@@ -14,3 +14,5 @@ CMakeSettings.json
 .idea/
 
 .github/
+
+.cache/

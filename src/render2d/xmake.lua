@@ -1,0 +1,5 @@
+target("fei-window")
+    set_kind("static")
+    add_headerfiles("**.hpp")
+    add_files("**.cpp")
+    add_deps("fei-graphics", "fei-base", "fei-core")

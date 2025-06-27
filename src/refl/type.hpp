@@ -27,7 +27,7 @@ class TypeId {
 
 template<class T>
 TypeId type_id() {
-    return TypeId(std::string(type_name<T>()));
+    return TypeId(std::string(type_name<std::decay_t<T>>()));
 }
 
 class Type {
@@ -40,7 +40,7 @@ class Type {
     Type(std::string name, TypeId id, std::size_t size) :
         m_name(std::move(name)), m_id(id), m_size(size) {}
 
-    std::string name() const { return m_name; }
+    const std::string& name() const { return m_name; }
     TypeId hash() const { return m_id; }
     TypeId id() const { return m_id; }
     std::size_t size() const { return m_size; }

@@ -8,6 +8,8 @@
 #include "ecs/scheduler.hpp"
 #include "ecs/system.hpp"
 
+#include <utility>
+
 namespace fei {
 
 class World {
@@ -56,24 +58,23 @@ class World {
     void add_system(ScheduleId schedule, Func func) {
         m_system_scheduler.add_system(schedule, func);
     }
-    void run_systems(ScheduleId schedule) {
-        m_system_scheduler.run_systems(*this);
+    void run_schedule(ScheduleId schedule) {
+        m_system_scheduler.run_systems(schedule, *this);
     }
-
-    Ref add_resource(TypeId type_id, Val val) {
-        m_resources.set(type_id, std::move(val));
-        return m_resources.get(type_id);
-    }
-    Ref get_resource(TypeId type_id) const { return m_resources.get(type_id); }
 
     template<typename T>
-    T& add_resource(T val) {
-        return add_resource(type_id<T>(), make_val<T>(std::move(val)))
-            .template get<T>();
+    T& add_resource(T&& val) {
+        m_resources.set(type_id<T>(), std::forward<T>(val));
+        return m_resources.get(type_id<T>()).template get<T>();
     }
+
     template<typename T>
     T& get_resource() const {
-        return get_resource(type_id<T>()).template get<T>();
+        auto ret = m_resources.get(type_id<T>());
+        if (!ret) {
+            fatal("Resource of type {} not found", type_name<T>());
+        }
+        return ret.template get<T>();
     }
 
     template<typename F>

@@ -157,6 +157,13 @@ class Query : public SystemParam {
         return count;
     }
 
+    Iterator::value_type first() const {
+        if (empty()) {
+            throw std::runtime_error("Query is empty");
+        }
+        return *begin();
+    }
+
   private:
     bool match_archetype(const Archetype& archetype) const {
         return (QueryParam<Options>::match(archetype) && ...);

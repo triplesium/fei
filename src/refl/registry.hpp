@@ -56,4 +56,8 @@ Type& type() {
     return Registry::instance().get_type<T>();
 }
 
+inline const std::string& type_name(TypeId id) {
+    return Registry::instance().get_type(id).name();
+}
+
 } // namespace fei

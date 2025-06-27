@@ -1,3 +1,4 @@
+#include "app/asset.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system.hpp"
@@ -5,6 +6,7 @@
 #include "ecs/world.hpp"
 #include "refl/registry.hpp"
 
+#include <fstream>
 #include <print>
 #include <string>
 
@@ -16,6 +18,22 @@ struct Transform {
 
 struct Config {
     std::string name;
+};
+
+class TextLoader : public AssetLoader {
+  public:
+    Val load(const std::filesystem::path path) override {
+        std::ifstream file(path);
+        if (!file.is_open()) {
+            error("Failed to open file: {}", path.string());
+            return {};
+        }
+        std::string content(
+            (std::istreambuf_iterator<char>(file)),
+            std::istreambuf_iterator<char>()
+        );
+        return make_val<std::string>(std::move(content));
+    }
 };
 
 int main() {
@@ -31,6 +49,8 @@ int main() {
     world.add_component(entity2, Transform {3.0f, 4.0f});
 
     world.add_resource(Config {.name = "HelloConfig"});
+    world.add_resource(AssetServer {});
+    std::println("{}", world.get_resource<AssetServer>().assets_dir().string());
 
     FunctionSystem system0([](Commands commands) {
         auto entity3 = commands.spawn().add(Transform {5.0f, 6.0f}).id();
@@ -72,6 +92,12 @@ int main() {
         }
     });
     system2.run(world);
+
+    world.get_resource<AssetServer>().add_loader<std::string, TextLoader>();
+    world.run_system_once([](Res<AssetServer> asset_server) {
+        auto handle = asset_server->load<std::string>("test.txt");
+        std::println("{}", *handle.get());
+    });
 
     return 0;
 }

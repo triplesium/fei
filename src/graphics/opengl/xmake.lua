@@ -1,0 +1,6 @@
+target("fei-graphics-opengl")
+    set_kind("static")
+    add_headerfiles("**.hpp")
+    add_files("**.cpp")
+    add_deps("fei-graphics")
+    add_packages("glad") 

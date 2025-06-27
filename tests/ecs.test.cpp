@@ -561,7 +561,9 @@ TEST_CASE("ECS Event System", "[ecs][event]") {
     Registry::instance().register_type<Position>();
 
     World world;
-    world.add_resource(EventsMap {});
+    auto& event_map = world.add_resource(EventsMap {});
+    event_map.add_event<GameEvent>();
+    event_map.add_event<PlayerMoved>();
 
     SECTION("Basic event sending and reading") {
         Entity player = world.entity();

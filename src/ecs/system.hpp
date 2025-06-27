@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ecs/utils.hpp"
+#include "base/type_traits.hpp"
 
 #include <tuple>
 #include <utility>
@@ -26,7 +26,7 @@ class System {
 template<typename Func>
 class FunctionSystem : public System {
   private:
-    using ParamTypes = typename function_traits<Func>::args_type;
+    using ParamTypes = typename function_traits<Func>::args_tuple;
     Func func_;
 
   public:

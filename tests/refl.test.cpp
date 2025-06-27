@@ -174,4 +174,80 @@ TEST_CASE("refl Val", "[refl]") {
         REQUIRE(ref.type_id() == type<TestStruct>().id());
         REQUIRE(ref.get<TestStruct>().a == 42);
     }
+
+    SECTION("Non-copyable types") {
+        // Test non-copyable, but movable type
+        struct MoveOnlyType {
+            int value;
+
+            MoveOnlyType(int v) : value(v) {}
+            MoveOnlyType(const MoveOnlyType&) = delete;
+            MoveOnlyType& operator=(const MoveOnlyType&) = delete;
+            MoveOnlyType(MoveOnlyType&& other) noexcept : value(other.value) {
+                other.value = 0;
+            }
+            MoveOnlyType& operator=(MoveOnlyType&& other) noexcept {
+                if (this != &other) {
+                    value = other.value;
+                    other.value = 0;
+                }
+                return *this;
+            }
+        };
+        registry.register_type<MoveOnlyType>();
+
+        // Test creating move-only type
+        Val val1 = make_val<MoveOnlyType>(42);
+        REQUIRE(val1);
+        REQUIRE(val1.get<MoveOnlyType>().value == 42);
+
+        // Test moving move-only type
+        Val val2 = std::move(val1);
+        REQUIRE(val2);
+        REQUIRE(val2.get<MoveOnlyType>().value == 42);
+        REQUIRE(val1.empty());
+
+        // Test move assignment
+        Val val3;
+        val3 = std::move(val2);
+        REQUIRE(val3);
+        REQUIRE(val3.get<MoveOnlyType>().value == 42);
+        REQUIRE(val2.empty());
+    }
+
+    SECTION("Non-copyable and non-movable types") {
+        // Test completely non-copyable and non-movable type
+        struct NonCopyableNonMovableType {
+            int value;
+
+            NonCopyableNonMovableType(int v) : value(v) {}
+            NonCopyableNonMovableType(const NonCopyableNonMovableType&) =
+                delete;
+            NonCopyableNonMovableType&
+            operator=(const NonCopyableNonMovableType&) = delete;
+            NonCopyableNonMovableType(NonCopyableNonMovableType&&) = delete;
+            NonCopyableNonMovableType&
+            operator=(NonCopyableNonMovableType&&) = delete;
+        };
+        registry.register_type<NonCopyableNonMovableType>();
+
+        // Test creating non-copyable, non-movable type
+        Val val1 = make_val<NonCopyableNonMovableType>(42);
+        REQUIRE(val1);
+        REQUIRE(val1.get<NonCopyableNonMovableType>().value == 42);
+
+        // Test that copying fails gracefully (should log error and result in
+        // empty Val) Note: This will log an error, but shouldn't crash
+        std::println("Should log an error about non-copyable type:");
+        Val val2 = val1; // This should fail
+        REQUIRE(val2.empty());
+
+        // Test that moving fails gracefully (should log error and result in
+        // empty Val) Note: This will log an error, but shouldn't crash
+        std::println("Should log an error about non-movable type:");
+        Val val3 = std::move(val1); // This should fail
+        REQUIRE(val3.empty());
+        // val1 should still be valid since move failed
+        REQUIRE(val1);
+    }
 }

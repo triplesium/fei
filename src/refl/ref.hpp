@@ -5,6 +5,7 @@
 #include "refl/type.hpp"
 
 #include <cassert>
+#include <type_traits>
 
 namespace fei {
 
@@ -19,9 +20,9 @@ class Ref {
     Ref(void* ptr, TypeId type) : m_ptr(ptr), m_type_id(type) {}
 
     template<class T>
-    T& get() const {
+    std::decay_t<T>& get() const {
         FEI_ASSERT(m_type_id);
-        return *static_cast<T*>(m_ptr);
+        return *static_cast<std::decay_t<T>*>(m_ptr);
     }
 
     TypeId type_id() const {

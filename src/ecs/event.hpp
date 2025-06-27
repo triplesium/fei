@@ -1,5 +1,6 @@
 #pragma once
 
+#include "base/log.hpp"
 #include "ecs/system.hpp"
 #include "ecs/world.hpp"
 #include "refl/type.hpp"
@@ -119,13 +120,22 @@ class Events {
 struct EventsMap {
     std::unordered_map<TypeId, Events> events;
 
-    Events& get(TypeId type_id) {
-        auto it = events.find(type_id);
-        if (it != events.end()) {
-            return it->second;
+    template<typename T>
+    void add_event() {
+        TypeId id = type_id<T>();
+        if (events.find(id) == events.end()) {
+            events.emplace(id, Events(id));
         }
-        auto [new_it, inserted] = events.emplace(type_id, type_id);
-        return new_it->second;
+    }
+
+    template<typename T>
+    Events& get() {
+        TypeId id = type_id<T>();
+        auto it = events.find(id);
+        if (it == events.end()) {
+            error("Event not found: {}", id.id());
+        }
+        return it->second;
     }
 
     void clear() {
@@ -158,7 +168,7 @@ class EventReader : public SystemParam {
     }
 
     virtual void prepare(World& world) override {
-        m_events = &world.get_resource<EventsMap>().get(type_id<T>());
+        m_events = &world.get_resource<EventsMap>().get<T>();
         m_last_event_count = m_events->oldest_event_count();
     }
 
@@ -178,7 +188,7 @@ class EventWriter : public SystemParam {
     }
 
     virtual void prepare(World& world) override {
-        m_events = &world.get_resource<EventsMap>().get(type_id<T>());
+        m_events = &world.get_resource<EventsMap>().get<T>();
     }
 
   private:
