@@ -7,6 +7,7 @@
 #include "ecs/resource.hpp"
 #include "ecs/scheduler.hpp"
 #include "ecs/system.hpp"
+#include "refl/ref_utils.hpp"
 
 #include <utility>
 

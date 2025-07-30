@@ -1,3 +1,4 @@
+#pragma once
 #include "ecs/system.hpp"
 
 #include <memory>

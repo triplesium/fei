@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "refl/ref.hpp"
+#include "refl/ref_utils.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
 #include "refl/val.hpp"

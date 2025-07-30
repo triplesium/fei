@@ -1,5 +1,6 @@
-target("fei-window")
+target("fei-render2d")
     set_kind("static")
     add_headerfiles("**.hpp")
     add_files("**.cpp")
-    add_deps("fei-graphics", "fei-base", "fei-core")
+    add_deps("fei-graphics", "fei-window", "fei-base", "fei-core")
+    add_packages("glfw") 

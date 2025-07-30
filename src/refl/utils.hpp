@@ -103,4 +103,33 @@ constexpr uint32_t type_hash() {
     return crc32(type_name<std::remove_cv_t<std::remove_reference_t<T>>>());
 }
 
+template<typename>
+struct MemberTrait;
+
+template<typename MemberTypeT>
+struct MemberTrait<MemberTypeT*> {
+    using Type = MemberTypeT;
+    using PointerToMemberType = MemberTypeT;
+
+    static constexpr bool is_static = true;
+};
+
+template<typename ParentTypeT, typename MemberTypeT>
+struct MemberTrait<MemberTypeT ParentTypeT::*> {
+    using Type = MemberTypeT;
+    using PointerToMemberType = MemberTypeT ParentTypeT::*;
+    using ParentType = ParentTypeT;
+
+    static constexpr bool is_static = false;
+};
+
+template<typename ParentTypeT, typename MemberTypeT>
+struct MemberTrait<MemberTypeT ParentTypeT::* const> {
+    using Type = MemberTypeT;
+    using PointerToMemberType = MemberTypeT ParentTypeT::*;
+    using ParentType = ParentTypeT;
+
+    static constexpr bool is_static = false;
+};
+
 } // namespace fei

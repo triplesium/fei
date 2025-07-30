@@ -20,19 +20,18 @@ struct Config {
     std::string name;
 };
 
-class TextLoader : public AssetLoader {
+class TextLoader : public AssetLoader<std::string> {
   public:
-    Val load(const std::filesystem::path path) override {
+    std::string* load_asset(const std::filesystem::path& path) override {
         std::ifstream file(path);
         if (!file.is_open()) {
             error("Failed to open file: {}", path.string());
             return {};
         }
-        std::string content(
+        return new std::string {
             (std::istreambuf_iterator<char>(file)),
             std::istreambuf_iterator<char>()
-        );
-        return make_val<std::string>(std::move(content));
+        };
     }
 };
 

@@ -14,23 +14,25 @@ void sprite_system(
     Res<AssetServer> asset_server,
     Res<Window> res_win
 ) {
-    commands.spawn()
-        .add(Camera {
+    commands.spawn().add(
+        Camera {
             .width = (float)res_win->width,
             .height = (float)res_win->height,
             .near = -1.0f,
             .far = 1.0f,
-        })
-        .add(Transform2D {
+        },
+        Transform2D {
             .position = {0.0f, 0.0f},
-        });
-    commands.spawn()
-        .add(Sprite {
+        }
+    );
+    commands.spawn().add(
+        Sprite {
             .texture = asset_server->load<Texture2D>("awesomeface.png"),
-        })
-        .add(Transform2D {
+        },
+        Transform2D {
             .position = {0.0f, 0.0f},
-        });
+        }
+    );
 }
 
 int main() {

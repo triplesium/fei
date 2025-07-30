@@ -25,8 +25,8 @@ class TypeId {
     operator bool() const { return m_id != 0; }
 };
 
-template<class T>
-TypeId type_id() {
+template<typename T>
+inline TypeId type_id() {
     return TypeId(std::string(type_name<std::decay_t<T>>()));
 }
 

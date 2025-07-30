@@ -33,16 +33,18 @@ class EntityCommands {
     EntityCommands(World& world, Entity entity) :
         m_world(world), m_entity(entity) {}
 
-    template<typename T>
-    EntityCommands& add(T&& val) {
-        m_world.get_resource<CommandsQueue>().add_command(
-            [entity = this->m_entity,
-             val = std::forward<T>(val)](World& world) mutable {
-                world.add_component(entity, std::move(val));
-            }
-        );
+    template<typename... Ts>
+    EntityCommands& add(Ts&&... vals) {
+        (m_world.get_resource<CommandsQueue>().add_command(
+             [entity = this->m_entity,
+              val = std::forward<Ts>(vals)](World& world) mutable {
+                 world.add_component(entity, std::move(val));
+             }
+         ),
+         ...);
         return *this;
     }
+
     template<typename T>
     EntityCommands& remove() {
         m_world.remove_component(m_entity, type_id<T>());

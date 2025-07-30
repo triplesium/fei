@@ -2,11 +2,12 @@
 #include "refl/type.hpp"
 #include "refl/utils.hpp"
 
-#include <stdexcept>
 #include <string>
 #include <unordered_map>
 
 namespace fei {
+
+class Cls;
 
 class Registry {
   public:
@@ -15,32 +16,34 @@ class Registry {
 
     static Registry& instance();
 
+    Type& register_type(TypeId id, const std::string& name, std::size_t size);
+    Type& get_type(TypeId id);
+    Cls& add_cls(TypeId id);
+    Cls& get_cls(TypeId id);
+
+    template<typename T>
+    Cls& register_cls() {
+        TypeId id = type_id<T>();
+        return add_cls(id);
+    }
+
+    template<typename T>
+    Cls& get_cls() {
+        return get_cls(type_id<T>());
+    }
+
     template<typename T>
     Type& register_type() {
-        auto id = type_id<T>();
-        if (m_types.contains(id)) {
-            return m_types.at(id);
-        }
-        Type type(std::string(type_name<T>()), id, sizeof(T));
-        m_types.emplace(id, type);
-        return m_types.at(id);
+        return register_type(
+            type_id<T>(),
+            std::string(type_name<T>()),
+            sizeof(T)
+        );
     }
 
     template<typename T>
     Type& get_type() {
-        auto id = type_id<T>();
-        if (m_types.contains(id)) {
-            return m_types.at(id);
-        }
-        return register_type<T>();
-    }
-
-    Type& get_type(TypeId id) {
-        auto it = m_types.find(id);
-        if (it != m_types.end()) {
-            return it->second;
-        }
-        throw std::runtime_error("Type not found");
+        return get_type(type_id<T>());
     }
 
   private:
@@ -48,16 +51,17 @@ class Registry {
     static Registry* s_instance;
 
     std::unordered_map<TypeId, Type> m_types;
+    std::unordered_map<TypeId, Cls> m_classes;
     TypeId m_next_id = 1;
 };
 
+Type& type(TypeId id);
+
 template<class T>
 Type& type() {
-    return Registry::instance().get_type<T>();
+    return type(type_id<T>());
 }
 
-inline const std::string& type_name(TypeId id) {
-    return Registry::instance().get_type(id).name();
-}
+const std::string& type_name(TypeId id);
 
 } // namespace fei

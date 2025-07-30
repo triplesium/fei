@@ -2,6 +2,7 @@
 
 #include "base/log.hpp"
 #include "refl/ref.hpp"
+#include "refl/ref_utils.hpp"
 #include "refl/type.hpp"
 
 #include <concepts>
@@ -173,9 +174,14 @@ struct ValHandlerHeap : public ValHandlerBase {
         }
     }
     template<class... Args>
-        requires std::constructible_from<T, Args...>
     void construct(Val& val, Args&&... args) const {
-        val.m_storage.set_ptr(new T(std::forward<Args>(args)...));
+        if constexpr (std::constructible_from<T, Args...>) {
+            val.m_storage.set_ptr(new T(std::forward<Args>(args)...));
+        } else {
+            fatal(
+                "Cannot create heap object from reference for non-copyable type"
+            );
+        }
     }
     virtual void destroy(Val& val) const override {
         delete static_cast<T*>(val.m_storage.get_ptr());
@@ -226,11 +232,16 @@ struct ValHandlerStack : public ValHandlerBase {
         }
     }
     template<class... Args>
-        requires std::constructible_from<
-            T,
-            decltype(std::forward<Args>(std::declval<Args>()))...>
     void construct(Val& val, Args&&... args) const {
-        new ((void*)&val.m_storage) T(std::forward<Args>(args)...);
+        if constexpr (std::constructible_from<
+                          T,
+                          decltype(std::forward<Args>(std::declval<Args>())
+                          )...>) {
+            new ((void*)&val.m_storage) T(std::forward<Args>(args)...);
+        } else {
+            fatal("Cannot create stack object from reference for non-copyable "
+                  "type");
+        }
     }
     virtual void destroy(Val& val) const override {
         static_cast<T*>((void*)&val.m_storage)->~T();
