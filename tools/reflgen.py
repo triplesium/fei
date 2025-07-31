@@ -5,6 +5,9 @@ import os
 import json
 from pathlib import Path
 from typing import List, Dict, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+from tqdm import tqdm
 
 
 class ParamInfo:
@@ -256,6 +259,7 @@ class CppHeaderParser:
         self.header_paths = header_paths  # Now accepts multiple files
         self.include_paths = include_paths or []
         self.classes: List[CppClassInfo] = []
+        self._lock = threading.Lock()  # Thread safety for collecting results
 
         # Initialize libclang - try different approaches
         self._init_libclang()
@@ -265,8 +269,71 @@ class CppHeaderParser:
         # The libclang package should handle this automatically
         pass
 
-    def parse(self) -> List[CppClassInfo]:
-        """Parse the header files and extract class information."""
+    def parse(self, max_workers: int = None) -> List[CppClassInfo]:
+        """Parse the header files and extract class information using multi-threading."""
+
+        # If max_workers is None, use the number of CPU cores
+        if max_workers is None:
+            max_workers = min(len(self.header_paths), os.cpu_count() or 1)
+
+        # For single file or single thread, use sequential processing
+        if len(self.header_paths) == 1 or max_workers == 1:
+            return self._parse_sequential()
+
+        # Use ThreadPoolExecutor for multi-threaded parsing
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all header files for parsing
+            future_to_header = {
+                executor.submit(self._parse_single_header, header_path): header_path
+                for header_path in self.header_paths
+            }
+
+            # Use tqdm for progress tracking
+            with tqdm(
+                total=len(self.header_paths), desc="Parsing headers", unit="file"
+            ) as pbar:
+                # Collect results as they complete
+                for future in as_completed(future_to_header):
+                    header_path = future_to_header[future]
+                    try:
+                        classes = future.result()
+                        # Thread-safe addition to the main classes list
+                        with self._lock:
+                            self.classes.extend(classes)
+
+                        # Update progress bar with file info
+                        filename = Path(header_path).name
+                        pbar.set_postfix_str(f"{filename}: {len(classes)} classes")
+                        pbar.update(1)
+                    except Exception as exc:
+                        pbar.write(f"Error parsing {header_path}: {exc}")
+                        pbar.update(1)
+
+        return self.classes
+
+    def _parse_sequential(self) -> List[CppClassInfo]:
+        """Sequential parsing for single file or when multi-threading is disabled."""
+        with tqdm(self.header_paths, desc="Parsing headers", unit="file") as pbar:
+            for header_path in pbar:
+                filename = Path(header_path).name
+                pbar.set_postfix_str(f"Processing {filename}")
+
+                classes = self._parse_single_header(header_path)
+                self.classes.extend(classes)
+
+                # Update postfix with results
+                pbar.set_postfix_str(f"{filename}: {len(classes)} classes")
+
+        return self.classes
+
+    def _parse_single_header(self, header_path: str) -> List[CppClassInfo]:
+        """Parse a single header file and return the classes found in it."""
+        classes = []
+
+        # Check if file exists
+        if not os.path.exists(header_path):
+            print(f"Warning: Header file '{header_path}' not found", file=sys.stderr)
+            return classes
 
         # Set up compilation arguments
         args = ["-x", "c++-header", "-std=c++23"]
@@ -275,50 +342,39 @@ class CppHeaderParser:
         for include_path in self.include_paths:
             args.extend(["-I", include_path])
 
-        # Parse each header file
-        for header_path in self.header_paths:
-            print("Parsing header:", header_path)
-            # Check if file exists
-            if not os.path.exists(header_path):
+        # Create translation unit for this header
+        index = clang.cindex.Index.create()
+        translation_unit = index.parse(header_path, args=args)
+
+        # Check for parsing errors
+        if translation_unit is None:
+            print(f"Warning: Failed to parse {header_path}", file=sys.stderr)
+            return classes
+
+        # Print diagnostics if any
+        for diagnostic in translation_unit.diagnostics:
+            if diagnostic.severity >= clang.cindex.Diagnostic.Warning:
                 print(
-                    f"Warning: Header file '{header_path}' not found", file=sys.stderr
+                    f"Warning in {header_path}: {diagnostic.spelling}",
+                    file=sys.stderr,
                 )
-                continue
 
-            # Create translation unit for this header
-            index = clang.cindex.Index.create()
-            translation_unit = index.parse(header_path, args=args)
+        # Parse the translation unit and collect classes
+        return self._parse_cursor_for_header(translation_unit.cursor, header_path)
 
-            # Check for parsing errors
-            if translation_unit is None:
-                print(f"Warning: Failed to parse {header_path}", file=sys.stderr)
-                continue
-
-            # Print diagnostics if any
-            for diagnostic in translation_unit.diagnostics:
-                if diagnostic.severity >= clang.cindex.Diagnostic.Warning:
-                    print(
-                        f"Warning in {header_path}: {diagnostic.spelling}",
-                        file=sys.stderr,
-                    )
-
-            # Start parsing from the root cursor
-            self._parse_cursor(translation_unit.cursor, header_path)
-
-        return self.classes
-
-    def _parse_cursor(
+    def _parse_cursor_for_header(
         self,
         cursor: clang.cindex.Cursor,
         header_path: str,
         current_access: str = "private",
         parent_cursor: clang.cindex.Cursor = None,
-    ):
-        """Recursively parse cursors to find class definitions."""
+    ) -> List[CppClassInfo]:
+        """Recursively parse cursors to find class definitions for a specific header."""
+        classes = []
 
         # Skip cursors that are not from the main file we're parsing
         if cursor.location.file and cursor.location.file.name != header_path:
-            return
+            return classes
 
         # Check if this cursor represents a class or struct
         if cursor.kind == clang.cindex.CursorKind.CLASS_DECL:
@@ -328,10 +384,12 @@ class CppHeaderParser:
                 clang.cindex.CursorKind.STRUCT_DECL,
             ]:
                 if current_access in ["private", "protected"]:
-                    return  # Skip private and protected nested classes
-            self._parse_class(
+                    return classes  # Skip private and protected nested classes
+            class_info = self._parse_class_for_header(
                 cursor, "private", header_path
             )  # Classes default to private
+            if class_info:
+                classes.append(class_info)
         elif cursor.kind == clang.cindex.CursorKind.STRUCT_DECL:
             # If this is a nested struct, check if it should be skipped based on access
             if parent_cursor and parent_cursor.kind in [
@@ -339,10 +397,12 @@ class CppHeaderParser:
                 clang.cindex.CursorKind.STRUCT_DECL,
             ]:
                 if current_access in ["private", "protected"]:
-                    return  # Skip private and protected nested structs
-            self._parse_class(
+                    return classes  # Skip private and protected nested structs
+            class_info = self._parse_class_for_header(
                 cursor, "public", header_path
             )  # Structs default to public
+            if class_info:
+                classes.append(class_info)
         elif cursor.kind == clang.cindex.CursorKind.CLASS_TEMPLATE:
             # Skip class templates - they're not concrete instantiable classes
             pass
@@ -361,29 +421,37 @@ class CppHeaderParser:
                 if child.kind == clang.cindex.CursorKind.CXX_ACCESS_SPEC_DECL:
                     child_access = self._get_access_specifier(child, header_path)
                 else:
-                    self._parse_cursor(child, header_path, child_access, cursor)
+                    child_classes = self._parse_cursor_for_header(
+                        child, header_path, child_access, cursor
+                    )
+                    classes.extend(child_classes)
         else:
             # For other cursors, recursively parse children with current access
             for child in cursor.get_children():
-                self._parse_cursor(child, header_path, current_access, cursor)
+                child_classes = self._parse_cursor_for_header(
+                    child, header_path, current_access, cursor
+                )
+                classes.extend(child_classes)
 
-    def _parse_class(
+        return classes
+
+    def _parse_class_for_header(
         self, class_cursor: clang.cindex.Cursor, default_access: str, header_path: str
-    ):
-        """Parse a class or struct definition."""
+    ) -> CppClassInfo:
+        """Parse a class or struct definition and return the class info, or None if skipped."""
 
         # Skip forward declarations
         if not class_cursor.is_definition():
-            return
+            return None
 
         # Skip class templates
         if class_cursor.kind == clang.cindex.CursorKind.CLASS_TEMPLATE:
-            return
+            return None
 
         # Skip anonymous classes/structs
         class_name = class_cursor.spelling
         if not class_name:
-            return
+            return None
 
         # Get the fully qualified class name including namespaces
         qualified_class_name = self._get_qualified_name(class_cursor)
@@ -459,7 +527,17 @@ class CppHeaderParser:
                 # Destructor
                 pass
 
-        self.classes.append(class_info)
+        return class_info
+
+    def _parse_class(
+        self, class_cursor: clang.cindex.Cursor, default_access: str, header_path: str
+    ):
+        """Parse a class or struct definition (legacy method for backward compatibility)."""
+        class_info = self._parse_class_for_header(
+            class_cursor, default_access, header_path
+        )
+        if class_info:
+            self.classes.append(class_info)
 
     def _get_parameters(self, cursor: clang.cindex.Cursor) -> List[ParamInfo]:
         """Extract parameter information from a function/method/constructor cursor."""
@@ -813,8 +891,6 @@ def save_classes_to_json(classes: List[CppClassInfo], output_file: str):
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(classes_data, f, indent=2, ensure_ascii=False)
 
-    print(f"Class information saved to: {output_file}")
-
 
 def gen_cpp_file(classes: List[CppClassInfo], root_dir: Path, output_file: str):
     with open(output_file, "w", encoding="utf-8") as f:
@@ -829,6 +905,9 @@ def gen_cpp_file(classes: List[CppClassInfo], root_dir: Path, output_file: str):
         f.write("\nnamespace fei {\n")
         f.write("void register_classes() {\n")
         f.write("auto& registry = Registry::instance();\n")
+
+        # Sort classes by name for consistency
+        classes.sort(key=lambda x: x.name)
         for class_info in classes:
             if class_info.name == "fei::Registry":
                 continue
@@ -901,6 +980,13 @@ def main():
         type=str,
         help="Output file path for JSON format (if not specified, prints to console)",
     )
+    parser.add_argument(
+        "--threads",
+        "-j",
+        type=int,
+        default=None,
+        help="Number of threads to use for parsing (default: number of CPU cores, 1 to disable multi-threading)",
+    )
 
     args = parser.parse_args()
 
@@ -919,7 +1005,14 @@ def main():
     try:
         # Create parser and parse the headers
         parser_instance = CppHeaderParser(args.headers, args.includes or [])
-        classes = parser_instance.parse()
+        classes = parser_instance.parse(max_workers=args.threads)
+
+        # Print summary
+        total_files = len(args.headers)
+        total_classes = len(classes)
+        print(
+            f"\n✅ Parsing complete! Found {total_classes} classes in {total_files} files."
+        )
 
         if not classes:
             print("No classes found in the header files.")
@@ -928,9 +1021,11 @@ def main():
                 if args.outmode == "cpp":
                     # Generate C++ file
                     gen_cpp_file(classes, args.rootdir, args.output)
+                    print(f"📝 Generated C++ reflection code: {args.output}")
                 else:
                     # Save to JSON file
                     save_classes_to_json(classes, args.output)
+                    print(f"💾 Saved class information: {args.output}")
             else:
                 # Print to console
                 print_class_summary(classes)
