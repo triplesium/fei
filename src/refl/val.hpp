@@ -148,13 +148,23 @@ class Val {
     bool empty() const { return m_handler == nullptr; }
     explicit operator bool() const { return !empty(); }
 
-    template<class T>
+    template<typename T>
     T& get() {
         return ref().get<T>();
     }
-    template<class T>
+
+    template<typename T>
     const T& get() const {
         return ref().get<T>();
+    }
+
+    template<typename T>
+    T to_number() const {
+        if (!m_handler) {
+            error("Attempting to convert empty Val to number");
+            return T(0);
+        }
+        return ref().to_number<T>();
     }
 };
 

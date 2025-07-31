@@ -3,6 +3,7 @@
 #include "refl/utils.hpp"
 
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 
 namespace fei {
@@ -34,11 +35,15 @@ class Registry {
 
     template<typename T>
     Type& register_type() {
-        return register_type(
-            type_id<T>(),
-            std::string(type_name<T>()),
-            sizeof(T)
-        );
+        if constexpr (std::is_same_v<std::decay_t<T>, void>) {
+            return register_type(type_id<T>(), std::string(type_name<T>()), 0);
+        } else {
+            return register_type(
+                type_id<T>(),
+                std::string(type_name<T>()),
+                sizeof(T)
+            );
+        }
     }
 
     template<typename T>

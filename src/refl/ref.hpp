@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/debug.hpp"
+#include "base/log.hpp"
 #include "refl/type.hpp"
 
 #include <cassert>
@@ -49,6 +50,41 @@ class Ref {
     bool operator!=(const Ref& other) const { return !(*this == other); }
 
     explicit operator bool() const { return m_ptr != nullptr; }
+
+    template<typename T>
+        requires std::is_arithmetic_v<T>
+    T to_number() const {
+        if (m_type_id == fei::type_id<int>()) {
+            return static_cast<T>(get<int>());
+        } else if (m_type_id == fei::type_id<signed char>()) {
+            return static_cast<T>(get<signed char>());
+        } else if (m_type_id == fei::type_id<unsigned char>()) {
+            return static_cast<T>(get<unsigned char>());
+        } else if (m_type_id == fei::type_id<short int>()) {
+            return static_cast<T>(get<short int>());
+        } else if (m_type_id == fei::type_id<unsigned short int>()) {
+            return static_cast<T>(get<unsigned short int>());
+        } else if (m_type_id == fei::type_id<long int>()) {
+            return static_cast<T>(get<long int>());
+        } else if (m_type_id == fei::type_id<unsigned long int>()) {
+            return static_cast<T>(get<unsigned long int>());
+        } else if (m_type_id == fei::type_id<long long int>()) {
+            return static_cast<T>(get<long long int>());
+        } else if (m_type_id == fei::type_id<unsigned long long int>()) {
+            return static_cast<T>(get<unsigned long long int>());
+        } else if (m_type_id == fei::type_id<bool>()) {
+            return static_cast<T>(get<bool>());
+        } else if (m_type_id == fei::type_id<float>()) {
+            return static_cast<T>(get<float>());
+        } else if (m_type_id == fei::type_id<double>()) {
+            return static_cast<T>(get<double>());
+        } else if (m_type_id == fei::type_id<long double>()) {
+            return static_cast<T>(get<long double>());
+        } else {
+            error("Invalid type conversion");
+            return static_cast<T>(0);
+        }
+    }
 };
 
 } // namespace fei

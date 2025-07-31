@@ -11,6 +11,16 @@ using ScheduleId = std::size_t;
 
 class SystemScheduler {
   public:
+    SystemScheduler() = default;
+
+    // Delete copy constructor and copy assignment operator
+    SystemScheduler(const SystemScheduler&) = delete;
+    SystemScheduler& operator=(const SystemScheduler&) = delete;
+
+    // Default move constructor and move assignment operator
+    SystemScheduler(SystemScheduler&&) noexcept = default;
+    SystemScheduler& operator=(SystemScheduler&&) noexcept = default;
+
     template<typename Func>
     void add_system(ScheduleId schedule, Func func) {
         m_systems[schedule].emplace_back(

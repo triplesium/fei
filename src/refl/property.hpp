@@ -5,6 +5,7 @@
 #include "refl/utils.hpp"
 
 #include <string>
+#include <type_traits>
 
 namespace fei {
 
@@ -25,7 +26,7 @@ class Property {
 };
 
 template<typename P>
-class TProperty : public Property {
+class PropertyImpl : public Property {
   private:
     using MemberType = typename MemberTrait<P>::Type;
     using ParentType = typename MemberTrait<P>::ParentType;
@@ -33,7 +34,7 @@ class TProperty : public Property {
     P m_ptr;
 
   public:
-    TProperty(std::string name, P ptr) :
+    PropertyImpl(std::string name, P ptr) :
         Property(std::move(name), fei::type_id<MemberType>()), m_ptr(ptr) {}
 
     Ref get(Ref obj) const override {

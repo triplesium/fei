@@ -62,11 +62,13 @@ class MethodInfo(MemberInfo):
         parameters: List[ParamInfo] = None,
         is_static: bool = False,
         is_const: bool = False,
+        is_abstract: bool = False,
     ):
         super().__init__(name, type_name, access)
         self.parameters = parameters or []  # List of ParamInfo objects
         self.is_static = is_static
         self.is_const = is_const
+        self.is_abstract = is_abstract
 
     def __str__(self):
         if self.parameters:
@@ -81,6 +83,8 @@ class MethodInfo(MemberInfo):
             modifiers.append("static")
         if self.is_const:
             modifiers.append("const")
+        if self.is_abstract:
+            modifiers.append("abstract")
 
         if modifiers:
             modifier_str = " ".join(modifiers)
@@ -136,6 +140,7 @@ class MethodInfo(MemberInfo):
         base_dict["parameters"] = [param.to_dict() for param in self.parameters]
         base_dict["is_static"] = self.is_static
         base_dict["is_const"] = self.is_const
+        base_dict["is_abstract"] = self.is_abstract
         return base_dict
 
     def to_cpp_type(self, parent: str = None) -> str:
@@ -175,10 +180,11 @@ class CppClassInfo:
         parameters: List[ParamInfo] = None,
         is_static: bool = False,
         is_const: bool = False,
+        is_abstract: bool = False,
     ):
         """Add a method to the class."""
         method_info = MethodInfo(
-            name, return_type, access, parameters, is_static, is_const
+            name, return_type, access, parameters, is_static, is_const, is_abstract
         )
         self.methods.append(method_info)
 
@@ -189,10 +195,10 @@ class CppClassInfo:
         is_static: bool = False,
     ):
         """Add a constructor to the class."""
-        # Constructors are never const, but could be static (factory methods)
+        # Constructors are never const or abstract, but could be static (factory methods)
         # Constructor return type should match the class name
         method_info = MethodInfo(
-            self.name, self.name, access, parameters, is_static, False
+            self.name, self.name, access, parameters, is_static, False, False
         )
         self.constructors.append(method_info)
 
@@ -215,6 +221,14 @@ class CppClassInfo:
     def get_const_methods(self) -> List[MethodInfo]:
         """Get all const methods."""
         return [method for method in self.methods if method.is_const]
+
+    def get_abstract_methods(self) -> List[MethodInfo]:
+        """Get all abstract methods."""
+        return [method for method in self.methods if method.is_abstract]
+
+    def is_abstract(self) -> bool:
+        """Check if this class is abstract (has any pure virtual methods)."""
+        return any(method.is_abstract for method in self.methods)
 
     def get_getters(self) -> List[MethodInfo]:
         """Get all methods that look like getters."""
@@ -400,7 +414,16 @@ class CppHeaderParser:
             elif child.kind == clang.cindex.CursorKind.FIELD_DECL:
                 # Property variable
                 property_name = child.spelling
-                property_type = self._get_fully_qualified_type(child.type)
+
+                # Skip properties with incomplete types
+                property_type_obj = child.type
+                canonical_type = property_type_obj.get_canonical()
+
+                # Check if the type is incomplete
+                if self._is_incomplete_type(canonical_type):
+                    continue
+
+                property_type = self._get_fully_qualified_type(property_type_obj)
                 class_info.add_property(property_name, property_type, current_access)
             elif child.kind == clang.cindex.CursorKind.CXX_METHOD:
                 # Member function - skip deleted methods
@@ -411,9 +434,10 @@ class CppHeaderParser:
                 return_type = self._get_fully_qualified_type(child.result_type)
                 parameters = self._get_parameters(child)
 
-                # Check if method is static or const
+                # Check if method is static, const, or abstract (pure virtual)
                 is_static = child.is_static_method()
                 is_const = child.is_const_method()
+                is_abstract = child.is_pure_virtual_method()
 
                 class_info.add_method(
                     method_name,
@@ -422,6 +446,7 @@ class CppHeaderParser:
                     parameters,
                     is_static,
                     is_const,
+                    is_abstract,
                 )
             elif child.kind == clang.cindex.CursorKind.CONSTRUCTOR:
                 # Constructor - skip deleted constructors
@@ -466,12 +491,35 @@ class CppHeaderParser:
             ):
                 return self._format_function_pointer_type(pointee)
             return self._get_fully_qualified_type(pointee) + "*"
-        elif canonical_type.kind == clang.cindex.TypeKind.LVALUEREFERENCE:
+        elif canonical_type.kind in [
+            clang.cindex.TypeKind.LVALUEREFERENCE,
+            clang.cindex.TypeKind.RVALUEREFERENCE,
+        ]:
             pointee = canonical_type.get_pointee()
-            return self._get_fully_qualified_type(pointee) + "&"
-        elif canonical_type.kind == clang.cindex.TypeKind.RVALUEREFERENCE:
-            pointee = canonical_type.get_pointee()
-            return self._get_fully_qualified_type(pointee) + "&&"
+            pointee_type_str = self._get_fully_qualified_type(pointee)
+
+            # Determine reference operator
+            ref_op = (
+                "&"
+                if canonical_type.kind == clang.cindex.TypeKind.LVALUEREFERENCE
+                else "&&"
+            )
+
+            # Handle array references specially: float[9]& should be float(&)[9]
+            if pointee.kind in [
+                clang.cindex.TypeKind.CONSTANTARRAY,
+                clang.cindex.TypeKind.INCOMPLETEARRAY,
+            ]:
+                # Split the array type into base type and array dimensions
+                if "[" in pointee_type_str and "]" in pointee_type_str:
+                    array_start = pointee_type_str.find("[")
+                    base_type = pointee_type_str[:array_start]
+                    array_part = pointee_type_str[array_start:]
+                    return f"{base_type}({ref_op}){array_part}"
+                else:
+                    return pointee_type_str + ref_op
+            else:
+                return pointee_type_str + ref_op
 
         # For built-in types, arrays, and other non-class types, prefer original spelling
         # This preserves typedefs like GLuint, size_t, etc.
@@ -629,6 +677,33 @@ class CppHeaderParser:
         params_str = ", ".join(param_types) if param_types else ""
         return f"{return_type}(*)({params_str})"
 
+    def _is_incomplete_type(self, type_obj) -> bool:
+        """Check if a type is incomplete (forward declared but not defined)."""
+        # Get the canonical type to resolve typedefs
+        canonical_type = type_obj.get_canonical()
+
+        # For pointer and reference types, check if the pointee is incomplete
+        if canonical_type.kind in [
+            clang.cindex.TypeKind.POINTER,
+            clang.cindex.TypeKind.LVALUEREFERENCE,
+            clang.cindex.TypeKind.RVALUEREFERENCE,
+        ]:
+            pointee = canonical_type.get_pointee()
+            return self._is_incomplete_type(pointee)
+
+        # For class/struct/union types, check if they have a declaration and if it's complete
+        if canonical_type.kind in [
+            clang.cindex.TypeKind.RECORD,
+            clang.cindex.TypeKind.ENUM,
+        ]:
+            type_decl = canonical_type.get_declaration()
+            if type_decl.kind != clang.cindex.CursorKind.NO_DECL_FOUND:
+                # Check if the declaration is a definition (complete) or just a forward declaration
+                return not type_decl.is_definition()
+
+        # Built-in types and other types are always complete
+        return False
+
     def _get_access_specifier(
         self, cursor: clang.cindex.Cursor, header_path: str
     ) -> str:
@@ -743,7 +818,7 @@ def save_classes_to_json(classes: List[CppClassInfo], output_file: str):
 
 def gen_cpp_file(classes: List[CppClassInfo], root_dir: Path, output_file: str):
     with open(output_file, "w", encoding="utf-8") as f:
-        f.write("#pragma once\n")
+        f.write('#include "reflgen.hpp"\n')
         f.write("// Generated by reflgen\n\n")
         includes = list(set(info.source_file for info in classes))
         f.write('#include "refl/registry.hpp"\n')
@@ -751,8 +826,8 @@ def gen_cpp_file(classes: List[CppClassInfo], root_dir: Path, output_file: str):
             f.write(
                 f'#include "{Path(include).relative_to(root_dir.resolve()).as_posix()}"\n'
             )
-        f.write("\ninline void register_classes() {\n")
-        f.write("using namespace fei;\n")
+        f.write("\nnamespace fei {\n")
+        f.write("void register_classes() {\n")
         f.write("auto& registry = Registry::instance();\n")
         for class_info in classes:
             if class_info.name == "fei::Registry":
@@ -773,8 +848,20 @@ def gen_cpp_file(classes: List[CppClassInfo], root_dir: Path, output_file: str):
                 f.write(
                     f'\n\t.add_method("{method.name}", static_cast<{method.to_cpp_type(class_info.name)}>(&{class_info.name}::{method.name}))'
                 )
+            # Abstract classes should not be constructible
+            if not class_info.is_abstract():
+                for constructor in class_info.constructors:
+                    if constructor.access != "public":
+                        continue
+                    if constructor.has_parameters():
+                        params = ", ".join(
+                            [param.type_name for param in constructor.parameters]
+                        )
+                        f.write(f"\n\t.add_constructor<{class_info.name}, {params}>()")
+                    else:
+                        f.write(f"\n\t.add_constructor<{class_info.name}>()")
             f.write(";\n")
-        f.write("}\n")
+        f.write("}\n}\n")
 
 
 def main():

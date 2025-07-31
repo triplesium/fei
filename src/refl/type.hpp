@@ -44,6 +44,10 @@ class Type {
     TypeId hash() const { return m_id; }
     TypeId id() const { return m_id; }
     std::size_t size() const { return m_size; }
+    bool is_number() const;
+    bool is_integral() const;
+    bool is_floating_point() const;
+    std::string stripped_name() const;
 
     auto operator<=>(const Type&) const = default;
 };

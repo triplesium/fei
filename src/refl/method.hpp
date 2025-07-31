@@ -1,4 +1,5 @@
 #pragma once
+#include "base/log.hpp"
 #include "refl/callable.hpp"
 #include "refl/ref_utils.hpp"
 #include "refl/type.hpp"
@@ -40,7 +41,7 @@ struct SignatureTrait<Ret(Params...) const>
 class Method : public Callable {
   public:
     Method(
-        std::string_view name,
+        std::string name,
         const std::vector<Param>& params,
         const QualType& return_type
     ) : Callable(name, params, return_type) {}
@@ -50,7 +51,7 @@ class Method : public Callable {
 };
 
 template<typename P>
-class TMethod : public Method {
+class MethodImpl : public Method {
   private:
     P m_ptr;
     using MethodType = typename MemberTrait<P>::Type;
@@ -64,22 +65,38 @@ class TMethod : public Method {
         typename SignatureTrait<MethodType>::template TypeOfParam<Index>::Type;
 
   public:
-    TMethod(std::string name, P ptr) :
+    MethodImpl(std::string name, P ptr) :
         Method(name, {}, type_id<ReturnType>()), m_ptr(ptr) {
         auto types = SignatureTrait<MethodType>::param_types();
     }
 
     ReturnValue invoke_variadic(const std::vector<Ref>& args) const override {
         if (c_is_static) {
-            if (args.size() != c_params_count)
+            if (args.size() != c_params_count) {
+                error(
+                    "Invalid argument count for static method {}: expected {}, "
+                    "got {}",
+                    name(),
+                    c_params_count,
+                    args.size()
+                );
                 return {};
+            }
             return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
                 // static method does not need an instance
                 return invoke_template(Ref(), args[ArgIdx]...);
             }(std::make_index_sequence<c_params_count>());
         } else {
-            if (args.size() - 1 != c_params_count)
+            if (args.size() - 1 != c_params_count) {
+                error(
+                    "Invalid argument count for method {}.{}: expected {}, got "
+                    "{}",
+                    name(),
+                    c_params_count,
+                    args.size() - 1
+                );
                 return {};
+            }
             return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
                 // arg[0] is the object instance itself
                 return invoke_template(args[0], args[ArgIdx + 1]...);

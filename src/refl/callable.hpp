@@ -3,25 +3,26 @@
 #include "refl/type.hpp"
 #include "refl/val.hpp"
 
+#include <string>
 #include <vector>
 
 namespace fei {
 
 class Param {
   private:
-    std::string_view m_name;
+    std::string m_name;
     TypeId m_type_id;
 
   public:
     Param() = default;
-    Param(std::string_view name, TypeId type_id) :
+    Param(std::string name, TypeId type_id) :
         m_name(name), m_type_id(type_id) {}
 
     TypeId type_id() const { return m_type_id; }
 
-    std::string_view name() const { return m_name; }
+    const std::string& name() const { return m_name; }
 
-    void set_name(std::string_view name) { m_name = name; }
+    void set_name(const std::string& name) { m_name = name; }
 };
 
 class ReturnValue {
@@ -53,12 +54,16 @@ class ReturnValue {
             return m_ref;
         }
     }
+
+    bool is_value() const { return m_kind == Kind::Value; }
+    bool is_ref() const { return m_kind == Kind::Reference; }
+    bool is_void() const { return m_kind == Kind::Void; }
 };
 
 class Callable {
   public:
     Callable(
-        std::string_view name,
+        std::string name,
         const std::vector<Param>& params,
         const QualType& return_type
     ) : m_name(name), m_params(params), m_return_type(return_type) {}
@@ -95,8 +100,12 @@ class Callable {
         return invoke_variadic({arg0, arg1, arg2, arg3, arg4, arg5});
     }
 
+    const std::string& name() const { return m_name; }
+    const std::vector<Param>& params() const { return m_params; }
+    QualType return_type() const { return m_return_type; }
+
   protected:
-    std::string_view m_name;
+    std::string m_name;
     std::vector<Param> m_params;
     QualType m_return_type;
 };
