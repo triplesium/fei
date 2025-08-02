@@ -161,7 +161,7 @@ class MethodInfo(MemberInfo):
 class CppClassInfo:
     """Represents information about a C++ class."""
 
-    def __init__(self, name: str, cursor: clang.cindex.Cursor, source_file: str = ""):
+    def __init__(self, name: str, cursor: clang.cindex.Cursor, source_file: Path):
         self.name = name
         self.cursor = cursor
         self.source_file = source_file  # Track which file this class is from
@@ -943,6 +943,29 @@ def gen_cpp_file(classes: List[CppClassInfo], root_dir: Path, output_file: str):
         f.write("}\n}\n")
 
 
+def render_template(
+    template_path: Path,
+    classes: List[CppClassInfo],
+    out_file_path: Path,
+    rootdir: Path,
+):
+    """Render a template file with class information."""
+    from jinja2 import Environment, FileSystemLoader
+
+    if not template_path.exists():
+        raise FileNotFoundError(f"Template file '{template_path}' not found.")
+    env = Environment(
+        loader=FileSystemLoader(template_path.parent),
+        trim_blocks=True,
+        lstrip_blocks=True,
+        keep_trailing_newline=True,
+    )
+    template = env.get_template(template_path.name)
+    rendered_content = template.render(classes=classes, rootdir=rootdir, Path=Path)
+    with open(out_file_path, "w", encoding="utf-8") as out_file:
+        out_file.write(rendered_content)
+
+
 def main():
     """Main entry point."""
     parser = ArgumentParser(
@@ -962,18 +985,12 @@ def main():
         "--verbose", "-v", action="store_true", help="Enable verbose output"
     )
     parser.add_argument(
-        "--outmode",
-        "-m",
-        type=str,
-        choices=["json", "cpp"],
-        default="json",
-    )
-    parser.add_argument(
         "--rootdir",
         type=Path,
         default=Path.cwd(),
         help="Root directory for relative paths",
     )
+    parser.add_argument("--template", "-t", type=Path)
     parser.add_argument(
         "--output",
         "-o",
@@ -1018,14 +1035,9 @@ def main():
             print("No classes found in the header files.")
         else:
             if args.output:
-                if args.outmode == "cpp":
-                    # Generate C++ file
-                    gen_cpp_file(classes, args.rootdir, args.output)
-                    print(f"📝 Generated C++ reflection code: {args.output}")
-                else:
-                    # Save to JSON file
-                    save_classes_to_json(classes, args.output)
-                    print(f"💾 Saved class information: {args.output}")
+                # Generate C++ file
+                render_template(args.template, classes, args.output, args.rootdir)
+                print(f"📝 Generated C++ reflection code: {args.output}")
             else:
                 # Print to console
                 print_class_summary(classes)
