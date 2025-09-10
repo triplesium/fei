@@ -4,6 +4,10 @@
 
 namespace fei {
 void App::run() {
+    for (auto& [type, plugin] : m_plugins) {
+        plugin->finish(*this);
+    }
+
     run_schedule(PreStartUp);
     run_schedule(StartUp);
     bool should_stop = false;
@@ -14,7 +18,7 @@ void App::run() {
         run_schedule(PostUpdate);
         run_schedule(Last);
 
-        get_resource<CommandsQueue>().execute(m_world);
+        resource<CommandsQueue>().execute(m_world);
 
         run_schedule(RenderFirst);
         run_schedule(RenderStart);
@@ -22,7 +26,7 @@ void App::run() {
         run_schedule(RenderEnd);
         run_schedule(RenderLast);
 
-        auto& app_states = m_world.get_resource<AppStates>();
+        auto& app_states = m_world.resource<AppStates>();
         should_stop = app_states.should_stop;
     }
 }
