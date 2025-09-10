@@ -55,7 +55,7 @@ class World {
         m_entities.remove_entity(entity);
     }
 
-    template<class Func>
+    template<typename Func>
     void add_system(ScheduleId schedule, Func func) {
         m_system_scheduler.add_system(schedule, func);
     }
@@ -69,8 +69,19 @@ class World {
         return m_resources.get(type_id<T>()).template get<T>();
     }
 
+    template<typename T, typename U>
+    T& add_resource_as(U&& val) {
+        m_resources.set(type_id<T>(), std::forward<U>(val));
+        return m_resources.get(type_id<T>()).template get<T>();
+    }
+
     template<typename T>
-    T& get_resource() const {
+    bool has_resource() const {
+        return m_resources.contains(type_id<T>());
+    }
+
+    template<typename T>
+    T& resource() const {
         auto ret = m_resources.get(type_id<T>());
         if (!ret) {
             fatal("Resource of type {} not found", type_name<T>());

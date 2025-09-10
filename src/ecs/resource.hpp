@@ -1,5 +1,6 @@
 #pragma once
 
+#include "refl/type.hpp"
 #include "refl/val.hpp"
 
 #include <unordered_map>
@@ -12,6 +13,10 @@ class Resources {
 
   public:
     Resources() = default;
+
+    bool contains(TypeId type_id) const {
+        return m_resources.contains(type_id);
+    }
 
     template<typename T>
     void set(TypeId type_id, T&& val) {
@@ -26,28 +31,5 @@ class Resources {
         return {};
     }
 };
+
 } // namespace fei
-
-// #include "ecs/system.hpp"
-// #include "ecs/world.hpp"
-
-// namespace fei {
-
-// template<typename T>
-// class Res : public SystemParam {
-//     T* m_resource = nullptr;
-
-//   public:
-//     void prepare(World& world) override {
-//         m_resource = &world.template get_resource<T>();
-//     }
-
-//     T& get() { return *m_resource; }
-//     const T& get() const { return *m_resource; }
-//     T& operator*() { return *m_resource; }
-//     const T& operator*() const { return *m_resource; }
-//     T* operator->() { return m_resource; }
-//     const T* operator->() const { return m_resource; }
-// };
-
-// } // namespace fei

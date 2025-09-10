@@ -31,14 +31,31 @@ inline TypeId type_id() {
 }
 
 class Type {
+  public:
+    using DefaultConstructFunc = void (*)(void* dest);
+    using CopyConstructFunc = void (*)(void* dest, const void* src);
+    using DeleteFunc = void (*)(void* ptr);
+
   private:
     std::string m_name;
     TypeId m_id;
     std::size_t m_size;
+    DefaultConstructFunc m_default_construct {nullptr};
+    CopyConstructFunc m_copy_construct {nullptr};
+    DeleteFunc m_delete {nullptr};
 
   public:
-    Type(std::string name, TypeId id, std::size_t size) :
-        m_name(std::move(name)), m_id(id), m_size(size) {}
+    Type(
+        std::string name,
+        TypeId id,
+        std::size_t size,
+        DefaultConstructFunc default_construct,
+        CopyConstructFunc copy_construct,
+        DeleteFunc delete_func
+    ) :
+        m_name(std::move(name)), m_id(id), m_size(size),
+        m_default_construct(default_construct),
+        m_copy_construct(copy_construct), m_delete(delete_func) {}
 
     const std::string& name() const { return m_name; }
     TypeId hash() const { return m_id; }
@@ -48,8 +65,13 @@ class Type {
     bool is_integral() const;
     bool is_floating_point() const;
     std::string stripped_name() const;
+    DefaultConstructFunc default_construct_func() const {
+        return m_default_construct;
+    }
+    CopyConstructFunc copy_construct_func() const { return m_copy_construct; }
+    DeleteFunc delete_func() const { return m_delete; }
 
-    auto operator<=>(const Type&) const = default;
+    auto operator<=>(const Type& other) const { return m_id <=> other.m_id; }
 };
 } // namespace fei
 

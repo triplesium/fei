@@ -35,10 +35,10 @@ class EntityCommands {
 
     template<typename... Ts>
     EntityCommands& add(Ts&&... vals) {
-        (m_world.get_resource<CommandsQueue>().add_command(
+        (m_world.resource<CommandsQueue>().add_command(
              [entity = this->m_entity,
-              val = std::forward<Ts>(vals)](World& world) mutable {
-                 world.add_component(entity, std::move(val));
+              val = std::forward<Ts>(vals)](World& world) {
+                 world.add_component(entity, val);
              }
          ),
          ...);
@@ -66,7 +66,7 @@ class Commands : public SystemParam {
 
   public:
     virtual void prepare(World& world) override {
-        m_commands_queue = &world.get_resource<CommandsQueue>();
+        m_commands_queue = &world.resource<CommandsQueue>();
         m_world = &world;
     }
 

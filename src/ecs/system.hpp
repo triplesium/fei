@@ -2,6 +2,7 @@
 
 #include "base/type_traits.hpp"
 
+#include <concepts>
 #include <tuple>
 #include <utility>
 
@@ -48,16 +49,22 @@ class FunctionSystem : public System {
 
     template<typename Tuple, std::size_t... Is>
     Tuple prepare_params_impl(World& world, std::index_sequence<Is...>) {
-        return std::make_tuple(
+        return std::forward_as_tuple(
             prepare_param<std::tuple_element_t<Is, Tuple>>(world)...
         );
     }
 
     template<typename T>
     T prepare_param(World& world) {
-        T param;
-        param.prepare(world);
-        return param;
+        if constexpr (std::derived_from<T, SystemParam>) {
+            T param;
+            param.prepare(world);
+            return param;
+        } else if constexpr (std::same_as<T, World&>) {
+            return world;
+        } else {
+            static_assert(false, "Unsupported system parameter type");
+        }
     }
 };
 

@@ -168,7 +168,7 @@ class EventReader : public SystemParam {
     }
 
     virtual void prepare(World& world) override {
-        m_events = &world.get_resource<EventsMap>().get<T>();
+        m_events = &world.resource<EventsMap>().get<T>();
         m_last_event_count = m_events->oldest_event_count();
     }
 
@@ -188,7 +188,7 @@ class EventWriter : public SystemParam {
     }
 
     virtual void prepare(World& world) override {
-        m_events = &world.get_resource<EventsMap>().get<T>();
+        m_events = &world.resource<EventsMap>().get<T>();
     }
 
   private:

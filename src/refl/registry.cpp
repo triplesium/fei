@@ -16,12 +16,15 @@ Registry& Registry::instance() {
 Type& Registry::register_type(
     TypeId id,
     const std::string& name,
-    std::size_t size
+    std::size_t size,
+    Type::DefaultConstructFunc default_construct,
+    Type::CopyConstructFunc copy_construct,
+    Type::DeleteFunc delete_func
 ) {
     if (m_types.contains(id)) {
         return m_types.at(id);
     }
-    Type type(name, id, size);
+    Type type(name, id, size, default_construct, copy_construct, delete_func);
     m_types.emplace(id, type);
     return m_types.at(id);
 }
