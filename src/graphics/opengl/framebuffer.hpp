@@ -11,8 +11,12 @@ class FramebufferOpenGL : public Framebuffer {
   private:
     GLuint m_fbo;
 
+    friend class GraphicsDeviceOpenGL;
+    FramebufferOpenGL(GLuint fbo) : Framebuffer({}), m_fbo(fbo) {}
+
   public:
-    FramebufferOpenGL(const FramebufferDescriptor& desc);
-    GLuint handler() const;
+    FramebufferOpenGL(const FramebufferDescription& desc);
+    virtual ~FramebufferOpenGL();
+    GLuint id() const { return m_fbo; }
 };
 } // namespace fei

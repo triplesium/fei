@@ -31,12 +31,17 @@ struct V2F_C4F_T2F_Quad {
     V2F_C4F_T2F tr;
 };
 
+struct BufferDescription {
+    std::size_t size;
+    BufferType type;
+    BufferUsage usage;
+};
+
 class Buffer {
   public:
-    Buffer(BufferType type, BufferUsage usage) : m_type(type), m_usage(usage) {}
+    Buffer(const BufferDescription& desc) :
+        m_size(desc.size), m_type(desc.type), m_usage(desc.usage) {}
     virtual ~Buffer() = default;
-
-    virtual void update_data(const std::byte* data, size_t size) = 0;
 
   protected:
     size_t m_size;

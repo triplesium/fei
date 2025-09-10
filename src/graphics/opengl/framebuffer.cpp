@@ -1,43 +1,58 @@
 #include "graphics/opengl/framebuffer.hpp"
-#include "graphics/opengl/texture2d.hpp"
+#include "graphics/opengl/texture.hpp"
+#include "graphics/opengl/utils.hpp"
+#include <memory>
+#include <vector>
 
 namespace fei {
 
-FramebufferOpenGL::FramebufferOpenGL(const FramebufferDescriptor& desc) :
+FramebufferOpenGL::FramebufferOpenGL(const FramebufferDescription& desc) :
     Framebuffer(desc) {
-    glGenFramebuffers(1, &m_fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
+    glCreateFramebuffers(1, &m_fbo);
     opengl_check_error();
 
-    for (int i = 0; i < desc.color_attachments.size(); i++) {
-        const auto& attachment = desc.color_attachments[i];
-        glFramebufferTexture2D(
-            GL_FRAMEBUFFER,
-            GL_COLOR_ATTACHMENT0 + i,
-            GL_TEXTURE_2D,
-            static_cast<Texture2DOpenGL*>(attachment.texture)->handler(),
-            attachment.mip_level
-        );
+    if (!m_color_attachments.empty()) {
+        for (int i = 0; i < m_color_attachments.size(); i++) {
+            const auto& color_attachment = desc.color_targets[i];
+            auto tex_gl = std::static_pointer_cast<Texture2DOpenGL>(
+                color_attachment.texture
+            );
+
+            glNamedFramebufferTexture(
+                m_fbo,
+                GL_COLOR_ATTACHMENT0 + i,
+                tex_gl->id(),
+                color_attachment.mip_level
+            );
+            opengl_check_error();
+        }
+        std::vector<GLenum> bufs(m_color_attachments.size());
+        for (int i = 0; i < m_color_attachments.size(); i++) {
+            bufs[i] = GL_COLOR_ATTACHMENT0 + i;
+        }
+        glNamedFramebufferDrawBuffers(m_fbo, bufs.size(), bufs.data());
         opengl_check_error();
     }
 
-    if (desc.has_depth_attachment) {
-        glFramebufferTexture2D(
-            GL_FRAMEBUFFER,
+    if (m_depth_attachment.has_value()) {
+        auto depth_tex_gl = std::static_pointer_cast<Texture2DOpenGL>(
+            m_depth_attachment->texture
+        );
+        glNamedFramebufferTexture(
+            m_fbo,
             GL_DEPTH_ATTACHMENT,
-            GL_TEXTURE_2D,
-            static_cast<Texture2DOpenGL*>(desc.depth_attachment.texture)
-                ->handler(),
-            desc.depth_attachment.mip_level
+            depth_tex_gl->id(),
+            m_depth_attachment->mip_level
         );
         opengl_check_error();
     }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-GLuint FramebufferOpenGL::handler() const {
-    return m_fbo;
+FramebufferOpenGL::~FramebufferOpenGL() {
+    if (m_fbo) {
+        glDeleteFramebuffers(1, &m_fbo);
+        opengl_check_error();
+    }
 }
 
 } // namespace fei

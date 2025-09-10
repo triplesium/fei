@@ -23,5 +23,6 @@ GLenum convert_shader_stage(ShaderStage stage);
 GLenum convert_render_primitive(RenderPrimitive render_primitive);
 GLsizei convert_attribute_size(VertexFormat format);
 GLenum convert_attribute_type(VertexFormat format);
+GLenum convert_texture_type(TextureType type);
 
 } // namespace fei

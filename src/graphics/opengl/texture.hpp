@@ -1,13 +1,11 @@
 #pragma once
 
 #include "graphics/opengl/utils.hpp"
-#include "graphics/texture2d.hpp"
-
-#include <cstdint>
+#include "graphics/texture.hpp"
 
 namespace fei {
 
-class Texture2DOpenGL : public Texture2D {
+class Texture2DOpenGL : public Texture {
   private:
     int m_width, m_height;
     GLuint m_texture {0};
@@ -16,28 +14,20 @@ class Texture2DOpenGL : public Texture2D {
     GLuint m_image_format;
     GLint m_wrap_s, m_wrap_t;
     GLint m_min_filter, m_mag_filter;
+    GLenum m_texture_type;
+    GLsizei m_mip_level;
 
   public:
-    Texture2DOpenGL(const TextureDescriptor& desc);
+    Texture2DOpenGL(const TextureDescription& desc);
     Texture2DOpenGL(Texture2DOpenGL&&) noexcept;
     Texture2DOpenGL& operator=(Texture2DOpenGL&&) noexcept;
     Texture2DOpenGL(const Texture2DOpenGL&) = delete;
     Texture2DOpenGL& operator=(const Texture2DOpenGL&) = delete;
-
     ~Texture2DOpenGL();
 
-    void update_data(
-        const std::byte* data,
-        std::uint32_t width,
-        std::uint32_t height
-    ) override;
-
-    void apply(std::uint32_t index) const override;
-
-    GLuint handler() const;
-
-    int width() const override;
-    int height() const override;
+    GLuint id() const { return m_texture; }
+    int width() const override { return m_width; }
+    int height() const override { return m_height; }
 };
 
 } // namespace fei

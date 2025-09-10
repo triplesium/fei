@@ -1,5 +1,6 @@
 #include "graphics/opengl/utils.hpp"
 #include "base/log.hpp"
+#include "graphics/enums.hpp"
 
 namespace fei {
 
@@ -188,6 +189,16 @@ GLenum convert_attribute_type(VertexFormat format) {
             return GL_UNSIGNED_SHORT;
         case VertexFormat::UByte4:
             return GL_UNSIGNED_BYTE;
+    }
+    return 0;
+}
+
+GLenum convert_texture_type(TextureType type) {
+    switch (type) {
+        case TextureType::Texture2D:
+            return GL_TEXTURE_2D;
+        case TextureType::TextureCube:
+            return GL_TEXTURE_CUBE_MAP;
     }
     return 0;
 }
