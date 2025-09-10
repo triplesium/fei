@@ -1,0 +1,5 @@
+target("fei-asset")
+    set_kind("headeronly")
+    add_headerfiles("**.hpp")
+    -- add_files("**.cpp")
+    add_deps("fei-base", "fei-refl", "fei-ecs", "fei-app")
