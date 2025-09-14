@@ -29,6 +29,8 @@ class GraphicsDevice {
     create_framebuffer(const FramebufferDescription& desc) = 0;
     virtual std::shared_ptr<ResourceLayout>
     create_resource_layout(const ResourceLayoutDescription& desc) = 0;
+    virtual std::shared_ptr<ResourceSet>
+    create_resource_set(const ResourceSetDescription& desc) = 0;
     virtual std::shared_ptr<Sampler>
     create_sampler(const SamplerDescription& desc) = 0;
     virtual void submit_commands(std::shared_ptr<CommandBuffer> command_buffer

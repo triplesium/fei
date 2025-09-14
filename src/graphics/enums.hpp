@@ -278,4 +278,9 @@ enum class SamplerBorderColor : uint8 {
     OpaqueWhite,
 };
 
+enum class IndexFormat : uint8 {
+    Uint16,
+    Uint32,
+};
+
 } // namespace fei

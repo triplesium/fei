@@ -10,8 +10,8 @@ struct TextureDescription {
     uint32 width {0};
     uint32 height {0};
     uint32 depth {0};
-    uint32 mip_level {0};
-    uint32 layer {0};
+    uint32 mip_level {1};
+    uint32 layer {1};
     PixelFormat texture_format;
     BitFlags<TextureUsage> texture_usage;
     TextureType texture_type;

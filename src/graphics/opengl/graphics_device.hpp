@@ -4,6 +4,7 @@
 
 namespace fei {
 class GraphicsDeviceOpenGL : public GraphicsDevice {
+  private:
   public:
     GraphicsDeviceOpenGL();
     virtual ~GraphicsDeviceOpenGL() = default;
@@ -21,6 +22,8 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
     create_framebuffer(const FramebufferDescription& desc) override;
     virtual std::shared_ptr<ResourceLayout>
     create_resource_layout(const ResourceLayoutDescription& desc) override;
+    virtual std::shared_ptr<ResourceSet>
+    create_resource_set(const ResourceSetDescription& desc) override;
     virtual std::shared_ptr<Sampler>
     create_sampler(const SamplerDescription& desc) override;
     virtual void submit_commands(std::shared_ptr<CommandBuffer> command_buffer

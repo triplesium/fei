@@ -363,4 +363,123 @@ GLenum to_gl_comparison_function(ComparisonKind func) {
     return 0;
 }
 
+GLenum to_gl_draw_elements_type(IndexFormat format) {
+    switch (format) {
+        case IndexFormat::Uint16:
+            return GL_UNSIGNED_SHORT;
+        case IndexFormat::Uint32:
+            return GL_UNSIGNED_INT;
+    }
+    return 0;
+}
+
+GLenum to_gl_pixel_format(PixelFormat format) {
+    switch (format) {
+        case PixelFormat::R8Unorm:
+        case PixelFormat::R8Snorm:
+        case PixelFormat::R8Uint:
+        case PixelFormat::R8Sint:
+        case PixelFormat::R16Uint:
+        case PixelFormat::R16Sint:
+        case PixelFormat::R16Unorm:
+        case PixelFormat::R16Snorm:
+        case PixelFormat::R16Float:
+        case PixelFormat::R32Uint:
+        case PixelFormat::R32Sint:
+        case PixelFormat::R32Float:
+            return GL_RED;
+        case PixelFormat::Rg8Unorm:
+        case PixelFormat::Rg8Snorm:
+        case PixelFormat::Rg8Uint:
+        case PixelFormat::Rg8Sint:
+        case PixelFormat::Rg16Uint:
+        case PixelFormat::Rg16Sint:
+        case PixelFormat::Rg16Unorm:
+        case PixelFormat::Rg16Snorm:
+        case PixelFormat::Rg16Float:
+        case PixelFormat::Rg32Uint:
+        case PixelFormat::Rg32Sint:
+        case PixelFormat::Rg32Float:
+            return GL_RG;
+        case PixelFormat::Rgba8Unorm:
+        case PixelFormat::Rgba8UnormSrgb:
+        case PixelFormat::Rgba8Snorm:
+        case PixelFormat::Rgba8Uint:
+        case PixelFormat::Rgba8Sint:
+        case PixelFormat::Bgra8Unorm:
+        case PixelFormat::Bgra8UnormSrgb:
+        case PixelFormat::Rgb9e5Ufloat:
+        case PixelFormat::Rgb10a2Uint:
+        case PixelFormat::Rgb10a2Unorm:
+        case PixelFormat::Rg11b10Ufloat:
+        case PixelFormat::Rgba16Uint:
+        case PixelFormat::Rgba16Sint:
+        case PixelFormat::Rgba16Unorm:
+        case PixelFormat::Rgba16Snorm:
+        case PixelFormat::Rgba16Float:
+        case PixelFormat::Rgba32Uint:
+        case PixelFormat::Rgba32Sint:
+        case PixelFormat::Rgba32Float:
+            return GL_RGBA;
+        default:
+            fei::fatal("Unsupported PixelFormat");
+    }
+    return 0;
+}
+
+GLenum to_gl_pixel_type(PixelFormat format) {
+    switch (format) {
+        case PixelFormat::R8Unorm:
+        case PixelFormat::R8Uint:
+        case PixelFormat::Rg8Unorm:
+        case PixelFormat::Rg8Uint:
+        case PixelFormat::Rgba8Unorm:
+        case PixelFormat::Rgba8UnormSrgb:
+        case PixelFormat::Rgba8Uint:
+        case PixelFormat::Bgra8Unorm:
+        case PixelFormat::Bgra8UnormSrgb:
+            return GL_UNSIGNED_BYTE;
+        case PixelFormat::R8Snorm:
+        case PixelFormat::R8Sint:
+        case PixelFormat::Rg8Snorm:
+        case PixelFormat::Rg8Sint:
+        case PixelFormat::Rgba8Snorm:
+        case PixelFormat::Rgba8Sint:
+            return GL_BYTE;
+        case PixelFormat::R16Unorm:
+        case PixelFormat::R16Uint:
+        case PixelFormat::Rg16Unorm:
+        case PixelFormat::Rg16Uint:
+        case PixelFormat::Rgba16Unorm:
+        case PixelFormat::Rgba16Uint:
+            return GL_UNSIGNED_SHORT;
+        case PixelFormat::R16Snorm:
+        case PixelFormat::R16Sint:
+        case PixelFormat::Rg16Snorm:
+        case PixelFormat::Rg16Sint:
+        case PixelFormat::Rgba16Snorm:
+        case PixelFormat::Rgba16Sint:
+            return GL_SHORT;
+        case PixelFormat::R32Uint:
+        case PixelFormat::Rg32Uint:
+        case PixelFormat::Rgba32Uint:
+            return GL_UNSIGNED_INT;
+        case PixelFormat::R32Sint:
+        case PixelFormat::Rg32Sint:
+        case PixelFormat::Rgba32Sint:
+            return GL_INT;
+        case PixelFormat::R16Float:
+        case PixelFormat::Rg16Float:
+        case PixelFormat::Rgba16Float:
+            return GL_HALF_FLOAT;
+        case PixelFormat::R32Float:
+        case PixelFormat::Rg32Float:
+        case PixelFormat::Rgba32Float:
+            return GL_FLOAT;
+        default:
+            fei::fatal("Unsupported PixelFormat");
+    }
+    return 0;
+}
+
 } // namespace fei

@@ -27,12 +27,14 @@ void CommandBufferOpenGL::set_viewport(
 
 void CommandBufferOpenGL::clear_color(const Color4F& color) {
     glClearColor(color.r, color.g, color.b, color.a);
+    opengl_check_error();
     glClear(GL_COLOR_BUFFER_BIT);
     opengl_check_error();
 }
 
 void CommandBufferOpenGL::clear_depth(float depth) {
     glClearDepth(depth);
+    opengl_check_error();
     glClear(GL_DEPTH_BUFFER_BIT);
     opengl_check_error();
 }
@@ -58,12 +60,6 @@ void CommandBufferOpenGL::set_vertex_buffer(std::shared_ptr<Buffer> buffer) {
             opengl_check_error();
         }
     }
-}
-
-void CommandBufferOpenGL::set_index_buffer(std::shared_ptr<Buffer> buffer) {
-    auto buffer_gl = std::static_pointer_cast<BufferOpenGL>(buffer);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_gl->id());
-    opengl_check_error();
 }
 
 void CommandBufferOpenGL::set_resource_set(
@@ -117,11 +113,13 @@ void CommandBufferOpenGL::update_buffer(
     std::size_t size
 ) {
     auto buffer_gl = std::static_pointer_cast<BufferOpenGL>(buffer);
-    glBindBuffer(GL_ARRAY_BUFFER, buffer_gl->id());
-    opengl_check_error();
-    glBufferSubData(GL_ARRAY_BUFFER, 0, size, data);
-    opengl_check_error();
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    glNamedBufferData(
+        buffer_gl->id(),
+        size,
+        data,
+        to_gl_buffer_usage(buffer_gl->usages())
+    );
     opengl_check_error();
 }
 
@@ -142,7 +140,7 @@ void CommandBufferOpenGL::draw_indexed(size_t count) {
     glDrawElements(
         to_gl_render_primitive(pipeline_gl->render_primitive()),
         count,
-        GL_UNSIGNED_INT,
+        m_draw_elements_type,
         nullptr
     );
     opengl_check_error();
@@ -169,41 +167,16 @@ void CommandBufferOpenGL::set_pipeline_impl(std::shared_ptr<Pipeline> pipeline
     opengl_check_error();
 }
 
-// void CommandBufferOpenGL::set_uniform(
-//     const std::string& name,
-//     UniformValue value
-// ) {
-//     auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(m_pipeline);
-//     auto location = glGetUniformLocation(pipeline_gl->program(),
-//     name.c_str()); if (const float* f = std::get_if<float>(&value)) {
-//         glUniform1f(location, *f);
-//     } else if (const int* i = std::get_if<int>(&value)) {
-//         glUniform1i(location, *i);
-//     } else if (const bool* b = std::get_if<bool>(&value)) {
-//         glUniform1i(location, (int)*b);
-//     } else if (const Vector2* v = std::get_if<Vector2>(&value)) {
-//         glUniform2f(location, v->x, v->y);
-//     } else if (const Vector3* v = std::get_if<Vector3>(&value)) {
-//         glUniform3f(location, v->x, v->y, v->z);
-//     } else if (const Vector4* v = std::get_if<Vector4>(&value)) {
-//         glUniform4f(location, v->x, v->y, v->z, v->w);
-//     } else if (const Matrix4x4* m = std::get_if<Matrix4x4>(&value)) {
-//         glUniformMatrix4fv(location, 1, GL_TRUE, m->data());
-//     } else if (const auto* tex =
-//                    std::get_if<std::shared_ptr<Texture>>(&value)) {
-//         auto texture_gl = std::static_pointer_cast<TextureOpenGL>(*tex);
-//         // TODO: Texture uniforms
-//         glActiveTexture(GL_TEXTURE0);
-//         opengl_check_error();
-//         glBindTexture(GL_TEXTURE_2D, texture_gl->id());
-//         opengl_check_error();
-//         glUniform1i(location, 0);
-//         opengl_check_error();
-//         fei::error("Unsupported uniform value type");
-//     } else {
-//         fei::error("Unsupported uniform value type");
-//     }
-//     opengl_check_error();
-// }
+void CommandBufferOpenGL::set_index_buffer_impl(
+    std::shared_ptr<Buffer> buffer,
+    IndexFormat format,
+    uint32 offset
+) {
+    auto buffer_gl = std::static_pointer_cast<BufferOpenGL>(buffer);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_gl->id());
+    opengl_check_error();
+
+    m_draw_elements_type = to_gl_draw_elements_type(format);
+}
 
 } // namespace fei

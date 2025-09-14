@@ -1,5 +1,7 @@
 #pragma once
+#include "base/types.hpp"
 #include "graphics/buffer.hpp"
+#include "graphics/enums.hpp"
 #include "graphics/framebuffer.hpp"
 #include "graphics/pipeline.hpp"
 #include "graphics/resource.hpp"
@@ -35,7 +37,20 @@ class CommandBuffer {
         set_pipeline_impl(pipeline);
     }
     virtual void set_vertex_buffer(std::shared_ptr<Buffer> buffer) = 0;
-    virtual void set_index_buffer(std::shared_ptr<Buffer> buffer) = 0;
+
+    virtual void
+    set_index_buffer(std::shared_ptr<Buffer> buffer, IndexFormat format) {
+        set_index_buffer_impl(buffer, format, 0);
+    }
+
+    virtual void set_index_buffer(
+        std::shared_ptr<Buffer> buffer,
+        IndexFormat format,
+        uint32 offset
+    ) {
+        set_index_buffer_impl(buffer, format, offset);
+    }
+
     virtual void set_resource_set(
         uint32 slot,
         std::shared_ptr<ResourceSet> resource_set
@@ -52,6 +67,11 @@ class CommandBuffer {
     virtual void set_framebuffer_impl(std::shared_ptr<Framebuffer> framebuffer
     ) = 0;
     virtual void set_pipeline_impl(std::shared_ptr<Pipeline> pipeline) = 0;
+    virtual void set_index_buffer_impl(
+        std::shared_ptr<Buffer> buffer,
+        IndexFormat format,
+        uint32 offset
+    ) = 0;
 };
 
 } // namespace fei

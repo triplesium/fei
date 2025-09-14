@@ -9,11 +9,14 @@ class TextureOpenGL : public Texture {
   private:
     GLuint m_texture {0};
     uint32 m_width, m_height, m_depth;
-    uint32 m_mip_level {0};
-    uint32 m_layer {0};
+    uint32 m_mip_level {1};
+    uint32 m_layer {1};
     PixelFormat m_texture_format;
     BitFlags<TextureUsage> m_texture_usage;
     TextureType m_texture_type;
+    GLenum m_gl_format;
+    GLenum m_gl_type;
+    GLenum m_gl_sized_internal_format;
 
   public:
     TextureOpenGL(const TextureDescription& desc);
@@ -31,6 +34,11 @@ class TextureOpenGL : public Texture {
         return m_texture_usage;
     }
     virtual TextureType type() const override { return m_texture_type; }
+    GLenum gl_format() const { return m_gl_format; }
+    GLenum gl_type() const { return m_gl_type; }
+    GLenum gl_sized_internal_format() const {
+        return m_gl_sized_internal_format;
+    }
 };
 
 } // namespace fei

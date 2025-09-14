@@ -25,5 +25,8 @@ GLenum to_gl_attribute_type(VertexFormat format);
 GLenum to_gl_sized_internal_format(PixelFormat format);
 GLenum to_gl_texture_target(BitFlags<TextureUsage> usage, TextureType type);
 GLenum to_gl_comparison_function(ComparisonKind func);
+GLenum to_gl_draw_elements_type(IndexFormat format);
+GLenum to_gl_pixel_format(PixelFormat format);
+GLenum to_gl_pixel_type(PixelFormat format);
 
 } // namespace fei

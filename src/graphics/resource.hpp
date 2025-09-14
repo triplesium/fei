@@ -1,4 +1,5 @@
 #pragma once
+#include "base/bitflags.hpp"
 #include "base/types.hpp"
 #include "graphics/enums.hpp"
 
@@ -17,7 +18,7 @@ enum class ResourceKind : uint8 {
 struct ResourceLayoutElementDescription {
     uint32 binding;
     ResourceKind kind;
-    ShaderStages stages;
+    BitFlags<ShaderStages> stages;
 };
 
 struct ResourceLayoutDescription {
