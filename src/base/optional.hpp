@@ -1,7 +1,5 @@
 #pragma once
-
 #include "base/type_traits.hpp"
-
 #include <concepts>
 #include <type_traits>
 
@@ -32,6 +30,7 @@ union OptionalStorage {
 
     template<class... Args>
     OptionalStorage(Args&&... args) : value(std::forward<Args>(args)...) {}
+    ~OptionalStorage() {}
 };
 
 template<class T>

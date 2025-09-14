@@ -1,7 +1,7 @@
 #pragma once
-
 #include "app/plugin.hpp"
 #include "ecs/system_params.hpp"
+
 #include <chrono>
 
 namespace fei {
@@ -9,6 +9,7 @@ namespace fei {
 struct Time {
     void tick();
     float delta() const;
+    float elapsed_time() const { return m_elapsed_time; }
 
     float time_scale {1.0f};
 
@@ -16,7 +17,11 @@ struct Time {
     std::chrono::steady_clock::time_point m_last_tick_time {
         std::chrono::steady_clock::now()
     };
+    std::chrono::steady_clock::time_point m_start_time {
+        std::chrono::steady_clock::now()
+    };
     float m_delta_time = 0.0f;
+    float m_elapsed_time = 0.0f;
 };
 
 enum TimerMode {

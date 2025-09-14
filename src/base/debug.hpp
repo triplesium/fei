@@ -1,5 +1,4 @@
 #pragma once
-
 #include "base/log.hpp"
 
 #ifdef NDEBUG

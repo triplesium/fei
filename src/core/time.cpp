@@ -1,14 +1,14 @@
 #include "core/time.hpp"
+#include "app/app.hpp"
 
 namespace fei {
 
 void Time::tick() {
     auto now = std::chrono::steady_clock::now();
-    auto duration =
-        std::chrono::duration_cast<std::chrono::duration<float>>(
-            now - m_last_tick_time
-        )
-            .count();
+    auto duration = std::chrono::duration_cast<std::chrono::duration<float>>(
+                        now - m_last_tick_time
+    )
+                        .count();
     m_delta_time = duration * time_scale;
     m_last_tick_time = now;
 }
@@ -44,4 +44,4 @@ void TimePlugin::setup(App& app) {
     app.add_system(First, time_system);
 }
 
-}
+} // namespace fei

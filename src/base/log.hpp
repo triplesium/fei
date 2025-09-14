@@ -1,5 +1,4 @@
 #pragma once
-
 #include <cstdint>
 #include <exception>
 #include <format>
@@ -8,9 +7,17 @@
 
 namespace fei {
 
-enum class LogLevel : std::uint32_t { Trace, Debug, Info, Error, Fatal, None };
+enum class LogLevel : std::uint32_t {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+    Fatal,
+    None
+};
 static constexpr const char* LOG_LEVEL_STR[] =
-    {"trace", "debug", "info", "error", "fatal", nullptr};
+    {"trace", "debug", "info", "warn", "error", "fatal", nullptr};
 
 struct FormatString {
     std::string_view str;
@@ -42,6 +49,11 @@ void debug(const FormatString& format, Args&&... args) {
 template<typename... Args>
 void info(const FormatString& format, Args&&... args) {
     detail::log(LogLevel::Info, format, std::make_format_args(args...));
+}
+
+template<typename... Args>
+void warn(const FormatString& format, Args&&... args) {
+    detail::log(LogLevel::Warn, format, std::make_format_args(args...));
 }
 
 template<typename... Args>
