@@ -1,4 +1,5 @@
 #include "core/time.hpp"
+
 #include "app/app.hpp"
 
 namespace fei {
@@ -11,6 +12,10 @@ void Time::tick() {
                         .count();
     m_delta_time = duration * time_scale;
     m_last_tick_time = now;
+    m_elapsed_time = std::chrono::duration_cast<std::chrono::duration<float>>(
+                         now - m_start_time
+    )
+                         .count();
 }
 
 float Time::delta() const {

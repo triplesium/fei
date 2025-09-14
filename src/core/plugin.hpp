@@ -1,5 +1,6 @@
 #pragma once
 #include "app/plugin.hpp"
+#include "core/image.hpp"
 #include "core/text.hpp"
 #include "core/time.hpp"
 
@@ -10,6 +11,7 @@ class CorePlugin : public Plugin {
     void setup(App& app) override {
         app.add_plugin<TimePlugin>();
         app.add_plugin<TextAssetPlugin>();
+        app.add_plugin<ImagePlugin>();
     }
 };
 

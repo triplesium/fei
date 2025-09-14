@@ -7,6 +7,10 @@
 namespace fei {
 
 struct Time {
+    Time() :
+        m_last_tick_time(std::chrono::steady_clock::now()),
+        m_start_time(std::chrono::steady_clock::now()) {}
+
     void tick();
     float delta() const;
     float elapsed_time() const { return m_elapsed_time; }

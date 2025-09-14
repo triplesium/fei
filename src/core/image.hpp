@@ -1,5 +1,7 @@
 #pragma once
+#include "app/plugin.hpp"
 #include "asset/asset_loader.hpp"
+#include "asset/asset_server.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -30,6 +32,13 @@ class Image {
 class ImageLoader : public AssetLoader<Image> {
   public:
     Image* load(const std::filesystem::path& path) override;
+};
+
+class ImagePlugin : public Plugin {
+  public:
+    void setup(App& app) override {
+        app.resource<AssetServer>().add_loader<Image, ImageLoader>();
+    }
 };
 
 } // namespace fei
