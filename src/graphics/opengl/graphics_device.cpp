@@ -1,11 +1,15 @@
-#include "graphics_device.hpp"
+#include "graphics/opengl/graphics_device.hpp"
+
 #include "graphics/opengl/buffer.hpp"
 #include "graphics/opengl/command_buffer.hpp"
 #include "graphics/opengl/framebuffer.hpp"
 #include "graphics/opengl/pipeline.hpp"
+#include "graphics/opengl/sampler.hpp"
 #include "graphics/opengl/shader_module.hpp"
 #include "graphics/opengl/texture.hpp"
 #include "graphics/opengl/utils.hpp"
+
+#include <memory>
 
 namespace fei {
 
@@ -27,7 +31,7 @@ GraphicsDeviceOpenGL::create_buffer(const BufferDescription& desc) {
 
 std::shared_ptr<Texture>
 GraphicsDeviceOpenGL::create_texture(const TextureDescription& desc) {
-    return std::make_shared<Texture2DOpenGL>(desc);
+    return std::make_shared<TextureOpenGL>(desc);
 }
 
 std::shared_ptr<CommandBuffer> GraphicsDeviceOpenGL::create_command_buffer() {
@@ -44,7 +48,20 @@ GraphicsDeviceOpenGL::create_framebuffer(const FramebufferDescription& desc) {
     return std::make_shared<FramebufferOpenGL>(desc);
 }
 
-void GraphicsDeviceOpenGL::submit_commands(CommandBuffer* command_buffer) {}
+std::shared_ptr<ResourceLayout> GraphicsDeviceOpenGL::create_resource_layout(
+    const ResourceLayoutDescription& desc
+) {
+    return std::make_shared<ResourceLayout>(desc);
+}
+
+std::shared_ptr<Sampler>
+GraphicsDeviceOpenGL::create_sampler(const SamplerDescription& desc) {
+    return std::make_shared<SamplerOpenGL>(desc);
+}
+
+void GraphicsDeviceOpenGL::submit_commands(
+    std::shared_ptr<CommandBuffer> command_buffer
+) {}
 
 void GraphicsDeviceOpenGL::update_texture(
     std::shared_ptr<Texture> texture,
@@ -58,7 +75,7 @@ void GraphicsDeviceOpenGL::update_texture(
     std::uint32_t mip_level,
     std::uint32_t layer
 ) {
-    auto gl_texture = std::static_pointer_cast<Texture2DOpenGL>(texture);
+    auto gl_texture = std::static_pointer_cast<TextureOpenGL>(texture);
 
     glBindTexture(GL_TEXTURE_2D, gl_texture->id());
     opengl_check_error();

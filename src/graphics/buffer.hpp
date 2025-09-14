@@ -1,6 +1,7 @@
 #pragma once
-
+#include "base/bitflags.hpp"
 #include "graphics/enums.hpp"
+#include "graphics/resource.hpp"
 #include "math/color.hpp"
 #include "math/vector.hpp"
 
@@ -33,19 +34,13 @@ struct V2F_C4F_T2F_Quad {
 
 struct BufferDescription {
     std::size_t size;
-    BufferType type;
-    BufferUsage usage;
+    BitFlags<BufferUsages> usages;
 };
 
-class Buffer {
+class Buffer : public BindableResource {
   public:
-    Buffer(const BufferDescription& desc) :
-        m_size(desc.size), m_type(desc.type), m_usage(desc.usage) {}
     virtual ~Buffer() = default;
-
-  protected:
-    size_t m_size;
-    BufferType m_type;
-    BufferUsage m_usage;
+    virtual std::size_t size() const = 0;
+    virtual BitFlags<BufferUsages> usages() const = 0;
 };
 } // namespace fei

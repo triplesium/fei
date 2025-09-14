@@ -1,5 +1,4 @@
 #pragma once
-
 #include "base/optional.hpp"
 #include "graphics/texture.hpp"
 

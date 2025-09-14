@@ -1,5 +1,4 @@
 #pragma once
-
 #include "graphics/opengl/utils.hpp"
 #include "graphics/shader_module.hpp"
 

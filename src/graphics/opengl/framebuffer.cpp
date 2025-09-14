@@ -1,6 +1,8 @@
 #include "graphics/opengl/framebuffer.hpp"
+
 #include "graphics/opengl/texture.hpp"
 #include "graphics/opengl/utils.hpp"
+
 #include <memory>
 #include <vector>
 
@@ -14,9 +16,9 @@ FramebufferOpenGL::FramebufferOpenGL(const FramebufferDescription& desc) :
     if (!m_color_attachments.empty()) {
         for (int i = 0; i < m_color_attachments.size(); i++) {
             const auto& color_attachment = desc.color_targets[i];
-            auto tex_gl = std::static_pointer_cast<Texture2DOpenGL>(
-                color_attachment.texture
-            );
+            auto tex_gl =
+                std::static_pointer_cast<TextureOpenGL>(color_attachment.texture
+                );
 
             glNamedFramebufferTexture(
                 m_fbo,
@@ -35,9 +37,9 @@ FramebufferOpenGL::FramebufferOpenGL(const FramebufferDescription& desc) :
     }
 
     if (m_depth_attachment.has_value()) {
-        auto depth_tex_gl = std::static_pointer_cast<Texture2DOpenGL>(
-            m_depth_attachment->texture
-        );
+        auto depth_tex_gl =
+            std::static_pointer_cast<TextureOpenGL>(m_depth_attachment->texture
+            );
         glNamedFramebufferTexture(
             m_fbo,
             GL_DEPTH_ATTACHMENT,

@@ -1,5 +1,4 @@
 #pragma once
-
 #include "graphics/framebuffer.hpp"
 #include "graphics/opengl/utils.hpp"
 

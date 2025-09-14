@@ -1,5 +1,4 @@
 #pragma once
-
 #include "graphics/graphics_device.hpp"
 #include "graphics/shader_module.hpp"
 
@@ -20,7 +19,12 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
     create_render_pipeline(const PipelineDescription& desc) override;
     virtual std::shared_ptr<Framebuffer>
     create_framebuffer(const FramebufferDescription& desc) override;
-    virtual void submit_commands(CommandBuffer* command_buffer) override;
+    virtual std::shared_ptr<ResourceLayout>
+    create_resource_layout(const ResourceLayoutDescription& desc) override;
+    virtual std::shared_ptr<Sampler>
+    create_sampler(const SamplerDescription& desc) override;
+    virtual void submit_commands(std::shared_ptr<CommandBuffer> command_buffer
+    ) override;
 
     virtual void update_texture(
         std::shared_ptr<Texture> texture,

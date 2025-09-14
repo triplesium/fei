@@ -1,8 +1,9 @@
 #pragma once
-
 #include "graphics/buffer.hpp"
 #include "graphics/command_buffer.hpp"
 #include "graphics/framebuffer.hpp"
+#include "graphics/resource.hpp"
+#include "graphics/sampler.hpp"
 #include "graphics/shader_module.hpp"
 #include "graphics/texture.hpp"
 
@@ -26,7 +27,12 @@ class GraphicsDevice {
     create_render_pipeline(const PipelineDescription& desc) = 0;
     virtual std::shared_ptr<Framebuffer>
     create_framebuffer(const FramebufferDescription& desc) = 0;
-    virtual void submit_commands(CommandBuffer* command_buffer) = 0;
+    virtual std::shared_ptr<ResourceLayout>
+    create_resource_layout(const ResourceLayoutDescription& desc) = 0;
+    virtual std::shared_ptr<Sampler>
+    create_sampler(const SamplerDescription& desc) = 0;
+    virtual void submit_commands(std::shared_ptr<CommandBuffer> command_buffer
+    ) = 0;
 
     virtual void update_texture(
         std::shared_ptr<Texture> texture,

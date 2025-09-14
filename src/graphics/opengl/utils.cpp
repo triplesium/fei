@@ -1,4 +1,5 @@
 #include "graphics/opengl/utils.hpp"
+
 #include "base/log.hpp"
 #include "graphics/enums.hpp"
 
@@ -37,41 +38,7 @@ bool opengl_check_error() {
     return false;
 }
 
-void convert_pixel_format(
-    PixelFormat pixel_format,
-    GLint& interal_format,
-    GLuint& format,
-    GLenum& type
-) {
-    switch (pixel_format) {
-        case PixelFormat::RGBA8888: {
-            interal_format = GL_RGBA;
-            format = GL_RGBA;
-            type = GL_UNSIGNED_BYTE;
-            break;
-        }
-        case PixelFormat::RGB888: {
-            interal_format = GL_RGB;
-            format = GL_RGB;
-            type = GL_UNSIGNED_BYTE;
-            break;
-        }
-        case PixelFormat::RGBA4444: {
-            interal_format = GL_RGBA;
-            format = GL_RGBA;
-            type = GL_UNSIGNED_SHORT_4_4_4_4;
-            break;
-        }
-        case PixelFormat::D16: {
-            interal_format = GL_DEPTH_COMPONENT;
-            format = GL_DEPTH_COMPONENT;
-            type = GL_UNSIGNED_INT;
-            break;
-        }
-    }
-}
-
-GLint convert_address_mode(SamplerAddressMode address_mode) {
+GLint to_gl_address_mode(SamplerAddressMode address_mode) {
     switch (address_mode) {
         case SamplerAddressMode::Repeat:
             return GL_REPEAT;
@@ -79,63 +46,76 @@ GLint convert_address_mode(SamplerAddressMode address_mode) {
             return GL_MIRRORED_REPEAT;
         case SamplerAddressMode::ClampToEdge:
             return GL_CLAMP_TO_EDGE;
-        case SamplerAddressMode::DontCare:
-            return GL_REPEAT;
+        case SamplerAddressMode::ClampToBorder:
+            return GL_CLAMP_TO_BORDER;
     }
-    return 0;
 }
 
-GLint convert_filter(SamplerFilter filter) {
-    switch (filter) {
-        case SamplerFilter::Linear:
-            return GL_LINEAR;
-        case SamplerFilter::LinearMipmapLinear:
-            return GL_LINEAR_MIPMAP_LINEAR;
-        case SamplerFilter::LinearMipmapNearest:
-            return GL_LINEAR_MIPMAP_NEAREST;
+GLuint to_gl_mag_filter(SamplerFilter mag_filter) {
+    switch (mag_filter) {
         case SamplerFilter::Nearest:
             return GL_NEAREST;
-        case SamplerFilter::NearestMipmapNearest:
-            return GL_NEAREST_MIPMAP_NEAREST;
-        case SamplerFilter::NearestMipmapLinear:
-            return GL_NEAREST_MIPMAP_LINEAR;
-        case SamplerFilter::DontCare:
+        case SamplerFilter::Linear:
+            return GL_LINEAR;
+    }
+}
+
+GLint to_gl_min_filter(
+    SamplerFilter min_filter,
+    SamplerFilter mipmap_filter,
+    bool mipmap
+) {
+    if (min_filter == SamplerFilter::Linear) {
+        if (mipmap) {
+            if (mipmap_filter == SamplerFilter::Linear) {
+                return GL_LINEAR_MIPMAP_LINEAR;
+            } else {
+                return GL_LINEAR_MIPMAP_NEAREST;
+            }
+        } else {
+            return GL_LINEAR;
+        }
+    } else {
+        if (mipmap) {
+            if (mipmap_filter == SamplerFilter::Linear) {
+                return GL_NEAREST_MIPMAP_LINEAR;
+            } else {
+                return GL_NEAREST_MIPMAP_NEAREST;
+            }
+        } else {
             return GL_NEAREST;
+        }
+    }
+}
+
+GLenum convert_buffer_type(BitFlags<BufferUsages> usages) {
+    if (usages.is_set(BufferUsages::Vertex)) {
+        return GL_ARRAY_BUFFER;
+    }
+    if (usages.is_set(BufferUsages::Index)) {
+        return GL_ELEMENT_ARRAY_BUFFER;
     }
     return 0;
 }
 
-GLenum convert_buffer_type(BufferType type) {
-    switch (type) {
-        case BufferType::Vertex:
-            return GL_ARRAY_BUFFER;
-        case BufferType::Index:
-            return GL_ELEMENT_ARRAY_BUFFER;
+GLenum to_gl_buffer_usage(BitFlags<BufferUsages> usages) {
+    if (usages.is_set(BufferUsages::Dynamic)) {
+        return GL_DYNAMIC_DRAW;
+    }
+    return GL_STATIC_DRAW;
+}
+
+GLenum to_gl_shader_stage(BitFlags<ShaderStages> stages) {
+    if (stages.is_set(ShaderStages::Vertex)) {
+        return GL_VERTEX_SHADER;
+    }
+    if (stages.is_set(ShaderStages::Fragment)) {
+        return GL_FRAGMENT_SHADER;
     }
     return 0;
 }
 
-GLenum convert_buffer_usage(BufferUsage usage) {
-    switch (usage) {
-        case BufferUsage::Static:
-            return GL_STATIC_DRAW;
-        case BufferUsage::Dynamic:
-            return GL_DYNAMIC_DRAW;
-    }
-    return 0;
-}
-
-GLenum convert_shader_stage(ShaderStage stage) {
-    switch (stage) {
-        case ShaderStage::Vertex:
-            return GL_VERTEX_SHADER;
-        case ShaderStage::Fragment:
-            return GL_FRAGMENT_SHADER;
-    }
-    return 0;
-}
-
-GLenum convert_render_primitive(RenderPrimitive render_primitive) {
+GLenum to_gl_render_primitive(RenderPrimitive render_primitive) {
     switch (render_primitive) {
         case RenderPrimitive::Point:
             return GL_POINT;
@@ -151,7 +131,7 @@ GLenum convert_render_primitive(RenderPrimitive render_primitive) {
     return 0;
 }
 
-GLsizei convert_attribute_size(VertexFormat format) {
+GLsizei to_gl_attribute_size(VertexFormat format) {
     switch (format) {
         case VertexFormat::Float4:
         case VertexFormat::Int4:
@@ -172,7 +152,7 @@ GLsizei convert_attribute_size(VertexFormat format) {
     return 0;
 }
 
-GLenum convert_attribute_type(VertexFormat format) {
+GLenum to_gl_attribute_type(VertexFormat format) {
     switch (format) {
         case VertexFormat::Float4:
         case VertexFormat::Float3:
@@ -193,12 +173,192 @@ GLenum convert_attribute_type(VertexFormat format) {
     return 0;
 }
 
-GLenum convert_texture_type(TextureType type) {
-    switch (type) {
-        case TextureType::Texture2D:
-            return GL_TEXTURE_2D;
-        case TextureType::TextureCube:
-            return GL_TEXTURE_CUBE_MAP;
+GLenum to_gl_sized_internal_format(PixelFormat format) {
+    switch (format) {
+        case PixelFormat::R8Unorm:
+            return GL_R8;
+        case PixelFormat::R8Snorm:
+            return GL_R8_SNORM;
+        case PixelFormat::R8Uint:
+            return GL_R8UI;
+        case PixelFormat::R8Sint:
+            return GL_R8I;
+        case PixelFormat::R16Uint:
+            return GL_R16UI;
+        case PixelFormat::R16Sint:
+            return GL_R16I;
+        case PixelFormat::R16Unorm:
+            return GL_R16;
+        case PixelFormat::R16Snorm:
+            return GL_R16_SNORM;
+        case PixelFormat::R16Float:
+            return GL_R16F;
+        case PixelFormat::Rg8Unorm:
+            return GL_RG8;
+        case PixelFormat::Rg8Snorm:
+            return GL_RG8_SNORM;
+        case PixelFormat::Rg8Uint:
+            return GL_RG8UI;
+        case PixelFormat::Rg8Sint:
+            return GL_RG8I;
+        case PixelFormat::R32Uint:
+            return GL_R32UI;
+        case PixelFormat::R32Sint:
+            return GL_R32I;
+        case PixelFormat::R32Float:
+            return GL_R32F;
+        case PixelFormat::Rg16Uint:
+            return GL_RG16UI;
+        case PixelFormat::Rg16Sint:
+            return GL_RG16I;
+        case PixelFormat::Rg16Unorm:
+            return GL_RG16;
+        case PixelFormat::Rg16Snorm:
+            return GL_RG16_SNORM;
+        case PixelFormat::Rg16Float:
+            return GL_RG16F;
+        case PixelFormat::Rgba8Unorm:
+            return GL_RGBA8;
+        case PixelFormat::Rgba8UnormSrgb:
+            return GL_SRGB8_ALPHA8;
+        case PixelFormat::Rgba8Snorm:
+            return GL_RGBA8_SNORM;
+        case PixelFormat::Rgba8Uint:
+            return GL_RGBA8UI;
+        case PixelFormat::Rgba8Sint:
+            return GL_RGBA8I;
+        case PixelFormat::Bgra8Unorm:
+            return GL_RGBA8;
+        case PixelFormat::Bgra8UnormSrgb:
+            return GL_SRGB8_ALPHA8;
+        case PixelFormat::Rgb9e5Ufloat:
+            return GL_RGB9_E5;
+        case PixelFormat::Rgb10a2Uint:
+            return GL_RGB10_A2UI;
+        case PixelFormat::Rgb10a2Unorm:
+            return GL_RGB10_A2;
+        case PixelFormat::Rg11b10Ufloat:
+            return GL_R11F_G11F_B10F;
+        case PixelFormat::Rg32Uint:
+            return GL_RG32UI;
+        case PixelFormat::Rg32Sint:
+            return GL_RG32I;
+        case PixelFormat::Rg32Float:
+            return GL_RG32F;
+        case PixelFormat::Rgba16Uint:
+            return GL_RGBA16UI;
+        case PixelFormat::Rgba16Sint:
+            return GL_RGBA16I;
+        case PixelFormat::Rgba16Unorm:
+            return GL_RGBA16;
+        case PixelFormat::Rgba16Snorm:
+            return GL_RGBA16_SNORM;
+        case PixelFormat::Rgba16Float:
+            return GL_RGBA16F;
+        case PixelFormat::Rgba32Uint:
+            return GL_RGBA32UI;
+        case PixelFormat::Rgba32Sint:
+            return GL_RGBA32I;
+        case PixelFormat::Rgba32Float:
+            return GL_RGBA32F;
+        case PixelFormat::Stencil8:
+            return GL_STENCIL_INDEX8;
+        case PixelFormat::Depth16Unorm:
+            return GL_DEPTH_COMPONENT16;
+        case PixelFormat::Depth24Plus:
+            return GL_DEPTH_COMPONENT24;
+        case PixelFormat::Depth24PlusStencil8:
+            return GL_DEPTH24_STENCIL8;
+        case PixelFormat::Depth32Float:
+            return GL_DEPTH_COMPONENT32F;
+        case PixelFormat::Depth32FloatStencil8:
+            return GL_DEPTH32F_STENCIL8;
+        // case PixelFormat::Bc1RgbaUnorm:
+        //     return GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+        // case PixelFormat::Bc1RgbaUnormSrgb:
+        //     return GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
+        // case PixelFormat::Bc2RgbaUnorm:
+        //     return GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
+        // case PixelFormat::Bc2RgbaUnormSrgb:
+        //     return GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT;
+        // case PixelFormat::Bc3RgbaUnorm:
+        //     return GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+        // case PixelFormat::Bc3RgbaUnormSrgb:
+        //     return GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
+        case PixelFormat::Bc4RUnorm:
+            return GL_COMPRESSED_RED_RGTC1;
+        case PixelFormat::Bc4RSnorm:
+            return GL_COMPRESSED_SIGNED_RED_RGTC1;
+        case PixelFormat::Bc5RgUnorm:
+            return GL_COMPRESSED_RG_RGTC2;
+        case PixelFormat::Bc5RgSnorm:
+            return GL_COMPRESSED_SIGNED_RG_RGTC2;
+        case PixelFormat::Bc6hRgbUfloat:
+            return GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT;
+        case PixelFormat::Bc6hRgbFloat:
+            return GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT;
+        case PixelFormat::Bc7RgbaUnorm:
+            return GL_COMPRESSED_RGBA_BPTC_UNORM;
+        case PixelFormat::Bc7RgbaUnormSrgb:
+            return GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM;
+        case PixelFormat::Etc2Rgb8Unorm:
+            return GL_COMPRESSED_RGB8_ETC2;
+        case PixelFormat::Etc2Rgb8UnormSrgb:
+            return GL_COMPRESSED_SRGB8_ETC2;
+        case PixelFormat::Etc2Rgb8A1Unorm:
+            return GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2;
+        case PixelFormat::Etc2Rgb8A1UnormSrgb:
+            return GL_COMPRESSED_SRGB8_PUNCHTHROUGH_ALPHA1_ETC2;
+        case PixelFormat::Etc2Rgba8Unorm:
+            return GL_COMPRESSED_RGBA8_ETC2_EAC;
+        case PixelFormat::Etc2Rgba8UnormSrgb:
+            return GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC;
+        case PixelFormat::EacR11Unorm:
+            return GL_COMPRESSED_R11_EAC;
+        case PixelFormat::EacR11Snorm:
+            return GL_COMPRESSED_SIGNED_R11_EAC;
+        case PixelFormat::EacRg11Unorm:
+            return GL_COMPRESSED_RG11_EAC;
+        case PixelFormat::EacRg11Snorm:
+            return GL_COMPRESSED_SIGNED_RG11_EAC;
+        default:
+            fei::fatal("Unsupported PixelFormat");
+    }
+    return 0;
+}
+
+GLenum to_gl_texture_target(BitFlags<TextureUsage> usage, TextureType type) {
+    if (usage.is_set(TextureUsage::Cubemap)) {
+        return GL_TEXTURE_CUBE_MAP;
+    } else if (type == TextureType::Texture1D) {
+        return GL_TEXTURE_1D;
+    } else if (type == TextureType::Texture2D) {
+        return GL_TEXTURE_2D;
+    } else if (type == TextureType::Texture3D) {
+        return GL_TEXTURE_3D;
+    }
+    fei::fatal("Unsupported texture target");
+    return 0;
+}
+
+GLenum to_gl_comparison_function(ComparisonKind func) {
+    switch (func) {
+        case ComparisonKind::Never:
+            return GL_NEVER;
+        case ComparisonKind::Less:
+            return GL_LESS;
+        case ComparisonKind::Equal:
+            return GL_EQUAL;
+        case ComparisonKind::LessEqual:
+            return GL_LEQUAL;
+        case ComparisonKind::Greater:
+            return GL_GREATER;
+        case ComparisonKind::NotEqual:
+            return GL_NOTEQUAL;
+        case ComparisonKind::GreaterEqual:
+            return GL_GEQUAL;
+        case ComparisonKind::Always:
+            return GL_ALWAYS;
     }
     return 0;
 }

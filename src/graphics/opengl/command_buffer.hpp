@@ -1,12 +1,18 @@
 #pragma once
-
 #include "graphics/command_buffer.hpp"
+#include "graphics/opengl/resource.hpp"
+#include "graphics/resource.hpp"
 
 #include <cstdint>
+#include <memory>
+#include <vector>
 
 namespace fei {
 
 class CommandBufferOpenGL : public CommandBuffer {
+  private:
+    std::vector<std::shared_ptr<ResourceSetOpenGL>> m_bound_resource_sets;
+
   public:
     virtual void begin() override;
     virtual void end() override;
@@ -18,8 +24,12 @@ class CommandBufferOpenGL : public CommandBuffer {
     ) override;
     virtual void clear_color(const Color4F& color) override;
     virtual void clear_depth(float depth) override;
-    virtual void bind_vertex_buffer(std::shared_ptr<Buffer> buffer) override;
-    virtual void bind_index_buffer(std::shared_ptr<Buffer> buffer) override;
+    virtual void set_vertex_buffer(std::shared_ptr<Buffer> buffer) override;
+    virtual void set_index_buffer(std::shared_ptr<Buffer> buffer) override;
+    virtual void set_resource_set(
+        uint32 slot,
+        std::shared_ptr<ResourceSet> resource_set
+    ) override;
     virtual void update_buffer(
         std::shared_ptr<Buffer> buffer,
         const void* data,
@@ -27,14 +37,11 @@ class CommandBufferOpenGL : public CommandBuffer {
     ) override;
     virtual void draw(std::size_t start, std::size_t count) override;
     virtual void draw_indexed(std::size_t count) override;
-    virtual void
-    set_uniform(const std::string& name, UniformValue value) override;
 
   protected:
-    virtual void bind_framebuffer_impl(std::shared_ptr<Framebuffer> framebuffer
+    virtual void set_framebuffer_impl(std::shared_ptr<Framebuffer> framebuffer
     ) override;
-    virtual void bind_pipeline_impl(std::shared_ptr<Pipeline> pipeline
-    ) override;
+    virtual void set_pipeline_impl(std::shared_ptr<Pipeline> pipeline) override;
 };
 
 } // namespace fei

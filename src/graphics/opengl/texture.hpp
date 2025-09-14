@@ -1,33 +1,36 @@
 #pragma once
-
+#include "base/types.hpp"
 #include "graphics/opengl/utils.hpp"
 #include "graphics/texture.hpp"
 
 namespace fei {
 
-class Texture2DOpenGL : public Texture {
+class TextureOpenGL : public Texture {
   private:
-    int m_width, m_height;
     GLuint m_texture {0};
-    GLint m_internal_format;
-    GLenum m_data_type;
-    GLuint m_image_format;
-    GLint m_wrap_s, m_wrap_t;
-    GLint m_min_filter, m_mag_filter;
-    GLenum m_texture_type;
-    GLsizei m_mip_level;
+    uint32 m_width, m_height, m_depth;
+    uint32 m_mip_level {0};
+    uint32 m_layer {0};
+    PixelFormat m_texture_format;
+    BitFlags<TextureUsage> m_texture_usage;
+    TextureType m_texture_type;
 
   public:
-    Texture2DOpenGL(const TextureDescription& desc);
-    Texture2DOpenGL(Texture2DOpenGL&&) noexcept;
-    Texture2DOpenGL& operator=(Texture2DOpenGL&&) noexcept;
-    Texture2DOpenGL(const Texture2DOpenGL&) = delete;
-    Texture2DOpenGL& operator=(const Texture2DOpenGL&) = delete;
-    ~Texture2DOpenGL();
+    TextureOpenGL(const TextureDescription& desc);
+    TextureOpenGL(const TextureOpenGL&) = delete;
+    virtual ~TextureOpenGL();
 
     GLuint id() const { return m_texture; }
-    int width() const override { return m_width; }
-    int height() const override { return m_height; }
+    virtual uint32 width() const override { return m_width; }
+    virtual uint32 height() const override { return m_height; }
+    virtual uint32 depth() const override { return m_depth; }
+    virtual uint32 mip_level() const override { return m_mip_level; }
+    virtual uint32 layer() const override { return m_layer; }
+    virtual PixelFormat format() const override { return m_texture_format; }
+    virtual BitFlags<TextureUsage> usage() const override {
+        return m_texture_usage;
+    }
+    virtual TextureType type() const override { return m_texture_type; }
 };
 
 } // namespace fei

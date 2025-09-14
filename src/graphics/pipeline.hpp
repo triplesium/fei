@@ -1,7 +1,6 @@
 #pragma once
-
-#include "asset/handle.hpp"
 #include "graphics/enums.hpp"
+#include "graphics/resource.hpp"
 #include "graphics/shader_module.hpp"
 #include "graphics/texture.hpp"
 #include "math/matrix.hpp"
@@ -9,8 +8,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <string>
-#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -183,7 +180,7 @@ struct VertexLayoutDescription {
 };
 
 struct ShaderProgramDescription {
-    VertexLayoutDescription vertex_layout;
+    std::vector<VertexLayoutDescription> vertex_layouts;
     std::vector<std::shared_ptr<ShaderModule>> shaders;
 };
 
@@ -203,7 +200,7 @@ struct PipelineDescription {
     RasterizerStateDescription rasterizer_state;
     RenderPrimitive render_primitive;
     ShaderProgramDescription shader_program;
-    std::unordered_map<std::string, UniformValue> uniforms;
+    std::vector<std::shared_ptr<ResourceLayout>> resource_layouts;
 };
 
 class Pipeline {

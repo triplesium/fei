@@ -6,22 +6,19 @@
 namespace fei {
 
 struct ShaderDescription {
-    ShaderStage stage;
+    ShaderStages stage;
     std::string source;
-
-    ShaderDescription(ShaderStage stage, const std::string& source) :
-        stage(stage), source(source) {}
 };
 
 class ShaderModule {
   private:
-    ShaderStage m_stage;
+    ShaderStages m_stage;
 
   public:
     ShaderModule(const ShaderDescription& desc) : m_stage(desc.stage) {}
     virtual ~ShaderModule() = default;
 
-    ShaderStage stage() const { return m_stage; }
+    ShaderStages stage() const { return m_stage; }
 };
 
 } // namespace fei

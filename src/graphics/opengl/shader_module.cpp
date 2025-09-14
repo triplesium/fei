@@ -1,4 +1,5 @@
 #include "graphics/opengl/shader_module.hpp"
+
 #include "base/log.hpp"
 #include "graphics/opengl/utils.hpp"
 #include "graphics/shader_module.hpp"
@@ -6,7 +7,7 @@
 namespace fei {
 
 ShaderOpenGL::ShaderOpenGL(const ShaderDescription& desc) : ShaderModule(desc) {
-    m_stage = convert_shader_stage(desc.stage);
+    m_stage = to_gl_shader_stage(desc.stage);
     m_shader = glCreateShader(m_stage);
 
     const char* src_ptr = desc.source.c_str();

@@ -1,33 +1,32 @@
 #pragma once
+#include "base/bitflags.hpp"
+#include "base/types.hpp"
 #include "graphics/enums.hpp"
-
-#include <cstdint>
+#include "graphics/resource.hpp"
 
 namespace fei {
 
-struct SamplerDescription {
-    SamplerFilter mag_filter {SamplerFilter::Linear};
-    SamplerFilter min_filter {SamplerFilter::Linear};
-    SamplerAddressMode s_address_mode {SamplerAddressMode::ClampToEdge};
-    SamplerAddressMode t_address_mode {SamplerAddressMode::ClampToEdge};
-};
-
 struct TextureDescription {
-    std::uint32_t width {0};
-    std::uint32_t height {0};
-    std::uint32_t depth {0};
-    std::uint32_t mip_level {0};
-    std::uint32_t layer {0};
-    PixelFormat texture_format {PixelFormat::RGBA8888};
-    TextureUsage texture_usage {TextureUsage::Read};
-    TextureType texture_type {TextureType::Texture2D};
-    SamplerDescription sampler_descriptor {};
+    uint32 width {0};
+    uint32 height {0};
+    uint32 depth {0};
+    uint32 mip_level {0};
+    uint32 layer {0};
+    PixelFormat texture_format;
+    BitFlags<TextureUsage> texture_usage;
+    TextureType texture_type;
 };
 
-class Texture {
+class Texture : public BindableResource {
   public:
     virtual ~Texture() = default;
-    virtual int width() const = 0;
-    virtual int height() const = 0;
+    virtual PixelFormat format() const = 0;
+    virtual uint32 width() const = 0;
+    virtual uint32 height() const = 0;
+    virtual uint32 depth() const = 0;
+    virtual uint32 mip_level() const = 0;
+    virtual uint32 layer() const = 0;
+    virtual BitFlags<TextureUsage> usage() const = 0;
+    virtual TextureType type() const = 0;
 };
 } // namespace fei
