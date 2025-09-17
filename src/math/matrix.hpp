@@ -2,6 +2,7 @@
 #include "math/vector.hpp"
 
 #include <cassert>
+#include <cmath>
 #include <cstring>
 
 namespace fei {
@@ -633,6 +634,28 @@ inline Matrix4x4 scale(const Vector3& scale) {
     return fei::scale(scale.x, scale.y, scale.z);
 }
 
+inline Matrix4x4 rotate_x(float rad) {
+    float cos = fei::cos(rad);
+    float sin = fei::sin(rad);
+    Matrix4x4 m {Matrix4x4::Identity};
+    m[1][1] = cos;
+    m[1][2] = -sin;
+    m[2][1] = sin;
+    m[2][2] = cos;
+    return m;
+}
+
+inline Matrix4x4 rotate_y(float rad) {
+    float cos = fei::cos(rad);
+    float sin = fei::sin(rad);
+    Matrix4x4 m {Matrix4x4::Identity};
+    m[0][0] = cos;
+    m[0][2] = sin;
+    m[2][0] = -sin;
+    m[2][2] = cos;
+    return m;
+}
+
 inline Matrix4x4 rotate_z(float rad) {
     float cos = fei::cos(rad);
     float sin = fei::sin(rad);
@@ -669,6 +692,26 @@ look_at(const Vector3& from, const Vector3& to, const Vector3& up) {
     look_at[2][3] = 0;
     look_at[3][3] = 1.0f;
     return look_at;
+}
+
+inline Matrix4x4 perspective(
+    float fov_radians,
+    float aspect_ratio,
+    float near_plane,
+    float far_plane
+) {
+    float tan_half_fov = std::tan(fov_radians * 0.5f);
+    float top = near_plane * tan_half_fov;
+    float right = top * aspect_ratio;
+
+    Matrix4x4 result = Matrix4x4::Zero;
+    result[0][0] = near_plane / right;
+    result[1][1] = near_plane / top;
+    result[2][2] = -(far_plane + near_plane) / (far_plane - near_plane);
+    result[2][3] = -(2.0f * far_plane * near_plane) / (far_plane - near_plane);
+    result[3][2] = -1.0f;
+
+    return result;
 }
 
 } // namespace fei

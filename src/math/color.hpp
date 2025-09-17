@@ -6,6 +6,7 @@
 namespace fei {
 struct Color3B;
 struct Color4B;
+struct Color3F;
 struct Color4F;
 
 struct Color3B {
@@ -14,6 +15,7 @@ struct Color3B {
     Color3B() = default;
     Color3B(std::uint8_t r, std::uint8_t g, std::uint8_t b) :
         r {r}, g {g}, b {b} {}
+    const std::uint8_t* data() const { return &r; }
 };
 
 struct Color4B {
@@ -22,6 +24,17 @@ struct Color4B {
     Color4B() = default;
     Color4B(std::uint8_t r, std::uint8_t g, std::uint8_t b, std::uint8_t a) :
         r {r}, g {g}, b {b}, a {a} {}
+    const std::uint8_t* data() const { return &r; }
+};
+
+struct Color3F {
+    float r {.0f}, g {.0f}, b {.0f};
+
+    Color3F() = default;
+    Color3F(float r, float g, float b) : r {r}, g {g}, b {b} {}
+
+    std::tuple<float, float, float> values() const { return {r, g, b}; }
+    const float* data() const { return &r; }
 };
 
 struct Color4F {
@@ -36,6 +49,7 @@ struct Color4F {
     std::tuple<float, float, float, float> values() const {
         return {r, g, b, a};
     }
+    const float* data() const { return &r; }
 
     static const Color4F White;
     static const Color4F Yellow;
