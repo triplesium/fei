@@ -11,7 +11,6 @@ target("fei-generated")
         "fei-graphics-opengl",
         "fei-math",
         "fei-refl",
-        "fei-render2d",
         "fei-scripting",
         "fei-window"
     )
