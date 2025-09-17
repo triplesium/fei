@@ -125,7 +125,6 @@ class Assets {
         auto entry = get_entry(id);
         if (entry) {
             entry->ref_count++;
-            // info("Acquired asset: {}, ref_count: {}", id, entry->ref_count);
         } else {
             error("Attempted to acquire non-existent asset: {}", id);
         }
@@ -135,9 +134,7 @@ class Assets {
         auto entry = get_entry(id);
         if (entry) {
             entry->ref_count--;
-            // info("Released asset: {}, ref_count: {}", id, entry->ref_count);
             if (entry->ref_count == 0) {
-                info("Unloading asset: {}", id);
                 unload(id);
             }
         } else {
