@@ -1,13 +1,20 @@
 #pragma once
-#include "asset/asset_loader.hpp"
+#include "asset/event.hpp"
 #include "asset/handle.hpp"
+#include "asset/id.hpp"
+#include "asset/loader.hpp"
 #include "base/log.hpp"
 #include "base/optional.hpp"
+#include "ecs/event.hpp"
+#include "ecs/system_params.hpp"
 #include "refl/type.hpp"
 
 #include <concepts>
+#include <expected>
 #include <filesystem>
+#include <memory>
 #include <unordered_map>
+#include <vector>
 
 namespace fei {
 
@@ -18,30 +25,26 @@ template<typename T>
 class Assets {
   public:
     struct Entry {
+        AssetId id;
         Optional<std::filesystem::path> path;
         TypeId type_id;
-        T* asset;
+        std::unique_ptr<T> asset;
         bool is_loaded;
         int ref_count;
     };
 
   private:
-    std::unordered_map<HandleId, Entry> m_assets;
-    std::unordered_map<std::filesystem::path, HandleId> m_cache;
-    HandleId m_next_id = 0;
+    std::unordered_map<AssetId, Entry> m_assets;
+    std::unordered_map<std::filesystem::path, AssetId> m_cache;
+    AssetId m_next_id = 0;
     std::unique_ptr<AssetLoader<T>> m_loader;
     TypeId m_type_id;
+    std::vector<AssetEvent<T>> m_event_queue;
 
   public:
     Assets(std::unique_ptr<AssetLoader<T>> loader) :
         m_loader(std::move(loader)), m_type_id(type_id<T>()) {}
-    ~Assets() {
-        for (auto& [id, entry] : m_assets) {
-            if (entry.is_loaded) {
-                m_loader->unload(entry.asset);
-            }
-        }
-    }
+    ~Assets() = default;
 
     Assets(const Assets&) = delete;
     Assets& operator=(const Assets&) = delete;
@@ -53,75 +56,59 @@ class Assets {
             fei::fatal("AssetLoader not set for {}", path.string());
         }
         if (m_cache.contains(path)) {
-            HandleId cached_id = m_cache[path];
+            AssetId cached_id = m_cache[path];
             return Handle<T>(cached_id, this);
         }
-        T* asset = m_loader->load(path);
+        std::expected<std::unique_ptr<T>, std::error_code> asset =
+            m_loader->load(path);
         if (!asset) {
             fei::fatal("Failed to load asset: {}", path.string());
         }
-        HandleId id = m_next_id++;
-        m_assets[id] = {
-            .path = path,
-            .type_id = m_type_id,
-            .asset = asset,
-            .is_loaded = true,
-            .ref_count = 0,
-        };
-        return Handle<T>(id, this);
+        return add(std::move(*asset));
     }
 
-    Handle<T> add(T asset) {
-        HandleId id = m_next_id++;
+    Handle<T> add(std::unique_ptr<T> asset) {
+        AssetId id = m_next_id++;
         m_assets[id] = {
             .path = nullopt,
             .type_id = m_type_id,
-            .asset = new T(std::move(asset)),
+            .asset = std::move(asset),
             .is_loaded = true,
             .ref_count = 0,
         };
+        m_event_queue.push_back(AssetEvent<T> {
+            .type = AssetEventType::Added,
+            .id = id,
+        });
         return Handle<T>(id, this);
     }
 
     template<typename... Args>
     Handle<T> emplace(Args&&... args) {
-        HandleId id = m_next_id++;
-        m_assets[id] = {
-            .path = nullopt,
-            .type_id = m_type_id,
-            .asset = new T(std::forward<Args>(args)...),
-            .is_loaded = true,
-            .ref_count = 0,
-        };
-        return Handle<T>(id, this);
+        return add(std::make_unique<T>(std::forward<Args>(args)...));
     }
 
     template<std::derived_from<T> U, typename... Args>
     Handle<T> emplace_derived(Args&&... args) {
-        HandleId id = m_next_id++;
-        m_assets[id] = {
-            .path = nullopt,
-            .type_id = m_type_id,
-            .asset = new U(std::forward<Args>(args)...),
-            .is_loaded = true,
-            .ref_count = 0,
-        };
-        return Handle<T>(id, this);
+        return add(std::make_unique<U>(std::forward<Args>(args)...));
     }
 
-    void unload(HandleId id) {
+    void unload(AssetId id) {
         auto it = m_assets.find(id);
         if (it == m_assets.end()) {
             error("Asset not found: {}", id);
             return;
         }
-        m_loader->unload(it->second.asset);
         m_assets.erase(it);
+        m_event_queue.push_back(AssetEvent<T> {
+            .type = AssetEventType::Removed,
+            .id = id,
+        });
     }
 
     Optional<T&> get(Handle<T> handle);
 
-    void acquire(HandleId id) {
+    void acquire(AssetId id) {
         auto entry = get_entry(id);
         if (entry) {
             entry->ref_count++;
@@ -130,7 +117,7 @@ class Assets {
         }
     }
 
-    void release(HandleId id) {
+    void release(AssetId id) {
         auto entry = get_entry(id);
         if (entry) {
             entry->ref_count--;
@@ -142,8 +129,16 @@ class Assets {
         }
     }
 
+    static void
+    track_assets(Res<Assets<T>> assets, EventWriter<AssetEvent<T>> events) {
+        for (auto& event : assets->m_event_queue) {
+            events.send(event);
+        }
+        assets->m_event_queue.clear();
+    }
+
   private:
-    Optional<Entry&> get_entry(HandleId id) {
+    Optional<Entry&> get_entry(AssetId id) {
         auto it = m_assets.find(id);
         if (it == m_assets.end()) {
             error("Asset not found: {}", id);
@@ -161,11 +156,15 @@ namespace fei {
 
 template<typename T>
 Optional<T&> Assets<T>::get(Handle<T> handle) {
-    auto entry = get_entry(handle.id());
+    Optional<Entry&> entry = get_entry(handle.id());
     if (!entry || !entry->is_loaded) {
         return {};
     }
-    return *static_cast<T*>(entry->asset);
+    m_event_queue.push_back(AssetEvent<T> {
+        .type = AssetEventType::Modified,
+        .id = handle.id(),
+    });
+    return *entry->asset;
 }
 
 } // namespace fei

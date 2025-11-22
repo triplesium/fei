@@ -1,6 +1,6 @@
 #pragma once
 #include "app/plugin.hpp"
-#include "asset/asset_server.hpp"
+#include "asset/server.hpp"
 
 namespace fei {
 

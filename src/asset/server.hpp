@@ -1,7 +1,7 @@
 #pragma once
 #include "app/app.hpp"
-#include "asset/asset_loader.hpp"
 #include "asset/assets.hpp"
+#include "asset/loader.hpp"
 
 #include <concepts>
 #include <filesystem>
@@ -12,7 +12,6 @@ namespace fei {
 class AssetServer {
   private:
     std::filesystem::path m_assets_dir;
-    // std::unordered_map<TypeId, void*> m_assets;
     App* m_app;
 
   public:
@@ -43,9 +42,11 @@ class AssetServer {
         if (m_app->has_resource<Assets<T>>()) {
             fatal("Asset loader for type {} already exists", type_name<T>());
         }
-        m_app->add_resource(
-            Assets<T>(std::unique_ptr<AssetLoader<T>>(new Loader()))
-        );
+        (*m_app)
+            .add_resource(Assets<T>(std::unique_ptr<AssetLoader<T>>(new Loader()
+            )))
+            .template add_event<AssetEvent<T>>()
+            .add_system(PreUpdate, Assets<T>::track_assets);
     }
 
     template<typename T>
@@ -53,7 +54,10 @@ class AssetServer {
         if (m_app->has_resource<Assets<T>>()) {
             fatal("Asset type {} already exists", type_name<T>());
         }
-        m_app->add_resource(Assets<T>(nullptr));
+        (*m_app)
+            .add_resource(Assets<T>(nullptr))
+            .template add_event<AssetEvent<T>>()
+            .add_system(PreUpdate, Assets<T>::track_assets);
     }
 
     template<typename T>

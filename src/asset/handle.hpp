@@ -1,9 +1,7 @@
 #pragma once
-#include <cstdint>
+#include "asset/id.hpp"
 
 namespace fei {
-
-using HandleId = std::uint32_t;
 
 template<typename T>
 class Assets;
@@ -11,12 +9,12 @@ class Assets;
 template<typename T>
 class Handle {
   private:
-    HandleId m_id;
+    AssetId m_id;
     Assets<T>* m_assets;
 
   public:
     Handle() : m_id(0), m_assets(nullptr) {}
-    Handle(HandleId id, Assets<T>* assets);
+    Handle(AssetId id, Assets<T>* assets);
     ~Handle();
 
     Handle(const Handle&);
@@ -24,7 +22,7 @@ class Handle {
     Handle(Handle&&) noexcept;
     Handle& operator=(Handle&&) noexcept;
 
-    HandleId id() const { return m_id; }
+    AssetId id() const { return m_id; }
 };
 
 } // namespace fei
@@ -34,7 +32,7 @@ class Handle {
 namespace fei {
 
 template<typename T>
-Handle<T>::Handle(HandleId id, Assets<T>* assets) : m_id(id), m_assets(assets) {
+Handle<T>::Handle(AssetId id, Assets<T>* assets) : m_id(id), m_assets(assets) {
     if (m_assets) {
         m_assets->acquire(m_id);
     }
