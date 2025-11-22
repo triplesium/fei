@@ -59,30 +59,29 @@ class EntityCommands {
     Entity id() const { return m_entity; }
 };
 
-class Commands : public SystemParam {
+class Commands {
   private:
-    CommandsQueue* m_commands_queue = nullptr;
-    World* m_world = nullptr;
+    CommandsQueue& m_commands_queue;
+    World& m_world;
 
   public:
-    virtual void prepare(World& world) override {
-        m_commands_queue = &world.resource<CommandsQueue>();
-        m_world = &world;
+    Commands(CommandsQueue& queue, World& world) :
+        m_commands_queue(queue), m_world(world) {}
+    static Commands get_param(World& world) {
+        return Commands(world.resource<CommandsQueue>(), world);
     }
 
     void add_command(std::function<void(World&)> command) {
-        m_commands_queue->add_command(std::move(command));
+        m_commands_queue.add_command(std::move(command));
     }
 
     EntityCommands entity(Entity entity) {
-        return EntityCommands(*m_world, entity);
+        return EntityCommands(m_world, entity);
     }
 
-    EntityCommands spawn() {
-        return EntityCommands(*m_world, m_world->entity());
-    }
+    EntityCommands spawn() { return EntityCommands(m_world, m_world.entity()); }
 
-    World& world() { return *m_world; }
+    World& world() { return m_world; }
 };
 
 } // namespace fei

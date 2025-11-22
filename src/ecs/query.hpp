@@ -120,7 +120,7 @@ class QueryIter {
 };
 
 template<typename... Options>
-class Query : public SystemParam {
+class Query {
   private:
     const World* m_world = nullptr;
     std::vector<ArchetypeId> m_cached_archetypes;
@@ -129,9 +129,11 @@ class Query : public SystemParam {
     using Iterator = QueryIter<Options...>;
 
     // Prepare the query with world context
-    void prepare(World& world) override {
-        m_world = &world;
-        update_cache();
+    static Query get_param(World& world) {
+        Query query;
+        query.m_world = &world;
+        query.update_cache();
+        return query;
     }
 
     // Get iterator to beginning of query results
