@@ -1,8 +1,9 @@
 #pragma once
 #include "app/plugin.hpp"
-#include "asset/asset_loader.hpp"
-#include "asset/asset_server.hpp"
+#include "asset/loader.hpp"
+#include "asset/server.hpp"
 
+#include <expected>
 #include <fstream>
 #include <string>
 
@@ -20,14 +21,15 @@ class TextAsset {
 
 class TextAssetLoader : public AssetLoader<TextAsset> {
   protected:
-    virtual TextAsset* load(const std::filesystem::path& path) override {
+    virtual std::expected<std::unique_ptr<TextAsset>, std::error_code>
+    load(const std::filesystem::path& path) override {
         std::ifstream file(path);
         if (!file) {
-            return nullptr;
+            return std::unexpected(std::error_code {});
         }
         std::stringstream buffer;
         buffer << file.rdbuf();
-        return new TextAsset(buffer.str());
+        return std::make_unique<TextAsset>(buffer.str());
     }
 };
 

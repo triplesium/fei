@@ -108,6 +108,8 @@ class Assets {
 
     Optional<T&> get(Handle<T> handle);
 
+    Optional<T&> get(AssetId id) { return get(Handle<T>(id, this)); }
+
     void acquire(AssetId id) {
         auto entry = get_entry(id);
         if (entry) {
