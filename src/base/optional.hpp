@@ -1,5 +1,6 @@
 #pragma once
-#include "base/type_traits.hpp"
+#include "base/concepts.hpp"
+
 #include <concepts>
 #include <type_traits>
 
@@ -18,7 +19,7 @@ template<class F, class T>
 concept transform_concept = requires {
     requires std::is_object_v<std::invoke_result_t<F, T>>;
     requires !std::is_array_v<std::invoke_result_t<F, T>>;
-    requires !is_any_of<std::invoke_result_t<F, T>, NullOpt, InPlace>;
+    requires !AnyOf<std::invoke_result_t<F, T>, NullOpt, InPlace>;
 };
 
 template<class T>
@@ -177,7 +178,7 @@ class Optional {
     }
 
     template<class F>
-        requires is_specialization<std::invoke_result_t<F, T&>, Optional>
+        requires SpecializationOf<std::invoke_result_t<F, T&>, Optional>
     constexpr auto and_then(F&& f) & {
         if (*this)
             return std::invoke(std::forward<F>(f), **this);
@@ -185,7 +186,7 @@ class Optional {
             return std::remove_cvref_t<std::invoke_result_t<F, T&>> {};
     }
     template<class F>
-        requires is_specialization<std::invoke_result_t<F, const T&>, Optional>
+        requires SpecializationOf<std::invoke_result_t<F, const T&>, Optional>
     constexpr auto and_then(F&& f) const& {
         if (*this)
             return std::invoke(std::forward<F>(f), **this);
@@ -193,7 +194,7 @@ class Optional {
             return std::remove_cvref_t<std::invoke_result_t<F, const T&>> {};
     }
     template<class F>
-        requires is_specialization<std::invoke_result_t<F, T>, Optional>
+        requires SpecializationOf<std::invoke_result_t<F, T>, Optional>
     constexpr auto and_then(F&& f) && {
         if (*this)
             return std::invoke(std::forward<F>(f), std::move(**this));
@@ -201,7 +202,7 @@ class Optional {
             return std::remove_cvref_t<std::invoke_result_t<F, T>> {};
     }
     template<class F>
-        requires is_specialization<std::invoke_result_t<F, const T>, Optional>
+        requires SpecializationOf<std::invoke_result_t<F, const T>, Optional>
     constexpr auto and_then(F&& f) const&& {
         if (*this)
             return std::invoke(std::forward<F>(f), std::move(**this));
@@ -316,7 +317,7 @@ class Optional<T&> {
     }
 
     template<class F>
-        requires is_specialization<std::invoke_result_t<F, T&>, Optional>
+        requires SpecializationOf<std::invoke_result_t<F, T&>, Optional>
     constexpr auto and_then(F&& f) const {
         if (m_ref) {
             return std::invoke(std::forward<F>(f), *m_ref);
