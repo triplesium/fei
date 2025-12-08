@@ -92,10 +92,6 @@ enum class BlendOp : uint8 {
 };
 
 enum class PixelFormat : uint8 {
-    // RGBA8888,
-    // RGB888,
-    // RGBA4444,
-    // D16,
     R8Unorm,
     R8Snorm,
     R8Uint,

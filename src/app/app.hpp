@@ -2,8 +2,10 @@
 #include "app/plugin.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/event.hpp"
+#include "ecs/system_params.hpp"
 #include "ecs/world.hpp"
 #include "refl/type.hpp"
+
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -19,6 +21,8 @@ enum MainSchedules : std::uint32_t {
     Update,
     PostUpdate,
     Last,
+
+    RenderPrepare,
 
     RenderFirst,
     RenderStart,
@@ -38,13 +42,15 @@ class App {
   public:
     App() {
         add_resource<AppStates>();
-        add_resource<EventsMap>();
         add_resource<CommandsQueue>();
     }
 
     template<typename E>
     App& add_event() {
-        m_world.resource<EventsMap>().add_event(type_id<E>());
+        m_world.add_resource(Events<E>());
+        add_system(Last, [](Res<Events<E>> events) {
+            events->update();
+        });
         return *this;
     }
 

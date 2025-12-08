@@ -1,5 +1,7 @@
 #include "app/app.hpp"
+
 #include "ecs/commands.hpp"
+
 #include <print>
 
 namespace fei {
@@ -20,6 +22,7 @@ void App::run() {
 
         resource<CommandsQueue>().execute(m_world);
 
+        run_schedule(RenderPrepare);
         run_schedule(RenderFirst);
         run_schedule(RenderStart);
         run_schedule(RenderUpdate);

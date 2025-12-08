@@ -7,6 +7,7 @@
 #include "graphics/opengl/texture.hpp"
 #include "graphics/opengl/utils.hpp"
 
+#include <cassert>
 #include <memory>
 
 namespace fei {
@@ -68,13 +69,19 @@ void CommandBufferOpenGL::set_resource_set(
 ) {
     auto gl_resource_set =
         std::static_pointer_cast<ResourceSetOpenGL>(resource_set);
+    if (m_bound_resource_sets.size() <= slot) {
+        m_bound_resource_sets.resize(slot + 1);
+    }
     m_bound_resource_sets[slot] = gl_resource_set;
     auto gl_layout =
         std::static_pointer_cast<ResourceLayoutOpenGL>(gl_resource_set->layout()
         );
-    for (auto& element : gl_layout->elements()) {
+    assert(gl_resource_set->resources().size() == gl_layout->elements().size());
+    auto size = gl_layout->elements().size();
+    for (size_t i = 0; i < size; ++i) {
+        auto& element = gl_layout->elements()[i];
         auto kind = element.kind;
-        auto resource = gl_resource_set->resources()[element.binding];
+        auto resource = gl_resource_set->resources()[i];
         switch (kind) {
             case ResourceKind::UniformBuffer: {
                 auto buffer = std::static_pointer_cast<BufferOpenGL>(resource);

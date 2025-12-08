@@ -4,7 +4,7 @@
 
 namespace fei {
 
-struct Transform2D {
+struct Transform2d {
     Vector2 position {0.0f, 0.0f};
     Vector2 scale {1.0f, 1.0f};
     float rotation {0.0f};
@@ -15,7 +15,7 @@ struct Transform2D {
     }
 };
 
-struct Transform3D {
+struct Transform3d {
     Vector3 position {0.0f, 0.0f, 0.0f};
     Vector3 rotation {0.0f, 0.0f, 0.0f};
     Vector3 scale {1.0f, 1.0f, 1.0f};

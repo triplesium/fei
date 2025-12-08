@@ -1,37 +1,39 @@
 #pragma once
 #include "app/plugin.hpp"
-#include "asset/asset_loader.hpp"
-#include "asset/asset_server.hpp"
+#include "asset/loader.hpp"
+#include "asset/server.hpp"
+#include "graphics/texture.hpp"
 
 #include <cstdint>
+#include <expected>
 #include <memory>
 
 namespace fei {
 
 class Image {
   private:
-    std::uint32_t m_width;
-    std::uint32_t m_height;
-    std::uint32_t m_channels;
     std::unique_ptr<unsigned char[]> m_data;
+    TextureDescription m_texture_description;
 
   public:
     Image(
-        std::uint32_t width,
-        std::uint32_t height,
-        std::uint32_t channels,
-        std::unique_ptr<unsigned char[]> data
+        std::unique_ptr<unsigned char[]> data,
+        TextureDescription texture_description
     );
 
-    std::uint32_t width() const { return m_width; }
-    std::uint32_t height() const { return m_height; }
-    std::uint32_t channels() const { return m_channels; }
+    std::uint32_t width() const { return m_texture_description.width; }
+    std::uint32_t height() const { return m_texture_description.height; }
+    std::uint32_t channels() const { return m_texture_description.depth; }
     const unsigned char* data() const { return m_data.get(); }
+    const TextureDescription& texture_description() const {
+        return m_texture_description;
+    }
 };
 
 class ImageLoader : public AssetLoader<Image> {
   public:
-    Image* load(const std::filesystem::path& path) override;
+    std::expected<std::unique_ptr<Image>, std::error_code>
+    load(const std::filesystem::path& path) override;
 };
 
 class ImagePlugin : public Plugin {
