@@ -1,6 +1,5 @@
 #include "core/image.hpp"
 
-#include "base/log.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/texture.hpp"
 
@@ -22,7 +21,7 @@ std::expected<std::unique_ptr<Image>, std::error_code>
 ImageLoader::load(const std::filesystem::path& path) {
     int width, height, channels;
     stbi_set_flip_vertically_on_load(true);
-    auto data = stbi_load(path.string().c_str(), &width, &height, &channels, 0);
+    auto data = stbi_load(path.string().c_str(), &width, &height, &channels, 4);
     if (!data) {
         // TODO: error codes
         return std::unexpected(std::error_code {});
@@ -36,8 +35,7 @@ ImageLoader::load(const std::filesystem::path& path) {
             format = PixelFormat::Rg8Unorm;
             break;
         case 3:
-            // TODO: Convert RGB to RGBA
-            fatal("RGB format not supported, please use RGBA images");
+            format = PixelFormat::Rgba8Unorm;
             break;
         case 4:
             format = PixelFormat::Rgba8Unorm;
