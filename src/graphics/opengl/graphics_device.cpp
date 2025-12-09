@@ -21,6 +21,14 @@ GraphicsDeviceOpenGL::GraphicsDeviceOpenGL() {
     opengl_check_error();
     glBindVertexArray(vao);
     opengl_check_error();
+
+    // TODO: Abstract these states to be configurable
+    glEnable(GL_CULL_FACE);
+    opengl_check_error();
+    glCullFace(GL_BACK);
+    opengl_check_error();
+    glEnable(GL_DEPTH_TEST);
+    opengl_check_error();
 }
 
 std::shared_ptr<ShaderModule>
