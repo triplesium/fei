@@ -2,13 +2,13 @@
 
 #include "app/app.hpp"
 #include "asset/server.hpp"
+#include "rendering/forward_render.hpp"
 #include "rendering/gpu_image.hpp"
 #include "rendering/material.hpp"
 #include "rendering/mesh.hpp"
 #include "rendering/mesh_loader.hpp"
 #include "rendering/render_asset.hpp"
 #include "rendering/shader.hpp"
-#include "rendering/systems.hpp"
 #include "rendering/view.hpp"
 #include "window/window.hpp"
 
@@ -46,8 +46,8 @@ void RenderingPlugin::setup(App& app) {
         .add_resource<MeshUniforms>()
         .add_system(RenderPrepare, prepare_mesh_uniforms)
         .add_system(RenderStart, render_begin)
-        .add_system(RenderUpdate, render_mesh)
         .add_system(RenderEnd, render_end);
+    app.add_plugin(ForwardRenderPlugin {});
 }
 
 } // namespace fei

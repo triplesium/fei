@@ -421,6 +421,15 @@ GLenum to_gl_pixel_format(PixelFormat format) {
         case PixelFormat::Rgba32Sint:
         case PixelFormat::Rgba32Float:
             return GL_RGBA;
+        case PixelFormat::Depth16Unorm:
+        case PixelFormat::Depth24Plus:
+        case PixelFormat::Depth32Float:
+            return GL_DEPTH_COMPONENT;
+        case PixelFormat::Depth24PlusStencil8:
+        case PixelFormat::Depth32FloatStencil8:
+            return GL_DEPTH_STENCIL;
+        case PixelFormat::Stencil8:
+            return GL_STENCIL_INDEX;
         default:
             fei::fatal("Unsupported PixelFormat");
     }
@@ -452,6 +461,7 @@ GLenum to_gl_pixel_type(PixelFormat format) {
         case PixelFormat::Rg16Uint:
         case PixelFormat::Rgba16Unorm:
         case PixelFormat::Rgba16Uint:
+        case PixelFormat::Depth16Unorm:
             return GL_UNSIGNED_SHORT;
         case PixelFormat::R16Snorm:
         case PixelFormat::R16Sint:
@@ -475,6 +485,7 @@ GLenum to_gl_pixel_type(PixelFormat format) {
         case PixelFormat::R32Float:
         case PixelFormat::Rg32Float:
         case PixelFormat::Rgba32Float:
+        case PixelFormat::Depth32Float:
             return GL_FLOAT;
         default:
             fei::fatal("Unsupported PixelFormat");

@@ -1,5 +1,6 @@
 #pragma once
 #include "asset/handle.hpp"
+#include "base/bitflags.hpp"
 #include "base/optional.hpp"
 #include "core/image.hpp"
 #include "ecs/world.hpp"
@@ -11,6 +12,7 @@
 #include "rendering/render_asset.hpp"
 #include "rendering/shader.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -44,8 +46,14 @@ class Material {
     }
 };
 
+enum class StandardMaterialFlags : std::uint32_t {
+    None = 0,
+    HasBaseColorTexture = 1 << 0,
+};
+
 struct alignas(16) StandardMaterialUniform {
     Color3F base_color {1.0f, 1.0f, 1.0f};
+    uint32_t flags {0};
 };
 
 class StandardMaterial : public Material {
@@ -90,13 +98,23 @@ class StandardMaterial : public Material {
         return elements;
     }
 
+    StandardMaterialUniform create_uniform() const {
+        StandardMaterialUniform uniform;
+        uniform.base_color = base_color;
+        BitFlags<StandardMaterialFlags> flags;
+        if (base_color_texture) {
+            flags |= StandardMaterialFlags::HasBaseColorTexture;
+        }
+        uniform.flags = static_cast<std::uint32_t>(flags.to_raw());
+        return uniform;
+    }
+
     virtual std::vector<std::shared_ptr<BindableResource>>
     resources(GraphicsDevice& device, World& world) const override {
         std::vector<std::shared_ptr<BindableResource>> resources;
         auto& gpu_image_assets = world.resource<RenderAssets<GpuImage>>();
-        StandardMaterialUniform uniform {
-            .base_color = base_color,
-        };
+
+        auto uniform = create_uniform();
         auto uniform_buffer = device.create_buffer(BufferDescription {
             .size = sizeof(StandardMaterialUniform),
             .usages = {BufferUsages::Uniform, BufferUsages::Dynamic},

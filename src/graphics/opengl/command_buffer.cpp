@@ -1,5 +1,6 @@
 #include "graphics/opengl/command_buffer.hpp"
 
+#include "graphics/framebuffer.hpp"
 #include "graphics/opengl/buffer.hpp"
 #include "graphics/opengl/framebuffer.hpp"
 #include "graphics/opengl/pipeline.hpp"
@@ -15,6 +16,73 @@ namespace fei {
 void CommandBufferOpenGL::begin() {}
 
 void CommandBufferOpenGL::end() {}
+
+void CommandBufferOpenGL::begin_render_pass(const RenderPassDescription& desc) {
+    FramebufferDescription fb_desc;
+    for (const auto& attachment : desc.color_attachments) {
+        fb_desc.color_targets.push_back(FramebufferAttachment {
+            .texture = attachment.texture,
+            .mip_level = 0,
+            .layer = 0
+        });
+    }
+    if (desc.depth_stencil_attachment) {
+        fb_desc.depth_target = FramebufferAttachment {
+            .texture = desc.depth_stencil_attachment->texture,
+            .mip_level = 0,
+            .layer = 0
+        };
+    }
+
+    auto framebuffer = m_device.create_framebuffer(fb_desc);
+    set_framebuffer(framebuffer);
+    auto fb_gl = std::static_pointer_cast<FramebufferOpenGL>(framebuffer);
+
+    // Handle Color Clears
+    for (size_t i = 0; i < desc.color_attachments.size(); ++i) {
+        const auto& att = desc.color_attachments[i];
+        if (att.load_op == LoadOp::Clear) {
+            glClearNamedFramebufferfv(
+                fb_gl->id(),
+                GL_COLOR,
+                static_cast<GLint>(i),
+                att.clear_color.data()
+            );
+            opengl_check_error();
+        }
+    }
+
+    // Handle Depth/Stencil Clears
+    if (desc.depth_stencil_attachment) {
+        const auto& att = *desc.depth_stencil_attachment;
+        if (att.depth_load_op == LoadOp::Clear &&
+            att.stencil_load_op == LoadOp::Clear) {
+            glClearNamedFramebufferfi(
+                fb_gl->id(),
+                GL_DEPTH_STENCIL,
+                0,
+                att.clear_depth,
+                att.clear_stencil
+            );
+        } else if (att.depth_load_op == LoadOp::Clear) {
+            glClearNamedFramebufferfv(
+                fb_gl->id(),
+                GL_DEPTH,
+                0,
+                &att.clear_depth
+            );
+        } else if (att.stencil_load_op == LoadOp::Clear) {
+            GLint s = att.clear_stencil;
+            glClearNamedFramebufferiv(fb_gl->id(), GL_STENCIL, 0, &s);
+        }
+        opengl_check_error();
+    }
+}
+
+void CommandBufferOpenGL::end_render_pass() {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    opengl_check_error();
+}
 
 void CommandBufferOpenGL::set_viewport(
     std::int32_t x,
@@ -37,6 +105,13 @@ void CommandBufferOpenGL::clear_depth(float depth) {
     glClearDepth(depth);
     opengl_check_error();
     glClear(GL_DEPTH_BUFFER_BIT);
+    opengl_check_error();
+}
+
+void CommandBufferOpenGL::clear_stencil(std::uint8_t stencil) {
+    glClearStencil(stencil);
+    opengl_check_error();
+    glClear(GL_STENCIL_BUFFER_BIT);
     opengl_check_error();
 }
 
@@ -184,6 +259,31 @@ void CommandBufferOpenGL::set_index_buffer_impl(
     opengl_check_error();
 
     m_draw_elements_type = to_gl_draw_elements_type(format);
+}
+
+void CommandBufferOpenGL::blit_to(std::shared_ptr<Framebuffer> target) {
+    auto target_gl = std::static_pointer_cast<FramebufferOpenGL>(target);
+    auto src_gl = std::static_pointer_cast<FramebufferOpenGL>(m_framebuffer);
+
+    GLint viewport[4];
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    opengl_check_error();
+
+    glBlitNamedFramebuffer(
+        src_gl->id(),
+        target_gl->id(),
+        0,
+        0,
+        viewport[2],
+        viewport[3],
+        0,
+        0,
+        viewport[2],
+        viewport[3],
+        GL_COLOR_BUFFER_BIT,
+        GL_NEAREST
+    );
+    opengl_check_error();
 }
 
 } // namespace fei

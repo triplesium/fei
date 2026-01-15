@@ -4,6 +4,7 @@
 #include "graphics/enums.hpp"
 #include "graphics/framebuffer.hpp"
 #include "graphics/pipeline.hpp"
+#include "graphics/render_pass.hpp"
 #include "graphics/resource.hpp"
 #include "math/color.hpp"
 
@@ -20,6 +21,10 @@ class CommandBuffer {
   public:
     virtual void begin() = 0;
     virtual void end() = 0;
+
+    virtual void begin_render_pass(const RenderPassDescription& desc) = 0;
+    virtual void end_render_pass() = 0;
+
     virtual void set_viewport(
         std::int32_t x,
         std::int32_t y,
@@ -28,6 +33,7 @@ class CommandBuffer {
     ) = 0;
     virtual void clear_color(const Color4F& color) = 0;
     virtual void clear_depth(float depth) = 0;
+    virtual void clear_stencil(std::uint8_t stencil) = 0;
     void set_framebuffer(std::shared_ptr<Framebuffer> framebuffer) {
         m_framebuffer = framebuffer;
         set_framebuffer_impl(framebuffer);
@@ -62,6 +68,8 @@ class CommandBuffer {
     ) = 0;
     virtual void draw(std::size_t start, std::size_t count) = 0;
     virtual void draw_indexed(std::size_t count) = 0;
+
+    virtual void blit_to(std::shared_ptr<Framebuffer> target) = 0;
 
   protected:
     virtual void set_framebuffer_impl(std::shared_ptr<Framebuffer> framebuffer

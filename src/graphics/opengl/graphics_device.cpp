@@ -47,7 +47,7 @@ GraphicsDeviceOpenGL::create_texture(const TextureDescription& desc) {
 }
 
 std::shared_ptr<CommandBuffer> GraphicsDeviceOpenGL::create_command_buffer() {
-    return std::make_shared<CommandBufferOpenGL>();
+    return std::make_shared<CommandBufferOpenGL>(*this);
 }
 
 std::shared_ptr<Pipeline>
