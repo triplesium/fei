@@ -43,7 +43,11 @@ void prepare_view_resource(
         return;
     }
     auto [camera, transform] = query.first();
-    auto view = transform.to_matrix().inverse_affine();
+    auto view = look_at(
+        transform.position,
+        transform.position + transform.forward(),
+        Vector3 {0.0f, 1.0f, 0.0f}
+    );
     auto projection = perspective(
         camera.fov_y * DEG2RAD,
         camera.aspect_ratio,

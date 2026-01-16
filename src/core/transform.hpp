@@ -25,6 +25,29 @@ struct Transform3d {
                rotate_x(rotation.x) * rotate_y(rotation.y) *
                rotate_z(rotation.z) * fei::scale(scale.x, scale.y, scale.z);
     }
+
+    inline Vector3 forward() const {
+        float cy = std::cos(rotation.y);
+        float sy = std::sin(rotation.y);
+        float cp = std::cos(rotation.x);
+        float sp = std::sin(rotation.x);
+        return Vector3 {-sy * cp, sp, -cy * cp}.normalized();
+    }
+
+    inline Vector3 right() const {
+        float cy = std::cos(rotation.y);
+        float sy = std::sin(rotation.y);
+        float cp = std::cos(rotation.x);
+        float sp = std::sin(rotation.x);
+        float cr = std::cos(rotation.z);
+        float sr = std::sin(rotation.z);
+        return Vector3 {cy * cr, sr * cp + cr * sy * sp, sr * sp - cr * sy * cp}
+            .normalized();
+    }
+
+    inline Vector3 up() const {
+        return Vector3::cross(right(), forward()).normalized();
+    }
 };
 
 } // namespace fei

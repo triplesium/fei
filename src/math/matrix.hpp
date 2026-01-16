@@ -670,26 +670,29 @@ inline Matrix4x4 rotate_z(float rad) {
 inline Matrix4x4
 look_at(const Vector3& from, const Vector3& to, const Vector3& up) {
     Vector3 x, y, z;
-    z = (to - from).normalized();
+    z = (from - to).normalized();
     x = Vector3::cross(up, z).normalized();
     y = Vector3::cross(z, x).normalized();
 
     Matrix4x4 look_at;
     look_at[0][0] = x.x;
-    look_at[1][0] = x.y;
-    look_at[2][0] = x.z;
-    look_at[3][0] = -Vector3::dot(x, from);
-    look_at[0][1] = y.x;
+    look_at[0][1] = x.y;
+    look_at[0][2] = x.z;
+    look_at[0][3] = -Vector3::dot(x, from);
+
+    look_at[1][0] = y.x;
     look_at[1][1] = y.y;
-    look_at[2][1] = y.z;
-    look_at[3][1] = -Vector3::dot(y, from);
-    look_at[0][2] = z.x;
-    look_at[1][2] = z.y;
+    look_at[1][2] = y.z;
+    look_at[1][3] = -Vector3::dot(y, from);
+
+    look_at[2][0] = z.x;
+    look_at[2][1] = z.y;
     look_at[2][2] = z.z;
-    look_at[3][2] = -Vector3::dot(z, from);
-    look_at[0][3] = 0;
-    look_at[1][3] = 0;
-    look_at[2][3] = 0;
+    look_at[2][3] = -Vector3::dot(z, from);
+
+    look_at[3][0] = 0;
+    look_at[3][1] = 0;
+    look_at[3][2] = 0;
     look_at[3][3] = 1.0f;
     return look_at;
 }
