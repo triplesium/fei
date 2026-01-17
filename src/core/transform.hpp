@@ -1,4 +1,5 @@
 #pragma once
+#include "math/common.hpp"
 #include "math/matrix.hpp"
 #include "math/vector.hpp"
 
@@ -22,25 +23,26 @@ struct Transform3d {
 
     inline Matrix4x4 to_matrix() const {
         return translate(position.x, position.y, position.z) *
-               rotate_x(rotation.x) * rotate_y(rotation.y) *
-               rotate_z(rotation.z) * fei::scale(scale.x, scale.y, scale.z);
+               rotate_x(rotation.x * DEG2RAD) * rotate_y(rotation.y * DEG2RAD) *
+               rotate_z(rotation.z * DEG2RAD) *
+               fei::scale(scale.x, scale.y, scale.z);
     }
 
     inline Vector3 forward() const {
-        float cy = std::cos(rotation.y);
-        float sy = std::sin(rotation.y);
-        float cp = std::cos(rotation.x);
-        float sp = std::sin(rotation.x);
+        float cy = std::cos(rotation.y * DEG2RAD);
+        float sy = std::sin(rotation.y * DEG2RAD);
+        float cp = std::cos(rotation.x * DEG2RAD);
+        float sp = std::sin(rotation.x * DEG2RAD);
         return Vector3 {-sy * cp, sp, -cy * cp}.normalized();
     }
 
     inline Vector3 right() const {
-        float cy = std::cos(rotation.y);
-        float sy = std::sin(rotation.y);
-        float cp = std::cos(rotation.x);
-        float sp = std::sin(rotation.x);
-        float cr = std::cos(rotation.z);
-        float sr = std::sin(rotation.z);
+        float cy = std::cos(rotation.y * DEG2RAD);
+        float sy = std::sin(rotation.y * DEG2RAD);
+        float cp = std::cos(rotation.x * DEG2RAD);
+        float sp = std::sin(rotation.x * DEG2RAD);
+        float cr = std::cos(rotation.z * DEG2RAD);
+        float sr = std::sin(rotation.z * DEG2RAD);
         return Vector3 {cy * cr, sr * cp + cr * sy * sp, sr * sp - cr * sy * cp}
             .normalized();
     }
