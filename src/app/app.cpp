@@ -12,6 +12,7 @@ void App::run() {
 
     run_schedule(PreStartUp);
     run_schedule(StartUp);
+    resource<CommandsQueue>().execute(m_world);
     bool should_stop = false;
     while (!should_stop) {
         run_schedule(First);
