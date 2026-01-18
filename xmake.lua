@@ -5,6 +5,7 @@ set_warnings("all")
 set_runtimes("MD")
 add_requires("catch2", "stb", "glad", "lua", "tinyobjloader")
 add_requires("glfw", {configs = {shared = false}})
+add_requires("imgui", {configs = {glfw = true, opengl3 = true}})
 
 set_policy("check.auto_ignore_flags", false)
 
