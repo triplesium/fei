@@ -38,6 +38,13 @@ void CommandBufferOpenGL::begin_render_pass(const RenderPassDescription& desc) {
     set_framebuffer(framebuffer);
     auto fb_gl = std::static_pointer_cast<FramebufferOpenGL>(framebuffer);
 
+    if (desc.color_attachments.empty()) {
+        glDrawBuffer(GL_NONE);
+        opengl_check_error();
+        glReadBuffer(GL_NONE);
+        opengl_check_error();
+    }
+
     // Handle Color Clears
     for (size_t i = 0; i < desc.color_attachments.size(); ++i) {
         const auto& att = desc.color_attachments[i];
