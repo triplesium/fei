@@ -16,6 +16,7 @@ struct MeshRenderable {
 
 struct Mesh3d {
     Handle<Mesh> mesh;
+    bool cast_shadow {true};
 };
 
 struct MeshMaterial3d {

@@ -4,6 +4,7 @@
 #include "base/optional.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/pipeline.hpp"
+#include "rendering/components.hpp"
 #include "rendering/vertex.hpp"
 
 #include <array>

@@ -139,7 +139,7 @@ class GpuMeshAdapter : public RenderAssetAdapter<Mesh, GpuMesh> {
     }
 };
 
-struct MeshUniform {
+struct alignas(16) MeshUniform {
     Matrix4x4 model;
 };
 

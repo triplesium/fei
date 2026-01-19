@@ -45,8 +45,8 @@ void RenderingPlugin::setup(App& app) {
         .add_system(RenderPrepare, prepare_view_resource)
         .add_resource<MeshUniforms>()
         .add_system(RenderPrepare, prepare_mesh_uniforms)
-        .add_system(RenderStart, render_begin)
-        .add_system(RenderEnd, render_end);
+        .add_system(RenderFirst, render_begin)
+        .add_system(RenderLast, render_end);
     app.add_plugin(ForwardRenderPlugin {});
 }
 

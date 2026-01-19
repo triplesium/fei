@@ -56,6 +56,7 @@ void prepare_view_resource(
     );
     ViewUniform uniform {
         .view_projection = projection * view,
+        .view_position = transform.position,
     };
     device->update_buffer(
         view_uniform->uniform_buffer,

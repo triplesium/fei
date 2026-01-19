@@ -7,13 +7,15 @@
 #include "graphics/graphics_device.hpp"
 #include "graphics/resource.hpp"
 #include "math/matrix.hpp"
+#include "math/vector.hpp"
 
 #include <memory>
 
 namespace fei {
 
-struct ViewUniform {
+struct alignas(16) ViewUniform {
     Matrix4x4 view_projection;
+    Vector3 view_position;
 };
 
 struct ViewResource {
