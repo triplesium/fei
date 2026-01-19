@@ -1,5 +1,7 @@
 #pragma once
 
+#include "math/vector.hpp"
+
 #include <cstdint>
 #include <tuple>
 
@@ -33,6 +35,7 @@ struct Color3F {
     Color3F() = default;
     Color3F(float r, float g, float b) : r {r}, g {g}, b {b} {}
 
+    Vector3 to_vector3() const { return {r, g, b}; }
     std::tuple<float, float, float> values() const { return {r, g, b}; }
     const float* data() const { return &r; }
 };
@@ -46,6 +49,7 @@ struct Color4F {
         r {color.a / 255.0f}, g {color.g / 255.0f}, b {color.b / 255.0f},
         a {color.a / 255.0f} {}
 
+    Vector4 to_vector4() const { return {r, g, b, a}; }
     std::tuple<float, float, float, float> values() const {
         return {r, g, b, a};
     }
