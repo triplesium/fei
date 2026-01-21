@@ -147,6 +147,7 @@ struct MeshUniforms {
     struct Entry {
         Entity entity;
         std::shared_ptr<Buffer> uniform_buffer;
+        std::shared_ptr<ResourceLayout> resource_layout;
         std::shared_ptr<ResourceSet> resource_set;
     };
     std::unordered_map<Entity, Entry> entries;

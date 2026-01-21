@@ -17,6 +17,7 @@ enum class ResourceKind : uint8 {
 
 struct ResourceLayoutElementDescription {
     uint32 binding;
+    std::string name;
     ResourceKind kind;
     BitFlags<ShaderStages> stages;
 };

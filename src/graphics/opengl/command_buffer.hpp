@@ -58,6 +58,9 @@ class CommandBufferOpenGL : public CommandBuffer {
         IndexFormat format,
         uint32 offset
     ) override;
+
+  private:
+    uint32 calculate_uniform_block_base_index(uint32 slot);
 };
 
 } // namespace fei

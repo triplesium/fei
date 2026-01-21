@@ -156,24 +156,25 @@ void prepare_mesh_uniforms(
                 .size = sizeof(MeshUniform),
                 .usages = {BufferUsages::Uniform, BufferUsages::Dynamic},
             });
+            entry.resource_layout =
+                device->create_resource_layout(ResourceLayoutDescription {
+                    .elements =
+                        {
+                            ResourceLayoutElementDescription {
+                                .binding = 2,
+                                .name = "Mesh",
+                                .kind = ResourceKind::UniformBuffer,
+                                .stages =
+                                    {
+                                        ShaderStages::Vertex,
+                                        ShaderStages::Fragment,
+                                    },
+                            },
+                        },
+                });
             entry.resource_set =
                 device->create_resource_set(ResourceSetDescription {
-                    .layout = device->create_resource_layout(
-                        ResourceLayoutDescription {
-                            .elements =
-                                {
-                                    ResourceLayoutElementDescription {
-                                        .binding = 2,
-                                        .kind = ResourceKind::UniformBuffer,
-                                        .stages =
-                                            {
-                                                ShaderStages::Vertex,
-                                                ShaderStages::Fragment,
-                                            },
-                                    },
-                                },
-                        }
-                    ),
+                    .layout = entry.resource_layout,
                     .resources = {entry.uniform_buffer},
                 });
             mesh_uniforms->entries[entity] = std::move(entry);

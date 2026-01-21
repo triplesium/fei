@@ -18,8 +18,8 @@ void init_view_resource(
             .elements =
                 {
                     ResourceLayoutElementDescription {
-                        // NOTE: Temporary binding point
                         .binding = 1,
+                        .name = "View",
                         .kind = ResourceKind::UniformBuffer,
                         .stages =
                             {ShaderStages::Vertex, ShaderStages::Fragment},

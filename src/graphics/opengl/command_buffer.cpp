@@ -1,10 +1,11 @@
 #include "graphics/opengl/command_buffer.hpp"
 
+#include "base/log.hpp"
+#include "base/types.hpp"
 #include "graphics/framebuffer.hpp"
 #include "graphics/opengl/buffer.hpp"
 #include "graphics/opengl/framebuffer.hpp"
 #include "graphics/opengl/pipeline.hpp"
-#include "graphics/opengl/sampler.hpp"
 #include "graphics/opengl/texture.hpp"
 #include "graphics/opengl/utils.hpp"
 
@@ -149,49 +150,74 @@ void CommandBufferOpenGL::set_resource_set(
     uint32 slot,
     std::shared_ptr<ResourceSet> resource_set
 ) {
+    auto gl_pipeline = std::static_pointer_cast<PipelineOpenGL>(m_pipeline);
     auto gl_resource_set =
         std::static_pointer_cast<ResourceSetOpenGL>(resource_set);
+    if (slot >= gl_pipeline->resource_layouts().size()) {
+        fei::fatal(
+            "Resource set slot {} out of range (max {})",
+            slot,
+            gl_pipeline->resource_layouts().size()
+        );
+    }
     if (m_bound_resource_sets.size() <= slot) {
         m_bound_resource_sets.resize(slot + 1);
     }
     m_bound_resource_sets[slot] = gl_resource_set;
-    auto gl_layout =
-        std::static_pointer_cast<ResourceLayoutOpenGL>(gl_resource_set->layout()
-        );
+    auto gl_layout = std::static_pointer_cast<ResourceLayoutOpenGL>(
+        gl_pipeline->resource_layouts()[slot]
+    );
     assert(gl_resource_set->resources().size() == gl_layout->elements().size());
+
+    uint32 uniform_block_base_index = calculate_uniform_block_base_index(slot);
+    uint32 uniform_block_offset = 0;
+
     auto size = gl_layout->elements().size();
     for (size_t i = 0; i < size; ++i) {
         auto& element = gl_layout->elements()[i];
         auto kind = element.kind;
         auto resource = gl_resource_set->resources()[i];
+        auto& binding_info = gl_pipeline->get_resource_binding(slot, i).value();
+        if (std::holds_alternative<PipelineOpenGL::EmptyBinding>(binding_info
+            )) {
+            continue;
+        }
         switch (kind) {
             case ResourceKind::UniformBuffer: {
                 auto buffer = std::static_pointer_cast<BufferOpenGL>(resource);
-                glBindBufferBase(
-                    GL_UNIFORM_BUFFER,
-                    element.binding,
-                    buffer->id()
+                auto info =
+                    std::get<PipelineOpenGL::UniformBinding>(binding_info);
+                auto binding = uniform_block_base_index + uniform_block_offset;
+                glUniformBlockBinding(
+                    gl_pipeline->program(),
+                    info.location,
+                    binding
                 );
                 opengl_check_error();
+                glBindBufferBase(GL_UNIFORM_BUFFER, binding, buffer->id());
+                opengl_check_error();
+                uniform_block_offset++;
                 break;
             }
-            case ResourceKind::TextureReadOnly:
-            case ResourceKind::TextureReadWrite: {
+            case ResourceKind::TextureReadOnly: {
                 auto texture =
                     std::static_pointer_cast<TextureOpenGL>(resource);
-                glActiveTexture(GL_TEXTURE0 + element.binding);
+                auto info =
+                    std::get<PipelineOpenGL::TextureBinding>(binding_info);
+                glActiveTexture(GL_TEXTURE0 + info.unit);
                 opengl_check_error();
                 glBindTexture(GL_TEXTURE_2D, texture->id());
                 opengl_check_error();
-                break;
-            }
-            case ResourceKind::Sampler: {
-                auto sampler =
-                    std::static_pointer_cast<SamplerOpenGL>(resource);
-                glBindSampler(element.binding, sampler->id());
+                glUniform1i(info.location, info.unit);
                 opengl_check_error();
                 break;
             }
+            default:
+                fei::fatal(
+                    "ResourceKind {} not supported in "
+                    "CommandBufferOpenGL::set_resource_set",
+                    static_cast<uint32>(kind)
+                );
         }
     }
 }
@@ -291,6 +317,15 @@ void CommandBufferOpenGL::blit_to(std::shared_ptr<Framebuffer> target) {
         GL_NEAREST
     );
     opengl_check_error();
+}
+
+uint32 CommandBufferOpenGL::calculate_uniform_block_base_index(uint32 slot) {
+    uint32 base_index = 0;
+    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(m_pipeline);
+    for (uint32 s = 0; s < slot; ++s) {
+        base_index += pipeline_gl->uniform_buffer_count(s);
+    }
+    return base_index;
 }
 
 } // namespace fei

@@ -17,6 +17,7 @@ struct ForwardRenderResources {
     std::shared_ptr<Texture> shadow_map_texture;
     std::vector<std::shared_ptr<ShaderModule>> shadow_shader_modules;
     std::shared_ptr<Buffer> shadow_uniform_buffer;
+    std::shared_ptr<ResourceLayout> shadow_resource_layout;
     std::shared_ptr<ResourceSet> shadow_resource_set;
 };
 

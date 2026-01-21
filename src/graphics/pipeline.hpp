@@ -200,7 +200,6 @@ struct PipelineDescription {
     RasterizerStateDescription rasterizer_state;
     RenderPrimitive render_primitive;
     ShaderProgramDescription shader_program;
-    // NOTE: really need this?
     std::vector<std::shared_ptr<ResourceLayout>> resource_layouts;
 };
 

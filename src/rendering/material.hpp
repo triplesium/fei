@@ -80,6 +80,7 @@ class StandardMaterial : public Material {
         std::vector<ResourceLayoutElementDescription> elements = {
             {
                 .binding = 0,
+                .name = "Material",
                 .kind = ResourceKind::UniformBuffer,
                 .stages =
                     {
@@ -91,6 +92,7 @@ class StandardMaterial : public Material {
         if (base_color_texture) {
             elements.push_back(ResourceLayoutElementDescription {
                 .binding = 1,
+                .name = "diffuse_texture",
                 .kind = ResourceKind::TextureReadOnly,
                 .stages = ShaderStages::Fragment,
             });

@@ -80,24 +80,28 @@ void setup_forward_render_resources(
         .size = sizeof(DirectionalLightUniform),
         .usages = BufferUsages::Uniform,
     });
+    resources->shadow_resource_layout =
+        device->create_resource_layout(ResourceLayoutDescription {
+            .elements =
+                {
+                    ResourceLayoutElementDescription {
+                        .binding = 3,
+                        .name = "Light",
+                        .kind = ResourceKind::UniformBuffer,
+                        .stages = ShaderStages::Vertex,
+                    },
+                    // Shadow Map
+                    ResourceLayoutElementDescription {
+                        .binding = 2,
+                        .name = "shadow_map",
+                        .kind = ResourceKind::TextureReadOnly,
+                        .stages = ShaderStages::Fragment,
+                    },
+                },
+        });
     resources->shadow_resource_set =
         device->create_resource_set(ResourceSetDescription {
-            .layout = device->create_resource_layout(ResourceLayoutDescription {
-                .elements =
-                    {
-                        ResourceLayoutElementDescription {
-                            .binding = 3,
-                            .kind = ResourceKind::UniformBuffer,
-                            .stages = ShaderStages::Vertex,
-                        },
-                        // Shadow Map
-                        ResourceLayoutElementDescription {
-                            .binding = 2,
-                            .kind = ResourceKind::TextureReadOnly,
-                            .stages = ShaderStages::Fragment,
-                        },
-                    },
-            }),
+            .layout = resources->shadow_resource_layout,
             .resources =
                 {resources->shadow_uniform_buffer, resources->shadow_map_texture
                 },
@@ -176,6 +180,11 @@ void shadow_pass(
                     .vertex_layouts = {gpu_mesh.vertex_buffer_layout()
                                            .to_vertex_layout_description()},
                     .shaders = resources->shadow_shader_modules,
+                },
+            .resource_layouts =
+                {
+                    resources->shadow_resource_layout,
+                    mesh_uniforms->entries.at(entity).resource_layout,
                 },
         });
         command_buffer->set_pipeline(pipeline);
@@ -256,6 +265,13 @@ void color_pass(
                     .vertex_layouts = {gpu_mesh.vertex_buffer_layout()
                                            .to_vertex_layout_description()},
                     .shaders = material.shaders(),
+                },
+            .resource_layouts =
+                {
+                    material.resource_layout(),
+                    view_resource->resource_layout,
+                    mesh_uniforms->entries.at(entity).resource_layout,
+                    forward_render_resources->shadow_resource_layout,
                 },
         });
         command_buffer->set_pipeline(pipeline);
