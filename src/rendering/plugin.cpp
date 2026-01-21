@@ -2,6 +2,7 @@
 
 #include "app/app.hpp"
 #include "asset/server.hpp"
+#include "rendering/defaults.hpp"
 #include "rendering/forward_render.hpp"
 #include "rendering/gpu_image.hpp"
 #include "rendering/material.hpp"
@@ -46,8 +47,9 @@ void RenderingPlugin::setup(App& app) {
         .add_resource<MeshUniforms>()
         .add_system(RenderPrepare, prepare_mesh_uniforms)
         .add_system(RenderFirst, render_begin)
-        .add_system(RenderLast, render_end);
-    app.add_plugin(ForwardRenderPlugin {});
+        .add_system(RenderLast, render_end)
+        .add_plugin(ForwardRenderPlugin {})
+        .add_plugin(RenderingDefaultsPlugin {});
 }
 
 } // namespace fei

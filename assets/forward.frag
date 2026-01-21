@@ -5,26 +5,23 @@ in vec2 Frag_TexCoords;
 in vec4 Frag_LightSpacePosition;
 out vec4 Out_Color;
 
-layout(binding = 0, row_major, std140) uniform Material {
+layout(row_major, std140) uniform Material {
     vec3 base_color;
-    int material_flags;
 };
-layout(binding = 1, row_major, std140) uniform View {
+layout(row_major, std140) uniform View {
     mat4 view_projection;
     vec3 view_position;
 };
-layout(binding = 2, row_major, std140) uniform Mesh {
+layout(row_major, std140) uniform Mesh {
     mat4 model;
 };
-layout(binding = 3, row_major, std140) uniform Light {
+layout(row_major, std140) uniform Light {
     mat4 light_view_projection;
     vec3 light_position;
     vec3 light_color;
 };
 layout(binding = 1) uniform sampler2D diffuse_texture;
 layout(binding = 2) uniform sampler2D shadow_map;
-
-const int MATERIAL_FLAG_HAS_BASE_COLOR_TEXTURE = 1;
 
 #define SHADOW_MAP_SIZE 2048.0
 #define LIGHT_FRUSTUM_SIZE 20.0
@@ -193,10 +190,7 @@ vec3 blinn_phong(
 }
 
 void main() {
-    vec3 color = base_color;
-    if ((material_flags & MATERIAL_FLAG_HAS_BASE_COLOR_TEXTURE) != 0) {
-        color *= texture(diffuse_texture, Frag_TexCoords.xy).rgb;
-    }
+    vec3 color = base_color * texture(diffuse_texture, Frag_TexCoords.xy).rgb;
     
     // Perform perspective divide
     vec3 shadow_coord = Frag_LightSpacePosition.xyz / Frag_LightSpacePosition.w;

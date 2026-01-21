@@ -1,6 +1,5 @@
 #pragma once
 #include "asset/handle.hpp"
-#include "base/bitflags.hpp"
 #include "base/optional.hpp"
 #include "core/image.hpp"
 #include "ecs/world.hpp"
@@ -8,11 +7,11 @@
 #include "graphics/resource.hpp"
 #include "graphics/shader_module.hpp"
 #include "math/color.hpp"
+#include "rendering/defaults.hpp"
 #include "rendering/gpu_image.hpp"
 #include "rendering/render_asset.hpp"
 #include "rendering/shader.hpp"
 
-#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -46,14 +45,8 @@ class Material {
     }
 };
 
-enum class StandardMaterialFlags : std::uint32_t {
-    None = 0,
-    HasBaseColorTexture = 1 << 0,
-};
-
 struct alignas(16) StandardMaterialUniform {
     Color3F base_color {1.0f, 1.0f, 1.0f};
-    uint32_t flags {0};
 };
 
 class StandardMaterial : public Material {
@@ -89,31 +82,25 @@ class StandardMaterial : public Material {
                     },
             },
         };
-        if (base_color_texture) {
-            elements.push_back(ResourceLayoutElementDescription {
-                .binding = 1,
-                .name = "diffuse_texture",
-                .kind = ResourceKind::TextureReadOnly,
-                .stages = ShaderStages::Fragment,
-            });
-        }
+        elements.push_back(ResourceLayoutElementDescription {
+            .binding = 1,
+            .name = "diffuse_texture",
+            .kind = ResourceKind::TextureReadOnly,
+            .stages = ShaderStages::Fragment,
+        });
         return elements;
     }
 
     StandardMaterialUniform create_uniform() const {
         StandardMaterialUniform uniform;
         uniform.base_color = base_color;
-        BitFlags<StandardMaterialFlags> flags;
-        if (base_color_texture) {
-            flags |= StandardMaterialFlags::HasBaseColorTexture;
-        }
-        uniform.flags = static_cast<std::uint32_t>(flags.to_raw());
         return uniform;
     }
 
     virtual std::vector<std::shared_ptr<BindableResource>>
     resources(GraphicsDevice& device, World& world) const override {
         std::vector<std::shared_ptr<BindableResource>> resources;
+        auto& defaults = world.resource<RenderingDefaults>();
         auto& gpu_image_assets = world.resource<RenderAssets<GpuImage>>();
 
         auto uniform = create_uniform();
@@ -129,16 +116,14 @@ class StandardMaterial : public Material {
         );
         resources.push_back(uniform_buffer);
 
-        if (base_color_texture) {
-            auto gpu_image = gpu_image_assets.get(base_color_texture->id());
-            if (!gpu_image) {
-                fatal(
-                    "GpuImage for Image asset id {} not found",
-                    base_color_texture->id()
-                );
-            }
-            resources.push_back(gpu_image->texture());
-        }
+        resources.push_back(
+            base_color_texture
+                .transform([&](const Handle<Image>& image_handle) {
+                    return gpu_image_assets.get(image_handle.id())->texture();
+                })
+                .value_or(defaults.default_texture)
+        );
+
         return resources;
     }
 };

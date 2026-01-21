@@ -3,16 +3,16 @@ layout (location = 0) in vec3 Vertex_Position;
 layout (location = 1) in vec3 Vertex_Normal;
 layout (location = 2) in vec2 Vertex_Uv;
 
-layout(binding = 1, row_major, std140) uniform View {
+layout(row_major, std140) uniform View {
     mat4 view_projection;
     vec3 view_position;
 };
 
-layout(binding = 2, row_major, std140) uniform Mesh {
+layout(row_major, std140) uniform Mesh {
     mat4 model;
 };
 
-layout(binding = 3, row_major, std140) uniform Light {
+layout(row_major, std140) uniform Light {
     mat4 light_view_projection;
     vec3 light_position;
     vec3 light_color;
