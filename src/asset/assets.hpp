@@ -1,6 +1,5 @@
 #pragma once
 #include "asset/event.hpp"
-#include "asset/handle.hpp"
 #include "asset/id.hpp"
 #include "asset/loader.hpp"
 #include "base/log.hpp"
@@ -22,6 +21,14 @@ template<typename T>
 class Handle;
 
 template<typename T>
+class Assets;
+
+template<typename T>
+struct AssetsState {
+    Assets<T>* assets = nullptr;
+};
+
+template<typename T>
 class Assets {
   public:
     struct Entry {
@@ -40,16 +47,47 @@ class Assets {
     std::unique_ptr<AssetLoader<T>> m_loader;
     TypeId m_type_id;
     std::vector<AssetEvent<T>> m_event_queue;
+    std::shared_ptr<AssetsState<T>> m_state;
 
   public:
     Assets(std::unique_ptr<AssetLoader<T>> loader) :
-        m_loader(std::move(loader)), m_type_id(type_id<T>()) {}
-    ~Assets() = default;
+        m_loader(std::move(loader)), m_type_id(type_id<T>()),
+        m_state(std::make_shared<AssetsState<T>>()) {
+        m_state->assets = this;
+    }
+    ~Assets() {
+        if (m_state) {
+            m_state->assets = nullptr;
+        }
+    }
 
     Assets(const Assets&) = delete;
     Assets& operator=(const Assets&) = delete;
-    Assets(Assets&&) = default;
-    Assets& operator=(Assets&&) = default;
+    Assets(Assets&& other) noexcept :
+        m_assets(std::move(other.m_assets)), m_cache(std::move(other.m_cache)),
+        m_next_id(other.m_next_id), m_loader(std::move(other.m_loader)),
+        m_type_id(other.m_type_id),
+        m_event_queue(std::move(other.m_event_queue)),
+        m_state(std::move(other.m_state)) {
+        if (m_state) {
+            m_state->assets = this;
+        }
+    }
+    Assets& operator=(Assets&& other) noexcept {
+        if (this != &other) {
+            m_assets = std::move(other.m_assets);
+            m_cache = std::move(other.m_cache);
+            m_next_id = other.m_next_id;
+            m_loader = std::move(other.m_loader);
+            m_type_id = other.m_type_id;
+            m_event_queue = std::move(other.m_event_queue);
+            m_state = std::move(other.m_state);
+            if (m_state) {
+                m_state->assets = this;
+            }
+        }
+        return *this;
+    }
 
     Handle<T> load(const std::filesystem::path& path) {
         if (!m_loader) {
@@ -57,7 +95,7 @@ class Assets {
         }
         if (m_cache.contains(path)) {
             AssetId cached_id = m_cache[path];
-            return Handle<T>(cached_id, this);
+            return Handle<T>(cached_id, m_state);
         }
         std::expected<std::unique_ptr<T>, std::error_code> asset =
             m_loader->load(path);
@@ -70,6 +108,7 @@ class Assets {
     Handle<T> add(std::unique_ptr<T> asset) {
         AssetId id = m_next_id++;
         m_assets[id] = {
+            .id = id,
             .path = nullopt,
             .type_id = m_type_id,
             .asset = std::move(asset),
@@ -80,7 +119,7 @@ class Assets {
             .type = AssetEventType::Added,
             .id = id,
         });
-        return Handle<T>(id, this);
+        return Handle<T>(id, m_state);
     }
 
     template<typename... Args>
@@ -108,7 +147,7 @@ class Assets {
 
     Optional<T&> get(Handle<T> handle);
 
-    Optional<T&> get(AssetId id) { return get(Handle<T>(id, this)); }
+    Optional<T&> get(AssetId id) { return get(Handle<T>(id, m_state)); }
 
     void acquire(AssetId id) {
         auto entry = get_entry(id);
