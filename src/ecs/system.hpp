@@ -1,16 +1,21 @@
 #pragma once
-
+#include "base/log.hpp"
 #include "base/type_traits.hpp"
+#include "refl/type.hpp"
 
 #include <concepts>
+#include <memory>
+#include <print>
 #include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace fei {
 
 class World;
+class System;
 
 template<typename T>
 concept StatefulSystemParam = requires(World& world) {
@@ -29,20 +34,11 @@ concept StatelessSystemParam = requires(World& world) {
 template<typename T>
 concept SystemParam = StatefulSystemParam<T> || StatelessSystemParam<T>;
 
-struct Dependency {};
-
-struct Condition {};
-
-struct SystemConfig {
-    std::vector<Dependency> dependencies;
-    std::vector<Condition> conditions;
-};
-
 // Concept to check if a type can be used as a system
 template<typename T>
 concept IntoSystem =
     // System is a function (pointer)
-    ((std::is_function_v<std::remove_pointer_t<T>> ||
+    ((std::is_function_v<std::remove_reference_t<std::remove_pointer_t<T>>> ||
       // Or a callable object
       (std::is_class_v<T> && requires { &T::operator(); })) &&
      // System should not return value
@@ -52,15 +48,22 @@ concept IntoSystem =
          return (SystemParam<Ts> && ...);
      }(std::type_identity<typename fei::FunctionTraits<T>::args_tuple>()));
 
-class System {
-  private:
-    SystemConfig m_config;
+template<typename T>
+concept HashableSystem =
+    IntoSystem<T> && (std::is_function_v<std::remove_cvref_t<T>>);
 
+std::size_t hash_system(HashableSystem auto&& system) {
+    return reinterpret_cast<std::size_t>(system);
+}
+
+class System {
   public:
     System() = default;
     virtual ~System() = default;
 
     virtual void run(World& world) = 0;
+    virtual bool hashable() const { return false; }
+    virtual std::size_t hash() const { return 0; }
 };
 
 template<typename Func>
@@ -96,6 +99,23 @@ class FunctionSystem : public System {
     void run(World& world) override {
         auto params = prepare_params<ParamTypes>(world);
         std::apply(m_func, params);
+    }
+
+    virtual bool hashable() const override {
+        if constexpr (std::is_pointer_v<Func> &&
+                      std::is_function_v<std::remove_pointer_t<Func>>) {
+            return true;
+        }
+        return false;
+    }
+
+    virtual std::size_t hash() const override {
+        if constexpr (std::is_pointer_v<Func> &&
+                      std::is_function_v<std::remove_pointer_t<Func>>) {
+            return reinterpret_cast<std::size_t>(m_func);
+        }
+        fei::fatal("Cannot hash non-function pointer systems");
+        return 0;
     }
 
   private:

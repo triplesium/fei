@@ -5,7 +5,7 @@
 #include "ecs/entity.hpp"
 #include "ecs/fwd.hpp"
 #include "ecs/resource.hpp"
-#include "ecs/scheduler.hpp"
+#include "ecs/schedule.hpp"
 #include "ecs/system.hpp"
 #include "refl/ref_utils.hpp"
 
@@ -55,10 +55,10 @@ class World {
         m_entities.remove_entity(entity);
     }
 
-    template<typename Func>
-    void add_system(ScheduleId schedule, Func func) {
-        m_system_scheduler.add_system(schedule, func);
+    void add_system(ScheduleId schedule, SystemConfig config) {
+        m_system_scheduler.add_system(schedule, std::move(config));
     }
+
     void run_schedule(ScheduleId schedule) {
         m_system_scheduler.run_systems(schedule, *this);
     }
