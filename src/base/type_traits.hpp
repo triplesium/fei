@@ -8,6 +8,10 @@ namespace fei {
 template<typename T>
 struct FunctionTraits : public FunctionTraits<decltype(&T::operator())> {};
 
+template<typename T>
+    requires std::is_reference_v<T> || std::is_pointer_v<T>
+struct FunctionTraits<T> : public FunctionTraits<std::remove_cvref_t<T>> {};
+
 template<typename ClassType, typename ReturnType, typename... Args>
 struct FunctionTraits<ReturnType (ClassType::*)(Args...) const> {
     using return_type = ReturnType;
