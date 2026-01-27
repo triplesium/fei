@@ -9,6 +9,7 @@ void App::run() {
     for (auto& [type, plugin] : m_plugins) {
         plugin->finish(*this);
     }
+    m_world.sort_systems();
 
     run_schedule(PreStartUp);
     run_schedule(StartUp);
