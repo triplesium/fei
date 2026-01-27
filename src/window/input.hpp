@@ -115,8 +115,7 @@ class InputPlugin : public Plugin {
     void setup(App& app) {
         app.add_resource<KeyInput>();
         app.add_resource<MouseInput>();
-        app.add_system(PreUpdate, key_input_system);
-        app.add_system(PreUpdate, mouse_input_system);
+        app.add_systems(PreUpdate, key_input_system, mouse_input_system);
     }
 };
 

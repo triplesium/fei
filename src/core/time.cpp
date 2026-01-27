@@ -46,7 +46,7 @@ void time_system(Res<Time> time) {
 
 void TimePlugin::setup(App& app) {
     app.add_resource<Time>();
-    app.add_system(First, time_system);
+    app.add_systems(First, time_system);
 }
 
 } // namespace fei

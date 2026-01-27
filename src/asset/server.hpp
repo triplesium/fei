@@ -46,7 +46,7 @@ class AssetServer {
             .add_resource(Assets<T>(std::unique_ptr<AssetLoader<T>>(new Loader()
             )))
             .template add_event<AssetEvent<T>>()
-            .add_system(PreUpdate, Assets<T>::track_assets);
+            .add_systems(PreUpdate, Assets<T>::track_assets);
     }
 
     template<typename T>
@@ -57,7 +57,7 @@ class AssetServer {
         (*m_app)
             .add_resource(Assets<T>(nullptr))
             .template add_event<AssetEvent<T>>()
-            .add_system(PreUpdate, Assets<T>::track_assets);
+            .add_systems(PreUpdate, Assets<T>::track_assets);
     }
 
     template<typename T>

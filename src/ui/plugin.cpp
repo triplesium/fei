@@ -39,9 +39,9 @@ void end_imgui() {
 }
 
 void UIPlugin::setup(App& app) {
-    app.add_system(StartUp, setup_imgui)
-        .add_system(RenderStart, begin_imgui)
-        .add_system(RenderEnd, end_imgui);
+    app.add_systems(StartUp, setup_imgui)
+        .add_systems(RenderStart, begin_imgui)
+        .add_systems(RenderEnd, end_imgui);
 }
 
 } // namespace fei

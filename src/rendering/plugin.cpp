@@ -42,12 +42,15 @@ void RenderingPlugin::setup(App& app) {
                     PreparedMaterial,
                     PreparedStandardMaterialAdapter> {})
         .add_resource<ViewResource>()
-        .add_system(StartUp, init_view_resource)
-        .add_system(RenderPrepare, prepare_view_resource)
+        .add_systems(StartUp, init_view_resource)
+        .add_systems(
+            RenderPrepare,
+            prepare_view_resource,
+            prepare_mesh_uniforms
+        )
         .add_resource<MeshUniforms>()
-        .add_system(RenderPrepare, prepare_mesh_uniforms)
-        .add_system(RenderFirst, render_begin)
-        .add_system(RenderLast, render_end)
+        .add_systems(RenderFirst, render_begin)
+        .add_systems(RenderLast, render_end)
         .add_plugin(ForwardRenderPlugin {})
         .add_plugin(RenderingDefaultsPlugin {});
 }

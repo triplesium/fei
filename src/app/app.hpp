@@ -6,6 +6,7 @@
 #include "ecs/world.hpp"
 #include "refl/type.hpp"
 
+#include <concepts>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -35,6 +36,11 @@ struct AppStates {
     bool should_stop {false};
 };
 
+template<typename E>
+void event_update_system(Res<Events<E>> events) {
+    events->update();
+}
+
 class App {
   private:
     std::unordered_map<TypeId, std::unique_ptr<Plugin>> m_plugins;
@@ -48,15 +54,29 @@ class App {
     template<typename E>
     App& add_event() {
         m_world.add_resource(Events<E>());
-        add_system(Last, [](Res<Events<E>> events) {
-            events->update();
-        });
+        add_systems(Last, event_update_system<E>);
         return *this;
     }
 
-    template<typename F>
-    App& add_system(uint32_t schedule, F system) {
-        m_world.add_system(schedule, system);
+    App& add_systems(
+        uint32_t schedule,
+        std::convertible_to<SystemConfigs> auto&&... systems
+    ) {
+        m_world.add_systems(
+            schedule,
+            std::forward<decltype(systems)>(systems)...
+        );
+        return *this;
+    }
+
+    App& configure_sets(
+        uint32_t schedule,
+        std::convertible_to<SystemSetConfig> auto&&... config
+    ) {
+        m_world.configure_sets(
+            schedule,
+            std::forward<decltype(config)>(config)...
+        );
         return *this;
     }
 

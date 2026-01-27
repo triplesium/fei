@@ -37,7 +37,7 @@ void init_rendering_defaults(
 
 void RenderingDefaultsPlugin::setup(App& app) {
     app.add_resource(RenderingDefaults {})
-        .add_system(StartUp, init_rendering_defaults);
+        .add_systems(StartUp, init_rendering_defaults);
 }
 
 } // namespace fei

@@ -9,6 +9,7 @@
 #include "ecs/system.hpp"
 #include "refl/ref_utils.hpp"
 
+#include <cstdint>
 #include <utility>
 
 namespace fei {
@@ -55,12 +56,24 @@ class World {
         m_entities.remove_entity(entity);
     }
 
-    void add_system(ScheduleId schedule, SystemConfig config) {
-        m_system_scheduler.add_system(schedule, std::move(config));
+    void add_systems(
+        ScheduleId schedule,
+        std::convertible_to<SystemConfigs> auto&&... configs
+    ) {
+        m_schedules.add_systems(
+            schedule,
+            std::forward<decltype(configs)>(configs)...
+        );
     }
 
     void run_schedule(ScheduleId schedule) {
         m_schedules.run_systems(schedule, *this);
+    }
+
+    void sort_systems() { m_schedules.sort_systems(); }
+
+    void configure_sets(uint32_t schedule, SystemSetConfig config) {
+        m_schedules.configure_sets(schedule, std::move(config));
     }
 
     template<typename T>

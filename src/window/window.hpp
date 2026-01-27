@@ -29,9 +29,9 @@ class WindowPlugin : public Plugin {
             .width = width,
             .height = height,
         });
-        app.add_system(First, window_prepare);
+        app.add_systems(First, window_prepare);
         // app.add_system(RenderEnd, swap_buffers);
-        app.add_system(Last, update_should_close);
+        app.add_systems(Last, update_should_close);
     }
 };
 

@@ -144,8 +144,7 @@ struct RenderAssetPlugin : public Plugin {
     void setup(App& app) override {
         // app.add_resource<ExtractedAssets<Source>>();
         app.add_resource<RenderAssets<Target>>();
-        app.add_system(RenderPrepare, extract_render_assets<Source>);
-        app.add_system(RenderPrepare, prepare_assets<Source, Target, Adapter>);
+        app.add_systems(RenderPrepare, extract_render_assets<Source>, prepare_assets<Source, Target, Adapter>);
     }
 };
 

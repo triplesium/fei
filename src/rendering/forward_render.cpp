@@ -306,9 +306,8 @@ void color_pass(
 
 void ForwardRenderPlugin::setup(App& app) {
     app.add_resource<ForwardRenderResources>()
-        .add_system(StartUp, setup_forward_render_resources)
-        .add_system(RenderUpdate, shadow_pass)
-        .add_system(RenderUpdate, color_pass);
+        .add_systems(StartUp, setup_forward_render_resources)
+        .add_systems(RenderUpdate, chain(shadow_pass, color_pass));
 }
 
 } // namespace fei
