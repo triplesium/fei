@@ -18,7 +18,7 @@ class World {
     Entities m_entities;
     Archetypes m_archetypes;
     Resources m_resources;
-    SystemScheduler m_system_scheduler;
+    Schedules m_schedules;
 
   public:
     World() = default;
@@ -60,7 +60,7 @@ class World {
     }
 
     void run_schedule(ScheduleId schedule) {
-        m_system_scheduler.run_systems(schedule, *this);
+        m_schedules.run_systems(schedule, *this);
     }
 
     template<typename T>

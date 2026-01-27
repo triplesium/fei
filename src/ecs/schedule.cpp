@@ -44,7 +44,7 @@ void ScheduleGraph::sort() {
     }
 }
 
-void SystemScheduler::run_systems(ScheduleId schedule, World& world) {
+void Schedules::run_systems(ScheduleId schedule, World& world) {
     auto it = m_schedules.find(schedule);
     if (it != m_schedules.end()) {
         it->second.run_systems(world);

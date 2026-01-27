@@ -144,20 +144,40 @@ class Schedule {
     }
 };
 
-class SystemScheduler {
+class Schedules {
   private:
     std::unordered_map<ScheduleId, Schedule> m_schedules;
 
   public:
-    SystemScheduler() = default;
+    Schedules() = default;
 
-    SystemScheduler(const SystemScheduler&) = delete;
-    SystemScheduler& operator=(const SystemScheduler&) = delete;
-    SystemScheduler(SystemScheduler&&) noexcept = default;
-    SystemScheduler& operator=(SystemScheduler&&) noexcept = default;
+    Schedules(const Schedules&) = delete;
+    Schedules& operator=(const Schedules&) = delete;
+    Schedules(Schedules&&) noexcept = default;
+    Schedules& operator=(Schedules&&) noexcept = default;
 
-    void add_system(ScheduleId schedule, SystemConfig&& config) {
-        m_schedules[schedule].add_system(std::move(config));
+    void add_systems(
+        ScheduleId schedule,
+        std::convertible_to<SystemConfigs> auto&&... configs
+    ) {
+        m_schedules[schedule].add_systems(
+            std::forward<decltype(configs)>(configs)...
+        );
+    }
+
+    void configure_sets(
+        uint32_t schedule,
+        std::convertible_to<SystemSetConfig> auto&&... configs
+    ) {
+        m_schedules[schedule].configure_sets(
+            std::forward<decltype(configs)>(configs)...
+        );
+    }
+
+    void sort_systems() {
+        for (auto& [_, schedule] : m_schedules) {
+            schedule.sort_systems();
+        }
     }
 
     void run_systems(ScheduleId schedule, World& world);
