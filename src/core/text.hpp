@@ -1,10 +1,10 @@
 #pragma once
 #include "app/plugin.hpp"
+#include "asset/io.hpp"
 #include "asset/loader.hpp"
 #include "asset/server.hpp"
 
 #include <expected>
-#include <fstream>
 #include <string>
 
 namespace fei {
@@ -22,14 +22,8 @@ class TextAsset {
 class TextAssetLoader : public AssetLoader<TextAsset> {
   protected:
     virtual std::expected<std::unique_ptr<TextAsset>, std::error_code>
-    load(const std::filesystem::path& path) override {
-        std::ifstream file(path);
-        if (!file) {
-            return std::unexpected(std::error_code {});
-        }
-        std::stringstream buffer;
-        buffer << file.rdbuf();
-        return std::make_unique<TextAsset>(buffer.str());
+    load(Reader& reader, const LoadContext& context) override {
+        return std::make_unique<TextAsset>(reader.as_string());
     }
 };
 

@@ -1,5 +1,7 @@
 #include "core/image.hpp"
 
+#include "asset/io.hpp"
+#include "base/log.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/texture.hpp"
 
@@ -18,12 +20,19 @@ Image::Image(
 ) : m_data(std::move(data)), m_texture_description(texture_description) {}
 
 std::expected<std::unique_ptr<Image>, std::error_code>
-ImageLoader::load(const std::filesystem::path& path) {
+ImageLoader::load(Reader& reader, const LoadContext& context) {
     int width, height, channels;
     stbi_set_flip_vertically_on_load(true);
-    auto data = stbi_load(path.string().c_str(), &width, &height, &channels, 4);
+    auto data = stbi_load_from_memory(
+        reinterpret_cast<const stbi_uc*>(reader.data()),
+        static_cast<int>(reader.size()),
+        &width,
+        &height,
+        &channels,
+        4
+    );
     if (!data) {
-        // TODO: error codes
+        error("Failed to load image: {}", stbi_failure_reason());
         return std::unexpected(std::error_code {});
     }
     PixelFormat format;

@@ -175,23 +175,23 @@ void compute_smoothing_shapes(
 }
 
 std::expected<std::unique_ptr<Mesh>, std::error_code>
-MeshLoader::load(const std::filesystem::path& path) {
+MeshLoader::load(Reader& reader, const LoadContext& context) {
     tinyobj::ObjReaderConfig reader_config;
-    tinyobj::ObjReader reader;
+    tinyobj::ObjReader obj_reader;
 
-    if (!reader.ParseFromFile(path.string(), reader_config)) {
-        if (!reader.Error().empty()) {
-            fei::error("TinyObjReader: {}", reader.Error());
+    if (!obj_reader.ParseFromString(reader.as_string(), "", reader_config)) {
+        if (!obj_reader.Error().empty()) {
+            fei::error("TinyObjReader: {}", obj_reader.Error());
         }
         return std::unexpected(std::make_error_code(std::errc::io_error));
     }
 
-    if (!reader.Warning().empty()) {
-        fei::warn("TinyObjReader: {}", reader.Warning());
+    if (!obj_reader.Warning().empty()) {
+        fei::warn("TinyObjReader: {}", obj_reader.Warning());
     }
 
-    auto attrib = reader.GetAttrib();
-    auto shapes = reader.GetShapes();
+    auto attrib = obj_reader.GetAttrib();
+    auto shapes = obj_reader.GetShapes();
     if (shapes.size() > 1) {
         fei::warn(
             "MeshLoader: only the first shape is loaded, {} shapes found",

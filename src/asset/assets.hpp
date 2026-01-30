@@ -1,7 +1,9 @@
 #pragma once
 #include "asset/event.hpp"
 #include "asset/id.hpp"
+#include "asset/io.hpp"
 #include "asset/loader.hpp"
+#include "asset/path.hpp"
 #include "base/log.hpp"
 #include "base/optional.hpp"
 #include "ecs/event.hpp"
@@ -10,7 +12,6 @@
 
 #include <concepts>
 #include <expected>
-#include <filesystem>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -33,7 +34,7 @@ class Assets {
   public:
     struct Entry {
         AssetId id;
-        Optional<std::filesystem::path> path;
+        Optional<AssetPath> path;
         TypeId type_id;
         std::unique_ptr<T> asset;
         bool is_loaded;
@@ -42,7 +43,7 @@ class Assets {
 
   private:
     std::unordered_map<AssetId, Entry> m_assets;
-    std::unordered_map<std::filesystem::path, AssetId> m_cache;
+    std::unordered_map<AssetPath, AssetId> m_cache;
     AssetId m_next_id = 0;
     std::unique_ptr<AssetLoader<T>> m_loader;
     TypeId m_type_id;
@@ -89,18 +90,24 @@ class Assets {
         return *this;
     }
 
-    Handle<T> load(const std::filesystem::path& path) {
+    Handle<T> load(Reader& reader, const LoadContext& context) {
         if (!m_loader) {
-            fei::fatal("AssetLoader not set for {}", path.string());
+            fei::fatal(
+                "AssetLoader not set for {}",
+                context.asset_path().as_string()
+            );
         }
-        if (m_cache.contains(path)) {
-            AssetId cached_id = m_cache[path];
+        if (m_cache.contains(context.asset_path())) {
+            AssetId cached_id = m_cache[context.asset_path()];
             return Handle<T>(cached_id, m_state);
         }
         std::expected<std::unique_ptr<T>, std::error_code> asset =
-            m_loader->load(path);
+            m_loader->load(reader, context);
         if (!asset) {
-            fei::fatal("Failed to load asset: {}", path.string());
+            fei::fatal(
+                "Failed to load asset: {}",
+                context.asset_path().as_string()
+            );
         }
         return add(std::move(*asset));
     }

@@ -1,5 +1,6 @@
 #pragma once
 #include "app/plugin.hpp"
+#include "asset/io.hpp"
 #include "asset/loader.hpp"
 #include "asset/server.hpp"
 #include "graphics/texture.hpp"
@@ -33,7 +34,7 @@ class Image {
 class ImageLoader : public AssetLoader<Image> {
   public:
     std::expected<std::unique_ptr<Image>, std::error_code>
-    load(const std::filesystem::path& path) override;
+    load(Reader& reader, const LoadContext& context) override;
 };
 
 class ImagePlugin : public Plugin {

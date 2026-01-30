@@ -1,6 +1,7 @@
 #pragma once
 #include "app/app.hpp"
 #include "asset/assets.hpp"
+#include "asset/io.hpp"
 #include "asset/loader.hpp"
 
 #include <concepts>
@@ -67,7 +68,9 @@ class AssetServer {
         }
         auto& assets = m_app->resource<Assets<T>>();
         auto full_path = m_assets_dir / path;
-        return assets.load(full_path);
+        Reader reader(full_path);
+        LoadContext context(AssetPath(path.string()));
+        return assets.load(reader, context);
     }
 };
 

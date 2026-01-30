@@ -1,4 +1,5 @@
 #pragma once
+#include "asset/io.hpp"
 #include "asset/loader.hpp"
 #include "base/log.hpp"
 #include "graphics/enums.hpp"
@@ -19,12 +20,8 @@ struct Shader {
 class ShaderLoader : public AssetLoader<Shader> {
   public:
     std::expected<std::unique_ptr<Shader>, std::error_code>
-    load(const std::filesystem::path& path) override {
-        std::ifstream file(path);
-        if (!file) {
-            fei::error("Failed to open shader file: {}", path.string());
-            return nullptr;
-        }
+    load(Reader& reader, const LoadContext& context) override {
+        auto path = context.asset_path().path();
         ShaderStages stage;
         if (path.extension() == ".vert") {
             stage = ShaderStages::Vertex;
@@ -34,10 +31,7 @@ class ShaderLoader : public AssetLoader<Shader> {
             fei::error("Unknown shader extension: {}", path.string());
             return nullptr;
         }
-        std::string source(
-            (std::istreambuf_iterator<char>(file)),
-            std::istreambuf_iterator<char>()
-        );
+        std::string source = reader.as_string();
 
         return std::make_unique<Shader>(Shader {path, source, stage});
     }
