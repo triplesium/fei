@@ -24,6 +24,7 @@ class AssetPath {
             m_path = path;
         }
     }
+    AssetPath(const char* path) : AssetPath(std::string(path)) {}
 
     const Optional<std::string>& source() const { return m_source; }
 

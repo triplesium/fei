@@ -8,9 +8,7 @@ namespace fei {
 
 class AssetsPlugin : public Plugin {
   public:
-    virtual void setup(App& app) override {
-        app.add_resource(AssetServer {&app});
-    }
+    virtual void setup(App& app) override;
 };
 
 struct NoLoader {};

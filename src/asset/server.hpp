@@ -1,28 +1,23 @@
 #pragma once
 #include "app/app.hpp"
 #include "asset/assets.hpp"
-#include "asset/io.hpp"
 #include "asset/loader.hpp"
+#include "asset/path.hpp"
+#include "asset/source.hpp"
 
 #include <concepts>
-#include <filesystem>
 #include <memory>
+#include <unordered_map>
 
 namespace fei {
 
 class AssetServer {
   private:
-    std::filesystem::path m_assets_dir;
     App* m_app;
+    std::unordered_map<std::string, std::unique_ptr<AssetSource>> m_sources;
 
   public:
-    AssetServer(App* app) : m_app(app) {
-        if (std::string(FEI_ASSETS_PATH).empty()) {
-            set_assets_dir(std::filesystem::current_path());
-        } else {
-            set_assets_dir(FEI_ASSETS_PATH);
-        }
-    }
+    AssetServer(App* app) : m_app(app) {}
 
     // Delete copy constructor and copy assignment operator
     AssetServer(const AssetServer&) = delete;
@@ -31,12 +26,6 @@ class AssetServer {
     // Default move constructor and move assignment operator
     AssetServer(AssetServer&&) = default;
     AssetServer& operator=(AssetServer&&) = default;
-
-    void set_assets_dir(const std::filesystem::path& path) {
-        m_assets_dir = path;
-    }
-
-    const std::filesystem::path& assets_dir() const { return m_assets_dir; }
 
     template<typename T, std::derived_from<AssetLoader<T>> Loader>
     void add_loader() {
@@ -62,15 +51,29 @@ class AssetServer {
     }
 
     template<typename T>
-    Handle<T> load(const std::filesystem::path& path) {
+    Handle<T> load(AssetPath path) {
         if (!m_app->has_resource<Assets<T>>()) {
             fatal("No asset found for type: {}", type_name<T>());
         }
         auto& assets = m_app->resource<Assets<T>>();
-        auto full_path = m_assets_dir / path;
-        Reader reader(full_path);
-        LoadContext context(AssetPath(path.string()));
+        auto source_name = path.source().value_or("default");
+        if (!m_sources.contains(source_name)) {
+            fatal("No asset source found with name: {}", source_name);
+        }
+        auto& source = m_sources.at(source_name);
+        LoadContext context(path);
+        auto reader = source->get_reader(path.path());
         return assets.load(reader, context);
+    }
+
+    template<std::derived_from<AssetSource> Source, typename... Args>
+    void emplace_source(Args&&... args) {
+        auto source = std::make_unique<Source>(std::forward<Args>(args)...);
+        auto name = source->name();
+        if (m_sources.contains(name)) {
+            fatal("Asset source with name {} already exists", name);
+        }
+        m_sources.emplace(std::move(name), std::move(source));
     }
 };
 
