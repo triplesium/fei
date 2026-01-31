@@ -63,8 +63,10 @@ void setup_forward_render_resources(
         .texture_type = TextureType::Texture2D,
     });
 
-    auto shadow_vertex_shader = asset_server->load<Shader>("shadow.vert");
-    auto shadow_fragment_shader = asset_server->load<Shader>("shadow.frag");
+    auto shadow_vertex_shader =
+        asset_server->load<Shader>("embeded://shadow.vert");
+    auto shadow_fragment_shader =
+        asset_server->load<Shader>("embeded://shadow.frag");
 
     resources->shadow_shader_modules = {
         device->create_shader_module(ShaderDescription {
