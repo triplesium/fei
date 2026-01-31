@@ -2,7 +2,7 @@
 #include "app/plugin.hpp"
 #include "asset/io.hpp"
 #include "asset/loader.hpp"
-#include "asset/server.hpp"
+#include "asset/plugin.hpp"
 
 #include <expected>
 #include <string>
@@ -30,7 +30,7 @@ class TextAssetLoader : public AssetLoader<TextAsset> {
 class TextAssetPlugin : public Plugin {
   public:
     void setup(App& app) override {
-        app.resource<AssetServer>().add_loader<TextAsset, TextAssetLoader>();
+        app.add_plugin<AssetPlugin<TextAsset, TextAssetLoader>>();
     }
 };
 

@@ -110,10 +110,15 @@ class App {
         return *this;
     }
 
-    template<typename P>
+    template<std::derived_from<Plugin> P>
     App& add_plugin(P&& plugin) {
         m_plugins[type_id<P>()] = std::make_unique<P>(std::forward<P>(plugin));
         m_plugins[type_id<P>()]->setup(*this);
+        return *this;
+    }
+
+    App& add_plugins(std::derived_from<Plugin> auto&&... plugins) {
+        (add_plugin(std::forward<decltype(plugins)>(plugins)), ...);
         return *this;
     }
 

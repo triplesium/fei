@@ -1,7 +1,7 @@
 #include "rendering/plugin.hpp"
 
 #include "app/app.hpp"
-#include "asset/server.hpp"
+#include "asset/plugin.hpp"
 #include "rendering/defaults.hpp"
 #include "rendering/forward_render.hpp"
 #include "rendering/gpu_image.hpp"
@@ -31,16 +31,17 @@ void render_end(Res<Window> win) {
 }
 
 void RenderingPlugin::setup(App& app) {
-    auto& asset_server = app.resource<AssetServer>();
-    asset_server.add_loader<Shader, ShaderLoader>();
-    asset_server.add_loader<Mesh, MeshLoader>();
-    asset_server.add_without_loader<StandardMaterial>();
-    app.add_plugin(RenderAssetPlugin<Image, GpuImage, GpuImageAdapter> {})
-        .add_plugin(RenderAssetPlugin<Mesh, GpuMesh, GpuMeshAdapter> {})
-        .add_plugin(RenderAssetPlugin<
-                    StandardMaterial,
-                    PreparedMaterial,
-                    PreparedStandardMaterialAdapter> {})
+    app.add_plugins(
+           AssetPlugin<Shader, ShaderLoader> {},
+           AssetPlugin<Mesh, MeshLoader> {},
+           AssetPlugin<StandardMaterial> {},
+           RenderAssetPlugin<Image, GpuImage, GpuImageAdapter> {},
+           RenderAssetPlugin<Mesh, GpuMesh, GpuMeshAdapter> {},
+           RenderAssetPlugin<
+               StandardMaterial,
+               PreparedMaterial,
+               PreparedStandardMaterialAdapter> {}
+    )
         .add_resource<ViewResource>()
         .add_systems(StartUp, init_view_resource)
         .add_systems(
@@ -51,8 +52,7 @@ void RenderingPlugin::setup(App& app) {
         .add_resource<MeshUniforms>()
         .add_systems(RenderFirst, render_begin)
         .add_systems(RenderLast, render_end)
-        .add_plugin(ForwardRenderPlugin {})
-        .add_plugin(RenderingDefaultsPlugin {});
+        .add_plugins(ForwardRenderPlugin {}, RenderingDefaultsPlugin {});
 }
 
 } // namespace fei

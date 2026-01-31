@@ -2,7 +2,7 @@
 #include "app/plugin.hpp"
 #include "asset/io.hpp"
 #include "asset/loader.hpp"
-#include "asset/server.hpp"
+#include "asset/plugin.hpp"
 #include "graphics/texture.hpp"
 
 #include <cstdint>
@@ -40,7 +40,7 @@ class ImageLoader : public AssetLoader<Image> {
 class ImagePlugin : public Plugin {
   public:
     void setup(App& app) override {
-        app.resource<AssetServer>().add_loader<Image, ImageLoader>();
+        app.add_plugins(AssetPlugin<Image, ImageLoader> {});
     }
 };
 
