@@ -1,9 +1,11 @@
 #include "ui/plugin.hpp"
 
 #include "app/app.hpp"
+#include "asset/embed.hpp"
 #include "asset/server.hpp"
 #include "window/window.hpp"
 
+#include <cstddef>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -16,10 +18,12 @@ void setup_imgui(Res<Window> window, Res<AssetServer> asset_server) {
     ImGuiIO& io = ImGui::GetIO();
     (void)io;
 
-    auto font_path = asset_server->assets_dir() / "Cousine-Regular.ttf";
-    io.Fonts->AddFontFromFileTTF(font_path.string().c_str(), 20.0f);
-    io.Fonts->AddFontFromFileTTF(font_path.string().c_str(), 16.0f);
-    io.Fonts->AddFontFromFileTTF(font_path.string().c_str(), 14.0f);
+    auto reader = EmbededAssets::get("Cousine-Regular.ttf").reader();
+    void* data = static_cast<void*>(const_cast<std::byte*>(reader.data()));
+    int size = static_cast<int>(reader.size());
+    io.Fonts->AddFontFromMemoryTTF(data, size, 20.0f);
+    io.Fonts->AddFontFromMemoryTTF(data, size, 16.0f);
+    io.Fonts->AddFontFromMemoryTTF(data, size, 14.0f);
 
     ImGui::StyleColorsDark();
 
