@@ -20,7 +20,7 @@ class AssetPlugin : public Plugin {
         if constexpr (std::is_same_v<Loader, NoLoader>) {
             app.resource<AssetServer>().add_without_loader<Asset>();
         } else if constexpr (std::derived_from<Loader, AssetLoader<Asset>>) {
-            app.resource<AssetServer>().add_without_loader<Asset>();
+            app.resource<AssetServer>().add_loader<Asset, Loader>();
         } else {
             static_assert(
                 std::derived_from<Loader, AssetLoader<Asset>>,
