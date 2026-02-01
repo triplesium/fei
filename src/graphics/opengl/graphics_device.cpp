@@ -50,8 +50,15 @@ std::shared_ptr<CommandBuffer> GraphicsDeviceOpenGL::create_command_buffer() {
     return std::make_shared<CommandBufferOpenGL>(*this);
 }
 
-std::shared_ptr<Pipeline>
-GraphicsDeviceOpenGL::create_render_pipeline(const PipelineDescription& desc) {
+std::shared_ptr<Pipeline> GraphicsDeviceOpenGL::create_render_pipeline(
+    const RenderPipelineDescription& desc
+) {
+    return std::make_shared<PipelineOpenGL>(desc);
+}
+
+std::shared_ptr<Pipeline> GraphicsDeviceOpenGL::create_compute_pipeline(
+    const ComputePipelineDescription& desc
+) {
     return std::make_shared<PipelineOpenGL>(desc);
 }
 
@@ -141,6 +148,53 @@ void GraphicsDeviceOpenGL::update_buffer(
         to_gl_buffer_usage(buffer_gl->usages())
     );
     opengl_check_error();
+}
+
+MappedResource GraphicsDeviceOpenGL::map(
+    std::shared_ptr<MappableResource> resource,
+    MapMode map_mode
+) {
+    if (auto texture_gl = std::dynamic_pointer_cast<TextureOpenGL>(resource)) {
+        std::uint32_t width = texture_gl->width();
+        std::uint32_t height = texture_gl->height();
+        std::uint32_t depth = texture_gl->depth();
+        std::size_t bytes_per_pixel =
+            get_pixel_format_size(texture_gl->format());
+
+        std::size_t total_size = width * height * depth * bytes_per_pixel;
+
+        auto* data = new std::byte[total_size];
+        glGetTextureImage(
+            texture_gl->id(),
+            0, // mip level
+            texture_gl->gl_format(),
+            texture_gl->gl_type(),
+            total_size,
+            data
+        );
+        opengl_check_error();
+
+        m_mapped_resources[resource.get()] = data;
+
+        return MappedResource(
+            resource,
+            map_mode,
+            std::span<std::byte>(data, total_size)
+        );
+    }
+    fei::fatal("Unknown MappableResource type in GraphicsDeviceOpenGL::map");
+    return MappedResource(nullptr, MapMode::Read, std::span<std::byte>());
+}
+
+void GraphicsDeviceOpenGL::unmap(std::shared_ptr<MappableResource> resource) {
+    if (auto texture_gl = std::dynamic_pointer_cast<TextureOpenGL>(resource)) {
+        auto it = m_mapped_resources.find(resource.get());
+        if (it != m_mapped_resources.end()) {
+            delete[] it->second;
+            m_mapped_resources.erase(it);
+        }
+        return;
+    }
 }
 
 std::shared_ptr<Framebuffer> GraphicsDeviceOpenGL::main_framebuffer() {

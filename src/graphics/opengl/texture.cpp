@@ -35,19 +35,6 @@ TextureOpenGL::TextureOpenGL(const TextureDescription& desc) :
             m_width,
             m_height
         );
-        // glBindTexture(gl_target, m_texture);
-        // opengl_check_error();
-        // glTexImage2D(
-        //     gl_target,
-        //     m_mip_level,
-        //     m_gl_format,
-        //     m_width,
-        //     m_height,
-        //     0,
-        //     m_gl_format,
-        //     m_gl_type,
-        //     nullptr
-        // );
         opengl_check_error();
     } else {
         fei::fatal("Unsupported texture type for OpenGL");

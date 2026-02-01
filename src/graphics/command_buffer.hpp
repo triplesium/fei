@@ -38,9 +38,13 @@ class CommandBuffer {
         m_framebuffer = framebuffer;
         set_framebuffer_impl(framebuffer);
     }
-    void set_pipeline(std::shared_ptr<Pipeline> pipeline) {
+    void set_render_pipeline(std::shared_ptr<Pipeline> pipeline) {
         m_pipeline = pipeline;
-        set_pipeline_impl(pipeline);
+        set_render_pipeline_impl(pipeline);
+    }
+    void set_compute_pipeline(std::shared_ptr<Pipeline> pipeline) {
+        m_pipeline = pipeline;
+        set_compute_pipeline_impl(pipeline);
     }
     virtual void set_vertex_buffer(std::shared_ptr<Buffer> buffer) = 0;
 
@@ -68,13 +72,18 @@ class CommandBuffer {
     ) = 0;
     virtual void draw(std::size_t start, std::size_t count) = 0;
     virtual void draw_indexed(std::size_t count) = 0;
+    virtual void
+    dispatch(std::size_t group_x, std::size_t group_y, std::size_t group_z) = 0;
 
     virtual void blit_to(std::shared_ptr<Framebuffer> target) = 0;
 
   protected:
     virtual void set_framebuffer_impl(std::shared_ptr<Framebuffer> framebuffer
     ) = 0;
-    virtual void set_pipeline_impl(std::shared_ptr<Pipeline> pipeline) = 0;
+    virtual void set_render_pipeline_impl(std::shared_ptr<Pipeline> pipeline
+    ) = 0;
+    virtual void set_compute_pipeline_impl(std::shared_ptr<Pipeline> pipeline
+    ) = 0;
     virtual void set_index_buffer_impl(
         std::shared_ptr<Buffer> buffer,
         IndexFormat format,

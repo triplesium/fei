@@ -2,9 +2,14 @@
 #include "graphics/graphics_device.hpp"
 #include "graphics/shader_module.hpp"
 
+#include <cstddef>
+#include <unordered_map>
+
 namespace fei {
 class GraphicsDeviceOpenGL : public GraphicsDevice {
   private:
+    std::unordered_map<MappableResource*, std::byte*> m_mapped_resources;
+
   public:
     GraphicsDeviceOpenGL();
     virtual ~GraphicsDeviceOpenGL() = default;
@@ -17,7 +22,9 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
     create_texture(const TextureDescription& desc) override;
     virtual std::shared_ptr<CommandBuffer> create_command_buffer() override;
     virtual std::shared_ptr<Pipeline>
-    create_render_pipeline(const PipelineDescription& desc) override;
+    create_render_pipeline(const RenderPipelineDescription& desc) override;
+    virtual std::shared_ptr<Pipeline>
+    create_compute_pipeline(const ComputePipelineDescription& desc) override;
     virtual std::shared_ptr<Framebuffer>
     create_framebuffer(const FramebufferDescription& desc) override;
     virtual std::shared_ptr<ResourceLayout>
@@ -48,6 +55,10 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
         const void* data,
         std::uint32_t size
     ) override;
+
+    virtual MappedResource
+    map(std::shared_ptr<MappableResource> resource, MapMode map_mode) override;
+    virtual void unmap(std::shared_ptr<MappableResource> resource) override;
 
     std::shared_ptr<Framebuffer> main_framebuffer() override;
 };

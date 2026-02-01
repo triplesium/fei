@@ -72,6 +72,7 @@ void CommandBufferOpenGL::begin_render_pass(const RenderPassDescription& desc) {
                 att.clear_depth,
                 att.clear_stencil
             );
+            // >>>
         } else if (att.depth_load_op == LoadOp::Clear) {
             glClearNamedFramebufferfv(
                 fb_gl->id(),
@@ -212,6 +213,23 @@ void CommandBufferOpenGL::set_resource_set(
                 opengl_check_error();
                 break;
             }
+            case ResourceKind::TextureReadWrite: {
+                auto texture =
+                    std::static_pointer_cast<TextureOpenGL>(resource);
+                auto info =
+                    std::get<PipelineOpenGL::TextureBinding>(binding_info);
+                glBindImageTexture(
+                    info.unit,
+                    texture->id(),
+                    0,
+                    GL_FALSE,
+                    0,
+                    GL_READ_WRITE,
+                    texture->gl_sized_internal_format()
+                );
+                opengl_check_error();
+                break;
+            }
             default:
                 fei::fatal(
                     "ResourceKind {} not supported in "
@@ -261,6 +279,22 @@ void CommandBufferOpenGL::draw_indexed(size_t count) {
     opengl_check_error();
 }
 
+void CommandBufferOpenGL::dispatch(
+    std::size_t group_x,
+    std::size_t group_y,
+    std::size_t group_z
+) {
+    glDispatchCompute(
+        static_cast<GLuint>(group_x),
+        static_cast<GLuint>(group_y),
+        static_cast<GLuint>(group_z)
+    );
+    opengl_check_error();
+
+    glMemoryBarrier(GL_ALL_BARRIER_BITS);
+    opengl_check_error();
+}
+
 void CommandBufferOpenGL::set_framebuffer_impl(
     std::shared_ptr<Framebuffer> framebuffer
 ) {
@@ -270,7 +304,21 @@ void CommandBufferOpenGL::set_framebuffer_impl(
     opengl_check_error();
 }
 
-void CommandBufferOpenGL::set_pipeline_impl(std::shared_ptr<Pipeline> pipeline
+void CommandBufferOpenGL::set_render_pipeline_impl(
+    std::shared_ptr<Pipeline> pipeline
+) {
+    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(pipeline);
+
+    if (m_bound_resource_sets.size() < pipeline_gl->resource_layouts().size()) {
+        m_bound_resource_sets.resize(pipeline_gl->resource_layouts().size());
+    }
+
+    glUseProgram(pipeline_gl->program());
+    opengl_check_error();
+}
+
+void CommandBufferOpenGL::set_compute_pipeline_impl(
+    std::shared_ptr<Pipeline> pipeline
 ) {
     auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(pipeline);
 

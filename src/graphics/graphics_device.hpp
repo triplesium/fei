@@ -2,6 +2,7 @@
 #include "graphics/buffer.hpp"
 #include "graphics/command_buffer.hpp"
 #include "graphics/framebuffer.hpp"
+#include "graphics/mapped_resource.hpp"
 #include "graphics/resource.hpp"
 #include "graphics/sampler.hpp"
 #include "graphics/shader_module.hpp"
@@ -24,7 +25,9 @@ class GraphicsDevice {
     create_texture(const TextureDescription& desc) = 0;
     virtual std::shared_ptr<CommandBuffer> create_command_buffer() = 0;
     virtual std::shared_ptr<Pipeline>
-    create_render_pipeline(const PipelineDescription& desc) = 0;
+    create_render_pipeline(const RenderPipelineDescription& desc) = 0;
+    virtual std::shared_ptr<Pipeline>
+    create_compute_pipeline(const ComputePipelineDescription& desc) = 0;
     virtual std::shared_ptr<Framebuffer>
     create_framebuffer(const FramebufferDescription& desc) = 0;
     virtual std::shared_ptr<ResourceLayout>
@@ -55,6 +58,10 @@ class GraphicsDevice {
         const void* data,
         std::uint32_t size
     ) = 0;
+
+    virtual MappedResource
+    map(std::shared_ptr<MappableResource> resource, MapMode map_mode) = 0;
+    virtual void unmap(std::shared_ptr<MappableResource> resource) = 0;
 
     virtual std::shared_ptr<Framebuffer> main_framebuffer() = 0;
 };

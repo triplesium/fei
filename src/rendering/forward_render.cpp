@@ -172,24 +172,25 @@ void shadow_pass(
             continue;
         }
         auto& gpu_mesh = *gpu_mesh_opt;
-        auto pipeline = device->create_render_pipeline(PipelineDescription {
-            .depth_stencil_state =
-                DepthStencilStateDescription::DepthOnlyGreaterEqual,
-            .rasterizer_state = {},
-            .render_primitive = gpu_mesh.primitive(),
-            .shader_program =
-                ShaderProgramDescription {
-                    .vertex_layouts = {gpu_mesh.vertex_buffer_layout()
-                                           .to_vertex_layout_description()},
-                    .shaders = resources->shadow_shader_modules,
-                },
-            .resource_layouts =
-                {
-                    resources->shadow_resource_layout,
-                    mesh_uniforms->entries.at(entity).resource_layout,
-                },
-        });
-        command_buffer->set_pipeline(pipeline);
+        auto pipeline =
+            device->create_render_pipeline(RenderPipelineDescription {
+                .depth_stencil_state =
+                    DepthStencilStateDescription::DepthOnlyGreaterEqual,
+                .rasterizer_state = {},
+                .render_primitive = gpu_mesh.primitive(),
+                .shader_program =
+                    ShaderProgramDescription {
+                        .vertex_layouts = {gpu_mesh.vertex_buffer_layout()
+                                               .to_vertex_layout_description()},
+                        .shaders = resources->shadow_shader_modules,
+                    },
+                .resource_layouts =
+                    {
+                        resources->shadow_resource_layout,
+                        mesh_uniforms->entries.at(entity).resource_layout,
+                    },
+            });
+        command_buffer->set_render_pipeline(pipeline);
         command_buffer->set_resource_set(0, resources->shadow_resource_set);
         command_buffer->set_resource_set(
             1,
@@ -256,27 +257,28 @@ void color_pass(
         auto& gpu_mesh = *gpu_mesh_opt;
         auto& material = *material_opt;
         // TODO: Pipeline caching
-        auto pipeline = device->create_render_pipeline(PipelineDescription {
-            .blend_state = BlendStateDescription::SingleAlphaBlend,
-            .depth_stencil_state =
-                DepthStencilStateDescription::DepthOnlyGreaterEqual,
-            .rasterizer_state = {},
-            .render_primitive = gpu_mesh.primitive(),
-            .shader_program =
-                ShaderProgramDescription {
-                    .vertex_layouts = {gpu_mesh.vertex_buffer_layout()
-                                           .to_vertex_layout_description()},
-                    .shaders = material.shaders(),
-                },
-            .resource_layouts =
-                {
-                    material.resource_layout(),
-                    view_resource->resource_layout,
-                    mesh_uniforms->entries.at(entity).resource_layout,
-                    forward_render_resources->shadow_resource_layout,
-                },
-        });
-        command_buffer->set_pipeline(pipeline);
+        auto pipeline =
+            device->create_render_pipeline(RenderPipelineDescription {
+                .blend_state = BlendStateDescription::SingleAlphaBlend,
+                .depth_stencil_state =
+                    DepthStencilStateDescription::DepthOnlyGreaterEqual,
+                .rasterizer_state = {},
+                .render_primitive = gpu_mesh.primitive(),
+                .shader_program =
+                    ShaderProgramDescription {
+                        .vertex_layouts = {gpu_mesh.vertex_buffer_layout()
+                                               .to_vertex_layout_description()},
+                        .shaders = material.shaders(),
+                    },
+                .resource_layouts =
+                    {
+                        material.resource_layout(),
+                        view_resource->resource_layout,
+                        mesh_uniforms->entries.at(entity).resource_layout,
+                        forward_render_resources->shadow_resource_layout,
+                    },
+            });
+        command_buffer->set_render_pipeline(pipeline);
         command_buffer->set_resource_set(0, material.resource_set());
         command_buffer->set_resource_set(1, view_resource->resource_set);
         command_buffer->set_resource_set(

@@ -194,7 +194,7 @@ using UniformValue = std::variant<
     Matrix4x4,
     std::shared_ptr<Texture>>;
 
-struct PipelineDescription {
+struct RenderPipelineDescription {
     BlendStateDescription blend_state;
     DepthStencilStateDescription depth_stencil_state;
     RasterizerStateDescription rasterizer_state;
@@ -203,9 +203,13 @@ struct PipelineDescription {
     std::vector<std::shared_ptr<ResourceLayout>> resource_layouts;
 };
 
+struct ComputePipelineDescription {
+    std::shared_ptr<ShaderModule> shader;
+    std::vector<std::shared_ptr<ResourceLayout>> resource_layouts;
+};
+
 class Pipeline {
   public:
-    Pipeline(const PipelineDescription& desc) {}
     virtual ~Pipeline() = default;
 };
 } // namespace fei

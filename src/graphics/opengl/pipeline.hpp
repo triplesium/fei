@@ -34,6 +34,7 @@ class PipelineOpenGL : public Pipeline {
         variant<TextureBinding, SamplerBinding, UniformBinding, EmptyBinding>;
 
   private:
+    bool m_is_compute;
     GLuint m_program;
     std::vector<std::shared_ptr<ShaderModule>> m_shaders;
     std::vector<VertexLayoutDescription> m_vertex_layouts;
@@ -46,7 +47,8 @@ class PipelineOpenGL : public Pipeline {
     std::vector<std::vector<ResourceBindingInfo>> m_resource_bindings;
 
   public:
-    PipelineOpenGL(const PipelineDescription& desc);
+    PipelineOpenGL(const RenderPipelineDescription& desc);
+    PipelineOpenGL(const ComputePipelineDescription& desc);
 
     const auto& vertex_layouts() const { return m_vertex_layouts; }
     const auto& blend_state() const { return m_blend_state; }

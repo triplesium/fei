@@ -46,13 +46,19 @@ class CommandBufferOpenGL : public CommandBuffer {
     ) override;
     virtual void draw(std::size_t start, std::size_t count) override;
     virtual void draw_indexed(std::size_t count) override;
+    virtual void
+    dispatch(std::size_t group_x, std::size_t group_y, std::size_t group_z)
+        override;
 
     virtual void blit_to(std::shared_ptr<Framebuffer> target) override;
 
   protected:
     virtual void set_framebuffer_impl(std::shared_ptr<Framebuffer> framebuffer
     ) override;
-    virtual void set_pipeline_impl(std::shared_ptr<Pipeline> pipeline) override;
+    virtual void set_render_pipeline_impl(std::shared_ptr<Pipeline> pipeline
+    ) override;
+    virtual void set_compute_pipeline_impl(std::shared_ptr<Pipeline> pipeline
+    ) override;
     virtual void set_index_buffer_impl(
         std::shared_ptr<Buffer> buffer,
         IndexFormat format,

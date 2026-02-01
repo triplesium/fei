@@ -84,6 +84,7 @@ enum class ShaderStages : uint8 {
     None = 0,
     Vertex = 1 << 0,
     Fragment = 1 << 1,
+    Compute = 1 << 2,
 };
 
 enum class BlendOp : uint8 {
@@ -166,6 +167,106 @@ enum class PixelFormat : uint8 {
     EacRg11Unorm,
     EacRg11Snorm,
 };
+
+constexpr std::size_t get_pixel_format_size(PixelFormat format) {
+    switch (format) {
+        // 1 byte formats
+        case PixelFormat::R8Unorm:
+        case PixelFormat::R8Snorm:
+        case PixelFormat::R8Uint:
+        case PixelFormat::R8Sint:
+        case PixelFormat::Stencil8:
+            return 1;
+
+        // 2 byte formats
+        case PixelFormat::R16Uint:
+        case PixelFormat::R16Sint:
+        case PixelFormat::R16Unorm:
+        case PixelFormat::R16Snorm:
+        case PixelFormat::R16Float:
+        case PixelFormat::Rg8Unorm:
+        case PixelFormat::Rg8Snorm:
+        case PixelFormat::Rg8Uint:
+        case PixelFormat::Rg8Sint:
+        case PixelFormat::Depth16Unorm:
+            return 2;
+
+        // 4 byte formats
+        case PixelFormat::R32Uint:
+        case PixelFormat::R32Sint:
+        case PixelFormat::R32Float:
+        case PixelFormat::Rg16Uint:
+        case PixelFormat::Rg16Sint:
+        case PixelFormat::Rg16Unorm:
+        case PixelFormat::Rg16Snorm:
+        case PixelFormat::Rg16Float:
+        case PixelFormat::Rgba8Unorm:
+        case PixelFormat::Rgba8UnormSrgb:
+        case PixelFormat::Rgba8Snorm:
+        case PixelFormat::Rgba8Uint:
+        case PixelFormat::Rgba8Sint:
+        case PixelFormat::Bgra8Unorm:
+        case PixelFormat::Bgra8UnormSrgb:
+        case PixelFormat::Rgb9e5Ufloat:
+        case PixelFormat::Rgb10a2Uint:
+        case PixelFormat::Rgb10a2Unorm:
+        case PixelFormat::Rg11b10Ufloat:
+        case PixelFormat::Depth24Plus:
+        case PixelFormat::Depth32Float:
+            return 4;
+
+        // 8 byte formats
+        case PixelFormat::Rg32Uint:
+        case PixelFormat::Rg32Sint:
+        case PixelFormat::Rg32Float:
+        case PixelFormat::Rgba16Uint:
+        case PixelFormat::Rgba16Sint:
+        case PixelFormat::Rgba16Unorm:
+        case PixelFormat::Rgba16Snorm:
+        case PixelFormat::Rgba16Float:
+        case PixelFormat::Depth24PlusStencil8:
+        case PixelFormat::Depth32FloatStencil8:
+            return 8;
+
+        // 16 byte formats
+        case PixelFormat::Rgba32Uint:
+        case PixelFormat::Rgba32Sint:
+        case PixelFormat::Rgba32Float:
+            return 16;
+
+        // Compressed formats - return block size
+        case PixelFormat::Bc1RgbaUnorm:
+        case PixelFormat::Bc1RgbaUnormSrgb:
+        case PixelFormat::Bc4RUnorm:
+        case PixelFormat::Bc4RSnorm:
+        case PixelFormat::Etc2Rgb8Unorm:
+        case PixelFormat::Etc2Rgb8UnormSrgb:
+        case PixelFormat::Etc2Rgb8A1Unorm:
+        case PixelFormat::Etc2Rgb8A1UnormSrgb:
+        case PixelFormat::EacR11Unorm:
+        case PixelFormat::EacR11Snorm:
+            return 8; // 8 bytes per 4x4 block
+
+        case PixelFormat::Bc2RgbaUnorm:
+        case PixelFormat::Bc2RgbaUnormSrgb:
+        case PixelFormat::Bc3RgbaUnorm:
+        case PixelFormat::Bc3RgbaUnormSrgb:
+        case PixelFormat::Bc5RgUnorm:
+        case PixelFormat::Bc5RgSnorm:
+        case PixelFormat::Bc6hRgbUfloat:
+        case PixelFormat::Bc6hRgbFloat:
+        case PixelFormat::Bc7RgbaUnorm:
+        case PixelFormat::Bc7RgbaUnormSrgb:
+        case PixelFormat::Etc2Rgba8Unorm:
+        case PixelFormat::Etc2Rgba8UnormSrgb:
+        case PixelFormat::EacRg11Unorm:
+        case PixelFormat::EacRg11Snorm:
+            return 16; // 16 bytes per 4x4 block
+
+        default:
+            return 0;
+    }
+}
 
 enum class TextureType : uint8 {
     Texture1D,
@@ -277,6 +378,12 @@ enum class SamplerBorderColor : uint8 {
 enum class IndexFormat : uint8 {
     Uint16,
     Uint32,
+};
+
+enum class MapMode : uint8 {
+    Read,
+    Write,
+    ReadWrite,
 };
 
 } // namespace fei

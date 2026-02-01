@@ -17,7 +17,7 @@ struct TextureDescription {
     TextureType texture_type;
 };
 
-class Texture : public BindableResource {
+class Texture : public BindableResource, public MappableResource {
   public:
     virtual ~Texture() = default;
     virtual PixelFormat format() const = 0;

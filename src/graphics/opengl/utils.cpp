@@ -112,6 +112,9 @@ GLenum to_gl_shader_stage(BitFlags<ShaderStages> stages) {
     if (stages.is_set(ShaderStages::Fragment)) {
         return GL_FRAGMENT_SHADER;
     }
+    if (stages.is_set(ShaderStages::Compute)) {
+        return GL_COMPUTE_SHADER;
+    }
     return 0;
 }
 

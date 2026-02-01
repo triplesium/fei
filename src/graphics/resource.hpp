@@ -37,6 +37,11 @@ class BindableResource {
     virtual ~BindableResource() = default;
 };
 
+class MappableResource {
+  public:
+    virtual ~MappableResource() = default;
+};
+
 struct ResourceSetDescription {
     std::shared_ptr<ResourceLayout> layout;
     std::vector<std::shared_ptr<BindableResource>> resources;
