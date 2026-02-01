@@ -41,6 +41,9 @@ class EmbededAssets {
     }
 
     static const EmbededData& get(std::string_view name) {
+        if (!has(name)) {
+            fatal("No embedded asset found with name: {}", name);
+        }
         return s_embedded_assets.at(name);
     }
 };
