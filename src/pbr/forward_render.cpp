@@ -1,4 +1,4 @@
-#include "rendering/forward_render.hpp"
+#include "pbr/forward_render.hpp"
 
 #include "app/app.hpp"
 #include "asset/server.hpp"
@@ -10,8 +10,11 @@
 #include "graphics/enums.hpp"
 #include "graphics/graphics_device.hpp"
 #include "math/matrix.hpp"
+#include "pbr/directional_light.hpp"
+#include "pbr/forward_render.hpp"
+#include "pbr/material.hpp"
 #include "rendering/components.hpp"
-#include "rendering/directional_light.hpp"
+#include "rendering/defaults.hpp"
 #include "rendering/material.hpp"
 #include "rendering/mesh.hpp"
 #include "rendering/render_asset.hpp"
@@ -111,7 +114,8 @@ void setup_forward_render_resources(
 }
 
 void shadow_pass(
-    Query<Entity, Mesh3d, MeshMaterial3d, Transform3d> query_meshes,
+    Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
+        query_meshes,
     Query<DirectionalLight, Transform3d> query_lights,
     Res<ForwardRenderResources> resources,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
@@ -214,13 +218,15 @@ void shadow_pass(
 }
 
 void color_pass(
-    Query<Entity, Mesh3d, MeshMaterial3d, Transform3d> query,
+    Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d> query,
     Res<ForwardRenderResources> forward_render_resources,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
     Res<RenderAssets<PreparedMaterial>> materials,
     Res<GraphicsDevice> device,
     Res<ViewResource> view_resource,
-    Res<MeshUniforms> mesh_uniforms
+    Res<MeshUniforms> mesh_uniforms,
+    Res<RenderingDefaults> rendering_defaults,
+    Res<RenderAssets<GpuImage>> gpu_images
 ) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin_render_pass(RenderPassDescription {

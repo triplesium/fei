@@ -154,10 +154,9 @@ struct MeshUniforms {
 };
 
 struct Mesh3d;
-struct MeshMaterial3d;
 
 void prepare_mesh_uniforms(
-    Query<Entity, Mesh3d, MeshMaterial3d, Transform3d> query,
+    Query<Entity, Mesh3d, Transform3d> query,
     Res<GraphicsDevice> device,
     Res<MeshUniforms> mesh_uniforms
 );

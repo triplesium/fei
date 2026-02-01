@@ -19,8 +19,9 @@ struct Mesh3d {
     bool cast_shadow {true};
 };
 
+template<std::derived_from<Material> T>
 struct MeshMaterial3d {
-    Handle<StandardMaterial> material;
+    Handle<T> material;
 };
 
 } // namespace fei

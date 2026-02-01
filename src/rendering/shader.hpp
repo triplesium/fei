@@ -1,13 +1,17 @@
 #pragma once
+#include "asset/assets.hpp"
+#include "asset/handle.hpp"
 #include "asset/io.hpp"
 #include "asset/loader.hpp"
+#include "asset/path.hpp"
+#include "asset/server.hpp"
 #include "base/log.hpp"
 #include "graphics/enums.hpp"
 
 #include <expected>
 #include <filesystem>
-#include <fstream>
 #include <memory>
+#include <variant>
 
 namespace fei {
 
@@ -34,6 +38,24 @@ class ShaderLoader : public AssetLoader<Shader> {
         std::string source = reader.as_string();
 
         return std::make_unique<Shader>(Shader {path, source, stage});
+    }
+};
+
+class ShaderRef {
+  private:
+    std::variant<Handle<Shader>, AssetPath> source;
+
+  public:
+    ShaderRef(Handle<Shader> handle) : source(handle) {}
+    ShaderRef(const AssetPath& path) : source(path) {}
+    ShaderRef(const char* path) : source(AssetPath(path)) {}
+
+    Handle<Shader> resolve(AssetServer& asset_server) const {
+        if (std::holds_alternative<Handle<Shader>>(source)) {
+            return std::get<Handle<Shader>>(source);
+        } else {
+            return asset_server.load<Shader>(std::get<AssetPath>(source));
+        }
     }
 };
 

@@ -3,9 +3,7 @@
 #include "app/app.hpp"
 #include "asset/plugin.hpp"
 #include "rendering/defaults.hpp"
-#include "rendering/forward_render.hpp"
 #include "rendering/gpu_image.hpp"
-#include "rendering/material.hpp"
 #include "rendering/mesh.hpp"
 #include "rendering/mesh_loader.hpp"
 #include "rendering/render_asset.hpp"
@@ -34,13 +32,9 @@ void RenderingPlugin::setup(App& app) {
     app.add_plugins(
            AssetPlugin<Shader, ShaderLoader> {},
            AssetPlugin<Mesh, MeshLoader> {},
-           AssetPlugin<StandardMaterial> {},
            RenderAssetPlugin<Image, GpuImage, GpuImageAdapter> {},
            RenderAssetPlugin<Mesh, GpuMesh, GpuMeshAdapter> {},
-           RenderAssetPlugin<
-               StandardMaterial,
-               PreparedMaterial,
-               PreparedStandardMaterialAdapter> {}
+           RenderingDefaultsPlugin {}
     )
         .add_resource<ViewResource>()
         .add_systems(StartUp, init_view_resource)
@@ -51,8 +45,7 @@ void RenderingPlugin::setup(App& app) {
         )
         .add_resource<MeshUniforms>()
         .add_systems(RenderFirst, render_begin)
-        .add_systems(RenderLast, render_end)
-        .add_plugins(ForwardRenderPlugin {}, RenderingDefaultsPlugin {});
+        .add_systems(RenderLast, render_end);
 }
 
 } // namespace fei

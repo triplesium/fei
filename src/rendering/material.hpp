@@ -1,12 +1,10 @@
 #pragma once
 #include "asset/handle.hpp"
-#include "base/optional.hpp"
-#include "core/image.hpp"
+#include "asset/plugin.hpp"
 #include "ecs/world.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics/resource.hpp"
 #include "graphics/shader_module.hpp"
-#include "math/color.hpp"
 #include "rendering/defaults.hpp"
 #include "rendering/gpu_image.hpp"
 #include "rendering/render_asset.hpp"
@@ -20,112 +18,47 @@ namespace fei {
 class Material {
   public:
     virtual ~Material() = default;
-    virtual Handle<Shader> vertex_shader() const = 0;
-    virtual Handle<Shader> fragment_shader() const = 0;
+    virtual ShaderRef vertex_shader() const = 0;
+    virtual ShaderRef fragment_shader() const = 0;
+
+    virtual std::shared_ptr<ResourceLayout> create_resource_layout(
+        GraphicsDevice& device,
+        const RenderingDefaults& defaults,
+        const RenderAssets<GpuImage>& gpu_images
+    ) const {
+        auto elements = resource_layout_elements();
+        if (elements.empty()) {
+            return nullptr;
+        }
+        return device.create_resource_layout(ResourceLayoutDescription {
+            .elements = elements,
+        });
+    }
+
+    virtual std::shared_ptr<ResourceSet> create_resource_set(
+        GraphicsDevice& device,
+        const RenderingDefaults& defaults,
+        const RenderAssets<GpuImage>& gpu_images
+    ) const {
+        auto layout = create_resource_layout(device, defaults, gpu_images);
+        if (!layout) {
+            return nullptr;
+        }
+        auto resources = this->resources(device, defaults, gpu_images);
+        return device.create_resource_set(ResourceSetDescription {
+            .layout = layout,
+            .resources = resources,
+        });
+    }
 
     virtual std::vector<ResourceLayoutElementDescription>
     resource_layout_elements() const = 0;
 
-    virtual std::vector<std::shared_ptr<BindableResource>>
-    resources(GraphicsDevice& device, World& world) const = 0;
-
-    virtual std::shared_ptr<ResourceSet>
-    create_resource_set(GraphicsDevice& device, World& world) const {
-        return device.create_resource_set(ResourceSetDescription {
-            .layout = create_resource_layout(device, world),
-            .resources = resources(device, world),
-        });
-    }
-
-    virtual std::shared_ptr<ResourceLayout>
-    create_resource_layout(GraphicsDevice& device, World& world) const {
-        return device.create_resource_layout(ResourceLayoutDescription {
-            .elements = resource_layout_elements(),
-        });
-    }
-};
-
-struct alignas(16) StandardMaterialUniform {
-    Color3F base_color {1.0f, 1.0f, 1.0f};
-};
-
-class StandardMaterial : public Material {
-  private:
-    Handle<Shader> m_vertex_shader;
-    Handle<Shader> m_fragment_shader;
-
-  public:
-    StandardMaterial(
-        Handle<Shader> vertex_shader,
-        Handle<Shader> fragment_shader
-    ) : m_vertex_shader(vertex_shader), m_fragment_shader(fragment_shader) {}
-
-    Handle<Shader> vertex_shader() const override { return m_vertex_shader; }
-    Handle<Shader> fragment_shader() const override {
-        return m_fragment_shader;
-    }
-
-    Color3F base_color {1.0f, 1.0f, 1.0f};
-    Optional<Handle<Image>> base_color_texture;
-
-    virtual std::vector<ResourceLayoutElementDescription>
-    resource_layout_elements() const override {
-        std::vector<ResourceLayoutElementDescription> elements = {
-            {
-                .binding = 0,
-                .name = "Material",
-                .kind = ResourceKind::UniformBuffer,
-                .stages =
-                    {
-                        ShaderStages::Vertex,
-                        ShaderStages::Fragment,
-                    },
-            },
-        };
-        elements.push_back(ResourceLayoutElementDescription {
-            .binding = 1,
-            .name = "diffuse_texture",
-            .kind = ResourceKind::TextureReadOnly,
-            .stages = ShaderStages::Fragment,
-        });
-        return elements;
-    }
-
-    StandardMaterialUniform create_uniform() const {
-        StandardMaterialUniform uniform;
-        uniform.base_color = base_color;
-        return uniform;
-    }
-
-    virtual std::vector<std::shared_ptr<BindableResource>>
-    resources(GraphicsDevice& device, World& world) const override {
-        std::vector<std::shared_ptr<BindableResource>> resources;
-        auto& defaults = world.resource<RenderingDefaults>();
-        auto& gpu_image_assets = world.resource<RenderAssets<GpuImage>>();
-
-        auto uniform = create_uniform();
-        auto uniform_buffer = device.create_buffer(BufferDescription {
-            .size = sizeof(StandardMaterialUniform),
-            .usages = {BufferUsages::Uniform, BufferUsages::Dynamic},
-        });
-        device.update_buffer(
-            uniform_buffer,
-            0,
-            &uniform,
-            sizeof(StandardMaterialUniform)
-        );
-        resources.push_back(uniform_buffer);
-
-        resources.push_back(
-            base_color_texture
-                .transform([&](const Handle<Image>& image_handle) {
-                    return gpu_image_assets.get(image_handle.id())->texture();
-                })
-                .value_or(defaults.default_texture)
-        );
-
-        return resources;
-    }
+    virtual std::vector<std::shared_ptr<BindableResource>> resources(
+        GraphicsDevice& device,
+        const RenderingDefaults& defaults,
+        const RenderAssets<GpuImage>& gpu_images
+    ) const = 0;
 };
 
 class PreparedMaterial {
@@ -150,28 +83,37 @@ class PreparedMaterial {
     std::shared_ptr<ResourceSet> resource_set() const { return m_resource_set; }
 };
 
-class PreparedStandardMaterialAdapter
-    : public RenderAssetAdapter<StandardMaterial, PreparedMaterial> {
+template<typename SourceMaterial>
+class MaterialAdapter
+    : public RenderAssetAdapter<SourceMaterial, PreparedMaterial> {
   public:
     Optional<PreparedMaterial>
-    prepare_asset(const StandardMaterial& source_asset, World& world) override {
+    prepare_asset(const SourceMaterial& source_asset, World& world) override {
         auto& device = world.resource<GraphicsDevice>();
+        auto& rendering_defaults = world.resource<RenderingDefaults>();
+        auto& gpu_images = world.resource<RenderAssets<GpuImage>>();
 
-        auto layout = source_asset.create_resource_layout(device, world);
+        auto layout = source_asset.create_resource_layout(
+            device,
+            rendering_defaults,
+            gpu_images
+        );
         if (!layout) {
             return nullopt;
         }
 
         auto resource_set = device.create_resource_set(ResourceSetDescription {
             .layout = layout,
-            .resources = source_asset.resources(device, world),
+            .resources =
+                source_asset.resources(device, rendering_defaults, gpu_images),
         });
         if (!resource_set) {
             return nullopt;
         }
+        auto& asset_server = world.resource<AssetServer>();
         std::vector<Handle<Shader>> shaders = {
-            source_asset.vertex_shader(),
-            source_asset.fragment_shader(),
+            source_asset.vertex_shader().resolve(asset_server),
+            source_asset.fragment_shader().resolve(asset_server),
         };
 
         std::vector<std::shared_ptr<ShaderModule>> shader_modules;
@@ -195,6 +137,17 @@ class PreparedStandardMaterialAdapter
             std::move(layout),
             std::move(resource_set)
         };
+    }
+};
+
+template<std::derived_from<Material> M>
+class MaterialPlugin : public Plugin {
+  public:
+    void setup(App& app) override {
+        app.add_plugins(
+            AssetPlugin<M> {},
+            RenderAssetPlugin<M, PreparedMaterial, MaterialAdapter<M>> {}
+        );
     }
 };
 

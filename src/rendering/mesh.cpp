@@ -139,12 +139,12 @@ std::unique_ptr<std::byte[]> Mesh::index_buffer_data() const {
 }
 
 void prepare_mesh_uniforms(
-    Query<Entity, Mesh3d, MeshMaterial3d, Transform3d> query,
+    Query<Entity, Mesh3d, Transform3d> query,
     Res<GraphicsDevice> device,
     Res<MeshUniforms> mesh_uniforms
 ) {
     // TODO: Cleanup unused uniforms
-    for (const auto& [entity, mesh3d, material3d, transform3d] : query) {
+    for (const auto& [entity, mesh3d, transform3d] : query) {
         MeshUniform uniform {
             .model = transform3d.to_matrix(),
         };
