@@ -7,6 +7,7 @@
 #include "asset/server.hpp"
 #include "base/log.hpp"
 #include "graphics/enums.hpp"
+#include "graphics/shader_module.hpp"
 
 #include <expected>
 #include <filesystem>
@@ -19,6 +20,10 @@ struct Shader {
     std::filesystem::path path;
     std::string source;
     ShaderStages stage;
+
+    ShaderDescription description() const {
+        return ShaderDescription {.stage = stage, .source = source};
+    }
 };
 
 class ShaderLoader : public AssetLoader<Shader> {
@@ -31,6 +36,8 @@ class ShaderLoader : public AssetLoader<Shader> {
             stage = ShaderStages::Vertex;
         } else if (path.extension() == ".frag") {
             stage = ShaderStages::Fragment;
+        } else if (path.extension() == ".comp") {
+            stage = ShaderStages::Compute;
         } else {
             fei::error("Unknown shader extension: {}", path.string());
             return nullptr;
