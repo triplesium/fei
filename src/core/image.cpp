@@ -23,31 +23,42 @@ std::expected<std::unique_ptr<Image>, std::error_code>
 ImageLoader::load(Reader& reader, const LoadContext& context) {
     int width, height, channels;
     stbi_set_flip_vertically_on_load(true);
+    stbi_info_from_memory(
+        reinterpret_cast<const stbi_uc*>(reader.data()),
+        static_cast<int>(reader.size()),
+        &width,
+        &height,
+        &channels
+    );
+    // For RGB images, load as RGBA, then ignore alpha channel
+    int req_comp = channels == 3 ? 4 : channels;
     auto data = stbi_load_from_memory(
         reinterpret_cast<const stbi_uc*>(reader.data()),
         static_cast<int>(reader.size()),
         &width,
         &height,
         &channels,
-        4
+        req_comp
     );
     if (!data) {
         error("Failed to load image: {}", stbi_failure_reason());
         return std::unexpected(std::error_code {});
     }
     PixelFormat format;
+    uint32 depth;
     switch (channels) {
         case 1:
             format = PixelFormat::R8Unorm;
+            depth = 1;
             break;
         case 2:
             format = PixelFormat::Rg8Unorm;
+            depth = 2;
             break;
         case 3:
-            format = PixelFormat::Rgba8Unorm;
-            break;
         case 4:
             format = PixelFormat::Rgba8Unorm;
+            depth = 4;
             break;
         default:
             stbi_image_free(data);
@@ -56,7 +67,7 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
     TextureDescription texture_description = TextureDescription {
         .width = static_cast<std::uint32_t>(width),
         .height = static_cast<std::uint32_t>(height),
-        .depth = static_cast<std::uint32_t>(channels),
+        .depth = depth,
         .mip_level = 1,
         .layer = 0,
         .texture_format = format,
