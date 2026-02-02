@@ -2,10 +2,8 @@
 #include "asset/handle.hpp"
 #include "base/optional.hpp"
 #include "core/image.hpp"
-#include "ecs/world.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics/resource.hpp"
-#include "graphics/shader_module.hpp"
 #include "math/color.hpp"
 #include "rendering/defaults.hpp"
 #include "rendering/gpu_image.hpp"
@@ -19,7 +17,9 @@
 namespace fei {
 
 struct alignas(16) StandardMaterialUniform {
-    Color3F base_color {1.0f, 1.0f, 1.0f};
+    Color3F albedo;
+    float metallic;
+    float roughness;
 };
 
 class StandardMaterial : public Material {
@@ -31,12 +31,17 @@ class StandardMaterial : public Material {
         return "embeded://forward.frag";
     }
 
-    Color3F base_color {1.0f, 1.0f, 1.0f};
-    Optional<Handle<Image>> base_color_texture;
+    Color3F albedo {1.0f, 1.0f, 1.0f};
+    Optional<Handle<Image>> albedo_map;
+    Optional<Handle<Image>> normal_map;
+    float metallic = 1.0f;
+    Optional<Handle<Image>> metallic_map;
+    float roughness = 0.5f;
+    Optional<Handle<Image>> roughness_map;
 
     virtual std::vector<ResourceLayoutElementDescription>
     resource_layout_elements() const override {
-        std::vector<ResourceLayoutElementDescription> elements = {
+        return {
             {
                 .binding = 0,
                 .name = "Material",
@@ -47,20 +52,39 @@ class StandardMaterial : public Material {
                         ShaderStages::Fragment,
                     },
             },
+            {
+                .binding = 1,
+                .name = "albedo_map",
+                .kind = ResourceKind::TextureReadOnly,
+                .stages = ShaderStages::Fragment,
+            },
+            {
+                .binding = 2,
+                .name = "normal_map",
+                .kind = ResourceKind::TextureReadOnly,
+                .stages = ShaderStages::Fragment,
+            },
+            {
+                .binding = 3,
+                .name = "metallic_map",
+                .kind = ResourceKind::TextureReadOnly,
+                .stages = ShaderStages::Fragment,
+            },
+            {
+                .binding = 4,
+                .name = "roughness_map",
+                .kind = ResourceKind::TextureReadOnly,
+                .stages = ShaderStages::Fragment,
+            }
         };
-        elements.push_back(ResourceLayoutElementDescription {
-            .binding = 1,
-            .name = "diffuse_texture",
-            .kind = ResourceKind::TextureReadOnly,
-            .stages = ShaderStages::Fragment,
-        });
-        return elements;
     }
 
     StandardMaterialUniform create_uniform() const {
-        StandardMaterialUniform uniform;
-        uniform.base_color = base_color;
-        return uniform;
+        return StandardMaterialUniform {
+            .albedo = albedo,
+            .metallic = metallic,
+            .roughness = roughness,
+        };
     }
 
     virtual std::vector<std::shared_ptr<BindableResource>> resources(
@@ -83,13 +107,20 @@ class StandardMaterial : public Material {
         );
         resources.push_back(uniform_buffer);
 
-        resources.push_back(
-            base_color_texture
-                .transform([&](const Handle<Image>& image_handle) {
-                    return gpu_images.get(image_handle.id())->texture();
-                })
-                .value_or(defaults.default_texture)
-        );
+        auto push_image = [&](const Optional<Handle<Image>>& image_handle) {
+            resources.push_back(
+                image_handle
+                    .transform([&](const Handle<Image>& handle) {
+                        return gpu_images.get(handle.id())->texture();
+                    })
+                    .value_or(defaults.default_texture)
+            );
+        };
+
+        push_image(albedo_map);
+        push_image(normal_map);
+        push_image(metallic_map);
+        push_image(roughness_map);
 
         return resources;
     }
