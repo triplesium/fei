@@ -174,6 +174,38 @@ void compute_smoothing_shapes(
     }
 }
 
+void center_positions(std::vector<std::array<float, 3>>& positions) {
+    if (positions.empty()) {
+        return;
+    }
+
+    std::array<float, 3> min = positions[0];
+    std::array<float, 3> max = positions[0];
+
+    for (const auto& pos : positions) {
+        for (int i = 0; i < 3; ++i) {
+            if (pos[i] < min[i]) {
+                min[i] = pos[i];
+            }
+            if (pos[i] > max[i]) {
+                max[i] = pos[i];
+            }
+        }
+    }
+
+    std::array<float, 3> center = {
+        (min[0] + max[0]) * 0.5f,
+        (min[1] + max[1]) * 0.5f,
+        (min[2] + max[2]) * 0.5f,
+    };
+
+    for (auto& pos : positions) {
+        for (int i = 0; i < 3; ++i) {
+            pos[i] -= center[i];
+        }
+    }
+}
+
 std::expected<std::unique_ptr<Mesh>, std::error_code>
 MeshLoader::load(Reader& reader, const LoadContext& context) {
     tinyobj::ObjReaderConfig reader_config;
@@ -241,6 +273,7 @@ MeshLoader::load(Reader& reader, const LoadContext& context) {
             uvs.push_back(uv);
         }
     }
+    center_positions(positions);
     mesh->insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     if (!normals.empty()) {
         mesh->insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
