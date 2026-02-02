@@ -218,15 +218,19 @@ void CommandBufferOpenGL::set_resource_set(
                     std::static_pointer_cast<TextureOpenGL>(resource);
                 auto info =
                     std::get<PipelineOpenGL::TextureBinding>(binding_info);
+                bool layered = texture->usage().is_set(TextureUsage::Cubemap) ||
+                               texture->layer() > 1;
                 glBindImageTexture(
                     info.unit,
                     texture->id(),
-                    0,
-                    GL_FALSE,
-                    0,
+                    0, // [TODO]
+                    layered,
+                    0, // [TODO]
                     GL_READ_WRITE,
                     texture->gl_sized_internal_format()
                 );
+                opengl_check_error();
+                glUniform1i(info.location, info.unit);
                 opengl_check_error();
                 break;
             }
