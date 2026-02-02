@@ -30,39 +30,59 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
         &height,
         &channels
     );
-    // For RGB images, load as RGBA, then ignore alpha channel
-    int req_comp = channels == 3 ? 4 : channels;
-    auto data = stbi_load_from_memory(
-        reinterpret_cast<const stbi_uc*>(reader.data()),
-        static_cast<int>(reader.size()),
-        &width,
-        &height,
-        &channels,
-        req_comp
-    );
-    if (!data) {
-        error("Failed to load image: {}", stbi_failure_reason());
-        return std::unexpected(std::error_code {});
-    }
     PixelFormat format;
     uint32 depth;
-    switch (channels) {
-        case 1:
-            format = PixelFormat::R8Unorm;
-            depth = 1;
-            break;
-        case 2:
-            format = PixelFormat::Rg8Unorm;
-            depth = 2;
-            break;
-        case 3:
-        case 4:
-            format = PixelFormat::Rgba8Unorm;
-            depth = 4;
-            break;
-        default:
-            stbi_image_free(data);
+    void* data = nullptr;
+    auto extension = context.asset_path().path().extension();
+    if (extension == ".hdr") {
+        int req_comp = 4; // Force load as RGBA for HDR
+        data = stbi_loadf_from_memory(
+            reinterpret_cast<const stbi_uc*>(reader.data()),
+            static_cast<int>(reader.size()),
+            &width,
+            &height,
+            &channels,
+            req_comp
+        );
+        if (!data) {
+            error("Failed to load HDR image: {}", stbi_failure_reason());
             return std::unexpected(std::error_code {});
+        }
+        format = PixelFormat::Rgba32Float;
+        depth = 4;
+    } else {
+        // For RGB images, load as RGBA, then ignore alpha channel
+        int req_comp = channels == 3 ? 4 : channels;
+        data = stbi_load_from_memory(
+            reinterpret_cast<const stbi_uc*>(reader.data()),
+            static_cast<int>(reader.size()),
+            &width,
+            &height,
+            &channels,
+            req_comp
+        );
+        if (!data) {
+            error("Failed to load image: {}", stbi_failure_reason());
+            return std::unexpected(std::error_code {});
+        }
+        switch (channels) {
+            case 1:
+                format = PixelFormat::R8Unorm;
+                depth = 1;
+                break;
+            case 2:
+                format = PixelFormat::Rg8Unorm;
+                depth = 2;
+                break;
+            case 3:
+            case 4:
+                format = PixelFormat::Rgba8Unorm;
+                depth = 4;
+                break;
+            default:
+                stbi_image_free(data);
+                return std::unexpected(std::error_code {});
+        }
     }
     TextureDescription texture_description = TextureDescription {
         .width = static_cast<std::uint32_t>(width),
@@ -75,7 +95,7 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
         .texture_type = TextureType::Texture2D,
     };
     return std::make_unique<Image>(
-        std::unique_ptr<unsigned char[]>(data),
+        std::unique_ptr<unsigned char[]>(static_cast<unsigned char*>(data)),
         texture_description
     );
 }
