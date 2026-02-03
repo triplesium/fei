@@ -10,9 +10,11 @@
 #include "graphics/enums.hpp"
 #include "graphics/graphics_device.hpp"
 #include "math/matrix.hpp"
+#include "pbr/cubemap.hpp"
 #include "pbr/directional_light.hpp"
 #include "pbr/forward_render.hpp"
 #include "pbr/material.hpp"
+#include "pbr/skybox.hpp"
 #include "rendering/components.hpp"
 #include "rendering/defaults.hpp"
 #include "rendering/material.hpp"
@@ -179,7 +181,7 @@ void shadow_pass(
         auto pipeline =
             device->create_render_pipeline(RenderPipelineDescription {
                 .depth_stencil_state =
-                    DepthStencilStateDescription::DepthOnlyGreaterEqual,
+                    DepthStencilStateDescription::DepthOnlyLessEqual,
                 .rasterizer_state = {},
                 .render_primitive = gpu_mesh.primitive(),
                 .shader_program =
@@ -267,7 +269,7 @@ void color_pass(
             device->create_render_pipeline(RenderPipelineDescription {
                 .blend_state = BlendStateDescription::SingleAlphaBlend,
                 .depth_stencil_state =
-                    DepthStencilStateDescription::DepthOnlyGreaterEqual,
+                    DepthStencilStateDescription::DepthOnlyLessEqual,
                 .rasterizer_state = {},
                 .render_primitive = gpu_mesh.primitive(),
                 .shader_program =
@@ -309,15 +311,116 @@ void color_pass(
         }
     }
     command_buffer->end_render_pass();
-    auto backbuffer = device->main_framebuffer();
-    command_buffer->blit_to(backbuffer);
+    // auto backbuffer = device->main_framebuffer();
+    // command_buffer->blit_to(backbuffer);
+    device->submit_commands(command_buffer);
+}
+
+void skybox_pass(
+    Query<Skybox> query,
+    Res<ForwardRenderResources> forward_render_resources,
+    Res<EquirectToCubemap> equirect_to_cubemap,
+    Res<GraphicsDevice> device,
+    Res<Assets<Image>> images,
+    Res<RenderAssets<GpuMesh>> gpu_meshes,
+    Res<SkyboxResource> skybox_resource,
+    Res<ViewResource> view_resource
+) {
+    if (query.empty()) {
+        return;
+    }
+    if (query.size() > 1) {
+        fei::fatal("Multiple skyboxes are not supported yet.");
+    }
+    auto [skybox] = query.first();
+    auto cubemap_texture = equirect_to_cubemap->get_or_create_cubemap(
+        *device,
+        *images,
+        skybox.equirect_map
+    );
+    auto gpu_mesh = gpu_meshes->get(skybox_resource->mesh.id()).value();
+
+    auto command_buffer = device->create_command_buffer();
+    command_buffer->begin_render_pass(RenderPassDescription {
+        .color_attachments =
+            {
+                RenderPassColorAttachment {
+                    .texture = forward_render_resources->color_texture,
+                    .load_op = LoadOp::Load,
+                },
+            },
+        .depth_stencil_attachment =
+            RenderPassDepthStencilAttachment {
+                .texture = forward_render_resources->depth_texture,
+                .depth_load_op = LoadOp::Load,
+                .stencil_load_op = LoadOp::Load,
+            },
+    });
+
+    auto layout = device->create_resource_layout(ResourceLayoutDescription {
+        .elements =
+            {
+                ResourceLayoutElementDescription {
+                    .binding = 0,
+                    .name = "skybox",
+                    .kind = ResourceKind::TextureReadOnly,
+                    .stages = ShaderStages::Fragment,
+                },
+            },
+    });
+    auto resource_set = device->create_resource_set(ResourceSetDescription {
+        .layout = layout,
+        .resources = {cubemap_texture},
+    });
+
+    auto pipeline = device->create_render_pipeline(RenderPipelineDescription {
+        .depth_stencil_state = DepthStencilStateDescription::DepthOnlyLessEqual,
+        .rasterizer_state = {},
+        .render_primitive = RenderPrimitive::Triangles,
+        .shader_program =
+            ShaderProgramDescription {
+                .vertex_layouts = {gpu_mesh.vertex_buffer_layout()
+                                       .to_vertex_layout_description()},
+                .shaders = skybox_resource->shader_modules,
+            },
+        .resource_layouts = {layout, view_resource->resource_layout},
+    });
+    command_buffer->set_render_pipeline(pipeline);
+    command_buffer->set_resource_set(0, resource_set);
+    command_buffer->set_resource_set(1, view_resource->resource_set);
+    command_buffer->set_vertex_buffer(gpu_mesh.vertex_buffer());
+    command_buffer->draw(0, gpu_mesh.vertex_count());
+    command_buffer->end_render_pass();
+    device->submit_commands(command_buffer);
+}
+
+void blit_pass(
+    Res<ForwardRenderResources> forward_render_resources,
+    Res<GraphicsDevice> device
+) {
+    auto command_buffer = device->create_command_buffer();
+    command_buffer->begin_render_pass(RenderPassDescription {
+        .color_attachments =
+            {
+                RenderPassColorAttachment {
+                    .texture = forward_render_resources->color_texture,
+                    .load_op = LoadOp::Load,
+                },
+            },
+    });
+    command_buffer->end_render_pass();
+    command_buffer->blit_to(device->main_framebuffer());
     device->submit_commands(command_buffer);
 }
 
 void ForwardRenderPlugin::setup(App& app) {
     app.add_resource<ForwardRenderResources>()
+        .add_plugins(CubemapPlugin {}, SkyboxPlugin {})
         .add_systems(StartUp, setup_forward_render_resources)
-        .add_systems(RenderUpdate, chain(shadow_pass, color_pass));
+        .add_systems(
+            RenderUpdate,
+            chain(shadow_pass, color_pass, skybox_pass, blit_pass)
+        );
 }
 
 } // namespace fei
