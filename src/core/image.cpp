@@ -22,7 +22,6 @@ Image::Image(
 std::expected<std::unique_ptr<Image>, std::error_code>
 ImageLoader::load(Reader& reader, const LoadContext& context) {
     int width, height, channels;
-    stbi_set_flip_vertically_on_load(true);
     stbi_info_from_memory(
         reinterpret_cast<const stbi_uc*>(reader.data()),
         static_cast<int>(reader.size()),
@@ -35,6 +34,7 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
     void* data = nullptr;
     auto extension = context.asset_path().path().extension();
     if (extension == ".hdr") {
+        stbi_set_flip_vertically_on_load(false);
         int req_comp = 4; // Force load as RGBA for HDR
         data = stbi_loadf_from_memory(
             reinterpret_cast<const stbi_uc*>(reader.data()),
@@ -51,6 +51,7 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
         format = PixelFormat::Rgba32Float;
         depth = 4;
     } else {
+        stbi_set_flip_vertically_on_load(true);
         // For RGB images, load as RGBA, then ignore alpha channel
         int req_comp = channels == 3 ? 4 : channels;
         data = stbi_load_from_memory(
