@@ -12,6 +12,8 @@ enum class ResourceKind : uint8 {
     UniformBuffer,
     TextureReadOnly,
     TextureReadWrite,
+    StorageBufferReadOnly,
+    StorageBufferReadWrite,
     Sampler,
 };
 

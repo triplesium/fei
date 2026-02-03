@@ -175,6 +175,22 @@ MappedResource GraphicsDeviceOpenGL::map(
             map_mode,
             std::span<std::byte>(data, total_size)
         );
+    } else if (auto buffer_gl =
+                   std::dynamic_pointer_cast<BufferOpenGL>(resource)) {
+        void* ptr = glMapNamedBuffer(
+            buffer_gl->id(),
+            map_mode == MapMode::Read ? GL_READ_ONLY : GL_WRITE_ONLY
+        );
+        opengl_check_error();
+
+        return MappedResource(
+            resource,
+            map_mode,
+            std::span<std::byte>(
+                reinterpret_cast<std::byte*>(ptr),
+                buffer_gl->size()
+            )
+        );
     }
     fei::fatal("Unknown MappableResource type in GraphicsDeviceOpenGL::map");
     return MappedResource(nullptr, MapMode::Read, std::span<std::byte>());
@@ -188,7 +204,13 @@ void GraphicsDeviceOpenGL::unmap(std::shared_ptr<MappableResource> resource) {
             m_mapped_resources.erase(it);
         }
         return;
+    } else if (auto buffer_gl =
+                   std::dynamic_pointer_cast<BufferOpenGL>(resource)) {
+        glUnmapNamedBuffer(buffer_gl->id());
+        opengl_check_error();
+        return;
     }
+    fei::fatal("Unknown MappableResource type in GraphicsDeviceOpenGL::unmap");
 }
 
 std::shared_ptr<Framebuffer> GraphicsDeviceOpenGL::main_framebuffer() {

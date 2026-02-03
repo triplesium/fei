@@ -121,6 +121,21 @@ void PipelineOpenGL::process_resource_layouts() {
                     };
                     break;
                 }
+                case ResourceKind::StorageBufferReadOnly:
+                case ResourceKind::StorageBufferReadWrite: {
+                    auto index = glGetProgramResourceIndex(
+                        m_program,
+                        GL_SHADER_STORAGE_BLOCK,
+                        element.name.c_str()
+                    );
+                    opengl_check_error();
+                    if (index == GL_INVALID_INDEX) {
+                        continue;
+                    }
+                    m_resource_bindings[slot][i] =
+                        ShaderStorageBinding {.binding = index};
+                    break;
+                }
                 default:
                     fei::fatal(
                         "ResourceKind {} not supported in PipelineOpenGL",

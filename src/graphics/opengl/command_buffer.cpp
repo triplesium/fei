@@ -173,6 +173,10 @@ void CommandBufferOpenGL::set_resource_set(
     uint32 uniform_block_base_index = calculate_uniform_block_base_index(slot);
     uint32 uniform_block_offset = 0;
 
+    uint32 storage_buffer_base_index =
+        calculate_storage_buffer_base_index(slot);
+    uint32 storage_buffer_offset = 0;
+
     auto size = gl_layout->elements().size();
     for (size_t i = 0; i < size; ++i) {
         auto& element = gl_layout->elements()[i];
@@ -235,6 +239,29 @@ void CommandBufferOpenGL::set_resource_set(
                 opengl_check_error();
                 glUniform1i(info.location, info.unit);
                 opengl_check_error();
+                break;
+            }
+            case ResourceKind::StorageBufferReadOnly:
+            case ResourceKind::StorageBufferReadWrite: {
+                auto buffer = std::static_pointer_cast<BufferOpenGL>(resource);
+                auto info =
+                    std::get<PipelineOpenGL::ShaderStorageBinding>(binding_info
+                    );
+                auto binding =
+                    storage_buffer_base_index + storage_buffer_offset;
+                glShaderStorageBlockBinding(
+                    gl_pipeline->program(),
+                    info.binding,
+                    binding
+                );
+                opengl_check_error();
+                glBindBufferBase(
+                    GL_SHADER_STORAGE_BUFFER,
+                    binding,
+                    buffer->id()
+                );
+                opengl_check_error();
+                storage_buffer_offset++;
                 break;
             }
             default:
@@ -392,6 +419,15 @@ uint32 CommandBufferOpenGL::calculate_uniform_block_base_index(uint32 slot) {
     auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(m_pipeline);
     for (uint32 s = 0; s < slot; ++s) {
         base_index += pipeline_gl->uniform_buffer_count(s);
+    }
+    return base_index;
+}
+
+uint32 CommandBufferOpenGL::calculate_storage_buffer_base_index(uint32 slot) {
+    uint32 base_index = 0;
+    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(m_pipeline);
+    for (uint32 s = 0; s < slot; ++s) {
+        base_index += pipeline_gl->storage_buffer_count(s);
     }
     return base_index;
 }

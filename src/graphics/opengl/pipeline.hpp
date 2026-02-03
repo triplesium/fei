@@ -7,6 +7,7 @@
 #include "graphics/pipeline.hpp"
 #include "graphics/shader_module.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <variant>
 #include <vector>
@@ -28,10 +29,18 @@ class PipelineOpenGL : public Pipeline {
         GLuint location;
     };
 
+    struct ShaderStorageBinding {
+        GLuint binding;
+    };
+
     struct EmptyBinding {};
 
-    using ResourceBindingInfo = std::
-        variant<TextureBinding, SamplerBinding, UniformBinding, EmptyBinding>;
+    using ResourceBindingInfo = std::variant<
+        TextureBinding,
+        SamplerBinding,
+        UniformBinding,
+        ShaderStorageBinding,
+        EmptyBinding>;
 
   private:
     bool m_is_compute;
@@ -59,13 +68,21 @@ class PipelineOpenGL : public Pipeline {
     GLuint program() const { return m_program; }
 
     uint32 uniform_buffer_count(uint32 slot) const {
-        uint32 count = 0;
-        for (const auto& binding : m_resource_bindings[slot]) {
-            if (std::holds_alternative<UniformBinding>(binding)) {
-                count++;
+        return std::ranges::count_if(
+            m_resource_bindings[slot],
+            [](const ResourceBindingInfo& binding) {
+                return std::holds_alternative<UniformBinding>(binding);
             }
-        }
-        return count;
+        );
+    }
+
+    uint32 storage_buffer_count(uint32 slot) const {
+        return std::ranges::count_if(
+            m_resource_bindings[slot],
+            [](const ResourceBindingInfo& binding) {
+                return std::holds_alternative<ShaderStorageBinding>(binding);
+            }
+        );
     }
 
     Optional<ResourceBindingInfo&>

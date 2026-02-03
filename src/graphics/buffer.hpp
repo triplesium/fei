@@ -37,7 +37,7 @@ struct BufferDescription {
     BitFlags<BufferUsages> usages;
 };
 
-class Buffer : public BindableResource {
+class Buffer : public BindableResource, public MappableResource {
   public:
     virtual ~Buffer() = default;
     virtual std::size_t size() const = 0;

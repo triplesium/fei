@@ -67,6 +67,7 @@ class CommandBufferOpenGL : public CommandBuffer {
 
   private:
     uint32 calculate_uniform_block_base_index(uint32 slot);
+    uint32 calculate_storage_buffer_base_index(uint32 slot);
 };
 
 } // namespace fei
