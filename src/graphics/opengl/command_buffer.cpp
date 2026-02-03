@@ -319,6 +319,19 @@ void CommandBufferOpenGL::set_render_pipeline_impl(
 
     glUseProgram(pipeline_gl->program());
     opengl_check_error();
+
+    auto depth_stencil_state = pipeline_gl->depth_stencil_state();
+    // Depth test
+    if (depth_stencil_state.depth_test_enabled) {
+        glEnable(GL_DEPTH_TEST);
+        opengl_check_error();
+        glDepthFunc(to_gl_compare_function(depth_stencil_state.depth_comparison)
+        );
+        opengl_check_error();
+    } else {
+        glDisable(GL_DEPTH_TEST);
+        opengl_check_error();
+    }
 }
 
 void CommandBufferOpenGL::set_compute_pipeline_impl(

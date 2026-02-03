@@ -496,4 +496,26 @@ GLenum to_gl_pixel_type(PixelFormat format) {
     return 0;
 }
 
+GLenum to_gl_compare_function(ComparisonKind func) {
+    switch (func) {
+        case ComparisonKind::Never:
+            return GL_NEVER;
+        case ComparisonKind::Less:
+            return GL_LESS;
+        case ComparisonKind::Equal:
+            return GL_EQUAL;
+        case ComparisonKind::LessEqual:
+            return GL_LEQUAL;
+        case ComparisonKind::Greater:
+            return GL_GREATER;
+        case ComparisonKind::NotEqual:
+            return GL_NOTEQUAL;
+        case ComparisonKind::GreaterEqual:
+            return GL_GEQUAL;
+        case ComparisonKind::Always:
+            return GL_ALWAYS;
+    }
+    return 0;
+}
+
 } // namespace fei

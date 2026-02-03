@@ -28,5 +28,6 @@ GLenum to_gl_comparison_function(ComparisonKind func);
 GLenum to_gl_draw_elements_type(IndexFormat format);
 GLenum to_gl_pixel_format(PixelFormat format);
 GLenum to_gl_pixel_type(PixelFormat format);
+GLenum to_gl_compare_function(ComparisonKind func);
 
 } // namespace fei
