@@ -6,6 +6,7 @@
 #include "graphics/opengl/buffer.hpp"
 #include "graphics/opengl/framebuffer.hpp"
 #include "graphics/opengl/pipeline.hpp"
+#include "graphics/opengl/sampler.hpp"
 #include "graphics/opengl/texture.hpp"
 #include "graphics/opengl/utils.hpp"
 
@@ -190,7 +191,7 @@ void CommandBufferOpenGL::set_resource_set(
         switch (kind) {
             case ResourceKind::UniformBuffer: {
                 auto buffer = std::static_pointer_cast<BufferOpenGL>(resource);
-                auto info =
+                auto& info =
                     std::get<PipelineOpenGL::UniformBinding>(binding_info);
                 auto binding = uniform_block_base_index + uniform_block_offset;
                 glUniformBlockBinding(
@@ -207,7 +208,7 @@ void CommandBufferOpenGL::set_resource_set(
             case ResourceKind::TextureReadOnly: {
                 auto texture =
                     std::static_pointer_cast<TextureOpenGL>(resource);
-                auto info =
+                auto& info =
                     std::get<PipelineOpenGL::TextureBinding>(binding_info);
                 glActiveTexture(GL_TEXTURE0 + info.unit);
                 opengl_check_error();
@@ -223,7 +224,7 @@ void CommandBufferOpenGL::set_resource_set(
             case ResourceKind::TextureReadWrite: {
                 auto texture =
                     std::static_pointer_cast<TextureOpenGL>(resource);
-                auto info =
+                auto& info =
                     std::get<PipelineOpenGL::TextureBinding>(binding_info);
                 bool layered = texture->usage().is_set(TextureUsage::Cubemap) ||
                                texture->layer() > 1;
@@ -244,7 +245,7 @@ void CommandBufferOpenGL::set_resource_set(
             case ResourceKind::StorageBufferReadOnly:
             case ResourceKind::StorageBufferReadWrite: {
                 auto buffer = std::static_pointer_cast<BufferOpenGL>(resource);
-                auto info =
+                auto& info =
                     std::get<PipelineOpenGL::ShaderStorageBinding>(binding_info
                     );
                 auto binding =
@@ -262,6 +263,17 @@ void CommandBufferOpenGL::set_resource_set(
                 );
                 opengl_check_error();
                 storage_buffer_offset++;
+                break;
+            }
+            case ResourceKind::Sampler: {
+                auto sampler =
+                    std::static_pointer_cast<SamplerOpenGL>(resource);
+                auto& info =
+                    std::get<PipelineOpenGL::SamplerBinding>(binding_info);
+                for (auto unit : info.units) {
+                    glBindSampler(unit, sampler->id());
+                    opengl_check_error();
+                }
                 break;
             }
             default:

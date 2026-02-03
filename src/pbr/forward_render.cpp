@@ -340,6 +340,12 @@ void skybox_pass(
     );
     auto gpu_mesh = gpu_meshes->get(skybox_resource->mesh.id()).value();
 
+    auto cubemap_sampler = device->create_sampler(SamplerDescription {
+        .address_mode_u = SamplerAddressMode::ClampToEdge,
+        .address_mode_v = SamplerAddressMode::ClampToEdge,
+        .address_mode_w = SamplerAddressMode::ClampToEdge,
+    });
+
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin_render_pass(RenderPassDescription {
         .color_attachments =
@@ -359,18 +365,22 @@ void skybox_pass(
 
     auto layout = device->create_resource_layout(ResourceLayoutDescription {
         .elements =
-            {
-                ResourceLayoutElementDescription {
-                    .binding = 0,
-                    .name = "skybox",
-                    .kind = ResourceKind::TextureReadOnly,
-                    .stages = ShaderStages::Fragment,
-                },
-            },
+            {{
+                 .binding = 0,
+                 .name = "skybox",
+                 .kind = ResourceKind::TextureReadOnly,
+                 .stages = ShaderStages::Fragment,
+             },
+             {
+                 .binding = 1,
+                 .name = "skybox_sampler",
+                 .kind = ResourceKind::Sampler,
+                 .stages = ShaderStages::Fragment,
+             }},
     });
     auto resource_set = device->create_resource_set(ResourceSetDescription {
         .layout = layout,
-        .resources = {cubemap_texture},
+        .resources = {cubemap_texture, cubemap_sampler},
     });
 
     auto pipeline = device->create_render_pipeline(RenderPipelineDescription {

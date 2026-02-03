@@ -7,6 +7,8 @@
 #include "graphics/pipeline.hpp"
 #include "graphics/resource.hpp"
 
+#include <vector>
+
 namespace fei {
 
 PipelineOpenGL::PipelineOpenGL(const RenderPipelineDescription& desc) :
@@ -92,6 +94,7 @@ void PipelineOpenGL::process_resource_layouts() {
         );
         const auto& elements = layout->elements();
         m_resource_bindings[slot].resize(elements.size(), EmptyBinding {});
+        std::vector<uint32> sampler_tracked_texture_units;
         for (size_t i = 0; i < elements.size(); ++i) {
             const auto& element = elements[i];
             switch (element.kind) {
@@ -106,7 +109,21 @@ void PipelineOpenGL::process_resource_layouts() {
                         UniformBinding {.location = index};
                     break;
                 }
-                case ResourceKind::TextureReadOnly:
+                case ResourceKind::TextureReadOnly: {
+                    auto location =
+                        glGetUniformLocation(m_program, element.name.c_str());
+                    opengl_check_error();
+                    if (location == -1) {
+                        continue;
+                    }
+                    GLuint unit = next_texture_unit++;
+                    m_resource_bindings[slot][i] = TextureBinding {
+                        .unit = unit,
+                        .location = location,
+                    };
+                    sampler_tracked_texture_units.push_back(unit);
+                    break;
+                }
                 case ResourceKind::TextureReadWrite: {
                     auto location =
                         glGetUniformLocation(m_program, element.name.c_str());
@@ -134,6 +151,13 @@ void PipelineOpenGL::process_resource_layouts() {
                     }
                     m_resource_bindings[slot][i] =
                         ShaderStorageBinding {.binding = index};
+                    break;
+                }
+                case ResourceKind::Sampler: {
+                    m_resource_bindings[slot][i] = SamplerBinding {
+                        .units = sampler_tracked_texture_units,
+                    };
+                    sampler_tracked_texture_units.clear();
                     break;
                 }
                 default:
