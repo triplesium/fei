@@ -1,5 +1,5 @@
 #pragma once
-
+#include "base/concepts.hpp"
 #include "ecs/archetype.hpp"
 #include "ecs/fwd.hpp"
 #include "ecs/system.hpp"
@@ -8,15 +8,13 @@
 
 #include <cstddef>
 #include <tuple>
-#include <type_traits>
 #include <vector>
 
 namespace fei {
 
 // Default: T=component
-template<class T>
-struct QueryParam {
-    static constexpr bool can_get = true;
+template<typename T>
+struct QueryData {
     static bool match(const Archetype& archetype) {
         return archetype.has_component(type_id<T>());
     }
@@ -26,15 +24,37 @@ struct QueryParam {
 };
 
 template<>
-struct QueryParam<Entity> {
-    static constexpr bool can_get = true;
+struct QueryData<Entity> {
     static bool match(const Archetype& archetype) { return true; }
     static Entity get(const Archetype& archetype, std::size_t index) {
         return archetype.entities()[index];
     }
 };
 
-template<typename... Options>
+template<typename T>
+struct With {};
+
+template<typename T>
+struct Without {};
+
+template<typename T>
+struct QueryFilter;
+
+template<typename T>
+struct QueryFilter<With<T>> {
+    static bool match(const Archetype& archetype) {
+        return archetype.has_component(type_id<T>());
+    }
+};
+
+template<typename T>
+struct QueryFilter<Without<T>> {
+    static bool match(const Archetype& archetype) {
+        return !archetype.has_component(type_id<T>());
+    }
+};
+
+template<typename... Datas>
 class QueryIter {
   private:
     const World* m_world;
@@ -42,15 +62,10 @@ class QueryIter {
     std::size_t m_archetype_index;
     std::size_t m_entity_index;
 
-    template<class T>
-    using filter_option = std::conditional_t<
-        QueryParam<T>::can_get,
-        std::tuple<decltype(QueryParam<T>::get(std::declval<Archetype>(), 0))>,
-        std::tuple<>>;
-
   public:
     using value_type =
-        decltype(std::tuple_cat(std::declval<filter_option<Options>>()...));
+        std::tuple<decltype(QueryData<Datas>::get(std::declval<Archetype>(), 0)
+        )...>;
 
     QueryIter(
         const World* world,
@@ -72,7 +87,7 @@ class QueryIter {
             m_world->archetypes().get((*m_matching_archetypes
             )[m_archetype_index]);
         return std::tuple_cat(
-            get_component_tuple<Options>(archetype, m_entity_index)...
+            get_component_tuple<Datas>(archetype, m_entity_index)...
         );
     }
 
@@ -96,13 +111,9 @@ class QueryIter {
     template<typename T>
     auto
     get_component_tuple(const Archetype& archetype, std::size_t index) const {
-        if constexpr (QueryParam<T>::can_get) {
-            return std::tuple<decltype(QueryParam<T>::get(archetype, index))>(
-                QueryParam<T>::get(archetype, index)
-            );
-        } else {
-            return std::tuple<> {};
-        }
+        return std::tuple<decltype(QueryData<T>::get(archetype, index))>(
+            QueryData<T>::get(archetype, index)
+        );
     }
     void advance_to_next_valid() {
         while (m_archetype_index < m_matching_archetypes->size()) {
@@ -119,14 +130,24 @@ class QueryIter {
     }
 };
 
-template<typename... Options>
+template<typename... Datas>
+class Query;
+
+template<typename Q, typename... Filters>
+    requires SpecializationOf<Q, Query>
+class FilteredQuery;
+
+template<typename... Datas>
 class Query {
-  private:
+  protected:
     const World* m_world = nullptr;
     std::vector<ArchetypeId> m_cached_archetypes;
 
   public:
-    using Iterator = QueryIter<Options...>;
+    using Iterator = QueryIter<Datas...>;
+
+    template<typename... Filters>
+    using Filter = FilteredQuery<Query<Datas...>, Filters...>;
 
     // Prepare the query with world context
     static Query get_param(World& world) {
@@ -166,9 +187,9 @@ class Query {
         return *begin();
     }
 
-  private:
-    bool match_archetype(const Archetype& archetype) const {
-        return (QueryParam<Options>::match(archetype) && ...);
+  protected:
+    virtual bool match_archetype(const Archetype& archetype) const {
+        return (QueryData<Datas>::match(archetype) && ...);
     }
 
     void update_cache() {
@@ -179,6 +200,26 @@ class Query {
                 m_cached_archetypes.push_back(archetype_id);
             }
         }
+    }
+};
+
+template<typename Q, typename... Filters>
+    requires SpecializationOf<Q, Query>
+class FilteredQuery : public Q {
+  public:
+    using Iterator = Q::Iterator;
+
+    static FilteredQuery get_param(World& world) {
+        FilteredQuery query;
+        query.m_world = &world;
+        query.update_cache();
+        return query;
+    }
+
+  protected:
+    virtual bool match_archetype(const Archetype& archetype) const override {
+        return Q::match_archetype(archetype) &&
+               (QueryFilter<Filters>::match(archetype) && ...);
     }
 };
 
