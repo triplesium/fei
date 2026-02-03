@@ -113,12 +113,6 @@ void GraphicsDeviceOpenGL::update_texture(
         GL_TEXTURE_HEIGHT,
         &texture_height
     );
-    fei::info(
-        "Texture size at mip level {}: {}x{}",
-        mip_level,
-        texture_width,
-        texture_height
-    );
 
     glTextureSubImage2D(
         gl_texture->id(),
