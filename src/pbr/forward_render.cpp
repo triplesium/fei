@@ -139,9 +139,9 @@ void shadow_pass(
     float size = 20.0f;
     auto light_projection = orthographic(size, size, 0.1f, 100.0f);
     DirectionalLightUniform light_uniform {
-        .light_view_projection = light_projection * light_view,
-        .light_position = light_transform.position,
-        .light_color = light.color.to_vector3(),
+        .clip_from_world = light_projection * light_view,
+        .world_position = light_transform.position,
+        .color = light.color.to_vector3(),
     };
     device->update_buffer(
         resources->shadow_uniform_buffer,

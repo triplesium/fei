@@ -11,9 +11,9 @@ struct DirectionalLight {
 };
 
 struct alignas(16) DirectionalLightUniform {
-    Matrix4x4 light_view_projection;
-    alignas(16) Vector3 light_position;
-    alignas(16) Vector3 light_color;
+    Matrix4x4 clip_from_world;
+    alignas(16) Vector3 world_position;
+    alignas(16) Vector3 color;
 };
 
 } // namespace fei

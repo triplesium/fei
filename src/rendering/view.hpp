@@ -14,8 +14,10 @@
 namespace fei {
 
 struct alignas(16) ViewUniform {
-    Matrix4x4 view_projection;
-    Vector3 view_position;
+    Matrix4x4 clip_from_world;
+    Matrix4x4 view_from_world;
+    Matrix4x4 clip_from_view;
+    Vector3 world_position;
 };
 
 struct ViewResource {

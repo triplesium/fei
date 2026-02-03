@@ -1,5 +1,6 @@
 #pragma once
 #include "asset/handle.hpp"
+#include "base/bitflags.hpp"
 #include "base/optional.hpp"
 #include "core/image.hpp"
 #include "graphics/graphics_device.hpp"
@@ -16,10 +17,19 @@
 
 namespace fei {
 
+enum class StandardMaterialFlags : uint32 {
+    None = 0,
+    AlbedoMap = 1 << 0,
+    NormalMap = 1 << 1,
+    MetallicMap = 1 << 2,
+    RoughnessMap = 1 << 3,
+};
+
 struct alignas(16) StandardMaterialUniform {
     Color3F albedo;
     float metallic;
     float roughness;
+    uint32 flags;
 };
 
 class StandardMaterial : public Material {
@@ -80,10 +90,24 @@ class StandardMaterial : public Material {
     }
 
     StandardMaterialUniform create_uniform() const {
+        BitFlags<StandardMaterialFlags> flags = StandardMaterialFlags::None;
+        if (albedo_map.has_value()) {
+            flags |= StandardMaterialFlags::AlbedoMap;
+        }
+        if (normal_map.has_value()) {
+            flags |= StandardMaterialFlags::NormalMap;
+        }
+        if (metallic_map.has_value()) {
+            flags |= StandardMaterialFlags::MetallicMap;
+        }
+        if (roughness_map.has_value()) {
+            flags |= StandardMaterialFlags::RoughnessMap;
+        }
         return StandardMaterialUniform {
             .albedo = albedo,
             .metallic = metallic,
             .roughness = roughness,
+            .flags = flags.to_raw(),
         };
     }
 

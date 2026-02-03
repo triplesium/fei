@@ -5,23 +5,35 @@ in vec2 Frag_TexCoords;
 in vec4 Frag_LightSpacePosition;
 out vec4 Out_Color;
 
+const int STANDARD_MATERIAL_FLAGS_ALBEDO_MAP_BIT = 1 << 0;
+const int STANDARD_MATERIAL_FLAGS_NORMAL_MAP_BIT = 1 << 1;
+const int STANDARD_MATERIAL_FLAGS_METALLIC_MAP_BIT = 1 << 2;
+const int STANDARD_MATERIAL_FLAGS_ROUGHNESS_MAP_BIT = 1 << 3;
+
 layout(row_major, std140) uniform Material {
     vec3 albedo;
     float metallic;
     float roughness;
-};
+    int flags;
+} material;
+
 layout(row_major, std140) uniform View {
-    mat4 view_projection;
-    vec3 view_position;
-};
+    mat4 clip_from_world;
+    mat4 view_from_world;
+    mat4 clip_from_view;
+    vec3 world_position;
+} view;
+
 layout(row_major, std140) uniform Mesh {
-    mat4 model;
-};
+    mat4 world_from_local;
+} mesh;
+
 layout(row_major, std140) uniform Light {
-    mat4 light_view_projection;
-    vec3 light_position;
-    vec3 light_color;
-};
+    mat4 clip_from_world;
+    vec3 world_position;
+    vec3 color;
+} light;
+
 layout(binding = 1) uniform sampler2D albedo_map;
 layout(binding = 2) uniform sampler2D shadow_map;
 layout(binding = 3) uniform sampler2D normal_map;
@@ -108,7 +120,7 @@ float sample_shadow_map(
         bias_c,
         filter_radius_uv,
         Frag_Normal,
-        light_position,
+        light.world_position,
         Frag_Position,
         LIGHT_FRUSTUM_SIZE,
         SHADOW_MAP_SIZE
@@ -231,17 +243,22 @@ void main() {
     float metallic = texture(metallic_map, Frag_TexCoords.xy).r;
     float roughness = texture(roughness_map, Frag_TexCoords.xy).r;
 
-    vec3 N = get_normal_from_map();
-    vec3 V = normalize(view_position - Frag_Position);
+    vec3 N;
+    if ((material.flags & STANDARD_MATERIAL_FLAGS_NORMAL_MAP_BIT) != 0) {
+        N = get_normal_from_map();
+    } else {
+        N = normalize(Frag_Normal);
+    }
+    vec3 V = normalize(view.world_position - Frag_Position);
 
     vec3 F0 = vec3(0.04); 
     F0 = mix(F0, albedo, metallic);
     
-    vec3 L = normalize(light_position - Frag_Position);
+    vec3 L = normalize(light.world_position - Frag_Position);
     vec3 H = normalize(V + L);
-    float distance = length(light_position - Frag_Position);
+    float distance = length(light.world_position - Frag_Position);
     float attenuation = 1.0 / (distance * distance);
-    vec3 radiance = light_color * attenuation;
+    vec3 radiance = light.color * attenuation;
     float NDF = distribution_ggx(N, H, roughness);   
     float G   = geometry_smith(N, V, L, roughness);      
     vec3 F    = fresnel_schlick(clamp(dot(H, V), 0.0, 1.0), F0);

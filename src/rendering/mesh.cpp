@@ -146,7 +146,7 @@ void prepare_mesh_uniforms(
     // TODO: Cleanup unused uniforms
     for (const auto& [entity, mesh3d, transform3d] : query) {
         MeshUniform uniform {
-            .model = transform3d.to_matrix(),
+            .world_from_local = transform3d.to_matrix(),
         };
 
         if (!mesh_uniforms->entries.contains(entity)) {

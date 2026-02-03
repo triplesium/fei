@@ -55,8 +55,10 @@ void prepare_view_resource(
         camera.far_plane
     );
     ViewUniform uniform {
-        .view_projection = projection * view,
-        .view_position = transform.position,
+        .clip_from_world = projection * view,
+        .view_from_world = view,
+        .clip_from_view = projection,
+        .world_position = transform.position,
     };
     device->update_buffer(
         view_uniform->uniform_buffer,
