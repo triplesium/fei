@@ -40,6 +40,13 @@ TextureOpenGL::TextureOpenGL(const TextureDescription& desc) :
         fei::fatal("Unsupported texture type for OpenGL");
         return;
     }
+
+    // [TODO] Temporary cubemap fix
+    if (gl_target == GL_TEXTURE_CUBE_MAP) {
+        glTextureParameteri(m_texture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_texture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_texture, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    }
 }
 
 TextureOpenGL::~TextureOpenGL() {

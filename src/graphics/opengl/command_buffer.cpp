@@ -207,7 +207,10 @@ void CommandBufferOpenGL::set_resource_set(
                     std::get<PipelineOpenGL::TextureBinding>(binding_info);
                 glActiveTexture(GL_TEXTURE0 + info.unit);
                 opengl_check_error();
-                glBindTexture(GL_TEXTURE_2D, texture->id());
+                glBindTexture(
+                    to_gl_texture_target(texture->usage(), texture->type()),
+                    texture->id()
+                );
                 opengl_check_error();
                 glUniform1i(info.location, info.unit);
                 opengl_check_error();
