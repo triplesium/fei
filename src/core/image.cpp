@@ -30,7 +30,6 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
         &channels
     );
     PixelFormat format;
-    uint32 depth;
     void* data = nullptr;
     auto extension = context.asset_path().path().extension();
     if (extension == ".hdr") {
@@ -49,7 +48,6 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
             return std::unexpected(std::error_code {});
         }
         format = PixelFormat::Rgba32Float;
-        depth = 4;
     } else {
         stbi_set_flip_vertically_on_load(true);
         // For RGB images, load as RGBA, then ignore alpha channel
@@ -69,16 +67,13 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
         switch (channels) {
             case 1:
                 format = PixelFormat::R8Unorm;
-                depth = 1;
                 break;
             case 2:
                 format = PixelFormat::Rg8Unorm;
-                depth = 2;
                 break;
             case 3:
             case 4:
                 format = PixelFormat::Rgba8Unorm;
-                depth = 4;
                 break;
             default:
                 stbi_image_free(data);
@@ -88,7 +83,7 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
     TextureDescription texture_description = TextureDescription {
         .width = static_cast<std::uint32_t>(width),
         .height = static_cast<std::uint32_t>(height),
-        .depth = depth,
+        .depth = 1,
         .mip_level = 1,
         .layer = 0,
         .texture_format = format,
