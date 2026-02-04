@@ -12,6 +12,7 @@
 #include "math/matrix.hpp"
 #include "pbr/cubemap.hpp"
 #include "pbr/directional_light.hpp"
+#include "pbr/environment_map.hpp"
 #include "pbr/forward_render.hpp"
 #include "pbr/material.hpp"
 #include "pbr/skybox.hpp"
@@ -221,6 +222,7 @@ void shadow_pass(
 
 void color_pass(
     Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d> query,
+    Query<GpuEnvironmentMap> query_env_maps,
     Res<ForwardRenderResources> forward_render_resources,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
     Res<RenderAssets<PreparedMaterial>> materials,
@@ -256,6 +258,36 @@ void color_pass(
         forward_render_resources->color_texture->height()
     );
 
+    auto cubemap_sampler = device->create_sampler(SamplerDescription {
+        .address_mode_u = SamplerAddressMode::ClampToEdge,
+        .address_mode_v = SamplerAddressMode::ClampToEdge,
+        .address_mode_w = SamplerAddressMode::ClampToEdge,
+        .mag_filter = SamplerFilter::Linear,
+        .min_filter = SamplerFilter::Linear,
+    });
+
+    auto [env_map] = query_env_maps.first();
+    auto environment_layout =
+        device->create_resource_layout(ResourceLayoutDescription {
+            .elements =
+                {{
+                     .binding = 0,
+                     .name = "irradiance_map",
+                     .kind = ResourceKind::TextureReadOnly,
+                     .stages = ShaderStages::Fragment,
+                 },
+                 {
+                     .binding = 1,
+                     .name = "irradiance_sampler",
+                     .kind = ResourceKind::Sampler,
+                     .stages = ShaderStages::Fragment,
+                 }},
+        });
+    auto environment_set = device->create_resource_set(ResourceSetDescription {
+        .layout = environment_layout,
+        .resources = {env_map.irradiance_cubemap.texture(), cubemap_sampler},
+    });
+
     for (const auto& [entity, mesh3d, material3d, transform3d] : query) {
         auto gpu_mesh_opt = gpu_meshes->get(mesh3d.mesh.id());
         auto material_opt = materials->get(material3d.material.id());
@@ -284,6 +316,7 @@ void color_pass(
                         view_resource->resource_layout,
                         mesh_uniforms->entries.at(entity).resource_layout,
                         forward_render_resources->shadow_resource_layout,
+                        environment_layout,
                     },
             });
         command_buffer->set_render_pipeline(pipeline);
@@ -297,6 +330,7 @@ void color_pass(
             3,
             forward_render_resources->shadow_resource_set
         );
+        command_buffer->set_resource_set(4, environment_set);
         command_buffer->set_vertex_buffer(gpu_mesh.vertex_buffer());
         if (auto index_buffer = gpu_mesh.index_buffer()) {
             command_buffer->set_index_buffer(
