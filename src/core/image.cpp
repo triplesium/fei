@@ -19,6 +19,30 @@ Image::Image(
     TextureDescription texture_description
 ) : m_data(std::move(data)), m_texture_description(texture_description) {}
 
+std::unique_ptr<Image> Image::create_empty(
+    std::uint32_t width,
+    std::uint32_t height,
+    std::uint32_t depth,
+    PixelFormat format,
+    BitFlags<TextureUsage> usage,
+    TextureType type
+) {
+    TextureDescription texture_description = TextureDescription {
+        .width = width,
+        .height = height,
+        .depth = depth,
+        .mip_level = 1,
+        .layer = 1,
+        .texture_format = format,
+        .texture_usage = usage,
+        .texture_type = type,
+    };
+    auto data_size = width * height * depth *
+                     get_pixel_format_size(texture_description.texture_format);
+    auto data = std::make_unique<unsigned char[]>(data_size);
+    return std::make_unique<Image>(std::move(data), texture_description);
+}
+
 std::expected<std::unique_ptr<Image>, std::error_code>
 ImageLoader::load(Reader& reader, const LoadContext& context) {
     int width, height, channels;
