@@ -1,9 +1,5 @@
 #include "app/app.hpp"
 
-#include "ecs/commands.hpp"
-
-#include <print>
-
 namespace fei {
 void App::run() {
     for (auto& [type, plugin] : m_plugins) {
@@ -13,7 +9,6 @@ void App::run() {
 
     run_schedule(PreStartUp);
     run_schedule(StartUp);
-    resource<CommandsQueue>().execute(m_world);
     bool should_stop = false;
     while (!should_stop) {
         run_schedule(First);
@@ -21,8 +16,6 @@ void App::run() {
         run_schedule(Update);
         run_schedule(PostUpdate);
         run_schedule(Last);
-
-        resource<CommandsQueue>().execute(m_world);
 
         run_schedule(RenderPrepare);
         run_schedule(RenderFirst);

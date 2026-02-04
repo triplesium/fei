@@ -1,5 +1,6 @@
 #include "ecs/schedule.hpp"
 
+#include "ecs/commands.hpp"
 #include "ecs/fwd.hpp"
 #include "ecs/system.hpp"
 #include "ecs/world.hpp"
@@ -56,6 +57,8 @@ void Schedule::run_systems(World& world) {
         auto it = m_systems.find(system_id);
         if (it != m_systems.end()) {
             it->second.system->run(world);
+            // [TODO] Dont't do this every system run
+            world.resource<CommandsQueue>().execute(world);
         }
     }
 }
