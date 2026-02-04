@@ -34,11 +34,12 @@ layout(row_major, std140) uniform Light {
     vec3 color;
 } light;
 
-layout(binding = 1) uniform sampler2D albedo_map;
-layout(binding = 2) uniform sampler2D shadow_map;
-layout(binding = 3) uniform sampler2D normal_map;
-layout(binding = 4) uniform sampler2D metallic_map;
-layout(binding = 5) uniform sampler2D roughness_map;
+uniform sampler2D albedo_map;
+uniform sampler2D shadow_map;
+uniform sampler2D normal_map;
+uniform sampler2D metallic_map;
+uniform sampler2D roughness_map;
+uniform samplerCube irradiance_map;
 
 #define SHADOW_MAP_SIZE 2048.0
 #define LIGHT_FRUSTUM_SIZE 20.0
@@ -238,10 +239,24 @@ vec3 fresnel_schlick(float cosTheta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
+vec3 fresnel_schlick_roughness(float cosTheta, vec3 F0, float roughness) {
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
 void main() {
-    vec3 albedo = pow(texture(albedo_map, Frag_TexCoords.xy).rgb, vec3(2.2));
-    float metallic = texture(metallic_map, Frag_TexCoords.xy).r;
-    float roughness = texture(roughness_map, Frag_TexCoords.xy).r;
+    vec3 albedo = material.albedo;
+    if ((material.flags & STANDARD_MATERIAL_FLAGS_ALBEDO_MAP_BIT) != 0) {
+        albedo = texture(albedo_map, Frag_TexCoords.xy).rgb;
+    }
+
+    float metallic = material.metallic;
+    if ((material.flags & STANDARD_MATERIAL_FLAGS_METALLIC_MAP_BIT) != 0) {
+        metallic = texture(metallic_map, Frag_TexCoords.xy).r;
+    }
+    float roughness = material.roughness;
+    if ((material.flags & STANDARD_MATERIAL_FLAGS_ROUGHNESS_MAP_BIT) != 0) {
+        roughness = texture(roughness_map, Frag_TexCoords.xy).r;
+    }
 
     vec3 N;
     if ((material.flags & STANDARD_MATERIAL_FLAGS_NORMAL_MAP_BIT) != 0) {
@@ -249,6 +264,7 @@ void main() {
     } else {
         N = normalize(Frag_Normal);
     }
+
     vec3 V = normalize(view.world_position - Frag_Position);
 
     vec3 F0 = vec3(0.04); 
@@ -261,7 +277,7 @@ void main() {
     vec3 radiance = light.color * attenuation;
     float NDF = distribution_ggx(N, H, roughness);   
     float G   = geometry_smith(N, V, L, roughness);      
-    vec3 F    = fresnel_schlick(clamp(dot(H, V), 0.0, 1.0), F0);
+    vec3 F    = fresnel_schlick_roughness(clamp(dot(H, V), 0.0, 1.0), F0, roughness);
     vec3 numerator    = NDF * G * F;
     float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001; 
     vec3 specular = numerator / denominator;
@@ -271,14 +287,16 @@ void main() {
     float NdotL = max(dot(N, L), 0.0);
     vec3 lighting = (kD * albedo / PI + specular) * radiance * NdotL * 4;
 
-    vec3 ambient = vec3(0.03) * albedo;
+    vec3 irradiance = texture(irradiance_map, N).rgb;
+    vec3 diffuse = irradiance * albedo;
+    vec3 ambient = kD * diffuse;
 
     // Perform perspective divide
     vec3 shadow_coord = Frag_LightSpacePosition.xyz / Frag_LightSpacePosition.w;
     // Transform NDC to [0,1] range
     shadow_coord = shadow_coord * 0.5 + 0.5;
 
-    float visibility = 1.0;
+    float visibility = 0.0;
     // float visibility = pcss_shadow(
     //     shadow_map,
     //     vec4(shadow_coord, 1.0),
