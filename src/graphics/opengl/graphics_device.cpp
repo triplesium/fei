@@ -1,6 +1,7 @@
 #include "graphics/opengl/graphics_device.hpp"
 
 #include "base/log.hpp"
+#include "graphics/enums.hpp"
 #include "graphics/opengl/buffer.hpp"
 #include "graphics/opengl/command_buffer.hpp"
 #include "graphics/opengl/framebuffer.hpp"
@@ -107,25 +108,44 @@ void GraphicsDeviceOpenGL::update_texture(
         GL_TEXTURE_WIDTH,
         &texture_width
     );
+    opengl_check_error();
     glGetTextureLevelParameteriv(
         gl_texture->id(),
         mip_level,
         GL_TEXTURE_HEIGHT,
         &texture_height
     );
-
-    glTextureSubImage2D(
-        gl_texture->id(),
-        mip_level,
-        x,
-        y,
-        width,
-        height,
-        gl_texture->gl_format(),
-        gl_texture->gl_type(),
-        data
-    );
     opengl_check_error();
+
+    if (texture->usage().is_set(TextureUsage::Cubemap)) {
+        glTextureSubImage3D(
+            gl_texture->id(),
+            mip_level,
+            x,
+            y,
+            z,
+            width,
+            height,
+            depth,
+            gl_texture->gl_format(),
+            gl_texture->gl_type(),
+            data
+        );
+        opengl_check_error();
+    } else {
+        glTextureSubImage2D(
+            gl_texture->id(),
+            mip_level,
+            x,
+            y,
+            width,
+            height,
+            gl_texture->gl_format(),
+            gl_texture->gl_type(),
+            data
+        );
+        opengl_check_error();
+    }
 }
 
 void GraphicsDeviceOpenGL::update_buffer(
