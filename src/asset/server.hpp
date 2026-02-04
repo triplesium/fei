@@ -36,7 +36,7 @@ class AssetServer {
             .add_resource(Assets<T>(std::unique_ptr<AssetLoader<T>>(new Loader()
             )))
             .template add_event<AssetEvent<T>>()
-            .add_systems(PreUpdate, Assets<T>::track_assets);
+            .add_systems(PostUpdate, Assets<T>::track_assets);
     }
 
     template<typename T>
@@ -47,7 +47,7 @@ class AssetServer {
         (*m_app)
             .add_resource(Assets<T>(nullptr))
             .template add_event<AssetEvent<T>>()
-            .add_systems(PreUpdate, Assets<T>::track_assets);
+            .add_systems(PostUpdate, Assets<T>::track_assets);
     }
 
     template<typename T>
@@ -61,6 +61,13 @@ class AssetServer {
             fatal("No asset source found with name: {}", source_name);
         }
         auto& source = m_sources.at(source_name);
+        if (!source->exists(path.path())) {
+            fatal(
+                "Asset not found at path: {} in source: {}",
+                path.path().string(),
+                source_name
+            );
+        }
         LoadContext context(path);
         auto reader = source->get_reader(path.path());
         return assets.load(reader, context);
