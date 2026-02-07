@@ -10,6 +10,7 @@
 #include "graphics/opengl/sampler.hpp"
 #include "graphics/opengl/shader_module.hpp"
 #include "graphics/opengl/texture.hpp"
+#include "graphics/opengl/texture_view.hpp"
 #include "graphics/opengl/utils.hpp"
 
 #include <memory>
@@ -45,6 +46,11 @@ GraphicsDeviceOpenGL::create_buffer(const BufferDescription& desc) {
 std::shared_ptr<Texture>
 GraphicsDeviceOpenGL::create_texture(const TextureDescription& desc) {
     return std::make_shared<TextureOpenGL>(desc);
+}
+
+std::shared_ptr<TextureView>
+GraphicsDeviceOpenGL::create_texture_view(const TextureViewDescription& desc) {
+    return std::make_shared<TextureViewOpenGL>(desc);
 }
 
 std::shared_ptr<CommandBuffer> GraphicsDeviceOpenGL::create_command_buffer() {

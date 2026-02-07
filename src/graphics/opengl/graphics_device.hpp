@@ -20,6 +20,8 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
     ) override;
     virtual std::shared_ptr<Texture>
     create_texture(const TextureDescription& desc) override;
+    virtual std::shared_ptr<TextureView>
+    create_texture_view(const TextureViewDescription& desc) override;
     virtual std::shared_ptr<CommandBuffer> create_command_buffer() override;
     virtual std::shared_ptr<Pipeline>
     create_render_pipeline(const RenderPipelineDescription& desc) override;

@@ -1,4 +1,5 @@
 #pragma once
+#include "base/log.hpp"
 #include "base/types.hpp"
 #include "graphics/buffer.hpp"
 #include "graphics/enums.hpp"
@@ -77,6 +78,14 @@ class CommandBuffer {
 
     virtual void blit_to(std::shared_ptr<Framebuffer> target) = 0;
 
+    virtual void generate_mipmaps(std::shared_ptr<Texture> texture) {
+        if (!texture->usage().is_set(TextureUsage::GenerateMipmaps)) {
+            error("Texture does not have GenerateMipmaps usage flag set");
+            return;
+        }
+        generate_mipmaps_impl(texture);
+    }
+
   protected:
     virtual void set_framebuffer_impl(std::shared_ptr<Framebuffer> framebuffer
     ) = 0;
@@ -89,6 +98,7 @@ class CommandBuffer {
         IndexFormat format,
         uint32 offset
     ) = 0;
+    virtual void generate_mipmaps_impl(std::shared_ptr<Texture> texture) = 0;
 };
 
 } // namespace fei

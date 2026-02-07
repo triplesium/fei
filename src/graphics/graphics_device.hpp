@@ -7,6 +7,7 @@
 #include "graphics/sampler.hpp"
 #include "graphics/shader_module.hpp"
 #include "graphics/texture.hpp"
+#include "graphics/texture_view.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -23,6 +24,8 @@ class GraphicsDevice {
     ) = 0;
     virtual std::shared_ptr<Texture>
     create_texture(const TextureDescription& desc) = 0;
+    virtual std::shared_ptr<TextureView>
+    create_texture_view(const TextureViewDescription& desc) = 0;
     virtual std::shared_ptr<CommandBuffer> create_command_buffer() = 0;
     virtual std::shared_ptr<Pipeline>
     create_render_pipeline(const RenderPipelineDescription& desc) = 0;
@@ -64,6 +67,26 @@ class GraphicsDevice {
     virtual void unmap(std::shared_ptr<MappableResource> resource) = 0;
 
     virtual std::shared_ptr<Framebuffer> main_framebuffer() = 0;
+
+    virtual std::shared_ptr<TextureView>
+    get_texture_view(std::shared_ptr<BindableResource> texture) {
+        if (auto texture_view =
+                std::dynamic_pointer_cast<TextureView>(texture)) {
+            return texture_view;
+        } else if (auto tex = std::dynamic_pointer_cast<Texture>(texture)) {
+            return create_texture_view(TextureViewDescription {
+                .target = tex,
+                .base_mip_level = 0,
+                .mip_levels = tex->mip_level(),
+                .base_array_layer = 0,
+                .array_layers = tex->layer(),
+            });
+        } else {
+            fatal("Resource is not a Texture or TextureView in "
+                  "GraphicsDevice::get_texture_view");
+            return nullptr;
+        }
+    }
 };
 
 } // namespace fei

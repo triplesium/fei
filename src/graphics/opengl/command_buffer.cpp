@@ -8,6 +8,7 @@
 #include "graphics/opengl/pipeline.hpp"
 #include "graphics/opengl/sampler.hpp"
 #include "graphics/opengl/texture.hpp"
+#include "graphics/opengl/texture_view.hpp"
 #include "graphics/opengl/utils.hpp"
 
 #include <cassert>
@@ -206,36 +207,35 @@ void CommandBufferOpenGL::set_resource_set(
                 break;
             }
             case ResourceKind::TextureReadOnly: {
-                auto texture =
-                    std::static_pointer_cast<TextureOpenGL>(resource);
+                auto texture_view = m_device.get_texture_view(resource);
+                auto texture_view_gl =
+                    std::static_pointer_cast<TextureViewOpenGL>(texture_view);
                 auto& info =
                     std::get<PipelineOpenGL::TextureBinding>(binding_info);
-                glActiveTexture(GL_TEXTURE0 + info.unit);
-                opengl_check_error();
-                glBindTexture(
-                    to_gl_texture_target(texture->usage(), texture->type()),
-                    texture->id()
-                );
+                glBindTextureUnit(info.unit, texture_view_gl->target()->id());
                 opengl_check_error();
                 glUniform1i(info.location, info.unit);
                 opengl_check_error();
                 break;
             }
             case ResourceKind::TextureReadWrite: {
-                auto texture =
-                    std::static_pointer_cast<TextureOpenGL>(resource);
+                auto texture_view = m_device.get_texture_view(resource);
+                auto texture_view_gl =
+                    std::static_pointer_cast<TextureViewOpenGL>(texture_view);
                 auto& info =
                     std::get<PipelineOpenGL::TextureBinding>(binding_info);
-                bool layered = texture->usage().is_set(TextureUsage::Cubemap) ||
-                               texture->layer() > 1;
+                bool layered = texture_view_gl->target()->usage().is_set(
+                                   TextureUsage::Cubemap
+                               ) ||
+                               texture_view_gl->target()->layer() > 1;
                 glBindImageTexture(
                     info.unit,
-                    texture->id(),
-                    0, // [TODO]
+                    texture_view_gl->target()->id(),
+                    texture_view_gl->base_mip_level(),
                     layered,
-                    0, // [TODO]
+                    texture_view_gl->base_array_layer(),
                     GL_READ_WRITE,
-                    texture->gl_sized_internal_format()
+                    texture_view_gl->target()->gl_sized_internal_format()
                 );
                 opengl_check_error();
                 glUniform1i(info.location, info.unit);
@@ -423,6 +423,13 @@ void CommandBufferOpenGL::blit_to(std::shared_ptr<Framebuffer> target) {
         GL_COLOR_BUFFER_BIT,
         GL_NEAREST
     );
+    opengl_check_error();
+}
+
+void CommandBufferOpenGL::generate_mipmaps_impl(std::shared_ptr<Texture> texture
+) {
+    auto texture_gl = std::static_pointer_cast<TextureOpenGL>(texture);
+    glGenerateTextureMipmap(texture_gl->id());
     opengl_check_error();
 }
 

@@ -64,6 +64,8 @@ class CommandBufferOpenGL : public CommandBuffer {
         IndexFormat format,
         uint32 offset
     ) override;
+    virtual void generate_mipmaps_impl(std::shared_ptr<Texture> texture
+    ) override;
 
   private:
     uint32 calculate_uniform_block_base_index(uint32 slot);
