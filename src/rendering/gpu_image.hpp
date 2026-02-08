@@ -13,6 +13,8 @@ class GpuImage {
     std::shared_ptr<Texture> m_texture;
 
   public:
+    // [TODO] This is a temporary solution to allow using GpuImage in components
+    GpuImage() = default;
     GpuImage(std::shared_ptr<Texture> texture) :
         m_texture(std::move(texture)) {}
 
