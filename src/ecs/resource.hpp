@@ -20,7 +20,10 @@ class Resources {
 
     template<typename T>
     void set(TypeId type_id, T&& val) {
-        m_resources.emplace(type_id, make_val<T>(std::forward<T>(val)));
+        m_resources.insert_or_assign(
+            type_id,
+            make_val<T>(std::forward<T>(val))
+        );
     }
 
     Ref get(TypeId type_id) const {
