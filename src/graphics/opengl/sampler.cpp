@@ -60,8 +60,8 @@ SamplerOpenGL::SamplerOpenGL(const SamplerDescription& desc) : m_desc(desc) {
         opengl_check_error();
     }
 
-    // TODO: Support anisotropic filtering & mipmap
-    bool mipmap = false;
+    // [TODO] Create two separate samplers for mipmapped and non-mipmapped cases
+    bool mipmap = true;
     glSamplerParameteri(
         m_sampler,
         GL_TEXTURE_MIN_FILTER,
