@@ -37,7 +37,7 @@ class GpuImageAdapter : public RenderAssetAdapter<Image, GpuImage> {
             0,
             source_asset.width(),
             source_asset.height(),
-            source_asset.channels(),
+            source_asset.depth(),
             0,
             0
         );
