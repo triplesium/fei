@@ -1,5 +1,7 @@
 #pragma once
 #include "app/plugin.hpp"
+#include "asset/handle.hpp"
+#include "core/image.hpp"
 #include "graphics/buffer.hpp"
 #include "graphics/shader_module.hpp"
 #include "graphics/texture.hpp"
@@ -19,6 +21,8 @@ struct ForwardRenderResources {
     std::shared_ptr<Buffer> shadow_uniform_buffer;
     std::shared_ptr<ResourceLayout> shadow_resource_layout;
     std::shared_ptr<ResourceSet> shadow_resource_set;
+
+    Handle<Image> ibl_brdf_lut_image_handle;
 };
 
 class ForwardRenderPlugin : public Plugin {

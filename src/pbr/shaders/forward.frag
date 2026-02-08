@@ -40,6 +40,8 @@ uniform sampler2D normal_map;
 uniform sampler2D metallic_map;
 uniform sampler2D roughness_map;
 uniform samplerCube irradiance_map;
+uniform samplerCube radiance_map;
+uniform sampler2D brdf_lut;
 
 #define SHADOW_MAP_SIZE 2048.0
 #define LIGHT_FRUSTUM_SIZE 20.0
@@ -54,8 +56,7 @@ uniform samplerCube irradiance_map;
 #define PI 3.141592653589793
 #define PI2 6.283185307179586
 
-vec3 get_normal_from_map()
-{
+vec3 get_normal_from_map() {
     vec3 tangentNormal = texture(normal_map, Frag_TexCoords).xyz * 2.0 - 1.0;
 
     vec3 Q1  = dFdx(Frag_Position);
@@ -253,10 +254,12 @@ void main() {
     if ((material.flags & STANDARD_MATERIAL_FLAGS_METALLIC_MAP_BIT) != 0) {
         metallic = texture(metallic_map, Frag_TexCoords.xy).r;
     }
+
     float roughness = material.roughness;
     if ((material.flags & STANDARD_MATERIAL_FLAGS_ROUGHNESS_MAP_BIT) != 0) {
         roughness = texture(roughness_map, Frag_TexCoords.xy).r;
     }
+    roughness = clamp(roughness, 0.01, 1.0);
 
     vec3 N;
     if ((material.flags & STANDARD_MATERIAL_FLAGS_NORMAL_MAP_BIT) != 0) {
@@ -266,42 +269,56 @@ void main() {
     }
 
     vec3 V = normalize(view.world_position - Frag_Position);
+    vec3 R = reflect(-V, N);
 
     vec3 F0 = vec3(0.04); 
     F0 = mix(F0, albedo, metallic);
     
-    vec3 L = normalize(light.world_position - Frag_Position);
-    vec3 H = normalize(V + L);
-    float distance = length(light.world_position - Frag_Position);
-    float attenuation = 1.0 / (distance * distance);
-    vec3 radiance = light.color * attenuation;
-    float NDF = distribution_ggx(N, H, roughness);   
-    float G   = geometry_smith(N, V, L, roughness);      
-    vec3 F    = fresnel_schlick_roughness(clamp(dot(H, V), 0.0, 1.0), F0, roughness);
-    vec3 numerator    = NDF * G * F;
-    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001; 
-    vec3 specular = numerator / denominator;
+    vec3 lighting = vec3(0.0);
+    {   
+        vec3 L = normalize(light.world_position - Frag_Position);
+        vec3 H = normalize(V + L);
+        float distance = length(light.world_position - Frag_Position);
+        float attenuation = 1.0 / (distance * distance);
+        vec3 radiance = light.color * attenuation;
+        float NDF = distribution_ggx(N, H, roughness);   
+        float G   = geometry_smith(N, V, L, roughness);      
+        vec3 F    = fresnel_schlick(clamp(dot(H, V), 0.0, 1.0), F0);
+        vec3 numerator    = NDF * G * F;
+        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001; 
+        vec3 specular = numerator / denominator;
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+        kD *= 1.0 - metallic;
+        float NdotL = max(dot(N, L), 0.0);
+        lighting += (kD * albedo / PI + specular) * radiance * NdotL * 4;
+    }
+
+    vec3 F = fresnel_schlick_roughness(max(dot(N, V), 0.0), F0, roughness);
+
     vec3 kS = F;
-    vec3 kD = vec3(1.0) - kS;
+    vec3 kD = 1.0 - kS;
     kD *= 1.0 - metallic;
-    float NdotL = max(dot(N, L), 0.0);
-    vec3 lighting = (kD * albedo / PI + specular) * radiance * NdotL * 4;
 
     vec3 irradiance = texture(irradiance_map, N).rgb;
     vec3 diffuse = irradiance * albedo;
-    vec3 ambient = kD * diffuse;
+
+    vec3 prefiltered_color = textureLod(radiance_map, R, roughness * float(textureQueryLevels(radiance_map))).rgb;
+    vec2 brdf = texture(brdf_lut, vec2(max(dot(N, V), 0.0), roughness)).rg;
+    vec3 specular = prefiltered_color * (F * brdf.x + brdf.y);
+    
+    vec3 ambient = kD * diffuse + specular;
 
     // Perform perspective divide
     vec3 shadow_coord = Frag_LightSpacePosition.xyz / Frag_LightSpacePosition.w;
     // Transform NDC to [0,1] range
     shadow_coord = shadow_coord * 0.5 + 0.5;
 
-    float visibility = 0.0;
-    // float visibility = pcss_shadow(
-    //     shadow_map,
-    //     vec4(shadow_coord, 1.0),
-    //     0.08
-    // );
+    float visibility = pcss_shadow(
+        shadow_map,
+        vec4(shadow_coord, 1.0),
+        0.08
+    );
 
     vec3 color = ambient + lighting * visibility;
     color = color / (color + vec3(1.0));

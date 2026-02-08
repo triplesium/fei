@@ -1,5 +1,7 @@
 #include "pbr/cubemap.hpp"
 
+#include "graphics/enums.hpp"
+
 namespace fei {
 
 std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
@@ -10,15 +12,14 @@ std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
         .width = 1024,
         .height = 1024,
         .depth = 6,
-        .mip_level = 1,
+        .mip_level = 11,
         .layer = 1,
         .texture_format = PixelFormat::Rgba32Float,
         .texture_usage =
-            {
-                TextureUsage::Sampled,
-                TextureUsage::Storage,
-                TextureUsage::Cubemap,
-            },
+            {TextureUsage::Sampled,
+             TextureUsage::Storage,
+             TextureUsage::Cubemap,
+             TextureUsage::GenerateMipmaps},
     });
 
     auto resource_set = device.create_resource_set(ResourceSetDescription {
@@ -35,6 +36,7 @@ std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
         equirect_texture->height() / 32,
         6
     );
+    command_buffer->generate_mipmaps(cubemap_texture);
     command_buffer->end();
     device.submit_commands(command_buffer);
 
@@ -50,7 +52,7 @@ std::shared_ptr<Texture> EquirectToCubemap::get_or_create_cubemap(
     if (it != cubemaps.end()) {
         return it->second;
     }
-    auto& equirect_image = images.get(equirect_image_handle).value();
+    const auto& equirect_image = images.get(equirect_image_handle).value();
     auto equirect_texture =
         device.create_texture(equirect_image.texture_description());
     device.update_texture(

@@ -4,6 +4,7 @@
 #include "asset/server.hpp"
 #include "base/log.hpp"
 #include "base/types.hpp"
+#include "core/image.hpp"
 #include "core/transform.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
@@ -18,6 +19,7 @@
 #include "pbr/skybox.hpp"
 #include "rendering/components.hpp"
 #include "rendering/defaults.hpp"
+#include "rendering/gpu_image.hpp"
 #include "rendering/material.hpp"
 #include "rendering/mesh.hpp"
 #include "rendering/render_asset.hpp"
@@ -114,6 +116,9 @@ void setup_forward_render_resources(
                 {resources->shadow_uniform_buffer, resources->shadow_map_texture
                 },
         });
+
+    resources->ibl_brdf_lut_image_handle =
+        asset_server->load<Image>("embeded://ibl_brdf_lut.png");
 }
 
 void shadow_pass(
@@ -264,7 +269,12 @@ void color_pass(
         .address_mode_w = SamplerAddressMode::ClampToEdge,
         .mag_filter = SamplerFilter::Linear,
         .min_filter = SamplerFilter::Linear,
+        .mipmap_filter = SamplerFilter::Linear,
     });
+    auto brdf_lut_texture =
+        gpu_images
+            ->get(forward_render_resources->ibl_brdf_lut_image_handle.id())
+            ->texture();
 
     auto [env_map] = query_env_maps.first();
     auto environment_layout =
@@ -278,14 +288,30 @@ void color_pass(
                  },
                  {
                      .binding = 1,
-                     .name = "irradiance_sampler",
+                     .name = "radiance_map",
+                     .kind = ResourceKind::TextureReadOnly,
+                     .stages = ShaderStages::Fragment,
+                 },
+                 {
+                     .binding = 2,
+                     .name = "cubemap_sampler",
                      .kind = ResourceKind::Sampler,
+                     .stages = ShaderStages::Fragment,
+                 },
+                 {
+                     .binding = 3,
+                     .name = "brdf_lut",
+                     .kind = ResourceKind::TextureReadOnly,
                      .stages = ShaderStages::Fragment,
                  }},
         });
     auto environment_set = device->create_resource_set(ResourceSetDescription {
         .layout = environment_layout,
-        .resources = {env_map.irradiance_cubemap.texture(), cubemap_sampler},
+        .resources =
+            {env_map.irradiance_cubemap.texture(),
+             env_map.radiance_cubemap.texture(),
+             cubemap_sampler,
+             brdf_lut_texture},
     });
 
     for (const auto& [entity, mesh3d, material3d, transform3d] : query) {

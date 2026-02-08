@@ -12,6 +12,8 @@ EMBED(skybox_vert, "skybox.vert");
 EMBED(skybox_frag, "skybox.frag");
 EMBED(equirect2cube_comp, "equirect2cube.comp");
 EMBED(cubemap2irradiance_comp, "cubemap2irradiance.comp");
+EMBED(cubemap2radiance_comp, "cubemap2radiance.comp");
+EMBED(ibl_brdf_lut_png, "ibl_brdf_lut.png");
 
 namespace fei {
 
