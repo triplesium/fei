@@ -64,7 +64,7 @@ template<typename Source>
 void extract_render_assets(
     WorldRef world,
     EventReader<AssetEvent<Source>> events,
-    Res<Assets<Source>> assets
+    CRes<Assets<Source>> assets
 ) {
     std::unordered_set<AssetId> need_extracting, added, removed, modified;
     for (auto event = events.next(); event; event = events.next()) {
