@@ -3,6 +3,7 @@
 #include "asset/assets.hpp"
 #include "asset/event.hpp"
 #include "asset/id.hpp"
+#include "base/log.hpp"
 #include "base/optional.hpp"
 #include "ecs/event.hpp"
 #include "ecs/system.hpp"
@@ -126,12 +127,17 @@ void prepare_assets(
         auto* source_asset = entry.asset;
         render_assets->remove(id);
         auto render_asset = Adapter().prepare_asset(*source_asset, *world);
-        if (render_asset) {
-            render_assets->insert(
-                id,
-                std::make_unique<Target>(std::move(*render_asset))
+        if (!render_asset) {
+            error(
+                "Failed to prepare render asset for source asset with id {}",
+                id
             );
+            continue;
         }
+        render_assets->insert(
+            id,
+            std::make_unique<Target>(std::move(*render_asset))
+        );
     }
     extracted_assets->extracted.clear();
 }
@@ -144,7 +150,10 @@ struct RenderAssetPlugin : public Plugin {
     void setup(App& app) override {
         // app.add_resource<ExtractedAssets<Source>>();
         app.add_resource<RenderAssets<Target>>();
-        app.add_systems(RenderPrepare, extract_render_assets<Source>, prepare_assets<Source, Target, Adapter>);
+        app.add_systems(
+            RenderPrepare,
+            chain(extract_render_assets<Source>, prepare_assets<Source, Target, Adapter>)
+        );
     }
 };
 
