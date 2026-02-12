@@ -156,6 +156,18 @@ class Assets {
 
     Optional<T&> get(AssetId id) { return get(Handle<T>(id, m_state)); }
 
+    Optional<const T&> get(Handle<T> handle) const {
+        auto it = m_assets.find(handle.id());
+        if (it != m_assets.end() && it->second.is_loaded) {
+            return *it->second.asset;
+        }
+        return nullopt;
+    }
+
+    Optional<const T&> get(AssetId id) const {
+        return get(Handle<T>(id, m_state));
+    }
+
     void acquire(AssetId id) {
         auto entry = get_entry(id);
         if (entry) {
