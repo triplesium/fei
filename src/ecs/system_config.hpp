@@ -59,6 +59,11 @@ struct SystemConfigs {
          )),
          ...);
     }
+
+    SystemConfigs(const SystemConfigs&) = delete;
+    SystemConfigs& operator=(const SystemConfigs&) = delete;
+    SystemConfigs(SystemConfigs&&) noexcept = default;
+    SystemConfigs& operator=(SystemConfigs&&) noexcept = default;
 };
 
 struct SystemBeforeTag {
@@ -102,18 +107,49 @@ inline SystemConfig operator|(SystemConfig&& config, SystemInSetTag tag) {
     return std::move(config).in_set(tag.set_id);
 }
 
-inline SystemConfigs all(std::convertible_to<SystemConfig> auto&&... configs) {
+inline SystemConfigs all(std::convertible_to<SystemConfigs> auto&&... configs) {
     std::vector<SystemConfig> systems;
-    (systems.push_back(std::forward<SystemConfig>(configs)), ...);
+    (
+        [config = SystemConfigs(std::forward<decltype(configs)>(configs)),
+         &systems]() mutable {
+            systems.insert(
+                systems.end(),
+                std::make_move_iterator(config.systems.begin()),
+                std::make_move_iterator(config.systems.end())
+            );
+        }(),
+        ...
+    );
     return SystemConfigs {std::move(systems)};
 }
 
-inline SystemConfigs chain(std::convertible_to<SystemConfig> auto&&... configs
+inline SystemConfigs chain(std::convertible_to<SystemConfigs> auto&&... configs
 ) {
+    std::vector<SystemConfigs> system_configs;
+    system_configs.reserve(sizeof...(configs));
+    (system_configs.push_back(
+         SystemConfigs(std::forward<decltype(configs)>(configs))
+     ),
+     ...);
+
+    for (std::size_t i = 0; i < system_configs.size() - 1; ++i) {
+        auto& former = system_configs[i];
+        auto& latter = system_configs[i + 1];
+        for (auto& former_config : former.systems) {
+            for (auto& latter_config : latter.systems) {
+                former_config.dependencies.before.insert(
+                    latter_config.system->hash()
+                );
+            }
+        }
+    }
     std::vector<SystemConfig> systems;
-    (systems.push_back(std::forward<SystemConfig>(configs)), ...);
-    for (int i = 1; i < systems.size(); ++i) {
-        systems[i - 1].dependencies.before.insert(systems[i].system->hash());
+    for (auto& config : system_configs) {
+        systems.insert(
+            systems.end(),
+            std::make_move_iterator(config.systems.begin()),
+            std::make_move_iterator(config.systems.end())
+        );
     }
     return SystemConfigs {std::move(systems)};
 }

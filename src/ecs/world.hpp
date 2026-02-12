@@ -77,7 +77,7 @@ class World {
 
     void sort_systems() { m_schedules.sort_systems(); }
 
-    void configure_sets(uint32_t schedule, SystemSetConfig config) {
+    void configure_sets(uint32_t schedule, SystemSetConfigs config) {
         m_schedules.configure_sets(schedule, std::move(config));
     }
 

@@ -66,13 +66,15 @@ class Schedule {
         m_graph.sort();
     }
 
-    void configure_set(SystemSetConfig config) {
-        m_system_set_configs[config.set_id] = std::move(config);
+    void configure_set(SystemSetConfigs config) {
+        for (auto& set_config : config.sets) {
+            m_system_set_configs[set_config.set_id] = std::move(set_config);
+        }
     }
 
-    void configure_sets(std::convertible_to<SystemSetConfig> auto&&... configs
+    void configure_sets(std::convertible_to<SystemSetConfigs> auto&&... configs
     ) {
-        (configure_set(std::forward<SystemSetConfig>(configs)), ...);
+        (configure_set(std::forward<SystemSetConfigs>(configs)), ...);
     }
 
     void run_systems(World& world);
@@ -89,6 +91,11 @@ class Schedule {
                 if (!m_system_set_configs.contains(set_id)) {
                     m_system_set_configs.emplace(set_id, SystemSetConfig {});
                 }
+            }
+        }
+        for (auto& [set_id, set_config] : m_system_set_configs) {
+            if (!m_system_set_hash_map.contains(set_id)) {
+                m_system_set_hash_map[set_id] = {};
             }
         }
         // Resolve in_sets
@@ -167,7 +174,7 @@ class Schedules {
 
     void configure_sets(
         uint32_t schedule,
-        std::convertible_to<SystemSetConfig> auto&&... configs
+        std::convertible_to<SystemSetConfigs> auto&&... configs
     ) {
         m_schedules[schedule].configure_sets(
             std::forward<decltype(configs)>(configs)...
