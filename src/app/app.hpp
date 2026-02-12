@@ -71,7 +71,7 @@ class App {
 
     App& configure_sets(
         uint32_t schedule,
-        std::convertible_to<SystemSetConfig> auto&&... config
+        std::convertible_to<SystemSetConfigs> auto&&... config
     ) {
         m_world.configure_sets(
             schedule,
@@ -80,9 +80,16 @@ class App {
         return *this;
     }
 
+    // TODO: Remove this and use init_resource instead
     template<typename R>
     App& add_resource() {
         m_world.add_resource(R {});
+        return *this;
+    }
+
+    template<FromWorld R>
+    App& init_resource() {
+        m_world.init_resource<R>();
         return *this;
     }
 

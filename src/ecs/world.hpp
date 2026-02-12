@@ -14,6 +14,11 @@
 
 namespace fei {
 
+class World;
+
+template<typename T>
+concept FromWorld = std::constructible_from<T, World&>;
+
 class World {
   private:
     Entities m_entities;
@@ -86,6 +91,12 @@ class World {
     T& add_resource_as(U&& val) {
         m_resources.set(type_id<T>(), std::forward<U>(val));
         return m_resources.get(type_id<T>()).template get<T>();
+    }
+
+    template<FromWorld T>
+    T& init_resource() {
+        T resource(*this);
+        return add_resource(std::move(resource));
     }
 
     template<typename T>
