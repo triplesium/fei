@@ -99,7 +99,12 @@ class Assets {
         }
         if (m_cache.contains(context.asset_path())) {
             AssetId cached_id = m_cache[context.asset_path()];
-            return Handle<T>(cached_id, m_state);
+            if (auto asset_opt = get(cached_id)) {
+                return Handle<T>(cached_id, m_state);
+            } else {
+                // Cache is stale, remove it
+                m_cache.erase(context.asset_path());
+            }
         }
         std::expected<std::unique_ptr<T>, std::error_code> asset =
             m_loader->load(reader, context);
@@ -109,7 +114,9 @@ class Assets {
                 context.asset_path().as_string()
             );
         }
-        return add(std::move(*asset));
+        auto handle = add(std::move(*asset));
+        m_cache[context.asset_path()] = handle.id();
+        return handle;
     }
 
     Handle<T> add(std::unique_ptr<T> asset) {
@@ -154,7 +161,17 @@ class Assets {
 
     Optional<T&> get(Handle<T> handle);
 
-    Optional<T&> get(AssetId id) { return get(Handle<T>(id, m_state)); }
+    Optional<T&> get(AssetId id) {
+        Optional<Entry&> entry = get_entry(id);
+        if (!entry || !entry->is_loaded) {
+            return {};
+        }
+        m_event_queue.push_back(AssetEvent<T> {
+            .type = AssetEventType::Modified,
+            .id = id,
+        });
+        return *entry->asset;
+    }
 
     Optional<const T&> get(Handle<T> handle) const {
         auto it = m_assets.find(handle.id());
@@ -181,6 +198,7 @@ class Assets {
         auto entry = get_entry(id);
         if (entry) {
             entry->ref_count--;
+            // TODO: Queue unloading, and unload after some time
             if (entry->ref_count == 0) {
                 unload(id);
             }
@@ -201,7 +219,6 @@ class Assets {
     Optional<Entry&> get_entry(AssetId id) {
         auto it = m_assets.find(id);
         if (it == m_assets.end()) {
-            error("Asset not found: {}", id);
             return {};
         }
         return it->second;
@@ -216,15 +233,7 @@ namespace fei {
 
 template<typename T>
 Optional<T&> Assets<T>::get(Handle<T> handle) {
-    Optional<Entry&> entry = get_entry(handle.id());
-    if (!entry || !entry->is_loaded) {
-        return {};
-    }
-    m_event_queue.push_back(AssetEvent<T> {
-        .type = AssetEventType::Modified,
-        .id = handle.id(),
-    });
-    return *entry->asset;
+    return get(handle.id());
 }
 
 } // namespace fei
