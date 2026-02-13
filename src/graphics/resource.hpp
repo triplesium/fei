@@ -26,7 +26,77 @@ struct ResourceLayoutElementDescription {
 
 struct ResourceLayoutDescription {
     std::vector<ResourceLayoutElementDescription> elements;
+
+    static ResourceLayoutDescription sequencial(
+        BitFlags<ShaderStages> stages,
+        std::vector<ResourceLayoutElementDescription> resources
+    ) {
+        ResourceLayoutDescription desc;
+        uint32 current_binding = 0;
+        for (auto& resource : resources) {
+            resource.binding = current_binding++;
+            resource.stages = stages;
+            desc.elements.push_back(std::move(resource));
+        }
+        return desc;
+    }
 };
+
+inline ResourceLayoutElementDescription uniform_buffer(std::string name) {
+    return ResourceLayoutElementDescription {
+        .binding = 0,
+        .name = std::move(name),
+        .kind = ResourceKind::UniformBuffer,
+        .stages = {},
+    };
+}
+
+inline ResourceLayoutElementDescription texture_read_only(std::string name) {
+    return ResourceLayoutElementDescription {
+        .binding = 0,
+        .name = std::move(name),
+        .kind = ResourceKind::TextureReadOnly,
+        .stages = {},
+    };
+}
+
+inline ResourceLayoutElementDescription texture_read_write(std::string name) {
+    return ResourceLayoutElementDescription {
+        .binding = 0,
+        .name = std::move(name),
+        .kind = ResourceKind::TextureReadWrite,
+        .stages = {},
+    };
+}
+
+inline ResourceLayoutElementDescription sampler(std::string name) {
+    return ResourceLayoutElementDescription {
+        .binding = 0,
+        .name = std::move(name),
+        .kind = ResourceKind::Sampler,
+        .stages = {},
+    };
+}
+
+inline ResourceLayoutElementDescription
+storage_buffer_read_only(std::string name) {
+    return ResourceLayoutElementDescription {
+        .binding = 0,
+        .name = std::move(name),
+        .kind = ResourceKind::StorageBufferReadOnly,
+        .stages = {},
+    };
+}
+
+inline ResourceLayoutElementDescription
+storage_buffer_read_write(std::string name) {
+    return ResourceLayoutElementDescription {
+        .binding = 0,
+        .name = std::move(name),
+        .kind = ResourceKind::StorageBufferReadWrite,
+        .stages = {},
+    };
+}
 
 class ResourceLayout {
   public:
