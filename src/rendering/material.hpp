@@ -9,7 +9,9 @@
 #include "rendering/gpu_image.hpp"
 #include "rendering/render_asset.hpp"
 #include "rendering/shader.hpp"
+#include "rendering/shader_cache.hpp"
 
+#include <concepts>
 #include <memory>
 #include <vector>
 
@@ -59,6 +61,10 @@ class Material {
         const RenderingDefaults& defaults,
         const RenderAssets<GpuImage>& gpu_images
     ) const = 0;
+
+    // Used for caching prepared materials and pipelines. Materials with the
+    // same hash value will share the same resource layout.
+    virtual std::size_t hash() const = 0;
 };
 
 class PreparedMaterial {
@@ -66,24 +72,27 @@ class PreparedMaterial {
     std::vector<std::shared_ptr<ShaderModule>> m_shaders;
     std::shared_ptr<ResourceLayout> m_layout;
     std::shared_ptr<ResourceSet> m_resource_set;
+    std::size_t m_hash;
 
   public:
     PreparedMaterial(
         std::vector<std::shared_ptr<ShaderModule>> shaders,
         std::shared_ptr<ResourceLayout> layout,
-        std::shared_ptr<ResourceSet> resource_set
+        std::shared_ptr<ResourceSet> resource_set,
+        std::size_t hash
     ) :
         m_shaders(std::move(shaders)), m_layout(std::move(layout)),
-        m_resource_set(std::move(resource_set)) {}
+        m_resource_set(std::move(resource_set)), m_hash(hash) {}
 
     const std::vector<std::shared_ptr<ShaderModule>>& shaders() const {
         return m_shaders;
     }
     std::shared_ptr<ResourceLayout> resource_layout() const { return m_layout; }
     std::shared_ptr<ResourceSet> resource_set() const { return m_resource_set; }
+    std::size_t hash() const { return m_hash; }
 };
 
-template<typename SourceMaterial>
+template<std::derived_from<Material> SourceMaterial>
 class MaterialAdapter
     : public RenderAssetAdapter<SourceMaterial, PreparedMaterial> {
   public:
@@ -92,6 +101,7 @@ class MaterialAdapter
         auto& device = world.resource<GraphicsDevice>();
         auto& rendering_defaults = world.resource<RenderingDefaults>();
         auto& gpu_images = world.resource<RenderAssets<GpuImage>>();
+        auto& shader_cache = world.resource<ShaderCache>();
 
         auto layout = source_asset.create_resource_layout(
             device,
@@ -117,25 +127,15 @@ class MaterialAdapter
         };
 
         std::vector<std::shared_ptr<ShaderModule>> shader_modules;
-        auto& shader_assets = world.resource<Assets<Shader>>();
         for (const auto& shader_handle : shaders) {
-            auto shader_asset = shader_assets.get(shader_handle);
-            if (!shader_asset) {
-                return nullopt;
-            }
-            auto shader_module = device.create_shader_module(ShaderDescription {
-                .stage = shader_asset->stage,
-                .source = shader_asset->source,
-            });
-            if (!shader_module) {
-                return nullopt;
-            }
+            auto shader_module = shader_cache.get(shader_handle);
             shader_modules.push_back(shader_module);
         }
         return PreparedMaterial {
             std::move(shader_modules),
             std::move(layout),
-            std::move(resource_set)
+            std::move(resource_set),
+            source_asset.hash()
         };
     }
 };
