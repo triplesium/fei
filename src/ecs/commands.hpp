@@ -75,6 +75,14 @@ class Commands {
         m_commands_queue.add_command(std::move(command));
     }
 
+    template<typename R>
+    void add_resource(R&& resource) {
+        m_commands_queue.add_command([res = std::forward<R>(resource
+                                      )](World& world) {
+            world.add_resource(std::move(res));
+        });
+    }
+
     EntityCommands entity(Entity entity) {
         return EntityCommands(m_world, entity);
     }
