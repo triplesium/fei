@@ -31,6 +31,8 @@ GraphicsDeviceOpenGL::GraphicsDeviceOpenGL() {
     opengl_check_error();
     glEnable(GL_DEPTH_TEST);
     opengl_check_error();
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+    opengl_check_error();
 }
 
 std::shared_ptr<ShaderModule>
