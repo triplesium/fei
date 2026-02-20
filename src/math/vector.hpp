@@ -2,6 +2,7 @@
 
 #include "math/common.hpp"
 
+#include <array>
 #include <cmath>
 
 namespace fei {
@@ -173,6 +174,8 @@ class Vector3 {
     Vector3() = default;
     Vector3(float x, float y, float z) : x {x}, y {y}, z {z} {}
     explicit Vector3(float scalar) : x {scalar}, y {scalar}, z {scalar} {}
+    explicit Vector3(const std::array<float, 3>& arr) :
+        x {arr[0]}, y {arr[1]}, z {arr[2]} {}
 
     explicit operator Vector2() const;
 
@@ -324,6 +327,12 @@ class Vector3 {
     static Vector3 project(const Vector3& v, const Vector3& normal) {
         return v - dot(v, normal) * normal;
     }
+
+    float dot(const Vector3& rhs) const { return Vector3::dot(*this, rhs); }
+    Vector3 cross(const Vector3& rhs) const {
+        return Vector3::cross(*this, rhs);
+    }
+    float angle(const Vector3& rhs) const { return Vector3::angle(*this, rhs); }
 };
 
 class Vector4 {
