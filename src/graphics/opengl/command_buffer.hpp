@@ -66,6 +66,24 @@ class CommandBufferOpenGL : public CommandBuffer {
     ) override;
     virtual void generate_mipmaps_impl(std::shared_ptr<Texture> texture
     ) override;
+    virtual void copy_texture_impl(
+        std::shared_ptr<Texture> src,
+        uint32 src_x,
+        uint32 src_y,
+        uint32 src_z,
+        uint32 src_mip_level,
+        uint32 src_base_array_layer,
+        std::shared_ptr<Texture> dst,
+        uint32 dst_x,
+        uint32 dst_y,
+        uint32 dst_z,
+        uint32 dst_mip_level,
+        uint32 dst_base_array_layer,
+        uint32 width,
+        uint32 height,
+        uint32 depth,
+        uint32 layer_count
+    ) override;
 
   private:
     uint32 calculate_uniform_block_base_index(uint32 slot);
