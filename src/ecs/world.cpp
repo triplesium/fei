@@ -18,10 +18,11 @@ void World::add_component(Entity entity, Ref ref) {
     auto old_location = m_entities.get_location(entity);
     auto old_components =
         m_archetypes.get(old_location.archetype_id).components();
-    FEI_ASSERT(
-        std::find(old_components.begin(), old_components.end(), type_id) ==
-        old_components.end()
-    );
+    if (has_component(entity, type_id)) {
+        m_archetypes.get(old_location.archetype_id)
+            .set_component(type_id, old_location.row, ref);
+        return;
+    }
 
     auto new_components = old_components;
     new_components.push_back(type_id);
