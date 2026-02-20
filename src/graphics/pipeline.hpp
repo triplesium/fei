@@ -1,4 +1,5 @@
 #pragma once
+#include "base/hash.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/resource.hpp"
 #include "graphics/shader_module.hpp"
@@ -212,4 +213,13 @@ class Pipeline {
   public:
     virtual ~Pipeline() = default;
 };
+
 } // namespace fei
+
+MAKE_STD_HASHABLE(
+    fei::VertexAttributeDescription,
+    location,
+    offset,
+    format,
+    normalized
+)
