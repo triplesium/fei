@@ -1,6 +1,7 @@
 #pragma once
 #include "base/optional.hpp"
 #include "core/transform.hpp"
+#include "ecs/fwd.hpp"
 #include "ecs/query.hpp"
 #include "ecs/world.hpp"
 #include "graphics/buffer.hpp"
@@ -14,6 +15,7 @@
 #include <map>
 #include <memory>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace fei {
@@ -26,17 +28,18 @@ class Mesh {
 
   public:
     static inline MeshVertexAttribute ATTRIBUTE_POSITION =
-        {"Vertex_Position", 0, VertexFormat::Float3};
+        {.name = "Vertex_Position", .id = 0, .format = VertexFormat::Float3};
     static inline MeshVertexAttribute ATTRIBUTE_NORMAL =
-        {"Vertex_Normal", 1, VertexFormat::Float3};
+        {.name = "Vertex_Normal", .id = 1, .format = VertexFormat::Float3};
     static inline MeshVertexAttribute ATTRIBUTE_UV_0 =
-        {"Vertex_Uv", 2, VertexFormat::Float2};
+        {.name = "Vertex_Uv", .id = 2, .format = VertexFormat::Float2};
     static inline MeshVertexAttribute ATTRIBUTE_UV_1 =
-        {"Vertex_Uv1", 3, VertexFormat::Float2};
+        {.name = "Vertex_Uv1", .id = 3, .format = VertexFormat::Float2};
+    static inline MeshVertexAttribute ATTRIBUTE_TANGENT =
+        {.name = "Vertex_Tangent", .id = 4, .format = VertexFormat::Float4};
     static inline MeshVertexAttribute ATTRIBUTE_COLOR =
-        {"Vertex_Color", 4, VertexFormat::Float4};
+        {.name = "Vertex_Color", .id = 5, .format = VertexFormat::Float4};
 
-  public:
     Mesh(RenderPrimitive primitive) : m_primitive(primitive) {}
 
     RenderPrimitive primitive() const { return m_primitive; }
@@ -49,6 +52,18 @@ class Mesh {
     void insert_indices(std::vector<std::uint32_t> indices) {
         m_indices = std::move(indices);
     }
+
+    VertexAttributeValues get_attribute(MeshVertexAttributeId id) const {
+        return m_attributes.at(id).values;
+    }
+
+    bool has_attribute(MeshVertexAttributeId id) const {
+        return m_attributes.find(id) != m_attributes.end();
+    }
+
+    void compute_smooth_normals();
+    void center_positions();
+    void generate_tangents();
 
     std::size_t vertex_count() const;
     std::uint64_t vertex_size() const;
@@ -77,8 +92,9 @@ class GpuMesh {
         std::size_t index_buffer_size,
         std::size_t vertex_count
     ) :
-        m_vertex_buffer(vertex_buffer), m_index_buffer(index_buffer),
-        m_primitive(primitive), m_vertex_layout(vertex_layout),
+        m_vertex_buffer(std::move(vertex_buffer)),
+        m_index_buffer(std::move(index_buffer)), m_primitive(primitive),
+        m_vertex_layout(std::move(vertex_layout)),
         m_index_buffer_size(index_buffer_size), m_vertex_count(vertex_count) {}
     std::shared_ptr<Buffer> vertex_buffer() const { return m_vertex_buffer; }
     Optional<std::shared_ptr<Buffer>> index_buffer() const {
