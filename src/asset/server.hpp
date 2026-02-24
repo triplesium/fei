@@ -24,7 +24,7 @@ class AssetServer {
     AssetServer& operator=(const AssetServer&) = delete;
 
     // Default move constructor and move assignment operator
-    AssetServer(AssetServer&&) = default;
+    AssetServer(AssetServer&&) noexcept = default;
     AssetServer& operator=(AssetServer&&) = default;
 
     template<typename T, std::derived_from<AssetLoader<T>> Loader>
