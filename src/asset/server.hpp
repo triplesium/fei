@@ -51,7 +51,7 @@ class AssetServer {
     }
 
     template<typename T>
-    Handle<T> load(AssetPath path) {
+    Handle<T> load(const AssetPath& path) const {
         if (!m_app->has_resource<Assets<T>>()) {
             fatal("No asset found for type: {}", type_name<T>());
         }
@@ -68,7 +68,7 @@ class AssetServer {
                 source_name
             );
         }
-        LoadContext context(path);
+        LoadContext context(*this, path);
         auto reader = source->get_reader(path.path());
         return assets.load(reader, context);
     }
@@ -83,5 +83,10 @@ class AssetServer {
         m_sources.emplace(std::move(name), std::move(source));
     }
 };
+
+template<typename T>
+Handle<T> LoadContext::load(const AssetPath& path) const {
+    return m_asset_server.template load<T>(path);
+}
 
 } // namespace fei
