@@ -1,5 +1,4 @@
 #pragma once
-#include "asset/handle.hpp"
 #include "asset/plugin.hpp"
 #include "ecs/world.hpp"
 #include "graphics/graphics_device.hpp"
@@ -13,20 +12,34 @@
 
 #include <concepts>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 namespace fei {
+
+enum class MaterialShaderType : uint8 {
+    Vertex,
+    Fragment,
+    PrepassVertex,
+    PrepassFragment,
+    DeferredVertex,
+    DeferredFragment,
+};
 
 class Material {
   public:
     virtual ~Material() = default;
     virtual ShaderRef vertex_shader() const = 0;
     virtual ShaderRef fragment_shader() const = 0;
+    virtual ShaderRef prepass_vertex_shader() const = 0;
+    virtual ShaderRef prepass_fragment_shader() const = 0;
+    virtual ShaderRef deferred_vertex_shader() const = 0;
+    virtual ShaderRef deferred_fragment_shader() const = 0;
 
     virtual std::shared_ptr<ResourceLayout> create_resource_layout(
         GraphicsDevice& device,
-        const RenderingDefaults& defaults,
-        const RenderAssets<GpuImage>& gpu_images
+        const RenderingDefaults& /*defaults*/,
+        const RenderAssets<GpuImage>& /*gpu_images*/
     ) const {
         auto elements = resource_layout_elements();
         if (elements.empty()) {
@@ -69,14 +82,16 @@ class Material {
 
 class PreparedMaterial {
   private:
-    std::vector<std::shared_ptr<ShaderModule>> m_shaders;
+    std::unordered_map<MaterialShaderType, std::shared_ptr<ShaderModule>>
+        m_shaders;
     std::shared_ptr<ResourceLayout> m_layout;
     std::shared_ptr<ResourceSet> m_resource_set;
     std::size_t m_hash;
 
   public:
     PreparedMaterial(
-        std::vector<std::shared_ptr<ShaderModule>> shaders,
+        std::unordered_map<MaterialShaderType, std::shared_ptr<ShaderModule>>
+            shaders,
         std::shared_ptr<ResourceLayout> layout,
         std::shared_ptr<ResourceSet> resource_set,
         std::size_t hash
@@ -84,8 +99,12 @@ class PreparedMaterial {
         m_shaders(std::move(shaders)), m_layout(std::move(layout)),
         m_resource_set(std::move(resource_set)), m_hash(hash) {}
 
-    const std::vector<std::shared_ptr<ShaderModule>>& shaders() const {
-        return m_shaders;
+    std::shared_ptr<ShaderModule> shader(MaterialShaderType type) const {
+        auto it = m_shaders.find(type);
+        if (it != m_shaders.end()) {
+            return it->second;
+        }
+        return nullptr;
     }
     std::shared_ptr<ResourceLayout> resource_layout() const { return m_layout; }
     std::shared_ptr<ResourceSet> resource_set() const { return m_resource_set; }
@@ -120,17 +139,32 @@ class MaterialAdapter
         if (!resource_set) {
             return nullopt;
         }
-        auto& asset_server = world.resource<AssetServer>();
-        std::vector<Handle<Shader>> shaders = {
-            source_asset.vertex_shader().resolve(asset_server),
-            source_asset.fragment_shader().resolve(asset_server),
+        std::unordered_map<MaterialShaderType, std::shared_ptr<ShaderModule>>
+            shader_modules;
+        auto load_shader = [&](MaterialShaderType type, const ShaderRef& ref) {
+            shader_modules[type] = shader_cache.get(ref);
         };
-
-        std::vector<std::shared_ptr<ShaderModule>> shader_modules;
-        for (const auto& shader_handle : shaders) {
-            auto shader_module = shader_cache.get(shader_handle);
-            shader_modules.push_back(shader_module);
-        }
+        load_shader(MaterialShaderType::Vertex, source_asset.vertex_shader());
+        load_shader(
+            MaterialShaderType::Fragment,
+            source_asset.fragment_shader()
+        );
+        load_shader(
+            MaterialShaderType::PrepassVertex,
+            source_asset.prepass_vertex_shader()
+        );
+        load_shader(
+            MaterialShaderType::PrepassFragment,
+            source_asset.prepass_fragment_shader()
+        );
+        load_shader(
+            MaterialShaderType::DeferredVertex,
+            source_asset.deferred_vertex_shader()
+        );
+        load_shader(
+            MaterialShaderType::DeferredFragment,
+            source_asset.deferred_fragment_shader()
+        );
         return PreparedMaterial {
             std::move(shader_modules),
             std::move(layout),
