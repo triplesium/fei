@@ -6,8 +6,10 @@
 #include "rendering/gpu_image.hpp"
 #include "rendering/mesh.hpp"
 #include "rendering/mesh_loader.hpp"
+#include "rendering/pipeline_cache.hpp"
 #include "rendering/render_asset.hpp"
 #include "rendering/shader.hpp"
+#include "rendering/shader_cache.hpp"
 #include "rendering/view.hpp"
 #include "window/window.hpp"
 
@@ -36,8 +38,18 @@ void RenderingPlugin::setup(App& app) {
            RenderAssetPlugin<Mesh, GpuMesh, GpuMeshAdapter> {},
            RenderingDefaultsPlugin {}
     )
-        .add_resource<ViewResource>()
-        .add_systems(StartUp, init_view_resource)
+        .add_resource(PipelineCache(app.resource<GraphicsDevice>()))
+        .add_systems(
+            First,
+            [](Commands commands,
+               Res<AssetServer> asset_server,
+               Res<Assets<Shader>> shaders,
+               Res<GraphicsDevice> device) {
+                commands.add_resource(
+                    ShaderCache(*asset_server, *shaders, *device)
+                );
+            }
+        )
         .add_systems(
             RenderPrepare,
             prepare_view_resource,
