@@ -1,6 +1,9 @@
 #pragma once
+#include "base/hash.hpp"
+#include "base/optional.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/pipeline.hpp"
+
 #include <array>
 #include <cstdint>
 #include <string>
@@ -40,6 +43,7 @@ class VertexAttributeValues {
     std::size_t size() const;
     const void* data() const;
     VertexFormat vertex_format() const;
+    Optional<std::vector<std::array<float, 3>>&> as_float3();
 };
 
 struct MeshAttributeData {
@@ -96,3 +100,6 @@ struct MeshVertexBufferLayout {
 };
 
 } // namespace fei
+
+MAKE_STD_HASHABLE(fei::VertexBufferLayout, stride, step_mode, attributes)
+MAKE_STD_HASHABLE(fei::MeshVertexBufferLayout, attribute_ids, layout)

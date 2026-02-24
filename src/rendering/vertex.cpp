@@ -1,4 +1,7 @@
 #include "rendering/vertex.hpp"
+
+#include "base/optional.hpp"
+
 #include <tuple>
 
 namespace fei {
@@ -41,6 +44,14 @@ VertexFormat VertexAttributeValues::vertex_format() const {
         },
         m_value
     );
+}
+
+Optional<std::vector<std::array<float, 3>>&>
+VertexAttributeValues::as_float3() {
+    if (auto* ptr = std::get_if<std::vector<std::array<float, 3>>>(&m_value)) {
+        return *ptr;
+    }
+    return nullopt;
 }
 
 } // namespace fei
