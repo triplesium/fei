@@ -62,16 +62,16 @@ struct EmbededAssetsRegistrar {
 
 } // namespace fei
 
-#define EMBED(name, asset_name)                      \
-    extern "C" {                                     \
-    extern const uint8_t _binary_##name##_start[];   \
-    extern const uint8_t _binary_##name##_end[];     \
-    }                                                \
-    namespace {                                      \
-    static const fei::detail::EmbededAssetsRegistrar \
-        _embeded_asset_registrar_##name(             \
-            asset_name,                              \
-            _binary_##name##_start,                  \
-            _binary_##name##_end                     \
-        );                                           \
+#define EMBED(name, asset_name)                                  \
+    extern "C" {                                                 \
+    extern const uint8_t _binary_##name##_start[];               \
+    extern const uint8_t _binary_##name##_end[];                 \
+    }                                                            \
+    namespace {                                                  \
+    static const fei::detail::EmbededAssetsRegistrar             \
+        _embeded_asset_registrar_##name(                         \
+            asset_name,                                          \
+            static_cast<const uint8_t*>(_binary_##name##_start), \
+            static_cast<const uint8_t*>(_binary_##name##_end)    \
+        );                                                       \
     }\
