@@ -38,7 +38,13 @@ void World::add_component(Entity entity, Ref ref) {
         auto old_ref = old_archetype.get_component(type_id, old_row);
         new_archetype.set_component(type_id, new_row, old_ref);
     }
-    old_archetype.remove_row(old_row);
+
+    if (auto moved_entity = old_archetype.remove_row(old_row)) {
+        m_entities.set_location(
+            *moved_entity,
+            {old_location.archetype_id, old_row}
+        );
+    }
     m_entities.set_location(entity, {new_archetype_id, new_row});
 }
 
@@ -69,7 +75,14 @@ void World::remove_component(Entity entity, TypeId type_id) {
         auto old_ref = old_archetype.get_component(id, old_row);
         new_archetype.set_component(id, new_row, old_ref);
     }
-    old_archetype.remove_row(old_row);
+
+    if (auto moved_entity = old_archetype.remove_row(old_row)) {
+        m_entities.set_location(
+            *moved_entity,
+            {old_location.archetype_id, old_row}
+        );
+    }
+
     m_entities.set_location(entity, {new_archetype_id, new_row});
 }
 

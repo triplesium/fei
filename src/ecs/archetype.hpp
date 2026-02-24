@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/debug.hpp"
+#include "base/optional.hpp"
 #include "ecs/column.hpp"
 #include "ecs/fwd.hpp"
 
@@ -56,22 +57,31 @@ class Archetype {
         return m_entities.size() - 1;
     }
 
-    void remove_row(std::size_t row) {
+    Optional<Entity> remove_row(std::size_t row) {
         for (auto& [type, column] : m_columns) {
             column.swap_remove(static_cast<uint32_t>(row));
         }
-        m_entities[row] = m_entities.back();
+
+        if (row == m_entities.size() - 1) {
+            m_entities.pop_back();
+            return nullopt;
+        }
+
+        auto moved_entity = m_entities.back();
+        m_entities[row] = moved_entity;
         m_entities.pop_back();
+
+        return moved_entity;
     }
 
-    void remove_entity(Entity entity) {
+    Optional<Entity> remove_entity(Entity entity) {
         auto it = std::find(m_entities.begin(), m_entities.end(), entity);
         if (it == m_entities.end()) {
             error("Entity {} not found in archetype {}", entity, m_id);
-            return;
+            return nullopt;
         }
         std::size_t row = std::distance(m_entities.begin(), it);
-        remove_row(row);
+        return remove_row(row);
     }
 
     Ref get_component(TypeId type_id, std::size_t row) const {
