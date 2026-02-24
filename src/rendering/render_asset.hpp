@@ -7,8 +7,10 @@
 #include "base/optional.hpp"
 #include "ecs/event.hpp"
 #include "ecs/system.hpp"
+#include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
 #include "ecs/world.hpp"
+#include "rendering/plugin.hpp"
 
 #include <memory>
 #include <unordered_set>
@@ -19,6 +21,7 @@ namespace fei {
 template<typename Source, typename Target>
 class RenderAssetAdapter {
   public:
+    virtual ~RenderAssetAdapter() = default;
     virtual Optional<Target>
     prepare_asset(const Source& source_asset, World& world) = 0;
 };
@@ -151,8 +154,9 @@ struct RenderAssetPlugin : public Plugin {
         // app.add_resource<ExtractedAssets<Source>>();
         app.add_resource<RenderAssets<Target>>();
         app.add_systems(
-            RenderPrepare,
-            chain(extract_render_assets<Source>, prepare_assets<Source, Target, Adapter>)
+            RenderUpdate,
+            chain(extract_render_assets<Source>, prepare_assets<Source, Target, Adapter>) |
+                in_set<RenderingSystems::PrepareAssets>()
         );
     }
 };

@@ -1,71 +1,55 @@
 #include "rendering/view.hpp"
 
+#include "ecs/commands.hpp"
+#include "ecs/query.hpp"
 #include "math/matrix.hpp"
 
 namespace fei {
 
-void init_view_resource(
+void init_camera_view_uniform(
+    Query<Entity, Camera3d, Transform3d>::Filter<Without<ViewUniformBuffer>>
+        query,
     Res<GraphicsDevice> device,
-    Res<ViewResource> view_resource
+    Commands commands
 ) {
-    view_resource->uniform_buffer = device->create_buffer(BufferDescription {
-        .size = sizeof(ViewUniform),
-        .usages = BufferUsages::Uniform,
-    });
-
-    view_resource->resource_layout =
-        device->create_resource_layout(ResourceLayoutDescription {
-            .elements =
-                {
-                    ResourceLayoutElementDescription {
-                        .binding = 1,
-                        .name = "View",
-                        .kind = ResourceKind::UniformBuffer,
-                        .stages =
-                            {ShaderStages::Vertex, ShaderStages::Fragment},
-                    },
-                },
+    for (auto [entity, camera, transform] : query) {
+        auto buffer = device->create_buffer(BufferDescription {
+            .size = sizeof(ViewUniform),
+            .usages = BufferUsages::Uniform,
         });
-
-    view_resource->resource_set =
-        device->create_resource_set(ResourceSetDescription {
-            .layout = view_resource->resource_layout,
-            .resources = {view_resource->uniform_buffer},
-        });
+        commands.entity(entity).add(ViewUniformBuffer {buffer});
+    }
 }
 
-void prepare_view_resource(
-    Res<GraphicsDevice> device,
-    Res<ViewResource> view_uniform,
-    Query<Camera3d, Transform3d> query
+void prepare_camera_view_uniform(
+    Query<Camera3d, Transform3d, ViewUniformBuffer> query,
+    Res<GraphicsDevice> device
 ) {
-    if (query.empty()) {
-        return;
+    for (auto [camera, transform, view_uniform_buffer_component] : query) {
+        auto view = look_at(
+            transform.position,
+            transform.position + transform.forward(),
+            Vector3 {0.0f, 1.0f, 0.0f}
+        );
+        auto projection = perspective(
+            camera.fov_y * DEG2RAD,
+            camera.aspect_ratio,
+            camera.near_plane,
+            camera.far_plane
+        );
+        ViewUniform uniform {
+            .clip_from_world = projection * view,
+            .view_from_world = view,
+            .clip_from_view = projection,
+            .world_position = transform.position,
+        };
+        device->update_buffer(
+            view_uniform_buffer_component.buffer,
+            0,
+            &uniform,
+            sizeof(ViewUniform)
+        );
     }
-    auto [camera, transform] = query.first();
-    auto view = look_at(
-        transform.position,
-        transform.position + transform.forward(),
-        Vector3 {0.0f, 1.0f, 0.0f}
-    );
-    auto projection = perspective(
-        camera.fov_y * DEG2RAD,
-        camera.aspect_ratio,
-        camera.near_plane,
-        camera.far_plane
-    );
-    ViewUniform uniform {
-        .clip_from_world = projection * view,
-        .view_from_world = view,
-        .clip_from_view = projection,
-        .world_position = transform.position,
-    };
-    device->update_buffer(
-        view_uniform->uniform_buffer,
-        0,
-        &uniform,
-        sizeof(ViewUniform)
-    );
 }
 
 } // namespace fei

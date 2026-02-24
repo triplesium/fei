@@ -2,6 +2,10 @@
 
 #include "app/app.hpp"
 #include "asset/plugin.hpp"
+#include "ecs/commands.hpp"
+#include "ecs/system_config.hpp"
+#include "ecs/system_params.hpp"
+#include "graphics/graphics_device.hpp"
 #include "rendering/defaults.hpp"
 #include "rendering/gpu_image.hpp"
 #include "rendering/mesh.hpp"
@@ -20,6 +24,7 @@ namespace fei {
 void render_begin(Res<GraphicsDevice> device) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
+    command_buffer->set_framebuffer(device->main_framebuffer());
     command_buffer->clear_color(Color4F {0.0f, 0.0f, 0.0f, 1.0f});
     command_buffer->clear_depth(1.0f);
     command_buffer->end();
@@ -31,13 +36,21 @@ void render_end(Res<Window> win) {
 }
 
 void RenderingPlugin::setup(App& app) {
-    app.add_plugins(
-           AssetPlugin<Shader, ShaderLoader> {},
-           AssetPlugin<Mesh, MeshLoader> {},
-           RenderAssetPlugin<Image, GpuImage, GpuImageAdapter> {},
-           RenderAssetPlugin<Mesh, GpuMesh, GpuMeshAdapter> {},
-           RenderingDefaultsPlugin {}
+    app.configure_sets(
+           RenderUpdate,
+           chain(
+               RenderingSystems::PrepareAssets(),
+               RenderingSystems::PrepareResources(),
+               RenderingSystems::Render()
+           )
     )
+        .add_plugins(
+            AssetPlugin<Shader, ShaderLoader> {},
+            AssetPlugin<Mesh, MeshLoader> {},
+            RenderAssetPlugin<Image, GpuImage, GpuImageAdapter> {},
+            RenderAssetPlugin<Mesh, GpuMesh, GpuMeshAdapter> {},
+            RenderingDefaultsPlugin {}
+        )
         .add_resource(PipelineCache(app.resource<GraphicsDevice>()))
         .add_systems(
             First,
@@ -51,9 +64,12 @@ void RenderingPlugin::setup(App& app) {
             }
         )
         .add_systems(
-            RenderPrepare,
-            prepare_view_resource,
-            prepare_mesh_uniforms
+            RenderUpdate,
+            chain(
+                init_camera_view_uniform,
+                prepare_mesh_uniforms,
+                prepare_camera_view_uniform
+            ) | in_set<RenderingSystems::PrepareResources>()
         )
         .add_resource<MeshUniforms>()
         .add_systems(RenderFirst, render_begin)
