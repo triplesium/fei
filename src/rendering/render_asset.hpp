@@ -2,6 +2,7 @@
 #include "app/app.hpp"
 #include "asset/assets.hpp"
 #include "asset/event.hpp"
+#include "asset/handle.hpp"
 #include "asset/id.hpp"
 #include "base/log.hpp"
 #include "base/optional.hpp"
@@ -45,6 +46,10 @@ class RenderAssets {
             return *it->second;
         }
         return nullopt;
+    }
+    template<typename U>
+    Optional<T&> get(Handle<U> handle) const {
+        return get(handle.id());
     }
     void insert(AssetId id, std::unique_ptr<T> asset) {
         m_render_assets.emplace(id, std::move(asset));
