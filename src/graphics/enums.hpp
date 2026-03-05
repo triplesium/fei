@@ -83,8 +83,9 @@ constexpr std::uint64_t vertex_format_size(VertexFormat format) {
 enum class ShaderStages : uint8 {
     None = 0,
     Vertex = 1 << 0,
-    Fragment = 1 << 1,
-    Compute = 1 << 2,
+    Geometry = 1 << 1,
+    Fragment = 1 << 2,
+    Compute = 1 << 3,
 };
 
 enum class BlendOp : uint8 {

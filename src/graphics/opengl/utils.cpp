@@ -109,6 +109,9 @@ GLenum to_gl_shader_stage(BitFlags<ShaderStages> stages) {
     if (stages.is_set(ShaderStages::Vertex)) {
         return GL_VERTEX_SHADER;
     }
+    if (stages.is_set(ShaderStages::Geometry)) {
+        return GL_GEOMETRY_SHADER;
+    }
     if (stages.is_set(ShaderStages::Fragment)) {
         return GL_FRAGMENT_SHADER;
     }

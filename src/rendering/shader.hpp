@@ -34,6 +34,8 @@ class ShaderLoader : public AssetLoader<Shader> {
         ShaderStages stage;
         if (path.extension() == ".vert") {
             stage = ShaderStages::Vertex;
+        } else if (path.extension() == ".geom") {
+            stage = ShaderStages::Geometry;
         } else if (path.extension() == ".frag") {
             stage = ShaderStages::Fragment;
         } else if (path.extension() == ".comp") {
