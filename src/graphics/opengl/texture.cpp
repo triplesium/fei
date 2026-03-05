@@ -36,6 +36,16 @@ TextureOpenGL::TextureOpenGL(const TextureDescription& desc) :
             m_height
         );
         opengl_check_error();
+    } else if (gl_target == GL_TEXTURE_3D) {
+        glTextureStorage3D(
+            m_texture,
+            m_mip_level,
+            m_gl_sized_internal_format,
+            m_width,
+            m_height,
+            m_depth
+        );
+        opengl_check_error();
     } else {
         fei::fatal("Unsupported texture type for OpenGL");
         return;

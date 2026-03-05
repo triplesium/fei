@@ -32,6 +32,8 @@ TextureViewOpenGL::TextureViewOpenGL(const TextureViewDescription& desc) :
         effective_array_layers *= 6;
         m_texture_target = array_layers() > 1 ? GL_TEXTURE_CUBE_MAP :
                                                 GL_TEXTURE_CUBE_MAP_ARRAY;
+    } else if (original_target == GL_TEXTURE_3D) {
+        m_texture_target = GL_TEXTURE_3D;
     } else {
         fatal("Unsupported texture type for TextureViewOpenGL");
         return;
