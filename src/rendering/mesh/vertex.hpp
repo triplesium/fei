@@ -44,6 +44,10 @@ class VertexAttributeValues {
     const void* data() const;
     VertexFormat vertex_format() const;
     Optional<std::vector<std::array<float, 3>>&> as_float3();
+    Optional<const std::vector<std::array<float, 3>>&> as_float3() const;
+
+    Optional<std::vector<std::array<float, 4>>&> as_float4();
+    Optional<const std::vector<std::array<float, 4>>&> as_float4() const;
 };
 
 struct MeshAttributeData {
@@ -67,8 +71,7 @@ struct VertexBufferLayout {
     VertexBufferLayout(
         VertexStepMode step_mode,
         std::vector<VertexFormat> vertex_formats
-    ) : step_mode(step_mode) {
-        stride = 0;
+    ) : stride(0), step_mode(step_mode) {
         for (std::uint64_t i = 0; i < vertex_formats.size(); i++) {
             attributes.emplace_back(VertexAttributeDescription {
                 .location = i,

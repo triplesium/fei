@@ -1,20 +1,17 @@
 #pragma once
 #include "base/optional.hpp"
-#include "core/transform.hpp"
-#include "ecs/fwd.hpp"
-#include "ecs/query.hpp"
+#include "core/aabb.hpp"
 #include "ecs/world.hpp"
 #include "graphics/buffer.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/graphics_device.hpp"
-#include "graphics/resource.hpp"
+#include "math/vector.hpp"
+#include "rendering/mesh/vertex.hpp"
 #include "rendering/render_asset.hpp"
-#include "rendering/vertex.hpp"
 
 #include <cstdint>
 #include <map>
 #include <memory>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -53,7 +50,7 @@ class Mesh {
         m_indices = std::move(indices);
     }
 
-    VertexAttributeValues get_attribute(MeshVertexAttributeId id) const {
+    const VertexAttributeValues& get_attribute(MeshVertexAttributeId id) const {
         return m_attributes.at(id).values;
     }
 
@@ -64,6 +61,10 @@ class Mesh {
     void compute_smooth_normals();
     void center_positions();
     void generate_tangents();
+    Aabb compute_aabb() const;
+
+    void scale_by(Vector3 scale);
+    void rotate_by(Vector3 euler_angles);
 
     std::size_t vertex_count() const;
     std::uint64_t vertex_size() const;
@@ -154,27 +155,5 @@ class GpuMeshAdapter : public RenderAssetAdapter<Mesh, GpuMesh> {
         };
     }
 };
-
-struct alignas(16) MeshUniform {
-    Matrix4x4 world_from_local;
-};
-
-struct MeshUniforms {
-    struct Entry {
-        Entity entity;
-        std::shared_ptr<Buffer> uniform_buffer;
-        std::shared_ptr<ResourceLayout> resource_layout;
-        std::shared_ptr<ResourceSet> resource_set;
-    };
-    std::unordered_map<Entity, Entry> entries;
-};
-
-struct Mesh3d;
-
-void prepare_mesh_uniforms(
-    Query<Entity, Mesh3d, Transform3d> query,
-    Res<GraphicsDevice> device,
-    Res<MeshUniforms> mesh_uniforms
-);
 
 } // namespace fei

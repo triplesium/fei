@@ -8,8 +8,10 @@
 #include "graphics/graphics_device.hpp"
 #include "rendering/defaults.hpp"
 #include "rendering/gpu_image.hpp"
-#include "rendering/mesh.hpp"
-#include "rendering/mesh_loader.hpp"
+#include "rendering/mesh/mesh.hpp"
+#include "rendering/mesh/mesh_aabb.hpp"
+#include "rendering/mesh/mesh_loader.hpp"
+#include "rendering/mesh/mesh_uniform.hpp"
 #include "rendering/pipeline_cache.hpp"
 #include "rendering/render_asset.hpp"
 #include "rendering/shader.hpp"
@@ -63,6 +65,7 @@ void RenderingPlugin::setup(App& app) {
                 );
             }
         )
+        .add_systems(PostUpdate, compute_mesh_aabb)
         .add_systems(
             RenderUpdate,
             chain(

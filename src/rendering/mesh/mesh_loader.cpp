@@ -1,4 +1,4 @@
-#include "rendering/mesh_loader.hpp"
+#include "rendering/mesh/mesh_loader.hpp"
 
 #include <tiny_obj_loader.h>
 #include <vector>

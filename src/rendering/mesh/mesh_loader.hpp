@@ -1,7 +1,7 @@
 #pragma once
 #include "asset/io.hpp"
 #include "asset/loader.hpp"
-#include "rendering/mesh.hpp"
+#include "rendering/mesh/mesh.hpp"
 
 #include <expected>
 #include <memory>

@@ -1,12 +1,13 @@
-#include "rendering/mesh.hpp"
+#include "rendering/mesh/mesh.hpp"
 
 #include "base/log.hpp"
 #include "base/optional.hpp"
+#include "core/aabb.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/pipeline.hpp"
+#include "math/matrix.hpp"
 #include "math/vector.hpp"
-#include "rendering/components.hpp"
-#include "rendering/vertex.hpp"
+#include "rendering/mesh/vertex.hpp"
 
 #include <array>
 #include <limits>
@@ -152,19 +153,20 @@ void Mesh::generate_tangents() {
         {0.0f, 0.0f, 0.0f, 1.0f}
     );
 
-    const float* positions = static_cast<const float*>(
+    const auto* positions = static_cast<const float*>(
         m_attributes.at(ATTRIBUTE_POSITION.id).values.data()
     );
-    const float* normals = static_cast<const float*>(
+    const auto* normals = static_cast<const float*>(
         m_attributes.at(ATTRIBUTE_NORMAL.id).values.data()
     );
-    const float* uvs = static_cast<const float*>(
+    const auto* uvs = static_cast<const float*>(
         m_attributes.at(ATTRIBUTE_UV_0.id).values.data()
     );
 
     const std::vector<std::uint32_t>* indices =
         m_indices ? &m_indices.value() : nullptr;
-    const std::size_t face_count = indices ? indices->size() / 3 : v_count / 3;
+    const std::size_t face_count =
+        (indices != nullptr) ? indices->size() / 3 : v_count / 3;
 
     struct UserData {
         const float* positions;
@@ -173,7 +175,14 @@ void Mesh::generate_tangents() {
         const std::vector<std::uint32_t>* indices;
         std::size_t face_count;
         std::vector<std::array<float, 4>>* tangents;
-    } user_data {positions, normals, uvs, indices, face_count, &tangents};
+    } user_data {
+        .positions = positions,
+        .normals = normals,
+        .uvs = uvs,
+        .indices = indices,
+        .face_count = face_count,
+        .tangents = &tangents
+    };
 
     SMikkTSpaceInterface iface {};
     iface.m_getNumFaces = [](const SMikkTSpaceContext* ctx) -> int {
@@ -191,11 +200,11 @@ void Mesh::generate_tangents() {
                              const int vert) {
         const auto* d = static_cast<const UserData*>(ctx->m_pUserData);
         const std::uint32_t idx =
-            d->indices ? (*d->indices)[face * 3 + vert] :
-                         static_cast<std::uint32_t>(face * 3 + vert);
-        pos[0] = d->positions[idx * 3 + 0];
-        pos[1] = d->positions[idx * 3 + 1];
-        pos[2] = d->positions[idx * 3 + 2];
+            d->indices ? (*d->indices)[(face * 3) + vert] :
+                         static_cast<std::uint32_t>((face * 3) + vert);
+        pos[0] = d->positions[(idx * 3) + 0];
+        pos[1] = d->positions[(idx * 3) + 1];
+        pos[2] = d->positions[(idx * 3) + 2];
     };
     iface.m_getNormal = [](const SMikkTSpaceContext* ctx,
                            float norm[],
@@ -203,11 +212,11 @@ void Mesh::generate_tangents() {
                            const int vert) {
         const auto* d = static_cast<const UserData*>(ctx->m_pUserData);
         const std::uint32_t idx =
-            d->indices ? (*d->indices)[face * 3 + vert] :
-                         static_cast<std::uint32_t>(face * 3 + vert);
-        norm[0] = d->normals[idx * 3 + 0];
-        norm[1] = d->normals[idx * 3 + 1];
-        norm[2] = d->normals[idx * 3 + 2];
+            d->indices ? (*d->indices)[(face * 3) + vert] :
+                         static_cast<std::uint32_t>((face * 3) + vert);
+        norm[0] = d->normals[(idx * 3) + 0];
+        norm[1] = d->normals[(idx * 3) + 1];
+        norm[2] = d->normals[(idx * 3) + 2];
     };
     iface.m_getTexCoord = [](const SMikkTSpaceContext* ctx,
                              float uv[],
@@ -215,10 +224,10 @@ void Mesh::generate_tangents() {
                              const int vert) {
         const auto* d = static_cast<const UserData*>(ctx->m_pUserData);
         const std::uint32_t idx =
-            d->indices ? (*d->indices)[face * 3 + vert] :
-                         static_cast<std::uint32_t>(face * 3 + vert);
-        uv[0] = d->uvs[idx * 2 + 0];
-        uv[1] = d->uvs[idx * 2 + 1];
+            d->indices ? (*d->indices)[(face * 3) + vert] :
+                         static_cast<std::uint32_t>((face * 3) + vert);
+        uv[0] = d->uvs[(idx * 2) + 0];
+        uv[1] = d->uvs[(idx * 2) + 1];
     };
     iface.m_setTSpaceBasic = [](const SMikkTSpaceContext* ctx,
                                 const float fvTangent[],
@@ -227,8 +236,8 @@ void Mesh::generate_tangents() {
                                 const int vert) {
         auto* d = static_cast<UserData*>(ctx->m_pUserData);
         const std::uint32_t idx =
-            d->indices ? (*d->indices)[face * 3 + vert] :
-                         static_cast<std::uint32_t>(face * 3 + vert);
+            d->indices ? (*d->indices)[(face * 3) + vert] :
+                         static_cast<std::uint32_t>((face * 3) + vert);
         (*d->tangents)[idx] = {fvTangent[0], fvTangent[1], fvTangent[2], fSign};
     };
 
@@ -241,6 +250,109 @@ void Mesh::generate_tangents() {
         ATTRIBUTE_TANGENT,
         VertexAttributeValues(std::move(tangents))
     );
+}
+
+Aabb Mesh::compute_aabb() const {
+    if (!has_attribute(ATTRIBUTE_POSITION.id)) {
+        fei::warn("Mesh has no position attribute, cannot compute AABB");
+        return {};
+    }
+    const auto& positions =
+        m_attributes.at(ATTRIBUTE_POSITION.id).values.as_float3().value();
+    std::array<float, 3> min = positions[0];
+    std::array<float, 3> max = positions[0];
+    if (m_indices) {
+        for (auto index : m_indices.value()) {
+            const auto& pos = positions[index];
+            for (int i = 0; i < 3; i++) {
+                min[i] = std::min(min[i], pos[i]);
+                max[i] = std::max(max[i], pos[i]);
+            }
+        }
+    } else {
+        for (const auto& pos : positions) {
+            for (int i = 0; i < 3; i++) {
+                min[i] = std::min(min[i], pos[i]);
+                max[i] = std::max(max[i], pos[i]);
+            }
+        }
+    }
+    return Aabb {
+        .min = {min[0], min[1], min[2]},
+        .max = {max[0], max[1], max[2]}
+    };
+}
+
+void Mesh::scale_by(Vector3 scale) {
+    if (!has_attribute(ATTRIBUTE_POSITION.id)) {
+        fei::warn("Mesh has no position attribute, cannot scale");
+        return;
+    }
+    auto& positions =
+        m_attributes.at(ATTRIBUTE_POSITION.id).values.as_float3().value();
+    for (auto& pos : positions) {
+        pos[0] *= scale.x;
+        pos[1] *= scale.y;
+        pos[2] *= scale.z;
+    }
+
+    if (scale.x != scale.y || scale.y != scale.z) {
+        fei::fatal("Non-uniform scaling is not yet supported");
+    }
+}
+
+void Mesh::rotate_by(Vector3 euler_angles) {
+    if (!has_attribute(ATTRIBUTE_POSITION.id)) {
+        fei::warn("Mesh has no position attribute, cannot rotate");
+        return;
+    }
+
+    Matrix4x4 rotation = rotate_x(euler_angles.x * DEG2RAD) *
+                         rotate_y(euler_angles.y * DEG2RAD) *
+                         rotate_z(euler_angles.z * DEG2RAD);
+
+    // Positions
+    {
+        auto& positions =
+            m_attributes.at(ATTRIBUTE_POSITION.id).values.as_float3().value();
+        for (auto& pos : positions) {
+            Vector4 p(pos[0], pos[1], pos[2], 1.0f);
+            p = rotation * p;
+            pos[0] = p.x;
+            pos[1] = p.y;
+            pos[2] = p.z;
+        }
+    }
+
+    // Normals
+    if (has_attribute(ATTRIBUTE_NORMAL.id)) {
+        auto& normals =
+            m_attributes.at(ATTRIBUTE_NORMAL.id).values.as_float3().value();
+        for (auto& norm : normals) {
+            Vector4 n(norm[0], norm[1], norm[2], 0.0f);
+            n = rotation * n;
+            Vector3 n3(n.x, n.y, n.z);
+            n3.normalize();
+            norm[0] = n3.x;
+            norm[1] = n3.y;
+            norm[2] = n3.z;
+        }
+    }
+
+    // Tangents
+    if (has_attribute(ATTRIBUTE_TANGENT.id)) {
+        auto& tangents =
+            m_attributes.at(ATTRIBUTE_TANGENT.id).values.as_float4().value();
+        for (auto& tan : tangents) {
+            Vector4 t(tan[0], tan[1], tan[2], 0.0f);
+            t = rotation * t;
+            Vector3 t3(t.x, t.y, t.z);
+            t3.normalize();
+            tan[0] = t3.x;
+            tan[1] = t3.y;
+            tan[2] = t3.z;
+        }
+    }
 }
 
 std::uint64_t Mesh::vertex_size() const {
@@ -329,46 +441,6 @@ std::unique_ptr<std::byte[]> Mesh::index_buffer_data() const {
         m_indices->size() * sizeof(IndexType)
     );
     return buffer;
-}
-
-void prepare_mesh_uniforms(
-    Query<Entity, Mesh3d, Transform3d> query,
-    Res<GraphicsDevice> device,
-    Res<MeshUniforms> mesh_uniforms
-) {
-    // TODO: Cleanup unused uniforms
-    for (const auto& [entity, mesh3d, transform3d] : query) {
-        MeshUniform uniform {
-            .world_from_local = transform3d.to_matrix(),
-        };
-
-        if (!mesh_uniforms->entries.contains(entity)) {
-            MeshUniforms::Entry entry;
-            entry.entity = entity;
-            entry.uniform_buffer = device->create_buffer(BufferDescription {
-                .size = sizeof(MeshUniform),
-                .usages = {BufferUsages::Uniform, BufferUsages::Dynamic},
-            });
-            entry.resource_layout = device->create_resource_layout(
-                ResourceLayoutDescription::sequencial(
-                    {ShaderStages::Vertex, ShaderStages::Fragment},
-                    {uniform_buffer("Mesh")}
-                )
-            );
-            entry.resource_set =
-                device->create_resource_set(ResourceSetDescription {
-                    .layout = entry.resource_layout,
-                    .resources = {entry.uniform_buffer},
-                });
-            mesh_uniforms->entries[entity] = std::move(entry);
-        }
-        device->update_buffer(
-            mesh_uniforms->entries[entity].uniform_buffer,
-            0,
-            &uniform,
-            sizeof(MeshUniform)
-        );
-    }
 }
 
 } // namespace fei

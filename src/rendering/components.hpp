@@ -2,7 +2,7 @@
 #include "asset/handle.hpp"
 #include "graphics/pipeline.hpp"
 #include "rendering/material.hpp"
-#include "rendering/mesh.hpp"
+#include "rendering/mesh/mesh.hpp"
 
 #include <memory>
 

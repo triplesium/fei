@@ -1,4 +1,4 @@
-#include "rendering/vertex.hpp"
+#include "rendering/mesh/vertex.hpp"
 
 #include "base/optional.hpp"
 
@@ -49,6 +49,32 @@ VertexFormat VertexAttributeValues::vertex_format() const {
 Optional<std::vector<std::array<float, 3>>&>
 VertexAttributeValues::as_float3() {
     if (auto* ptr = std::get_if<std::vector<std::array<float, 3>>>(&m_value)) {
+        return *ptr;
+    }
+    return nullopt;
+}
+
+Optional<const std::vector<std::array<float, 3>>&>
+VertexAttributeValues::as_float3() const {
+    if (const auto* ptr =
+            std::get_if<std::vector<std::array<float, 3>>>(&m_value)) {
+        return *ptr;
+    }
+    return nullopt;
+}
+
+Optional<std::vector<std::array<float, 4>>&>
+VertexAttributeValues::as_float4() {
+    if (auto* ptr = std::get_if<std::vector<std::array<float, 4>>>(&m_value)) {
+        return *ptr;
+    }
+    return nullopt;
+}
+
+Optional<const std::vector<std::array<float, 4>>&>
+VertexAttributeValues::as_float4() const {
+    if (const auto* ptr =
+            std::get_if<std::vector<std::array<float, 4>>>(&m_value)) {
         return *ptr;
     }
     return nullopt;
