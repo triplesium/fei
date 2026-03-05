@@ -74,13 +74,7 @@ class GraphicsDevice {
                 std::dynamic_pointer_cast<TextureView>(texture)) {
             return texture_view;
         } else if (auto tex = std::dynamic_pointer_cast<Texture>(texture)) {
-            return create_texture_view(TextureViewDescription {
-                .target = tex,
-                .base_mip_level = 0,
-                .mip_levels = tex->mip_level(),
-                .base_array_layer = 0,
-                .array_layers = tex->layer(),
-            });
+            return tex->full_view(*this);
         } else {
             fatal("Resource is not a Texture or TextureView in "
                   "GraphicsDevice::get_texture_view");

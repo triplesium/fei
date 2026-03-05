@@ -4,6 +4,8 @@
 #include "graphics/enums.hpp"
 #include "graphics/resource.hpp"
 
+#include <memory>
+
 namespace fei {
 
 struct TextureDescription {
@@ -17,7 +19,15 @@ struct TextureDescription {
     TextureType texture_type;
 };
 
-class Texture : public BindableResource, public MappableResource {
+class TextureView;
+class GraphicsDevice;
+
+class Texture : public BindableResource,
+                public MappableResource,
+                public std::enable_shared_from_this<Texture> {
+  private:
+    std::shared_ptr<TextureView> m_full_view;
+
   public:
     virtual ~Texture() = default;
     virtual PixelFormat format() const = 0;
@@ -28,5 +38,6 @@ class Texture : public BindableResource, public MappableResource {
     virtual uint32 layer() const = 0;
     virtual BitFlags<TextureUsage> usage() const = 0;
     virtual TextureType type() const = 0;
+    std::shared_ptr<TextureView> full_view(GraphicsDevice& device);
 };
 } // namespace fei
