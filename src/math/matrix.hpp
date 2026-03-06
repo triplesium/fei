@@ -578,6 +578,40 @@ class Matrix4x4 {
             1
         );
     }
+
+    Matrix4x4 inverse() const {
+        float det = determinant();
+        if (fei::abs(det) < std::numeric_limits<float>::epsilon()) {
+            return Zero;
+        }
+
+        float inv_det = 1.0f / det;
+
+        // Compute inverse via adjugate matrix: inv(A) = adj(A) / det(A)
+        // adj(A)[i][j] = cofactor C_{ji} = (-1)^(i+j) * minor(rows\j, cols\i)
+        Matrix4x4 r = Zero;
+        r.mat[0][0] = inv_det * minor(1, 2, 3, 1, 2, 3);
+        r.mat[1][0] = -inv_det * minor(1, 2, 3, 0, 2, 3);
+        r.mat[2][0] = inv_det * minor(1, 2, 3, 0, 1, 3);
+        r.mat[3][0] = -inv_det * minor(1, 2, 3, 0, 1, 2);
+
+        r.mat[0][1] = -inv_det * minor(0, 2, 3, 1, 2, 3);
+        r.mat[1][1] = inv_det * minor(0, 2, 3, 0, 2, 3);
+        r.mat[2][1] = -inv_det * minor(0, 2, 3, 0, 1, 3);
+        r.mat[3][1] = inv_det * minor(0, 2, 3, 0, 1, 2);
+
+        r.mat[0][2] = inv_det * minor(0, 1, 3, 1, 2, 3);
+        r.mat[1][2] = -inv_det * minor(0, 1, 3, 0, 2, 3);
+        r.mat[2][2] = inv_det * minor(0, 1, 3, 0, 1, 3);
+        r.mat[3][2] = -inv_det * minor(0, 1, 3, 0, 1, 2);
+
+        r.mat[0][3] = -inv_det * minor(0, 1, 2, 1, 2, 3);
+        r.mat[1][3] = inv_det * minor(0, 1, 2, 0, 2, 3);
+        r.mat[2][3] = -inv_det * minor(0, 1, 2, 0, 1, 3);
+        r.mat[3][3] = inv_det * minor(0, 1, 2, 0, 1, 2);
+
+        return r;
+    }
 };
 
 inline Matrix4x4 orthographic(
