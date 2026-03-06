@@ -1,8 +1,9 @@
 #pragma once
 #include "asset/handle.hpp"
 #include "core/image.hpp"
+#include "graphics/pipeline.hpp"
 #include "graphics/shader_module.hpp"
-#include "rendering/mesh.hpp"
+#include "rendering/mesh/mesh.hpp"
 
 #include <memory>
 #include <vector>
@@ -12,6 +13,7 @@ namespace fei {
 struct SkyboxResource {
     Handle<Mesh> mesh;
     std::vector<std::shared_ptr<ShaderModule>> shader_modules;
+    std::shared_ptr<Pipeline> pipeline;
 };
 
 struct alignas(16) SkyboxUniform {

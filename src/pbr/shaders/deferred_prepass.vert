@@ -2,6 +2,7 @@
 layout (location = 0) in vec3 Vertex_Position;
 layout (location = 1) in vec3 Vertex_Normal;
 layout (location = 2) in vec2 Vertex_Uv;
+layout (location = 4) in vec3 Vertex_Tangent;
 
 layout(row_major, std140) uniform View {
     mat4 clip_from_world;
@@ -17,13 +18,20 @@ layout(row_major, std140) uniform Mesh {
 out vec3 Frag_Position;
 out vec3 Frag_Normal;
 out vec2 Frag_TexCoords;
-out vec4 Frag_LightSpacePosition;
+out mat3 Frag_TBN;
 
 void main()
 {
     Frag_Position = vec3(mesh.world_from_local * vec4(Vertex_Position, 1.0));
-    Frag_Normal = mat3(transpose(inverse(mesh.world_from_local))) * Vertex_Normal;
+    mat3 normal_matrix = mat3(transpose(inverse(mesh.world_from_local)));
+    Frag_Normal = normal_matrix * Vertex_Normal;
     Frag_TexCoords = Vertex_Uv;
-    // Frag_LightSpacePosition = light.clip_from_world * vec4(Frag_Position, 1.0);
+
+    vec3 T = normalize(normal_matrix * Vertex_Tangent);
+    vec3 N = normalize(Frag_Normal);
+    T = normalize(T - dot(T, N) * N);
+    vec3 B = cross(N, T);
+    Frag_TBN = mat3(T, B, N);
+
     gl_Position = view.clip_from_world * vec4(Frag_Position, 1.0);
 }

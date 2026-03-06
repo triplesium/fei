@@ -5,7 +5,9 @@
 #include "core/image.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics/resource.hpp"
+#include "graphics/sampler.hpp"
 #include "math/color.hpp"
+#include "refl/type.hpp"
 #include "rendering/defaults.hpp"
 #include "rendering/gpu_image.hpp"
 #include "rendering/material.hpp"
@@ -18,18 +20,22 @@
 namespace fei {
 
 enum class StandardMaterialFlags : uint32 {
-    None = 0,
-    AlbedoMap = 1 << 0,
-    NormalMap = 1 << 1,
-    MetallicMap = 1 << 2,
-    RoughnessMap = 1 << 3,
+    None = 0u,
+    AlbedoMap = 1u << 0u,
+    NormalMap = 1u << 1u,
+    MetallicMap = 1u << 2u,
+    RoughnessMap = 1u << 3u,
+    EmissiveMap = 1u << 4u,
+    SpecularMap = 1u << 5u,
 };
 
 struct alignas(16) StandardMaterialUniform {
-    Color3F albedo;
-    float metallic;
-    float roughness;
-    uint32 flags;
+    Color3F albedo {1.0f, 1.0f, 1.0f};
+    float metallic {0.0f};
+    float roughness {0.5f};
+    alignas(16) Color3F emissive {0.0f, 0.0f, 0.0f};
+    alignas(16) Color3F specular {0.0f, 0.0f, 0.0f};
+    uint32 flags {0};
 };
 
 class StandardMaterial : public Material {
@@ -40,16 +46,32 @@ class StandardMaterial : public Material {
     ShaderRef fragment_shader() const override {
         return "embeded://forward.frag";
     }
+    ShaderRef prepass_vertex_shader() const override {
+        return "embeded://deferred_prepass.vert";
+    }
+    ShaderRef prepass_fragment_shader() const override {
+        return "embeded://deferred_prepass.frag";
+    }
+    ShaderRef deferred_vertex_shader() const override {
+        return "embeded://deferred.vert";
+    }
+    ShaderRef deferred_fragment_shader() const override {
+        return "embeded://deferred_gi.frag";
+    }
 
     Color3F albedo {1.0f, 1.0f, 1.0f};
     Optional<Handle<Image>> albedo_map;
     Optional<Handle<Image>> normal_map;
-    float metallic = 1.0f;
+    float metallic = 0.0f;
     Optional<Handle<Image>> metallic_map;
     float roughness = 0.5f;
     Optional<Handle<Image>> roughness_map;
+    Color3F emissive {0.0f, 0.0f, 0.0f};
+    Optional<Handle<Image>> emissive_map;
+    Color3F specular {0.0f, 0.0f, 0.0f};
+    Optional<Handle<Image>> specular_map;
 
-    virtual std::vector<ResourceLayoutElementDescription>
+    std::vector<ResourceLayoutElementDescription>
     resource_layout_elements() const override {
         return {
             {
@@ -85,7 +107,25 @@ class StandardMaterial : public Material {
                 .name = "roughness_map",
                 .kind = ResourceKind::TextureReadOnly,
                 .stages = ShaderStages::Fragment,
-            }
+            },
+            {
+                .binding = 5,
+                .name = "emissive_map",
+                .kind = ResourceKind::TextureReadOnly,
+                .stages = ShaderStages::Fragment,
+            },
+            {
+                .binding = 6,
+                .name = "specular_map",
+                .kind = ResourceKind::TextureReadOnly,
+                .stages = ShaderStages::Fragment,
+            },
+            {
+                .binding = 7,
+                .name = "sampler",
+                .kind = ResourceKind::Sampler,
+                .stages = ShaderStages::Fragment,
+            },
         };
     }
 
@@ -103,15 +143,23 @@ class StandardMaterial : public Material {
         if (roughness_map.has_value()) {
             flags |= StandardMaterialFlags::RoughnessMap;
         }
+        if (emissive_map.has_value()) {
+            flags |= StandardMaterialFlags::EmissiveMap;
+        }
+        if (specular_map.has_value()) {
+            flags |= StandardMaterialFlags::SpecularMap;
+        }
         return StandardMaterialUniform {
             .albedo = albedo,
             .metallic = metallic,
             .roughness = roughness,
+            .emissive = emissive,
+            .specular = specular,
             .flags = flags.to_raw(),
         };
     }
 
-    virtual std::vector<std::shared_ptr<BindableResource>> resources(
+    std::vector<std::shared_ptr<BindableResource>> resources(
         GraphicsDevice& device,
         const RenderingDefaults& defaults,
         const RenderAssets<GpuImage>& gpu_images
@@ -145,9 +193,14 @@ class StandardMaterial : public Material {
         push_image(normal_map);
         push_image(metallic_map);
         push_image(roughness_map);
+        push_image(emissive_map);
+        push_image(specular_map);
+        resources.push_back(device.create_sampler(SamplerDescription::Linear));
 
         return resources;
     }
+
+    std::size_t hash() const override { return type_id<StandardMaterial>(); }
 };
 
 } // namespace fei

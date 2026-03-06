@@ -2,7 +2,7 @@
 in vec3 Frag_Position;
 in vec3 Frag_Normal;
 in vec2 Frag_TexCoords;
-in vec4 Frag_LightSpacePosition;
+// in vec4 Frag_LightSpacePosition;
 out vec4 Out_Color;
 
 const int STANDARD_MATERIAL_FLAGS_ALBEDO_MAP_BIT = 1 << 0;
@@ -275,24 +275,24 @@ void main() {
     F0 = mix(F0, albedo, metallic);
     
     vec3 lighting = vec3(0.0);
-    {   
-        vec3 L = normalize(light.world_position - Frag_Position);
-        vec3 H = normalize(V + L);
-        float distance = length(light.world_position - Frag_Position);
-        float attenuation = 1.0 / (distance * distance);
-        vec3 radiance = light.color * attenuation;
-        float NDF = distribution_ggx(N, H, roughness);   
-        float G   = geometry_smith(N, V, L, roughness);      
-        vec3 F    = fresnel_schlick(clamp(dot(H, V), 0.0, 1.0), F0);
-        vec3 numerator    = NDF * G * F;
-        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001; 
-        vec3 specular = numerator / denominator;
-        vec3 kS = F;
-        vec3 kD = vec3(1.0) - kS;
-        kD *= 1.0 - metallic;
-        float NdotL = max(dot(N, L), 0.0);
-        lighting += (kD * albedo / PI + specular) * radiance * NdotL * 4;
-    }
+    // {   
+    //     vec3 L = normalize(light.world_position - Frag_Position);
+    //     vec3 H = normalize(V + L);
+    //     float distance = length(light.world_position - Frag_Position);
+    //     float attenuation = 1.0 / (distance * distance);
+    //     vec3 radiance = light.color * attenuation;
+    //     float NDF = distribution_ggx(N, H, roughness);   
+    //     float G   = geometry_smith(N, V, L, roughness);      
+    //     vec3 F    = fresnel_schlick(clamp(dot(H, V), 0.0, 1.0), F0);
+    //     vec3 numerator    = NDF * G * F;
+    //     float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001; 
+    //     vec3 specular = numerator / denominator;
+    //     vec3 kS = F;
+    //     vec3 kD = vec3(1.0) - kS;
+    //     kD *= 1.0 - metallic;
+    //     float NdotL = max(dot(N, L), 0.0);
+    //     lighting += (kD * albedo / PI + specular) * radiance * NdotL * 4;
+    // }
 
     vec3 F = fresnel_schlick_roughness(max(dot(N, V), 0.0), F0, roughness);
 
@@ -310,15 +310,16 @@ void main() {
     vec3 ambient = kD * diffuse + specular;
 
     // Perform perspective divide
-    vec3 shadow_coord = Frag_LightSpacePosition.xyz / Frag_LightSpacePosition.w;
+    // vec3 shadow_coord = Frag_LightSpacePosition.xyz / Frag_LightSpacePosition.w;
     // Transform NDC to [0,1] range
-    shadow_coord = shadow_coord * 0.5 + 0.5;
+    // shadow_coord = shadow_coord * 0.5 + 0.5;
 
-    float visibility = pcss_shadow(
-        shadow_map,
-        vec4(shadow_coord, 1.0),
-        0.08
-    );
+    float visibility = 1.0;
+    // float visibility = pcss_shadow(
+    //     shadow_map,
+    //     vec4(shadow_coord, 1.0),
+    //     0.08
+    // );
 
     vec3 color = ambient + lighting * visibility;
     color = color / (color + vec3(1.0));

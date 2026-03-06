@@ -1,11 +1,9 @@
 #pragma once
 #include "app/app.hpp"
-#include "app/plugin.hpp"
-#include "asset/embed.hpp"
 
 namespace fei {
 
-class PbrPlugin : public Plugin {
+class ForwardRenderPlugin : public Plugin {
   public:
     void setup(App& app) override;
 };

@@ -4,7 +4,7 @@
 #include "asset/server.hpp"
 #include "ecs/system_params.hpp"
 #include "graphics/shader_module.hpp"
-#include "rendering/mesh.hpp"
+#include "rendering/mesh/mesh.hpp"
 #include "rendering/shader.hpp"
 
 #include <memory>
