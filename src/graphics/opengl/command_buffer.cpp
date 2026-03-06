@@ -312,6 +312,10 @@ void CommandBufferOpenGL::draw(size_t start, size_t count) {
         count
     );
     opengl_check_error();
+    // FIXME: Temporary solution for image writing in shaders. Potential
+    // performance issue?
+    glMemoryBarrier(GL_ALL_BARRIER_BITS);
+    opengl_check_error();
 }
 
 void CommandBufferOpenGL::draw_indexed(size_t count) {
@@ -323,6 +327,8 @@ void CommandBufferOpenGL::draw_indexed(size_t count) {
         m_draw_elements_type,
         nullptr
     );
+    opengl_check_error();
+    glMemoryBarrier(GL_ALL_BARRIER_BITS);
     opengl_check_error();
 }
 
@@ -363,8 +369,20 @@ void CommandBufferOpenGL::set_render_pipeline_impl(
     glUseProgram(pipeline_gl->program());
     opengl_check_error();
 
-    auto depth_stencil_state = pipeline_gl->depth_stencil_state();
-    // Depth test
+    const auto& blend_state = pipeline_gl->blend_state();
+    if (!blend_state.attachment_states.empty()) {
+        const auto& att = blend_state.attachment_states[0];
+        if (att.enabled) {
+            glEnable(GL_BLEND);
+            opengl_check_error();
+            // TODO:
+        } else {
+            glDisable(GL_BLEND);
+            opengl_check_error();
+        }
+    }
+
+    const auto& depth_stencil_state = pipeline_gl->depth_stencil_state();
     if (depth_stencil_state.depth_test_enabled) {
         glEnable(GL_DEPTH_TEST);
         opengl_check_error();
@@ -373,6 +391,17 @@ void CommandBufferOpenGL::set_render_pipeline_impl(
         opengl_check_error();
     } else {
         glDisable(GL_DEPTH_TEST);
+        opengl_check_error();
+    }
+
+    const auto& rasterizer_state = pipeline_gl->rasterizer_state();
+    if (rasterizer_state.cull_mode == CullMode::None) {
+        glDisable(GL_CULL_FACE);
+        opengl_check_error();
+    } else {
+        glEnable(GL_CULL_FACE);
+        opengl_check_error();
+        glCullFace(to_gl_cull_mode(rasterizer_state.cull_mode));
         opengl_check_error();
     }
 }

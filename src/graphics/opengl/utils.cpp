@@ -521,4 +521,58 @@ GLenum to_gl_compare_function(ComparisonKind func) {
     return 0;
 }
 
+GLenum to_gl_blend_factor(BlendFactor factor) {
+    switch (factor) {
+        case BlendFactor::Zero:
+            return GL_ZERO;
+        case BlendFactor::One:
+            return GL_ONE;
+        case BlendFactor::SrcColor:
+            return GL_SRC_COLOR;
+        case BlendFactor::OneMinusSrcColor:
+            return GL_ONE_MINUS_SRC_COLOR;
+        case BlendFactor::SrcAlpha:
+            return GL_SRC_ALPHA;
+        case BlendFactor::OneMinusSrcAlpha:
+            return GL_ONE_MINUS_SRC_ALPHA;
+        case BlendFactor::DstColor:
+            return GL_DST_COLOR;
+        case BlendFactor::OneMinusDstColor:
+            return GL_ONE_MINUS_DST_COLOR;
+        case BlendFactor::DstAlpha:
+            return GL_DST_ALPHA;
+        case BlendFactor::OneMinusDstAlpha:
+            return GL_ONE_MINUS_DST_ALPHA;
+    }
+    return 0;
+}
+
+GLenum to_gl_blend_function(BlendFunction func) {
+    switch (func) {
+        case BlendFunction::Add:
+            return GL_FUNC_ADD;
+        case BlendFunction::Subtract:
+            return GL_FUNC_SUBTRACT;
+        case BlendFunction::ReverseSubtract:
+            return GL_FUNC_REVERSE_SUBTRACT;
+        case BlendFunction::Min:
+            return GL_MIN;
+        case BlendFunction::Max:
+            return GL_MAX;
+    }
+    return 0;
+}
+
+GLenum to_gl_cull_mode(CullMode cull_mode) {
+    switch (cull_mode) {
+        case CullMode::None:
+            return 0;
+        case CullMode::Back:
+            return GL_BACK;
+        case CullMode::Front:
+            return GL_FRONT;
+    }
+    return 0;
+}
+
 } // namespace fei
