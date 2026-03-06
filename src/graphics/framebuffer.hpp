@@ -25,7 +25,7 @@ class Framebuffer {
         m_depth_attachment(desc.depth_target) {}
     virtual ~Framebuffer() = default;
 
-    const std::vector<FramebufferAttachment> color_attachments() const {
+    const std::vector<FramebufferAttachment>& color_attachments() const {
         return m_color_attachments;
     }
     const Optional<FramebufferAttachment>& depth_attachment() const {

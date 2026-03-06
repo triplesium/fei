@@ -1,14 +1,16 @@
 #pragma once
 #include "base/optional.hpp"
+#include "base/types.hpp"
 #include "graphics/texture.hpp"
 #include "math/color.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
 namespace fei {
 
-enum class LoadOp { Load, Clear };
+enum class LoadOp : uint8 { Load, Clear };
 
 struct RenderPassColorAttachment {
     std::shared_ptr<Texture> texture;
