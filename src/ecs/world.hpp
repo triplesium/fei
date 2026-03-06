@@ -55,9 +55,11 @@ class World {
 
     void despawn(Entity entity) {
         FEI_ASSERT(has_entity(entity));
-        auto& archetype =
-            m_archetypes.get(m_entities.get_location(entity).archetype_id);
-        archetype.remove_entity(entity);
+        auto location = m_entities.get_location(entity);
+        auto& archetype = m_archetypes.get(location.archetype_id);
+        if (auto moved_entity = archetype.remove_row(location.row)) {
+            m_entities.set_location(*moved_entity, location);
+        }
         m_entities.remove_entity(entity);
     }
 

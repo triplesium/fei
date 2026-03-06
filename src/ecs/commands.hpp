@@ -47,13 +47,25 @@ class EntityCommands {
 
     template<typename T>
     EntityCommands& remove() {
-        m_world.remove_component(m_entity, type_id<T>());
+        m_world.resource<CommandsQueue>().add_command(
+            [entity = this->m_entity](World& world) {
+                world.remove_component(entity, type_id<T>());
+            }
+        );
         return *this;
     }
 
     template<typename T>
     bool has() const {
         return m_world.has_component(m_entity, type_id<T>());
+    }
+
+    void despawn() {
+        m_world.resource<CommandsQueue>().add_command(
+            [entity = this->m_entity](World& world) {
+                world.despawn(entity);
+            }
+        );
     }
 
     Entity id() const { return m_entity; }
