@@ -17,7 +17,7 @@ void init_camera_view_uniform(
             .size = sizeof(ViewUniform),
             .usages = BufferUsages::Uniform,
         });
-        commands.entity(entity).add(ViewUniformBuffer {buffer});
+        commands.entity(entity).add(ViewUniformBuffer {.buffer = buffer});
     }
 }
 
@@ -37,7 +37,7 @@ void prepare_camera_view_uniform(
             camera.near_plane,
             camera.far_plane
         );
-        ViewUniform uniform {
+        view_uniform_buffer_component.uniform = ViewUniform {
             .clip_from_world = projection * view,
             .view_from_world = view,
             .clip_from_view = projection,
@@ -46,7 +46,7 @@ void prepare_camera_view_uniform(
         device->update_buffer(
             view_uniform_buffer_component.buffer,
             0,
-            &uniform,
+            &view_uniform_buffer_component.uniform,
             sizeof(ViewUniform)
         );
     }

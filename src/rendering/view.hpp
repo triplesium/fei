@@ -21,6 +21,7 @@ struct alignas(16) ViewUniform {
 };
 
 struct ViewUniformBuffer {
+    ViewUniform uniform;
     std::shared_ptr<Buffer> buffer;
 };
 
