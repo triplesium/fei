@@ -33,6 +33,7 @@ EMBED(inject_propagation_comp, "inject_propagation.comp");
 EMBED(aniso_mipmapbase_comp, "aniso_mipmapbase.comp");
 EMBED(aniso_mipmapvolume_comp, "aniso_mipmapvolume.comp");
 EMBED(deferred_gi_frag, "deferred_gi.frag");
+EMBED(blur_frag, "blur.frag");
 
 namespace fei {
 
@@ -57,7 +58,8 @@ void PbrPlugin::setup(App& app) {
                 prepare_light_view_uniform_buffer,
                 prepare_mesh_view_resource_set,
                 setup_shadow_map,
-                render_shadow_map
+                render_shadow_map,
+                blur_shadow_map
             ) | after(generate_env_maps) |
                 after(prepare_camera_view_uniform) |
                 in_set<RenderingSystems::PrepareResources>()
