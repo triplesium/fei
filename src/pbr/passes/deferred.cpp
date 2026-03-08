@@ -8,11 +8,11 @@
 #include "pbr/material.hpp"
 #include "pbr/passes/target.hpp"
 #include "pbr/pipelines.hpp"
+#include "pbr/postprocess.hpp"
 #include "pbr/skybox.hpp"
 #include "pbr/vxgi.hpp"
 #include "rendering/components.hpp"
 #include "rendering/mesh/mesh.hpp"
-#include "rendering/mesh/mesh_factory.hpp"
 #include "rendering/mesh/mesh_uniform.hpp"
 #include "rendering/plugin.hpp"
 #include "rendering/shader.hpp"
@@ -28,6 +28,7 @@ void setup_gbuffer(
     Res<GraphicsDevice> device,
     Res<Window> window,
     Res<DeferedRenderResources> resources,
+    Res<FullscreenQuad> fullscreen_quad,
     Res<Assets<Mesh>> meshes,
     Res<Assets<Shader>> shader_assets,
     Res<AssetServer> asset_server,
@@ -92,10 +93,7 @@ void setup_gbuffer(
         .texture_type = TextureType::Texture2D,
     });
 
-    resources->fullscreen_quad_mesh =
-        meshes->add(MeshFactory::create_quad(2.0f, 2.0f));
-
-    auto& mesh = meshes->get(resources->fullscreen_quad_mesh).value();
+    auto& mesh = meshes->get(fullscreen_quad->fullscreen_quad_mesh).value();
 
     resources->defered_resource_layout =
         device->create_resource_layout(ResourceLayoutDescription::sequencial(
@@ -109,8 +107,7 @@ void setup_gbuffer(
             }
         ));
 
-    auto vert_shader_handle =
-        asset_server->load<Shader>("embeded://deferred.vert");
+    auto vert_shader_handle = asset_server->load<Shader>("embeded://quad.vert");
     auto vert_shader = shader_assets->get(vert_shader_handle).value();
     auto frag_shader_handle =
         asset_server->load<Shader>("embeded://deferred_gi.frag");
@@ -268,7 +265,8 @@ void defered_pass(
     Res<RenderAssets<PreparedMaterial>> materials,
     Res<PipelineCache> pipeline_cache,
     Res<VxgiLighting> vxgi_lighting,
-    Res<DeferedRenderResources> resources
+    Res<DeferedRenderResources> resources,
+    Res<FullscreenQuad> fullscreen_quad
 ) {
     auto [mesh_view_resource_set] = query_cameras.first();
 
@@ -302,10 +300,11 @@ void defered_pass(
     command_buffer->set_resource_set(1, resources->defered_resource_set);
     command_buffer->set_resource_set(2, vxgi_lighting->resource_set);
     command_buffer->set_vertex_buffer(
-        gpu_meshes->get(resources->fullscreen_quad_mesh.id())->vertex_buffer()
+        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id())
+            ->vertex_buffer()
     );
     auto gpu_mesh =
-        gpu_meshes->get(resources->fullscreen_quad_mesh.id()).value();
+        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id()).value();
     command_buffer->set_index_buffer(
         *gpu_mesh.index_buffer(),
         IndexFormat::Uint32

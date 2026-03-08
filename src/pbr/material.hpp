@@ -53,7 +53,7 @@ class StandardMaterial : public Material {
         return "embeded://deferred_prepass.frag";
     }
     ShaderRef deferred_vertex_shader() const override {
-        return "embeded://deferred.vert";
+        return "embeded://quad.vert";
     }
     ShaderRef deferred_fragment_shader() const override {
         return "embeded://deferred_gi.frag";

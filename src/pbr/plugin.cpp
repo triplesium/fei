@@ -23,7 +23,7 @@ EMBED(cubemap2radiance_comp, "cubemap2radiance.comp");
 EMBED(ibl_brdf_lut_png, "ibl_brdf_lut.png");
 EMBED(deferred_prepass_vert, "deferred_prepass.vert");
 EMBED(deferred_prepass_frag, "deferred_prepass.frag");
-EMBED(deferred_vert, "deferred.vert");
+EMBED(quad_vert, "quad.vert");
 EMBED(deferred_frag, "deferred.frag");
 EMBED(voxelization_vert, "voxelization.vert");
 EMBED(voxelization_geom, "voxelization.geom");
@@ -48,6 +48,7 @@ void PbrPlugin::setup(App& app) {
             app.resource<MeshUniforms>(),
             app.resource<PipelineCache>()
         ))
+        .add_systems(PreStartUp, setup_fullscreen_quad)
         .add_systems(StartUp, init_mesh_view_layout, setup_shadow_mapping)
         .add_systems(
             RenderUpdate,
