@@ -18,7 +18,7 @@ layout(row_major, std140) uniform Mesh {
 out vec3 Frag_Position;
 out vec3 Frag_Normal;
 out vec2 Frag_TexCoords;
-out mat3 Frag_TBN;
+out vec3 Frag_Tangent;
 
 void main()
 {
@@ -26,12 +26,7 @@ void main()
     mat3 normal_matrix = mat3(transpose(inverse(mesh.world_from_local)));
     Frag_Normal = normal_matrix * Vertex_Normal;
     Frag_TexCoords = Vertex_Uv;
-
-    vec3 T = normalize(normal_matrix * Vertex_Tangent);
-    vec3 N = normalize(Frag_Normal);
-    T = normalize(T - dot(T, N) * N);
-    vec3 B = cross(N, T);
-    Frag_TBN = mat3(T, B, N);
+    Frag_Tangent = normal_matrix * Vertex_Tangent;
 
     gl_Position = view.clip_from_world * vec4(Frag_Position, 1.0);
 }

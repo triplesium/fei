@@ -8,7 +8,7 @@ layout (location = 4) out vec4 g_emissive;
 in vec3 Frag_Position;
 in vec3 Frag_Normal;
 in vec2 Frag_TexCoords;
-in mat3 Frag_TBN;
+in vec3 Frag_Tangent;
 
 uniform sampler2D albedo_map;
 uniform sampler2D normal_map;
@@ -46,7 +46,12 @@ layout(row_major, std140) uniform Material {
 
 vec3 normal_mapping() {
     vec3 tangentNormal = texture(normal_map, Frag_TexCoords).xyz * 2.0 - 1.0;
-    return normalize(Frag_TBN * tangentNormal);
+    vec3 N = normalize(Frag_Normal);
+    vec3 T = normalize(Frag_Tangent);
+    T = normalize(T - dot(T, N) * N);
+    vec3 B = normalize(cross(N, T));
+    mat3 TBN = mat3(T, B, N);
+    return normalize(TBN * tangentNormal);
 }
 
 void main()
