@@ -3,6 +3,7 @@ from argparse import ArgumentParser
 import sys
 import os
 import json
+import re
 from pathlib import Path
 from typing import List, Dict, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -65,12 +66,14 @@ class MethodInfo(MemberInfo):
         parameters: List[ParamInfo] = None,
         is_static: bool = False,
         is_const: bool = False,
+        ref_qualifier: str = "",
         is_abstract: bool = False,
     ):
         super().__init__(name, type_name, access)
         self.parameters = parameters or []  # List of ParamInfo objects
         self.is_static = is_static
         self.is_const = is_const
+        self.ref_qualifier = ref_qualifier
         self.is_abstract = is_abstract
 
     def __str__(self):
@@ -86,6 +89,8 @@ class MethodInfo(MemberInfo):
             modifiers.append("static")
         if self.is_const:
             modifiers.append("const")
+        if self.ref_qualifier:
+            modifiers.append(self.ref_qualifier)
         if self.is_abstract:
             modifiers.append("abstract")
 
@@ -143,6 +148,7 @@ class MethodInfo(MemberInfo):
         base_dict["parameters"] = [param.to_dict() for param in self.parameters]
         base_dict["is_static"] = self.is_static
         base_dict["is_const"] = self.is_const
+        base_dict["ref_qualifier"] = self.ref_qualifier
         base_dict["is_abstract"] = self.is_abstract
         return base_dict
 
@@ -152,9 +158,41 @@ class MethodInfo(MemberInfo):
         if self.is_static:
             return f"{self.type_name}(*)({param_str})"
         else:
-            ty = f"{self.type_name}({parent}::*)({param_str})"
+            qualifier_suffix = ""
             if self.is_const:
-                ty += " const"
+                qualifier_suffix += " const"
+            if self.ref_qualifier:
+                qualifier_suffix += f" {self.ref_qualifier}"
+
+            function_pointer_return_match = re.match(
+                r"^(?P<return_type>.+)\(\*\)\((?P<return_params>.*)\)$",
+                self.type_name,
+            )
+
+            if function_pointer_return_match:
+                # C++ declarator precedence makes this case special:
+                # for methods returning function pointers, we cannot just prepend
+                # `self.type_name` before `(Class::*)(...)`.
+                #
+                # Wrong shape (parsed incorrectly):
+                #   R(*)(RetArgs...)(Class::*)(MethodArgs...) const
+                #
+                # Correct shape:
+                #   R (* (Class::*)(MethodArgs...) const &&)(RetArgs...)
+                #
+                # The member-function pointer part `(Class::*)(...) const &&` must be
+                # wrapped first, and then declared as returning `R (*)(RetArgs...)`.
+                return_type = function_pointer_return_match.group("return_type").strip()
+                return_params = function_pointer_return_match.group(
+                    "return_params"
+                ).strip()
+                return (
+                    f"{return_type} (* ({parent}::*)({param_str}){qualifier_suffix})"
+                    f"({return_params})"
+                )
+
+            ty = f"{self.type_name}({parent}::*)({param_str})"
+            ty += qualifier_suffix
             return ty
 
 
@@ -183,11 +221,19 @@ class CppClassInfo:
         parameters: List[ParamInfo] = None,
         is_static: bool = False,
         is_const: bool = False,
+        ref_qualifier: str = "",
         is_abstract: bool = False,
     ):
         """Add a method to the class."""
         method_info = MethodInfo(
-            name, return_type, access, parameters, is_static, is_const, is_abstract
+            name,
+            return_type,
+            access,
+            parameters,
+            is_static,
+            is_const,
+            ref_qualifier,
+            is_abstract,
         )
         self.methods.append(method_info)
 
@@ -336,7 +382,7 @@ class CppHeaderParser:
             return classes
 
         # Set up compilation arguments
-        args = ["-x", "c++-header", "-std=c++23"]
+        args = ["-x", "c++-header", "-std=c++23", "-DFEI_REFLGEN_SCRIPT"]
 
         # Add include paths
         for include_path in self.include_paths:
@@ -453,6 +499,10 @@ class CppHeaderParser:
         if not class_name:
             return None
 
+        # # Only process classes/structs explicitly marked with reflgen attribute
+        # if not self._has_reflgen_attribute(class_cursor):
+        #     return None
+
         # Get the fully qualified class name including namespaces
         qualified_class_name = self._get_qualified_name(class_cursor)
         if not qualified_class_name:
@@ -505,7 +555,14 @@ class CppHeaderParser:
                 # Check if method is static, const, or abstract (pure virtual)
                 is_static = child.is_static_method()
                 is_const = child.is_const_method()
+                ref_qualifier = self._get_method_ref_qualifier(child)
                 is_abstract = child.is_pure_virtual_method()
+
+                # FIXME:
+                # Ignore ref-qualified methods for now. The reflection runtime
+                # does not fully support signatures like `R(Args...) &/&&`.
+                if ref_qualifier:
+                    continue
 
                 class_info.add_method(
                     method_name,
@@ -514,6 +571,7 @@ class CppHeaderParser:
                     parameters,
                     is_static,
                     is_const,
+                    ref_qualifier,
                     is_abstract,
                 )
             elif child.kind == clang.cindex.CursorKind.CONSTRUCTOR:
@@ -528,6 +586,23 @@ class CppHeaderParser:
                 pass
 
         return class_info
+
+    def _has_reflgen_attribute(self, cursor: clang.cindex.Cursor) -> bool:
+        """Check whether a class/struct cursor has a reflgen attribute."""
+        target_attr = "reflgen"
+
+        for child in cursor.get_children():
+            if child.kind == clang.cindex.CursorKind.ANNOTATE_ATTR:
+                if (child.spelling or "").strip() == target_attr:
+                    return True
+
+            # Fallback for compilers/parsing modes that expose attributes as unexposed cursors.
+            if child.kind == clang.cindex.CursorKind.UNEXPOSED_ATTR:
+                token_text = "".join(token.spelling for token in child.get_tokens())
+                if target_attr in token_text:
+                    return True
+
+        return False
 
     def _parse_class(
         self, class_cursor: clang.cindex.Cursor, default_access: str, header_path: str
@@ -549,6 +624,29 @@ class CppHeaderParser:
                 param_info = ParamInfo(param_name, param_type)
                 parameters.append(param_info)
         return parameters
+
+    def _get_method_ref_qualifier(self, cursor: clang.cindex.Cursor) -> str:
+        """Extract C++ method ref-qualifier ('&' or '&&') from a method cursor."""
+        display_name = cursor.displayname or ""
+        if display_name:
+            right_paren = display_name.rfind(")")
+            if right_paren != -1:
+                suffix = display_name[right_paren + 1 :].strip()
+                if suffix.startswith("const"):
+                    suffix = suffix[len("const") :].strip()
+                if suffix.startswith("&&"):
+                    return "&&"
+                if suffix.startswith("&"):
+                    return "&"
+
+        # Fallback: parse cursor.type spelling when display name does not carry
+        # qualifiers in the current libclang/python binding combination.
+        type_spelling = (cursor.type.spelling or "").strip()
+        if type_spelling.endswith("&&"):
+            return "&&"
+        if type_spelling.endswith("&"):
+            return "&"
+        return ""
 
     def _get_fully_qualified_type(self, type_obj) -> str:
         """Get fully qualified type name including namespaces."""
