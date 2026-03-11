@@ -224,7 +224,8 @@ void prepare_vxgi_voxelization(
     uniform.flag_static_voxels = 1;
     uniform.voxel_scale = 1.0f / volume_grid_size;
     uniform.voxel_size = voxel_size;
-    uniform.world_min_point = voxelization->scene_aabb.min;
+    auto cube_half_extent = Vector3 {half_size, half_size, half_size};
+    uniform.world_min_point = center - cube_half_extent;
     device->update_buffer(
         voxelization->voxelization_uniform_buffer,
         0,
@@ -638,6 +639,7 @@ void setup_inject_propagation(
                 texture_read_only("voxel_tex_mipmap[3]"),
                 texture_read_only("voxel_tex_mipmap[4]"),
                 texture_read_only("voxel_tex_mipmap[5]"),
+                sampler("voxel_sampler"),
             }
         ));
     auto pipeline = device->create_compute_pipeline(ComputePipelineDescription {
@@ -671,6 +673,11 @@ void setup_inject_propagation(
                 volumes->mipmap[3],
                 volumes->mipmap[4],
                 volumes->mipmap[5],
+                device->create_sampler(SamplerDescription {
+                    .address_mode_u = SamplerAddressMode::ClampToEdge,
+                    .address_mode_v = SamplerAddressMode::ClampToEdge,
+                    .address_mode_w = SamplerAddressMode::ClampToEdge,
+                }),
             },
     });
 
@@ -778,10 +785,15 @@ void prepare_vxgi_lighting(
     uniform.num_point_lights = point_light_count;
 
     auto axis_size = voxelization->scene_aabb.extent() * 2.0f;
+    auto center = voxelization->scene_aabb.center();
     auto volume_grid_size = std::max({axis_size.x, axis_size.y, axis_size.z});
+    auto half_size = volume_grid_size * 0.5f;
+    auto cube_half_extent = Vector3 {half_size, half_size, half_size};
+    auto cube_min_point = center - cube_half_extent;
+    auto cube_max_point = center + cube_half_extent;
     uniform.voxel_scale = 1.0f / volume_grid_size;
-    uniform.world_min_point = voxelization->scene_aabb.min;
-    uniform.world_max_point = voxelization->scene_aabb.max;
+    uniform.world_min_point = cube_min_point;
+    uniform.world_max_point = cube_max_point;
     uniform.volume_dimension =
         static_cast<int>(volumes->config.voxel_resolution);
 
@@ -808,7 +820,11 @@ void prepare_vxgi_lighting(
                 volumes->mipmap[3],
                 volumes->mipmap[4],
                 volumes->mipmap[5],
-                device->create_sampler(SamplerDescription::Linear),
+                device->create_sampler(SamplerDescription {
+                    .address_mode_u = SamplerAddressMode::ClampToEdge,
+                    .address_mode_v = SamplerAddressMode::ClampToEdge,
+                    .address_mode_w = SamplerAddressMode::ClampToEdge,
+                }),
                 shadow_map ? shadow_map : rendering_defaults->default_texture,
                 device->create_sampler(SamplerDescription {
                     .address_mode_u = SamplerAddressMode::ClampToEdge,
