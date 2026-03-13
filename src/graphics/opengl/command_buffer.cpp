@@ -312,10 +312,10 @@ void CommandBufferOpenGL::draw(size_t start, size_t count) {
         count
     );
     opengl_check_error();
-    // FIXME: Temporary solution for image writing in shaders. Potential
-    // performance issue?
-    glMemoryBarrier(GL_ALL_BARRIER_BITS);
-    opengl_check_error();
+    if (pipeline_gl->memory_barriers() != 0) {
+        glMemoryBarrier(pipeline_gl->memory_barriers());
+        opengl_check_error();
+    }
 }
 
 void CommandBufferOpenGL::draw_indexed(size_t count) {
@@ -328,8 +328,10 @@ void CommandBufferOpenGL::draw_indexed(size_t count) {
         nullptr
     );
     opengl_check_error();
-    glMemoryBarrier(GL_ALL_BARRIER_BITS);
-    opengl_check_error();
+    if (pipeline_gl->memory_barriers() != 0) {
+        glMemoryBarrier(pipeline_gl->memory_barriers());
+        opengl_check_error();
+    }
 }
 
 void CommandBufferOpenGL::dispatch(

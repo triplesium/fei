@@ -55,6 +55,8 @@ class PipelineOpenGL : public Pipeline {
 
     std::vector<std::vector<ResourceBindingInfo>> m_resource_bindings;
 
+    GLbitfield m_memory_barriers {0};
+
   public:
     PipelineOpenGL(const RenderPipelineDescription& desc);
     PipelineOpenGL(const ComputePipelineDescription& desc);
@@ -108,6 +110,8 @@ class PipelineOpenGL : public Pipeline {
     }
 
     void process_resource_layouts();
+
+    GLbitfield memory_barriers() const { return m_memory_barriers; }
 };
 
 } // namespace fei

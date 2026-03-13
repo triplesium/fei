@@ -136,6 +136,8 @@ void PipelineOpenGL::process_resource_layouts() {
                         .unit = unit,
                         .location = location,
                     };
+                    m_memory_barriers |= GL_SHADER_IMAGE_ACCESS_BARRIER_BIT;
+                    m_memory_barriers |= GL_TEXTURE_FETCH_BARRIER_BIT;
                     break;
                 }
                 case ResourceKind::StorageBufferReadOnly:
@@ -151,6 +153,7 @@ void PipelineOpenGL::process_resource_layouts() {
                     }
                     m_resource_bindings[slot][i] =
                         ShaderStorageBinding {.binding = index};
+                    m_memory_barriers |= GL_SHADER_STORAGE_BARRIER_BIT;
                     break;
                 }
                 case ResourceKind::Sampler: {
