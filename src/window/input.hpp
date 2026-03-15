@@ -42,6 +42,12 @@ struct KeyEvent {
 
 class KeyInput {
   public:
+    KeyInput() {
+        for (auto key : c_key_codes) {
+            keys[key] = {};
+        }
+    }
+
     bool pressed(KeyCode key) const { return keys.at(key).down_this_frame; }
     bool just_pressed(KeyCode key) const {
         return keys.at(key).down_this_frame && !keys.at(key).down_last_frame;
@@ -75,6 +81,13 @@ enum class MouseButton : int32_t {
 
 class MouseInput {
   public:
+    MouseInput() {
+        for (auto button :
+             {MouseButton::Left, MouseButton::Right, MouseButton::Middle}) {
+            keys[button] = {};
+        }
+    }
+
     void set_position(Vector2 position) { m_position = position; }
     Vector2 position() const { return m_position; }
 
