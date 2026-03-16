@@ -34,6 +34,9 @@ EMBED(aniso_mipmapbase_comp, "aniso_mipmapbase.comp");
 EMBED(aniso_mipmapvolume_comp, "aniso_mipmapvolume.comp");
 EMBED(deferred_gi_frag, "deferred_gi.frag");
 EMBED(blur_frag, "blur.frag");
+EMBED(deferred_gi_direct_frag, "deferred_gi_direct.frag");
+EMBED(deferred_gi_indirect_frag, "deferred_gi_indirect.frag");
+EMBED(deferred_gi_composite_frag, "deferred_gi_composite.frag");
 
 namespace fei {
 

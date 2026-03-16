@@ -361,19 +361,19 @@ vec3 CalculateDirectional(Light light, vec3 normal, vec3 position, vec3 albedo, 
 {
     float visibility = 1.0f;
 
-    if(light.shadowingMethod == 1)
-    {
+    // if(light.shadowingMethod == 1)
+    // {
         visibility = Visibility(position);
-    }
-    else if(light.shadowingMethod == 2)
-    {
-        visibility = max(0.0f, TraceShadowCone(position, light.direction, cone_shadow_aperture, 1.0f / voxel_scale));
-    }
-    else if(light.shadowingMethod == 3)
-    {
-        vec3 voxelPos = WorldToVoxel(position);  
-        visibility = max(0.0f, texture(voxel_visibility, voxelPos).a);
-    }
+    // }
+    // else if(light.shadowingMethod == 2)
+    // {
+    //     visibility = max(0.0f, TraceShadowCone(position, light.direction, cone_shadow_aperture, 1.0f / voxel_scale));
+    // }
+    // else if(light.shadowingMethod == 3)
+    // {
+    //     vec3 voxelPos = WorldToVoxel(position);  
+    //     visibility = max(0.0f, texture(voxel_visibility, voxelPos).a);
+    // }
 
     if(visibility <= 0.0f) return vec3(0.0f);  
 
@@ -392,15 +392,15 @@ vec3 CalculatePoint(Light light, vec3 normal, vec3 position, vec3 albedo, vec4 s
 
     float visibility = 1.0f;
 
-    if(light.shadowingMethod == 2)
-    {
-        visibility = max(0.0f, TraceShadowCone(position, light.direction, cone_shadow_aperture, d));
-    }
-    else if(light.shadowingMethod == 3)
-    {
+    // if(light.shadowingMethod == 2)
+    // {
+    //     visibility = max(0.0f, TraceShadowCone(position, light.direction, cone_shadow_aperture, d));
+    // }
+    // else if(light.shadowingMethod == 3)
+    // {
         vec3 voxelPos = WorldToVoxel(position);  
         visibility = max(0.0f, texture(voxel_visibility, voxelPos).a);
-    } 
+    // } 
 
     if(visibility <= 0.0f) return vec3(0.0f);  
 
@@ -433,15 +433,15 @@ vec3 CalculateSpot(Light light, vec3 normal, vec3 position, vec3 albedo, vec4 sp
     float visibility = 1.0f;
 
 
-    if(light.shadowingMethod == 2)
-    {
-        visibility = max(0.0f, TraceShadowCone(position, light.direction, cone_shadow_aperture, dst));
-    }
-    else if(light.shadowingMethod == 3)
-    {
+    // if(light.shadowingMethod == 2)
+    // {
+    //     visibility = max(0.0f, TraceShadowCone(position, light.direction, cone_shadow_aperture, dst));
+    // }
+    // else if(light.shadowingMethod == 3)
+    // {
         vec3 voxelPos = WorldToVoxel(position);  
         visibility = max(0.0f, texture(voxel_visibility, voxelPos).a);
-    } 
+    // } 
 
     if(visibility <= 0.0f) return vec3(0.0f); 
 
@@ -533,65 +533,15 @@ vec4 CalculateIndirectLighting(vec3 position, vec3 normal, vec3 albedo, vec4 spe
 
 void main()
 {
-    // world-space position
     vec3 position = texture(g_position_ao, Frag_TexCoords).rgb;
-    // world-space normal
     vec3 normal = normalize(texture(g_normal_roughness, Frag_TexCoords).xyz);
-    // xyz = fragment specular, w = shininess
     vec4 specular = texture(g_specular, Frag_TexCoords);
-    // fragment albedo
     vec3 baseColor = texture(g_albedo_metallic, Frag_TexCoords).rgb;
-    // convert to linear space
     vec3 albedo = pow(baseColor, vec3(2.2f));
-    // fragment emissiviness
     vec3 emissive = texture(g_emissive_depth, Frag_TexCoords).rgb;
-    // lighting cumulatives
     vec3 directLighting = vec3(1.0f);
-    vec4 indirectLighting = vec4(1.0f);
-    vec3 compositeLighting = vec3(1.0f);
 
-    if(mode == 0)   // direct + indirect + ao
-    {
-        indirectLighting = CalculateIndirectLighting(position, normal, baseColor, specular, true);
-        directLighting = CalculateDirectLighting(position, normal, albedo, specular);
-    }
-    else if(mode == 1)  // direct + indirect
-    {
-        indirectLighting = CalculateIndirectLighting(position, normal, baseColor, specular, false);
-        directLighting = CalculateDirectLighting(position, normal, albedo, specular);
-    }
-    else if(mode == 2) // direct only
-    {
-        indirectLighting = vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        directLighting = CalculateDirectLighting(position, normal, albedo, specular);
-    }
-    else if(mode == 3) // indirect only
-    {
-        directLighting = vec3(0.0f);
-        baseColor.rgb = specular.rgb = vec3(1.0f);
-        indirectLighting = CalculateIndirectLighting(position, normal, baseColor, specular, false);
-    }
-    else if(mode == 4) // ambient occlusion only
-    {
-        directLighting = vec3(0.0f);
-        specular = vec4(0.0f);
-        indirectLighting = CalculateIndirectLighting(position, normal, baseColor, specular, true);
-        indirectLighting.rgb = vec3(1.0f);
-    }
+    directLighting = CalculateDirectLighting(position, normal, albedo, specular);
 
-    // convert indirect to linear space
-    indirectLighting.rgb = pow(indirectLighting.rgb, vec3(2.2f));
-    // final composite lighting (direct + indirect) * ambient occlusion
-    compositeLighting = (directLighting + indirectLighting.rgb) * indirectLighting.a;
-    compositeLighting += emissive;
-    // -- this could be done in a post-process pass -- 
-
-    // Reinhard tone mapping
-    compositeLighting = compositeLighting / (compositeLighting + 1.0f);
-    // gamma correction
-    const float gamma = 2.2;
-    // convert to gamma space
-    compositeLighting = pow(compositeLighting, vec3(1.0 / gamma));
-
-    fragColor = vec4(compositeLighting, 1.0f);
+    fragColor = vec4(directLighting, 1.0f);
 }

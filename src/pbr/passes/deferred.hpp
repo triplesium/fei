@@ -14,10 +14,19 @@ struct DeferedRenderResources {
     std::shared_ptr<Texture> g_normal_roughness;
     std::shared_ptr<Texture> g_albedo_metallic;
     std::shared_ptr<Texture> g_specular;
-    std::shared_ptr<Texture> g_emissive;
+    std::shared_ptr<Texture> g_emissive_depth;
     std::shared_ptr<ResourceLayout> defered_resource_layout;
     std::shared_ptr<ResourceSet> defered_resource_set;
     std::shared_ptr<Pipeline> defered_pipeline;
+
+    std::shared_ptr<Texture> direct_lighting;
+    std::shared_ptr<Pipeline> direct_lighting_pipeline;
+    std::shared_ptr<Texture> indirect_lighting;
+    std::shared_ptr<Pipeline> indirect_lighting_pipeline;
+    std::shared_ptr<Texture> composite_lighting;
+    std::shared_ptr<Pipeline> composite_lighting_pipeline;
+    std::shared_ptr<ResourceLayout> composite_resource_layout;
+    std::shared_ptr<ResourceSet> composite_resource_set;
 };
 
 class DeferredPipelineSpecializer : public PipelineSpecializer {

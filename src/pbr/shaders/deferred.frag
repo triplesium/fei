@@ -18,7 +18,7 @@ uniform sampler2D g_position_ao;
 uniform sampler2D g_normal_roughness;
 uniform sampler2D g_albedo_metallic;
 uniform sampler2D g_specular;
-uniform sampler2D g_emissive;
+uniform sampler2D g_emissive_depth;
 
 uniform samplerCube irradiance_map;
 uniform samplerCube radiance_map;

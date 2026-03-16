@@ -3,7 +3,7 @@ layout (location = 0) out vec4 g_position_ao;
 layout (location = 1) out vec4 g_normal_roughness;
 layout (location = 2) out vec4 g_albedo_metallic;
 layout (location = 3) out vec4 g_specular;
-layout (location = 4) out vec4 g_emissive;
+layout (location = 4) out vec4 g_emissive_depth;
 
 in vec3 Frag_Position;
 in vec3 Frag_Normal;
@@ -65,6 +65,6 @@ void main()
     g_albedo_metallic.a = (material.flags & STANDARD_MATERIAL_FLAGS_METALLIC_MAP_BIT) != 0 ? texture(metallic_map, Frag_TexCoords).r : material.metallic;
     g_specular.rgb = (material.flags & STANDARD_MATERIAL_FLAGS_SPECULAR_MAP_BIT) != 0 ? texture(specular_map, Frag_TexCoords).rgb : material.specular;
     g_specular.a = 1.0;
-    g_emissive.rgb = (material.flags & STANDARD_MATERIAL_FLAGS_EMISSIVE_MAP_BIT) != 0 ? texture(emissive_map, Frag_TexCoords).rgb : material.emissive;
-    g_emissive.a = 1.0;
+    g_emissive_depth.rgb = (material.flags & STANDARD_MATERIAL_FLAGS_EMISSIVE_MAP_BIT) != 0 ? texture(emissive_map, Frag_TexCoords).rgb : material.emissive;
+    g_emissive_depth.a = gl_FragCoord.z;
 }  

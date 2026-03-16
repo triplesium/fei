@@ -82,13 +82,13 @@ void setup_gbuffer(
         .texture_type = TextureType::Texture2D,
     });
 
-    resources->g_emissive = device->create_texture(TextureDescription {
+    resources->g_emissive_depth = device->create_texture(TextureDescription {
         .width = width,
         .height = height,
         .depth = 1,
         .mip_level = 1,
         .layer = 1,
-        .texture_format = PixelFormat::Rgba8Unorm,
+        .texture_format = PixelFormat::Rgba16Float,
         .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
         .texture_type = TextureType::Texture2D,
     });
@@ -103,20 +103,20 @@ void setup_gbuffer(
                 texture_read_only("g_normal_roughness"),
                 texture_read_only("g_albedo_metallic"),
                 texture_read_only("g_specular"),
-                texture_read_only("g_emissive"),
+                texture_read_only("g_emissive_depth"),
+                sampler("g_buffer_sampler"),
             }
         ));
 
-    auto vert_shader_handle = asset_server->load<Shader>("embeded://quad.vert");
-    auto vert_shader = shader_assets->get(vert_shader_handle).value();
-    auto frag_shader_handle =
-        asset_server->load<Shader>("embeded://deferred_gi.frag");
-    auto frag_shader = shader_assets->get(frag_shader_handle).value();
-
-    std::vector<std::shared_ptr<ShaderModule>> shader_modules {
-        device->create_shader_module(vert_shader.description()),
-        device->create_shader_module(frag_shader.description()),
+    auto create_shader_module = [&](const std::string& path) {
+        auto shader_handle = asset_server->load<Shader>(path);
+        auto shader = shader_assets->get(shader_handle).value();
+        return device->create_shader_module(shader.description());
     };
+
+    auto quad_vert_shader = create_shader_module("embeded://quad.vert");
+    auto deferred_gi_frag_shader =
+        create_shader_module("embeded://deferred_gi.frag");
 
     resources->defered_resource_set =
         device->create_resource_set(ResourceSetDescription {
@@ -127,7 +127,8 @@ void setup_gbuffer(
                     resources->g_normal_roughness,
                     resources->g_albedo_metallic,
                     resources->g_specular,
-                    resources->g_emissive,
+                    resources->g_emissive_depth,
+                    device->create_sampler(SamplerDescription::Point),
                 },
         });
 
@@ -141,13 +142,142 @@ void setup_gbuffer(
                 ShaderProgramDescription {
                     .vertex_layouts = {mesh.vertex_buffer_layout()
                                            .to_vertex_layout_description()},
-                    .shaders = shader_modules,
+                    .shaders =
+                        {
+                            quad_vert_shader,
+                            deferred_gi_frag_shader,
+                        },
                 },
             .resource_layouts =
                 {
                     mesh_view_layout->layout,
                     resources->defered_resource_layout,
                     vxgi_lighting->resource_layout,
+                },
+        });
+
+    resources->direct_lighting = device->create_texture(TextureDescription {
+        .width = width,
+        .height = height,
+        .depth = 1,
+        .mip_level = 1,
+        .layer = 1,
+        .texture_format = PixelFormat::Rgba16Float,
+        .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
+        .texture_type = TextureType::Texture2D,
+    });
+
+    resources->indirect_lighting = device->create_texture(TextureDescription {
+        .width = width / 2,
+        .height = height / 2,
+        .depth = 1,
+        .mip_level = 1,
+        .layer = 1,
+        .texture_format = PixelFormat::Rgba16Float,
+        .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
+        .texture_type = TextureType::Texture2D,
+    });
+
+    resources->composite_lighting = device->create_texture(TextureDescription {
+        .width = width,
+        .height = height,
+        .depth = 1,
+        .mip_level = 1,
+        .layer = 1,
+        .texture_format = PixelFormat::Rgba8Unorm,
+        .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
+        .texture_type = TextureType::Texture2D,
+    });
+
+    auto direct_lighting_shader =
+        create_shader_module("embeded://deferred_gi_direct.frag");
+    resources->direct_lighting_pipeline =
+        device->create_render_pipeline(RenderPipelineDescription {
+            .depth_stencil_state = DepthStencilStateDescription::Disabled,
+            .rasterizer_state = {},
+            .render_primitive = RenderPrimitive::Triangles,
+            .shader_program =
+                ShaderProgramDescription {
+                    .vertex_layouts = {mesh.vertex_buffer_layout()
+                                           .to_vertex_layout_description()},
+                    .shaders =
+                        {
+                            quad_vert_shader,
+                            direct_lighting_shader,
+                        },
+                },
+            .resource_layouts =
+                {
+                    mesh_view_layout->layout,
+                    resources->defered_resource_layout,
+                    vxgi_lighting->resource_layout,
+                },
+        });
+
+    auto indirect_lighting_shader =
+        create_shader_module("embeded://deferred_gi_indirect.frag");
+    resources->indirect_lighting_pipeline =
+        device->create_render_pipeline(RenderPipelineDescription {
+            .depth_stencil_state = DepthStencilStateDescription::Disabled,
+            .rasterizer_state = {},
+            .render_primitive = RenderPrimitive::Triangles,
+            .shader_program =
+                ShaderProgramDescription {
+                    .vertex_layouts = {mesh.vertex_buffer_layout()
+                                           .to_vertex_layout_description()},
+                    .shaders =
+                        {
+                            quad_vert_shader,
+                            indirect_lighting_shader,
+                        },
+                },
+            .resource_layouts =
+                {
+                    mesh_view_layout->layout,
+                    resources->defered_resource_layout,
+                    vxgi_lighting->resource_layout,
+                },
+        });
+
+    auto composite_shader =
+        create_shader_module("embeded://deferred_gi_composite.frag");
+    resources->composite_resource_layout =
+        device->create_resource_layout(ResourceLayoutDescription::sequencial(
+            {ShaderStages::Vertex, ShaderStages::Fragment},
+            {
+                texture_read_only("direct_lighting"),
+                texture_read_only("indirect_lighting"),
+            }
+        ));
+    resources->composite_resource_set =
+        device->create_resource_set(ResourceSetDescription {
+            .layout = resources->composite_resource_layout,
+            .resources =
+                {
+                    resources->direct_lighting,
+                    resources->indirect_lighting,
+                },
+        });
+    resources->composite_lighting_pipeline =
+        device->create_render_pipeline(RenderPipelineDescription {
+            .depth_stencil_state = DepthStencilStateDescription::Disabled,
+            .rasterizer_state = {},
+            .render_primitive = RenderPrimitive::Triangles,
+            .shader_program =
+                ShaderProgramDescription {
+                    .vertex_layouts = {mesh.vertex_buffer_layout()
+                                           .to_vertex_layout_description()},
+                    .shaders =
+                        {
+                            quad_vert_shader,
+                            composite_shader,
+                        },
+                },
+            .resource_layouts =
+                {
+                    mesh_view_layout->layout,
+                    resources->defered_resource_layout,
+                    resources->composite_resource_layout,
                 },
         });
 }
@@ -190,7 +320,7 @@ void defered_prepass(
                     .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
                 },
                 {
-                    .texture = resources->g_emissive,
+                    .texture = resources->g_emissive_depth,
                     .load_op = LoadOp::Clear,
                     .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
                 },
@@ -254,16 +384,10 @@ void defered_prepass(
 }
 
 void defered_pass(
-    Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
-        query_meshes,
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     Res<RenderTarget> target,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
     Res<GraphicsDevice> device,
-    Res<MeshUniforms> mesh_uniforms,
-    Res<MeshMaterialPipelines> mesh_material_pipelines,
-    Res<RenderAssets<PreparedMaterial>> materials,
-    Res<PipelineCache> pipeline_cache,
     Res<VxgiLighting> vxgi_lighting,
     Res<DeferedRenderResources> resources,
     Res<FullscreenQuad> fullscreen_quad
@@ -316,6 +440,149 @@ void defered_pass(
     device->submit_commands(command_buffer);
 }
 
+void direct_lighting_pass(
+    Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    Res<RenderAssets<GpuMesh>> gpu_meshes,
+    Res<GraphicsDevice> device,
+    Res<VxgiLighting> vxgi_lighting,
+    Res<DeferedRenderResources> resources,
+    Res<FullscreenQuad> fullscreen_quad
+) {
+    auto [mesh_view_resource_set] = query_cameras.first();
+
+    auto command_buffer = device->create_command_buffer();
+    command_buffer->begin_render_pass(RenderPassDescription {
+        .color_attachments =
+            {
+                {
+                    .texture = resources->direct_lighting,
+                    .load_op = LoadOp::Clear,
+                    .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
+                },
+            }
+    });
+    command_buffer->set_viewport(
+        0,
+        0,
+        resources->direct_lighting->width(),
+        resources->direct_lighting->height()
+    );
+    command_buffer->set_render_pipeline(resources->direct_lighting_pipeline);
+    command_buffer->set_resource_set(0, mesh_view_resource_set.resource_set);
+    command_buffer->set_resource_set(1, resources->defered_resource_set);
+    command_buffer->set_resource_set(2, vxgi_lighting->resource_set);
+    command_buffer->set_vertex_buffer(
+        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id())
+            ->vertex_buffer()
+    );
+    auto gpu_mesh =
+        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id()).value();
+    command_buffer->set_index_buffer(
+        *gpu_mesh.index_buffer(),
+        IndexFormat::Uint32
+    );
+    command_buffer->draw_indexed(
+        gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
+    );
+    command_buffer->end_render_pass();
+    device->submit_commands(command_buffer);
+}
+
+void indirect_lighting_pass(
+    Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    Res<RenderAssets<GpuMesh>> gpu_meshes,
+    Res<GraphicsDevice> device,
+    Res<VxgiLighting> vxgi_lighting,
+    Res<DeferedRenderResources> resources,
+    Res<FullscreenQuad> fullscreen_quad
+) {
+    auto [mesh_view_resource_set] = query_cameras.first();
+
+    auto command_buffer = device->create_command_buffer();
+    command_buffer->begin_render_pass(RenderPassDescription {
+        .color_attachments =
+            {
+                {
+                    .texture = resources->indirect_lighting,
+                    .load_op = LoadOp::Clear,
+                    .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
+                },
+            }
+    });
+    command_buffer->set_viewport(
+        0,
+        0,
+        resources->indirect_lighting->width(),
+        resources->indirect_lighting->height()
+    );
+    command_buffer->set_render_pipeline(resources->indirect_lighting_pipeline);
+    command_buffer->set_resource_set(0, mesh_view_resource_set.resource_set);
+    command_buffer->set_resource_set(1, resources->defered_resource_set);
+    command_buffer->set_resource_set(2, vxgi_lighting->resource_set);
+    command_buffer->set_vertex_buffer(
+        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id())
+            ->vertex_buffer()
+    );
+    auto gpu_mesh =
+        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id()).value();
+    command_buffer->set_index_buffer(
+        *gpu_mesh.index_buffer(),
+        IndexFormat::Uint32
+    );
+    command_buffer->draw_indexed(
+        gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
+    );
+    command_buffer->end_render_pass();
+    device->submit_commands(command_buffer);
+}
+
+void composite_pass(
+    Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    Res<RenderAssets<GpuMesh>> gpu_meshes,
+    Res<GraphicsDevice> device,
+    Res<DeferedRenderResources> resources,
+    Res<FullscreenQuad> fullscreen_quad
+) {
+    auto [mesh_view_resource_set] = query_cameras.first();
+
+    auto command_buffer = device->create_command_buffer();
+    command_buffer->begin_render_pass(RenderPassDescription {
+        .color_attachments =
+            {
+                {
+                    .texture = resources->composite_lighting,
+                    .load_op = LoadOp::Clear,
+                    .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
+                },
+            }
+    });
+    command_buffer->set_viewport(
+        0,
+        0,
+        resources->composite_lighting->width(),
+        resources->composite_lighting->height()
+    );
+    command_buffer->set_render_pipeline(resources->composite_lighting_pipeline);
+    command_buffer->set_resource_set(0, mesh_view_resource_set.resource_set);
+    command_buffer->set_resource_set(1, resources->defered_resource_set);
+    command_buffer->set_resource_set(2, resources->composite_resource_set);
+    command_buffer->set_vertex_buffer(
+        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id())
+            ->vertex_buffer()
+    );
+    auto gpu_mesh =
+        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id()).value();
+    command_buffer->set_index_buffer(
+        *gpu_mesh.index_buffer(),
+        IndexFormat::Uint32
+    );
+    command_buffer->draw_indexed(
+        gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
+    );
+    command_buffer->end_render_pass();
+    device->submit_commands(command_buffer);
+}
+
 void blit_pass(
     Res<RenderTarget> forward_render_resources,
     Res<GraphicsDevice> device
@@ -326,6 +593,25 @@ void blit_pass(
             {
                 RenderPassColorAttachment {
                     .texture = forward_render_resources->color_texture,
+                    .load_op = LoadOp::Load,
+                },
+            },
+    });
+    command_buffer->end_render_pass();
+    command_buffer->blit_to(device->main_framebuffer());
+    device->submit_commands(command_buffer);
+}
+
+void blit_composite_pass(
+    Res<DeferedRenderResources> resources,
+    Res<GraphicsDevice> device
+) {
+    auto command_buffer = device->create_command_buffer();
+    command_buffer->begin_render_pass(RenderPassDescription {
+        .color_attachments =
+            {
+                RenderPassColorAttachment {
+                    .texture = resources->composite_lighting,
                     .load_op = LoadOp::Load,
                 },
             },
@@ -348,8 +634,16 @@ void DeferredRenderPlugin::setup(App& app) {
         )
         .add_systems(
             RenderUpdate,
-            chain(defered_prepass, defered_pass, blit_pass) |
-                after(inject_propagation) | in_set<RenderingSystems::Render>()
+            chain(
+                defered_prepass,
+                // defered_pass,
+                // blit_pass
+                direct_lighting_pass,
+                indirect_lighting_pass,
+                composite_pass,
+                blit_composite_pass
+            ) | after(inject_propagation) |
+                in_set<RenderingSystems::Render>()
         );
 }
 
