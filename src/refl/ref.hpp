@@ -36,6 +36,12 @@ class Ref {
         return *static_cast<std::decay_t<T>*>(m_ptr);
     }
 
+    template<class T>
+    std::decay_t<T>&& get_rref() const {
+        FEI_ASSERT(m_type_id);
+        return std::move(*static_cast<std::decay_t<T>*>(m_ptr));
+    }
+
     TypeId type_id() const {
         FEI_ASSERT(m_type_id);
         return m_type_id;

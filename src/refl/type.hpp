@@ -34,6 +34,7 @@ class Type {
   public:
     using DefaultConstructFunc = void (*)(void* dest);
     using CopyConstructFunc = void (*)(void* dest, const void* src);
+    using MoveConstructFunc = void (*)(void* dest, void* src);
     using DeleteFunc = void (*)(void* ptr);
 
   private:
@@ -42,6 +43,7 @@ class Type {
     std::size_t m_size;
     DefaultConstructFunc m_default_construct {nullptr};
     CopyConstructFunc m_copy_construct {nullptr};
+    MoveConstructFunc m_move_construct {nullptr};
     DeleteFunc m_delete {nullptr};
 
   public:
@@ -51,11 +53,13 @@ class Type {
         std::size_t size,
         DefaultConstructFunc default_construct,
         CopyConstructFunc copy_construct,
+        MoveConstructFunc move_construct,
         DeleteFunc delete_func
     ) :
         m_name(std::move(name)), m_id(id), m_size(size),
         m_default_construct(default_construct),
-        m_copy_construct(copy_construct), m_delete(delete_func) {}
+        m_copy_construct(copy_construct), m_move_construct(move_construct),
+        m_delete(delete_func) {}
 
     const std::string& name() const { return m_name; }
     TypeId hash() const { return m_id; }
@@ -69,7 +73,14 @@ class Type {
         return m_default_construct;
     }
     CopyConstructFunc copy_construct_func() const { return m_copy_construct; }
+    MoveConstructFunc move_construct_func() const { return m_move_construct; }
     DeleteFunc delete_func() const { return m_delete; }
+
+    bool default_constructible() const {
+        return m_default_construct != nullptr;
+    }
+    bool copy_constructible() const { return m_copy_construct != nullptr; }
+    bool move_constructible() const { return m_move_construct != nullptr; }
 
     auto operator<=>(const Type& other) const { return m_id <=> other.m_id; }
 };

@@ -185,7 +185,7 @@ struct ValHandlerHeap : public ValHandlerBase {
     }
     template<class... Args>
     void construct(Val& val, Args&&... args) const {
-        if constexpr (std::constructible_from<T, Args...>) {
+        if constexpr (requires { T(std::forward<Args>(args)...); }) {
             val.m_storage.set_ptr(new T(std::forward<Args>(args)...));
         } else {
             fatal(
@@ -243,15 +243,7 @@ struct ValHandlerStack : public ValHandlerBase {
     }
     template<class... Args>
     void construct(Val& val, Args&&... args) const {
-        if constexpr (std::constructible_from<
-                          T,
-                          decltype(std::forward<Args>(std::declval<Args>())
-                          )...>) {
-            new ((void*)&val.m_storage) T(std::forward<Args>(args)...);
-        } else {
-            fatal("Cannot create stack object from reference for non-copyable "
-                  "type");
-        }
+        new ((void*)&val.m_storage) T(std::forward<Args>(args)...);
     }
     virtual void destroy(Val& val) const override {
         static_cast<T*>((void*)&val.m_storage)->~T();

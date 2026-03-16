@@ -1,12 +1,15 @@
 #pragma once
 #include "refl/qual_type.hpp"
+#include "refl/ref.hpp"
 #include "refl/type.hpp"
-#include "refl/val.hpp"
 
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace fei {
+
+class Val;
 
 class Param {
   private:
@@ -15,49 +18,38 @@ class Param {
 
   public:
     Param() = default;
-    Param(std::string name, TypeId type_id) :
-        m_name(name), m_type_id(type_id) {}
+    Param(std::string name, TypeId type_id);
 
-    TypeId type_id() const { return m_type_id; }
+    TypeId type_id() const;
 
-    const std::string& name() const { return m_name; }
+    const std::string& name() const;
 
-    void set_name(const std::string& name) { m_name = name; }
+    void set_name(const std::string& name);
 };
 
 class ReturnValue {
   private:
-    Val m_val;
+    std::shared_ptr<Val> m_val;
     Ref m_ref;
 
   public:
     enum class Kind { Void, Value, Reference } m_kind;
 
-    ReturnValue() : m_kind(Kind::Void) {}
+    ReturnValue();
 
-    ReturnValue(Val val) : m_val(val), m_kind(Kind::Value) {}
+    ReturnValue(Val val);
 
-    ReturnValue(Ref ref) : m_ref(ref), m_kind(Kind::Reference) {}
+    ReturnValue(Ref ref);
 
-    Kind kind() const { return m_kind; }
+    Kind kind() const;
 
-    Val& value() {
-        assert(m_kind == Kind::Value);
-        return m_val;
-    }
+    Val& value();
 
-    Ref ref() const {
-        assert(m_kind == Kind::Reference || m_kind == Kind::Value);
-        if (m_kind == Kind::Value) {
-            return m_val.ref();
-        } else {
-            return m_ref;
-        }
-    }
+    Ref ref() const;
 
-    bool is_value() const { return m_kind == Kind::Value; }
-    bool is_ref() const { return m_kind == Kind::Reference; }
-    bool is_void() const { return m_kind == Kind::Void; }
+    bool is_value() const;
+    bool is_ref() const;
+    bool is_void() const;
 };
 
 class Callable {
@@ -66,43 +58,29 @@ class Callable {
         std::string name,
         const std::vector<Param>& params,
         const QualType& return_type
-    ) : m_name(name), m_params(params), m_return_type(return_type) {}
+    );
     virtual ~Callable() = default;
 
-    bool validate(const std::vector<Ref>& args) const {
-        if (args.size() != m_params.size())
-            return false;
-        return true;
-    }
+    bool validate(const std::vector<Ref>& args) const;
 
     virtual ReturnValue invoke_variadic(const std::vector<Ref>& args) const = 0;
 
-    ReturnValue invoke(Ref arg0) const { return invoke_variadic({arg0}); }
+    ReturnValue invoke(Ref arg0) const;
 
-    ReturnValue invoke(Ref arg0, Ref arg1) const {
-        return invoke_variadic({arg0, arg1});
-    }
+    ReturnValue invoke(Ref arg0, Ref arg1) const;
 
-    ReturnValue invoke(Ref arg0, Ref arg1, Ref arg2) const {
-        return invoke_variadic({arg0, arg1, arg2});
-    }
+    ReturnValue invoke(Ref arg0, Ref arg1, Ref arg2) const;
 
-    ReturnValue invoke(Ref arg0, Ref arg1, Ref arg2, Ref arg3) const {
-        return invoke_variadic({arg0, arg1, arg2, arg3});
-    }
+    ReturnValue invoke(Ref arg0, Ref arg1, Ref arg2, Ref arg3) const;
 
-    ReturnValue invoke(Ref arg0, Ref arg1, Ref arg2, Ref arg3, Ref arg4) const {
-        return invoke_variadic({arg0, arg1, arg2, arg3, arg4});
-    }
+    ReturnValue invoke(Ref arg0, Ref arg1, Ref arg2, Ref arg3, Ref arg4) const;
 
     ReturnValue
-    invoke(Ref arg0, Ref arg1, Ref arg2, Ref arg3, Ref arg4, Ref arg5) const {
-        return invoke_variadic({arg0, arg1, arg2, arg3, arg4, arg5});
-    }
+    invoke(Ref arg0, Ref arg1, Ref arg2, Ref arg3, Ref arg4, Ref arg5) const;
 
-    const std::string& name() const { return m_name; }
-    const std::vector<Param>& params() const { return m_params; }
-    QualType return_type() const { return m_return_type; }
+    const std::string& name() const;
+    const std::vector<Param>& params() const;
+    QualType return_type() const;
 
   protected:
     std::string m_name;

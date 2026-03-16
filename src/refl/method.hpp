@@ -6,6 +6,8 @@
 #include "refl/val.hpp"
 
 #include <array>
+#include <type_traits>
+#include <utility>
 
 namespace fei {
 
@@ -89,7 +91,7 @@ class MethodImpl : public Method {
         } else {
             if (args.size() - 1 != c_params_count) {
                 error(
-                    "Invalid argument count for method {}.{}: expected {}, got "
+                    "Invalid argument count for method {}: expected {}, got "
                     "{}",
                     name(),
                     c_params_count,
@@ -105,6 +107,20 @@ class MethodImpl : public Method {
     }
 
   private:
+    template<typename T>
+    decltype(auto) ref_to_arg(const Ref& ref) const {
+        if constexpr (std::is_pointer_v<T>) {
+            return ref.get<std::remove_pointer_t<T>*>();
+        } else if constexpr (std::is_lvalue_reference_v<T>) {
+            return ref.get<std::remove_reference_t<T>&>();
+        } else if constexpr (std::is_rvalue_reference_v<T> ||
+                             !std::is_copy_constructible_v<T>) {
+            return std::move(ref.get<std::remove_reference_t<T>&>());
+        } else {
+            return ref.get<T>();
+        }
+    }
+
     template<class... Args, size_t... N>
     decltype(auto) invoke_template_expand(
         std::index_sequence<N...>,
@@ -114,13 +130,13 @@ class MethodImpl : public Method {
         if constexpr (c_is_static) {
             return std::invoke(
                 m_ptr,
-                std::forward<Args>(args).template get<TypeOfParam<N>>()...
+                ref_to_arg<TypeOfParam<N>>(std::forward<Args>(args))...
             );
         } else {
             return std::invoke(
                 m_ptr,
                 instance.get<typename MemberTrait<P>::ParentType>(),
-                std::forward<Args>(args).template get<TypeOfParam<N>>()...
+                ref_to_arg<TypeOfParam<N>>(std::forward<Args>(args))...
             );
         }
     }
@@ -147,7 +163,7 @@ class MethodImpl : public Method {
                               std::is_reference_v<ReturnType>) {
                     return make_ref(ret);
                 } else {
-                    return make_val<ReturnType>(ret);
+                    return make_val<ReturnType>(std::move(ret));
                 }
             }
         }

@@ -30,12 +30,22 @@ class ConstructorImpl : public Constructor {
             return {};
         }
         return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
-            return make_val<T>(args[ArgIdx].get<Args>()...);
+            return make_val<T>(ref_to_arg<Args>(args[ArgIdx])...);
         }(std::make_index_sequence<sizeof...(Args)>());
     }
 
     virtual std::vector<TypeId> arg_types() const override {
         return {type_id<Args>()...};
+    }
+
+  private:
+    template<typename T>
+    decltype(auto) ref_to_arg(Ref ref) const {
+        if constexpr (std::is_rvalue_reference_v<T>) {
+            return ref.get_rref<T>();
+        } else {
+            return ref.get<T>();
+        }
     }
 };
 
