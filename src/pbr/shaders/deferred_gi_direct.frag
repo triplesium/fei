@@ -79,25 +79,6 @@ layout(row_major, std140) uniform Vxgi {
 const vec2 exponents = vec2(40.0f, 5.0f);
 const float lightBleedingReduction = 0.0f;
 
-// uniform Light directionalLight[MAX_DIRECTIONAL_LIGHTS];
-// uniform Light pointLight[MAX_POINT_LIGHTS];
-// uniform Light spotLight[MAX_SPOT_LIGHTS];
-// uniform uint lightTypeCount[3];
-
-// uniform float voxelScale;
-// uniform vec3 worldMinPoint;
-// uniform vec3 worldMaxPoint;
-// uniform int volumeDimension;
-
-// uniform float maxTracingDistanceGlobal = 1.0f;
-// uniform float bounceStrength = 1.0f;
-// uniform float aoFalloff = 725.0f;
-// uniform float aoAlpha = 0.01f;
-// uniform float samplingFactor = 0.5f;
-// uniform float coneShadowTolerance = 1.0f;
-// uniform float coneShadowAperture = 0.03f;
-// uniform uint mode = 0;
-
 const vec3 diffuseConeDirections[] =
 {
     vec3(0.0f, 1.0f, 0.0f),
@@ -331,33 +312,78 @@ vec3 Ambient(Light light, vec3 albedo)
     return max(albedo * light.ambient, 0.0f);
 }
 
-vec3 BRDF(Light light, vec3 N, vec3 X, vec3 ka, vec4 ks)
+float DistributionGGX(vec3 N, vec3 H, float roughness)
 {
-    // common variables
-    vec3 L = light.direction;
-    vec3 V = normalize(view.world_position - X);
-    vec3 H = normalize(V + L);
-    // compute dot procuts
-    float dotNL = max(dot(N, L), 0.0f);
-    float dotNH = max(dot(N, H), 0.0f);
-    float dotLH = max(dot(L, H), 0.0f);
-    // decode specular power
-    float spec = exp2(11.0f * ks.a + 1.0f);
-    // emulate fresnel effect
-    vec3 fresnel = ks.rgb + (1.0f - ks.rgb) * pow(1.0f - dotLH, 5.0f);
-    // specular factor
-    float blinnPhong = pow(dotNH, spec);
-    // energy conservation, aprox normalization factor
-    blinnPhong *= spec * 0.0397f + 0.3183f;
-    // specular term
-    vec3 specular = ks.rgb * light.specular * blinnPhong * fresnel;
-    // diffuse term
-    vec3 diffuse = ka.rgb * light.diffuse;
-    // return composition
-    return (diffuse + specular) * dotNL;
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float nDotH = max(dot(N, H), 0.0f);
+    float nDotH2 = nDotH * nDotH;
+
+    float numerator = a2;
+    float denominator = (nDotH2 * (a2 - 1.0f) + 1.0f);
+    denominator = PI * denominator * denominator;
+
+    return numerator / max(denominator, EPSILON);
 }
 
-vec3 CalculateDirectional(Light light, vec3 normal, vec3 position, vec3 albedo, vec4 specular)
+float GeometrySchlickGGX(float nDotV, float roughness)
+{
+    float r = roughness + 1.0f;
+    float k = (r * r) / 8.0f;
+
+    float numerator = nDotV;
+    float denominator = nDotV * (1.0f - k) + k;
+    return numerator / max(denominator, EPSILON);
+}
+
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
+{
+    float nDotV = max(dot(N, V), 0.0f);
+    float nDotL = max(dot(N, L), 0.0f);
+    float ggx2 = GeometrySchlickGGX(nDotV, roughness);
+    float ggx1 = GeometrySchlickGGX(nDotL, roughness);
+    return ggx1 * ggx2;
+}
+
+vec3 FresnelSchlick(float cosTheta, vec3 F0)
+{
+    return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
+}
+
+vec3 BRDF(
+    vec3 N,
+    vec3 V,
+    vec3 L,
+    vec3 radiance,
+    vec3 albedo,
+    float metallic,
+    float roughness,
+    vec3 F0)
+{
+    vec3 H = normalize(V + L);
+    float nDotL = max(dot(N, L), 0.0f);
+    float nDotV = max(dot(N, V), 0.0f);
+    if(nDotL <= 0.0f || nDotV <= 0.0f)
+    {
+        return vec3(0.0f);
+    }
+
+    float NDF = DistributionGGX(N, H, roughness);
+    float G = GeometrySmith(N, V, L, roughness);
+    vec3 F = FresnelSchlick(clamp(dot(H, V), 0.0f, 1.0f), F0);
+
+    vec3 numerator = NDF * G * F;
+    float denominator = 4.0f * nDotV * nDotL + 0.001f;
+    vec3 specular = numerator / denominator;
+
+    vec3 kS = F;
+    vec3 kD = (vec3(1.0f) - kS) * (1.0f - metallic);
+    vec3 diffuse = kD * albedo / PI;
+
+    return (diffuse + specular) * radiance * nDotL;
+}
+
+vec3 CalculateDirectional(Light light, vec3 normal, vec3 viewDir, vec3 position, vec3 albedo, float metallic, float roughness, vec3 F0)
 {
     float visibility = 1.0f;
 
@@ -377,14 +403,16 @@ vec3 CalculateDirectional(Light light, vec3 normal, vec3 position, vec3 albedo, 
 
     if(visibility <= 0.0f) return vec3(0.0f);  
 
-    return BRDF(light, normal, position, albedo, specular) * visibility;
+    vec3 lightDir = normalize(light.direction);
+    vec3 radiance = max(light.diffuse, vec3(0.0f));
+    return BRDF(normal, viewDir, lightDir, radiance, albedo, metallic, roughness, F0) * visibility;
 }
 
-vec3 CalculatePoint(Light light, vec3 normal, vec3 position, vec3 albedo, vec4 specular)
+vec3 CalculatePoint(Light light, vec3 normal, vec3 viewDir, vec3 position, vec3 albedo, float metallic, float roughness, vec3 F0)
 {
-    light.direction = light.position - position;
-    float d = length(light.direction);
-    light.direction = normalize(light.direction);
+    vec3 lightDir = light.position - position;
+    float d = length(lightDir);
+    lightDir = normalize(lightDir);
     float falloff = 1.0f / (light.attenuation.constant + light.attenuation.linear * d
                     + light.attenuation.quadratic * d * d + 1.0f);
 
@@ -394,7 +422,7 @@ vec3 CalculatePoint(Light light, vec3 normal, vec3 position, vec3 albedo, vec4 s
 
     // if(light.shadowingMethod == 2)
     // {
-    //     visibility = max(0.0f, TraceShadowCone(position, light.direction, cone_shadow_aperture, d));
+    //     visibility = max(0.0f, TraceShadowCone(position, lightDir, cone_shadow_aperture, d));
     // }
     // else if(light.shadowingMethod == 3)
     // {
@@ -404,14 +432,15 @@ vec3 CalculatePoint(Light light, vec3 normal, vec3 position, vec3 albedo, vec4 s
 
     if(visibility <= 0.0f) return vec3(0.0f);  
 
-    return BRDF(light, normal, position, albedo, specular) * falloff * visibility;
+    vec3 radiance = max(light.diffuse, vec3(0.0f)) * falloff;
+    return BRDF(normal, viewDir, lightDir, radiance, albedo, metallic, roughness, F0) * visibility;
 }
 
-vec3 CalculateSpot(Light light, vec3 normal, vec3 position, vec3 albedo, vec4 specular)
+vec3 CalculateSpot(Light light, vec3 normal, vec3 viewDir, vec3 position, vec3 albedo, float metallic, float roughness, vec3 F0)
 {
     vec3 spotDirection = light.direction;
-    light.direction = normalize(light.position - position);
-    float cosAngle = dot(-light.direction, spotDirection);
+    vec3 lightDir = normalize(light.position - position);
+    float cosAngle = dot(-lightDir, spotDirection);
 
     // outside the cone
     if(cosAngle < light.angleOuterCone) { return vec3(0.0f); }
@@ -435,7 +464,7 @@ vec3 CalculateSpot(Light light, vec3 normal, vec3 position, vec3 albedo, vec4 sp
 
     // if(light.shadowingMethod == 2)
     // {
-    //     visibility = max(0.0f, TraceShadowCone(position, light.direction, cone_shadow_aperture, dst));
+    //     visibility = max(0.0f, TraceShadowCone(position, lightDir, cone_shadow_aperture, dst));
     // }
     // else if(light.shadowingMethod == 3)
     // {
@@ -445,103 +474,55 @@ vec3 CalculateSpot(Light light, vec3 normal, vec3 position, vec3 albedo, vec4 sp
 
     if(visibility <= 0.0f) return vec3(0.0f); 
 
-    return BRDF(light, normal, position, albedo, specular) * falloff * spotFalloff * visibility;
+    vec3 radiance = max(light.diffuse, vec3(0.0f)) * falloff * spotFalloff;
+    return BRDF(normal, viewDir, lightDir, radiance, albedo, metallic, roughness, F0) * visibility;
 }
 
-vec3 CalculateDirectLighting(vec3 position, vec3 normal, vec3 albedo, vec4 specular)
+vec3 CalculateDirectLighting(vec3 position, vec3 normal, vec3 albedo, float metallic, float roughness, vec3 F0)
 {
     // calculate directional lighting
     vec3 directLighting = vec3(0.0f);
+    vec3 viewDir = normalize(view.world_position - position);
 
     // calculate lighting for directional lights
     for(int i = 0; i < num_directional_lights; ++i)
     {
-        directLighting += CalculateDirectional(directional_lights[i], normal, position, 
-                                         albedo, specular);
-        directLighting += Ambient(directional_lights[i], albedo);
+        directLighting += CalculateDirectional(
+            directional_lights[i], normal, viewDir, position, albedo, metallic, roughness, F0);
     }
 
     // calculate lighting for point lights
     for(int i = 0; i < num_point_lights; ++i)
     {
-        directLighting += CalculatePoint(point_lights[i], normal, position, 
-                                   albedo, specular);
-        directLighting += Ambient(point_lights[i], albedo);
+        directLighting += CalculatePoint(
+            point_lights[i], normal, viewDir, position, albedo, metallic, roughness, F0);
     }
 
     // calculate lighting for spot lights
     for(int i = 0; i < num_spot_lights; ++i) 
     {
-        directLighting += CalculateSpot(spot_lights[i], normal, position, 
-                                  albedo, specular);
-        directLighting += Ambient(spot_lights[i], albedo);
+        directLighting += CalculateSpot(
+            spot_lights[i], normal, viewDir, position, albedo, metallic, roughness, F0);
     }
 
     return directLighting;
-}
-
-vec4 CalculateIndirectLighting(vec3 position, vec3 normal, vec3 albedo, vec4 specular, bool ambientOcclusion)
-{
-    vec4 specularTrace = vec4(0.0f);
-    vec4 diffuseTrace = vec4(0.0f);
-    vec3 coneDirection = vec3(0.0f);
-
-    // component greater than zero
-    if(any(greaterThan(specular.rgb, specularTrace.rgb)))
-    {
-        vec3 viewDirection = normalize(view.world_position - position);
-        vec3 coneDirection = reflect(-viewDirection, normal);
-        coneDirection = normalize(coneDirection);
-        // specular cone setup, minimum of 1 grad, fewer can severly slow down performance
-        float aperture = clamp(tan(HALF_PI * (1.0f - specular.a)), 0.0174533f, PI);
-        specularTrace = TraceCone(position, normal, coneDirection, aperture, false);
-        specularTrace.rgb *= specular.rgb;
-    }
-
-    // component greater than zero
-    if(any(greaterThan(albedo, diffuseTrace.rgb)))
-    {
-        // diffuse cone setup
-        const float aperture = 0.57735f;
-        vec3 guide = vec3(0.0f, 1.0f, 0.0f);
-
-        if (abs(dot(normal,guide)) == 1.0f)
-        {
-            guide = vec3(0.0f, 0.0f, 1.0f);
-        }
-
-        // Find a tangent and a bitangent
-        vec3 right = normalize(guide - dot(normal, guide) * normal);
-        vec3 up = cross(right, normal);
-
-        for(int i = 0; i < 6; i++)
-        {
-            coneDirection = normal;
-            coneDirection += diffuseConeDirections[i].x * right + diffuseConeDirections[i].z * up;
-            coneDirection = normalize(coneDirection);
-            // cumulative result
-            diffuseTrace += TraceCone(position, normal, coneDirection, aperture, ambientOcclusion) * diffuseConeWeights[i];
-        }
-
-        diffuseTrace.rgb *= albedo;
-    }
-
-    vec3 result = bounce_strength * (diffuseTrace.rgb + specularTrace.rgb);
-
-    return vec4(result, ambientOcclusion ? clamp(1.0f - diffuseTrace.a + ao_alpha, 0.0f, 1.0f) : 1.0f);
 }
 
 void main()
 {
     vec3 position = texture(g_position_ao, Frag_TexCoords).rgb;
     vec3 normal = normalize(texture(g_normal_roughness, Frag_TexCoords).xyz);
-    vec4 specular = texture(g_specular, Frag_TexCoords);
+    float roughness = clamp(texture(g_normal_roughness, Frag_TexCoords).a, 0.045f, 1.0f);
     vec3 baseColor = texture(g_albedo_metallic, Frag_TexCoords).rgb;
+    float metallic = clamp(texture(g_albedo_metallic, Frag_TexCoords).a, 0.0f, 1.0f);
     vec3 albedo = pow(baseColor, vec3(2.2f));
-    vec3 emissive = texture(g_emissive_depth, Frag_TexCoords).rgb;
+    vec3 specularColor = texture(g_specular, Frag_TexCoords).rgb;
     vec3 directLighting = vec3(1.0f);
+    vec3 F0 = mix(vec3(0.04f), albedo, metallic);
+    // Keep compatibility with the existing specular buffer as a reflectance override.
+    F0 = mix(F0, clamp(specularColor, 0.0f, 1.0f), 0.5f);
 
-    directLighting = CalculateDirectLighting(position, normal, albedo, specular);
+    directLighting = CalculateDirectLighting(position, normal, albedo, metallic, roughness, F0);
 
     fragColor = vec4(directLighting, 1.0f);
 }
