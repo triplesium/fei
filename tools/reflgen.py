@@ -298,6 +298,54 @@ class CppClassInfo:
         }
 
 
+class EnumValueInfo:
+    """Represents information about a C++ enum value."""
+
+    def __init__(self, name: str, value: int):
+        self.name = name
+        self.value = value
+
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "name": self.name,
+            "value": self.value,
+        }
+
+
+class CppEnumInfo:
+    """Represents information about a C++ enum."""
+
+    def __init__(
+        self,
+        name: str,
+        cursor: clang.cindex.Cursor,
+        source_file: Path,
+        underlying_type: str,
+        is_scoped: bool,
+    ):
+        self.name = name
+        self.cursor = cursor
+        self.source_file = source_file
+        self.underlying_type = underlying_type
+        self.is_scoped = is_scoped
+        self.values: List[EnumValueInfo] = []
+
+    def add_value(self, name: str, value: int):
+        """Add an enum value to this enum."""
+        self.values.append(EnumValueInfo(name, value))
+
+    def to_dict(self) -> Dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "name": self.name,
+            "source_file": self.source_file,
+            "underlying_type": self.underlying_type,
+            "is_scoped": self.is_scoped,
+            "values": [value.to_dict() for value in self.values],
+        }
+
+
 class CppHeaderParser:
     """Parser for C++ header files using libclang."""
 
@@ -305,6 +353,7 @@ class CppHeaderParser:
         self.header_paths = header_paths  # Now accepts multiple files
         self.include_paths = include_paths or []
         self.classes: List[CppClassInfo] = []
+        self.enums: List[CppEnumInfo] = []
         self._lock = threading.Lock()  # Thread safety for collecting results
 
         # Initialize libclang - try different approaches
@@ -342,10 +391,11 @@ class CppHeaderParser:
                 for future in as_completed(future_to_header):
                     header_path = future_to_header[future]
                     try:
-                        classes = future.result()
+                        classes, enums = future.result()
                         # Thread-safe addition to the main classes list
                         with self._lock:
                             self.classes.extend(classes)
+                            self.enums.extend(enums)
 
                         # Update progress bar with file info
                         filename = Path(header_path).name
@@ -365,21 +415,28 @@ class CppHeaderParser:
                 pbar.set_postfix_str(f"Processing {filename}")
 
                 classes = self._parse_single_header(header_path)
-                self.classes.extend(classes)
+                parsed_classes, parsed_enums = classes
+                self.classes.extend(parsed_classes)
+                self.enums.extend(parsed_enums)
 
                 # Update postfix with results
-                pbar.set_postfix_str(f"{filename}: {len(classes)} classes")
+                pbar.set_postfix_str(
+                    f"{filename}: {len(parsed_classes)} classes, {len(parsed_enums)} enums"
+                )
 
         return self.classes
 
-    def _parse_single_header(self, header_path: str) -> List[CppClassInfo]:
-        """Parse a single header file and return the classes found in it."""
+    def _parse_single_header(
+        self, header_path: str
+    ) -> Tuple[List[CppClassInfo], List[CppEnumInfo]]:
+        """Parse a single header file and return the classes/enums found in it."""
         classes = []
+        enums = []
 
         # Check if file exists
         if not os.path.exists(header_path):
             print(f"Warning: Header file '{header_path}' not found", file=sys.stderr)
-            return classes
+            return classes, enums
 
         # Set up compilation arguments
         args = ["-x", "c++-header", "-std=c++23", "-DFEI_REFLGEN_SCRIPT"]
@@ -395,7 +452,7 @@ class CppHeaderParser:
         # Check for parsing errors
         if translation_unit is None:
             print(f"Warning: Failed to parse {header_path}", file=sys.stderr)
-            return classes
+            return classes, enums
 
         # Print diagnostics if any
         for diagnostic in translation_unit.diagnostics:
@@ -414,13 +471,14 @@ class CppHeaderParser:
         header_path: str,
         current_access: str = "private",
         parent_cursor: clang.cindex.Cursor = None,
-    ) -> List[CppClassInfo]:
-        """Recursively parse cursors to find class definitions for a specific header."""
+    ) -> Tuple[List[CppClassInfo], List[CppEnumInfo]]:
+        """Recursively parse cursors to find class/enum definitions for a specific header."""
         classes = []
+        enums = []
 
         # Skip cursors that are not from the main file we're parsing
         if cursor.location.file and cursor.location.file.name != header_path:
-            return classes
+            return classes, enums
 
         # Check if this cursor represents a class or struct
         if cursor.kind == clang.cindex.CursorKind.CLASS_DECL:
@@ -430,7 +488,7 @@ class CppHeaderParser:
                 clang.cindex.CursorKind.STRUCT_DECL,
             ]:
                 if current_access in ["private", "protected"]:
-                    return classes  # Skip private and protected nested classes
+                    return classes, enums  # Skip private/protected nested classes
             class_info = self._parse_class_for_header(
                 cursor, "private", header_path
             )  # Classes default to private
@@ -443,7 +501,7 @@ class CppHeaderParser:
                 clang.cindex.CursorKind.STRUCT_DECL,
             ]:
                 if current_access in ["private", "protected"]:
-                    return classes  # Skip private and protected nested structs
+                    return classes, enums  # Skip private/protected nested structs
             class_info = self._parse_class_for_header(
                 cursor, "public", header_path
             )  # Structs default to public
@@ -452,6 +510,16 @@ class CppHeaderParser:
         elif cursor.kind == clang.cindex.CursorKind.CLASS_TEMPLATE:
             # Skip class templates - they're not concrete instantiable classes
             pass
+        elif cursor.kind == clang.cindex.CursorKind.ENUM_DECL:
+            if parent_cursor and parent_cursor.kind in [
+                clang.cindex.CursorKind.CLASS_DECL,
+                clang.cindex.CursorKind.STRUCT_DECL,
+            ]:
+                if current_access in ["private", "protected"]:
+                    return classes, enums
+            enum_info = self._parse_enum_for_header(cursor, header_path)
+            if enum_info:
+                enums.append(enum_info)
 
         # For class/struct cursors, we need to track access specifiers for their children
         if cursor.kind in [
@@ -470,16 +538,54 @@ class CppHeaderParser:
                     child_classes = self._parse_cursor_for_header(
                         child, header_path, child_access, cursor
                     )
-                    classes.extend(child_classes)
+                    parsed_classes, parsed_enums = child_classes
+                    classes.extend(parsed_classes)
+                    enums.extend(parsed_enums)
         else:
             # For other cursors, recursively parse children with current access
             for child in cursor.get_children():
                 child_classes = self._parse_cursor_for_header(
                     child, header_path, current_access, cursor
                 )
-                classes.extend(child_classes)
+                parsed_classes, parsed_enums = child_classes
+                classes.extend(parsed_classes)
+                enums.extend(parsed_enums)
 
-        return classes
+        return classes, enums
+
+    def _parse_enum_for_header(
+        self, enum_cursor: clang.cindex.Cursor, header_path: str
+    ) -> CppEnumInfo:
+        """Parse an enum definition and return enum info, or None if skipped."""
+
+        if not enum_cursor.is_definition():
+            return None
+
+        enum_name = enum_cursor.spelling
+        if not enum_name:
+            return None
+
+        qualified_enum_name = self._get_qualified_name(enum_cursor)
+        if not qualified_enum_name:
+            qualified_enum_name = enum_name
+
+        absolute_path = Path(header_path).resolve().as_posix()
+        underlying_type = self._get_fully_qualified_type(enum_cursor.enum_type)
+        is_scoped = enum_cursor.is_scoped_enum()
+
+        enum_info = CppEnumInfo(
+            qualified_enum_name,
+            enum_cursor,
+            absolute_path,
+            underlying_type,
+            is_scoped,
+        )
+
+        for child in enum_cursor.get_children():
+            if child.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
+                enum_info.add_value(child.spelling, child.enum_value)
+
+        return enum_info
 
     def _parse_class_for_header(
         self, class_cursor: clang.cindex.Cursor, default_access: str, header_path: str
@@ -1019,9 +1125,6 @@ def gen_cpp_file(classes: List[CppClassInfo], root_dir: Path, output_file: str):
             for method in class_info.methods:
                 if method.access != "public":
                     continue
-                # Skip operator overloads for now
-                if method.name.startswith("operator"):
-                    continue
                 f.write(
                     f'\n\t.add_method("{method.name}", static_cast<{method.to_cpp_type(class_info.name)}>(&{class_info.name}::{method.name}))'
                 )
@@ -1044,6 +1147,7 @@ def gen_cpp_file(classes: List[CppClassInfo], root_dir: Path, output_file: str):
 def render_template(
     template_path: Path,
     classes: List[CppClassInfo],
+    enums: List[CppEnumInfo],
     out_file_path: Path,
     rootdir: Path,
 ):
@@ -1059,7 +1163,12 @@ def render_template(
         keep_trailing_newline=True,
     )
     template = env.get_template(template_path.name)
-    rendered_content = template.render(classes=classes, rootdir=rootdir, Path=Path)
+    rendered_content = template.render(
+        classes=classes,
+        enums=enums,
+        rootdir=rootdir,
+        Path=Path,
+    )
     with open(out_file_path, "w", encoding="utf-8") as out_file:
         out_file.write(rendered_content)
 
@@ -1125,16 +1234,23 @@ def main():
         # Print summary
         total_files = len(args.headers)
         total_classes = len(classes)
+        total_enums = len(parser_instance.enums)
         print(
-            f"\n✅ Parsing complete! Found {total_classes} classes in {total_files} files."
+            f"\n✅ Parsing complete! Found {total_classes} classes and {total_enums} enums in {total_files} files."
         )
 
-        if not classes:
-            print("No classes found in the header files.")
+        if not classes and not parser_instance.enums:
+            print("No classes or enums found in the header files.")
         else:
             if args.output:
                 # Generate C++ file
-                render_template(args.template, classes, args.output, args.rootdir)
+                render_template(
+                    args.template,
+                    classes,
+                    parser_instance.enums,
+                    args.output,
+                    args.rootdir,
+                )
                 print(f"📝 Generated C++ reflection code: {args.output}")
             else:
                 # Print to console
