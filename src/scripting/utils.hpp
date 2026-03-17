@@ -6,7 +6,11 @@
 
 namespace fei {
 
-ReturnValue lua_to_val(lua_State* L, int idx);
+bool lua_is_fei_type(lua_State* L, int idx);
+bool lua_is_type_registered(lua_State* L, Type& type);
+bool lua_can_ref(lua_State* L, int idx);
+Val lua_to_val(lua_State* L, int idx);
+Ref lua_to_ref(lua_State* L, int idx);
 TypeId lua_type_of(lua_State* L, int idx);
 void lua_push_val(lua_State* L, const Val& val);
 void lua_push_ref(lua_State* L, Ref ref);

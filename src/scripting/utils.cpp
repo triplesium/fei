@@ -1,16 +1,49 @@
 #include "scripting/utils.hpp"
-#include "lauxlib.h"
+
 #include "refl/callable.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
 #include "refl/val.hpp"
+#include "scripting/object.hpp"
 
 #include <lua.hpp>
 #include <string>
 
 namespace fei {
 
-ReturnValue lua_to_val(lua_State* L, int idx) {
+bool lua_is_fei_type(lua_State* L, int idx) {
+    if (lua_type(L, idx) != LUA_TTABLE) {
+        return false;
+    }
+    lua_getfield(L, idx, "__type_id");
+    bool is_fei_type = lua_isinteger(L, -1);
+    lua_pop(L, 1);
+    return is_fei_type;
+}
+
+bool lua_is_type_registered(lua_State* L, Type& type) {
+    luaL_getmetatable(L, type.stripped_name().c_str());
+    bool is_registered = !lua_isnil(L, -1);
+    lua_pop(L, 1);
+    return is_registered;
+}
+
+bool lua_can_ref(lua_State* L, int idx) {
+    switch (lua_type(L, idx)) {
+        case LUA_TNIL:
+        case LUA_TBOOLEAN:
+        case LUA_TNUMBER:
+        case LUA_TSTRING:
+        case LUA_TTABLE:
+            return false;
+        case LUA_TUSERDATA:
+        case LUA_TLIGHTUSERDATA:
+            return true;
+    }
+    return false;
+}
+
+Val lua_to_val(lua_State* L, int idx) {
     switch (lua_type(L, idx)) {
         case LUA_TNIL:
             return {};
@@ -22,11 +55,30 @@ ReturnValue lua_to_val(lua_State* L, int idx) {
             } else {
                 return make_val<float>(lua_tonumber(L, idx));
             }
+        case LUA_TTABLE:
+            if (lua_is_fei_type(L, idx)) {
+                lua_getfield(L, idx, "__type_id");
+                auto type_id = static_cast<TypeId>(lua_tointeger(L, -1));
+                lua_pop(L, 1);
+                return make_val<TypeId>(type_id);
+            }
+            break;
         case LUA_TSTRING:
             return make_val<std::string>(lua_tostring(L, idx));
         case LUA_TUSERDATA:
         case LUA_TLIGHTUSERDATA:
-            return reinterpret_cast<Val*>(lua_touserdata(L, idx))->ref();
+            return reinterpret_cast<LuaObject*>(lua_touserdata(L, idx))
+                ->as_val();
+    }
+    return {};
+}
+
+Ref lua_to_ref(lua_State* L, int idx) {
+    switch (lua_type(L, idx)) {
+        case LUA_TUSERDATA:
+        case LUA_TLIGHTUSERDATA:
+            return reinterpret_cast<LuaObject*>(lua_touserdata(L, idx))
+                ->as_ref();
     }
     return {};
 }
@@ -45,9 +97,16 @@ TypeId lua_type_of(lua_State* L, int idx) {
             }
         case LUA_TSTRING:
             return type_id<std::string>();
+        case LUA_TTABLE: {
+            if (lua_is_fei_type(L, idx)) {
+                return type_id<TypeId>();
+            }
+            return {};
+        }
         case LUA_TUSERDATA:
         case LUA_TLIGHTUSERDATA:
-            return reinterpret_cast<Val*>(lua_touserdata(L, idx))->type_id();
+            return reinterpret_cast<LuaObject*>(lua_touserdata(L, idx))
+                ->type_id();
     }
     return {};
 }
@@ -64,9 +123,20 @@ void lua_push_val(lua_State* L, const Val& val) {
         lua_pushnumber(L, val.to_number<float>());
     } else if (type.id() == type_id<std::string>()) {
         lua_pushstring(L, val.get<std::string>().c_str());
+    } else if (type.id() == type_id<bool>()) {
+        lua_pushboolean(L, static_cast<int>(val.get<bool>()));
     } else {
-        new (lua_newuserdata(L, sizeof(Val))) Val(val);
-        luaL_setmetatable(L, type.name().c_str());
+        if (!lua_is_type_registered(L, type)) {
+            luaL_error(
+                L,
+                "Type %s is not registered in Lua",
+                type.stripped_name().c_str()
+            );
+            lua_pushnil(L);
+            return;
+        }
+        new (lua_newuserdata(L, sizeof(LuaObject))) LuaObject(val);
+        luaL_setmetatable(L, type.stripped_name().c_str());
     }
 }
 
@@ -82,9 +152,20 @@ void lua_push_ref(lua_State* L, Ref ref) {
         lua_pushnumber(L, ref.to_number<float>());
     } else if (type.id() == type_id<std::string>()) {
         lua_pushstring(L, ref.get<std::string>().c_str());
+    } else if (type.id() == type_id<bool>()) {
+        lua_pushboolean(L, static_cast<int>(ref.get<bool>()));
     } else {
-        new (lua_newuserdata(L, sizeof(Ref))) Ref(ref);
-        luaL_setmetatable(L, type.name().c_str());
+        if (!lua_is_type_registered(L, type)) {
+            luaL_error(
+                L,
+                "Type %s is not registered in Lua",
+                type.stripped_name().c_str()
+            );
+            lua_pushnil(L);
+            return;
+        }
+        new (lua_newuserdata(L, sizeof(LuaObject))) LuaObject(ref);
+        luaL_setmetatable(L, type.stripped_name().c_str());
     }
 }
 
