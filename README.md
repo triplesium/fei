@@ -19,6 +19,16 @@
 
 Most third-party libraries can be resolved by `xmake`.
 
+## Build
+
+First, follow the instructions to install [xmake](https://xmake.io/).
+Once xmake is ready, simply clone the repository and run xmake.
+```bash
+git clone https://github.com/triplesium/fei.git
+cd triple
+xmake
+```
+
 ## Examples
 
 Below is a minimal example of our core ECS functionality.
@@ -84,15 +94,8 @@ int main() {
 }
 ```
 
-## Build
-
-First, follow the instructions to install [xmake](https://xmake.io/).
-Once xmake is ready, simply clone the repository and run xmake.
-```bash
-git clone https://github.com/triplesium/fei.git
-cd triple
-xmake
-```
+## Screenshots
+![VXGI](assets/scene.jpg)
 
 ## Acknowledgements
 
