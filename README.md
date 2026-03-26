@@ -15,7 +15,7 @@
 
 - A C++23-capable compiler
 - [xmake](https://xmake.io/)
-- Python 3 (for reflection code generation scripts)
+- Python 3 with `clang` and `jinja2` (for reflection code generation scripts)
 
 Most third-party libraries can be resolved by `xmake`.
 
@@ -28,6 +28,14 @@ git clone https://github.com/triplesium/fei.git
 cd triple
 xmake
 ```
+
+Basic reflection like type names, type ids, and type-erased wrappers (`Ref` and `Val`) do not need generated metadata. But if you want to use the scripting module, or retrieve method or property information of an object, you need to generate reflection metadata.
+
+To do this, run the `reflgen` xmake task.
+```bash
+xmake reflgen
+```
+It will run the Python script `tools/reflgen.py` to parse all the dependencies of the `fei-generated` target, and output to `src/generated/reflgen.cpp`.
 
 ## Examples
 
