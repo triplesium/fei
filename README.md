@@ -95,6 +95,8 @@ int main() {
 }
 ```
 
+For more samples, please see the [samples folder](samples/).
+
 ## Screenshots
 ![VXGI](assets/scene.jpg)
 
