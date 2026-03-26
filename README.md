@@ -67,6 +67,7 @@ void update(
 
 int main() {
     App()
+        .add_plugins(TimePlugin())
         .add_systems(StartUp, start)
         .add_systems(Update, update)
         .run();
