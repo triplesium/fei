@@ -115,6 +115,14 @@ class World {
         return ret.template get<T>();
     }
 
+    Ref resource(TypeId type_id) const {
+        auto ret = m_resources.get(type_id);
+        if (!ret) {
+            fatal("Resource with type id {} not found", type_id.id());
+        }
+        return ret;
+    }
+
     template<typename F>
     void run_system_once(F&& func) {
         FunctionSystem(std::forward<F>(func)).run(*this);

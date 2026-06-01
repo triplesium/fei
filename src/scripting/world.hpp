@@ -9,7 +9,7 @@ class LuaWorld {
 
   public:
     LuaWorld(World* world) : m_world(world) {}
-    Ref resource(TypeId id) const { return make_ref(m_world->resource(id)); }
+    Ref resource(TypeId id) const { return m_world->resource(id); }
 };
 
 } // namespace fei
