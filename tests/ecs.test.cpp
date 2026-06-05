@@ -4,9 +4,15 @@
 #include "ecs/event.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system.hpp"
+#include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
+#include "ecs/system_set.hpp"
 #include "ecs/world.hpp"
 #include "refl/registry.hpp"
+
+#include <algorithm>
+#include <string>
+#include <vector>
 
 using namespace fei;
 
@@ -89,6 +95,59 @@ struct GameEvent {
     }
 };
 
+namespace {
+
+constexpr ScheduleId TestSchedule = 123;
+
+struct ScheduleTrace {
+    std::vector<std::string> entries;
+};
+
+struct EventStats {
+    std::vector<std::string> messages;
+};
+
+struct ScheduleFirstSet : SystemSet<ScheduleFirstSet> {};
+struct ScheduleSecondSet : SystemSet<ScheduleSecondSet> {};
+
+void scheduled_spawn_position(Commands commands) {
+    commands.spawn().add(Position(30.0f, 40.0f));
+}
+
+void scheduled_count_positions(
+    Query<Entity, Position> query,
+    Res<ScheduleTrace> trace
+) {
+    trace->entries.push_back("count:" + std::to_string(query.size()));
+}
+
+void scheduled_first(Res<ScheduleTrace> trace) {
+    trace->entries.push_back("first");
+}
+
+void scheduled_second(Res<ScheduleTrace> trace) {
+    trace->entries.push_back("second");
+}
+
+void scheduled_send_event(EventWriter<GameEvent> writer) {
+    writer.send(GameEvent("tick"));
+}
+
+void scheduled_read_events(
+    EventReader<GameEvent> reader,
+    Res<EventStats> stats
+) {
+    while (auto event = reader.next()) {
+        stats->messages.push_back(event->message);
+    }
+}
+
+void scheduled_update_events(Res<Events<GameEvent>> events) {
+    events->update();
+}
+
+} // namespace
+
 TEST_CASE("ECS Entity Management", "[ecs][entity]") {
     // Register test component types
     Registry::instance().register_type<Position>();
@@ -113,6 +172,44 @@ TEST_CASE("ECS Entity Management", "[ecs][entity]") {
 
         world.despawn(entity);
         REQUIRE_FALSE(world.has_entity(entity));
+    }
+
+    SECTION("Despawning a non-last entity keeps moved entity locations valid") {
+        Entity first = world.entity();
+        world.add_component(first, Position(1.0f, 1.0f));
+        world.add_component(first, Health(10));
+
+        Entity middle = world.entity();
+        world.add_component(middle, Position(2.0f, 2.0f));
+        world.add_component(middle, Health(20));
+
+        Entity last = world.entity();
+        world.add_component(last, Position(3.0f, 3.0f));
+        world.add_component(last, Health(30));
+
+        world.despawn(first);
+
+        REQUIRE_FALSE(world.has_entity(first));
+        REQUIRE(world.has_entity(middle));
+        REQUIRE(world.has_entity(last));
+
+        REQUIRE(world.get_component<Position>(middle) == Position(2.0f, 2.0f));
+        REQUIRE(world.get_component<Health>(middle) == Health(20));
+        REQUIRE(world.get_component<Position>(last) == Position(3.0f, 3.0f));
+        REQUIRE(world.get_component<Health>(last) == Health(30));
+
+        std::vector<Entity> remaining;
+        world.run_system_once([&remaining](Query<Entity, Position> query) {
+            for (auto [entity, pos] : query) {
+                (void)pos;
+                remaining.push_back(entity);
+            }
+        });
+
+        std::sort(remaining.begin(), remaining.end());
+        std::vector<Entity> expected = {middle, last};
+        std::sort(expected.begin(), expected.end());
+        REQUIRE(remaining == expected);
     }
 }
 
@@ -195,7 +292,7 @@ TEST_CASE("ECS World Resource Management", "[ecs][resource]") {
 
         world.add_resource(config);
 
-        GameConfig& retrieved = world.get_resource<GameConfig>();
+        GameConfig& retrieved = world.resource<GameConfig>();
         REQUIRE(retrieved.max_entities == 500);
         REQUIRE(retrieved.dt == 0.02f);
     }
@@ -204,11 +301,11 @@ TEST_CASE("ECS World Resource Management", "[ecs][resource]") {
         EventQueue queue;
         world.add_resource(queue);
 
-        EventQueue& event_queue = world.get_resource<EventQueue>();
+        EventQueue& event_queue = world.resource<EventQueue>();
         event_queue.push("test_event");
         event_queue.push("another_event");
 
-        EventQueue& retrieved = world.get_resource<EventQueue>();
+        EventQueue& retrieved = world.resource<EventQueue>();
         REQUIRE(retrieved.events.size() == 2);
         REQUIRE(retrieved.events[0] == "test_event");
         REQUIRE(retrieved.events[1] == "another_event");
@@ -271,7 +368,7 @@ TEST_CASE("ECS System Execution", "[ecs][system]") {
             );
         });
 
-        EventQueue& events = world.get_resource<EventQueue>();
+        EventQueue& events = world.resource<EventQueue>();
         REQUIRE(events.events.size() == 2);
         REQUIRE(events.events[0] == "system_executed");
         REQUIRE(events.events[1] == "processed_2_entities");
@@ -282,6 +379,7 @@ TEST_CASE("ECS Commands System", "[ecs][commands]") {
     Registry::instance().register_type<Position>();
     Registry::instance().register_type<Name>();
     Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<ScheduleTrace>();
 
     World world;
     world.add_resource(CommandsQueue {});
@@ -297,7 +395,7 @@ TEST_CASE("ECS Commands System", "[ecs][commands]") {
         });
 
         // Execute queued commands
-        world.get_resource<CommandsQueue>().execute(world);
+        world.resource<CommandsQueue>().execute(world);
 
         REQUIRE(world.has_entity(spawned_entity));
         REQUIRE(world.has_component<Position>(spawned_entity));
@@ -319,11 +417,25 @@ TEST_CASE("ECS Commands System", "[ecs][commands]") {
             commands.entity(entity).add(Name("AddedLater"));
         });
 
-        world.get_resource<CommandsQueue>().execute(world);
+        world.resource<CommandsQueue>().execute(world);
 
         REQUIRE(world.has_component<Name>(entity));
         Name& name = world.get_component<Name>(entity);
         REQUIRE(name.value == "AddedLater");
+    }
+
+    SECTION("Schedule flushes commands between ordered systems") {
+        world.add_resource(ScheduleTrace {});
+
+        world.add_systems(
+            TestSchedule,
+            chain(scheduled_spawn_position, scheduled_count_positions)
+        );
+        world.sort_systems();
+        world.run_schedule(TestSchedule);
+
+        std::vector<std::string> expected = {"count:1"};
+        REQUIRE(world.resource<ScheduleTrace>().entries == expected);
     }
 }
 
@@ -482,6 +594,67 @@ TEST_CASE("ECS Archetype System", "[ecs][archetype]") {
         REQUIRE(pos.y == 6.0f);
         REQUIRE(health.value == 100);
     }
+
+    SECTION("Removing a component from a non-last entity keeps moved rows valid") {
+        Entity first = world.entity();
+        world.add_component(first, Position(1.0f, 1.0f));
+        world.add_component(first, Velocity(10.0f, 10.0f));
+        world.add_component(first, Health(10));
+
+        Entity middle = world.entity();
+        world.add_component(middle, Position(2.0f, 2.0f));
+        world.add_component(middle, Velocity(20.0f, 20.0f));
+        world.add_component(middle, Health(20));
+
+        Entity last = world.entity();
+        world.add_component(last, Position(3.0f, 3.0f));
+        world.add_component(last, Velocity(30.0f, 30.0f));
+        world.add_component(last, Health(30));
+
+        world.remove_component<Velocity>(first);
+
+        REQUIRE(world.has_component<Position>(first));
+        REQUIRE_FALSE(world.has_component<Velocity>(first));
+        REQUIRE(world.has_component<Health>(first));
+        REQUIRE(world.get_component<Position>(first) == Position(1.0f, 1.0f));
+        REQUIRE(world.get_component<Health>(first) == Health(10));
+
+        REQUIRE(world.has_component<Velocity>(middle));
+        REQUIRE(world.get_component<Position>(middle) == Position(2.0f, 2.0f));
+        REQUIRE(world.get_component<Velocity>(middle) ==
+                Velocity(20.0f, 20.0f));
+        REQUIRE(world.get_component<Health>(middle) == Health(20));
+
+        REQUIRE(world.has_component<Velocity>(last));
+        REQUIRE(world.get_component<Position>(last) == Position(3.0f, 3.0f));
+        REQUIRE(world.get_component<Velocity>(last) ==
+                Velocity(30.0f, 30.0f));
+        REQUIRE(world.get_component<Health>(last) == Health(30));
+    }
+}
+
+TEST_CASE("ECS Schedule Ordering", "[ecs][schedule]") {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<ScheduleTrace>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(ScheduleTrace {});
+
+    world.configure_sets(
+        TestSchedule,
+        chain(ScheduleFirstSet {}, ScheduleSecondSet {})
+    );
+    world.add_systems(
+        TestSchedule,
+        scheduled_second | in_set<ScheduleSecondSet>(),
+        scheduled_first | in_set<ScheduleFirstSet>()
+    );
+    world.sort_systems();
+    world.run_schedule(TestSchedule);
+
+    std::vector<std::string> expected = {"first", "second"};
+    REQUIRE(world.resource<ScheduleTrace>().entries == expected);
 }
 
 TEST_CASE("ECS Integration Test", "[ecs][integration]") {
@@ -528,7 +701,7 @@ TEST_CASE("ECS Integration Test", "[ecs][integration]") {
                 .add(Name("Enemy2"));
         });
 
-        world.get_resource<CommandsQueue>().execute(world);
+        world.resource<CommandsQueue>().execute(world);
 
         // Verify movement system worked
         Position& player_pos = world.get_component<Position>(player);
@@ -557,13 +730,15 @@ TEST_CASE("ECS Event System", "[ecs][event]") {
     // Register event types
     Registry::instance().register_type<PlayerMoved>();
     Registry::instance().register_type<GameEvent>();
-    Registry::instance().register_type<EventsMap>();
+    Registry::instance().register_type<Events<GameEvent>>();
+    Registry::instance().register_type<Events<PlayerMoved>>();
     Registry::instance().register_type<Position>();
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<EventStats>();
 
     World world;
-    auto& event_map = world.add_resource(EventsMap {});
-    event_map.add_event<GameEvent>();
-    event_map.add_event<PlayerMoved>();
+    world.add_resource(Events<GameEvent> {});
+    world.add_resource(Events<PlayerMoved> {});
 
     SECTION("Basic event sending and reading") {
         Entity player = world.entity();
@@ -641,5 +816,33 @@ TEST_CASE("ECS Event System", "[ecs][event]") {
 
         REQUIRE(reader1_count == 1);
         REQUIRE(reader2_count == 1);
+    }
+
+    SECTION("Scheduled reader keeps cursor while events age across updates") {
+        world.add_resource(CommandsQueue {});
+        world.add_resource(EventStats {});
+
+        world.add_systems(
+            TestSchedule,
+            chain(
+                scheduled_send_event,
+                scheduled_read_events,
+                scheduled_update_events
+            )
+        );
+        world.sort_systems();
+
+        world.run_schedule(TestSchedule);
+        REQUIRE(world.resource<EventStats>().messages ==
+                std::vector<std::string> {"tick"});
+        REQUIRE(world.resource<Events<GameEvent>>().size() == 1);
+
+        world.run_schedule(TestSchedule);
+        REQUIRE(world.resource<EventStats>().messages ==
+                std::vector<std::string> {"tick", "tick"});
+        REQUIRE(world.resource<Events<GameEvent>>().size() == 1);
+
+        world.resource<Events<GameEvent>>().update();
+        REQUIRE(world.resource<Events<GameEvent>>().size() == 0);
     }
 }

@@ -63,7 +63,7 @@ std::shared_ptr<Texture> EquirectToCubemap::get_or_create_cubemap(
         0,
         equirect_image.width(),
         equirect_image.height(),
-        equirect_image.channels(),
+        equirect_image.depth(),
         0,
         0
     );

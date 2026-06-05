@@ -17,11 +17,13 @@ class Image {
   private:
     std::unique_ptr<unsigned char[]> m_data;
     TextureDescription m_texture_description;
+    std::uint32_t m_channels;
 
   public:
     Image(
         std::unique_ptr<unsigned char[]> data,
-        TextureDescription texture_description
+        TextureDescription texture_description,
+        std::uint32_t channels = 0
     );
 
     static std::unique_ptr<Image> create_empty(
@@ -35,7 +37,7 @@ class Image {
 
     std::uint32_t width() const { return m_texture_description.width; }
     std::uint32_t height() const { return m_texture_description.height; }
-    std::uint32_t channels() const { return m_texture_description.depth; }
+    std::uint32_t channels() const { return m_channels; }
     std::uint32_t depth() const { return m_texture_description.depth; }
     const unsigned char* data() const { return m_data.get(); }
     void set_data(std::unique_ptr<unsigned char[]> data) {

@@ -43,7 +43,7 @@ void equirect_to_cubemap(
         0,
         equirect_image.width(),
         equirect_image.height(),
-        equirect_image.channels(),
+        equirect_image.depth(),
         0,
         0
     );

@@ -6,7 +6,9 @@
 #include "refl/type.hpp"
 #include "refl/val.hpp"
 
-#include <print>
+#include <iostream>
+#include <sstream>
+#include <string>
 
 using namespace fei;
 
@@ -14,6 +16,27 @@ struct TestStruct {
     int a;
     float b;
 };
+
+struct HeapValStruct {
+    int arr[32] {};
+    double values[8] {};
+};
+
+namespace {
+
+class StdoutCapture {
+  private:
+    std::ostringstream m_stream;
+    std::streambuf* m_old_buffer;
+
+  public:
+    StdoutCapture() : m_old_buffer(std::cout.rdbuf(m_stream.rdbuf())) {}
+    ~StdoutCapture() { std::cout.rdbuf(m_old_buffer); }
+
+    std::string str() const { return m_stream.str(); }
+};
+
+} // namespace
 
 TEST_CASE("refl Ref", "[refl]") {
     Registry& registry = Registry::instance();
@@ -41,6 +64,8 @@ TEST_CASE("refl Ref", "[refl]") {
 
         REQUIRE(ref);
         REQUIRE(ref.type_id() == type<TestStruct>().id());
+        REQUIRE(static_cast<const void*>(ref.ptr()) ==
+                static_cast<const void*>(&test));
 
         const TestStruct& ref_test = ref.get<TestStruct>();
         REQUIRE(ref_test.a == 42);
@@ -67,6 +92,8 @@ TEST_CASE("refl Ref", "[refl]") {
 
         REQUIRE(ref);
         REQUIRE(ref.type_id() == type<TestStruct>().id());
+        REQUIRE(static_cast<const void*>(ref.ptr()) ==
+                static_cast<const void*>(test_ptr));
 
         delete test_ptr;
     }
@@ -138,6 +165,36 @@ TEST_CASE("refl Val", "[refl]") {
 
         val.get<LargeStruct>().arr[0] = 42;
         REQUIRE(val.get<LargeStruct>().arr[0] == 42);
+    }
+
+    SECTION("Heap copy and move semantics") {
+        registry.register_type<HeapValStruct>();
+
+        Val val1 = make_val<HeapValStruct>();
+        val1.get<HeapValStruct>().arr[0] = 7;
+        val1.get<HeapValStruct>().arr[31] = 31;
+        val1.get<HeapValStruct>().values[0] = 1.5;
+
+        Val copied = val1;
+        REQUIRE(copied.get<HeapValStruct>().arr[0] == 7);
+        REQUIRE(copied.get<HeapValStruct>().arr[31] == 31);
+        REQUIRE(copied.get<HeapValStruct>().values[0] == 1.5);
+
+        copied.get<HeapValStruct>().arr[0] = 99;
+        REQUIRE(val1.get<HeapValStruct>().arr[0] == 7);
+        REQUIRE(copied.get<HeapValStruct>().arr[0] == 99);
+
+        Val assigned;
+        assigned = val1;
+        assigned.get<HeapValStruct>().arr[31] = 100;
+        REQUIRE(val1.get<HeapValStruct>().arr[31] == 31);
+        REQUIRE(assigned.get<HeapValStruct>().arr[31] == 100);
+
+        Val moved = std::move(val1);
+        REQUIRE(moved.get<HeapValStruct>().arr[0] == 7);
+        REQUIRE(moved.get<HeapValStruct>().arr[31] == 31);
+        REQUIRE(moved.get<HeapValStruct>().values[0] == 1.5);
+        REQUIRE(val1.empty());
     }
 
     SECTION("Copy and move semantics") {
@@ -239,15 +296,25 @@ TEST_CASE("refl Val", "[refl]") {
 
         // Test that copying fails gracefully (should log error and result in
         // empty Val) Note: This will log an error, but shouldn't crash
-        std::println("Should log an error about non-copyable type:");
-        Val val2 = val1; // This should fail
-        REQUIRE(val2.empty());
+        {
+            StdoutCapture logs;
+            Val val2 = val1; // This should fail
+            REQUIRE(val2.empty());
+            REQUIRE(logs.str().contains(
+                "Attempting to copy non-copyable type"
+            ));
+        }
 
         // Test that moving fails gracefully (should log error and result in
         // empty Val) Note: This will log an error, but shouldn't crash
-        std::println("Should log an error about non-movable type:");
-        Val val3 = std::move(val1); // This should fail
-        REQUIRE(val3.empty());
+        {
+            StdoutCapture logs;
+            Val val3 = std::move(val1); // This should fail
+            REQUIRE(val3.empty());
+            REQUIRE(logs.str().contains(
+                "Attempting to move non-movable and non-copyable type"
+            ));
+        }
         // val1 should still be valid since move failed
         REQUIRE(val1);
     }

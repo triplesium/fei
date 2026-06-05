@@ -102,7 +102,7 @@ void start_up(
     renderer->texture = device->create_texture(TextureDescription {
         .width = image->width(),
         .height = image->height(),
-        .depth = image->channels(),
+        .depth = image->depth(),
         .mip_level = 1,
         .layer = 0,
         .texture_format = PixelFormat::Rgba8Unorm,
@@ -117,7 +117,7 @@ void start_up(
         0,
         image->width(),
         image->height(),
-        image->channels(),
+        image->depth(),
         0,
         0
     );

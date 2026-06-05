@@ -5,6 +5,7 @@
 #include "graphics/enums.hpp"
 #include "graphics/texture.hpp"
 
+#include <cstring>
 #include <memory>
 #include <system_error>
 
@@ -14,10 +15,75 @@
 
 namespace fei {
 
+namespace {
+
+std::uint32_t pixel_format_channels(PixelFormat format) {
+    switch (format) {
+        case PixelFormat::R8Unorm:
+        case PixelFormat::R8Snorm:
+        case PixelFormat::R8Uint:
+        case PixelFormat::R8Sint:
+        case PixelFormat::R16Uint:
+        case PixelFormat::R16Sint:
+        case PixelFormat::R16Unorm:
+        case PixelFormat::R16Snorm:
+        case PixelFormat::R16Float:
+        case PixelFormat::R32Uint:
+        case PixelFormat::R32Sint:
+        case PixelFormat::R32Float:
+        case PixelFormat::Stencil8:
+        case PixelFormat::Depth16Unorm:
+        case PixelFormat::Depth24Plus:
+        case PixelFormat::Depth32Float:
+        case PixelFormat::Bc4RUnorm:
+        case PixelFormat::Bc4RSnorm:
+        case PixelFormat::EacR11Unorm:
+        case PixelFormat::EacR11Snorm:
+            return 1;
+
+        case PixelFormat::Rg8Unorm:
+        case PixelFormat::Rg8Snorm:
+        case PixelFormat::Rg8Uint:
+        case PixelFormat::Rg8Sint:
+        case PixelFormat::Rg16Uint:
+        case PixelFormat::Rg16Sint:
+        case PixelFormat::Rg16Unorm:
+        case PixelFormat::Rg16Snorm:
+        case PixelFormat::Rg16Float:
+        case PixelFormat::Rg32Uint:
+        case PixelFormat::Rg32Sint:
+        case PixelFormat::Rg32Float:
+        case PixelFormat::Bc5RgUnorm:
+        case PixelFormat::Bc5RgSnorm:
+        case PixelFormat::EacRg11Unorm:
+        case PixelFormat::EacRg11Snorm:
+            return 2;
+
+        case PixelFormat::Rgb9e5Ufloat:
+        case PixelFormat::Rg11b10Ufloat:
+        case PixelFormat::Bc6hRgbUfloat:
+        case PixelFormat::Bc6hRgbFloat:
+        case PixelFormat::Etc2Rgb8Unorm:
+        case PixelFormat::Etc2Rgb8UnormSrgb:
+            return 3;
+
+        default:
+            return 4;
+    }
+}
+
+} // namespace
+
 Image::Image(
     std::unique_ptr<unsigned char[]> data,
-    TextureDescription texture_description
-) : m_data(std::move(data)), m_texture_description(texture_description) {}
+    TextureDescription texture_description,
+    std::uint32_t channels
+) :
+    m_data(std::move(data)), m_texture_description(texture_description),
+    m_channels(
+        channels ? channels :
+                   pixel_format_channels(texture_description.texture_format)
+    ) {}
 
 std::unique_ptr<Image> Image::create_empty(
     std::uint32_t width,
@@ -40,21 +106,32 @@ std::unique_ptr<Image> Image::create_empty(
     auto data_size = width * height * depth *
                      get_pixel_format_size(texture_description.texture_format);
     auto data = std::make_unique<unsigned char[]>(data_size);
-    return std::make_unique<Image>(std::move(data), texture_description);
+    return std::make_unique<Image>(
+        std::move(data),
+        texture_description,
+        pixel_format_channels(format)
+    );
 }
 
 std::expected<std::unique_ptr<Image>, std::error_code>
 ImageLoader::load(Reader& reader, const LoadContext& context) {
-    int width, height, channels;
-    stbi_info_from_memory(
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    if (!stbi_info_from_memory(
         reinterpret_cast<const stbi_uc*>(reader.data()),
         static_cast<int>(reader.size()),
         &width,
         &height,
         &channels
-    );
+    )) {
+        error("Failed to read image info: {}", stbi_failure_reason());
+        return std::unexpected(std::error_code {});
+    }
+
     PixelFormat format;
     void* data = nullptr;
+    std::uint32_t loaded_channels = 0;
     auto extension = context.asset_path().path().extension();
     if (extension == ".hdr") {
         stbi_set_flip_vertically_on_load(false);
@@ -72,6 +149,7 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
             return std::unexpected(std::error_code {});
         }
         format = PixelFormat::Rgba32Float;
+        loaded_channels = static_cast<std::uint32_t>(req_comp);
     } else {
         stbi_set_flip_vertically_on_load(true);
         // For RGB images, load as RGBA, then ignore alpha channel
@@ -91,13 +169,16 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
         switch (channels) {
             case 1:
                 format = PixelFormat::R8Unorm;
+                loaded_channels = 1;
                 break;
             case 2:
                 format = PixelFormat::Rg8Unorm;
+                loaded_channels = 2;
                 break;
             case 3:
             case 4:
                 format = PixelFormat::Rgba8Unorm;
+                loaded_channels = static_cast<std::uint32_t>(req_comp);
                 break;
             default:
                 stbi_image_free(data);
@@ -114,9 +195,19 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
         .texture_usage = TextureUsage::Sampled,
         .texture_type = TextureType::Texture2D,
     };
+
+    auto data_size = static_cast<std::size_t>(width) *
+                     static_cast<std::size_t>(height) *
+                     texture_description.depth *
+                     get_pixel_format_size(texture_description.texture_format);
+    auto image_data = std::make_unique<unsigned char[]>(data_size);
+    std::memcpy(image_data.get(), data, data_size);
+    stbi_image_free(data);
+
     return std::make_unique<Image>(
-        std::unique_ptr<unsigned char[]>(static_cast<unsigned char*>(data)),
-        texture_description
+        std::move(image_data),
+        texture_description,
+        loaded_channels
     );
 }
 
