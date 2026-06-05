@@ -11,6 +11,7 @@ Column::Column(TypeId type_id) :
     m_elements = std::malloc(m_type_size * m_capacity);
     m_default_construct = type.default_construct_func();
     m_copy_construct = type.copy_construct_func();
+    m_move_construct = type.move_construct_func();
     m_delete = type.delete_func();
     // FIXME: Support types with no default constructor
     // (maybe just do not allow push_back(nullptr))
@@ -48,7 +49,8 @@ Column::Column(const Column& other) :
     m_elements(nullptr), m_count(other.m_count), m_capacity(other.m_capacity),
     m_type_size(other.m_type_size), m_type_id(other.m_type_id),
     m_default_construct(other.m_default_construct),
-    m_copy_construct(other.m_copy_construct), m_delete(other.m_delete) {
+    m_copy_construct(other.m_copy_construct),
+    m_move_construct(other.m_move_construct), m_delete(other.m_delete) {
     if (other.m_elements) {
         m_elements = std::malloc(m_type_size * m_capacity);
         // std::memcpy(m_elements, other.m_elements, m_type_size * m_count);
@@ -72,6 +74,7 @@ Column& Column::operator=(const Column& other) {
         m_type_id = other.m_type_id;
         m_default_construct = other.m_default_construct;
         m_copy_construct = other.m_copy_construct;
+        m_move_construct = other.m_move_construct;
         m_delete = other.m_delete;
 
         if (other.m_elements) {
@@ -96,7 +99,8 @@ Column::Column(Column&& other) noexcept :
     m_elements(other.m_elements), m_count(other.m_count),
     m_capacity(other.m_capacity), m_type_size(other.m_type_size),
     m_type_id(other.m_type_id), m_default_construct(other.m_default_construct),
-    m_copy_construct(other.m_copy_construct), m_delete(other.m_delete) {
+    m_copy_construct(other.m_copy_construct),
+    m_move_construct(other.m_move_construct), m_delete(other.m_delete) {
     other.m_elements = nullptr;
     other.m_count = 0;
     other.m_capacity = 0;
@@ -113,6 +117,7 @@ Column& Column::operator=(Column&& other) noexcept {
         m_type_id = other.m_type_id;
         m_default_construct = other.m_default_construct;
         m_copy_construct = other.m_copy_construct;
+        m_move_construct = other.m_move_construct;
         m_delete = other.m_delete;
         other.m_elements = nullptr;
         other.m_count = 0;
@@ -130,8 +135,22 @@ void Column::set(uint32_t row, Ref ref) {
 
 void Column::push_back(Ref ref) {
     if (m_count == m_capacity) {
-        m_capacity *= 2;
-        m_elements = std::realloc(m_elements, m_type_size * m_capacity);
+        const uint32_t new_capacity = m_capacity * 2;
+        void* new_elements = std::malloc(m_type_size * new_capacity);
+        for (uint32_t i = 0; i < m_count; ++i) {
+            void* dest_ptr =
+                static_cast<char*>(new_elements) + i * m_type_size;
+            void* src_ptr = static_cast<char*>(m_elements) + i * m_type_size;
+            if (m_move_construct) {
+                m_move_construct(dest_ptr, src_ptr);
+            } else {
+                m_copy_construct(dest_ptr, src_ptr);
+            }
+            m_delete(src_ptr);
+        }
+        std::free(m_elements);
+        m_elements = new_elements;
+        m_capacity = new_capacity;
     }
     m_count++;
     void* dest_ptr =

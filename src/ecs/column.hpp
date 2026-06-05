@@ -16,6 +16,7 @@ class Column {
     TypeId m_type_id;
     Type::DefaultConstructFunc m_default_construct;
     Type::CopyConstructFunc m_copy_construct;
+    Type::MoveConstructFunc m_move_construct;
     Type::DeleteFunc m_delete;
 
   public:
