@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace fei {
@@ -44,6 +45,7 @@ void event_update_system(Res<Events<E>> events) {
 class App {
   private:
     std::unordered_map<TypeId, std::unique_ptr<Plugin>> m_plugins;
+    std::unordered_set<TypeId> m_events;
 
   public:
     App() {
@@ -53,7 +55,14 @@ class App {
 
     template<typename E>
     App& add_event() {
-        m_world.add_resource(Events<E>());
+        if (!m_world.has_resource<Events<E>>()) {
+            m_world.add_resource(Events<E>());
+        }
+        auto event_type = type_id<Events<E>>();
+        if (m_events.contains(event_type)) {
+            return *this;
+        }
+        m_events.insert(event_type);
         add_systems(Last, event_update_system<E>);
         return *this;
     }
@@ -112,15 +121,27 @@ class App {
 
     template<typename P>
     App& add_plugin() {
-        m_plugins[type_id<P>()] = std::make_unique<P>();
-        m_plugins[type_id<P>()]->setup(*this);
+        auto plugin_type = type_id<P>();
+        if (m_plugins.contains(plugin_type)) {
+            return *this;
+        }
+        auto plugin = std::make_unique<P>();
+        auto* plugin_ptr = plugin.get();
+        m_plugins.emplace(plugin_type, std::move(plugin));
+        plugin_ptr->setup(*this);
         return *this;
     }
 
     template<std::derived_from<Plugin> P>
     App& add_plugin(P&& plugin) {
-        m_plugins[type_id<P>()] = std::make_unique<P>(std::forward<P>(plugin));
-        m_plugins[type_id<P>()]->setup(*this);
+        auto plugin_type = type_id<P>();
+        if (m_plugins.contains(plugin_type)) {
+            return *this;
+        }
+        auto stored_plugin = std::make_unique<P>(std::forward<P>(plugin));
+        auto* plugin_ptr = stored_plugin.get();
+        m_plugins.emplace(plugin_type, std::move(stored_plugin));
+        plugin_ptr->setup(*this);
         return *this;
     }
 

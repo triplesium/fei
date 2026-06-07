@@ -6,6 +6,7 @@ target("tests")
         "fei-base",
         "fei-refl",
         "fei-ecs",
+        "fei-app",
         "fei-asset",
         "fei-core",
         "fei-math"
