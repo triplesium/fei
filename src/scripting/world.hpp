@@ -1,9 +1,10 @@
 #pragma once
 
 #include "ecs/world.hpp"
+#include "refl/reflect.hpp"
 namespace fei {
 
-class LuaWorld {
+class FEI_REFLECT LuaWorld {
   private:
     World* m_world;
 

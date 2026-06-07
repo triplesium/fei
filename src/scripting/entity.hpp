@@ -1,12 +1,13 @@
 #pragma once
 #include "ecs/fwd.hpp"
 #include "ecs/world.hpp"
+#include "refl/reflect.hpp"
 #include "refl/ref.hpp"
 #include "refl/type.hpp"
 
 namespace fei {
 
-class LuaEntity {
+class FEI_REFLECT LuaEntity {
   private:
     World* m_world;
     Entity m_entity;

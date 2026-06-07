@@ -1,6 +1,7 @@
 #pragma once
 
 #include "math/common.hpp"
+#include "refl/reflect.hpp"
 
 #include <array>
 #include <cmath>
@@ -153,7 +154,7 @@ class Vector2 {
     }
 };
 
-class Vector3 {
+class FEI_REFLECT Vector3 {
   public:
     float x {0.f};
     float y {0.f};

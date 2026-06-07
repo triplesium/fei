@@ -76,12 +76,20 @@ Enum& Registry::get_enum(TypeId id) {
     throw std::runtime_error("Enum not found");
 }
 
+bool Registry::has_enum(TypeId id) const {
+    return m_enums.contains(id);
+}
+
 Type& type(TypeId id) {
     return Registry::instance().get_type(id);
 }
 
 const std::string& type_name(TypeId id) {
     return Registry::instance().get_type(id).name();
+}
+
+bool is_enum_type(TypeId type_id) {
+    return Registry::instance().has_enum(type_id);
 }
 
 } // namespace fei

@@ -346,6 +346,177 @@ class CppEnumInfo:
         }
 
 
+PRIMITIVE_BINDABLE_TYPES = {
+    "void",
+    "bool",
+    "char",
+    "signed char",
+    "unsigned char",
+    "short",
+    "short int",
+    "unsigned short",
+    "unsigned short int",
+    "int",
+    "unsigned int",
+    "long",
+    "long int",
+    "unsigned long",
+    "unsigned long int",
+    "long long",
+    "long long int",
+    "unsigned long long",
+    "unsigned long long int",
+    "float",
+    "double",
+    "long double",
+    "size_t",
+    "std::size_t",
+    "int8_t",
+    "std::int8_t",
+    "uint8_t",
+    "std::uint8_t",
+    "int16_t",
+    "std::int16_t",
+    "uint16_t",
+    "std::uint16_t",
+    "int32_t",
+    "std::int32_t",
+    "uint32_t",
+    "std::uint32_t",
+    "int64_t",
+    "std::int64_t",
+    "uint64_t",
+    "std::uint64_t",
+}
+
+SPECIAL_BINDABLE_TYPES = {
+    "std::string",
+    "string",
+    "fei::TypeId",
+    "TypeId",
+    "fei::Ref",
+    "Ref",
+}
+
+
+def stripped_cpp_name(name: str) -> str:
+    return name.split("::")[-1]
+
+
+def strip_cv_ref(type_name: str) -> str:
+    ty = " ".join(type_name.strip().split())
+    changed = True
+    while changed:
+        changed = False
+        for prefix in ("const ", "volatile ", "class ", "struct ", "enum "):
+            if ty.startswith(prefix):
+                ty = ty[len(prefix) :].strip()
+                changed = True
+        for suffix in (" const", " volatile", "&&", "&"):
+            if ty.endswith(suffix):
+                ty = ty[: -len(suffix)].strip()
+                changed = True
+    return ty
+
+
+def is_bindable_type(
+    type_name: str,
+    reflectable_type_names: set[str],
+    allow_void: bool = False,
+) -> bool:
+    ty = strip_cv_ref(type_name)
+    if not ty:
+        return False
+    if ty == "void":
+        return allow_void
+    if "*" in ty or "[" in ty or "(*)" in ty:
+        return False
+    if "<" in ty or ">" in ty:
+        return False
+    if ty in PRIMITIVE_BINDABLE_TYPES or ty in SPECIAL_BINDABLE_TYPES:
+        return True
+    if ty in reflectable_type_names:
+        return True
+    return stripped_cpp_name(ty) in reflectable_type_names
+
+
+def dedupe_reflected_types(
+    classes: List[CppClassInfo], enums: List[CppEnumInfo]
+) -> Tuple[List[CppClassInfo], List[CppEnumInfo]]:
+    deduped_classes = {}
+    for cls in classes:
+        deduped_classes.setdefault(cls.name, cls)
+
+    deduped_enums = {}
+    for enum in enums:
+        deduped_enums.setdefault(enum.name, enum)
+
+    return list(deduped_classes.values()), list(deduped_enums.values())
+
+
+def filter_bindable_members(
+    classes: List[CppClassInfo], enums: List[CppEnumInfo]
+) -> None:
+    reflectable_type_names = set()
+    for cls in classes:
+        reflectable_type_names.add(cls.name)
+        reflectable_type_names.add(stripped_cpp_name(cls.name))
+    for enum in enums:
+        reflectable_type_names.add(enum.name)
+        reflectable_type_names.add(stripped_cpp_name(enum.name))
+
+    for cls in classes:
+        filtered_properties = []
+        for prop in cls.properties:
+            if is_bindable_type(prop.type_name, reflectable_type_names):
+                filtered_properties.append(prop)
+            elif prop.access == "public":
+                print(
+                    f"Skipping {cls.name}.{prop.name}: unbindable property type "
+                    f"{prop.type_name}",
+                    file=sys.stderr,
+                )
+        cls.properties = filtered_properties
+
+        filtered_methods = []
+        for method in cls.methods:
+            param_types = [param.type_name for param in method.parameters]
+            if is_bindable_type(
+                method.type_name,
+                reflectable_type_names,
+                allow_void=True,
+            ) and all(
+                is_bindable_type(param_type, reflectable_type_names)
+                for param_type in param_types
+            ):
+                filtered_methods.append(method)
+            elif method.access == "public":
+                signature = ", ".join(param_types)
+                print(
+                    f"Skipping {cls.name}.{method.name}({signature}): "
+                    f"unbindable return/parameter type",
+                    file=sys.stderr,
+                )
+        cls.methods = filtered_methods
+
+        filtered_constructors = []
+        for constructor in cls.constructors:
+            param_types = [param.type_name for param in constructor.parameters]
+            if all(
+                is_bindable_type(param_type, reflectable_type_names)
+                for param_type in param_types
+            ):
+                filtered_constructors.append(constructor)
+            elif constructor.access == "public":
+                signature = ", ".join(param_types)
+                print(
+                    f"Skipping {cls.name} constructor({signature}): "
+                    f"unbindable parameter type",
+                    file=sys.stderr,
+                )
+        cls.constructors = filtered_constructors
+
+
 class CppHeaderParser:
     """Parser for C++ header files using libclang."""
 
@@ -561,6 +732,9 @@ class CppHeaderParser:
         if not enum_cursor.is_definition():
             return None
 
+        if not self._has_reflgen_attribute(enum_cursor):
+            return None
+
         enum_name = enum_cursor.spelling
         if not enum_name:
             return None
@@ -605,9 +779,9 @@ class CppHeaderParser:
         if not class_name:
             return None
 
-        # # Only process classes/structs explicitly marked with reflgen attribute
-        # if not self._has_reflgen_attribute(class_cursor):
-        #     return None
+        # Only process classes/structs explicitly marked with reflgen attribute.
+        if not self._has_reflgen_attribute(class_cursor):
+            return None
 
         # Get the fully qualified class name including namespaces
         qualified_class_name = self._get_qualified_name(class_cursor)
@@ -1230,13 +1404,18 @@ def main():
         # Create parser and parse the headers
         parser_instance = CppHeaderParser(args.headers, args.includes or [])
         classes = parser_instance.parse(max_workers=args.threads)
+        classes, parser_instance.enums = dedupe_reflected_types(
+            classes,
+            parser_instance.enums,
+        )
+        filter_bindable_members(classes, parser_instance.enums)
 
         # Print summary
         total_files = len(args.headers)
         total_classes = len(classes)
         total_enums = len(parser_instance.enums)
         print(
-            f"\n✅ Parsing complete! Found {total_classes} classes and {total_enums} enums in {total_files} files."
+            f"\nParsing complete! Found {total_classes} classes and {total_enums} enums in {total_files} files."
         )
 
         if not classes and not parser_instance.enums:
@@ -1251,7 +1430,7 @@ def main():
                     args.output,
                     args.rootdir,
                 )
-                print(f"📝 Generated C++ reflection code: {args.output}")
+                print(f"Generated C++ reflection code: {args.output}")
             else:
                 # Print to console
                 print_class_summary(classes)

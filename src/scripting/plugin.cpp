@@ -5,6 +5,7 @@
 #include "generated/reflgen.hpp"
 #include "refl/cls.hpp"
 #include "refl/enum.hpp"
+#include "refl/registry.hpp"
 #include "scripting/asset.hpp"
 #include "scripting/scripting_engine.hpp"
 #include "scripting/systems.hpp"

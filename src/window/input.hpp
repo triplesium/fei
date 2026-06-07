@@ -1,13 +1,14 @@
 #pragma once
 
 #include "math/vector.hpp"
+#include "refl/reflect.hpp"
 #include "window/window.hpp"
 
 #include <cstdint>
 #include <unordered_map>
 
 namespace fei {
-enum class KeyCode : std::int32_t {
+enum class FEI_REFLECT KeyCode : std::int32_t {
 #define KEY_CODE(name, code) name = code,
 #include "keycode.def"
 #undef KEY_CODE
@@ -40,7 +41,7 @@ struct KeyEvent {
     KeyState state;
 };
 
-class KeyInput {
+class FEI_REFLECT KeyInput {
   public:
     KeyInput() {
         for (auto key : c_key_codes) {

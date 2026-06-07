@@ -2,6 +2,7 @@
 #include "math/common.hpp"
 #include "math/matrix.hpp"
 #include "math/vector.hpp"
+#include "refl/reflect.hpp"
 
 namespace fei {
 
@@ -16,7 +17,7 @@ struct Transform2d {
     }
 };
 
-struct Transform3d {
+struct FEI_REFLECT Transform3d {
     Vector3 position {0.0f, 0.0f, 0.0f};
     Vector3 rotation {0.0f, 0.0f, 0.0f};
     Vector3 scale {1.0f, 1.0f, 1.0f};

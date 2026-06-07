@@ -34,7 +34,7 @@ void ScriptingEngine::register_type(Type& type) {
     auto id = type.id();
 
     auto register_operator = [&](LuaOperator op) {
-        if (auto* method = get_operator(Registry::instance().get_cls(id), op)) {
+        if (has_operator(Registry::instance().get_cls(id), op)) {
             lua_pushinteger(L, id.id());
             lua_pushinteger(L, static_cast<int>(op));
             lua_pushcclosure(L, &dispatch_operator, 2);
@@ -348,16 +348,6 @@ int ScriptingEngine::dispatch_operator(lua_State* L) {
 
     auto instance = lua_to_ref(L, 1);
 
-    Method* method = get_operator(cls, op);
-    if (!method) {
-        luaL_error(
-            L,
-            "Operator method not found for operator %d in class %s",
-            static_cast<int>(op),
-            type.stripped_name().c_str()
-        );
-        return 0;
-    }
     auto arg_count = lua_gettop(L) - 1;
     std::vector<TypeId> arg_types;
     std::vector<ReturnValue> args;
@@ -375,6 +365,16 @@ int ScriptingEngine::dispatch_operator(lua_State* L) {
         }
         arg_types.push_back(arg_type);
         args.push_back(lua_to_val(L, i + 1));
+    }
+    Method* method = get_operator(cls, op, arg_types);
+    if (!method) {
+        luaL_error(
+            L,
+            "Operator method not found for operator %d in class %s",
+            static_cast<int>(op),
+            type.stripped_name().c_str()
+        );
+        return 0;
     }
 
     std::vector<Ref> refs;

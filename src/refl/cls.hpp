@@ -1,6 +1,7 @@
 #pragma once
 
 #include "refl/constructor.hpp"
+#include "refl/enum.hpp"
 #include "refl/method.hpp"
 #include "refl/property.hpp"
 #include "refl/type.hpp"
@@ -60,9 +61,17 @@ class Cls {
         if (it != m_methods.end()) {
             // Find method with matching argument types
             for (const auto& method : it->second) {
+                if (method->params().size() != arg_types.size()) {
+                    continue;
+                }
                 bool match = true;
                 for (int i = 0; i < method->params().size(); ++i) {
-                    if (method->params()[i].type_id() != arg_types[i]) {
+                    auto param_type = method->params()[i].type_id();
+                    auto arg_type = arg_types[i];
+                    auto enum_arg_matches =
+                        arg_type == fei::type_id<int>() &&
+                        is_enum_type(param_type);
+                    if (param_type != arg_type && !enum_arg_matches) {
                         match = false;
                         break;
                     }

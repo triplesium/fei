@@ -8,6 +8,7 @@
 #include <array>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace fei {
 
@@ -68,9 +69,8 @@ class MethodImpl : public Method {
 
   public:
     MethodImpl(std::string name, P ptr) :
-        Method(name, {}, type_id<ReturnType>()), m_ptr(ptr) {
-        auto types = SignatureTrait<MethodType>::param_types();
-    }
+        Method(std::move(name), make_params(), type_id<ReturnType>()),
+        m_ptr(ptr) {}
 
     ReturnValue invoke_variadic(const std::vector<Ref>& args) const override {
         if (c_is_static) {
@@ -107,9 +107,25 @@ class MethodImpl : public Method {
     }
 
   private:
+    static std::vector<Param> make_params() {
+        auto types = SignatureTrait<MethodType>::param_types();
+        std::vector<Param> params;
+        params.reserve(types.size());
+        for (auto type : types) {
+            params.emplace_back("", type);
+        }
+        return params;
+    }
+
     template<typename T>
     decltype(auto) ref_to_arg(const Ref& ref) const {
-        if constexpr (std::is_pointer_v<T>) {
+        using Decayed = std::remove_cvref_t<T>;
+        if constexpr (std::is_enum_v<Decayed>) {
+            Decayed value = ref.type_id() == type_id<int>() ?
+                                static_cast<Decayed>(ref.get<int>()) :
+                                ref.get<Decayed>();
+            return value;
+        } else if constexpr (std::is_pointer_v<T>) {
             return ref.get<std::remove_pointer_t<T>*>();
         } else if constexpr (std::is_lvalue_reference_v<T>) {
             return ref.get<std::remove_reference_t<T>&>();

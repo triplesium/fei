@@ -34,6 +34,7 @@ class Registry {
     Cls& get_cls(TypeId id);
     Enum& add_enum(TypeId id);
     Enum& get_enum(TypeId id);
+    bool has_enum(TypeId id) const;
 
     template<typename T>
     Cls& register_cls() {

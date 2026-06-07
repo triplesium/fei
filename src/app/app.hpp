@@ -4,6 +4,7 @@
 #include "ecs/event.hpp"
 #include "ecs/system_params.hpp"
 #include "ecs/world.hpp"
+#include "refl/reflect.hpp"
 #include "refl/type.hpp"
 
 #include <concepts>
@@ -33,7 +34,7 @@ enum MainSchedules : std::uint32_t {
     RenderLast
 };
 
-struct AppStates {
+struct FEI_REFLECT AppStates {
     bool should_stop {false};
 };
 

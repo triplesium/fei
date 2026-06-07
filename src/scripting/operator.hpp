@@ -21,32 +21,41 @@ enum class LuaOperator : uint8 {
     Le,
 };
 
-inline Method* get_operator(Cls& cls, LuaOperator op) {
+inline const char* get_operator_method_name(LuaOperator op) {
     switch (op) {
         case LuaOperator::Add:
-            return cls.get_method("operator+", {cls.type_id()});
+            return "operator+";
         case LuaOperator::Sub:
-            return cls.get_method("operator-", {cls.type_id()});
+            return "operator-";
         case LuaOperator::Mul:
-            return cls.get_method("operator*", {cls.type_id()});
+            return "operator*";
         case LuaOperator::Div:
-            return cls.get_method("operator/", {cls.type_id()});
+            return "operator/";
         case LuaOperator::Mod:
-            return cls.get_method("operator%", {cls.type_id()});
+            return "operator%";
         case LuaOperator::Pow:
-            return cls.get_method("operator^", {cls.type_id()});
+            return "operator^";
         case LuaOperator::Unm:
-            return cls.get_method("operator-", {});
+            return "operator-";
         case LuaOperator::Len:
-            return cls.get_method("operator#", {});
+            return "operator#";
         case LuaOperator::Eq:
-            return cls.get_method("operator==", {cls.type_id()});
+            return "operator==";
         case LuaOperator::Lt:
-            return cls.get_method("operator<", {cls.type_id()});
+            return "operator<";
         case LuaOperator::Le:
-            return cls.get_method("operator<=", {cls.type_id()});
+            return "operator<=";
     }
     return nullptr;
+}
+
+inline bool has_operator(Cls& cls, LuaOperator op) {
+    return cls.has_method(get_operator_method_name(op));
+}
+
+inline Method*
+get_operator(Cls& cls, LuaOperator op, const std::vector<TypeId>& arg_types) {
+    return cls.get_method(get_operator_method_name(op), arg_types);
 }
 
 inline const char* get_operator_metamethod(LuaOperator op) {

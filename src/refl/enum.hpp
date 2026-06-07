@@ -31,4 +31,6 @@ class Enum {
     TypeId type_id() const { return m_type_id; }
 };
 
+bool is_enum_type(TypeId type_id);
+
 } // namespace fei

@@ -1,12 +1,13 @@
 #pragma once
 #include "app/plugin.hpp"
 #include "ecs/system_params.hpp"
+#include "refl/reflect.hpp"
 
 #include <chrono>
 
 namespace fei {
 
-struct Time {
+struct FEI_REFLECT Time {
     Time() :
         m_last_tick_time(std::chrono::steady_clock::now()),
         m_start_time(std::chrono::steady_clock::now()) {}
