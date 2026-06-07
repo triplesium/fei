@@ -838,15 +838,18 @@ void prepare_vxgi_lighting(
 }
 
 void VxgiPlugin::setup(App& app) {
-    app.add_resource<VxgiVolumes>()
+    app.add_event<SceneSpawnEvent>()
+        .add_resource<VxgiVolumes>()
         .add_systems(
             StartUp,
-            setup_vxgi,
-            setup_inject_radiance,
-            setup_inject_propagation,
-            setup_vxgi_generate_mipmap_base,
-            setup_vxgi_generate_mipmap_volume,
-            setup_vxgi_lighting
+            chain(
+                setup_vxgi,
+                all(setup_inject_radiance,
+                    setup_inject_propagation,
+                    setup_vxgi_generate_mipmap_base,
+                    setup_vxgi_generate_mipmap_volume,
+                    setup_vxgi_lighting)
+            )
         )
         .add_systems(
             RenderUpdate,

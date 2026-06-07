@@ -25,13 +25,13 @@ void prepare_light_view_uniform_buffer(
     Query<Entity, DirectionalLight, Transform3d, ViewUniformBuffer> query_light,
     Res<GraphicsDevice> device
 ) {
-    constexpr float proj_size = 25.0f;
     for (auto [entity, light, transform, view_uniform_buffer] : query_light) {
         auto view = look_at(
             transform.position,
             transform.position + transform.forward(),
             Vector3 {0.0f, 1.0f, 0.0f}
         );
+        const float proj_size = light.projection_size;
         auto proj = orthographic(
             -proj_size,
             proj_size,

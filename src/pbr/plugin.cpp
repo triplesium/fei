@@ -8,6 +8,7 @@
 #include "pbr/passes/deferred.hpp"
 #include "pbr/passes/forward.hpp"
 #include "pbr/pipelines.hpp"
+#include "pbr/vxgi.hpp"
 #include "rendering/material.hpp"
 
 EMBED(shadow_vert, "shadow.vert");
@@ -43,6 +44,7 @@ namespace fei {
 void PbrPlugin::setup(App& app) {
     app.add_plugins(
            MaterialPlugin<StandardMaterial> {},
+           VxgiPlugin {},
            DeferredRenderPlugin {}
     )
         .add_resource(MeshViewLayout {})

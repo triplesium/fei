@@ -34,6 +34,7 @@ namespace fei {
 struct DirectionalLight {
     Color3F color {1.0f, 1.0f, 1.0f};
     float intensity {1.0f};
+    float projection_size {25.0f};
     bool shadow_map_enabled {false};
 };
 

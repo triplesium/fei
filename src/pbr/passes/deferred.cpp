@@ -629,8 +629,8 @@ void DeferredRenderPlugin::setup(App& app) {
         .add_resource(RenderTarget {})
         .add_systems(
             StartUp,
-            all(setup_gbuffer, setup_render_target) |
-                after(init_mesh_view_layout)
+            all(setup_gbuffer | after(setup_vxgi_lighting), setup_render_target
+            ) | after(init_mesh_view_layout)
         )
         .add_systems(
             RenderUpdate,
