@@ -2,7 +2,9 @@
 #include "base/concepts.hpp"
 
 #include <concepts>
+#include <functional>
 #include <type_traits>
+#include <utility>
 
 namespace fei {
 
@@ -57,23 +59,24 @@ class Optional {
     explicit constexpr Optional(InPlace, Args&&... args) :
         m_has_value(true), m_storage(std::forward<Args>(args)...) {}
 
-    Optional(const Optional& other) : m_has_value(other.m_has_value) {
+    Optional(const Optional& other) :
+        m_has_value(other.m_has_value), m_storage(trivial_init) {
         if (m_has_value) {
             new (&m_storage.value) T(other.m_storage.value);
         }
     }
 
-    Optional(Optional&& other) : m_has_value(other.m_has_value) {
+    Optional(Optional&& other) :
+        m_has_value(other.m_has_value), m_storage(trivial_init) {
         if (m_has_value) {
             new (&m_storage.value) T(std::move(other.m_storage.value));
-            other.m_storage.value.T::~T();
-            other.m_has_value = false;
+            other.reset();
         }
     }
 
     ~Optional() {
         if (m_has_value) {
-            m_storage.value.T::~T();
+            m_storage.value.~T();
         }
     }
 
@@ -140,7 +143,7 @@ class Optional {
 
     void reset() {
         if (m_has_value) {
-            m_storage.value.T::~T();
+            m_storage.value.~T();
             m_has_value = false;
         }
     }

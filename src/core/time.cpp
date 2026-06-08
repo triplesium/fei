@@ -29,10 +29,23 @@ void Timer::tick(float delta) {
     if (m_just_finished) {
         m_just_finished = false;
     }
+    if (mode == Once && m_time >= duration) {
+        return;
+    }
     m_time += delta;
     if (m_time >= duration) {
-        m_time -= duration;
         m_just_finished = true;
+        if (mode == Repeating) {
+            if (duration > 0.0f) {
+                while (m_time >= duration) {
+                    m_time -= duration;
+                }
+            } else {
+                m_time = 0.0f;
+            }
+        } else {
+            m_time = duration;
+        }
     }
 }
 

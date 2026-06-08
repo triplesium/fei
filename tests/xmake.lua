@@ -1,13 +1,18 @@
-target("tests")
-    set_kind("binary")
-    add_files("**.cpp")
-    add_packages("catch2")
-    add_deps(
-        "fei-base",
-        "fei-refl",
-        "fei-ecs",
-        "fei-app",
-        "fei-asset",
-        "fei-core",
-        "fei-math"
-    )
+local integration_tests = os.files("*.cpp")
+
+if #integration_tests > 0 then
+    target("tests")
+        set_kind("binary")
+        add_files(integration_tests)
+        add_packages("catch2")
+        add_deps(
+            "fei-base",
+            "fei-refl",
+            "fei-ecs",
+            "fei-app",
+            "fei-asset",
+            "fei-core",
+            "fei-math"
+        )
+        add_tests("default")
+end

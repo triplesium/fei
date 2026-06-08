@@ -1,14 +1,14 @@
-#include <catch2/catch_test_macros.hpp>
+#include "core/image.hpp"
 
 #include "app/app.hpp"
 #include "asset/io.hpp"
 #include "asset/loader.hpp"
 #include "asset/path.hpp"
 #include "asset/server.hpp"
-#include "core/image.hpp"
 #include "graphics/enums.hpp"
 
 #include <array>
+#include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <expected>
 #include <iostream>
@@ -52,42 +52,36 @@ consteval auto bytes_from_hex(const char (&hex)[Size]) {
 
     std::array<std::byte, (Size - 1) / 2> bytes {};
     for (std::size_t i = 0; i < bytes.size(); ++i) {
-        bytes[i] = std::byte {
-            static_cast<unsigned char>(
-                (hex_digit(hex[i * 2]) << 4) | hex_digit(hex[i * 2 + 1])
-            )
-        };
+        bytes[i] = std::byte {static_cast<unsigned char>(
+            (hex_digit(hex[i * 2]) << 4) | hex_digit(hex[i * 2 + 1])
+        )};
     }
     return bytes;
 }
 
-static constexpr auto gray_png = bytes_from_hex(
-    "89504e470d0a1a0a"
-    "0000000d49484452000000010000000108000000003a7e9b55"
-    "0000000a49444154789c63a8070000810080d394534a"
-    "0000000049454e44ae426082"
-);
+static constexpr auto gray_png =
+    bytes_from_hex("89504e470d0a1a0a"
+                   "0000000d49484452000000010000000108000000003a7e9b55"
+                   "0000000a49444154789c63a8070000810080d394534a"
+                   "0000000049454e44ae426082");
 
-static constexpr auto rg_png = bytes_from_hex(
-    "89504e470d0a1a0a"
-    "0000000d4948445200000001000000010804000000b51c0c02"
-    "0000000b49444154789c63a86f000001810100d3b7bf54"
-    "0000000049454e44ae426082"
-);
+static constexpr auto rg_png =
+    bytes_from_hex("89504e470d0a1a0a"
+                   "0000000d4948445200000001000000010804000000b51c0c02"
+                   "0000000b49444154789c63a86f000001810100d3b7bf54"
+                   "0000000049454e44ae426082");
 
-static constexpr auto rgb_png = bytes_from_hex(
-    "89504e470d0a1a0a"
-    "0000000d4948445200000001000000010802000000907753de"
-    "0000000c49444154789c63105030000000a4006134667d72"
-    "0000000049454e44ae426082"
-);
+static constexpr auto rgb_png =
+    bytes_from_hex("89504e470d0a1a0a"
+                   "0000000d4948445200000001000000010802000000907753de"
+                   "0000000c49444154789c63105030000000a4006134667d72"
+                   "0000000049454e44ae426082");
 
-static constexpr auto rgba_png = bytes_from_hex(
-    "89504e470d0a1a0a"
-    "0000000d49484452000000010000000108060000001f15c489"
-    "0000000d49444154789c63105030700000014500a15186264f"
-    "0000000049454e44ae426082"
-);
+static constexpr auto rgba_png =
+    bytes_from_hex("89504e470d0a1a0a"
+                   "0000000d49484452000000010000000108060000001f15c489"
+                   "0000000d49444154789c63105030700000014500a15186264f"
+                   "0000000049454e44ae426082");
 
 template<std::size_t Size>
 std::expected<std::unique_ptr<Image>, std::error_code>
@@ -101,8 +95,10 @@ load_image(const std::array<std::byte, Size>& bytes, const char* path) {
 }
 
 template<std::size_t Size>
-std::unique_ptr<Image>
-require_loaded_image(const std::array<std::byte, Size>& bytes, const char* path) {
+std::unique_ptr<Image> require_loaded_image(
+    const std::array<std::byte, Size>& bytes,
+    const char* path
+) {
     auto image = load_image(bytes, path);
     REQUIRE(image.has_value());
     return std::move(image.value());
@@ -123,6 +119,8 @@ void require_1x1_image(
     REQUIRE(desc.width == 1);
     REQUIRE(desc.height == 1);
     REQUIRE(desc.depth == 1);
+    REQUIRE(desc.mip_level == 1);
+    REQUIRE(desc.layer == 1);
     REQUIRE(desc.texture_format == format);
     REQUIRE(desc.texture_usage.is_set(TextureUsage::Sampled));
     REQUIRE(desc.texture_type == TextureType::Texture2D);
@@ -148,6 +146,11 @@ TEST_CASE("Core Image creates empty images", "[core][image]") {
     REQUIRE(image->channels() == 4);
 
     const auto& desc = image->texture_description();
+    REQUIRE(desc.width == 2);
+    REQUIRE(desc.height == 3);
+    REQUIRE(desc.depth == 1);
+    REQUIRE(desc.mip_level == 1);
+    REQUIRE(desc.layer == 1);
     REQUIRE(desc.texture_format == PixelFormat::Rgba8Unorm);
     REQUIRE(desc.texture_usage.is_set(TextureUsage::Sampled));
     REQUIRE(desc.texture_usage.is_set(TextureUsage::Storage));

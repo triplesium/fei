@@ -1,0 +1,129 @@
+#include "test_types.hpp"
+
+#include <algorithm>
+#include <catch2/catch_test_macros.hpp>
+#include <string>
+#include <vector>
+
+using namespace fei;
+using namespace fei::ecs_test;
+
+TEST_CASE("ECS queries select matching component sets", "[ecs][query]") {
+    register_components();
+    World world;
+
+    Entity entity1 = world.entity();
+    world.add_component(entity1, Position(1.0f, 1.0f));
+    world.add_component(entity1, Velocity(0.1f, 0.1f));
+
+    Entity entity2 = world.entity();
+    world.add_component(entity2, Position(2.0f, 2.0f));
+    world.add_component(entity2, Health(50));
+
+    Entity entity3 = world.entity();
+    world.add_component(entity3, Position(3.0f, 3.0f));
+    world.add_component(entity3, Velocity(0.3f, 0.3f));
+    world.add_component(entity3, Health(75));
+
+    Entity entity4 = world.entity();
+    world.add_component(entity4, Name("OnlyName"));
+
+    SECTION("Query with single component") {
+        std::vector<Entity> entities_with_position;
+
+        world.run_system_once(
+            [&entities_with_position](Query<Entity, Position> query) {
+                for (auto [entity, pos] : query) {
+                    (void)pos;
+                    entities_with_position.push_back(entity);
+                }
+            }
+        );
+
+        std::sort(entities_with_position.begin(), entities_with_position.end());
+        std::vector<Entity> expected = {entity1, entity2, entity3};
+        std::sort(expected.begin(), expected.end());
+        REQUIRE(entities_with_position == expected);
+    }
+
+    SECTION("Query with multiple components") {
+        std::vector<Entity> entities_with_pos_and_vel;
+
+        world.run_system_once([&entities_with_pos_and_vel](
+                                  Query<Entity, Position, Velocity> query
+                              ) {
+            for (auto [entity, pos, vel] : query) {
+                (void)pos;
+                (void)vel;
+                entities_with_pos_and_vel.push_back(entity);
+            }
+        });
+
+        std::sort(
+            entities_with_pos_and_vel.begin(),
+            entities_with_pos_and_vel.end()
+        );
+        std::vector<Entity> expected = {entity1, entity3};
+        std::sort(expected.begin(), expected.end());
+        REQUIRE(entities_with_pos_and_vel == expected);
+    }
+
+    SECTION("Query with all three components") {
+        std::vector<Entity> entities_with_all_three;
+
+        world.run_system_once(
+            [&entities_with_all_three](
+                Query<Entity, Position, Velocity, Health> query
+            ) {
+                for (auto [entity, pos, vel, health] : query) {
+                    (void)pos;
+                    (void)vel;
+                    (void)health;
+                    entities_with_all_three.push_back(entity);
+                }
+            }
+        );
+
+        REQUIRE(entities_with_all_three.size() == 1);
+        REQUIRE(entities_with_all_three[0] == entity3);
+    }
+
+    SECTION("Empty query") {
+        int count = 0;
+
+        world.run_system_once([&count](Query<Entity, Position, Name> query) {
+            for (auto [entity, pos, name] : query) {
+                (void)entity;
+                (void)pos;
+                (void)name;
+                ++count;
+            }
+        });
+
+        REQUIRE(count == 0);
+    }
+}
+
+TEST_CASE("ECS schedule ordering respects configured sets", "[ecs][schedule]") {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<ScheduleTrace>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(ScheduleTrace {});
+
+    world.configure_sets(
+        TestSchedule,
+        chain(ScheduleFirstSet {}, ScheduleSecondSet {})
+    );
+    world.add_systems(
+        TestSchedule,
+        scheduled_second | in_set<ScheduleSecondSet>(),
+        scheduled_first | in_set<ScheduleFirstSet>()
+    );
+    world.sort_systems();
+    world.run_schedule(TestSchedule);
+
+    std::vector<std::string> expected = {"first", "second"};
+    REQUIRE(world.resource<ScheduleTrace>().entries == expected);
+}

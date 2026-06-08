@@ -119,12 +119,12 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
     int height = 0;
     int channels = 0;
     if (!stbi_info_from_memory(
-        reinterpret_cast<const stbi_uc*>(reader.data()),
-        static_cast<int>(reader.size()),
-        &width,
-        &height,
-        &channels
-    )) {
+            reinterpret_cast<const stbi_uc*>(reader.data()),
+            static_cast<int>(reader.size()),
+            &width,
+            &height,
+            &channels
+        )) {
         error("Failed to read image info: {}", stbi_failure_reason());
         return std::unexpected(std::error_code {});
     }
@@ -190,7 +190,7 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
         .height = static_cast<std::uint32_t>(height),
         .depth = 1,
         .mip_level = 1,
-        .layer = 0,
+        .layer = 1,
         .texture_format = format,
         .texture_usage = TextureUsage::Sampled,
         .texture_type = TextureType::Texture2D,

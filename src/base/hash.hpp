@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <ranges>
+#include <vector>
 
 namespace fei {
 
