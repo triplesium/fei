@@ -21,3 +21,5 @@ assets/
 
 # Generated reflection output
 src/generated/reflgen.cpp
+
+.codex/
