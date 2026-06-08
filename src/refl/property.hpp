@@ -1,11 +1,14 @@
 #pragma once
+#include "base/log.hpp"
 #include "refl/ref.hpp"
 #include "refl/ref_utils.hpp"
 #include "refl/type.hpp"
 #include "refl/utils.hpp"
 
+#include <cstring>
 #include <string>
 #include <type_traits>
+#include <utility>
 
 namespace fei {
 
@@ -20,7 +23,7 @@ class Property {
     virtual ~Property() = default;
 
     virtual Ref get(Ref obj) const = 0;
-    virtual void set(Ref obj, Ref value) const = 0;
+    virtual bool set(Ref obj, Ref value) const = 0;
     const std::string& name() const { return m_name; }
     TypeId type_id() const { return m_type_id; }
 };
@@ -41,35 +44,73 @@ class PropertyImpl : public Property {
         if constexpr (is_static) {
             return make_ref(*m_ptr);
         } else {
-            auto& p = obj.get<ParentType>();
-            return make_ref(p.*m_ptr);
+            if (auto* p = obj.try_get<ParentType>()) {
+                return make_ref(p->*m_ptr);
+            }
+            if (auto* p = obj.try_get_const<ParentType>()) {
+                return make_ref(p->*m_ptr);
+            }
+            error("Invalid object passed to property get {}", name());
+            return {};
         }
     }
 
-    void set(Ref obj, Ref value) const override {
+    bool set(Ref obj, Ref value) const override {
+        if (!value || value.type_id() != fei::type_id<MemberType>()) {
+            error("Invalid value passed to property set {}", name());
+            return false;
+        }
         if constexpr (is_static) {
             if constexpr (std::is_array_v<MemberType>) {
-                auto& src = value.get<MemberType>();
-                std::memcpy(*m_ptr, src, sizeof(MemberType));
+                auto* src = value.try_get_const<MemberType>();
+                if (!src) {
+                    return false;
+                }
+                std::memcpy(*m_ptr, *src, sizeof(MemberType));
+                return true;
             } else {
-                if constexpr (std::is_move_assignable_v<MemberType>) {
+                if constexpr (std::is_copy_assignable_v<MemberType>) {
+                    *m_ptr = value.get_const<MemberType>();
+                    return true;
+                } else if constexpr (std::is_move_assignable_v<MemberType>) {
+                    if (value.is_const()) {
+                        error("Cannot move-assign property {} from const value", name());
+                        return false;
+                    }
                     *m_ptr = std::move(value.get<MemberType>());
+                    return true;
                 } else {
-                    // For non-assignable types, reconstruct in place
-                    *m_ptr = MemberType(std::move(value.get<MemberType>()));
+                    error("Property {} is not assignable", name());
+                    return false;
                 }
             }
         } else {
-            auto& p = obj.get<ParentType>();
+            auto* p = obj.try_get<ParentType>();
+            if (!p) {
+                error("Invalid or const object passed to property set {}", name());
+                return false;
+            }
             if constexpr (std::is_array_v<MemberType>) {
-                auto& src = value.get<MemberType>();
-                std::memcpy(&(p.*m_ptr), &src, sizeof(MemberType));
+                auto* src = value.try_get_const<MemberType>();
+                if (!src) {
+                    return false;
+                }
+                std::memcpy(&(p->*m_ptr), src, sizeof(MemberType));
+                return true;
             } else {
-                if constexpr (std::is_move_assignable_v<MemberType>) {
-                    p.*m_ptr = std::move(value.get<MemberType>());
+                if constexpr (std::is_copy_assignable_v<MemberType>) {
+                    p->*m_ptr = value.get_const<MemberType>();
+                    return true;
+                } else if constexpr (std::is_move_assignable_v<MemberType>) {
+                    if (value.is_const()) {
+                        error("Cannot move-assign property {} from const value", name());
+                        return false;
+                    }
+                    p->*m_ptr = std::move(value.get<MemberType>());
+                    return true;
                 } else {
-                    // For non-assignable types, reconstruct in place
-                    p.*m_ptr = MemberType(std::move(value.get<MemberType>()));
+                    error("Property {} is not assignable", name());
+                    return false;
                 }
             }
         }

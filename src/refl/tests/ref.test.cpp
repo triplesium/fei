@@ -22,7 +22,10 @@ TEST_CASE(
         Ref ref = make_ref(test);
         REQUIRE(ref);
         REQUIRE(ref.type_id() == type<TestStruct>().id());
+        REQUIRE_FALSE(ref.is_const());
         REQUIRE(ref.ptr() == &test);
+        REQUIRE(ref.try_get<TestStruct>() == &test);
+        REQUIRE(ref.try_get<float>() == nullptr);
 
         TestStruct& ref_test = ref.get<TestStruct>();
         REQUIRE(ref_test.a == 42);
@@ -38,12 +41,15 @@ TEST_CASE(
 
         REQUIRE(ref);
         REQUIRE(ref.type_id() == type<TestStruct>().id());
+        REQUIRE(ref.is_const());
+        REQUIRE(ref.try_get<TestStruct>() == nullptr);
+        REQUIRE(ref.try_get_const<TestStruct>() == &test);
         REQUIRE(
             static_cast<const void*>(ref.ptr()) ==
             static_cast<const void*>(&test)
         );
 
-        const TestStruct& ref_test = ref.get<TestStruct>();
+        const TestStruct& ref_test = ref.get_const<TestStruct>();
         REQUIRE(ref_test.a == 42);
         REQUIRE(ref_test.b == 3.14f);
     }
@@ -54,6 +60,7 @@ TEST_CASE(
 
         REQUIRE(ref);
         REQUIRE(ref.type_id() == type<TestStruct>().id());
+        REQUIRE_FALSE(ref.is_const());
         REQUIRE(ref.ptr() == test_ptr);
         REQUIRE(ref.get<TestStruct>().a == 42);
 
@@ -66,6 +73,9 @@ TEST_CASE(
 
         REQUIRE(ref);
         REQUIRE(ref.type_id() == type<TestStruct>().id());
+        REQUIRE(ref.is_const());
+        REQUIRE(ref.try_get<TestStruct>() == nullptr);
+        REQUIRE(ref.try_get_const<TestStruct>() == test_ptr);
         REQUIRE(
             static_cast<const void*>(ref.ptr()) ==
             static_cast<const void*>(test_ptr)

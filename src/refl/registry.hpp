@@ -3,10 +3,12 @@
 #include "refl/utils.hpp"
 
 #include <concepts>
+#include <cstring>
 #include <ranges>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
 
 namespace fei {
 
@@ -24,10 +26,8 @@ class Registry {
         TypeId id,
         const std::string& name,
         std::size_t size,
-        Type::DefaultConstructFunc default_construct,
-        Type::CopyConstructFunc copy_construct,
-        Type::MoveConstructFunc move_construct,
-        Type::DeleteFunc delete_func
+        std::size_t align,
+        TypeOps ops
     );
     Type& get_type(TypeId id);
     Cls& add_cls(TypeId id);
@@ -35,6 +35,7 @@ class Registry {
     Enum& add_enum(TypeId id);
     Enum& get_enum(TypeId id);
     bool has_enum(TypeId id) const;
+    void clear_generated_metadata();
 
     template<typename T>
     Cls& register_cls() {
@@ -67,55 +68,61 @@ class Registry {
 
     template<typename T>
     Type& register_type() {
-        if constexpr (std::is_same_v<std::decay_t<T>, void> ||
-                      std::is_function_v<T>) {
+        using U = std::remove_cvref_t<T>;
+        if constexpr (std::is_same_v<U, void> || std::is_function_v<U>) {
             return register_type(
-                type_id<T>(),
-                std::string(type_name<T>()),
+                type_id<U>(),
+                std::string(type_name<U>()),
                 0,
-                nullptr,
-                nullptr,
-                nullptr,
-                nullptr
+                0,
+                {}
             );
         } else {
-            Type::DefaultConstructFunc default_construct = nullptr;
-            if constexpr (std::is_default_constructible_v<T>) {
-                default_construct = [](void* dest) {
-                    new (dest) T();
+            TypeOps ops {};
+            if constexpr (std::is_default_constructible_v<U>) {
+                ops.default_construct = [](void* dest) {
+                    new (dest) U();
                 };
             }
-            Type::CopyConstructFunc copy_construct = nullptr;
-            if constexpr (std::is_trivially_copyable_v<T>) {
-                copy_construct = [](void* dest, const void* src) {
-                    std::memcpy(dest, src, sizeof(T));
+            if constexpr (std::is_trivially_copyable_v<U>) {
+                ops.copy_construct = [](void* dest, const void* src) {
+                    std::memcpy(dest, src, sizeof(U));
                 };
-            } else if constexpr (std::copy_constructible<T>) {
-                copy_construct = [](void* dest, const void* src) {
-                    new (dest) T(*static_cast<const T*>(src));
-                };
-            };
-            Type::MoveConstructFunc move_construct = nullptr;
-            if constexpr (std::is_trivially_move_constructible_v<T>) {
-                move_construct = [](void* dest, void* src) {
-                    std::memcpy(dest, src, sizeof(T));
-                };
-            } else if constexpr (std::move_constructible<T>) {
-                move_construct = [](void* dest, void* src) {
-                    new (dest) T(std::move(*static_cast<T*>(src)));
+            } else if constexpr (std::copy_constructible<U>) {
+                ops.copy_construct = [](void* dest, const void* src) {
+                    new (dest) U(*static_cast<const U*>(src));
                 };
             };
-            auto delete_func = [](void* ptr) {
-                static_cast<T*>(ptr)->~T();
+            if constexpr (std::is_trivially_copyable_v<U>) {
+                ops.move_construct = [](void* dest, void* src) {
+                    std::memcpy(dest, src, sizeof(U));
+                };
+            } else if constexpr (std::move_constructible<U>) {
+                ops.move_construct = [](void* dest, void* src) {
+                    new (dest) U(std::move(*static_cast<U*>(src)));
+                };
             };
+            ops.destroy = [](void* ptr) {
+                static_cast<U*>(ptr)->~U();
+            };
+            if constexpr (std::is_copy_assignable_v<U>) {
+                ops.copy_assign = [](void* dest, const void* src) {
+                    *static_cast<U*>(dest) = *static_cast<const U*>(src);
+                    return true;
+                };
+            }
+            if constexpr (std::is_move_assignable_v<U>) {
+                ops.move_assign = [](void* dest, void* src) {
+                    *static_cast<U*>(dest) = std::move(*static_cast<U*>(src));
+                    return true;
+                };
+            }
             return register_type(
-                type_id<T>(),
-                std::string(type_name<T>()),
-                sizeof(T),
-                default_construct,
-                copy_construct,
-                move_construct,
-                delete_func
+                type_id<U>(),
+                std::string(type_name<U>()),
+                sizeof(U),
+                alignof(U),
+                ops
             );
         }
     }
@@ -132,7 +139,6 @@ class Registry {
     std::unordered_map<TypeId, Type> m_types;
     std::unordered_map<TypeId, Cls> m_classes;
     std::unordered_map<TypeId, Enum> m_enums;
-    TypeId m_next_id = 1;
 };
 
 Type& type(TypeId id);

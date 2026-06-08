@@ -6,6 +6,7 @@
 #include "test_types.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstdint>
 #include <utility>
 
 using namespace fei;
@@ -57,6 +58,18 @@ TEST_CASE("Val owns small and heap values", "[refl][val]") {
         REQUIRE(val.get<LargeStruct>().arr[0] == 42);
     }
 
+    SECTION("Aligned heap allocation") {
+        struct alignas(32) AlignedStruct {
+            int value {42};
+        };
+        registry.register_type<AlignedStruct>();
+
+        Val val = make_val<AlignedStruct>();
+        auto address = reinterpret_cast<std::uintptr_t>(val.ref().ptr());
+        REQUIRE(address % alignof(AlignedStruct) == 0);
+        REQUIRE(val.get<AlignedStruct>().value == 42);
+    }
+
     SECTION("Empty Val") {
         Val val;
         REQUIRE_FALSE(val);
@@ -71,6 +84,24 @@ TEST_CASE("Val owns small and heap values", "[refl][val]") {
         REQUIRE(ref.type_id() == type<TestStruct>().id());
         REQUIRE(ref.get<TestStruct>().a == 42);
     }
+}
+
+TEST_CASE("Val destroys owned objects", "[refl][val]") {
+    struct Counted {
+        int* count;
+
+        explicit Counted(int& count) : count(&count) {}
+        Counted(const Counted& other) : count(other.count) {}
+        ~Counted() { ++(*count); }
+    };
+    Registry::instance().register_type<Counted>();
+
+    int destroyed = 0;
+    {
+        Val val = make_val<Counted>(destroyed);
+        REQUIRE(val);
+    }
+    REQUIRE(destroyed == 1);
 }
 
 TEST_CASE("Val copies and moves owned objects", "[refl][val]") {

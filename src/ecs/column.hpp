@@ -3,6 +3,7 @@
 #include "refl/ref.hpp"
 #include "refl/type.hpp"
 
+#include <cstddef>
 #include <cstdint>
 
 namespace fei {
@@ -13,11 +14,15 @@ class Column {
     uint32_t m_count;
     uint32_t m_capacity;
     uint32_t m_type_size;
+    std::size_t m_type_align;
     TypeId m_type_id;
     Type::DefaultConstructFunc m_default_construct;
     Type::CopyConstructFunc m_copy_construct;
     Type::MoveConstructFunc m_move_construct;
     Type::DeleteFunc m_delete;
+
+    void* allocate_elements(uint32_t capacity) const;
+    void deallocate_elements() const;
 
   public:
     Column(TypeId type_id);

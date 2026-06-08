@@ -15,11 +15,21 @@ TEST_CASE("Registry records type metadata and capabilities", "[refl][type]") {
     REQUIRE(test_type.id() == type_id<TestStruct>());
     REQUIRE(test_type.hash() == type_id<TestStruct>());
     REQUIRE(test_type.size() == sizeof(TestStruct));
+    REQUIRE(test_type.align() == alignof(TestStruct));
     REQUIRE(test_type.default_constructible());
     REQUIRE(test_type.copy_constructible());
     REQUIRE(test_type.move_constructible());
+    REQUIRE(test_type.copy_assignable());
+    REQUIRE(test_type.move_assignable());
     REQUIRE(test_type.delete_func() != nullptr);
     REQUIRE(type(test_type.id()).id() == test_type.id());
+
+    struct alignas(32) AlignedStruct {
+        int value;
+    };
+    Type& aligned_type = registry.register_type<AlignedStruct>();
+    REQUIRE(aligned_type.size() == sizeof(AlignedStruct));
+    REQUIRE(aligned_type.align() == alignof(AlignedStruct));
 
     Type& int_type = registry.register_type<int>();
     Type& float_type = registry.register_type<float>();

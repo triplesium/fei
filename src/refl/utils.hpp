@@ -110,6 +110,7 @@ template<typename MemberTypeT>
 struct MemberTrait<MemberTypeT*> {
     using Type = MemberTypeT;
     using PointerToMemberType = MemberTypeT;
+    using ParentType = void;
 
     static constexpr bool is_static = true;
 };

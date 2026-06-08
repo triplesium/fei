@@ -1,10 +1,14 @@
 #pragma once
 
 #include "base/log.hpp"
+#include "refl/arg_binding.hpp"
 #include "refl/callable.hpp"
 #include "refl/qual_type.hpp"
 #include "refl/type.hpp"
 #include "refl/val.hpp"
+
+#include <type_traits>
+#include <utility>
 
 namespace fei {
 
@@ -21,32 +25,42 @@ template<typename T, typename... Args>
 class ConstructorImpl : public Constructor {
   public:
     ConstructorImpl() :
-        Constructor({Param {"args", type_id<Args>()}...}, type_id<T>()) {}
+        Constructor({Param {"args", QualType::of<Args>()}...}, type_id<T>()) {}
 
     virtual ReturnValue invoke_variadic(const std::vector<Ref>& args
     ) const override {
-        if (!validate(args)) {
+        if (!validate_args(args)) {
             error("Invalid arguments passed to constructor");
             return {};
         }
         return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
-            return make_val<T>(ref_to_arg<Args>(args[ArgIdx])...);
+            return make_val<T>(detail::ref_to_arg<Args>(args[ArgIdx])...);
         }(std::make_index_sequence<sizeof...(Args)>());
     }
 
     virtual std::vector<TypeId> arg_types() const override {
-        return {type_id<Args>()...};
+        return {QualType::of<Args>().type_id()...};
     }
 
   private:
-    template<typename T>
-    decltype(auto) ref_to_arg(Ref ref) const {
-        if constexpr (std::is_rvalue_reference_v<T>) {
-            return ref.get_rref<T>();
-        } else {
-            return ref.get<T>();
-        }
+    template<std::size_t... ArgIdx>
+    bool validate_args_impl(
+        const std::vector<Ref>& args,
+        std::index_sequence<ArgIdx...>
+    ) const {
+        return (detail::can_bind_arg<Args>(args[ArgIdx]) && ...);
     }
+
+    bool validate_args(const std::vector<Ref>& args) const {
+        if (args.size() != sizeof...(Args)) {
+            return false;
+        }
+        return validate_args_impl(
+            args,
+            std::make_index_sequence<sizeof...(Args)>()
+        );
+    }
+
 };
 
 } // namespace fei

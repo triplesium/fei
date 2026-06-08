@@ -5,10 +5,17 @@
 namespace fei {
 
 Param::Param(std::string name, TypeId type_id) :
-    m_name(std::move(name)), m_type_id(type_id) {}
+    m_name(std::move(name)), m_type(type_id) {}
+
+Param::Param(std::string name, QualType type) :
+    m_name(std::move(name)), m_type(type) {}
 
 TypeId Param::type_id() const {
-    return m_type_id;
+    return m_type.type_id();
+}
+
+QualType Param::type() const {
+    return m_type;
 }
 
 const std::string& Param::name() const {
@@ -62,8 +69,15 @@ Callable::Callable(
 ) : m_name(std::move(name)), m_params(params), m_return_type(return_type) {}
 
 bool Callable::validate(const std::vector<Ref>& args) const {
-    // TODO: check argument types
-    return args.size() == m_params.size();
+    if (args.size() != m_params.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < args.size(); ++i) {
+        if (!args[i] || args[i].type_id() != m_params[i].type_id()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 ReturnValue Callable::invoke(Ref arg0) const {

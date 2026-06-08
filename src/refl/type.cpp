@@ -7,7 +7,8 @@ bool Type::is_number() const {
 }
 
 bool Type::is_integral() const {
-    return m_id == type_id<int>() || m_id == type_id<signed char>() ||
+    return m_id == type_id<bool>() || m_id == type_id<char>() ||
+           m_id == type_id<int>() || m_id == type_id<signed char>() ||
            m_id == type_id<unsigned char>() || m_id == type_id<short int>() ||
            m_id == type_id<long int>() || m_id == type_id<long long int>() ||
            m_id == type_id<unsigned short int>() ||

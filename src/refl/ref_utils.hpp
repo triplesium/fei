@@ -3,6 +3,7 @@
 #include "refl/registry.hpp"
 
 #include <concepts>
+#include <type_traits>
 
 namespace fei {
 
@@ -11,31 +12,30 @@ inline Ref make_ref(Ref ref) {
 }
 
 template<class T>
-    requires(!std::same_as<T, Ref>)
+    requires(!std::same_as<std::remove_cv_t<T>, Ref> && !std::is_pointer_v<T>)
 Ref make_ref(T& value) {
-    return Ref(&value, Registry::instance().register_type<T>().id());
-}
-
-template<class T>
-    requires(!std::same_as<T, Ref>)
-Ref make_ref(const T& value) {
+    using U = std::remove_cv_t<T>;
     return Ref(
-        const_cast<T*>(&value),
-        Registry::instance().register_type<T>().id()
+        const_cast<U*>(&value),
+        Registry::instance().register_type<U>().id(),
+        std::is_const_v<T>
     );
 }
 
 template<class T>
 Ref make_ref(T* ptr) {
+    if (!ptr) {
+        return {};
+    }
     return Ref(ptr, Registry::instance().register_type<T>().id());
 }
 
 template<class T>
 Ref make_ref(const T* ptr) {
-    return Ref(
-        const_cast<T*>(ptr),
-        Registry::instance().register_type<T>().id()
-    );
+    if (!ptr) {
+        return {};
+    }
+    return Ref(ptr, Registry::instance().register_type<T>().id());
 }
 
 } // namespace fei

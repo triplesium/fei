@@ -51,9 +51,9 @@ Val lua_to_val(lua_State* L, int idx) {
             return make_val<bool>(lua_toboolean(L, idx));
         case LUA_TNUMBER:
             if (lua_isinteger(L, idx)) {
-                return make_val<int>(lua_tointeger(L, idx));
+                return make_val<int>(static_cast<int>(lua_tointeger(L, idx)));
             } else {
-                return make_val<float>(lua_tonumber(L, idx));
+                return make_val<float>(static_cast<float>(lua_tonumber(L, idx)));
             }
         case LUA_TTABLE:
             if (lua_is_fei_type(L, idx)) {
@@ -117,14 +117,14 @@ void lua_push_val(lua_State* L, const Val& val) {
         return;
     }
     auto& type = Registry::instance().get_type(val.type_id());
-    if (type.is_integral()) {
+    if (type.id() == type_id<bool>()) {
+        lua_pushboolean(L, static_cast<int>(val.get<bool>()));
+    } else if (type.is_integral()) {
         lua_pushinteger(L, val.to_number<int>());
     } else if (type.is_floating_point()) {
         lua_pushnumber(L, val.to_number<float>());
     } else if (type.id() == type_id<std::string>()) {
         lua_pushstring(L, val.get<std::string>().c_str());
-    } else if (type.id() == type_id<bool>()) {
-        lua_pushboolean(L, static_cast<int>(val.get<bool>()));
     } else {
         if (!lua_is_type_registered(L, type)) {
             luaL_error(
@@ -146,14 +146,14 @@ void lua_push_ref(lua_State* L, Ref ref) {
         return;
     }
     auto& type = Registry::instance().get_type(ref.type_id());
-    if (type.is_integral()) {
+    if (type.id() == type_id<bool>()) {
+        lua_pushboolean(L, static_cast<int>(ref.get_const<bool>()));
+    } else if (type.is_integral()) {
         lua_pushinteger(L, ref.to_number<int>());
     } else if (type.is_floating_point()) {
         lua_pushnumber(L, ref.to_number<float>());
     } else if (type.id() == type_id<std::string>()) {
-        lua_pushstring(L, ref.get<std::string>().c_str());
-    } else if (type.id() == type_id<bool>()) {
-        lua_pushboolean(L, static_cast<int>(ref.get<bool>()));
+        lua_pushstring(L, ref.get_const<std::string>().c_str());
     } else {
         if (!lua_is_type_registered(L, type)) {
             luaL_error(

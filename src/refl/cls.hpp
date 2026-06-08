@@ -6,6 +6,7 @@
 #include "refl/property.hpp"
 #include "refl/type.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -50,9 +51,22 @@ class Cls {
 
     template<typename P>
     Cls& add_method(std::string name, P method_ptr) {
-        m_methods[name].push_back(
-            std::make_unique<MethodImpl<P>>(name, method_ptr)
-        );
+        auto method = std::make_unique<MethodImpl<P>>(name, method_ptr);
+        auto& methods = m_methods[name];
+        auto is_duplicate = [&](const std::unique_ptr<Method>& existing) {
+            if (existing->params().size() != method->params().size()) {
+                return false;
+            }
+            for (std::size_t i = 0; i < method->params().size(); ++i) {
+                if (existing->params()[i].type() != method->params()[i].type()) {
+                    return false;
+                }
+            }
+            return existing->return_type() == method->return_type();
+        };
+        if (std::ranges::none_of(methods, is_duplicate)) {
+            methods.push_back(std::move(method));
+        }
         return *this;
     }
 
@@ -112,8 +126,14 @@ class Cls {
     template<typename T, typename... Args>
         requires std::constructible_from<T, Args...>
     Cls& add_constructor() {
-        m_constructors.push_back(std::make_unique<ConstructorImpl<T, Args...>>()
-        );
+        auto constructor = std::make_unique<ConstructorImpl<T, Args...>>();
+        auto arg_types = constructor->arg_types();
+        auto is_duplicate = [&](const std::unique_ptr<Constructor>& existing) {
+            return existing->arg_types() == arg_types;
+        };
+        if (std::ranges::none_of(m_constructors, is_duplicate)) {
+            m_constructors.push_back(std::move(constructor));
+        }
         return *this;
     }
 

@@ -14,13 +14,15 @@ class Val;
 class Param {
   private:
     std::string m_name;
-    TypeId m_type_id;
+    QualType m_type;
 
   public:
     Param() = default;
     Param(std::string name, TypeId type_id);
+    Param(std::string name, QualType type);
 
     TypeId type_id() const;
+    QualType type() const;
 
     const std::string& name() const;
 

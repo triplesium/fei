@@ -1,4 +1,5 @@
 #pragma once
+#include "refl/arg_binding.hpp"
 #include "base/log.hpp"
 #include "refl/callable.hpp"
 #include "refl/ref_utils.hpp"
@@ -20,8 +21,8 @@ struct SignatureTraitBase<Ret(Params...)> {
     using ReturnType = Ret;
     static constexpr auto params_count = sizeof...(Params);
 
-    static inline std::array<TypeId, params_count> param_types() {
-        return {type_id<Params>()...};
+    static inline std::array<QualType, params_count> param_types() {
+        return {QualType::of<Params>()...};
     }
 
     template<size_t Index>
@@ -35,11 +36,15 @@ template<class>
 struct SignatureTrait;
 
 template<class Ret, class... Params>
-struct SignatureTrait<Ret(Params...)> : SignatureTraitBase<Ret(Params...)> {};
+struct SignatureTrait<Ret(Params...)> : SignatureTraitBase<Ret(Params...)> {
+    static constexpr bool is_const = false;
+};
 
 template<class Ret, class... Params>
 struct SignatureTrait<Ret(Params...) const>
-    : SignatureTraitBase<Ret(Params...)> {};
+    : SignatureTraitBase<Ret(Params...)> {
+    static constexpr bool is_const = true;
+};
 
 class Method : public Callable {
   public:
@@ -62,6 +67,7 @@ class MethodImpl : public Method {
     constexpr static auto c_params_count =
         SignatureTrait<MethodType>::params_count;
     constexpr static auto c_is_static = MemberTrait<P>::is_static;
+    constexpr static auto c_is_const_method = SignatureTrait<MethodType>::is_const;
 
     template<size_t Index>
     using TypeOfParam =
@@ -69,7 +75,7 @@ class MethodImpl : public Method {
 
   public:
     MethodImpl(std::string name, P ptr) :
-        Method(std::move(name), make_params(), type_id<ReturnType>()),
+        Method(std::move(name), make_params(), QualType::of<ReturnType>()),
         m_ptr(ptr) {}
 
     ReturnValue invoke_variadic(const std::vector<Ref>& args) const override {
@@ -85,21 +91,33 @@ class MethodImpl : public Method {
                 return {};
             }
             return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
+                if (!validate_params<0, ArgIdx...>(args)) {
+                    error("Invalid argument type passed to static method {}", name());
+                    return ReturnValue {};
+                }
                 // static method does not need an instance
                 return invoke_template(Ref(), args[ArgIdx]...);
             }(std::make_index_sequence<c_params_count>());
         } else {
-            if (args.size() - 1 != c_params_count) {
+            if (args.size() == 0 || args.size() - 1 != c_params_count) {
                 error(
                     "Invalid argument count for method {}: expected {}, got "
                     "{}",
                     name(),
                     c_params_count,
-                    args.size() - 1
+                    args.size() == 0 ? 0 : args.size() - 1
                 );
                 return {};
             }
+            if (!validate_instance(args[0])) {
+                error("Invalid instance passed to method {}", name());
+                return {};
+            }
             return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
+                if (!validate_params<1, ArgIdx...>(args)) {
+                    error("Invalid argument type passed to method {}", name());
+                    return ReturnValue {};
+                }
                 // arg[0] is the object instance itself
                 return invoke_template(args[0], args[ArgIdx + 1]...);
             }(std::make_index_sequence<c_params_count>());
@@ -117,24 +135,24 @@ class MethodImpl : public Method {
         return params;
     }
 
-    template<typename T>
-    decltype(auto) ref_to_arg(const Ref& ref) const {
-        using Decayed = std::remove_cvref_t<T>;
-        if constexpr (std::is_enum_v<Decayed>) {
-            Decayed value = ref.type_id() == type_id<int>() ?
-                                static_cast<Decayed>(ref.get<int>()) :
-                                ref.get<Decayed>();
-            return value;
-        } else if constexpr (std::is_pointer_v<T>) {
-            return ref.get<std::remove_pointer_t<T>*>();
-        } else if constexpr (std::is_lvalue_reference_v<T>) {
-            return ref.get<std::remove_reference_t<T>&>();
-        } else if constexpr (std::is_rvalue_reference_v<T> ||
-                             !std::is_copy_constructible_v<T>) {
-            return std::move(ref.get<std::remove_reference_t<T>&>());
+    bool validate_instance(const Ref& instance) const {
+        if constexpr (c_is_static) {
+            return true;
         } else {
-            return ref.get<T>();
+            if (!instance ||
+                instance.type_id() != type_id<typename MemberTrait<P>::ParentType>()) {
+                return false;
+            }
+            return c_is_const_method || !instance.is_const();
         }
+    }
+
+    template<std::size_t Offset, std::size_t... ArgIdx>
+    bool validate_params(const std::vector<Ref>& args) const {
+        return (detail::can_bind_arg<TypeOfParam<ArgIdx>>(
+                    args[ArgIdx + Offset]
+                ) &&
+                ...);
     }
 
     template<class... Args, size_t... N>
@@ -146,13 +164,19 @@ class MethodImpl : public Method {
         if constexpr (c_is_static) {
             return std::invoke(
                 m_ptr,
-                ref_to_arg<TypeOfParam<N>>(std::forward<Args>(args))...
+                detail::ref_to_arg<TypeOfParam<N>>(std::forward<Args>(args))...
+            );
+        } else if constexpr (c_is_const_method) {
+            return std::invoke(
+                m_ptr,
+                instance.get_const<typename MemberTrait<P>::ParentType>(),
+                detail::ref_to_arg<TypeOfParam<N>>(std::forward<Args>(args))...
             );
         } else {
             return std::invoke(
                 m_ptr,
                 instance.get<typename MemberTrait<P>::ParentType>(),
-                ref_to_arg<TypeOfParam<N>>(std::forward<Args>(args))...
+                detail::ref_to_arg<TypeOfParam<N>>(std::forward<Args>(args))...
             );
         }
     }

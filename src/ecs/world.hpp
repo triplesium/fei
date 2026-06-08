@@ -9,7 +9,9 @@
 #include "ecs/system.hpp"
 #include "refl/ref_utils.hpp"
 
+#include <concepts>
 #include <cstdint>
+#include <type_traits>
 #include <utility>
 
 namespace fei {
@@ -84,15 +86,27 @@ class World {
     }
 
     template<typename T>
-    T& add_resource(T&& val) {
-        m_resources.set(type_id<T>(), std::forward<T>(val));
-        return m_resources.get(type_id<T>()).template get<T>();
+    std::remove_cvref_t<T>& add_resource(T&& val) {
+        using U = std::remove_cvref_t<T>;
+        m_resources.set(type_id<U>(), std::forward<T>(val));
+        return m_resources.get_mut(type_id<U>()).template get<U>();
     }
 
     template<typename T, typename U>
     T& add_resource_as(U&& val) {
-        m_resources.set(type_id<T>(), std::forward<U>(val));
-        return m_resources.get(type_id<T>()).template get<T>();
+        using Stored = std::remove_cvref_t<U>;
+        if constexpr (std::derived_from<Stored, T>) {
+            m_resources.template emplace<T, Stored>(
+                type_id<T>(),
+                std::forward<U>(val)
+            );
+        } else {
+            m_resources.template emplace<T, T>(
+                type_id<T>(),
+                std::forward<U>(val)
+            );
+        }
+        return m_resources.get_mut(type_id<T>()).template get<T>();
     }
 
     template<FromWorld T>
@@ -108,7 +122,7 @@ class World {
 
     template<typename T>
     T& resource() const {
-        auto ret = m_resources.get(type_id<T>());
+        auto ret = m_resources.get_mut(type_id<T>());
         if (!ret) {
             fatal("Resource of type {} not found", type_name<T>());
         }
@@ -116,7 +130,7 @@ class World {
     }
 
     Ref resource(TypeId type_id) const {
-        auto ret = m_resources.get(type_id);
+        auto ret = m_resources.get_mut(type_id);
         if (!ret) {
             fatal("Resource with type id {} not found", type_id.id());
         }

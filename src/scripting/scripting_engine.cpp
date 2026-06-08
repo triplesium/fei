@@ -141,7 +141,7 @@ bool ScriptingEngine::call_function(
     for (const auto& arg : args) {
         lua_push_ref(L, arg);
     }
-    if (lua_pcall(L, args.size(), 0, 0) != LUA_OK) {
+    if (lua_pcall(L, static_cast<int>(args.size()), 0, 0) != LUA_OK) {
         error("Lua call failed: {}", lua_tostring(L, -1));
         lua_pop(L, 1); // Pop the error message
         return false;

@@ -2,151 +2,176 @@
 
 #include "base/log.hpp"
 #include "refl/ref.hpp"
-#include "refl/ref_utils.hpp"
+#include "refl/registry.hpp"
 #include "refl/type.hpp"
 
-#include <concepts>
-#include <memory>
+#include <cstddef>
+#include <new>
 #include <type_traits>
+#include <utility>
 
 namespace fei {
 
-class Val;
-
-namespace detail {
-struct ValHandlerBase {
-    virtual ~ValHandlerBase() = default;
-    virtual Ref ref(const Val& val) const = 0;
-    virtual void create(Val& val, Ref ref) const = 0;
-    virtual void destroy(Val& val) const = 0;
-    virtual void copy(Val& val, const Val& other) const = 0;
-    virtual void move(Val& val, Val& other) const = 0;
-    virtual bool is_copyable() const = 0;
-    virtual bool is_movable() const = 0;
-};
-template<class T>
-struct ValHandlerHeap;
-template<class T>
-struct ValHandlerStack;
-} // namespace detail
-
 class Val {
   public:
-    struct Storage {
-        uint8_t m_bytes[sizeof(void*) * 3];
-        void* get_ptr() const {
-            void* ptr = 0;
-            std::memcpy(&ptr, m_bytes, sizeof(void*));
-            return ptr;
-        }
-        void set_ptr(void* ptr) { std::memcpy(m_bytes, &ptr, sizeof(void*)); }
-    };
+    static constexpr std::size_t c_inline_size = sizeof(void*) * 3;
+    static constexpr std::size_t c_inline_align = alignof(std::max_align_t);
 
   private:
-    template<class T>
-    friend struct detail::ValHandlerHeap;
-    template<class T>
-    friend struct detail::ValHandlerStack;
+    struct alignas(c_inline_align) InlineStorage {
+        std::byte bytes[c_inline_size];
+    };
 
-    std::unique_ptr<detail::ValHandlerBase> m_handler;
-    Storage m_storage;
+    const Type* m_type {nullptr};
+    bool m_heap {false};
+    void* m_heap_ptr {nullptr};
+    InlineStorage m_storage;
+
+    static bool fits_inline(const Type& type) {
+        return type.size() <= c_inline_size && type.align() <= c_inline_align;
+    }
+
+    void* inline_ptr() { return &m_storage; }
+    const void* inline_ptr() const { return &m_storage; }
+
+    void* data_ptr() {
+        return m_heap ? m_heap_ptr : inline_ptr();
+    }
+
+    const void* data_ptr() const {
+        return m_heap ? m_heap_ptr : inline_ptr();
+    }
+
+    void* allocate_storage(const Type& type) {
+        m_heap = !fits_inline(type);
+        if (m_heap) {
+            m_heap_ptr =
+                ::operator new(type.size(), std::align_val_t {type.align()});
+            return m_heap_ptr;
+        }
+        m_heap_ptr = nullptr;
+        return inline_ptr();
+    }
+
+    void deallocate_storage() {
+        if (m_heap && m_heap_ptr) {
+            ::operator delete(
+                m_heap_ptr,
+                std::align_val_t {m_type ? m_type->align() : c_inline_align}
+            );
+        }
+        m_heap = false;
+        m_heap_ptr = nullptr;
+    }
+
+    void reset() {
+        if (!m_type) {
+            return;
+        }
+        if (auto destroy = m_type->destroy_func()) {
+            destroy(data_ptr());
+        }
+        deallocate_storage();
+        m_type = nullptr;
+    }
+
+    bool copy_from(const Val& other) {
+        if (!other.m_type) {
+            return true;
+        }
+        auto copy_construct = other.m_type->copy_construct_func();
+        if (!copy_construct) {
+            error("Attempting to copy non-copyable type {}", other.m_type->name());
+            return false;
+        }
+        m_type = other.m_type;
+        void* dest = allocate_storage(*m_type);
+        copy_construct(dest, other.data_ptr());
+        return true;
+    }
+
+    bool move_from(Val& other) {
+        if (!other.m_type) {
+            return true;
+        }
+        auto move_construct = other.m_type->move_construct_func();
+        if (move_construct) {
+            m_type = other.m_type;
+            void* dest = allocate_storage(*m_type);
+            move_construct(dest, const_cast<void*>(other.data_ptr()));
+            other.reset();
+            return true;
+        }
+        if (copy_from(other)) {
+            return true;
+        }
+        error(
+            "Attempting to move non-movable and non-copyable type {}",
+            other.m_type->name()
+        );
+        return false;
+    }
 
   public:
-    Val() : m_handler(nullptr) {}
-    ~Val() {
-        if (m_handler)
-            m_handler->destroy(*this);
-    }
+    Val() = default;
+
+    ~Val() { reset(); }
 
     template<class T, class... Args>
     friend Val make_val(Args&&... args);
 
-    Val(const Val& other) : Val() {
-        if (other.m_handler) {
-            if (!other.m_handler->is_copyable()) {
-                error("Attempting to copy non-copyable type");
-                return;
-            }
-            other.m_handler->copy(*this, other);
-        }
-    }
+    Val(const Val& other) { copy_from(other); }
 
-    Val(Val&& other) noexcept : Val() {
-        if (other.m_handler) {
-            if (other.m_handler->is_movable()) {
-                other.m_handler->move(*this, other);
-            } else {
-                // Fallback to copy if move is not available but copy is
-                if (other.m_handler->is_copyable()) {
-                    other.m_handler->copy(*this, other);
-                } else {
-                    error("Attempting to move non-movable and non-copyable type"
-                    );
-                    return;
-                }
-            }
-        }
-    }
+    Val(Val&& other) noexcept { move_from(other); }
 
     Val& operator=(const Val& other) {
-        if (this == &other)
+        if (this == &other) {
             return *this;
-
-        if (m_handler)
-            m_handler->destroy(*this);
-        m_handler.reset();
-
-        if (other.m_handler) {
-            if (!other.m_handler->is_copyable()) {
-                error("Attempting to copy-assign non-copyable type");
-                return *this;
-            }
-            other.m_handler->copy(*this, other);
         }
+        reset();
+        copy_from(other);
         return *this;
     }
 
     Val& operator=(Val&& other) noexcept {
-        if (this == &other)
+        if (this == &other) {
             return *this;
-
-        if (m_handler)
-            m_handler->destroy(*this);
-        m_handler.reset();
-
-        if (other.m_handler) {
-            if (other.m_handler->is_movable()) {
-                other.m_handler->move(*this, other);
-            } else {
-                // Fallback to copy if move is not available but copy is
-                if (other.m_handler->is_copyable()) {
-                    other.m_handler->copy(*this, other);
-                } else {
-                    error("Attempting to move-assign non-movable and "
-                          "non-copyable type");
-                    return *this;
-                }
-            }
         }
+        reset();
+        move_from(other);
         return *this;
     }
 
-    Val& swap(Val& other) {
-        std::swap(m_handler, other.m_handler);
-        std::swap(m_storage, other.m_storage);
-        return *this;
-    }
-
-    Ref ref() const {
-        if (!m_handler) {
+    Ref ref() {
+        if (!m_type) {
             error("Attempting to get ref from empty Val");
             return {};
         }
-        return m_handler->ref(*this);
+        return Ref(data_ptr(), m_type->id());
     }
-    TypeId type_id() const { return ref().type_id(); }
-    bool empty() const { return m_handler == nullptr; }
+
+    Ref ref() const {
+        if (!m_type) {
+            error("Attempting to get ref from empty Val");
+            return {};
+        }
+        return Ref(data_ptr(), m_type->id());
+    }
+
+    TypeId type_id() const { return m_type ? m_type->id() : TypeId {}; }
+    const Type* type() const { return m_type; }
+    bool empty() const { return m_type == nullptr; }
     explicit operator bool() const { return !empty(); }
+
+    template<typename T>
+    T* try_get() {
+        return ref().try_get<T>();
+    }
+
+    template<typename T>
+    const T* try_get() const {
+        return ref().try_get_const<T>();
+    }
 
     template<typename T>
     T& get() {
@@ -155,12 +180,12 @@ class Val {
 
     template<typename T>
     const T& get() const {
-        return ref().get<T>();
+        return ref().get_const<T>();
     }
 
     template<typename T>
     T to_number() const {
-        if (!m_handler) {
+        if (!m_type) {
             error("Attempting to convert empty Val to number");
             return T(0);
         }
@@ -168,135 +193,20 @@ class Val {
     }
 };
 
-namespace detail {
-template<class T>
-struct ValHandlerHeap : public ValHandlerBase {
-    virtual Ref ref(const Val& val) const override {
-        return make_ref(static_cast<const T*>(val.m_storage.get_ptr()));
-    }
-    virtual void create(Val& val, Ref ref) const override {
-        if constexpr (std::copy_constructible<T>) {
-            val.m_storage.set_ptr(new T(ref.get<T>()));
-        } else {
-            error(
-                "Cannot create heap object from reference for non-copyable type"
-            );
-        }
-    }
-    template<class... Args>
-    void construct(Val& val, Args&&... args) const {
-        if constexpr (requires { T(std::forward<Args>(args)...); }) {
-            val.m_storage.set_ptr(new T(std::forward<Args>(args)...));
-        } else {
-            fatal(
-                "Cannot create heap object from reference for non-copyable type"
-            );
-        }
-    }
-    virtual void destroy(Val& val) const override {
-        delete static_cast<T*>(val.m_storage.get_ptr());
-    }
-    virtual void copy(Val& val, const Val& other) const override {
-        if constexpr (std::copy_constructible<T>) {
-            create(val, ref(other));
-            val.m_handler = std::make_unique<ValHandlerHeap<T>>();
-        } else {
-            error("Cannot copy non-copyable type");
-        }
-    }
-    virtual void move(Val& val, Val& other) const override {
-        if constexpr (std::move_constructible<T>) {
-            // Actually move the object, not just swap the containers
-            T* other_ptr = static_cast<T*>(other.m_storage.get_ptr());
-            val.m_storage.set_ptr(new T(std::move(*other_ptr)));
-            val.m_handler = std::make_unique<ValHandlerHeap<T>>();
-
-            // Clear the other Val
-            other.m_handler->destroy(other);
-            other.m_handler.reset();
-        } else if constexpr (std::copy_constructible<T>) {
-            // Fallback to copy
-            copy(val, other);
-        } else {
-            error("Cannot move non-movable and non-copyable type");
-        }
-    }
-    virtual bool is_copyable() const override {
-        return std::copy_constructible<T>;
-    }
-    virtual bool is_movable() const override {
-        return std::move_constructible<T>;
-    }
-};
-template<class T>
-struct ValHandlerStack : public ValHandlerBase {
-    virtual Ref ref(const Val& val) const override {
-        return make_ref(static_cast<const T*>((void*)&val.m_storage));
-    }
-    virtual void create(Val& val, Ref ref) const override {
-        if constexpr (std::copy_constructible<T>) {
-            new ((void*)&val.m_storage) T(ref.get<T>());
-        } else {
-            error("Cannot create stack object from reference for non-copyable "
-                  "type");
-        }
-    }
-    template<class... Args>
-    void construct(Val& val, Args&&... args) const {
-        new ((void*)&val.m_storage) T(std::forward<Args>(args)...);
-    }
-    virtual void destroy(Val& val) const override {
-        static_cast<T*>((void*)&val.m_storage)->~T();
-    }
-    virtual void copy(Val& val, const Val& other) const override {
-        if constexpr (std::copy_constructible<T>) {
-            create(val, ref(other));
-            val.m_handler = std::make_unique<ValHandlerStack<T>>();
-        } else {
-            error("Cannot copy non-copyable type");
-        }
-    }
-    virtual void move(Val& val, Val& other) const override {
-        if constexpr (std::move_constructible<T>) {
-            // Actually move the object, not just swap the containers
-            T* other_ptr = static_cast<T*>((void*)&other.m_storage);
-            new ((void*)&val.m_storage) T(std::move(*other_ptr));
-            val.m_handler = std::make_unique<ValHandlerStack<T>>();
-
-            // Clear the other Val
-            other.m_handler->destroy(other);
-            other.m_handler.reset();
-        } else if constexpr (std::copy_constructible<T>) {
-            // Fallback to copy
-            copy(val, other);
-        } else {
-            error("Cannot move non-movable and non-copyable type");
-        }
-    }
-    virtual bool is_copyable() const override {
-        return std::copy_constructible<T>;
-    }
-    virtual bool is_movable() const override {
-        return std::move_constructible<T>;
-    }
-};
-} // namespace detail
-
-template<class T>
-concept small_object = sizeof(T) <= sizeof(void*) * 3;
-
-template<class T>
-using ValHandler = std::conditional_t<
-    small_object<std::decay_t<T>>,
-    detail::ValHandlerStack<std::decay_t<T>>,
-    detail::ValHandlerHeap<std::decay_t<T>>>;
-
 template<class T, class... Args>
 Val make_val(Args&&... args) {
+    using U = std::remove_cvref_t<T>;
+    static_assert(!std::is_reference_v<T>, "Val cannot own a reference type");
+
     Val val;
-    auto handler = std::make_unique<ValHandler<T>>();
-    handler->construct(val, std::forward<Args>(args)...);
-    val.m_handler = std::move(handler);
+    Type& type = Registry::instance().register_type<U>();
+    val.m_type = &type;
+    void* dest = val.allocate_storage(type);
+    if constexpr (requires { U(std::forward<Args>(args)...); }) {
+        new (dest) U(std::forward<Args>(args)...);
+    } else {
+        fatal("Cannot construct Val for type {}", type.name());
+    }
     return val;
 }
 
