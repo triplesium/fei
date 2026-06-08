@@ -7,6 +7,9 @@ add_requires("glfw", {configs = {shared = false}})
 add_requires("imgui", {configs = {glfw = true, opengl3 = true}})
 
 set_policy("check.auto_ignore_flags", false)
+if is_plat("windows") then
+    set_policy("run.windows_error_dialog", false)
+end
 
 local project_dir = os.scriptdir():gsub("\\", "/")
 add_cxxflags("-DFEI_ASSETS_PATH=\"" .. project_dir .. "/assets\"")
