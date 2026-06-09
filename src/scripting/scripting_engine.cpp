@@ -19,6 +19,17 @@
 
 namespace fei {
 
+namespace {
+
+ReturnValue lua_to_argument(lua_State* L, int idx) {
+    if (lua_can_ref(L, idx)) {
+        return ReturnValue(lua_to_ref(L, idx));
+    }
+    return ReturnValue(lua_to_val(L, idx));
+}
+
+} // namespace
+
 ScriptingEngine::ScriptingEngine() : m_state(luaL_newstate()) {
     luaL_openlibs(m_state);
 }
@@ -171,7 +182,7 @@ int ScriptingEngine::dispatch_new(lua_State* L) {
             return 0;
         }
         arg_types.push_back(arg_type);
-        args.push_back(lua_to_val(L, i));
+        args.push_back(lua_to_argument(L, i));
     }
 
     auto* ctor = cls.get_constructor(arg_types);
@@ -223,7 +234,7 @@ int ScriptingEngine::dispatch_method(lua_State* L) {
             return 0;
         }
         arg_types.push_back(arg_type);
-        args.push_back(lua_to_val(L, i + 1));
+        args.push_back(lua_to_argument(L, i + 1));
     }
 
     auto const_filter = instance.is_const() ? MethodConstFilter::ConstOnly :
@@ -373,7 +384,7 @@ int ScriptingEngine::dispatch_operator(lua_State* L) {
             return 0;
         }
         arg_types.push_back(arg_type);
-        args.push_back(lua_to_val(L, i + 1));
+        args.push_back(lua_to_argument(L, i + 1));
     }
     auto const_filter = instance.is_const() ? MethodConstFilter::ConstOnly :
                                               MethodConstFilter::PreferNonConst;
