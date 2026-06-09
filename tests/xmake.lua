@@ -3,8 +3,8 @@ local integration_tests = os.files("*.cpp")
 if #integration_tests > 0 then
     target("tests")
         set_kind("binary")
+        add_rules("fei.test")
         add_files(integration_tests)
-        add_packages("catch2")
         add_deps(
             "fei-base",
             "fei-refl",
@@ -14,5 +14,4 @@ if #integration_tests > 0 then
             "fei-core",
             "fei-math"
         )
-        add_tests("default")
 end

@@ -11,6 +11,14 @@ if is_plat("windows") then
     set_policy("run.windows_error_dialog", false)
 end
 
+rule("fei.test")
+    on_load(function(target)
+        target:add("packages", "catch2")
+        target:add("tests", "default")
+        target:add("files", path.join(os.projectdir(), "tests/support/crt_report.cpp"))
+    end)
+rule_end()
+
 local project_dir = os.scriptdir():gsub("\\", "/")
 add_cxxflags("-DFEI_ASSETS_PATH=\"" .. project_dir .. "/assets\"")
 
