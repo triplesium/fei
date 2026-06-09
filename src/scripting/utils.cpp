@@ -1,11 +1,13 @@
 #include "scripting/utils.hpp"
 
 #include "refl/callable.hpp"
+#include "refl/enum.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
 #include "refl/val.hpp"
 #include "scripting/object.hpp"
 
+#include <cstdint>
 #include <lua.hpp>
 #include <string>
 
@@ -19,6 +21,19 @@ bool lua_is_fei_type(lua_State* L, int idx) {
     bool is_fei_type = lua_isinteger(L, -1);
     lua_pop(L, 1);
     return is_fei_type;
+}
+
+bool lua_is_enum_value(lua_State* L, int idx) {
+    if (lua_type(L, idx) != LUA_TTABLE) {
+        return false;
+    }
+    lua_getfield(L, idx, "__enum_type_id");
+    bool has_type_id = lua_isinteger(L, -1);
+    lua_pop(L, 1);
+    lua_getfield(L, idx, "__enum_value");
+    bool has_value = lua_isinteger(L, -1);
+    lua_pop(L, 1);
+    return has_type_id && has_value;
 }
 
 bool lua_is_type_registered(lua_State* L, Type& type) {
@@ -56,6 +71,15 @@ Val lua_to_val(lua_State* L, int idx) {
                 return make_val<float>(static_cast<float>(lua_tonumber(L, idx)));
             }
         case LUA_TTABLE:
+            if (lua_is_enum_value(L, idx)) {
+                lua_getfield(L, idx, "__enum_type_id");
+                auto type_id = static_cast<TypeId>(lua_tointeger(L, -1));
+                lua_pop(L, 1);
+                lua_getfield(L, idx, "__enum_value");
+                auto value = static_cast<std::int64_t>(lua_tointeger(L, -1));
+                lua_pop(L, 1);
+                return Registry::instance().get_enum(type_id).make_val(value);
+            }
             if (lua_is_fei_type(L, idx)) {
                 lua_getfield(L, idx, "__type_id");
                 auto type_id = static_cast<TypeId>(lua_tointeger(L, -1));
@@ -98,6 +122,12 @@ TypeId lua_type_of(lua_State* L, int idx) {
         case LUA_TSTRING:
             return type_id<std::string>();
         case LUA_TTABLE: {
+            if (lua_is_enum_value(L, idx)) {
+                lua_getfield(L, idx, "__enum_type_id");
+                auto type_id = static_cast<TypeId>(lua_tointeger(L, -1));
+                lua_pop(L, 1);
+                return type_id;
+            }
             if (lua_is_fei_type(L, idx)) {
                 return type_id<TypeId>();
             }

@@ -331,8 +331,8 @@ class CppEnumInfo:
         self.is_scoped = is_scoped
         self.values: List[EnumValueInfo] = []
 
-    def add_value(self, name: str, value: int):
-        """Add an enum value to this enum."""
+    def add_enumerator(self, name: str, value: int):
+        """Add a named enumerator to this enum."""
         self.values.append(EnumValueInfo(name, value))
 
     def to_dict(self) -> Dict:
@@ -757,7 +757,7 @@ class CppHeaderParser:
 
         for child in enum_cursor.get_children():
             if child.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
-                enum_info.add_value(child.spelling, child.enum_value)
+                enum_info.add_enumerator(child.spelling, child.enum_value)
 
         return enum_info
 

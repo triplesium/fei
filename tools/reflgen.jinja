@@ -39,7 +39,7 @@ registry.register_cls<{{ cls.name }}>()
 {% for enum in enums | sort(attribute='name') %}
 registry.register_enum<{{ enum.name }}>()
     {% for enum_value in enum.values %}
-    .add_value("{{ enum_value.name }}", static_cast<std::int64_t>({{ enum.name }}::{{ enum_value.name }}))
+    .add_enumerator("{{ enum_value.name }}", static_cast<std::int64_t>({{ enum.name }}::{{ enum_value.name }}))
     {% endfor %}
     ;
 {% endfor %}

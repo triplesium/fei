@@ -14,6 +14,10 @@ namespace {
 
 enum class TestEnum { One = 1, Two = 2 };
 
+struct EnumPropertyFixture {
+    TestEnum value {TestEnum::One};
+};
+
 struct CallableFixture {
     int value {0};
 
@@ -65,9 +69,25 @@ TEST_CASE("Property validates object constness and value types", "[refl][propert
     REQUIRE_FALSE(prop->set(make_ref(const_obj), make_ref(next)));
 }
 
+TEST_CASE("Property accepts runtime enum values", "[refl][property]") {
+    auto& registry = Registry::instance();
+    auto& enm = registry.register_enum<TestEnum>();
+    auto& cls = registry.register_cls<EnumPropertyFixture>()
+                    .add_property("value", &EnumPropertyFixture::value);
+    auto* prop = cls.get_property("value");
+    REQUIRE(prop != nullptr);
+
+    EnumPropertyFixture obj;
+    auto value = enm.make_val(2);
+
+    REQUIRE(value.type_id() == type_id<TestEnum>());
+    REQUIRE(prop->set(make_ref(obj), value.ref()));
+    REQUIRE(obj.value == TestEnum::Two);
+}
+
 TEST_CASE("Method validates instances and argument types", "[refl][method]") {
     auto& registry = Registry::instance();
-    registry.register_enum<TestEnum>();
+    auto& enm = registry.register_enum<TestEnum>();
     auto& cls = registry.register_cls<CallableFixture>()
                     .add_method("add", &CallableFixture::add)
                     .add_method("read", &CallableFixture::read)
@@ -111,10 +131,12 @@ TEST_CASE("Method validates instances and argument types", "[refl][method]") {
     REQUIRE(sum_ret.is_value());
     REQUIRE(sum_ret.value().get<int>() == 6);
 
-    int enum_arg = 2;
-    auto* enum_method = cls.get_method("enum_value", {type_id<int>()});
+    REQUIRE(cls.get_method("enum_value", {type_id<int>()}) == nullptr);
+    auto* enum_method = cls.get_method("enum_value", {type_id<TestEnum>()});
     REQUIRE(enum_method != nullptr);
-    auto enum_ret = enum_method->invoke(make_ref(obj), make_ref(enum_arg));
+    auto enum_arg = enm.make_val(2);
+    REQUIRE(enum_arg.type_id() == type_id<TestEnum>());
+    auto enum_ret = enum_method->invoke(make_ref(obj), enum_arg.ref());
     REQUIRE(enum_ret.is_value());
     REQUIRE(enum_ret.value().get<int>() == 2);
 

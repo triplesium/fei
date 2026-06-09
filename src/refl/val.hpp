@@ -64,6 +64,14 @@ class Val {
         m_heap_ptr = nullptr;
     }
 
+    void deallocate_storage(const Type& type) {
+        if (m_heap && m_heap_ptr) {
+            ::operator delete(m_heap_ptr, std::align_val_t {type.align()});
+        }
+        m_heap = false;
+        m_heap_ptr = nullptr;
+    }
+
     void reset() {
         if (!m_type) {
             return;
@@ -117,8 +125,19 @@ class Val {
 
     ~Val() { reset(); }
 
-    template<class T, class... Args>
-    friend Val make_val(Args&&... args);
+    template<class Construct>
+    static Val construct(const Type& type, Construct&& construct) {
+        Val val;
+        void* dest = val.allocate_storage(type);
+        try {
+            std::forward<Construct>(construct)(dest);
+        } catch (...) {
+            val.deallocate_storage(type);
+            throw;
+        }
+        val.m_type = &type;
+        return val;
+    }
 
     Val(const Val& other) { copy_from(other); }
 
@@ -198,16 +217,14 @@ Val make_val(Args&&... args) {
     using U = std::remove_cvref_t<T>;
     static_assert(!std::is_reference_v<T>, "Val cannot own a reference type");
 
-    Val val;
     Type& type = Registry::instance().register_type<U>();
-    val.m_type = &type;
-    void* dest = val.allocate_storage(type);
-    if constexpr (requires { U(std::forward<Args>(args)...); }) {
-        new (dest) U(std::forward<Args>(args)...);
-    } else {
-        fatal("Cannot construct Val for type {}", type.name());
-    }
-    return val;
+    return Val::construct(type, [&](void* dest) {
+        if constexpr (requires { U(std::forward<Args>(args)...); }) {
+            new (dest) U(std::forward<Args>(args)...);
+        } else {
+            fatal("Cannot construct Val for type {}", type.name());
+        }
+    });
 }
 
 } // namespace fei

@@ -87,9 +87,16 @@ void ScriptingEngine::register_enum(const Enum& enm) {
     auto* L = m_state;
     auto& type = Registry::instance().get_type(enm.type_id());
     lua_newtable(L);
-    for (const auto& [name, value] : enm.values()) {
+    for (const auto& [name, underlying_value] : enm.enumerators()) {
         lua_pushstring(L, name.c_str());
-        lua_pushinteger(L, value);
+        lua_newtable(L);
+
+        lua_pushinteger(L, static_cast<lua_Integer>(type.id().id()));
+        lua_setfield(L, -2, "__enum_type_id");
+
+        lua_pushinteger(L, static_cast<lua_Integer>(underlying_value));
+        lua_setfield(L, -2, "__enum_value");
+
         lua_settable(L, -3);
     }
     lua_setglobal(L, type.stripped_name().c_str());

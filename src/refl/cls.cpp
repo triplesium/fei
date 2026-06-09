@@ -28,9 +28,7 @@ Method* Cls::get_method(
         for (std::size_t i = 0; i < method.params().size(); ++i) {
             auto param_type = method.params()[i].type_id();
             auto arg_type = arg_types[i];
-            auto enum_arg_matches =
-                arg_type == fei::type_id<int>() && is_enum_type(param_type);
-            if (param_type != arg_type && !enum_arg_matches) {
+            if (param_type != arg_type) {
                 return false;
             }
         }

@@ -1,4 +1,5 @@
 #pragma once
+#include "refl/enum.hpp"
 #include "refl/type.hpp"
 #include "refl/utils.hpp"
 
@@ -13,7 +14,6 @@
 namespace fei {
 
 class Cls;
-class Enum;
 
 class Registry {
   public:
@@ -57,7 +57,13 @@ class Registry {
         static_assert(std::is_enum_v<T>, "T must be an enum type");
         register_type<T>();
         TypeId id = type_id<T>();
-        return add_enum(id);
+        auto& enm = add_enum(id);
+        enm.set_construct_func(
+            [](void* dest, std::int64_t underlying_value) {
+                new (dest) T(static_cast<T>(underlying_value));
+            }
+        );
+        return enm;
     }
 
     template<typename T>
