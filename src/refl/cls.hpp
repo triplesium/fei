@@ -57,8 +57,8 @@ class Cls {
                 }
             }
             return existing->return_type() == method->return_type() &&
-                   existing->is_const_method() == method->is_const_method() &&
-                   existing->is_static_method() == method->is_static_method();
+                   existing->is_const() == method->is_const() &&
+                   existing->is_static() == method->is_static();
         };
         if (std::ranges::none_of(methods, is_duplicate)) {
             methods.push_back(std::move(method));

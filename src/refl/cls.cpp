@@ -43,9 +43,9 @@ Method* Cls::get_method(
                 case MethodConstFilter::Any:
                     return true;
                 case MethodConstFilter::ConstOnly:
-                    return method.is_const_method();
+                    return method.is_const();
                 case MethodConstFilter::NonConstOnly:
-                    return !method.is_const_method();
+                    return !method.is_const();
                 case MethodConstFilter::PreferConst:
                 case MethodConstFilter::PreferNonConst:
                     return true;

@@ -55,8 +55,8 @@ class Method : public Callable {
     virtual ~Method() = default;
 
     virtual ReturnValue invoke_variadic(const std::vector<Ref>& args) const = 0;
-    virtual bool is_const_method() const = 0;
-    virtual bool is_static_method() const = 0;
+    virtual bool is_const() const = 0;
+    virtual bool is_static() const = 0;
 };
 
 enum class MethodConstFilter {
@@ -76,7 +76,7 @@ class MethodImpl : public Method {
     constexpr static auto c_params_count =
         SignatureTrait<MethodType>::params_count;
     constexpr static auto c_is_static = MemberTrait<P>::is_static;
-    constexpr static auto c_is_const_method = SignatureTrait<MethodType>::is_const;
+    constexpr static auto c_is_const = SignatureTrait<MethodType>::is_const;
 
     template<size_t Index>
     using TypeOfParam =
@@ -87,12 +87,12 @@ class MethodImpl : public Method {
         Method(std::move(name), make_params(), QualType::of<ReturnType>()),
         m_ptr(ptr) {}
 
-    bool is_const_method() const override { return c_is_const_method; }
+    bool is_const() const override { return c_is_const; }
 
-    bool is_static_method() const override { return c_is_static; }
+    bool is_static() const override { return c_is_static; }
 
     ReturnValue invoke_variadic(const std::vector<Ref>& args) const override {
-        if (c_is_static) {
+        if constexpr (c_is_static) {
             if (args.size() != c_params_count) {
                 error(
                     "Invalid argument count for static method {}: expected {}, "
@@ -156,7 +156,7 @@ class MethodImpl : public Method {
                 instance.type_id() != type_id<typename MemberTrait<P>::ParentType>()) {
                 return false;
             }
-            return c_is_const_method || !instance.is_const();
+            return c_is_const || !instance.is_const();
         }
     }
 
@@ -176,7 +176,7 @@ class MethodImpl : public Method {
                 m_ptr,
                 std::forward<Args>(args).template as<TypeOfParam<N>>()...
             );
-        } else if constexpr (c_is_const_method) {
+        } else if constexpr (c_is_const) {
             return std::invoke(
                 m_ptr,
                 instance.get_const<typename MemberTrait<P>::ParentType>(),
