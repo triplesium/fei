@@ -1,7 +1,6 @@
 #pragma once
 
 #include "base/log.hpp"
-#include "refl/arg_binding.hpp"
 #include "refl/callable.hpp"
 #include "refl/qual_type.hpp"
 #include "refl/type.hpp"
@@ -34,7 +33,7 @@ class ConstructorImpl : public Constructor {
             return {};
         }
         return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
-            return make_val<T>(detail::ref_to_arg<Args>(args[ArgIdx])...);
+            return make_val<T>(args[ArgIdx].as<Args>()...);
         }(std::make_index_sequence<sizeof...(Args)>());
     }
 
@@ -48,7 +47,7 @@ class ConstructorImpl : public Constructor {
         const std::vector<Ref>& args,
         std::index_sequence<ArgIdx...>
     ) const {
-        return (detail::can_bind_arg<Args>(args[ArgIdx]) && ...);
+        return (args[ArgIdx].can_as<Args>() && ...);
     }
 
     bool validate_args(const std::vector<Ref>& args) const {

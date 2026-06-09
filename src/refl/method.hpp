@@ -1,5 +1,4 @@
 #pragma once
-#include "refl/arg_binding.hpp"
 #include "base/log.hpp"
 #include "refl/callable.hpp"
 #include "refl/ref_utils.hpp"
@@ -149,10 +148,7 @@ class MethodImpl : public Method {
 
     template<std::size_t Offset, std::size_t... ArgIdx>
     bool validate_params(const std::vector<Ref>& args) const {
-        return (detail::can_bind_arg<TypeOfParam<ArgIdx>>(
-                    args[ArgIdx + Offset]
-                ) &&
-                ...);
+        return (args[ArgIdx + Offset].can_as<TypeOfParam<ArgIdx>>() && ...);
     }
 
     template<class... Args, size_t... N>
@@ -164,19 +160,19 @@ class MethodImpl : public Method {
         if constexpr (c_is_static) {
             return std::invoke(
                 m_ptr,
-                detail::ref_to_arg<TypeOfParam<N>>(std::forward<Args>(args))...
+                std::forward<Args>(args).template as<TypeOfParam<N>>()...
             );
         } else if constexpr (c_is_const_method) {
             return std::invoke(
                 m_ptr,
                 instance.get_const<typename MemberTrait<P>::ParentType>(),
-                detail::ref_to_arg<TypeOfParam<N>>(std::forward<Args>(args))...
+                std::forward<Args>(args).template as<TypeOfParam<N>>()...
             );
         } else {
             return std::invoke(
                 m_ptr,
                 instance.get<typename MemberTrait<P>::ParentType>(),
-                detail::ref_to_arg<TypeOfParam<N>>(std::forward<Args>(args))...
+                std::forward<Args>(args).template as<TypeOfParam<N>>()...
             );
         }
     }

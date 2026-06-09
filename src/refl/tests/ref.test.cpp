@@ -6,9 +6,16 @@
 #include "test_types.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <type_traits>
 
 using namespace fei;
 using namespace fei::refl_test;
+
+namespace {
+
+enum class RefAsEnum { One = 1, Two = 2 };
+
+} // namespace
 
 TEST_CASE(
     "Ref wraps object references without taking ownership",
@@ -115,4 +122,54 @@ TEST_CASE("Ref converts arithmetic values through to_number", "[refl][ref]") {
     REQUIRE(make_ref(integer).to_number<float>() == 42.0f);
     REQUIRE(make_ref(real).to_number<int>() == 2);
     REQUIRE(make_ref(flag).to_number<int>() == 1);
+}
+
+TEST_CASE("Ref exposes typed values through as", "[refl][ref]") {
+    int value = 42;
+    Ref ref = make_ref(value);
+
+    static_assert(std::is_same_v<decltype(ref.as<int>()), int>);
+    static_assert(std::is_same_v<decltype(ref.as<int&>()), int&>);
+
+    REQUIRE(ref.can_as<int>());
+    REQUIRE(ref.can_as<int&>());
+    REQUIRE(ref.can_as<const int&>());
+    REQUIRE(ref.can_as<int*>());
+    REQUIRE(ref.can_as<const int*>());
+
+    REQUIRE(ref.as<int>() == 42);
+    ref.as<int&>() = 7;
+    REQUIRE(value == 7);
+    REQUIRE(ref.as<const int&>() == 7);
+    REQUIRE(ref.as<int*>() == &value);
+
+    const int const_value = 9;
+    Ref const_ref = make_ref(const_value);
+
+    REQUIRE(const_ref.can_as<int>());
+    REQUIRE(const_ref.can_as<const int&>());
+    REQUIRE(const_ref.can_as<const int*>());
+    REQUIRE_FALSE(const_ref.can_as<int&>());
+    REQUIRE_FALSE(const_ref.can_as<int*>());
+    REQUIRE(const_ref.as<int>() == 9);
+    REQUIRE(const_ref.as<const int*>() == &const_value);
+}
+
+TEST_CASE("Ref can view ints as enum values", "[refl][ref]") {
+    int raw = 2;
+    Ref ref = make_ref(raw);
+
+    REQUIRE(ref.can_as<RefAsEnum>());
+    REQUIRE(ref.can_as<const RefAsEnum&>());
+    REQUIRE_FALSE(ref.can_as<RefAsEnum&>());
+    REQUIRE_FALSE(ref.can_as<RefAsEnum*>());
+    REQUIRE(ref.as<RefAsEnum>() == RefAsEnum::Two);
+    REQUIRE(ref.as<const RefAsEnum&>() == RefAsEnum::Two);
+
+    RefAsEnum actual = RefAsEnum::One;
+    Ref enum_ref = make_ref(actual);
+
+    REQUIRE(enum_ref.can_as<RefAsEnum&>());
+    enum_ref.as<RefAsEnum&>() = RefAsEnum::Two;
+    REQUIRE(actual == RefAsEnum::Two);
 }
