@@ -219,7 +219,9 @@ int ScriptingEngine::dispatch_method(lua_State* L) {
         args.push_back(lua_to_val(L, i + 1));
     }
 
-    auto* method = cls.get_method(name, arg_types);
+    auto const_filter = instance.is_const() ? MethodConstFilter::ConstOnly :
+                                              MethodConstFilter::PreferNonConst;
+    auto* method = cls.get_method(name, arg_types, const_filter);
     if (method == nullptr) {
         luaL_error(
             L,
@@ -366,7 +368,9 @@ int ScriptingEngine::dispatch_operator(lua_State* L) {
         arg_types.push_back(arg_type);
         args.push_back(lua_to_val(L, i + 1));
     }
-    Method* method = get_operator(cls, op, arg_types);
+    auto const_filter = instance.is_const() ? MethodConstFilter::ConstOnly :
+                                              MethodConstFilter::PreferNonConst;
+    Method* method = get_operator(cls, op, arg_types, const_filter);
     if (!method) {
         luaL_error(
             L,

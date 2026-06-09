@@ -41,13 +41,7 @@ class Cls {
         return *this;
     }
 
-    Property* get_property(const std::string& name) {
-        auto it = m_properties.find(name);
-        if (it != m_properties.end()) {
-            return it->second.get();
-        }
-        return nullptr;
-    }
+    Property* get_property(const std::string& name);
 
     template<typename P>
     Cls& add_method(std::string name, P method_ptr) {
@@ -62,7 +56,9 @@ class Cls {
                     return false;
                 }
             }
-            return existing->return_type() == method->return_type();
+            return existing->return_type() == method->return_type() &&
+                   existing->is_const_method() == method->is_const_method() &&
+                   existing->is_static_method() == method->is_static_method();
         };
         if (std::ranges::none_of(methods, is_duplicate)) {
             methods.push_back(std::move(method));
@@ -70,58 +66,17 @@ class Cls {
         return *this;
     }
 
-    Method* get_method(const std::string& name, std::vector<TypeId> arg_types) {
-        auto it = m_methods.find(name);
-        if (it != m_methods.end()) {
-            // Find method with matching argument types
-            for (const auto& method : it->second) {
-                if (method->params().size() != arg_types.size()) {
-                    continue;
-                }
-                bool match = true;
-                for (int i = 0; i < method->params().size(); ++i) {
-                    auto param_type = method->params()[i].type_id();
-                    auto arg_type = arg_types[i];
-                    auto enum_arg_matches =
-                        arg_type == fei::type_id<int>() &&
-                        is_enum_type(param_type);
-                    if (param_type != arg_type && !enum_arg_matches) {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match) {
-                    return method.get();
-                }
-            }
-        }
-        return nullptr;
-    }
+    Method* get_method(
+        const std::string& name,
+        std::vector<TypeId> arg_types,
+        MethodConstFilter const_filter = MethodConstFilter::Any
+    );
 
-    bool has_method(const std::string& name) const {
-        return m_methods.contains(name);
-    }
+    bool has_method(const std::string& name) const;
 
-    std::vector<Method*> get_methods() const {
-        std::vector<Method*> methods;
-        for (const auto& [name, method_list] : m_methods) {
-            for (const auto& method : method_list) {
-                methods.push_back(method.get());
-            }
-        }
-        return methods;
-    }
+    std::vector<Method*> get_methods() const;
 
-    std::vector<Method*> get_methods(const std::string& name) const {
-        std::vector<Method*> methods;
-        auto it = m_methods.find(name);
-        if (it != m_methods.end()) {
-            for (const auto& method : it->second) {
-                methods.push_back(method.get());
-            }
-        }
-        return methods;
-    }
+    std::vector<Method*> get_methods(const std::string& name) const;
 
     template<typename T, typename... Args>
         requires std::constructible_from<T, Args...>
@@ -137,27 +92,13 @@ class Cls {
         return *this;
     }
 
-    Constructor* get_constructor(const std::vector<TypeId>& arg_types) {
-        for (const auto& ctor : m_constructors) {
-            if (ctor->arg_types() == arg_types) {
-                return ctor.get();
-            }
-        }
-        return nullptr;
-    }
+    Constructor* get_constructor(const std::vector<TypeId>& arg_types);
 
     Cls& set_to_string(ToStringFunc func);
 
     std::string to_string(Ref ref) const;
 
-    std::vector<Property*> get_properties() const {
-        std::vector<Property*> props;
-        props.reserve(m_properties.size());
-        for (const auto& pair : m_properties) {
-            props.push_back(pair.second.get());
-        }
-        return props;
-    }
+    std::vector<Property*> get_properties() const;
 
     TypeId type_id() const { return m_type_id; }
 };

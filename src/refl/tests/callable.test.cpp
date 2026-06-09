@@ -35,6 +35,11 @@ struct PointerCtorFixture {
     explicit PointerCtorFixture(int* ptr) : ptr(ptr) {}
 };
 
+struct ConstOverloadFixture {
+    int read() { return 1; }
+    int read() const { return 2; }
+};
+
 } // namespace
 
 TEST_CASE("Property validates object constness and value types", "[refl][property]") {
@@ -131,6 +136,51 @@ TEST_CASE("Method validates instances and argument types", "[refl][method]") {
         write_ptr->invoke(make_ref(obj), make_ref(const_pointed));
     REQUIRE(const_write_ret.is_void());
     REQUIRE(pointed == 5);
+}
+
+TEST_CASE("Method lookup filters const overloads", "[refl][method]") {
+    auto& cls =
+        Registry::instance()
+            .register_cls<ConstOverloadFixture>()
+            .add_method(
+                "read",
+                static_cast<int (ConstOverloadFixture::*)()>(
+                    &ConstOverloadFixture::read
+                )
+            )
+            .add_method(
+                "read",
+                static_cast<int (ConstOverloadFixture::*)() const>(
+                    &ConstOverloadFixture::read
+                )
+            );
+
+    REQUIRE(cls.get_methods("read").size() == 2);
+
+    auto* any = cls.get_method("read", {}, MethodConstFilter::Any);
+    auto* non_const =
+        cls.get_method("read", {}, MethodConstFilter::NonConstOnly);
+    auto* const_only =
+        cls.get_method("read", {}, MethodConstFilter::ConstOnly);
+    auto* prefer_non_const =
+        cls.get_method("read", {}, MethodConstFilter::PreferNonConst);
+    auto* prefer_const =
+        cls.get_method("read", {}, MethodConstFilter::PreferConst);
+
+    REQUIRE(any == non_const);
+    REQUIRE(non_const != nullptr);
+    REQUIRE(const_only != nullptr);
+    REQUIRE(non_const != const_only);
+    REQUIRE(prefer_non_const == non_const);
+    REQUIRE(prefer_const == const_only);
+
+    ConstOverloadFixture obj;
+    const ConstOverloadFixture const_obj;
+
+    REQUIRE(non_const->invoke(make_ref(obj)).value().get<int>() == 1);
+    REQUIRE(non_const->invoke(make_ref(const_obj)).is_void());
+    REQUIRE(const_only->invoke(make_ref(obj)).value().get<int>() == 2);
+    REQUIRE(const_only->invoke(make_ref(const_obj)).value().get<int>() == 2);
 }
 
 TEST_CASE("Constructor validates argument types", "[refl][constructor]") {

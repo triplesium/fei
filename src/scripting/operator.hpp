@@ -54,8 +54,13 @@ inline bool has_operator(Cls& cls, LuaOperator op) {
 }
 
 inline Method*
-get_operator(Cls& cls, LuaOperator op, const std::vector<TypeId>& arg_types) {
-    return cls.get_method(get_operator_method_name(op), arg_types);
+get_operator(
+    Cls& cls,
+    LuaOperator op,
+    const std::vector<TypeId>& arg_types,
+    MethodConstFilter const_filter = MethodConstFilter::Any
+) {
+    return cls.get_method(get_operator_method_name(op), arg_types, const_filter);
 }
 
 inline const char* get_operator_metamethod(LuaOperator op) {

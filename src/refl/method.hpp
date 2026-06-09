@@ -55,6 +55,16 @@ class Method : public Callable {
     virtual ~Method() = default;
 
     virtual ReturnValue invoke_variadic(const std::vector<Ref>& args) const = 0;
+    virtual bool is_const_method() const = 0;
+    virtual bool is_static_method() const = 0;
+};
+
+enum class MethodConstFilter {
+    Any,
+    ConstOnly,
+    NonConstOnly,
+    PreferConst,
+    PreferNonConst,
 };
 
 template<typename P>
@@ -76,6 +86,10 @@ class MethodImpl : public Method {
     MethodImpl(std::string name, P ptr) :
         Method(std::move(name), make_params(), QualType::of<ReturnType>()),
         m_ptr(ptr) {}
+
+    bool is_const_method() const override { return c_is_const_method; }
+
+    bool is_static_method() const override { return c_is_static; }
 
     ReturnValue invoke_variadic(const std::vector<Ref>& args) const override {
         if (c_is_static) {
