@@ -9,7 +9,6 @@
 #include "core/time.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/system_params.hpp"
-#include "ecs/world.hpp"
 #include "graphics/buffer.hpp"
 #include "graphics/command_buffer.hpp"
 #include "graphics/enums.hpp"
@@ -25,9 +24,8 @@
 
 #include <array>
 #include <cstdint>
-#include <glfw/glfw3.h>
+#include <GLFW/glfw3.h>
 #include <memory>
-#include <print>
 
 using namespace fei;
 
@@ -67,10 +65,12 @@ void start_up(
         {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}},
         {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}},
     }};
-    renderer->vertex_buffer = device->create_buffer(BufferDescription {
-        .size = sizeof(vertices),
-        .usages = BufferUsages::Vertex,
-    });
+    renderer->vertex_buffer = device->create_buffer(
+        BufferDescription {
+            .size = sizeof(vertices),
+            .usages = BufferUsages::Vertex,
+        }
+    );
     device->update_buffer(
         renderer->vertex_buffer,
         0,
@@ -80,10 +80,12 @@ void start_up(
 
     // Create index buffer
     std::array<uint16_t, 6> indices = {0, 1, 3, 1, 2, 3};
-    renderer->index_buffer = device->create_buffer(BufferDescription {
-        .size = sizeof(indices),
-        .usages = BufferUsages::Index,
-    });
+    renderer->index_buffer = device->create_buffer(
+        BufferDescription {
+            .size = sizeof(indices),
+            .usages = BufferUsages::Index,
+        }
+    );
     device->update_buffer(
         renderer->index_buffer,
         0,
@@ -92,23 +94,27 @@ void start_up(
     );
 
     // Create uniform buffer
-    renderer->uniform_buffer = device->create_buffer(BufferDescription {
-        .size = sizeof(Uniforms),
-        .usages = {BufferUsages::Uniform, BufferUsages::Dynamic},
-    });
+    renderer->uniform_buffer = device->create_buffer(
+        BufferDescription {
+            .size = sizeof(Uniforms),
+            .usages = {BufferUsages::Uniform, BufferUsages::Dynamic},
+        }
+    );
 
     auto image_handle = asset_server->load<Image>("awesomeface.png");
     auto image = image_assets->get(image_handle);
-    renderer->texture = device->create_texture(TextureDescription {
-        .width = image->width(),
-        .height = image->height(),
-        .depth = image->depth(),
-        .mip_level = 1,
-        .layer = 0,
-        .texture_format = PixelFormat::Rgba8Unorm,
-        .texture_usage = TextureUsage::Sampled,
-        .texture_type = TextureType::Texture2D,
-    });
+    renderer->texture = device->create_texture(
+        TextureDescription {
+            .width = image->width(),
+            .height = image->height(),
+            .depth = image->depth(),
+            .mip_level = 1,
+            .layer = 0,
+            .texture_format = PixelFormat::Rgba8Unorm,
+            .texture_usage = TextureUsage::Sampled,
+            .texture_type = TextureType::Texture2D,
+        }
+    );
     device->update_texture(
         renderer->texture,
         image->data(),
@@ -123,33 +129,36 @@ void start_up(
     );
     auto vert_shader_text = asset_server->load<TextAsset>("forward.vert");
     auto frag_shader_text = asset_server->load<TextAsset>("forward.frag");
-    auto vert_shader = device->create_shader_module(ShaderDescription {
-        .stage = ShaderStages::Vertex,
-        .source = text_assets->get(vert_shader_text)->text(),
-    });
-    auto frag_shader = device->create_shader_module(ShaderDescription {
-        .stage = ShaderStages::Fragment,
-        .source = text_assets->get(frag_shader_text)->text(),
-    });
-    auto resource_layout =
-        device->create_resource_layout(ResourceLayoutDescription {
-            .elements =
-                {
-                    ResourceLayoutElementDescription {
-                        .binding = 0,
-                        .kind = ResourceKind::UniformBuffer,
-                        .stages =
-                            {ShaderStages::Vertex, ShaderStages::Fragment},
-                    },
-                    ResourceLayoutElementDescription {
-                        .binding = 1,
-                        .kind = ResourceKind::TextureReadOnly,
-                        .stages = {ShaderStages::Fragment},
-                    },
+    auto vert_shader = device->create_shader_module(
+        ShaderDescription {
+            .stage = ShaderStages::Vertex,
+            .source = text_assets->get(vert_shader_text)->text(),
+        }
+    );
+    auto frag_shader = device->create_shader_module(
+        ShaderDescription {
+            .stage = ShaderStages::Fragment,
+            .source = text_assets->get(frag_shader_text)->text(),
+        }
+    );
+    auto resource_layout = device->create_resource_layout(
+        ResourceLayoutDescription {
+            .elements = {
+                ResourceLayoutElementDescription {
+                    .binding = 0,
+                    .kind = ResourceKind::UniformBuffer,
+                    .stages = {ShaderStages::Vertex, ShaderStages::Fragment},
                 },
-        });
-    renderer->pipeline =
-        device->create_render_pipeline(RenderPipelineDescription {
+                ResourceLayoutElementDescription {
+                    .binding = 1,
+                    .kind = ResourceKind::TextureReadOnly,
+                    .stages = {ShaderStages::Fragment},
+                },
+            },
+        }
+    );
+    renderer->pipeline = device->create_render_pipeline(
+        RenderPipelineDescription {
             .blend_state = BlendStateDescription::SingleAlphaBlend,
             .depth_stencil_state =
                 DepthStencilStateDescription::DepthOnlyGreaterEqual,
@@ -179,12 +188,14 @@ void start_up(
                     .shaders = {vert_shader, frag_shader},
                 },
             .resource_layouts = {resource_layout},
-        });
-    renderer->resource_set =
-        device->create_resource_set(ResourceSetDescription {
+        }
+    );
+    renderer->resource_set = device->create_resource_set(
+        ResourceSetDescription {
             .layout = resource_layout,
             .resources = {renderer->uniform_buffer, renderer->texture},
-        });
+        }
+    );
 }
 
 void render_start(WorldRef world) {}
@@ -202,7 +213,7 @@ void render_update(
         translate(0.0f, 0.0f, -3.f),
         perspective(
             45.0f * DEG2RAD,
-            (float)win->width / (float)win->height,
+            static_cast<float>(win->width) / static_cast<float>(win->height),
             0.1f,
             100.0f
         ),

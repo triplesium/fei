@@ -8,9 +8,8 @@
 #include "ecs/event.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
-#include "graphics/opengl/plugin.hpp"
-#include "window/window.hpp"
 
+#include <chrono>
 #include <print>
 #include <thread>
 
@@ -35,8 +34,11 @@ void update(Query<Foo> query, Res<Assets<TextAsset>> assets) {
     for (auto [foo] : query) {
         if (auto text = assets->get(foo.handle)) {
             auto now = std::chrono::system_clock::now();
-            auto time_t = std::chrono::system_clock::to_time_t(now);
-            std::println("{} - {}", std::ctime(&time_t), text.value().text());
+            std::println(
+                "{:%F %T} - {}",
+                std::chrono::floor<std::chrono::seconds>(now),
+                text.value().text()
+            );
             text->set_text(text->text() + "!");
         }
     }

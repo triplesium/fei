@@ -21,19 +21,17 @@ class TextureOpenGL : public Texture {
   public:
     TextureOpenGL(const TextureDescription& desc);
     TextureOpenGL(const TextureOpenGL&) = delete;
-    virtual ~TextureOpenGL();
+    ~TextureOpenGL() override;
 
     GLuint id() const { return m_texture; }
-    virtual uint32 width() const override { return m_width; }
-    virtual uint32 height() const override { return m_height; }
-    virtual uint32 depth() const override { return m_depth; }
-    virtual uint32 mip_level() const override { return m_mip_level; }
-    virtual uint32 layer() const override { return m_layer; }
-    virtual PixelFormat format() const override { return m_texture_format; }
-    virtual BitFlags<TextureUsage> usage() const override {
-        return m_texture_usage;
-    }
-    virtual TextureType type() const override { return m_texture_type; }
+    uint32 width() const override { return m_width; }
+    uint32 height() const override { return m_height; }
+    uint32 depth() const override { return m_depth; }
+    uint32 mip_level() const override { return m_mip_level; }
+    uint32 layer() const override { return m_layer; }
+    PixelFormat format() const override { return m_texture_format; }
+    BitFlags<TextureUsage> usage() const override { return m_texture_usage; }
+    TextureType type() const override { return m_texture_type; }
     GLenum gl_format() const { return m_gl_format; }
     GLenum gl_type() const { return m_gl_type; }
     GLenum gl_sized_internal_format() const {

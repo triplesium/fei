@@ -1,16 +1,12 @@
 #pragma once
 #include "base/log.hpp"
 #include "base/type_traits.hpp"
-#include "refl/type.hpp"
 
 #include <concepts>
-#include <memory>
-#include <print>
 #include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
-#include <vector>
 
 namespace fei {
 
@@ -101,17 +97,16 @@ class FunctionSystem : public System {
         std::apply(m_func, params);
     }
 
-    virtual bool hashable() const override {
-        if constexpr (std::is_pointer_v<Func> &&
-                      std::is_function_v<std::remove_pointer_t<Func>>) {
-            return true;
-        }
-        return false;
+    bool hashable() const override {
+        return std::is_pointer_v<Func> &&
+               std::is_function_v<std::remove_pointer_t<Func>>;
     }
 
-    virtual std::size_t hash() const override {
-        if constexpr (std::is_pointer_v<Func> &&
-                      std::is_function_v<std::remove_pointer_t<Func>>) {
+    std::size_t hash() const override {
+        if constexpr (
+            std::is_pointer_v<Func> &&
+            std::is_function_v<std::remove_pointer_t<Func>>
+        ) {
             return reinterpret_cast<std::size_t>(m_func);
         }
         fei::fatal("Cannot hash non-function pointer systems");

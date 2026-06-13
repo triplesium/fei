@@ -27,16 +27,13 @@ struct EventInstance {
 template<typename T>
 struct EventSequence {
     std::vector<EventInstance<T>> events;
-    std::size_t start_event_count;
+    std::size_t start_event_count {0};
 };
 
 template<typename T>
 class Events {
   public:
-    Events() : m_event_count(0) {
-        m_events_a.start_event_count = 0;
-        m_events_b.start_event_count = 0;
-    }
+    Events() = default;
 
     EventId<T> send(T event) {
         EventId id {
@@ -103,7 +100,7 @@ class Events {
   private:
     EventSequence<T> m_events_a;
     EventSequence<T> m_events_b;
-    size_t m_event_count;
+    size_t m_event_count {0};
 };
 
 template<typename T>
@@ -142,7 +139,7 @@ static_assert(StatefulSystemParam<EventReader<int>>);
 template<typename T>
 class EventWriter {
   public:
-    EventWriter() : m_events(nullptr) {}
+    EventWriter() = default;
     EventWriter(Events<T>* events) : m_events(events) {}
 
     EventId<T> send(std::convertible_to<T> auto&& event) {
@@ -156,7 +153,7 @@ class EventWriter {
     }
 
   private:
-    Events<T>* m_events;
+    Events<T>* m_events {nullptr};
 };
 static_assert(StatelessSystemParam<EventWriter<int>>);
 

@@ -62,10 +62,12 @@ struct SystemSetConfigs {
     template<typename T>
         requires std::derived_from<T, SystemSet<T>>
     SystemSetConfigs(T&& set) {
-        sets.push_back(SystemSetConfig {
-            .dependencies = SystemSetDependencies {},
-            .set_id = type_id<T>()
-        });
+        sets.push_back(
+            SystemSetConfig {
+                .dependencies = SystemSetDependencies {},
+                .set_id = type_id<T>()
+            }
+        );
     }
 
     template<typename T>
@@ -114,6 +116,8 @@ struct SystemSetConfigs {
 
 template<typename T>
 struct SystemSet {
+  public:
+    SystemSet() = default; // NOLINT(bugprone-crtp-constructor-accessibility)
     template<typename U>
         requires std::derived_from<U, SystemSet<U>>
     SystemSetConfig before() {
@@ -153,8 +157,7 @@ SystemSetConfigs all(std::convertible_to<SystemSetConfigs> auto&&... sets) {
                 configs.sets.end()
             );
         }(),
-        ...
-    );
+        ...);
     return SystemSetConfigs {std::move(system_set_configs)};
 }
 

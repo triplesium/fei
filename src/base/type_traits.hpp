@@ -19,7 +19,7 @@ struct FunctionTraits<ReturnType (ClassType::*)(Args...) const> {
 
     using args_tuple = std::tuple<Args...>;
     template<size_t i>
-    using arg_type = typename std::tuple_element<i, std::tuple<Args...>>::type;
+    using arg_type = std::tuple_element_t<i, std::tuple<Args...>>;
 };
 
 template<typename ReturnType, typename... Args>
@@ -29,7 +29,7 @@ struct FunctionTraits<ReturnType(Args...)> {
 
     using args_tuple = std::tuple<Args...>;
     template<size_t i>
-    using arg_type = typename std::tuple_element<i, std::tuple<Args...>>::type;
+    using arg_type = std::tuple_element_t<i, std::tuple<Args...>>;
     using function_pointer_type = ReturnType (*)(Args...);
 };
 

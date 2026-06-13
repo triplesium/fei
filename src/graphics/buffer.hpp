@@ -39,7 +39,7 @@ struct BufferDescription {
 
 class Buffer : public BindableResource, public MappableResource {
   public:
-    virtual ~Buffer() = default;
+    ~Buffer() override = default;
     virtual std::size_t size() const = 0;
     virtual BitFlags<BufferUsages> usages() const = 0;
 };

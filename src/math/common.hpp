@@ -3,13 +3,14 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numbers>
 
 namespace fei {
 
 constexpr float POS_INFINITY = std::numeric_limits<float>::infinity();
 constexpr float NEG_INFINITY = -std::numeric_limits<float>::infinity();
-constexpr float PI = 3.14159265358979323846264338327950288f;
-constexpr float ONE_OVER_PI = 1.0f / PI;
+constexpr float PI = std::numbers::pi_v<float>;
+constexpr float ONE_OVER_PI = std::numbers::inv_pi_v<float>;
 constexpr float TWO_PI = 2.0f * PI;
 constexpr float HALF_PI = 0.5f * PI;
 constexpr float DEG2RAD = PI / 180.0f;

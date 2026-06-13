@@ -25,14 +25,8 @@ TEST_CASE("hash helpers combine scalar and range values", "[base][hash]") {
     std::vector<int> second {1, 2, 3};
     std::vector<int> third {3, 2, 1};
 
-    REQUIRE(
-        std::hash<std::vector<int>> {}(first) ==
-        std::hash<std::vector<int>> {}(second)
-    );
-    REQUIRE(
-        std::hash<std::vector<int>> {}(first) !=
-        std::hash<std::vector<int>> {}(third)
-    );
+    REQUIRE(fei::hash_combine_all(first) == fei::hash_combine_all(second));
+    REQUIRE(fei::hash_combine_all(first) != fei::hash_combine_all(third));
 
     REQUIRE(std::hash<BaseHashPoint> {}({1, 2}) == fei::hash_combine_all(1, 2));
 }

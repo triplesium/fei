@@ -12,7 +12,6 @@
 #include <cstdint>
 #include <memory>
 #include <span>
-#include <utility>
 #include <vector>
 
 using namespace fei;
@@ -44,7 +43,7 @@ class FakeTexture : public Texture {
     TextureDescription m_desc;
 
   public:
-    explicit FakeTexture(TextureDescription desc) : m_desc(std::move(desc)) {}
+    explicit FakeTexture(TextureDescription desc) : m_desc(desc) {}
 
     PixelFormat format() const override { return m_desc.texture_format; }
     uint32 width() const override { return m_desc.width; }
@@ -282,12 +281,11 @@ TEST_CASE(
                         .layer = 1,
                     },
                 },
-            .depth_target =
-                FramebufferAttachment {
-                    .texture = depth_texture,
-                    .mip_level = 0,
-                    .layer = 3,
-                },
+            .depth_target = FramebufferAttachment {
+                .texture = depth_texture,
+                .mip_level = 0,
+                .layer = 3,
+            },
         });
 
         REQUIRE(framebuffer.color_attachments().size() == 1);
@@ -356,7 +354,8 @@ TEST_CASE("Graphics texture views are resolved and cached", "[graphics]") {
         REQUIRE(device.texture_view_requests.empty());
     }
 
-    SECTION("GraphicsDevice::get_texture_view creates full views for textures"
+    SECTION(
+        "GraphicsDevice::get_texture_view creates full views for textures"
     ) {
         auto resolved = device.get_texture_view(texture);
 

@@ -22,6 +22,8 @@ class CommandBuffer {
     std::shared_ptr<Pipeline> m_pipeline;
 
   public:
+    virtual ~CommandBuffer() = default;
+
     virtual void begin() = 0;
     virtual void end() = 0;
 
@@ -182,12 +184,12 @@ class CommandBuffer {
     }
 
   protected:
-    virtual void set_framebuffer_impl(std::shared_ptr<Framebuffer> framebuffer
-    ) = 0;
-    virtual void set_render_pipeline_impl(std::shared_ptr<Pipeline> pipeline
-    ) = 0;
-    virtual void set_compute_pipeline_impl(std::shared_ptr<Pipeline> pipeline
-    ) = 0;
+    virtual void
+    set_framebuffer_impl(std::shared_ptr<Framebuffer> framebuffer) = 0;
+    virtual void
+    set_render_pipeline_impl(std::shared_ptr<Pipeline> pipeline) = 0;
+    virtual void
+    set_compute_pipeline_impl(std::shared_ptr<Pipeline> pipeline) = 0;
     virtual void set_index_buffer_impl(
         std::shared_ptr<Buffer> buffer,
         IndexFormat format,

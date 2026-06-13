@@ -66,8 +66,10 @@ class Optional {
         }
     }
 
-    Optional(Optional&& other) :
-        m_has_value(other.m_has_value), m_storage(trivial_init) {
+    Optional(Optional&& other) noexcept(
+        std::is_nothrow_move_constructible_v<T> &&
+        std::is_nothrow_destructible_v<T>
+    ) : m_has_value(other.m_has_value), m_storage(trivial_init) {
         if (m_has_value) {
             new (&m_storage.value) T(std::move(other.m_storage.value));
             other.reset();
@@ -96,7 +98,11 @@ class Optional {
         return *this;
     }
 
-    Optional& operator=(Optional&& other) {
+    Optional& operator=(Optional&& other) noexcept(
+        std::is_nothrow_move_assignable_v<T> &&
+        std::is_nothrow_move_constructible_v<T> &&
+        std::is_nothrow_destructible_v<T>
+    ) {
         if (m_has_value && other.m_has_value) {
             value() = std::move(other.value());
         } else if (m_has_value) {
@@ -148,7 +154,11 @@ class Optional {
         }
     }
 
-    void swap(Optional& other) {
+    void swap(Optional& other) noexcept(
+        std::is_nothrow_swappable_v<T> &&
+        std::is_nothrow_move_constructible_v<T> &&
+        std::is_nothrow_destructible_v<T>
+    ) {
         if (m_has_value && other.m_has_value) {
             std::swap(**this, *other);
         } else if (m_has_value) {
@@ -183,98 +193,108 @@ class Optional {
     template<class F>
         requires SpecializationOf<std::invoke_result_t<F, T&>, Optional>
     constexpr auto and_then(F&& f) & {
-        if (*this)
+        if (*this) {
             return std::invoke(std::forward<F>(f), **this);
-        else
+        } else {
             return std::remove_cvref_t<std::invoke_result_t<F, T&>> {};
+        }
     }
     template<class F>
         requires SpecializationOf<std::invoke_result_t<F, const T&>, Optional>
     constexpr auto and_then(F&& f) const& {
-        if (*this)
+        if (*this) {
             return std::invoke(std::forward<F>(f), **this);
-        else
+        } else {
             return std::remove_cvref_t<std::invoke_result_t<F, const T&>> {};
+        }
     }
     template<class F>
         requires SpecializationOf<std::invoke_result_t<F, T>, Optional>
     constexpr auto and_then(F&& f) && {
-        if (*this)
+        if (*this) {
             return std::invoke(std::forward<F>(f), std::move(**this));
-        else
+        } else {
             return std::remove_cvref_t<std::invoke_result_t<F, T>> {};
+        }
     }
     template<class F>
         requires SpecializationOf<std::invoke_result_t<F, const T>, Optional>
     constexpr auto and_then(F&& f) const&& {
-        if (*this)
+        if (*this) {
             return std::invoke(std::forward<F>(f), std::move(**this));
-        else
+        } else {
             return std::remove_cvref_t<std::invoke_result_t<F, const T>> {};
+        }
     }
 
     template<class F>
         requires transform_concept<F, T&>
     constexpr auto transform(F&& f) & {
         using U = std::remove_cv_t<std::invoke_result_t<F, T&>>;
-        if (*this)
+        if (*this) {
             return Optional<U> {std::invoke(std::forward<F>(f), **this)};
-        else
+        } else {
             return Optional<U> {nullopt};
+        }
     }
 
     template<class F>
         requires transform_concept<F, const T&>
     constexpr auto transform(F&& f) const& {
         using U = std::invoke_result_t<F, const T&>;
-        if (*this)
+        if (*this) {
             return Optional<U> {std::invoke(std::forward<F>(f), **this)};
-        else
+        } else {
             return Optional<U> {nullopt};
+        }
     }
 
     template<class F>
         requires transform_concept<F, T>
     constexpr auto transform(F&& f) && {
         using U = std::invoke_result_t<F, T>;
-        if (*this)
+        if (*this) {
             return Optional<U> {
                 std::invoke(std::forward<F>(f), std::move(**this))
             };
-        else
+        } else {
             return Optional<U> {nullopt};
+        }
     }
 
     template<class F>
         requires transform_concept<F, const T>
     constexpr auto transform(F&& f) const&& {
         using U = std::invoke_result_t<F, const T>;
-        if (*this)
+        if (*this) {
             return Optional<U> {
                 std::invoke(std::forward<F>(f), std::move(**this))
             };
-        else
+        } else {
             return Optional<U> {nullopt};
+        }
     }
 
     template<std::invocable<> F>
         requires std::
             same_as<std::remove_cvref_t<std::invoke_result_t<F>>, Optional>
         constexpr Optional or_else(F&& f) const& {
-        if (*this)
+        if (*this) {
             return *this;
-        else
+        } else {
             return std::invoke(std::forward<F>(f));
+        }
     }
 
     template<std::invocable<> F>
         requires std::
             same_as<std::remove_cvref_t<std::invoke_result_t<F>>, Optional>
         constexpr Optional or_else(F&& f) && {
-        if (*this)
+        if (*this) {
             return std::move(*this);
-        else
+        } else {
             return std::invoke(std::forward<F>(f));
+        }
     }
 
   private:
@@ -304,7 +324,7 @@ class Optional<T&> {
         return *this;
     }
 
-    void swap(Optional& other) { std::swap(m_ref, other.m_ref); }
+    void swap(Optional& other) noexcept { std::swap(m_ref, other.m_ref); }
 
     constexpr T& value() const { return *m_ref; }
     constexpr T* operator->() const { return m_ref; }

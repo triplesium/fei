@@ -16,10 +16,10 @@ struct EntityLocation {
 class Entities {
   private:
     std::vector<EntityLocation> m_locations;
-    Entity m_next_entity;
+    Entity m_next_entity {0};
 
   public:
-    Entities() : m_next_entity(0) {}
+    Entities() = default;
 
     Entity alloc() {
         auto id = m_next_entity++;

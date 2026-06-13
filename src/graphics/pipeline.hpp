@@ -176,7 +176,7 @@ struct VertexAttributeDescription {
 };
 
 struct VertexLayoutDescription {
-    std::vector<VertexAttributeDescription> attributes {};
+    std::vector<VertexAttributeDescription> attributes;
     size_t stride {0};
 };
 

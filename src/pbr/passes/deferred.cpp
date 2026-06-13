@@ -38,65 +38,80 @@ void setup_gbuffer(
     uint32 width = window->width;
     uint32 height = window->height;
 
-    resources->g_position_ao = device->create_texture(TextureDescription {
-        .width = width,
-        .height = height,
-        .depth = 1,
-        .mip_level = 1,
-        .layer = 1,
-        .texture_format = PixelFormat::Rgba16Float,
-        .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
-        .texture_type = TextureType::Texture2D,
-    });
+    resources->g_position_ao = device->create_texture(
+        TextureDescription {
+            .width = width,
+            .height = height,
+            .depth = 1,
+            .mip_level = 1,
+            .layer = 1,
+            .texture_format = PixelFormat::Rgba16Float,
+            .texture_usage =
+                {TextureUsage::RenderTarget, TextureUsage::Sampled},
+            .texture_type = TextureType::Texture2D,
+        }
+    );
 
-    resources->g_normal_roughness = device->create_texture(TextureDescription {
-        .width = width,
-        .height = height,
-        .depth = 1,
-        .mip_level = 1,
-        .layer = 1,
-        .texture_format = PixelFormat::Rgba16Float,
-        .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
-        .texture_type = TextureType::Texture2D,
-    });
+    resources->g_normal_roughness = device->create_texture(
+        TextureDescription {
+            .width = width,
+            .height = height,
+            .depth = 1,
+            .mip_level = 1,
+            .layer = 1,
+            .texture_format = PixelFormat::Rgba16Float,
+            .texture_usage =
+                {TextureUsage::RenderTarget, TextureUsage::Sampled},
+            .texture_type = TextureType::Texture2D,
+        }
+    );
 
-    resources->g_albedo_metallic = device->create_texture(TextureDescription {
-        .width = width,
-        .height = height,
-        .depth = 1,
-        .mip_level = 1,
-        .layer = 1,
-        .texture_format = PixelFormat::Rgba8Unorm,
-        .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
-        .texture_type = TextureType::Texture2D,
-    });
+    resources->g_albedo_metallic = device->create_texture(
+        TextureDescription {
+            .width = width,
+            .height = height,
+            .depth = 1,
+            .mip_level = 1,
+            .layer = 1,
+            .texture_format = PixelFormat::Rgba8Unorm,
+            .texture_usage =
+                {TextureUsage::RenderTarget, TextureUsage::Sampled},
+            .texture_type = TextureType::Texture2D,
+        }
+    );
 
-    resources->g_specular = device->create_texture(TextureDescription {
-        .width = width,
-        .height = height,
-        .depth = 1,
-        .mip_level = 1,
-        .layer = 1,
-        .texture_format = PixelFormat::Rgba8Unorm,
-        .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
-        .texture_type = TextureType::Texture2D,
-    });
+    resources->g_specular = device->create_texture(
+        TextureDescription {
+            .width = width,
+            .height = height,
+            .depth = 1,
+            .mip_level = 1,
+            .layer = 1,
+            .texture_format = PixelFormat::Rgba8Unorm,
+            .texture_usage =
+                {TextureUsage::RenderTarget, TextureUsage::Sampled},
+            .texture_type = TextureType::Texture2D,
+        }
+    );
 
-    resources->g_emissive_depth = device->create_texture(TextureDescription {
-        .width = width,
-        .height = height,
-        .depth = 1,
-        .mip_level = 1,
-        .layer = 1,
-        .texture_format = PixelFormat::Rgba16Float,
-        .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
-        .texture_type = TextureType::Texture2D,
-    });
+    resources->g_emissive_depth = device->create_texture(
+        TextureDescription {
+            .width = width,
+            .height = height,
+            .depth = 1,
+            .mip_level = 1,
+            .layer = 1,
+            .texture_format = PixelFormat::Rgba16Float,
+            .texture_usage =
+                {TextureUsage::RenderTarget, TextureUsage::Sampled},
+            .texture_type = TextureType::Texture2D,
+        }
+    );
 
     auto& mesh = meshes->get(fullscreen_quad->fullscreen_quad_mesh).value();
 
-    resources->defered_resource_layout =
-        device->create_resource_layout(ResourceLayoutDescription::sequencial(
+    resources->defered_resource_layout = device->create_resource_layout(
+        ResourceLayoutDescription::sequencial(
             {ShaderStages::Vertex, ShaderStages::Fragment},
             {
                 texture_read_only("g_position_ao"),
@@ -106,7 +121,8 @@ void setup_gbuffer(
                 texture_read_only("g_emissive_depth"),
                 sampler("g_buffer_sampler"),
             }
-        ));
+        )
+    );
 
     auto create_shader_module = [&](const std::string& path) {
         auto shader_handle = asset_server->load<Shader>(path);
@@ -118,22 +134,22 @@ void setup_gbuffer(
     auto deferred_gi_frag_shader =
         create_shader_module("embeded://deferred_gi.frag");
 
-    resources->defered_resource_set =
-        device->create_resource_set(ResourceSetDescription {
+    resources->defered_resource_set = device->create_resource_set(
+        ResourceSetDescription {
             .layout = resources->defered_resource_layout,
-            .resources =
-                {
-                    resources->g_position_ao,
-                    resources->g_normal_roughness,
-                    resources->g_albedo_metallic,
-                    resources->g_specular,
-                    resources->g_emissive_depth,
-                    device->create_sampler(SamplerDescription::Point),
-                },
-        });
+            .resources = {
+                resources->g_position_ao,
+                resources->g_normal_roughness,
+                resources->g_albedo_metallic,
+                resources->g_specular,
+                resources->g_emissive_depth,
+                device->create_sampler(SamplerDescription::Point),
+            },
+        }
+    );
 
-    resources->defered_pipeline =
-        device->create_render_pipeline(RenderPipelineDescription {
+    resources->defered_pipeline = device->create_render_pipeline(
+        RenderPipelineDescription {
             .depth_stencil_state =
                 DepthStencilStateDescription::DepthOnlyLessEqual,
             .rasterizer_state = {},
@@ -148,51 +164,60 @@ void setup_gbuffer(
                             deferred_gi_frag_shader,
                         },
                 },
-            .resource_layouts =
-                {
-                    mesh_view_layout->layout,
-                    resources->defered_resource_layout,
-                    vxgi_lighting->resource_layout,
-                },
-        });
+            .resource_layouts = {
+                mesh_view_layout->layout,
+                resources->defered_resource_layout,
+                vxgi_lighting->resource_layout,
+            },
+        }
+    );
 
-    resources->direct_lighting = device->create_texture(TextureDescription {
-        .width = width,
-        .height = height,
-        .depth = 1,
-        .mip_level = 1,
-        .layer = 1,
-        .texture_format = PixelFormat::Rgba16Float,
-        .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
-        .texture_type = TextureType::Texture2D,
-    });
+    resources->direct_lighting = device->create_texture(
+        TextureDescription {
+            .width = width,
+            .height = height,
+            .depth = 1,
+            .mip_level = 1,
+            .layer = 1,
+            .texture_format = PixelFormat::Rgba16Float,
+            .texture_usage =
+                {TextureUsage::RenderTarget, TextureUsage::Sampled},
+            .texture_type = TextureType::Texture2D,
+        }
+    );
 
-    resources->indirect_lighting = device->create_texture(TextureDescription {
-        .width = width / 2,
-        .height = height / 2,
-        .depth = 1,
-        .mip_level = 1,
-        .layer = 1,
-        .texture_format = PixelFormat::Rgba16Float,
-        .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
-        .texture_type = TextureType::Texture2D,
-    });
+    resources->indirect_lighting = device->create_texture(
+        TextureDescription {
+            .width = width / 2,
+            .height = height / 2,
+            .depth = 1,
+            .mip_level = 1,
+            .layer = 1,
+            .texture_format = PixelFormat::Rgba16Float,
+            .texture_usage =
+                {TextureUsage::RenderTarget, TextureUsage::Sampled},
+            .texture_type = TextureType::Texture2D,
+        }
+    );
 
-    resources->composite_lighting = device->create_texture(TextureDescription {
-        .width = width,
-        .height = height,
-        .depth = 1,
-        .mip_level = 1,
-        .layer = 1,
-        .texture_format = PixelFormat::Rgba8Unorm,
-        .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
-        .texture_type = TextureType::Texture2D,
-    });
+    resources->composite_lighting = device->create_texture(
+        TextureDescription {
+            .width = width,
+            .height = height,
+            .depth = 1,
+            .mip_level = 1,
+            .layer = 1,
+            .texture_format = PixelFormat::Rgba8Unorm,
+            .texture_usage =
+                {TextureUsage::RenderTarget, TextureUsage::Sampled},
+            .texture_type = TextureType::Texture2D,
+        }
+    );
 
     auto direct_lighting_shader =
         create_shader_module("embeded://deferred_gi_direct.frag");
-    resources->direct_lighting_pipeline =
-        device->create_render_pipeline(RenderPipelineDescription {
+    resources->direct_lighting_pipeline = device->create_render_pipeline(
+        RenderPipelineDescription {
             .depth_stencil_state = DepthStencilStateDescription::Disabled,
             .rasterizer_state = {},
             .render_primitive = RenderPrimitive::Triangles,
@@ -206,18 +231,18 @@ void setup_gbuffer(
                             direct_lighting_shader,
                         },
                 },
-            .resource_layouts =
-                {
-                    mesh_view_layout->layout,
-                    resources->defered_resource_layout,
-                    vxgi_lighting->resource_layout,
-                },
-        });
+            .resource_layouts = {
+                mesh_view_layout->layout,
+                resources->defered_resource_layout,
+                vxgi_lighting->resource_layout,
+            },
+        }
+    );
 
     auto indirect_lighting_shader =
         create_shader_module("embeded://deferred_gi_indirect.frag");
-    resources->indirect_lighting_pipeline =
-        device->create_render_pipeline(RenderPipelineDescription {
+    resources->indirect_lighting_pipeline = device->create_render_pipeline(
+        RenderPipelineDescription {
             .depth_stencil_state = DepthStencilStateDescription::Disabled,
             .rasterizer_state = {},
             .render_primitive = RenderPrimitive::Triangles,
@@ -231,35 +256,36 @@ void setup_gbuffer(
                             indirect_lighting_shader,
                         },
                 },
-            .resource_layouts =
-                {
-                    mesh_view_layout->layout,
-                    resources->defered_resource_layout,
-                    vxgi_lighting->resource_layout,
-                },
-        });
+            .resource_layouts = {
+                mesh_view_layout->layout,
+                resources->defered_resource_layout,
+                vxgi_lighting->resource_layout,
+            },
+        }
+    );
 
     auto composite_shader =
         create_shader_module("embeded://deferred_gi_composite.frag");
-    resources->composite_resource_layout =
-        device->create_resource_layout(ResourceLayoutDescription::sequencial(
+    resources->composite_resource_layout = device->create_resource_layout(
+        ResourceLayoutDescription::sequencial(
             {ShaderStages::Vertex, ShaderStages::Fragment},
             {
                 texture_read_only("direct_lighting"),
                 texture_read_only("indirect_lighting"),
             }
-        ));
-    resources->composite_resource_set =
-        device->create_resource_set(ResourceSetDescription {
+        )
+    );
+    resources->composite_resource_set = device->create_resource_set(
+        ResourceSetDescription {
             .layout = resources->composite_resource_layout,
-            .resources =
-                {
-                    resources->direct_lighting,
-                    resources->indirect_lighting,
-                },
-        });
-    resources->composite_lighting_pipeline =
-        device->create_render_pipeline(RenderPipelineDescription {
+            .resources = {
+                resources->direct_lighting,
+                resources->indirect_lighting,
+            },
+        }
+    );
+    resources->composite_lighting_pipeline = device->create_render_pipeline(
+        RenderPipelineDescription {
             .depth_stencil_state = DepthStencilStateDescription::Disabled,
             .rasterizer_state = {},
             .render_primitive = RenderPrimitive::Triangles,
@@ -273,13 +299,13 @@ void setup_gbuffer(
                             composite_shader,
                         },
                 },
-            .resource_layouts =
-                {
-                    mesh_view_layout->layout,
-                    resources->defered_resource_layout,
-                    resources->composite_resource_layout,
-                },
-        });
+            .resource_layouts = {
+                mesh_view_layout->layout,
+                resources->defered_resource_layout,
+                resources->composite_resource_layout,
+            },
+        }
+    );
 }
 
 void defered_prepass(
@@ -296,44 +322,45 @@ void defered_prepass(
     Res<DeferedRenderResources> resources
 ) {
     auto command_buffer = device->create_command_buffer();
-    command_buffer->begin_render_pass(RenderPassDescription {
-        .color_attachments =
-            {
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments =
                 {
-                    .texture = resources->g_position_ao,
-                    .load_op = LoadOp::Clear,
-                    .clear_color = Color4F {0.0f, 0.0f, 0.0f, 0.0f},
+                    {
+                        .texture = resources->g_position_ao,
+                        .load_op = LoadOp::Clear,
+                        .clear_color = Color4F {0.0f, 0.0f, 0.0f, 0.0f},
+                    },
+                    {
+                        .texture = resources->g_normal_roughness,
+                        .load_op = LoadOp::Clear,
+                        .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
+                    },
+                    {
+                        .texture = resources->g_albedo_metallic,
+                        .load_op = LoadOp::Clear,
+                        .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
+                    },
+                    {
+                        .texture = resources->g_specular,
+                        .load_op = LoadOp::Clear,
+                        .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
+                    },
+                    {
+                        .texture = resources->g_emissive_depth,
+                        .load_op = LoadOp::Clear,
+                        .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
+                    },
                 },
-                {
-                    .texture = resources->g_normal_roughness,
-                    .load_op = LoadOp::Clear,
-                    .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
-                },
-                {
-                    .texture = resources->g_albedo_metallic,
-                    .load_op = LoadOp::Clear,
-                    .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
-                },
-                {
-                    .texture = resources->g_specular,
-                    .load_op = LoadOp::Clear,
-                    .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
-                },
-                {
-                    .texture = resources->g_emissive_depth,
-                    .load_op = LoadOp::Clear,
-                    .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
-                },
-            },
-        .depth_stencil_attachment =
-            RenderPassDepthStencilAttachment {
+            .depth_stencil_attachment = RenderPassDepthStencilAttachment {
                 .texture = target->depth_texture,
                 .depth_load_op = LoadOp::Clear,
                 .stencil_load_op = LoadOp::Clear,
                 .clear_depth = 1.0f,
                 .clear_stencil = 0,
             },
-    });
+        }
+    );
     command_buffer->set_viewport(
         0,
         0,
@@ -383,7 +410,7 @@ void defered_prepass(
     }
 }
 
-void defered_pass(
+[[maybe_unused]] void defered_pass(
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     Res<RenderTarget> target,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
@@ -395,24 +422,25 @@ void defered_pass(
     auto [mesh_view_resource_set] = query_cameras.first();
 
     auto command_buffer = device->create_command_buffer();
-    command_buffer->begin_render_pass(RenderPassDescription {
-        .color_attachments =
-            {
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments =
                 {
-                    .texture = target->color_texture,
-                    .load_op = LoadOp::Clear,
-                    .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
+                    {
+                        .texture = target->color_texture,
+                        .load_op = LoadOp::Clear,
+                        .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
+                    },
                 },
-            },
-        .depth_stencil_attachment =
-            RenderPassDepthStencilAttachment {
+            .depth_stencil_attachment = RenderPassDepthStencilAttachment {
                 .texture = target->depth_texture,
                 .depth_load_op = LoadOp::Clear,
                 .stencil_load_op = LoadOp::Clear,
                 .clear_depth = 1.0f,
                 .clear_stencil = 0,
             },
-    });
+        }
+    );
     command_buffer->set_viewport(
         0,
         0,
@@ -451,16 +479,17 @@ void direct_lighting_pass(
     auto [mesh_view_resource_set] = query_cameras.first();
 
     auto command_buffer = device->create_command_buffer();
-    command_buffer->begin_render_pass(RenderPassDescription {
-        .color_attachments =
-            {
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments = {
                 {
                     .texture = resources->direct_lighting,
                     .load_op = LoadOp::Clear,
                     .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
                 },
             }
-    });
+        }
+    );
     command_buffer->set_viewport(
         0,
         0,
@@ -499,16 +528,17 @@ void indirect_lighting_pass(
     auto [mesh_view_resource_set] = query_cameras.first();
 
     auto command_buffer = device->create_command_buffer();
-    command_buffer->begin_render_pass(RenderPassDescription {
-        .color_attachments =
-            {
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments = {
                 {
                     .texture = resources->indirect_lighting,
                     .load_op = LoadOp::Clear,
                     .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
                 },
             }
-    });
+        }
+    );
     command_buffer->set_viewport(
         0,
         0,
@@ -546,16 +576,17 @@ void composite_pass(
     auto [mesh_view_resource_set] = query_cameras.first();
 
     auto command_buffer = device->create_command_buffer();
-    command_buffer->begin_render_pass(RenderPassDescription {
-        .color_attachments =
-            {
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments = {
                 {
                     .texture = resources->composite_lighting,
                     .load_op = LoadOp::Clear,
                     .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
                 },
             }
-    });
+        }
+    );
     command_buffer->set_viewport(
         0,
         0,
@@ -583,20 +614,21 @@ void composite_pass(
     device->submit_commands(command_buffer);
 }
 
-void blit_pass(
+[[maybe_unused]] void blit_pass(
     Res<RenderTarget> forward_render_resources,
     Res<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
-    command_buffer->begin_render_pass(RenderPassDescription {
-        .color_attachments =
-            {
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments = {
                 RenderPassColorAttachment {
                     .texture = forward_render_resources->color_texture,
                     .load_op = LoadOp::Load,
                 },
             },
-    });
+        }
+    );
     command_buffer->end_render_pass();
     command_buffer->blit_to(device->main_framebuffer());
     device->submit_commands(command_buffer);
@@ -607,15 +639,16 @@ void blit_composite_pass(
     Res<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
-    command_buffer->begin_render_pass(RenderPassDescription {
-        .color_attachments =
-            {
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments = {
                 RenderPassColorAttachment {
                     .texture = resources->composite_lighting,
                     .load_op = LoadOp::Load,
                 },
             },
-    });
+        }
+    );
     command_buffer->end_render_pass();
     command_buffer->blit_to(device->main_framebuffer());
     device->submit_commands(command_buffer);
@@ -629,8 +662,9 @@ void DeferredRenderPlugin::setup(App& app) {
         .add_resource(RenderTarget {})
         .add_systems(
             StartUp,
-            all(setup_gbuffer | after(setup_vxgi_lighting), setup_render_target
-            ) | after(init_mesh_view_layout)
+            all(setup_gbuffer | after(setup_vxgi_lighting),
+                setup_render_target) |
+                after(init_mesh_view_layout)
         )
         .add_systems(
             RenderUpdate,

@@ -8,19 +8,12 @@
 #include <type_traits>
 #include <vector>
 
-namespace {
-
-double sample_function(int, const std::string&) {
-    return 0.0;
-}
-
-} // namespace
-
 TEST_CASE(
     "type traits describe callables and type packs",
     "[base][type_traits]"
 ) {
-    using Function = fei::FunctionTraits<decltype(sample_function)>;
+    using SampleFunction = double(int, const std::string&);
+    using Function = fei::FunctionTraits<SampleFunction>;
     static_assert(std::is_same_v<Function::return_type, double>);
     static_assert(Function::arg_size == 2);
     static_assert(std::is_same_v<Function::arg_type<0>, int>);

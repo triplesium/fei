@@ -43,7 +43,6 @@ class PipelineOpenGL : public Pipeline {
         EmptyBinding>;
 
   private:
-    bool m_is_compute;
     GLuint m_program;
     std::vector<std::shared_ptr<ShaderModule>> m_shaders;
     std::vector<VertexLayoutDescription> m_vertex_layouts;
@@ -70,21 +69,21 @@ class PipelineOpenGL : public Pipeline {
     GLuint program() const { return m_program; }
 
     uint32 uniform_buffer_count(uint32 slot) const {
-        return std::ranges::count_if(
+        return static_cast<uint32>(std::ranges::count_if(
             m_resource_bindings[slot],
             [](const ResourceBindingInfo& binding) {
                 return std::holds_alternative<UniformBinding>(binding);
             }
-        );
+        ));
     }
 
     uint32 storage_buffer_count(uint32 slot) const {
-        return std::ranges::count_if(
+        return static_cast<uint32>(std::ranges::count_if(
             m_resource_bindings[slot],
             [](const ResourceBindingInfo& binding) {
                 return std::holds_alternative<ShaderStorageBinding>(binding);
             }
-        );
+        ));
     }
 
     Optional<ResourceBindingInfo&>

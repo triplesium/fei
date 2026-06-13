@@ -5,7 +5,6 @@
 #include "ecs/system.hpp"
 #include "ecs/world.hpp"
 
-#include <print>
 #include <queue>
 #include <unordered_map>
 

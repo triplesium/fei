@@ -6,7 +6,6 @@
 #include "pbr/material.hpp"
 #include "pbr/mesh_view.hpp"
 #include "pbr/passes/deferred.hpp"
-#include "pbr/passes/forward.hpp"
 #include "pbr/pipelines.hpp"
 #include "pbr/vxgi.hpp"
 #include "rendering/material.hpp"

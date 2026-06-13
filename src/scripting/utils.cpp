@@ -54,8 +54,9 @@ bool lua_can_ref(lua_State* L, int idx) {
         case LUA_TUSERDATA:
         case LUA_TLIGHTUSERDATA:
             return true;
+        default:
+            return false;
     }
-    return false;
 }
 
 Val lua_to_val(lua_State* L, int idx) {
@@ -68,7 +69,9 @@ Val lua_to_val(lua_State* L, int idx) {
             if (lua_isinteger(L, idx)) {
                 return make_val<int>(static_cast<int>(lua_tointeger(L, idx)));
             } else {
-                return make_val<float>(static_cast<float>(lua_tonumber(L, idx)));
+                return make_val<float>(
+                    static_cast<float>(lua_tonumber(L, idx))
+                );
             }
         case LUA_TTABLE:
             if (lua_is_enum_value(L, idx)) {
@@ -86,15 +89,16 @@ Val lua_to_val(lua_State* L, int idx) {
                 lua_pop(L, 1);
                 return make_val<TypeId>(type_id);
             }
-            break;
+            return {};
         case LUA_TSTRING:
             return make_val<std::string>(lua_tostring(L, idx));
         case LUA_TUSERDATA:
         case LUA_TLIGHTUSERDATA:
             return reinterpret_cast<LuaObject*>(lua_touserdata(L, idx))
                 ->as_val();
+        default:
+            return {};
     }
-    return {};
 }
 
 Ref lua_to_ref(lua_State* L, int idx) {
@@ -103,8 +107,9 @@ Ref lua_to_ref(lua_State* L, int idx) {
         case LUA_TLIGHTUSERDATA:
             return reinterpret_cast<LuaObject*>(lua_touserdata(L, idx))
                 ->as_ref();
+        default:
+            return {};
     }
-    return {};
 }
 
 TypeId lua_type_of(lua_State* L, int idx) {
@@ -137,8 +142,9 @@ TypeId lua_type_of(lua_State* L, int idx) {
         case LUA_TLIGHTUSERDATA:
             return reinterpret_cast<LuaObject*>(lua_touserdata(L, idx))
                 ->type_id();
+        default:
+            return {};
     }
-    return {};
 }
 
 void lua_push_val(lua_State* L, const Val& val) {

@@ -25,7 +25,7 @@ std::size_t VertexAttributeValues::size() const {
 const void* VertexAttributeValues::data() const {
     return std::visit(
         [](auto&& arg) {
-            return (void*)arg.data();
+            return static_cast<const void*>(arg.data());
         },
         m_value
     );

@@ -17,6 +17,7 @@ class QualType {
 
     QualType(TypeId type_id, Flags flags = None) :
         m_type_id(type_id), m_flags(flags) {}
+    QualType() = default;
 
     template<typename T>
     static QualType of() {
@@ -25,14 +26,18 @@ class QualType {
         using Base = std::remove_cv_t<NoPtr>;
 
         unsigned int flags = None;
-        if constexpr (std::is_pointer_v<NoRef>)
+        if constexpr (std::is_pointer_v<NoRef>) {
             flags |= Pointer;
-        if constexpr (std::is_lvalue_reference_v<T>)
+        }
+        if constexpr (std::is_lvalue_reference_v<T>) {
             flags |= Reference;
-        if constexpr (std::is_rvalue_reference_v<T>)
+        }
+        if constexpr (std::is_rvalue_reference_v<T>) {
             flags |= RvalueReference;
-        if constexpr (std::is_const_v<NoPtr>)
+        }
+        if constexpr (std::is_const_v<NoPtr>) {
             flags |= Const;
+        }
         return QualType(fei::type_id<Base>(), static_cast<Flags>(flags));
     }
 
@@ -55,7 +60,7 @@ class QualType {
     }
 
   private:
-    TypeId m_type_id {};
+    TypeId m_type_id;
     unsigned int m_flags {None};
 };
 } // namespace fei

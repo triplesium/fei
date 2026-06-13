@@ -5,7 +5,6 @@
 
 #include <concepts>
 #include <cstring>
-#include <ranges>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -58,11 +57,9 @@ class Registry {
         register_type<T>();
         TypeId id = type_id<T>();
         auto& enm = add_enum(id);
-        enm.set_construct_func(
-            [](void* dest, std::int64_t underlying_value) {
-                new (dest) T(static_cast<T>(underlying_value));
-            }
-        );
+        enm.set_construct_func([](void* dest, std::int64_t underlying_value) {
+            new (dest) T(static_cast<T>(underlying_value));
+        });
         return enm;
     }
 

@@ -73,7 +73,7 @@ inline SamplerDescription SamplerDescription::Aniso4x = {
 
 class Sampler : public BindableResource {
   public:
-    virtual ~Sampler() = default;
+    ~Sampler() override = default;
 };
 
 } // namespace fei

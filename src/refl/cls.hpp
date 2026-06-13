@@ -1,7 +1,6 @@
 #pragma once
 
 #include "refl/constructor.hpp"
-#include "refl/enum.hpp"
 #include "refl/method.hpp"
 #include "refl/property.hpp"
 #include "refl/type.hpp"
@@ -52,7 +51,8 @@ class Cls {
                 return false;
             }
             for (std::size_t i = 0; i < method->params().size(); ++i) {
-                if (existing->params()[i].type() != method->params()[i].type()) {
+                if (existing->params()[i].type() !=
+                    method->params()[i].type()) {
                     return false;
                 }
             }

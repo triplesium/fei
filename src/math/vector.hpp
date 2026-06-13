@@ -4,6 +4,7 @@
 #include "refl/reflect.hpp"
 
 #include <array>
+#include <cassert>
 #include <cmath>
 
 namespace fei {
@@ -43,12 +44,12 @@ class Vector2 {
     }
 
     float operator[](size_t i) const {
-        // ES_ASSERT_MSG(i < 2, "index out of range!");
-        return (i == 0 ? x : y);
+        assert(i < 2);
+        return i == 0 ? x : y;
     }
     float& operator[](size_t i) {
-        // ES_ASSERT_MSG(i < 2, "index out of range!");
-        return (i == 0 ? x : y);
+        assert(i < 2);
+        return i == 0 ? x : y;
     }
 
     bool operator==(const Vector2& rhs) const {
@@ -123,8 +124,9 @@ class Vector2 {
     }
     void normalize() {
         float length = magnitude();
-        if (length == 0.0f)
+        if (length == 0.0f) {
             return;
+        }
         float inv_length = 1.0f / length;
         *this *= inv_length;
     }
@@ -181,12 +183,26 @@ class FEI_REFLECT Vector3 {
     explicit operator Vector2() const;
 
     float operator[](size_t i) const {
-        // ES_ASSERT_MSG(i < 3, "index out of range!");
-        return *(&x + i);
+        assert(i < 3);
+        switch (i) {
+            case 0:
+                return x;
+            case 1:
+                return y;
+            default:
+                return z;
+        }
     }
     float& operator[](size_t i) {
-        // ES_ASSERT_MSG(i < 3, "index out of range!");
-        return *(&x + i);
+        assert(i < 3);
+        switch (i) {
+            case 0:
+                return x;
+            case 1:
+                return y;
+            default:
+                return z;
+        }
     }
 
     float* data() { return &x; }
@@ -281,8 +297,9 @@ class FEI_REFLECT Vector3 {
     }
     void normalize() {
         float length = magnitude();
-        if (length == 0.0f)
+        if (length == 0.0f) {
             return;
+        }
         float inv_length = 1.0f / length;
         *this *= inv_length;
     }
@@ -305,8 +322,9 @@ class FEI_REFLECT Vector3 {
     }
     static float angle(const Vector3& from, const Vector3& to) {
         float len_product = from.magnitude() * to.magnitude();
-        if (len_product < 1e-6f)
+        if (len_product < 1e-6f) {
             len_product = 1e-6f;
+        }
         float f = dot(from, to) / len_product;
         f = fei::clamp(f, -1.0f, 1.0f);
         return acos(f);
@@ -354,13 +372,31 @@ class Vector4 {
         x {coords[0]}, y {coords[1]}, z {coords[2]}, w {coords[3]} {}
 
     float operator[](size_t i) const {
-        // ES_ASSERT_MSG(i < 4, "index out of range!");
-        return *(&x + i);
+        assert(i < 4);
+        switch (i) {
+            case 0:
+                return x;
+            case 1:
+                return y;
+            case 2:
+                return z;
+            default:
+                return w;
+        }
     }
 
     float& operator[](size_t i) {
-        // ES_ASSERT_MSG(i < 4, "index out of range!");
-        return *(&x + i);
+        assert(i < 4);
+        switch (i) {
+            case 0:
+                return x;
+            case 1:
+                return y;
+            case 2:
+                return z;
+            default:
+                return w;
+        }
     }
 
     float* data() { return &x; }

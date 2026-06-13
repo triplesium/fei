@@ -103,7 +103,9 @@ std::unique_ptr<Image> Image::create_empty(
         .texture_usage = usage,
         .texture_type = type,
     };
-    auto data_size = width * height * depth *
+    auto data_size = static_cast<std::size_t>(width) *
+                     static_cast<std::size_t>(height) *
+                     static_cast<std::size_t>(depth) *
                      get_pixel_format_size(texture_description.texture_format);
     auto data = std::make_unique<unsigned char[]>(data_size);
     return std::make_unique<Image>(

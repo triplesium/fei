@@ -9,7 +9,7 @@
 
 namespace fei {
 enum class FEI_REFLECT KeyCode : std::int32_t {
-#define KEY_CODE(name, code) name = code,
+#define KEY_CODE(name, code) name = (code),
 #include "keycode.def"
 #undef KEY_CODE
 };
@@ -126,7 +126,7 @@ void mouse_input_system(Res<Window> win, Res<MouseInput> input);
 
 class InputPlugin : public Plugin {
   public:
-    void setup(App& app) {
+    void setup(App& app) override {
         app.add_resource<KeyInput>();
         app.add_resource<MouseInput>();
         app.add_systems(PreUpdate, key_input_system, mouse_input_system);

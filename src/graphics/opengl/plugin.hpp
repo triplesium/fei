@@ -7,7 +7,7 @@ namespace fei {
 
 class OpenGLPlugin : public Plugin {
   public:
-    void setup(App& app) {
+    void setup(App& app) override {
         app.add_resource_as<GraphicsDevice>(GraphicsDeviceOpenGL {});
     }
 };

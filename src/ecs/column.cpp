@@ -1,4 +1,5 @@
 #include "ecs/column.hpp"
+
 #include "base/log.hpp"
 #include "refl/registry.hpp"
 
@@ -6,10 +7,9 @@
 
 namespace fei {
 
-Column::Column(TypeId type_id) :
-    m_elements(nullptr), m_count(0), m_capacity(64), m_type_id(type_id) {
+Column::Column(TypeId type_id) : m_capacity(64), m_type_id(type_id) {
     auto& type = Registry::instance().get_type(type_id);
-    m_type_size = static_cast<uint32_t>(type.size());
+    m_type_size = type.size();
     m_type_align = type.align();
     m_elements = allocate_elements(m_capacity);
     m_default_construct = type.default_construct_func();
@@ -49,7 +49,7 @@ Column::~Column() {
 }
 
 Column::Column(const Column& other) :
-    m_elements(nullptr), m_count(other.m_count), m_capacity(other.m_capacity),
+    m_count(other.m_count), m_capacity(other.m_capacity),
     m_type_size(other.m_type_size), m_type_align(other.m_type_align),
     m_type_id(other.m_type_id), m_default_construct(other.m_default_construct),
     m_copy_construct(other.m_copy_construct),
@@ -58,9 +58,8 @@ Column::Column(const Column& other) :
         m_elements = allocate_elements(m_capacity);
         // std::memcpy(m_elements, other.m_elements, m_type_size * m_count);
         for (uint32_t i = 0; i < m_count; ++i) {
-            void* dest_ptr = static_cast<char*>(m_elements) + i * m_type_size;
-            const void* src_ptr =
-                static_cast<const char*>(other.m_elements) + i * m_type_size;
+            void* dest_ptr = element_at(m_elements, i);
+            const void* src_ptr = element_at(other.m_elements, i);
             m_copy_construct(dest_ptr, src_ptr);
         }
     }
@@ -85,11 +84,8 @@ Column& Column::operator=(const Column& other) {
             m_elements = allocate_elements(m_capacity);
             // std::memcpy(m_elements, other.m_elements, m_type_size * m_count);
             for (uint32_t i = 0; i < m_count; ++i) {
-                void* dest_ptr =
-                    static_cast<char*>(m_elements) + i * m_type_size;
-                const void* src_ptr =
-                    static_cast<const char*>(other.m_elements) +
-                    i * m_type_size;
+                void* dest_ptr = element_at(m_elements, i);
+                const void* src_ptr = element_at(other.m_elements, i);
                 m_copy_construct(dest_ptr, src_ptr);
             }
         } else {
@@ -133,10 +129,7 @@ Column& Column::operator=(Column&& other) noexcept {
 }
 
 void* Column::allocate_elements(uint32_t capacity) const {
-    return ::operator new(
-        static_cast<std::size_t>(m_type_size) * capacity,
-        std::align_val_t {m_type_align}
-    );
+    return ::operator new(byte_size(capacity), std::align_val_t {m_type_align});
 }
 
 void Column::deallocate_elements() const {
@@ -145,13 +138,25 @@ void Column::deallocate_elements() const {
     }
 }
 
+std::size_t Column::byte_size(uint32_t count) const {
+    return m_type_size * static_cast<std::size_t>(count);
+}
+
+void* Column::element_at(void* elements, uint32_t row) const {
+    return static_cast<std::byte*>(elements) + byte_size(row);
+}
+
+const void* Column::element_at(const void* elements, uint32_t row) const {
+    return static_cast<const std::byte*>(elements) + byte_size(row);
+}
+
 void Column::set(uint32_t row, Ref ref) {
     FEI_ASSERT(row < m_count);
     if (!ref || ref.type_id() != m_type_id) {
         error("Invalid ref passed to Column::set");
         return;
     }
-    void* dest_ptr = static_cast<char*>(m_elements) + row * m_type_size;
+    void* dest_ptr = element_at(m_elements, row);
     m_delete(dest_ptr);
     m_copy_construct(dest_ptr, ref.const_ptr());
 }
@@ -160,13 +165,12 @@ void Column::push_back(Ref ref) {
     if (m_count == m_capacity) {
         const uint32_t new_capacity = m_capacity * 2;
         void* new_elements = ::operator new(
-            static_cast<std::size_t>(m_type_size) * new_capacity,
+            byte_size(new_capacity),
             std::align_val_t {m_type_align}
         );
         for (uint32_t i = 0; i < m_count; ++i) {
-            void* dest_ptr =
-                static_cast<char*>(new_elements) + i * m_type_size;
-            void* src_ptr = static_cast<char*>(m_elements) + i * m_type_size;
+            void* dest_ptr = element_at(new_elements, i);
+            void* src_ptr = element_at(m_elements, i);
             if (m_move_construct) {
                 m_move_construct(dest_ptr, src_ptr);
             } else {
@@ -179,8 +183,7 @@ void Column::push_back(Ref ref) {
         m_capacity = new_capacity;
     }
     m_count++;
-    void* dest_ptr =
-        static_cast<char*>(m_elements) + (m_count - 1) * m_type_size;
+    void* dest_ptr = element_at(m_elements, m_count - 1);
     if (ref) {
         if (ref.type_id() != m_type_id) {
             error("Invalid ref passed to Column::push_back");
@@ -195,7 +198,7 @@ void Column::push_back(Ref ref) {
 
 Ref Column::get(uint32_t row) const {
     FEI_ASSERT(row < m_count);
-    void* data_ptr = static_cast<char*>(m_elements) + row * m_type_size;
+    void* data_ptr = element_at(m_elements, row);
     Ref result_ref(data_ptr, m_type_id);
     return result_ref;
 }
@@ -203,9 +206,8 @@ Ref Column::get(uint32_t row) const {
 void Column::swap_remove(uint32_t row) {
     FEI_ASSERT(row < m_count);
     if (row < m_count - 1) {
-        void* target_ptr = static_cast<char*>(m_elements) + row * m_type_size;
-        void* last_ptr =
-            static_cast<char*>(m_elements) + (m_count - 1) * m_type_size;
+        void* target_ptr = element_at(m_elements, row);
+        void* last_ptr = element_at(m_elements, m_count - 1);
 
         // Destroy the object at the target row first
         m_delete(target_ptr);
@@ -215,8 +217,7 @@ void Column::swap_remove(uint32_t row) {
         // Destroy the last element (now duplicated)
         m_delete(last_ptr);
     } else {
-        void* last_ptr =
-            static_cast<char*>(m_elements) + (m_count - 1) * m_type_size;
+        void* last_ptr = element_at(m_elements, m_count - 1);
         // Just delete the last element
         m_delete(last_ptr);
     }
@@ -225,7 +226,7 @@ void Column::swap_remove(uint32_t row) {
 
 void Column::clear() {
     for (uint32_t i = 0; i < m_count; ++i) {
-        void* data_ptr = static_cast<char*>(m_elements) + i * m_type_size;
+        void* data_ptr = element_at(m_elements, i);
         m_delete(data_ptr);
     }
     m_count = 0;

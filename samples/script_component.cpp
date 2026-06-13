@@ -10,8 +10,6 @@
 #include "window/input.hpp"
 #include "window/window.hpp"
 
-#include <print>
-
 using namespace fei;
 
 void setup(Res<AssetServer> asset_server, Commands commands) {

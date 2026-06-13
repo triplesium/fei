@@ -112,14 +112,14 @@ void GraphicsDeviceOpenGL::update_texture(
     GLint texture_width, texture_height;
     glGetTextureLevelParameteriv(
         gl_texture->id(),
-        mip_level,
+        static_cast<GLint>(mip_level),
         GL_TEXTURE_WIDTH,
         &texture_width
     );
     opengl_check_error();
     glGetTextureLevelParameteriv(
         gl_texture->id(),
-        mip_level,
+        static_cast<GLint>(mip_level),
         GL_TEXTURE_HEIGHT,
         &texture_height
     );
@@ -128,13 +128,13 @@ void GraphicsDeviceOpenGL::update_texture(
     if (texture->usage().is_set(TextureUsage::Cubemap)) {
         glTextureSubImage3D(
             gl_texture->id(),
-            mip_level,
-            x,
-            y,
-            z,
-            width,
-            height,
-            depth,
+            static_cast<GLint>(mip_level),
+            static_cast<GLint>(x),
+            static_cast<GLint>(y),
+            static_cast<GLint>(z),
+            static_cast<GLsizei>(width),
+            static_cast<GLsizei>(height),
+            static_cast<GLsizei>(depth),
             gl_texture->gl_format(),
             gl_texture->gl_type(),
             data
@@ -143,11 +143,11 @@ void GraphicsDeviceOpenGL::update_texture(
     } else {
         glTextureSubImage2D(
             gl_texture->id(),
-            mip_level,
-            x,
-            y,
-            width,
-            height,
+            static_cast<GLint>(mip_level),
+            static_cast<GLint>(x),
+            static_cast<GLint>(y),
+            static_cast<GLsizei>(width),
+            static_cast<GLsizei>(height),
             gl_texture->gl_format(),
             gl_texture->gl_type(),
             data
@@ -183,7 +183,9 @@ MappedResource GraphicsDeviceOpenGL::map(
         std::size_t bytes_per_pixel =
             get_pixel_format_size(texture_gl->format());
 
-        std::size_t total_size = width * height * depth * bytes_per_pixel;
+        std::size_t total_size =
+            static_cast<std::size_t>(width) * static_cast<std::size_t>(height) *
+            static_cast<std::size_t>(depth) * bytes_per_pixel;
 
         auto* data = new std::byte[total_size];
         glGetTextureImage(
@@ -191,7 +193,7 @@ MappedResource GraphicsDeviceOpenGL::map(
             0, // mip level
             texture_gl->gl_format(),
             texture_gl->gl_type(),
-            total_size,
+            static_cast<GLsizei>(total_size),
             data
         );
         opengl_check_error();
@@ -203,8 +205,9 @@ MappedResource GraphicsDeviceOpenGL::map(
             map_mode,
             std::span<std::byte>(data, total_size)
         );
-    } else if (auto buffer_gl =
-                   std::dynamic_pointer_cast<BufferOpenGL>(resource)) {
+    } else if (
+        auto buffer_gl = std::dynamic_pointer_cast<BufferOpenGL>(resource)
+    ) {
         void* ptr = glMapNamedBuffer(
             buffer_gl->id(),
             map_mode == MapMode::Read ? GL_READ_ONLY : GL_WRITE_ONLY
@@ -232,8 +235,9 @@ void GraphicsDeviceOpenGL::unmap(std::shared_ptr<MappableResource> resource) {
             m_mapped_resources.erase(it);
         }
         return;
-    } else if (auto buffer_gl =
-                   std::dynamic_pointer_cast<BufferOpenGL>(resource)) {
+    } else if (
+        auto buffer_gl = std::dynamic_pointer_cast<BufferOpenGL>(resource)
+    ) {
         glUnmapNamedBuffer(buffer_gl->id());
         opengl_check_error();
         return;

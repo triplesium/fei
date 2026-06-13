@@ -2,13 +2,15 @@
 #include "refl/type.hpp"
 #include "refl/val.hpp"
 
+#include <utility>
+
 struct lua_State;
 
 namespace fei {
 
 class ScriptingEngine {
   private:
-    lua_State* m_state;
+    lua_State* m_state {nullptr};
 
     static int dispatch_new(lua_State* L);
     static int dispatch_method(lua_State* L);
@@ -23,7 +25,7 @@ class ScriptingEngine {
 
     ScriptingEngine(const ScriptingEngine&) = delete;
     ScriptingEngine& operator=(const ScriptingEngine&) = delete;
-    ScriptingEngine(ScriptingEngine&& other) noexcept : m_state(nullptr) {
+    ScriptingEngine(ScriptingEngine&& other) noexcept {
         std::swap(m_state, other.m_state);
     }
     ScriptingEngine& operator=(ScriptingEngine&& other) noexcept {

@@ -6,7 +6,7 @@ namespace fei {
 
 class ScriptingPlugin : public Plugin {
   public:
-    virtual void setup(App& app);
+    void setup(App& app) override;
 };
 
 } // namespace fei

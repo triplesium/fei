@@ -1,6 +1,6 @@
 #include "window/input.hpp"
 
-#include <glfw/glfw3.h>
+#include <GLFW/glfw3.h>
 
 namespace fei {
 void key_input_system(Res<Window> win, Res<KeyInput> input) {
@@ -30,7 +30,7 @@ void mouse_input_system(Res<Window> win, Res<MouseInput> input) {
     }
     double xpos, ypos;
     glfwGetCursorPos(glfw_window, &xpos, &ypos);
-    input->set_position({(float)xpos, (float)ypos});
+    input->set_position({static_cast<float>(xpos), static_cast<float>(ypos)});
 }
 
 } // namespace fei

@@ -1,10 +1,8 @@
-#include "app/app.hpp"
 #include "generated/reflgen.hpp"
 #include "math/vector.hpp"
 #include "refl/ref_utils.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
-#include "scripting/plugin.hpp"
 #include "scripting/scripting_engine.hpp"
 #include "window/input.hpp"
 

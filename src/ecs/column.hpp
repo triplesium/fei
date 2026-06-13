@@ -10,10 +10,10 @@ namespace fei {
 
 class Column {
   private:
-    void* m_elements;
-    uint32_t m_count;
-    uint32_t m_capacity;
-    uint32_t m_type_size;
+    void* m_elements {nullptr};
+    uint32_t m_count {0};
+    uint32_t m_capacity {0};
+    std::size_t m_type_size;
     std::size_t m_type_align;
     TypeId m_type_id;
     Type::DefaultConstructFunc m_default_construct;
@@ -23,6 +23,9 @@ class Column {
 
     void* allocate_elements(uint32_t capacity) const;
     void deallocate_elements() const;
+    std::size_t byte_size(uint32_t count) const;
+    void* element_at(void* elements, uint32_t row) const;
+    const void* element_at(const void* elements, uint32_t row) const;
 
   public:
     Column(TypeId type_id);

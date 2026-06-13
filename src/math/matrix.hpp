@@ -89,8 +89,10 @@ class Matrix3x3 {
     bool operator==(const Matrix3x3& rhs) const {
         for (size_t row_index = 0; row_index < 3; row_index++) {
             for (size_t col_index = 0; col_index < 3; col_index++) {
-                if (mat[row_index][col_index] != rhs.mat[row_index][col_index])
+                if (mat[row_index][col_index] !=
+                    rhs.mat[row_index][col_index]) {
                     return false;
+                }
             }
         }
         return true;
@@ -157,8 +159,9 @@ class Matrix3x3 {
     Matrix3x3 operator-() const {
         Matrix3x3 neg;
         for (size_t row_index = 0; row_index < 3; row_index++) {
-            for (size_t col_index = 0; col_index < 3; col_index++)
+            for (size_t col_index = 0; col_index < 3; col_index++) {
                 neg[row_index][col_index] = -mat[row_index][col_index];
+            }
         }
         return neg;
     }
@@ -167,8 +170,9 @@ class Matrix3x3 {
     Matrix3x3 operator*(float scalar) const {
         Matrix3x3 prod;
         for (size_t row_index = 0; row_index < 3; row_index++) {
-            for (size_t col_index = 0; col_index < 3; col_index++)
+            for (size_t col_index = 0; col_index < 3; col_index++) {
                 prod[row_index][col_index] = scalar * mat[row_index][col_index];
+            }
         }
         return prod;
     }
@@ -177,9 +181,10 @@ class Matrix3x3 {
     friend Matrix3x3 operator*(float scalar, const Matrix3x3& rhs) {
         Matrix3x3 prod;
         for (size_t row_index = 0; row_index < 3; row_index++) {
-            for (size_t col_index = 0; col_index < 3; col_index++)
+            for (size_t col_index = 0; col_index < 3; col_index++) {
                 prod[row_index][col_index] =
                     scalar * rhs.mat[row_index][col_index];
+            }
         }
         return prod;
     }
@@ -208,8 +213,9 @@ class Matrix3x3 {
     Matrix3x3 inversed(float tolerance = 1e-06) const {
         Matrix3x3 inv_mat;
         float det = determinant();
-        if (fei::abs(det) < tolerance)
+        if (fei::abs(det) < tolerance) {
             return Zero;
+        }
 
         inv_mat[0][0] = mat[1][1] * mat[2][2] - mat[1][2] * mat[2][1];
         inv_mat[0][1] = mat[0][2] * mat[2][1] - mat[0][1] * mat[2][2];
@@ -498,9 +504,14 @@ class Matrix4x4 {
         );
     }
 
-    float
-    minor(size_t r0, size_t r1, size_t r2, size_t c0, size_t c1, size_t c2)
-        const {
+    float minor(
+        size_t r0,
+        size_t r1,
+        size_t r2,
+        size_t c0,
+        size_t c1,
+        size_t c2
+    ) const {
         return mat[r0][c0] *
                    (mat[r1][c1] * mat[r2][c2] - mat[r2][c1] * mat[r1][c2]) -
                mat[r0][c1] *

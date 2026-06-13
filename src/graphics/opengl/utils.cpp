@@ -32,7 +32,11 @@ bool opengl_check_error() {
     GLenum error = glGetError();
     if (error) {
         auto error_str = opengl_error_string(error);
-        fei::error("OpenGL error 0x{:04X}: {}", (unsigned int)error, error_str);
+        fei::error(
+            "OpenGL error 0x{:04X}: {}",
+            static_cast<unsigned int>(error),
+            error_str
+        );
         return true;
     }
     return false;
@@ -48,6 +52,9 @@ GLint to_gl_address_mode(SamplerAddressMode address_mode) {
             return GL_CLAMP_TO_EDGE;
         case SamplerAddressMode::ClampToBorder:
             return GL_CLAMP_TO_BORDER;
+        default:
+            fei::fatal("Unsupported SamplerAddressMode");
+            return 0;
     }
 }
 
@@ -57,6 +64,9 @@ GLuint to_gl_mag_filter(SamplerFilter mag_filter) {
             return GL_NEAREST;
         case SamplerFilter::Linear:
             return GL_LINEAR;
+        default:
+            fei::fatal("Unsupported SamplerFilter");
+            return 0;
     }
 }
 

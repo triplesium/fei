@@ -143,7 +143,7 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
         auto mesh_id = scene->meshes.size();
         scene->meshes.push_back(std::move(mesh));
         std::size_t material_id = -1;
-        if (shape.mesh.material_ids.size() > 0) {
+        if (!shape.mesh.material_ids.empty()) {
             material_id = shape.mesh.material_ids[0];
         }
         scene->objects.push_back(

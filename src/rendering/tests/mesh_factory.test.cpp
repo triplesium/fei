@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <cstddef>
 #include <cstdint>
 
 using namespace fei;
@@ -68,6 +69,9 @@ TEST_CASE(
 
     require_common_surface_attributes(*mesh);
     REQUIRE(mesh->vertex_count() == 9);
-    REQUIRE(mesh->index_buffer_size() == 2 * 2 * 6 * sizeof(std::uint32_t));
+    REQUIRE(
+        mesh->index_buffer_size() ==
+        std::size_t {2} * 2 * 6 * sizeof(std::uint32_t)
+    );
     require_bounds(*mesh, -1.0f, 0.0f, -2.0f, 1.0f, 0.0f, 2.0f);
 }

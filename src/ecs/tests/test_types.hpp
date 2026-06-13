@@ -5,7 +5,6 @@
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
 #include "ecs/system_set.hpp"
-#include "ecs/world.hpp"
 #include "refl/registry.hpp"
 
 #include <string>
@@ -47,7 +46,7 @@ struct Health {
 struct Name {
     std::string value;
 
-    Name() : value("") {}
+    Name() = default;
     explicit Name(const std::string& value) : value(value) {}
 
     bool operator==(const Name& other) const { return value == other.value; }
@@ -65,7 +64,7 @@ struct EventQueue {
 };
 
 struct PlayerMoved {
-    Entity player;
+    Entity player {};
     Position from;
     Position to;
 
@@ -121,11 +120,11 @@ inline void scheduled_count_positions(
 }
 
 inline void scheduled_first(Res<ScheduleTrace> trace) {
-    trace->entries.push_back("first");
+    trace->entries.emplace_back("first");
 }
 
 inline void scheduled_second(Res<ScheduleTrace> trace) {
-    trace->entries.push_back("second");
+    trace->entries.emplace_back("second");
 }
 
 inline void scheduled_send_event(EventWriter<GameEvent> writer) {

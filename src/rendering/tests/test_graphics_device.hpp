@@ -36,7 +36,7 @@ class FakeBuffer : public Buffer {
 
 class FakeTexture : public Texture {
   public:
-    explicit FakeTexture(TextureDescription desc) : m_desc(std::move(desc)) {}
+    explicit FakeTexture(TextureDescription desc) : m_desc(desc) {}
 
     PixelFormat format() const override { return m_desc.texture_format; }
     uint32 width() const override { return m_desc.width; }
@@ -218,16 +218,14 @@ class FakeGraphicsDevice : public GraphicsDevice {
         buffer_update_calls.push_back(std::move(call));
     }
 
-    MappedResource map(std::shared_ptr<MappableResource>, MapMode map_mode)
-        override {
+    MappedResource
+    map(std::shared_ptr<MappableResource>, MapMode map_mode) override {
         return MappedResource(nullptr, map_mode, std::span<std::byte> {});
     }
 
     void unmap(std::shared_ptr<MappableResource>) override {}
 
-    std::shared_ptr<Framebuffer> main_framebuffer() override {
-        return nullptr;
-    }
+    std::shared_ptr<Framebuffer> main_framebuffer() override { return nullptr; }
 };
 
 } // namespace fei::rendering_test

@@ -11,7 +11,7 @@ class SamplerOpenGL : public Sampler {
 
   public:
     SamplerOpenGL(const SamplerDescription& desc);
-    virtual ~SamplerOpenGL();
+    ~SamplerOpenGL() override;
     GLuint id() const { return m_sampler; }
 };
 

@@ -29,7 +29,7 @@ class Texture : public BindableResource,
     std::shared_ptr<TextureView> m_full_view;
 
   public:
-    virtual ~Texture() = default;
+    ~Texture() override = default;
     virtual PixelFormat format() const = 0;
     virtual uint32 width() const = 0;
     virtual uint32 height() const = 0;

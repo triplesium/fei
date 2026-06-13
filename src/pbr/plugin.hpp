@@ -1,7 +1,6 @@
 #pragma once
 #include "app/app.hpp"
 #include "app/plugin.hpp"
-#include "asset/embed.hpp"
 
 namespace fei {
 

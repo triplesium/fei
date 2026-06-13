@@ -91,7 +91,7 @@ TEST_CASE("Val destroys owned objects", "[refl][val]") {
         int* count;
 
         explicit Counted(int& count) : count(&count) {}
-        Counted(const Counted& other) : count(other.count) {}
+        Counted(const Counted&) = default;
         ~Counted() { ++(*count); }
     };
     Registry::instance().register_type<Counted>();
@@ -140,6 +140,7 @@ TEST_CASE("Val copies and moves owned objects", "[refl][val]") {
     SECTION("Stack copy and move semantics") {
         Val val1 = make_val<TestStruct>(42, 3.14f);
 
+        // NOLINTNEXTLINE(performance-unnecessary-copy-initialization)
         Val val2 = val1;
         REQUIRE(val2.get<TestStruct>().a == 42);
         REQUIRE(val2.get<TestStruct>().b == 3.14f);
@@ -219,9 +220,11 @@ TEST_CASE("Val handles non-copyable type capabilities", "[refl][val]") {
 
         {
             StdoutCapture logs;
+            // NOLINTNEXTLINE(performance-unnecessary-copy-initialization)
             Val val2 = val1;
             REQUIRE(val2.empty());
-            REQUIRE(logs.str().contains("Attempting to copy non-copyable type")
+            REQUIRE(
+                logs.str().contains("Attempting to copy non-copyable type")
             );
         }
 

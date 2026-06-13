@@ -1,6 +1,5 @@
 #include "pbr/mesh_view.hpp"
 
-#include "core/camera.hpp"
 #include "core/transform.hpp"
 #include "ecs/query.hpp"
 #include "graphics/resource.hpp"
@@ -16,8 +15,8 @@ void init_mesh_view_layout(
     Res<GraphicsDevice> device,
     Res<MeshViewLayout> mesh_view_layout
 ) {
-    mesh_view_layout->layout =
-        device->create_resource_layout(ResourceLayoutDescription::sequencial(
+    mesh_view_layout->layout = device->create_resource_layout(
+        ResourceLayoutDescription::sequencial(
             {ShaderStages::Vertex, ShaderStages::Fragment},
             {
                 uniform_buffer("View"),
@@ -27,7 +26,8 @@ void init_mesh_view_layout(
                 texture_read_only("brdf_lut"),
                 // uniform_buffer("Light"),
             }
-        ));
+        )
+    );
 }
 
 void prepare_mesh_view_resource_set(
@@ -57,30 +57,35 @@ void prepare_mesh_view_resource_set(
     //     &light_uniform,
     //     sizeof(LightUniform)
     // );
-    auto cubemap_sampler = device->create_sampler(SamplerDescription {
-        .address_mode_u = SamplerAddressMode::ClampToEdge,
-        .address_mode_v = SamplerAddressMode::ClampToEdge,
-        .address_mode_w = SamplerAddressMode::ClampToEdge,
-        .mag_filter = SamplerFilter::Linear,
-        .min_filter = SamplerFilter::Linear,
-        .mipmap_filter = SamplerFilter::Linear,
-    });
+    auto cubemap_sampler = device->create_sampler(
+        SamplerDescription {
+            .address_mode_u = SamplerAddressMode::ClampToEdge,
+            .address_mode_v = SamplerAddressMode::ClampToEdge,
+            .address_mode_w = SamplerAddressMode::ClampToEdge,
+            .mag_filter = SamplerFilter::Linear,
+            .min_filter = SamplerFilter::Linear,
+            .mipmap_filter = SamplerFilter::Linear,
+        }
+    );
 
     for (auto [entity, view_uniform_buffer_component] : query_cameras) {
-        commands.entity(entity).add(MeshViewResourceSet {
-            .resource_set = device->create_resource_set(ResourceSetDescription {
-                .layout = mesh_view_layout->layout,
-                .resources =
-                    {
-                        view_uniform_buffer_component.buffer,
-                        env_map.irradiance_cubemap.texture(),
-                        env_map.radiance_cubemap.texture(),
-                        cubemap_sampler,
-                        luts->brdf_lut.texture(),
-                        // light_uniform_buffer,
-                    },
-            }),
-        });
+        commands.entity(entity).add(
+            MeshViewResourceSet {
+                .resource_set = device->create_resource_set(
+                    ResourceSetDescription {
+                        .layout = mesh_view_layout->layout,
+                        .resources = {
+                            view_uniform_buffer_component.buffer,
+                            env_map.irradiance_cubemap.texture(),
+                            env_map.radiance_cubemap.texture(),
+                            cubemap_sampler,
+                            luts->brdf_lut.texture(),
+                            // light_uniform_buffer,
+                        },
+                    }
+                ),
+            }
+        );
     }
 }
 

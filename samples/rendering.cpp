@@ -27,10 +27,8 @@
 #include "window/window.hpp"
 
 #include <glad/glad.h>
-#include <glfw/glfw3.h>
 #include <imgui.h>
 #include <memory>
-#include <print>
 
 using namespace fei;
 
@@ -145,9 +143,11 @@ void setup(
         Transform3d {},
         LightCube {}
     );
-    commands.spawn().add(Skybox {
-        .equirect_map = asset_server->load<Image>("autumn_field_4k.hdr"),
-    });
+    commands.spawn().add(
+        Skybox {
+            .equirect_map = asset_server->load<Image>("autumn_field_4k.hdr"),
+        }
+    );
 }
 
 void handle_control(

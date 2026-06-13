@@ -400,7 +400,7 @@ std::unique_ptr<Mesh> MeshFactory::create_cylinder(
 
     // Body
     float angle_step = 2.0f * PI / static_cast<float>(segments);
-    std::uint32_t body_start_idx = index_offset;
+    std::uint32_t top_ring_start = index_offset;
 
     // Top Ring Body
     for (std::uint32_t i = 0; i <= segments; ++i) {
@@ -423,9 +423,6 @@ std::unique_ptr<Mesh> MeshFactory::create_cylinder(
             0.0f
         );
     }
-    std::uint32_t top_ring_start = body_start_idx;
-    body_start_idx += (segments + 1);
-
     // Bottom Ring Body
     for (std::uint32_t i = 0; i <= segments; ++i) {
         float angle = static_cast<float>(i) * angle_step;
@@ -818,8 +815,6 @@ std::unique_ptr<Mesh> MeshFactory::create_arrow(
             1.0f
         );
     }
-    index_offset += 2 * (segments + 1);
-
     // Indices for Cone
     for (std::uint32_t i = 0; i < segments; ++i) {
         std::uint32_t base_idx = cone_start_idx + i;

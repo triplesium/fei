@@ -4,7 +4,6 @@
 #include "refl/enum.hpp"
 #include "refl/ref_utils.hpp"
 #include "refl/registry.hpp"
-#include "refl/type.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
@@ -43,10 +42,7 @@ struct ScriptTestReceiver {
 void register_script_test_metadata() {
     auto& registry = Registry::instance();
     registry.register_enum<ScriptTestEnum>()
-        .add_enumerator(
-            "Idle",
-            static_cast<std::int64_t>(ScriptTestEnum::Idle)
-        )
+        .add_enumerator("Idle", static_cast<std::int64_t>(ScriptTestEnum::Idle))
         .add_enumerator(
             "Active",
             static_cast<std::int64_t>(ScriptTestEnum::Active)

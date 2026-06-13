@@ -27,28 +27,26 @@ class DefaultAssetSource : public AssetSource {
 #endif
     }
 
-    virtual std::string name() const override { return "default"; }
+    std::string name() const override { return "default"; }
 
-    virtual bool exists(const std::filesystem::path& path) const override {
+    bool exists(const std::filesystem::path& path) const override {
         return std::filesystem::exists(m_base_path / path);
     }
 
-    virtual Reader get_reader(const std::filesystem::path& path
-    ) const override {
+    Reader get_reader(const std::filesystem::path& path) const override {
         return Reader(m_base_path / path);
     }
 };
 
 class EmbededAssetSource : public AssetSource {
   public:
-    virtual std::string name() const override { return "embeded"; }
+    std::string name() const override { return "embeded"; }
 
-    virtual bool exists(const std::filesystem::path& path) const override {
+    bool exists(const std::filesystem::path& path) const override {
         return EmbededAssets::has(path.string());
     }
 
-    virtual Reader get_reader(const std::filesystem::path& path
-    ) const override {
+    Reader get_reader(const std::filesystem::path& path) const override {
         return EmbededAssets::get(path.string()).reader();
     }
 };

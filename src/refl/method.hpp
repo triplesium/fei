@@ -26,8 +26,7 @@ struct SignatureTraitBase<Ret(Params...)> {
 
     template<size_t Index>
     struct TypeOfParam {
-        using Type =
-            typename std::tuple_element<Index, std::tuple<Params...>>::type;
+        using Type = std::tuple_element_t<Index, std::tuple<Params...>>;
     };
 };
 
@@ -52,9 +51,10 @@ class Method : public Callable {
         const std::vector<Param>& params,
         const QualType& return_type
     ) : Callable(name, params, return_type) {}
-    virtual ~Method() = default;
+    ~Method() override = default;
 
-    virtual ReturnValue invoke_variadic(const std::vector<Ref>& args) const = 0;
+    ReturnValue
+    invoke_variadic(const std::vector<Ref>& args) const override = 0;
     virtual bool is_const() const = 0;
     virtual bool is_static() const = 0;
 };
@@ -105,20 +105,23 @@ class MethodImpl : public Method {
             }
             return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
                 if (!validate_params<0, ArgIdx...>(args)) {
-                    error("Invalid argument type passed to static method {}", name());
+                    error(
+                        "Invalid argument type passed to static method {}",
+                        name()
+                    );
                     return ReturnValue {};
                 }
                 // static method does not need an instance
                 return invoke_template(Ref(), args[ArgIdx]...);
             }(std::make_index_sequence<c_params_count>());
         } else {
-            if (args.size() == 0 || args.size() - 1 != c_params_count) {
+            if (args.empty() || args.size() - 1 != c_params_count) {
                 error(
                     "Invalid argument count for method {}: expected {}, got "
                     "{}",
                     name(),
                     c_params_count,
-                    args.size() == 0 ? 0 : args.size() - 1
+                    args.empty() ? 0 : args.size() - 1
                 );
                 return {};
             }
@@ -153,7 +156,8 @@ class MethodImpl : public Method {
             return true;
         } else {
             if (!instance ||
-                instance.type_id() != type_id<typename MemberTrait<P>::ParentType>()) {
+                instance.type_id() !=
+                    type_id<typename MemberTrait<P>::ParentType>()) {
                 return false;
             }
             return c_is_const || !instance.is_const();
@@ -209,8 +213,10 @@ class MethodImpl : public Method {
                     instance,
                     std::forward<Args>(args)...
                 );
-                if constexpr (std::is_pointer_v<ReturnType> ||
-                              std::is_reference_v<ReturnType>) {
+                if constexpr (
+                    std::is_pointer_v<ReturnType> ||
+                    std::is_reference_v<ReturnType>
+                ) {
                     return make_ref(ret);
                 } else {
                     return make_val<ReturnType>(std::move(ret));

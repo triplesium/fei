@@ -6,7 +6,6 @@
 #include "refl/type.hpp"
 #include "refl/val.hpp"
 
-#include <type_traits>
 #include <utility>
 
 namespace fei {
@@ -16,7 +15,8 @@ class Constructor : public Callable {
     Constructor(const std::vector<Param>& params, TypeId return_type) :
         Callable("Constructor", params, QualType {return_type}) {}
 
-    virtual ReturnValue invoke_variadic(const std::vector<Ref>& args) const = 0;
+    ReturnValue
+    invoke_variadic(const std::vector<Ref>& args) const override = 0;
     virtual std::vector<TypeId> arg_types() const = 0;
 };
 
@@ -26,8 +26,7 @@ class ConstructorImpl : public Constructor {
     ConstructorImpl() :
         Constructor({Param {"args", QualType::of<Args>()}...}, type_id<T>()) {}
 
-    virtual ReturnValue invoke_variadic(const std::vector<Ref>& args
-    ) const override {
+    ReturnValue invoke_variadic(const std::vector<Ref>& args) const override {
         if (!validate_args(args)) {
             error("Invalid arguments passed to constructor");
             return {};
@@ -37,7 +36,7 @@ class ConstructorImpl : public Constructor {
         }(std::make_index_sequence<sizeof...(Args)>());
     }
 
-    virtual std::vector<TypeId> arg_types() const override {
+    std::vector<TypeId> arg_types() const override {
         return {QualType::of<Args>().type_id()...};
     }
 
@@ -59,7 +58,6 @@ class ConstructorImpl : public Constructor {
             std::make_index_sequence<sizeof...(Args)>()
         );
     }
-
 };
 
 } // namespace fei

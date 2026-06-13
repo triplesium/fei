@@ -31,7 +31,6 @@
 #include "window/window.hpp"
 
 #include <imgui.h>
-#include <print>
 
 using namespace fei;
 
@@ -53,10 +52,12 @@ void setup(
     Res<Assets<Mesh>> mesh_assets,
     Res<Assets<StandardMaterial>> material_assets
 ) {
-    commands.spawn().add(SceneSpawner {
-        .scene = asset_server->load<Scene>("sponza/sponza.obj"),
-        .options = {.scale = Vector3 {0.01f}}
-    });
+    commands.spawn().add(
+        SceneSpawner {
+            .scene = asset_server->load<Scene>("sponza/sponza.obj"),
+            .options = {.scale = Vector3 {0.01f}}
+        }
+    );
 
     commands.spawn().add(
         Camera3d {
@@ -87,9 +88,11 @@ void setup(
             .rotation = {-80.0f, 47.0f, 0.0f},
         }
     );
-    commands.spawn().add(Skybox {
-        .equirect_map = asset_server->load<Image>("autumn_field_4k.hdr"),
-    });
+    commands.spawn().add(
+        Skybox {
+            .equirect_map = asset_server->load<Image>("autumn_field_4k.hdr"),
+        }
+    );
 }
 
 void update_directional_light(

@@ -12,7 +12,7 @@
 namespace fei {
 
 PipelineOpenGL::PipelineOpenGL(const RenderPipelineDescription& desc) :
-    m_is_compute(false), m_shaders(desc.shader_program.shaders),
+    m_shaders(desc.shader_program.shaders),
     m_vertex_layouts(desc.shader_program.vertex_layouts),
     m_blend_state(desc.blend_state),
     m_depth_stencil_state(desc.depth_stencil_state),
@@ -21,7 +21,7 @@ PipelineOpenGL::PipelineOpenGL(const RenderPipelineDescription& desc) :
     m_resource_layouts(desc.resource_layouts) {
 
     m_program = glCreateProgram();
-    for (auto shader : m_shaders) {
+    for (const auto& shader : m_shaders) {
         auto shader_gl = std::static_pointer_cast<ShaderOpenGL>(shader);
         glAttachShader(m_program, shader_gl->id());
         opengl_check_error();
@@ -30,8 +30,8 @@ PipelineOpenGL::PipelineOpenGL(const RenderPipelineDescription& desc) :
     glLinkProgram(m_program);
     opengl_check_error();
 
-    GLuint link_status;
-    glGetProgramiv(m_program, GL_LINK_STATUS, (GLint*)&link_status);
+    GLint link_status;
+    glGetProgramiv(m_program, GL_LINK_STATUS, &link_status);
     opengl_check_error();
     if (link_status == GL_FALSE) {
         GLint info_log_length;
@@ -51,11 +51,10 @@ PipelineOpenGL::PipelineOpenGL(const RenderPipelineDescription& desc) :
 }
 
 PipelineOpenGL::PipelineOpenGL(const ComputePipelineDescription& desc) :
-    m_is_compute(true), m_shaders({desc.shader}),
-    m_resource_layouts(desc.resource_layouts) {
+    m_shaders({desc.shader}), m_resource_layouts(desc.resource_layouts) {
 
     m_program = glCreateProgram();
-    for (auto shader : m_shaders) {
+    for (const auto& shader : m_shaders) {
         auto shader_gl = std::static_pointer_cast<ShaderOpenGL>(shader);
         glAttachShader(m_program, shader_gl->id());
         opengl_check_error();
@@ -64,8 +63,8 @@ PipelineOpenGL::PipelineOpenGL(const ComputePipelineDescription& desc) :
     glLinkProgram(m_program);
     opengl_check_error();
 
-    GLuint link_status;
-    glGetProgramiv(m_program, GL_LINK_STATUS, (GLint*)&link_status);
+    GLint link_status;
+    glGetProgramiv(m_program, GL_LINK_STATUS, &link_status);
     opengl_check_error();
     if (link_status == GL_FALSE) {
         GLint info_log_length;

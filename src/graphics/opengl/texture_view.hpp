@@ -15,11 +15,11 @@ class TextureViewOpenGL : public TextureView {
 
   public:
     TextureViewOpenGL(const TextureViewDescription& desc);
-    ~TextureViewOpenGL();
+    ~TextureViewOpenGL() override;
 
     GLuint id() const { return m_texture_view; }
     GLenum texture_target() const { return m_texture_target; }
-    std::shared_ptr<TextureOpenGL> target() const { return m_target_gl; }
+    std::shared_ptr<TextureOpenGL> target_gl() const { return m_target_gl; }
 };
 
 } // namespace fei

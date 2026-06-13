@@ -59,21 +59,18 @@ class QueryIter {
   private:
     const World* m_world;
     const std::vector<ArchetypeId>* m_matching_archetypes;
-    std::size_t m_archetype_index;
-    std::size_t m_entity_index;
+    std::size_t m_archetype_index {0};
+    std::size_t m_entity_index {0};
 
   public:
-    using value_type =
-        std::tuple<decltype(QueryData<Datas>::get(std::declval<Archetype>(), 0)
-        )...>;
+    using value_type = std::tuple<
+        decltype(QueryData<Datas>::get(std::declval<Archetype>(), 0))...>;
 
     QueryIter(
         const World* world,
         const std::vector<ArchetypeId>* matching_archetypes,
         bool is_end = false
-    ) :
-        m_world(world), m_matching_archetypes(matching_archetypes),
-        m_archetype_index(0), m_entity_index(0) {
+    ) : m_world(world), m_matching_archetypes(matching_archetypes) {
         if (!is_end) {
             advance_to_next_valid();
         } else {
@@ -83,9 +80,9 @@ class QueryIter {
 
     // Dereference operator returns tuple of component references
     value_type operator*() const {
-        const auto& archetype =
-            m_world->archetypes().get((*m_matching_archetypes
-            )[m_archetype_index]);
+        const auto& archetype = m_world->archetypes().get(
+            (*m_matching_archetypes)[m_archetype_index]
+        );
         return std::tuple_cat(
             get_component_tuple<Datas>(archetype, m_entity_index)...
         );
@@ -117,9 +114,9 @@ class QueryIter {
     }
     void advance_to_next_valid() {
         while (m_archetype_index < m_matching_archetypes->size()) {
-            const auto& archetype =
-                m_world->archetypes().get((*m_matching_archetypes
-                )[m_archetype_index]);
+            const auto& archetype = m_world->archetypes().get(
+                (*m_matching_archetypes)[m_archetype_index]
+            );
             if (m_entity_index < archetype.size()) {
                 return; // Found valid entity
             }
@@ -217,7 +214,7 @@ class FilteredQuery : public Q {
     }
 
   protected:
-    virtual bool match_archetype(const Archetype& archetype) const override {
+    bool match_archetype(const Archetype& archetype) const override {
         return Q::match_archetype(archetype) &&
                (QueryFilter<Filters>::match(archetype) && ...);
     }

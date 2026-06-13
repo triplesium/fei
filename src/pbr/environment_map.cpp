@@ -248,7 +248,7 @@ void generate_env_maps(
             );
             command_buffer->set_compute_pipeline(pipeline);
             uint32 map_width = gpu_env_map.radiance_cubemap.texture()->width();
-            auto num_mips = 32 - std::countl_zero(map_width);
+            uint32 num_mips = 32u - std::countl_zero(map_width);
             for (uint32 level = 0, size = map_width; level < num_mips;
                  level++, size /= 2) {
                 auto texture_view =

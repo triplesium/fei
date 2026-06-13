@@ -21,7 +21,7 @@ class TextAsset {
 
 class TextAssetLoader : public AssetLoader<TextAsset> {
   protected:
-    virtual std::expected<std::unique_ptr<TextAsset>, std::error_code>
+    std::expected<std::unique_ptr<TextAsset>, std::error_code>
     load(Reader& reader, const LoadContext& context) override {
         return std::make_unique<TextAsset>(reader.as_string());
     }

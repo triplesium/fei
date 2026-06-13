@@ -3,8 +3,8 @@
 #include "app/app.hpp"
 #include "asset/plugin.hpp"
 #include "generated/reflgen.hpp"
-#include "refl/cls.hpp"
-#include "refl/enum.hpp"
+#include "refl/cls.hpp"  // IWYU pragma: keep
+#include "refl/enum.hpp" // IWYU pragma: keep
 #include "refl/registry.hpp"
 #include "scripting/asset.hpp"
 #include "scripting/scripting_engine.hpp"

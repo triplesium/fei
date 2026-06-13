@@ -11,7 +11,7 @@ class ShaderOpenGL : public ShaderModule {
 
   public:
     ShaderOpenGL(const ShaderDescription& desc);
-    virtual ~ShaderOpenGL();
+    ~ShaderOpenGL() override;
 
     GLuint id() const { return m_shader; }
 };

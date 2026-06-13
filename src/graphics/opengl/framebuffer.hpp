@@ -15,7 +15,7 @@ class FramebufferOpenGL : public Framebuffer {
 
   public:
     FramebufferOpenGL(const FramebufferDescription& desc);
-    virtual ~FramebufferOpenGL();
+    ~FramebufferOpenGL() override;
     GLuint id() const { return m_fbo; }
 };
 } // namespace fei

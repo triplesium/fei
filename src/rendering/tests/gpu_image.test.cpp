@@ -32,9 +32,8 @@ TEST_CASE(
 ) {
     World world;
     world.add_resource_as<GraphicsDevice>(FakeGraphicsDevice {});
-    auto& device = dynamic_cast<FakeGraphicsDevice&>(
-        world.resource<GraphicsDevice>()
-    );
+    auto& device =
+        dynamic_cast<FakeGraphicsDevice&>(world.resource<GraphicsDevice>());
 
     auto image = Image::create_empty(
         2,
@@ -44,8 +43,9 @@ TEST_CASE(
         TextureUsage::Sampled,
         TextureType::Texture2D
     );
-    auto pixels = std::make_unique<unsigned char[]>(2 * 3 * 4);
-    for (std::size_t i = 0; i < 2 * 3 * 4; ++i) {
+    constexpr std::size_t pixel_count = std::size_t {2} * 3 * 4;
+    auto pixels = std::make_unique<unsigned char[]>(pixel_count);
+    for (std::size_t i = 0; i < pixel_count; ++i) {
         pixels[i] = static_cast<unsigned char>(i + 1);
     }
     image->set_data(std::move(pixels));
@@ -59,8 +59,9 @@ TEST_CASE(
     REQUIRE(device.texture_descriptions[0].width == 2);
     REQUIRE(device.texture_descriptions[0].height == 3);
     REQUIRE(device.texture_descriptions[0].depth == 1);
-    REQUIRE(device.texture_descriptions[0].texture_format ==
-            PixelFormat::Rgba8Unorm);
+    REQUIRE(
+        device.texture_descriptions[0].texture_format == PixelFormat::Rgba8Unorm
+    );
     REQUIRE(device.texture_update_calls.size() == 1);
 
     const auto& upload = device.texture_update_calls[0];
@@ -73,7 +74,7 @@ TEST_CASE(
     REQUIRE(upload.depth == 1);
     REQUIRE(upload.mip_level == 0);
     REQUIRE(upload.layer == 0);
-    REQUIRE(upload.bytes.size() == 2 * 3 * 4);
+    REQUIRE(upload.bytes.size() == pixel_count);
     REQUIRE(upload.bytes.front() == std::byte {1});
     REQUIRE(upload.bytes.back() == std::byte {24});
 }

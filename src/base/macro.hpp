@@ -1,12 +1,13 @@
 #pragma once
 
 // clang-format off
+#define FEI_EXPAND(x) x
 #define FEI_GET_MACRO(_1,_2,_3,_4,_5,_6,_7,_8,_9,_10,_11,_12,_13,_14,_15,_16,NAME,...) NAME
 #define FEI_FOREACH(action, ...) \
-    FEI_GET_MACRO(__VA_ARGS__, \
+    FEI_EXPAND(FEI_GET_MACRO(__VA_ARGS__, \
         FEI_FE_16, FEI_FE_15, FEI_FE_14, FEI_FE_13, FEI_FE_12, FEI_FE_11, FEI_FE_10, FEI_FE_9, \
         FEI_FE_8, FEI_FE_7, FEI_FE_6, FEI_FE_5, FEI_FE_4, FEI_FE_3, FEI_FE_2, FEI_FE_1) \
-        (action, __VA_ARGS__)
+        (action, __VA_ARGS__))
 
 #define FEI_FE_1(action, x1) action(x1)
 #define FEI_FE_2(action, x1, x2) action(x1), action(x2)

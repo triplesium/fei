@@ -1,5 +1,5 @@
 #pragma once
-#include "base/log.hpp"
+#include "base/log.hpp" // IWYU pragma: keep
 
 #ifdef NDEBUG
 #    define FEI_ASSERT(condition) static_cast<void>(0)

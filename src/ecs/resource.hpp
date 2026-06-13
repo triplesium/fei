@@ -3,7 +3,6 @@
 #include "refl/type.hpp"
 #include "refl/val.hpp"
 
-#include <concepts>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
