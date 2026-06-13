@@ -13,6 +13,7 @@
 #include "scripting/utils.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <lua.hpp>
 #include <string>
 #include <vector>
@@ -26,6 +27,10 @@ ReturnValue lua_to_argument(lua_State* L, int idx) {
         return ReturnValue(lua_to_ref(L, idx));
     }
     return ReturnValue(lua_to_val(L, idx));
+}
+
+lua_Integer to_lua_integer(std::uint64_t value) {
+    return static_cast<lua_Integer>(value);
 }
 
 } // namespace
@@ -46,7 +51,7 @@ void ScriptingEngine::register_type(Type& type) {
 
     auto register_operator = [&](LuaOperator op) {
         if (has_operator(Registry::instance().get_cls(id), op)) {
-            lua_pushinteger(L, id.id());
+            lua_pushinteger(L, to_lua_integer(id.id()));
             lua_pushinteger(L, static_cast<int>(op));
             lua_pushcclosure(L, &dispatch_operator, 2);
             const char* metamethod = get_operator_metamethod(op);
@@ -56,25 +61,25 @@ void ScriptingEngine::register_type(Type& type) {
 
     if (luaL_newmetatable(L, type.stripped_name().c_str())) {
         // Stack: [mt]; push id
-        lua_pushinteger(L, id.id());
+        lua_pushinteger(L, to_lua_integer(id.id()));
         // Stack: [mt, id]; push c closure & pop id as its argument
         lua_pushcclosure(L, &dispatch_index, 1);
         // Stack: [mt, closure]; mt["__index"] = closure & pop closure
         lua_setfield(L, -2, "__index");
 
-        lua_pushinteger(L, id.id());
+        lua_pushinteger(L, to_lua_integer(id.id()));
         lua_pushcclosure(L, &dispatch_newindex, 1);
         lua_setfield(L, -2, "__newindex");
 
-        lua_pushinteger(L, id.id());
+        lua_pushinteger(L, to_lua_integer(id.id()));
         lua_pushcclosure(L, &dispatch_new, 1);
         lua_setfield(L, -2, "new");
 
-        lua_pushinteger(L, id.id());
+        lua_pushinteger(L, to_lua_integer(id.id()));
         lua_pushcclosure(L, &dispatch_gc, 1);
         lua_setfield(L, -2, "__gc");
 
-        lua_pushinteger(L, id.id());
+        lua_pushinteger(L, to_lua_integer(id.id()));
         lua_setfield(L, -2, "__type_id");
 
         register_operator(LuaOperator::Add);
@@ -102,7 +107,7 @@ void ScriptingEngine::register_enum(const Enum& enm) {
         lua_pushstring(L, name.c_str());
         lua_newtable(L);
 
-        lua_pushinteger(L, static_cast<lua_Integer>(type.id().id()));
+        lua_pushinteger(L, to_lua_integer(type.id().id()));
         lua_setfield(L, -2, "__enum_type_id");
 
         lua_pushinteger(L, static_cast<lua_Integer>(underlying_value));
@@ -311,7 +316,7 @@ int ScriptingEngine::dispatch_index(lua_State* L) {
 
     if (cls.has_method(key)) {
         lua_pushstring(L, key);
-        lua_pushinteger(L, type_id.id());
+        lua_pushinteger(L, to_lua_integer(type_id.id()));
         lua_pushcclosure(L, &dispatch_method, 2);
         return 1;
     }

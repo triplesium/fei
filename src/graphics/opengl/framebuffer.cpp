@@ -14,37 +14,41 @@ FramebufferOpenGL::FramebufferOpenGL(const FramebufferDescription& desc) :
     opengl_check_error();
 
     if (!m_color_attachments.empty()) {
-        for (int i = 0; i < m_color_attachments.size(); i++) {
+        for (std::size_t i = 0; i < m_color_attachments.size(); i++) {
             const auto& color_attachment = desc.color_targets[i];
-            auto tex_gl =
-                std::static_pointer_cast<TextureOpenGL>(color_attachment.texture
-                );
+            auto tex_gl = std::static_pointer_cast<TextureOpenGL>(
+                color_attachment.texture
+            );
 
             glNamedFramebufferTexture(
                 m_fbo,
-                GL_COLOR_ATTACHMENT0 + i,
+                static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i),
                 tex_gl->id(),
-                color_attachment.mip_level
+                to_gl_int(color_attachment.mip_level)
             );
             opengl_check_error();
         }
         std::vector<GLenum> bufs(m_color_attachments.size());
-        for (int i = 0; i < m_color_attachments.size(); i++) {
-            bufs[i] = GL_COLOR_ATTACHMENT0 + i;
+        for (std::size_t i = 0; i < m_color_attachments.size(); i++) {
+            bufs[i] = static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i);
         }
-        glNamedFramebufferDrawBuffers(m_fbo, bufs.size(), bufs.data());
+        glNamedFramebufferDrawBuffers(
+            m_fbo,
+            to_gl_sizei(bufs.size()),
+            bufs.data()
+        );
         opengl_check_error();
     }
 
     if (m_depth_attachment.has_value()) {
-        auto depth_tex_gl =
-            std::static_pointer_cast<TextureOpenGL>(m_depth_attachment->texture
-            );
+        auto depth_tex_gl = std::static_pointer_cast<TextureOpenGL>(
+            m_depth_attachment->texture
+        );
         glNamedFramebufferTexture(
             m_fbo,
             GL_DEPTH_ATTACHMENT,
             depth_tex_gl->id(),
-            m_depth_attachment->mip_level
+            to_gl_int(m_depth_attachment->mip_level)
         );
         opengl_check_error();
     }

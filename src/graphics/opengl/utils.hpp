@@ -33,4 +33,19 @@ GLenum to_gl_blend_factor(BlendFactor factor);
 GLenum to_gl_blend_function(BlendFunction func);
 GLenum to_gl_cull_mode(CullMode cull_mode);
 
+template<typename T>
+GLint to_gl_int(T value) {
+    return static_cast<GLint>(value);
+}
+
+template<typename T>
+GLsizei to_gl_sizei(T value) {
+    return static_cast<GLsizei>(value);
+}
+
+template<typename T>
+GLsizeiptr to_gl_sizeiptr(T value) {
+    return static_cast<GLsizeiptr>(value);
+}
+
 } // namespace fei

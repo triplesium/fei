@@ -22,28 +22,28 @@ TextureOpenGL::TextureOpenGL(const TextureDescription& desc) :
     if (gl_target == GL_TEXTURE_1D) {
         glTextureStorage1D(
             m_texture,
-            m_mip_level,
+            to_gl_sizei(m_mip_level),
             m_gl_sized_internal_format,
-            m_width
+            to_gl_sizei(m_width)
         );
         opengl_check_error();
     } else if (gl_target == GL_TEXTURE_2D || gl_target == GL_TEXTURE_CUBE_MAP) {
         glTextureStorage2D(
             m_texture,
-            m_mip_level,
+            to_gl_sizei(m_mip_level),
             m_gl_sized_internal_format,
-            m_width,
-            m_height
+            to_gl_sizei(m_width),
+            to_gl_sizei(m_height)
         );
         opengl_check_error();
     } else if (gl_target == GL_TEXTURE_3D) {
         glTextureStorage3D(
             m_texture,
-            m_mip_level,
+            to_gl_sizei(m_mip_level),
             m_gl_sized_internal_format,
-            m_width,
-            m_height,
-            m_depth
+            to_gl_sizei(m_width),
+            to_gl_sizei(m_height),
+            to_gl_sizei(m_depth)
         );
         opengl_check_error();
     } else {

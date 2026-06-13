@@ -46,8 +46,10 @@ struct Color4F {
     Color4F() = default;
     Color4F(float r, float g, float b, float a) : r {r}, g {g}, b {b}, a {a} {}
     Color4F(const Color4B& color) :
-        r {color.r / 255.0f}, g {color.g / 255.0f}, b {color.b / 255.0f},
-        a {color.a / 255.0f} {}
+        r {static_cast<float>(color.r) / 255.0f},
+        g {static_cast<float>(color.g) / 255.0f},
+        b {static_cast<float>(color.b) / 255.0f},
+        a {static_cast<float>(color.a) / 255.0f} {}
 
     Vector4 to_vector4() const { return {r, g, b, a}; }
     std::tuple<float, float, float, float> values() const {

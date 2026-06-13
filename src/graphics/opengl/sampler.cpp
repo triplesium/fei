@@ -1,5 +1,6 @@
 #include "graphics/opengl/sampler.hpp"
 
+#include "base/log.hpp"
 #include "graphics/opengl/utils.hpp"
 #include "math/color.hpp"
 
@@ -13,6 +14,9 @@ inline Color4F to_color(SamplerBorderColor border_color) {
             return Color4F(0.0f, 0.0f, 0.0f, 1.0f);
         case SamplerBorderColor::OpaqueWhite:
             return Color4F(1.0f, 1.0f, 1.0f, 1.0f);
+        default:
+            fei::fatal("Unsupported SamplerBorderColor");
+            return {};
     }
 }
 
@@ -71,7 +75,7 @@ SamplerOpenGL::SamplerOpenGL(const SamplerDescription& desc) : m_desc(desc) {
     glSamplerParameteri(
         m_sampler,
         GL_TEXTURE_MAG_FILTER,
-        to_gl_mag_filter(m_desc.mag_filter)
+        to_gl_int(to_gl_mag_filter(m_desc.mag_filter))
     );
     opengl_check_error();
 
@@ -85,7 +89,7 @@ SamplerOpenGL::SamplerOpenGL(const SamplerDescription& desc) : m_desc(desc) {
         glSamplerParameteri(
             m_sampler,
             GL_TEXTURE_COMPARE_FUNC,
-            to_gl_comparison_function(m_desc.comparison_kind.value())
+            to_gl_int(to_gl_comparison_function(m_desc.comparison_kind.value()))
         );
         opengl_check_error();
     }

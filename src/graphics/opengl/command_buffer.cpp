@@ -24,11 +24,13 @@ void CommandBufferOpenGL::end() {}
 void CommandBufferOpenGL::begin_render_pass(const RenderPassDescription& desc) {
     FramebufferDescription fb_desc;
     for (const auto& attachment : desc.color_attachments) {
-        fb_desc.color_targets.push_back(FramebufferAttachment {
-            .texture = attachment.texture,
-            .mip_level = 0,
-            .layer = 0
-        });
+        fb_desc.color_targets.push_back(
+            FramebufferAttachment {
+                .texture = attachment.texture,
+                .mip_level = 0,
+                .layer = 0
+            }
+        );
     }
     if (desc.depth_stencil_attachment) {
         fb_desc.depth_target = FramebufferAttachment {
@@ -102,7 +104,7 @@ void CommandBufferOpenGL::set_viewport(
     std::uint32_t w,
     std::uint32_t h
 ) {
-    glViewport(x, y, w, h);
+    glViewport(x, y, to_gl_sizei(w), to_gl_sizei(h));
     opengl_check_error();
 }
 
@@ -135,15 +137,18 @@ void CommandBufferOpenGL::set_vertex_buffer(std::shared_ptr<Buffer> buffer) {
     opengl_check_error();
     for (auto& layout : pipeline_gl->vertex_layouts()) {
         for (auto& attr : layout.attributes) {
-            glEnableVertexAttribArray(attr.location);
+            auto location = static_cast<GLuint>(attr.location);
+            glEnableVertexAttribArray(location);
             opengl_check_error();
             glVertexAttribPointer(
-                attr.location,
+                location,
                 to_gl_attribute_size(attr.format),
                 to_gl_attribute_type(attr.format),
                 attr.normalized,
-                layout.stride,
-                reinterpret_cast<GLvoid*>((std::uint64_t)attr.offset)
+                static_cast<GLsizei>(layout.stride),
+                reinterpret_cast<const GLvoid*>(
+                    static_cast<std::uintptr_t>(attr.offset)
+                )
             );
             opengl_check_error();
         }
@@ -180,13 +185,14 @@ void CommandBufferOpenGL::set_resource_set(
         calculate_storage_buffer_base_index(slot);
     uint32 storage_buffer_offset = 0;
 
-    auto size = gl_layout->elements().size();
-    for (size_t i = 0; i < size; ++i) {
+    auto size = static_cast<uint32>(gl_layout->elements().size());
+    for (uint32 i = 0; i < size; ++i) {
         auto& element = gl_layout->elements()[i];
         auto kind = element.kind;
         auto resource = gl_resource_set->resources()[i];
         auto& binding_info = gl_pipeline->get_resource_binding(slot, i).value();
-        if (std::holds_alternative<PipelineOpenGL::EmptyBinding>(binding_info
+        if (std::holds_alternative<PipelineOpenGL::EmptyBinding>(
+                binding_info
             )) {
             continue;
         }
@@ -213,9 +219,12 @@ void CommandBufferOpenGL::set_resource_set(
                     std::static_pointer_cast<TextureViewOpenGL>(texture_view);
                 auto& info =
                     std::get<PipelineOpenGL::TextureBinding>(binding_info);
-                glBindTextureUnit(info.unit, texture_view_gl->target()->id());
+                glBindTextureUnit(
+                    info.unit,
+                    texture_view_gl->target_gl()->id()
+                );
                 opengl_check_error();
-                glUniform1i(info.location, info.unit);
+                glUniform1i(info.location, to_gl_int(info.unit));
                 opengl_check_error();
                 break;
             }
@@ -225,30 +234,30 @@ void CommandBufferOpenGL::set_resource_set(
                     std::static_pointer_cast<TextureViewOpenGL>(texture_view);
                 auto& info =
                     std::get<PipelineOpenGL::TextureBinding>(binding_info);
-                bool layered = texture_view_gl->target()->usage().is_set(
+                bool layered = texture_view_gl->target_gl()->usage().is_set(
                                    TextureUsage::Cubemap
                                ) ||
-                               texture_view_gl->target()->layer() > 1;
+                               texture_view_gl->target_gl()->layer() > 1;
                 glBindImageTexture(
                     info.unit,
-                    texture_view_gl->target()->id(),
-                    texture_view_gl->base_mip_level(),
+                    texture_view_gl->target_gl()->id(),
+                    to_gl_int(texture_view_gl->base_mip_level()),
                     layered,
-                    texture_view_gl->base_array_layer(),
+                    to_gl_int(texture_view_gl->base_array_layer()),
                     GL_READ_WRITE,
-                    texture_view_gl->target()->gl_sized_internal_format()
+                    texture_view_gl->target_gl()->gl_sized_internal_format()
                 );
                 opengl_check_error();
-                glUniform1i(info.location, info.unit);
+                glUniform1i(info.location, to_gl_int(info.unit));
                 opengl_check_error();
                 break;
             }
             case ResourceKind::StorageBufferReadOnly:
             case ResourceKind::StorageBufferReadWrite: {
                 auto buffer = std::static_pointer_cast<BufferOpenGL>(resource);
-                auto& info =
-                    std::get<PipelineOpenGL::ShaderStorageBinding>(binding_info
-                    );
+                auto& info = std::get<PipelineOpenGL::ShaderStorageBinding>(
+                    binding_info
+                );
                 auto binding =
                     storage_buffer_base_index + storage_buffer_offset;
                 glShaderStorageBlockBinding(
@@ -296,7 +305,7 @@ void CommandBufferOpenGL::update_buffer(
 
     glNamedBufferData(
         buffer_gl->id(),
-        size,
+        to_gl_sizeiptr(size),
         data,
         to_gl_buffer_usage(buffer_gl->usages())
     );
@@ -308,8 +317,8 @@ void CommandBufferOpenGL::draw(size_t start, size_t count) {
 
     glDrawArrays(
         to_gl_render_primitive(pipeline_gl->render_primitive()),
-        start,
-        count
+        static_cast<GLint>(start),
+        static_cast<GLsizei>(count)
     );
     opengl_check_error();
     if (pipeline_gl->memory_barriers() != 0) {
@@ -323,7 +332,7 @@ void CommandBufferOpenGL::draw_indexed(size_t count) {
 
     glDrawElements(
         to_gl_render_primitive(pipeline_gl->render_primitive()),
-        count,
+        static_cast<GLsizei>(count),
         m_draw_elements_type,
         nullptr
     );
@@ -388,7 +397,8 @@ void CommandBufferOpenGL::set_render_pipeline_impl(
     if (depth_stencil_state.depth_test_enabled) {
         glEnable(GL_DEPTH_TEST);
         opengl_check_error();
-        glDepthFunc(to_gl_compare_function(depth_stencil_state.depth_comparison)
+        glDepthFunc(
+            to_gl_compare_function(depth_stencil_state.depth_comparison)
         );
         opengl_check_error();
     } else {
@@ -458,7 +468,8 @@ void CommandBufferOpenGL::blit_to(std::shared_ptr<Framebuffer> target) {
     opengl_check_error();
 }
 
-void CommandBufferOpenGL::generate_mipmaps_impl(std::shared_ptr<Texture> texture
+void CommandBufferOpenGL::generate_mipmaps_impl(
+    std::shared_ptr<Texture> texture
 ) {
     auto texture_gl = std::static_pointer_cast<TextureOpenGL>(texture);
     glGenerateTextureMipmap(texture_gl->id());
@@ -493,19 +504,19 @@ void CommandBufferOpenGL::copy_texture_impl(
     glCopyImageSubData(
         src_gl->id(),
         to_gl_texture_target(src->usage(), src->type()),
-        src_mip_level,
-        src_x,
-        src_y,
-        src_z_or_layer,
+        static_cast<GLint>(src_mip_level),
+        static_cast<GLint>(src_x),
+        static_cast<GLint>(src_y),
+        static_cast<GLint>(src_z_or_layer),
         dst_gl->id(),
         to_gl_texture_target(dst->usage(), dst->type()),
-        dst_mip_level,
-        dst_x,
-        dst_y,
-        dst_z_or_layer,
-        width,
-        height,
-        depth_or_layer_count
+        static_cast<GLint>(dst_mip_level),
+        static_cast<GLint>(dst_x),
+        static_cast<GLint>(dst_y),
+        static_cast<GLint>(dst_z_or_layer),
+        static_cast<GLsizei>(width),
+        static_cast<GLsizei>(height),
+        static_cast<GLsizei>(depth_or_layer_count)
     );
     opengl_check_error();
 }
