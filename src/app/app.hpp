@@ -8,6 +8,7 @@
 #include "refl/type.hpp"
 
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -157,6 +158,11 @@ class App {
     }
 
     World& world() { return m_world; }
+
+    App& set_worker_threads(std::size_t thread_count) {
+        m_world.set_worker_threads(thread_count);
+        return *this;
+    }
 
     void run_schedule(uint32_t schedule) { m_world.run_schedule(schedule); }
 

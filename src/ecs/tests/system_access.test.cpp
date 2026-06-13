@@ -1,0 +1,215 @@
+#include "ecs/schedule.hpp"
+#include "test_types.hpp"
+
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <type_traits>
+
+using namespace fei;
+using namespace fei::ecs_test;
+
+namespace {
+
+void resource_access_system(Res<GameConfig>, CRes<EventQueue>) {}
+
+void write_position_system(Query<Position>) {}
+
+void read_position_system(Query<const Position>) {}
+
+void read_position_again_system(Query<const Position>) {}
+
+void read_velocity_system(Query<const Velocity>) {}
+
+void read_position_write_velocity_system(
+    Query<Entity, const Position, Velocity>
+) {}
+
+void commands_system(Commands) {}
+
+void world_ref_system(WorldRef) {}
+
+void event_access_system(EventReader<GameEvent>, EventWriter<PlayerMoved>) {}
+
+struct CustomParam {
+    static CustomParam get_param(World&) { return {}; }
+};
+
+void custom_param_system(CustomParam) {}
+
+} // namespace
+
+TEST_CASE("ECS systems expose resource access metadata", "[ecs][system]") {
+    FunctionSystem<decltype(resource_access_system)*> system(
+        resource_access_system
+    );
+    const auto& access = system.access();
+
+    REQUIRE(access.write_resources.contains(type_id<GameConfig>()));
+    REQUIRE(access.read_resources.contains(type_id<EventQueue>()));
+    REQUIRE_FALSE(access.world_exclusive);
+    REQUIRE_FALSE(access.commands);
+}
+
+TEST_CASE("ECS systems expose query access metadata", "[ecs][system]") {
+    FunctionSystem<decltype(read_position_write_velocity_system)*> system(
+        read_position_write_velocity_system
+    );
+    const auto& access = system.access();
+
+    REQUIRE(access.read_components.contains(type_id<Position>()));
+    REQUIRE(access.write_components.contains(type_id<Velocity>()));
+    REQUIRE_FALSE(access.read_components.contains(type_id<Entity>()));
+    REQUIRE_FALSE(access.write_components.contains(type_id<Entity>()));
+}
+
+TEST_CASE("ECS const queries expose read-only components", "[ecs][query]") {
+    register_components();
+    World world;
+    auto entity = world.entity();
+    world.add_component(entity, Position(2.0f, 3.0f));
+
+    float x = 0.0f;
+    world.run_system_once([&x](Query<const Position> query) {
+        for (auto [pos] : query) {
+            static_assert(
+                std::is_const_v<std::remove_reference_t<decltype(pos)>>
+            );
+            x += pos.x;
+        }
+    });
+
+    REQUIRE(x == 2.0f);
+}
+
+TEST_CASE("ECS system access metadata detects conflicts", "[ecs][system]") {
+    FunctionSystem<decltype(read_position_system)*> read_position(
+        read_position_system
+    );
+    FunctionSystem<decltype(write_position_system)*> write_position(
+        write_position_system
+    );
+    FunctionSystem<decltype(resource_access_system)*> resource_access(
+        resource_access_system
+    );
+    FunctionSystem<decltype(commands_system)*> commands(commands_system);
+
+    REQUIRE(read_position.access().conflicts_with(write_position.access()));
+    REQUIRE_FALSE(
+        read_position.access().conflicts_with(resource_access.access())
+    );
+    REQUIRE(commands.access().conflicts_with(read_position.access()));
+    REQUIRE(commands.access().is_barrier());
+}
+
+TEST_CASE(
+    "ECS schedule batches systems by access compatibility",
+    "[ecs][schedule]"
+) {
+    SECTION("Compatible systems share a batch") {
+        Schedule schedule;
+        schedule.add_systems(read_position_system, read_velocity_system);
+        schedule.sort_systems();
+
+        REQUIRE(schedule.execution_batches().size() == 1);
+        REQUIRE(schedule.execution_batches().front().size() == 2);
+    }
+
+    SECTION("Conflicting systems are split across batches") {
+        Schedule schedule;
+        schedule.add_systems(read_position_system, write_position_system);
+        schedule.sort_systems();
+
+        REQUIRE(schedule.execution_batches().size() == 2);
+        REQUIRE(schedule.execution_batches()[0].size() == 1);
+        REQUIRE(schedule.execution_batches()[1].size() == 1);
+    }
+
+    SECTION("Explicit dependencies split otherwise compatible systems") {
+        Schedule schedule;
+        schedule.add_systems(
+            chain(read_position_system, read_position_again_system)
+        );
+        schedule.sort_systems();
+
+        REQUIRE(schedule.execution_batches().size() == 2);
+        REQUIRE(schedule.execution_batches()[0].size() == 1);
+        REQUIRE(schedule.execution_batches()[1].size() == 1);
+    }
+}
+
+TEST_CASE(
+    "ECS schedule runs compatible systems in parallel",
+    "[ecs][schedule]"
+) {
+    using namespace std::chrono_literals;
+
+    World world;
+    world.set_worker_threads(2);
+    world.add_resource(CommandsQueue {});
+
+    std::mutex mutex;
+    std::condition_variable cv;
+    int entered = 0;
+    int overlapped = 0;
+
+    auto wait_for_peer = [&]() {
+        bool saw_peer = false;
+        {
+            std::unique_lock lock(mutex);
+            ++entered;
+            if (entered == 2) {
+                saw_peer = true;
+                cv.notify_all();
+            } else {
+                saw_peer = cv.wait_for(lock, 1s, [&]() {
+                    return entered == 2;
+                });
+            }
+        }
+
+        if (saw_peer) {
+            std::lock_guard lock(mutex);
+            ++overlapped;
+        }
+    };
+
+    world.add_systems(
+        TestSchedule,
+        [&](Query<const Position>) {
+            wait_for_peer();
+        },
+        [&](Query<const Velocity>) {
+            wait_for_peer();
+        }
+    );
+    world.sort_systems();
+    world.run_schedule(TestSchedule);
+
+    REQUIRE(world.worker_threads() == 2);
+    REQUIRE(overlapped == 2);
+}
+
+TEST_CASE(
+    "ECS exclusive params are represented in access metadata",
+    "[ecs][system]"
+) {
+    FunctionSystem<decltype(world_ref_system)*> world_ref(world_ref_system);
+    FunctionSystem<decltype(event_access_system)*> event_access(
+        event_access_system
+    );
+    FunctionSystem<decltype(custom_param_system)*> custom_param(
+        custom_param_system
+    );
+
+    REQUIRE(world_ref.access().world_exclusive);
+    REQUIRE(world_ref.access().is_barrier());
+    REQUIRE(event_access.access().write_resources.contains(
+        type_id<Events<GameEvent>>()
+    ));
+    REQUIRE(event_access.access().write_resources.contains(
+        type_id<Events<PlayerMoved>>()
+    ));
+    REQUIRE(custom_param.access().world_exclusive);
+}

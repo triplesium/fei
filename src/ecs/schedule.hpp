@@ -4,6 +4,7 @@
 #include "ecs/system.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_set.hpp"
+#include "ecs/thread_pool.hpp"
 #include "refl/type.hpp"
 
 #include <concepts>
@@ -31,6 +32,9 @@ class ScheduleGraph {
     void add_edge(SystemId from, SystemId to) { m_edges[from].push_back(to); }
     void sort();
     const std::vector<SystemId>& sorted_nodes() const { return m_sorted_nodes; }
+    const std::unordered_map<SystemId, std::vector<SystemId>>& edges() const {
+        return m_edges;
+    }
 };
 
 class Schedule {
@@ -40,6 +44,7 @@ class Schedule {
     std::unordered_map<TypeId, std::vector<SystemId>> m_system_set_hash_map;
     std::unordered_map<SystemId, SystemConfig> m_systems;
     ScheduleGraph m_graph;
+    std::vector<std::vector<SystemId>> m_execution_batches;
 
   public:
     Schedule() = default;
@@ -64,6 +69,7 @@ class Schedule {
         resolve_dependencies();
         build_graph();
         m_graph.sort();
+        build_execution_batches();
     }
 
     void configure_set(SystemSetConfigs config) {
@@ -78,8 +84,15 @@ class Schedule {
     }
 
     void run_systems(World& world);
+    void run_systems(World& world, ThreadPool& thread_pool);
+
+    const std::vector<std::vector<SystemId>>& execution_batches() const {
+        return m_execution_batches;
+    }
 
   private:
+    void build_execution_batches();
+
     void resolve_dependencies() {
         // Build the system hash map & system set hash map
         for (auto& [id, config] : m_systems) {
@@ -154,9 +167,10 @@ class Schedule {
 class Schedules {
   private:
     std::unordered_map<ScheduleId, Schedule> m_schedules;
+    std::unique_ptr<ThreadPool> m_thread_pool;
 
   public:
-    Schedules() = default;
+    Schedules();
 
     Schedules(const Schedules&) = delete;
     Schedules& operator=(const Schedules&) = delete;
@@ -186,6 +200,9 @@ class Schedules {
             schedule.sort_systems();
         }
     }
+
+    void set_worker_threads(std::size_t thread_count);
+    std::size_t worker_threads() const;
 
     void run_systems(ScheduleId schedule, World& world);
 };
