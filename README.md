@@ -35,7 +35,7 @@ To do this, run the `reflgen` xmake task.
 ```bash
 xmake reflgen
 ```
-It will run the Python script `tools/reflgen.py` to parse all the dependencies of the `fei-generated` target, and output to `src/generated/reflgen.cpp`.
+It will run the Python script `tools/reflgen/reflgen.py` to parse all the dependencies of the `fei-generated` target, and output to `src/generated/reflgen.cpp`.
 
 ## Examples
 
