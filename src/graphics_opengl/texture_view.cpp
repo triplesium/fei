@@ -1,8 +1,8 @@
-#include "graphics/opengl/texture_view.hpp"
+#include "graphics_opengl/texture_view.hpp"
 
 #include "base/log.hpp"
-#include "graphics/opengl/utils.hpp"
 #include "graphics/texture_view.hpp"
+#include "graphics_opengl/utils.hpp"
 
 namespace fei {
 

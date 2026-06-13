@@ -1,9 +1,9 @@
 #pragma once
 #include "graphics/command_buffer.hpp"
-#include "graphics/opengl/graphics_device.hpp"
-#include "graphics/opengl/resource.hpp"
-#include "graphics/opengl/utils.hpp"
 #include "graphics/resource.hpp"
+#include "graphics_opengl/graphics_device.hpp"
+#include "graphics_opengl/resource.hpp"
+#include "graphics_opengl/utils.hpp"
 
 #include <cstdint>
 #include <memory>

@@ -1,6 +1,6 @@
 #pragma once
 #include "graphics/framebuffer.hpp"
-#include "graphics/opengl/utils.hpp"
+#include "graphics_opengl/utils.hpp"
 
 #include <glad/glad.h>
 

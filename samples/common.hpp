@@ -2,8 +2,8 @@
 #include "app/plugin.hpp"
 #include "asset/plugin.hpp"
 #include "core/plugin.hpp"
-#include "graphics/opengl/plugin.hpp"
 #include "graphics/plugin.hpp"
+#include "graphics_opengl/plugin.hpp"
 #include "window/input.hpp"
 #include "window/window.hpp"
 

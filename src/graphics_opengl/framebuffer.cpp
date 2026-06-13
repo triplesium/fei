@@ -1,7 +1,7 @@
-#include "graphics/opengl/framebuffer.hpp"
+#include "graphics_opengl/framebuffer.hpp"
 
-#include "graphics/opengl/texture.hpp"
-#include "graphics/opengl/utils.hpp"
+#include "graphics_opengl/texture.hpp"
+#include "graphics_opengl/utils.hpp"
 
 #include <memory>
 #include <vector>

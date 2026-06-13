@@ -1,9 +1,8 @@
 target("fei-graphics")
     set_kind("static")
-    add_headerfiles("**.hpp")
+    add_headerfiles("*.hpp")
     add_files("*.cpp")
     add_deps("fei-base", "fei-refl", "fei-ecs", "fei-app", "fei-math", "fei-asset")
-    add_packages("glfw", "glad") 
 
 target("fei-graphics-tests")
     set_kind("binary")
@@ -11,5 +10,3 @@ target("fei-graphics-tests")
     add_rules("fei.test")
     add_files("tests/*.cpp")
     add_deps("fei-graphics")
-
-includes("opengl")

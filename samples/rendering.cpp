@@ -10,7 +10,7 @@
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
-#include "graphics/opengl/plugin.hpp"
+#include "graphics_opengl/plugin.hpp"
 #include "math/vector.hpp"
 #include "pbr/environment_map.hpp"
 #include "pbr/light.hpp"

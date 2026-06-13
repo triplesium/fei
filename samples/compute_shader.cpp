@@ -6,7 +6,7 @@
 #include "ecs/system_params.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/graphics_device.hpp"
-#include "graphics/opengl/plugin.hpp"
+#include "graphics_opengl/plugin.hpp"
 #include "pbr/plugin.hpp"
 #include "rendering/plugin.hpp"
 #include "rendering/shader.hpp"

@@ -1,7 +1,7 @@
-#include "graphics/opengl/sampler.hpp"
+#include "graphics_opengl/sampler.hpp"
 
 #include "base/log.hpp"
-#include "graphics/opengl/utils.hpp"
+#include "graphics_opengl/utils.hpp"
 #include "math/color.hpp"
 
 namespace fei {

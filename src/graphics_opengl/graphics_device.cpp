@@ -1,17 +1,17 @@
-#include "graphics/opengl/graphics_device.hpp"
+#include "graphics_opengl/graphics_device.hpp"
 
 #include "base/log.hpp"
 #include "graphics/enums.hpp"
-#include "graphics/opengl/buffer.hpp"
-#include "graphics/opengl/command_buffer.hpp"
-#include "graphics/opengl/framebuffer.hpp"
-#include "graphics/opengl/pipeline.hpp"
-#include "graphics/opengl/resource.hpp"
-#include "graphics/opengl/sampler.hpp"
-#include "graphics/opengl/shader_module.hpp"
-#include "graphics/opengl/texture.hpp"
-#include "graphics/opengl/texture_view.hpp"
-#include "graphics/opengl/utils.hpp"
+#include "graphics_opengl/buffer.hpp"
+#include "graphics_opengl/command_buffer.hpp"
+#include "graphics_opengl/framebuffer.hpp"
+#include "graphics_opengl/pipeline.hpp"
+#include "graphics_opengl/resource.hpp"
+#include "graphics_opengl/sampler.hpp"
+#include "graphics_opengl/shader_module.hpp"
+#include "graphics_opengl/texture.hpp"
+#include "graphics_opengl/texture_view.hpp"
+#include "graphics_opengl/utils.hpp"
 
 #include <memory>
 

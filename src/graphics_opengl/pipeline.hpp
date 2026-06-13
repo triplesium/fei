@@ -3,9 +3,9 @@
 #include "base/optional.hpp"
 #include "base/types.hpp"
 #include "graphics/enums.hpp"
-#include "graphics/opengl/utils.hpp"
 #include "graphics/pipeline.hpp"
 #include "graphics/shader_module.hpp"
+#include "graphics_opengl/utils.hpp"
 
 #include <algorithm>
 #include <memory>

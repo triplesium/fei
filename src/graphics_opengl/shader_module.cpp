@@ -1,8 +1,8 @@
-#include "graphics/opengl/shader_module.hpp"
+#include "graphics_opengl/shader_module.hpp"
 
 #include "base/log.hpp"
-#include "graphics/opengl/utils.hpp"
 #include "graphics/shader_module.hpp"
+#include "graphics_opengl/utils.hpp"
 
 namespace fei {
 

@@ -1,6 +1,6 @@
 #pragma once
-#include "graphics/opengl/utils.hpp"
 #include "graphics/sampler.hpp"
+#include "graphics_opengl/utils.hpp"
 
 namespace fei {
 

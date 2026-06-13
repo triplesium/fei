@@ -1,7 +1,7 @@
 #pragma once
-#include "graphics/opengl/texture.hpp"
-#include "graphics/opengl/utils.hpp"
 #include "graphics/texture_view.hpp"
+#include "graphics_opengl/texture.hpp"
+#include "graphics_opengl/utils.hpp"
 
 #include <memory>
 

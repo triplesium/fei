@@ -1,7 +1,7 @@
-#include "graphics/opengl/buffer.hpp"
+#include "graphics_opengl/buffer.hpp"
 
 #include "graphics/buffer.hpp"
-#include "graphics/opengl/utils.hpp"
+#include "graphics_opengl/utils.hpp"
 
 namespace fei {
 

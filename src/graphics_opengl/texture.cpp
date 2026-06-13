@@ -1,7 +1,7 @@
-#include "graphics/opengl/texture.hpp"
+#include "graphics_opengl/texture.hpp"
 
 #include "base/log.hpp"
-#include "graphics/opengl/utils.hpp"
+#include "graphics_opengl/utils.hpp"
 
 namespace fei {
 

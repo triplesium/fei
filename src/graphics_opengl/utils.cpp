@@ -1,4 +1,4 @@
-#include "graphics/opengl/utils.hpp"
+#include "graphics_opengl/utils.hpp"
 
 #include "base/log.hpp"
 #include "graphics/enums.hpp"

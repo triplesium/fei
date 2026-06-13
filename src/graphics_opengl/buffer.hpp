@@ -1,7 +1,7 @@
 #pragma once
 #include "graphics/buffer.hpp"
 #include "graphics/enums.hpp"
-#include "graphics/opengl/utils.hpp"
+#include "graphics_opengl/utils.hpp"
 
 #include <cstddef>
 
