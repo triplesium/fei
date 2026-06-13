@@ -36,8 +36,9 @@ void generated_equirect_env_map_to_env_map(
             1024,
             6,
             PixelFormat::Rgba32Float,
-            {TextureUsage::Sampled, TextureUsage::Cubemap, TextureUsage::Storage
-            },
+            {TextureUsage::Sampled,
+             TextureUsage::Cubemap,
+             TextureUsage::Storage},
             TextureType::Texture2D
         );
         auto environment_cubemap_handle =
@@ -47,8 +48,9 @@ void generated_equirect_env_map_to_env_map(
             32,
             6,
             PixelFormat::Rgba32Float,
-            {TextureUsage::Sampled, TextureUsage::Cubemap, TextureUsage::Storage
-            },
+            {TextureUsage::Sampled,
+             TextureUsage::Cubemap,
+             TextureUsage::Storage},
             TextureType::Texture2D
         );
         auto irradiance_image_handle = images->add(std::move(irradiance_image));
@@ -68,11 +70,13 @@ void generated_equirect_env_map_to_env_map(
         radiance_image->texture_description().mip_level =
             static_cast<uint32>(std::floor(std::log2(base_size))) + 1;
         auto radiance_image_handle = images->add(std::move(radiance_image));
-        commands.entity(entity).add(EnvironmentMap {
-            .environment_cubemap = environment_cubemap_handle,
-            .irradiance_cubemap = irradiance_image_handle,
-            .radiance_cubemap = radiance_image_handle,
-        });
+        commands.entity(entity).add(
+            EnvironmentMap {
+                .environment_cubemap = environment_cubemap_handle,
+                .irradiance_cubemap = irradiance_image_handle,
+                .radiance_cubemap = radiance_image_handle,
+            }
+        );
     }
 }
 
@@ -95,11 +99,13 @@ void insert_gpu_env_map(
             !environment_gpu_image) {
             continue;
         }
-        commands.entity(entity).add(GpuEnvironmentMap {
-            .environment_cubemap = *environment_gpu_image,
-            .irradiance_cubemap = *irradiance_gpu_image,
-            .radiance_cubemap = *radiance_gpu_image,
-        });
+        commands.entity(entity).add(
+            GpuEnvironmentMap {
+                .environment_cubemap = *environment_gpu_image,
+                .irradiance_cubemap = *irradiance_gpu_image,
+                .radiance_cubemap = *radiance_gpu_image,
+            }
+        );
     }
 }
 
@@ -150,41 +156,46 @@ void generate_env_maps(
             auto& shader = shaders->get(shader_handle).value();
             auto compute_shader =
                 device->create_shader_module(shader.description());
-            auto layout =
-                device->create_resource_layout(ResourceLayoutDescription {
-                    .elements =
-                        {{
-                             .binding = 0,
-                             .name = "cubemap",
-                             .kind = ResourceKind::TextureReadOnly,
-                             .stages = {ShaderStages::Compute},
-                         },
-                         {
-                             .binding = 1,
-                             .name = "cubemap_sampler",
-                             .kind = ResourceKind::Sampler,
-                             .stages = {ShaderStages::Compute},
-                         },
-                         {
-                             .binding = 1,
-                             .name = "output_texture",
-                             .kind = ResourceKind::TextureReadWrite,
-                             .stages = {ShaderStages::Compute},
-                         }},
-                });
-            auto pipeline =
-                device->create_compute_pipeline(ComputePipelineDescription {
+            auto layout = device->create_resource_layout(
+                ResourceLayoutDescription {
+                    .elements = {
+                        {
+                            .binding = 0,
+                            .name = "cubemap",
+                            .kind = ResourceKind::TextureReadOnly,
+                            .stages = {ShaderStages::Compute},
+                        },
+                        {
+                            .binding = 1,
+                            .name = "cubemap_sampler",
+                            .kind = ResourceKind::Sampler,
+                            .stages = {ShaderStages::Compute},
+                        },
+                        {
+                            .binding = 1,
+                            .name = "output_texture",
+                            .kind = ResourceKind::TextureReadWrite,
+                            .stages = {ShaderStages::Compute},
+                        }
+                    },
+                }
+            );
+            auto pipeline = device->create_compute_pipeline(
+                ComputePipelineDescription {
                     .shader = compute_shader,
                     .resource_layouts = {layout},
-                });
-            auto resource_set =
-                device->create_resource_set(ResourceSetDescription {
+                }
+            );
+            auto resource_set = device->create_resource_set(
+                ResourceSetDescription {
                     .layout = layout,
-                    .resources =
-                        {gpu_env_map.environment_cubemap.texture(),
-                         cubemap_sampler,
-                         gpu_env_map.irradiance_cubemap.texture()},
-                });
+                    .resources = {
+                        gpu_env_map.environment_cubemap.texture(),
+                        cubemap_sampler,
+                        gpu_env_map.irradiance_cubemap.texture()
+                    },
+                }
+            );
             auto command_buffer = device->create_command_buffer();
             command_buffer->begin();
             command_buffer->set_compute_pipeline(pipeline);
@@ -204,43 +215,48 @@ void generate_env_maps(
             auto& shader = shaders->get(shader_handle).value();
             auto compute_shader =
                 device->create_shader_module(shader.description());
-            auto uniform_buffer = device->create_buffer(BufferDescription {
-                .size = sizeof(FilteringConstants),
-                .usages = BufferUsages::Uniform,
-            });
-            auto layout =
-                device->create_resource_layout(ResourceLayoutDescription {
-                    .elements =
-                        {{
-                             .binding = 0,
-                             .name = "cubemap",
-                             .kind = ResourceKind::TextureReadOnly,
-                             .stages = {ShaderStages::Compute},
-                         },
-                         {
-                             .binding = 1,
-                             .name = "cubemap_sampler",
-                             .kind = ResourceKind::Sampler,
-                             .stages = {ShaderStages::Compute},
-                         },
-                         {
-                             .binding = 1,
-                             .name = "output_texture",
-                             .kind = ResourceKind::TextureReadWrite,
-                             .stages = {ShaderStages::Compute},
-                         },
-                         {
-                             .binding = 2,
-                             .name = "Constants",
-                             .kind = ResourceKind::UniformBuffer,
-                             .stages = {ShaderStages::Compute},
-                         }},
-                });
-            auto pipeline =
-                device->create_compute_pipeline(ComputePipelineDescription {
+            auto uniform_buffer = device->create_buffer(
+                BufferDescription {
+                    .size = sizeof(FilteringConstants),
+                    .usages = BufferUsages::Uniform,
+                }
+            );
+            auto layout = device->create_resource_layout(
+                ResourceLayoutDescription {
+                    .elements = {
+                        {
+                            .binding = 0,
+                            .name = "cubemap",
+                            .kind = ResourceKind::TextureReadOnly,
+                            .stages = {ShaderStages::Compute},
+                        },
+                        {
+                            .binding = 1,
+                            .name = "cubemap_sampler",
+                            .kind = ResourceKind::Sampler,
+                            .stages = {ShaderStages::Compute},
+                        },
+                        {
+                            .binding = 1,
+                            .name = "output_texture",
+                            .kind = ResourceKind::TextureReadWrite,
+                            .stages = {ShaderStages::Compute},
+                        },
+                        {
+                            .binding = 2,
+                            .name = "Constants",
+                            .kind = ResourceKind::UniformBuffer,
+                            .stages = {ShaderStages::Compute},
+                        }
+                    },
+                }
+            );
+            auto pipeline = device->create_compute_pipeline(
+                ComputePipelineDescription {
                     .shader = compute_shader,
                     .resource_layouts = {layout},
-                });
+                }
+            );
             auto command_buffer = device->create_command_buffer();
             command_buffer->begin();
             command_buffer->generate_mipmaps(
@@ -251,14 +267,15 @@ void generate_env_maps(
             uint32 num_mips = 32u - std::countl_zero(map_width);
             for (uint32 level = 0, size = map_width; level < num_mips;
                  level++, size /= 2) {
-                auto texture_view =
-                    device->create_texture_view(TextureViewDescription {
+                auto texture_view = device->create_texture_view(
+                    TextureViewDescription {
                         .target = gpu_env_map.radiance_cubemap.texture(),
                         .base_mip_level = level,
                         .mip_levels = 1,
                         .base_array_layer = 0,
                         .array_layers = 1,
-                    });
+                    }
+                );
                 FilteringConstants uniform {
                     .roughness = static_cast<float>(level) /
                                  static_cast<float>(num_mips - 1),
@@ -269,15 +286,17 @@ void generate_env_maps(
                     &uniform,
                     sizeof(FilteringConstants)
                 );
-                auto resource_set =
-                    device->create_resource_set(ResourceSetDescription {
+                auto resource_set = device->create_resource_set(
+                    ResourceSetDescription {
                         .layout = layout,
-                        .resources =
-                            {gpu_env_map.environment_cubemap.texture(),
-                             cubemap_sampler,
-                             texture_view,
-                             uniform_buffer},
-                    });
+                        .resources = {
+                            gpu_env_map.environment_cubemap.texture(),
+                            cubemap_sampler,
+                            texture_view,
+                            uniform_buffer
+                        },
+                    }
+                );
                 command_buffer->set_resource_set(0, resource_set);
                 command_buffer->dispatch(
                     gpu_env_map.radiance_cubemap.texture()->width() / 8,

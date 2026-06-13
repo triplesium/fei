@@ -41,14 +41,18 @@ void setup_skybox_resources(
     auto fragment_shader_handle =
         asset_server->load<Shader>("embeded://skybox.frag");
     skybox_resource->shader_modules = {
-        device->create_shader_module(ShaderDescription {
-            .stage = ShaderStages::Vertex,
-            .source = shaders->get(vertex_shader_handle)->source,
-        }),
-        device->create_shader_module(ShaderDescription {
-            .stage = ShaderStages::Fragment,
-            .source = shaders->get(fragment_shader_handle)->source,
-        })
+        device->create_shader_module(
+            ShaderDescription {
+                .stage = ShaderStages::Vertex,
+                .source = shaders->get(vertex_shader_handle)->source,
+            }
+        ),
+        device->create_shader_module(
+            ShaderDescription {
+                .stage = ShaderStages::Fragment,
+                .source = shaders->get(fragment_shader_handle)->source,
+            }
+        )
     };
 }
 

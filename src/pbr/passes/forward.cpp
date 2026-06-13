@@ -35,16 +35,17 @@ void shadow_pass(
         query_lights.first();
 
     auto command_buffer = device->create_command_buffer();
-    command_buffer->begin_render_pass(RenderPassDescription {
-        .depth_stencil_attachment =
-            RenderPassDepthStencilAttachment {
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .depth_stencil_attachment = RenderPassDepthStencilAttachment {
                 .texture = target->shadow_map_texture,
                 .depth_load_op = LoadOp::Clear,
                 .stencil_load_op = LoadOp::Clear,
                 .clear_depth = 1.0f,
                 .clear_stencil = 0,
             },
-    });
+        }
+    );
     command_buffer->set_viewport(
         0,
         0,
@@ -104,24 +105,25 @@ void forward_pass(
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras
 ) {
     auto command_buffer = device->create_command_buffer();
-    command_buffer->begin_render_pass(RenderPassDescription {
-        .color_attachments =
-            {
-                RenderPassColorAttachment {
-                    .texture = forward_render_resources->color_texture,
-                    .load_op = LoadOp::Clear,
-                    .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments =
+                {
+                    RenderPassColorAttachment {
+                        .texture = forward_render_resources->color_texture,
+                        .load_op = LoadOp::Clear,
+                        .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
+                    },
                 },
-            },
-        .depth_stencil_attachment =
-            RenderPassDepthStencilAttachment {
+            .depth_stencil_attachment = RenderPassDepthStencilAttachment {
                 .texture = forward_render_resources->depth_texture,
                 .depth_load_op = LoadOp::Clear,
                 .stencil_load_op = LoadOp::Clear,
                 .clear_depth = 1.0f,
                 .clear_stencil = 0,
             },
-    });
+        }
+    );
     command_buffer->set_viewport(
         0,
         0,
@@ -196,65 +198,75 @@ void skybox_pass(
     );
     auto gpu_mesh = gpu_meshes->get(skybox_resource->mesh.id()).value();
 
-    auto cubemap_sampler = device->create_sampler(SamplerDescription {
-        .address_mode_u = SamplerAddressMode::ClampToEdge,
-        .address_mode_v = SamplerAddressMode::ClampToEdge,
-        .address_mode_w = SamplerAddressMode::ClampToEdge,
-    });
+    auto cubemap_sampler = device->create_sampler(
+        SamplerDescription {
+            .address_mode_u = SamplerAddressMode::ClampToEdge,
+            .address_mode_v = SamplerAddressMode::ClampToEdge,
+            .address_mode_w = SamplerAddressMode::ClampToEdge,
+        }
+    );
 
     auto command_buffer = device->create_command_buffer();
-    command_buffer->begin_render_pass(RenderPassDescription {
-        .color_attachments =
-            {
-                RenderPassColorAttachment {
-                    .texture = forward_render_resources->color_texture,
-                    .load_op = LoadOp::Load,
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments =
+                {
+                    RenderPassColorAttachment {
+                        .texture = forward_render_resources->color_texture,
+                        .load_op = LoadOp::Load,
+                    },
                 },
-            },
-        .depth_stencil_attachment =
-            RenderPassDepthStencilAttachment {
+            .depth_stencil_attachment = RenderPassDepthStencilAttachment {
                 .texture = forward_render_resources->depth_texture,
                 .depth_load_op = LoadOp::Load,
                 .stencil_load_op = LoadOp::Load,
             },
-    });
+        }
+    );
 
-    auto layout = device->create_resource_layout(ResourceLayoutDescription {
-        .elements =
-            {{
-                 .binding = 0,
-                 .name = "skybox",
-                 .kind = ResourceKind::TextureReadOnly,
-                 .stages = ShaderStages::Fragment,
-             },
-             {
-                 .binding = 1,
-                 .name = "skybox_sampler",
-                 .kind = ResourceKind::Sampler,
-                 .stages = ShaderStages::Fragment,
-             }},
-    });
-    auto resource_set = device->create_resource_set(ResourceSetDescription {
-        .layout = layout,
-        .resources = {cubemap_texture, cubemap_sampler},
-    });
-
-    auto pipeline = device->create_render_pipeline(RenderPipelineDescription {
-        .depth_stencil_state = DepthStencilStateDescription::DepthOnlyLessEqual,
-        .rasterizer_state = {},
-        .render_primitive = RenderPrimitive::Triangles,
-        .shader_program =
-            ShaderProgramDescription {
-                .vertex_layouts = {gpu_mesh.vertex_buffer_layout()
-                                       .to_vertex_layout_description()},
-                .shaders = skybox_resource->shader_modules,
+    auto layout = device->create_resource_layout(
+        ResourceLayoutDescription {
+            .elements = {
+                {
+                    .binding = 0,
+                    .name = "skybox",
+                    .kind = ResourceKind::TextureReadOnly,
+                    .stages = ShaderStages::Fragment,
+                },
+                {
+                    .binding = 1,
+                    .name = "skybox_sampler",
+                    .kind = ResourceKind::Sampler,
+                    .stages = ShaderStages::Fragment,
+                }
             },
-        .resource_layouts =
-            {
+        }
+    );
+    auto resource_set = device->create_resource_set(
+        ResourceSetDescription {
+            .layout = layout,
+            .resources = {cubemap_texture, cubemap_sampler},
+        }
+    );
+
+    auto pipeline = device->create_render_pipeline(
+        RenderPipelineDescription {
+            .depth_stencil_state =
+                DepthStencilStateDescription::DepthOnlyLessEqual,
+            .rasterizer_state = {},
+            .render_primitive = RenderPrimitive::Triangles,
+            .shader_program =
+                ShaderProgramDescription {
+                    .vertex_layouts = {gpu_mesh.vertex_buffer_layout()
+                                           .to_vertex_layout_description()},
+                    .shaders = skybox_resource->shader_modules,
+                },
+            .resource_layouts = {
                 mesh_view_layout->layout,
                 layout,
             },
-    });
+        }
+    );
     command_buffer->set_render_pipeline(pipeline);
     command_buffer->set_resource_set(0, mesh_view_resource_set->resource_set);
     command_buffer->set_resource_set(1, resource_set);
@@ -269,15 +281,16 @@ void blit_pass(
     Res<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
-    command_buffer->begin_render_pass(RenderPassDescription {
-        .color_attachments =
-            {
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments = {
                 RenderPassColorAttachment {
                     .texture = forward_render_resources->color_texture,
                     .load_op = LoadOp::Load,
                 },
             },
-    });
+        }
+    );
     command_buffer->end_render_pass();
     command_buffer->blit_to(device->main_framebuffer());
     device->submit_commands(command_buffer);

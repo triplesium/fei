@@ -46,10 +46,15 @@ struct ConstOverloadFixture {
 
 } // namespace
 
-TEST_CASE("Property validates object constness and value types", "[refl][property]") {
-    auto& cls = Registry::instance()
-                    .register_cls<CallableFixture>()
-                    .add_property("value", &CallableFixture::value);
+TEST_CASE(
+    "Property validates object constness and value types",
+    "[refl][property]"
+) {
+    auto& cls =
+        Registry::instance().register_cls<CallableFixture>().add_property(
+            "value",
+            &CallableFixture::value
+        );
     auto* prop = cls.get_property("value");
     REQUIRE(prop != nullptr);
 
@@ -72,8 +77,10 @@ TEST_CASE("Property validates object constness and value types", "[refl][propert
 TEST_CASE("Property accepts runtime enum values", "[refl][property]") {
     auto& registry = Registry::instance();
     auto& enm = registry.register_enum<TestEnum>();
-    auto& cls = registry.register_cls<EnumPropertyFixture>()
-                    .add_property("value", &EnumPropertyFixture::value);
+    auto& cls = registry.register_cls<EnumPropertyFixture>().add_property(
+        "value",
+        &EnumPropertyFixture::value
+    );
     auto* prop = cls.get_property("value");
     REQUIRE(prop != nullptr);
 
@@ -161,29 +168,27 @@ TEST_CASE("Method validates instances and argument types", "[refl][method]") {
 }
 
 TEST_CASE("Method lookup filters const overloads", "[refl][method]") {
-    auto& cls =
-        Registry::instance()
-            .register_cls<ConstOverloadFixture>()
-            .add_method(
-                "read",
-                static_cast<int (ConstOverloadFixture::*)()>(
-                    &ConstOverloadFixture::read
-                )
-            )
-            .add_method(
-                "read",
-                static_cast<int (ConstOverloadFixture::*)() const>(
-                    &ConstOverloadFixture::read
-                )
-            );
+    auto& cls = Registry::instance()
+                    .register_cls<ConstOverloadFixture>()
+                    .add_method(
+                        "read",
+                        static_cast<int (ConstOverloadFixture::*)()>(
+                            &ConstOverloadFixture::read
+                        )
+                    )
+                    .add_method(
+                        "read",
+                        static_cast<int (ConstOverloadFixture::*)() const>(
+                            &ConstOverloadFixture::read
+                        )
+                    );
 
     REQUIRE(cls.get_methods("read").size() == 2);
 
     auto* any = cls.get_method("read", {}, MethodConstFilter::Any);
     auto* non_const =
         cls.get_method("read", {}, MethodConstFilter::NonConstOnly);
-    auto* const_only =
-        cls.get_method("read", {}, MethodConstFilter::ConstOnly);
+    auto* const_only = cls.get_method("read", {}, MethodConstFilter::ConstOnly);
     auto* prefer_non_const =
         cls.get_method("read", {}, MethodConstFilter::PreferNonConst);
     auto* prefer_const =

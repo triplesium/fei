@@ -136,21 +136,25 @@ inline void setup_shadow_mapping(
         device->create_shader_module(shadow_frag_shader.description()),
     };
 
-    commands.add_resource(ShadowMappingResources {
-        .pipeline_specializer =
-            ShadowMapPipelineSpecializer {shadow_shader_modules},
-        .temp_depth_texture = device->create_texture(TextureDescription {
-            .width = 1024,
-            .height = 1024,
-            .depth = 1,
-            .mip_level = 1,
-            .layer = 1,
-            .texture_format = PixelFormat::Depth32Float,
-            .texture_usage =
-                {TextureUsage::RenderTarget, TextureUsage::Sampled},
-            .texture_type = TextureType::Texture2D,
-        })
-    });
+    commands.add_resource(
+        ShadowMappingResources {
+            .pipeline_specializer =
+                ShadowMapPipelineSpecializer {shadow_shader_modules},
+            .temp_depth_texture = device->create_texture(
+                TextureDescription {
+                    .width = 1024,
+                    .height = 1024,
+                    .depth = 1,
+                    .mip_level = 1,
+                    .layer = 1,
+                    .texture_format = PixelFormat::Depth32Float,
+                    .texture_usage =
+                        {TextureUsage::RenderTarget, TextureUsage::Sampled},
+                    .texture_type = TextureType::Texture2D,
+                }
+            )
+        }
+    );
 
     auto blur_vert_shader_handle =
         asset_server->load<Shader>("embeded://quad.vert");
@@ -165,27 +169,30 @@ inline void setup_shadow_mapping(
         device->create_shader_module(blur_frag_shader.description()),
     };
 
-    auto blur_resource_layout =
-        device->create_resource_layout(ResourceLayoutDescription::sequencial(
+    auto blur_resource_layout = device->create_resource_layout(
+        ResourceLayoutDescription::sequencial(
             {ShaderStages::Vertex, ShaderStages::Fragment},
             {
                 uniform_buffer("Blur"),
                 texture_read_only("source"),
                 sampler("sampler"),
             }
-        ));
+        )
+    );
 
     auto blur_sampler = device->create_sampler(SamplerDescription::Linear);
 
-    auto blur_uniform_buffer = device->create_buffer(BufferDescription {
-        .size = sizeof(BlurUniform),
-        .usages = BufferUsages::Uniform,
-    });
+    auto blur_uniform_buffer = device->create_buffer(
+        BufferDescription {
+            .size = sizeof(BlurUniform),
+            .usages = BufferUsages::Uniform,
+        }
+    );
 
     auto& quad_mesh = mesh_assets->get(fs_quad->fullscreen_quad_mesh).value();
 
-    auto blur_pipeline =
-        device->create_render_pipeline(RenderPipelineDescription {
+    auto blur_pipeline = device->create_render_pipeline(
+        RenderPipelineDescription {
             .depth_stencil_state = DepthStencilStateDescription::Disabled,
             .rasterizer_state =
                 RasterizerStateDescription {.cull_mode = CullMode::None},
@@ -197,26 +204,32 @@ inline void setup_shadow_mapping(
                     .shaders = blur_shader_modules,
                 },
             .resource_layouts = {blur_resource_layout},
-        });
+        }
+    );
 
-    auto intermediate_texture = device->create_texture(TextureDescription {
-        .width = 1024,
-        .height = 1024,
-        .depth = 1,
-        .mip_level = 1,
-        .layer = 1,
-        .texture_format = PixelFormat::Rgba32Float,
-        .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
-        .texture_type = TextureType::Texture2D,
-    });
+    auto intermediate_texture = device->create_texture(
+        TextureDescription {
+            .width = 1024,
+            .height = 1024,
+            .depth = 1,
+            .mip_level = 1,
+            .layer = 1,
+            .texture_format = PixelFormat::Rgba32Float,
+            .texture_usage =
+                {TextureUsage::RenderTarget, TextureUsage::Sampled},
+            .texture_type = TextureType::Texture2D,
+        }
+    );
 
-    commands.add_resource(BlurResources {
-        .pipeline = blur_pipeline,
-        .resource_layout = blur_resource_layout,
-        .uniform_buffer = blur_uniform_buffer,
-        .intermediate_texture = intermediate_texture,
-        .sampler = blur_sampler,
-    });
+    commands.add_resource(
+        BlurResources {
+            .pipeline = blur_pipeline,
+            .resource_layout = blur_resource_layout,
+            .uniform_buffer = blur_uniform_buffer,
+            .intermediate_texture = intermediate_texture,
+            .sampler = blur_sampler,
+        }
+    );
 }
 
 inline void setup_shadow_map(
@@ -229,23 +242,27 @@ inline void setup_shadow_map(
         if (!light.shadow_map_enabled) {
             continue;
         }
-        auto shadow_map_texture = device->create_texture(TextureDescription {
-            // TODO: make shadow map resolution configurable
-            .width = 1024,
-            .height = 1024,
-            .depth = 1,
-            .mip_level = static_cast<uint32>(std::log2(1024) + 1),
-            .layer = 1,
-            .texture_format = PixelFormat::Rgba32Float,
-            .texture_usage =
-                {TextureUsage::RenderTarget,
-                 TextureUsage::Sampled,
-                 TextureUsage::GenerateMipmaps},
-            .texture_type = TextureType::Texture2D,
-        });
-        commands.entity(entity).add(ShadowMap {
-            .texture = shadow_map_texture,
-        });
+        auto shadow_map_texture = device->create_texture(
+            TextureDescription {
+                // TODO: make shadow map resolution configurable
+                .width = 1024,
+                .height = 1024,
+                .depth = 1,
+                .mip_level = static_cast<uint32>(std::log2(1024) + 1),
+                .layer = 1,
+                .texture_format = PixelFormat::Rgba32Float,
+                .texture_usage =
+                    {TextureUsage::RenderTarget,
+                     TextureUsage::Sampled,
+                     TextureUsage::GenerateMipmaps},
+                .texture_type = TextureType::Texture2D,
+            }
+        );
+        commands.entity(entity).add(
+            ShadowMap {
+                .texture = shadow_map_texture,
+            }
+        );
     }
 }
 
@@ -265,24 +282,25 @@ inline void render_shadow_map(
     auto command_buffer = device->create_command_buffer();
     for (auto [light_entity, light, transform, view_resource_set, shadow_map] :
          query_light) {
-        command_buffer->begin_render_pass(RenderPassDescription {
-            .color_attachments =
-                {
-                    RenderPassColorAttachment {
-                        .texture = shadow_map.texture,
-                        .load_op = LoadOp::Clear,
-                        .clear_color = Color4F {0.0f, 0.0f, 0.0f, 0.0f},
+        command_buffer->begin_render_pass(
+            RenderPassDescription {
+                .color_attachments =
+                    {
+                        RenderPassColorAttachment {
+                            .texture = shadow_map.texture,
+                            .load_op = LoadOp::Clear,
+                            .clear_color = Color4F {0.0f, 0.0f, 0.0f, 0.0f},
+                        },
                     },
-                },
-            .depth_stencil_attachment =
-                RenderPassDepthStencilAttachment {
+                .depth_stencil_attachment = RenderPassDepthStencilAttachment {
                     .texture = shadow_mapping_resources->temp_depth_texture,
                     .depth_load_op = LoadOp::Clear,
                     .stencil_load_op = LoadOp::Clear,
                     .clear_depth = 1.0f,
                     .clear_stencil = 0,
                 },
-        });
+            }
+        );
         command_buffer->set_viewport(
             0,
             0,
@@ -353,16 +371,17 @@ inline void blur_shadow_map(
     auto command_buffer = device->create_command_buffer();
     for (auto [shadow_map] : query_shadow_maps) {
         // Horizontal blur
-        command_buffer->begin_render_pass(RenderPassDescription {
-            .color_attachments =
-                {
+        command_buffer->begin_render_pass(
+            RenderPassDescription {
+                .color_attachments = {
                     RenderPassColorAttachment {
                         .texture = blur_resources->intermediate_texture,
                         .load_op = LoadOp::Clear,
                         .clear_color = Color4F {0.0f, 0.0f, 0.0f, 0.0f},
                     },
                 },
-        });
+            }
+        );
         command_buffer->set_viewport(
             0,
             0,
@@ -384,16 +403,16 @@ inline void blur_shadow_map(
             &horizontal_blur_uniform,
             sizeof(BlurUniform)
         );
-        auto horizontal_blur_resource_set =
-            device->create_resource_set(ResourceSetDescription {
+        auto horizontal_blur_resource_set = device->create_resource_set(
+            ResourceSetDescription {
                 .layout = blur_resources->resource_layout,
-                .resources =
-                    {
-                        blur_resources->uniform_buffer,
-                        shadow_map.texture,
-                        blur_resources->sampler,
-                    },
-            });
+                .resources = {
+                    blur_resources->uniform_buffer,
+                    shadow_map.texture,
+                    blur_resources->sampler,
+                },
+            }
+        );
         command_buffer->set_render_pipeline(blur_resources->pipeline);
         command_buffer->set_resource_set(0, horizontal_blur_resource_set);
         // Draw fullscreen quad
@@ -408,16 +427,17 @@ inline void blur_shadow_map(
         command_buffer->end_render_pass();
 
         // Vertical blur
-        command_buffer->begin_render_pass(RenderPassDescription {
-            .color_attachments =
-                {
+        command_buffer->begin_render_pass(
+            RenderPassDescription {
+                .color_attachments = {
                     RenderPassColorAttachment {
                         .texture = shadow_map.texture,
                         .load_op = LoadOp::Clear,
                         .clear_color = Color4F {0.0f, 0.0f, 0.0f, 0.0f},
                     },
                 },
-        });
+            }
+        );
         command_buffer->set_viewport(
             0,
             0,
@@ -439,16 +459,16 @@ inline void blur_shadow_map(
             &vertical_blur_uniform,
             sizeof(BlurUniform)
         );
-        auto vertical_blur_resource_set =
-            device->create_resource_set(ResourceSetDescription {
+        auto vertical_blur_resource_set = device->create_resource_set(
+            ResourceSetDescription {
                 .layout = blur_resources->resource_layout,
-                .resources =
-                    {
-                        blur_resources->uniform_buffer,
-                        blur_resources->intermediate_texture,
-                        blur_resources->sampler,
-                    },
-            });
+                .resources = {
+                    blur_resources->uniform_buffer,
+                    blur_resources->intermediate_texture,
+                    blur_resources->sampler,
+                },
+            }
+        );
         command_buffer->set_render_pipeline(blur_resources->pipeline);
         command_buffer->set_resource_set(0, vertical_blur_resource_set);
         // Draw fullscreen quad

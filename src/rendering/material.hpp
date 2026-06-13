@@ -45,9 +45,11 @@ class Material {
         if (elements.empty()) {
             return nullptr;
         }
-        return device.create_resource_layout(ResourceLayoutDescription {
-            .elements = elements,
-        });
+        return device.create_resource_layout(
+            ResourceLayoutDescription {
+                .elements = elements,
+            }
+        );
     }
 
     virtual std::shared_ptr<ResourceSet> create_resource_set(
@@ -60,10 +62,12 @@ class Material {
             return nullptr;
         }
         auto resources = this->resources(device, defaults, gpu_images);
-        return device.create_resource_set(ResourceSetDescription {
-            .layout = layout,
-            .resources = resources,
-        });
+        return device.create_resource_set(
+            ResourceSetDescription {
+                .layout = layout,
+                .resources = resources,
+            }
+        );
     }
 
     virtual std::vector<ResourceLayoutElementDescription>
@@ -131,11 +135,14 @@ class MaterialAdapter
             return nullopt;
         }
 
-        auto resource_set = device.create_resource_set(ResourceSetDescription {
-            .layout = layout,
-            .resources =
-                source_asset.resources(device, rendering_defaults, gpu_images),
-        });
+        auto resource_set = device.create_resource_set(
+            ResourceSetDescription {
+                .layout = layout,
+                .resources =
+                    source_asset
+                        .resources(device, rendering_defaults, gpu_images),
+            }
+        );
         if (!resource_set) {
             return nullopt;
         }

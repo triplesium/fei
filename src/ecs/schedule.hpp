@@ -72,8 +72,8 @@ class Schedule {
         }
     }
 
-    void configure_sets(std::convertible_to<SystemSetConfigs> auto&&... configs
-    ) {
+    void
+    configure_sets(std::convertible_to<SystemSetConfigs> auto&&... configs) {
         (configure_set(std::forward<SystemSetConfigs>(configs)), ...);
     }
 

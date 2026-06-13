@@ -55,8 +55,9 @@ struct SystemConfigs {
     SystemConfigs(std::vector<SystemConfig>&& configs) :
         systems(std::move(configs)) {}
     SystemConfigs(IntoSystem auto&&... configs) {
-        (systems.push_back(SystemConfig(std::forward<decltype(configs)>(configs)
-         )),
+        (systems.push_back(
+             SystemConfig(std::forward<decltype(configs)>(configs))
+         ),
          ...);
     }
 
@@ -118,13 +119,12 @@ inline SystemConfigs all(std::convertible_to<SystemConfigs> auto&&... configs) {
                 std::make_move_iterator(config.systems.end())
             );
         }(),
-        ...
-    );
+        ...);
     return SystemConfigs {std::move(systems)};
 }
 
-inline SystemConfigs chain(std::convertible_to<SystemConfigs> auto&&... configs
-) {
+inline SystemConfigs
+chain(std::convertible_to<SystemConfigs> auto&&... configs) {
     std::vector<SystemConfigs> system_configs;
     system_configs.reserve(sizeof...(configs));
     (system_configs.push_back(

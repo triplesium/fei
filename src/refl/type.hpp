@@ -100,8 +100,12 @@ class Type {
     DefaultConstructFunc default_construct_func() const {
         return m_ops.default_construct;
     }
-    CopyConstructFunc copy_construct_func() const { return m_ops.copy_construct; }
-    MoveConstructFunc move_construct_func() const { return m_ops.move_construct; }
+    CopyConstructFunc copy_construct_func() const {
+        return m_ops.copy_construct;
+    }
+    MoveConstructFunc move_construct_func() const {
+        return m_ops.move_construct;
+    }
     DeleteFunc delete_func() const { return m_ops.destroy; }
     DestroyFunc destroy_func() const { return m_ops.destroy; }
     CopyAssignFunc copy_assign_func() const { return m_ops.copy_assign; }

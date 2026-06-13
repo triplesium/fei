@@ -64,12 +64,11 @@ class MeshMaterialPipelines {
                         {material.shader(MaterialShaderType::Vertex),
                          material.shader(MaterialShaderType::Fragment)},
                 },
-            .resource_layouts =
-                {
-                    m_mesh_view_layout.layout,
-                    m_mesh_uniforms.entries.at(entity).resource_layout,
-                    material.resource_layout(),
-                },
+            .resource_layouts = {
+                m_mesh_view_layout.layout,
+                m_mesh_uniforms.entries.at(entity).resource_layout,
+                material.resource_layout(),
+            },
         };
         specializer.specialize(pipeline_desc, gpu_mesh, material);
         return m_pipeline_cache.insert_render_pipeline(pipeline_desc);
@@ -92,9 +91,9 @@ class MeshMaterialPipelines {
         const SpecializerType& specializer) {
         MeshMaterialPipelineKey key {
             .material_hash = material.hash(),
-            .vertex_layout_hash =
-                std::hash<MeshVertexBufferLayout> {
-                }(gpu_mesh.vertex_buffer_layout()),
+            .vertex_layout_hash = std::hash<MeshVertexBufferLayout> {}(
+                gpu_mesh.vertex_buffer_layout()
+            ),
             .specializer_type = type_id<SpecializerType>(),
         };
 

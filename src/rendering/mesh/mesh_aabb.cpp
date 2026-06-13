@@ -35,10 +35,12 @@ void compute_mesh_aabb(
             max.z = std::max(max.z, pos[2]);
         }
 
-        commands.entity(entity).add(Aabb {
-            .min = {min.x, min.y, min.z},
-            .max = {max.x, max.y, max.z},
-        });
+        commands.entity(entity).add(
+            Aabb {
+                .min = {min.x, min.y, min.z},
+                .max = {max.x, max.y, max.z},
+            }
+        );
     }
 }
 

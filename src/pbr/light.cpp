@@ -13,10 +13,12 @@ void init_light_view_uniform_buffer(
     Commands commands
 ) {
     for (auto [entity, light, transform] : query_light) {
-        auto buffer = device->create_buffer(BufferDescription {
-            .size = sizeof(ViewUniform),
-            .usages = BufferUsages::Uniform,
-        });
+        auto buffer = device->create_buffer(
+            BufferDescription {
+                .size = sizeof(ViewUniform),
+                .usages = BufferUsages::Uniform,
+            }
+        );
         commands.entity(entity).add(ViewUniformBuffer {.buffer = buffer});
     }
 }

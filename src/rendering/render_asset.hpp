@@ -100,23 +100,27 @@ void extract_render_assets(
     std::vector<typename ExtractedAssets<Source>::Entry> extracted;
     for (AssetId id : need_extracting) {
         if (auto source_asset = assets->get(id)) {
-            extracted.push_back(typename ExtractedAssets<Source>::Entry {
-                .id = id,
-                .asset = source_asset
-                             .transform([](auto& a) {
-                                 return &a;
-                             })
-                             .value_or(nullptr),
-            });
+            extracted.push_back(
+                typename ExtractedAssets<Source>::Entry {
+                    .id = id,
+                    .asset = source_asset
+                                 .transform([](auto& a) {
+                                     return &a;
+                                 })
+                                 .value_or(nullptr),
+                }
+            );
             added.insert(id);
         }
     }
-    world->add_resource(ExtractedAssets<Source> {
-        .extracted = std::move(extracted),
-        .removed = std::move(removed),
-        .modified = std::move(modified),
-        .added = std::move(added),
-    });
+    world->add_resource(
+        ExtractedAssets<Source> {
+            .extracted = std::move(extracted),
+            .removed = std::move(removed),
+            .modified = std::move(modified),
+            .added = std::move(added),
+        }
+    );
 }
 
 template<typename Source, typename Target, typename Adapter>
@@ -160,8 +164,10 @@ struct RenderAssetPlugin : public Plugin {
         app.add_resource<RenderAssets<Target>>();
         app.add_systems(
             RenderUpdate,
-            chain(extract_render_assets<Source>, prepare_assets<Source, Target, Adapter>) |
-                in_set<RenderingSystems::PrepareAssets>()
+            chain(
+                extract_render_assets<Source>,
+                prepare_assets<Source, Target, Adapter>
+            ) | in_set<RenderingSystems::PrepareAssets>()
         );
     }
 };

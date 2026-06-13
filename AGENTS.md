@@ -32,9 +32,14 @@
 - `xmake test -vD`: show detailed failure output and generated log paths.
 - `xmake run sample-scene`: run a sample target from `samples/`.
 - `xmake reflgen`: regenerate reflection metadata via `tools/reflgen/reflgen.py`.
+- `xmake format`: run clang-format for all xmake targets, excluding generated
+  reflection metadata.
+- `xmake format --check` or `xmake format fei-math`: check formatting without
+  modifying files, or format one target.
 - `xmake tidy`: run clang-tidy for all xmake targets, including target headers.
 - `xmake tidy fei-math` or `xmake tidy sample-scene`: run clang-tidy for one
-  target. Add `--jobs=N` to control parallel clang-tidy jobs.
+  target. Use `xmake tidy --jobs=N fei-math` to control parallel clang-tidy
+  jobs.
 
 ## Coding Style & Naming Conventions
 
@@ -42,7 +47,8 @@
   restating style rules here.
 - Keep names consistent with existing targets and files, such as `fei-*`,
   `sample-*`, and `*.test.cpp`.
-- After editing C++ files, run `clang-format` on the touched files.
+- After editing C++ files, run `xmake format <target>` or `xmake format --check`
+  for verification.
 - Prefer `xmake tidy <target>` for focused static analysis after C++ changes;
   run `xmake tidy` before broad cleanup changes.
 

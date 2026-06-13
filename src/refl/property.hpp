@@ -74,7 +74,10 @@ class PropertyImpl : public Property {
                     return true;
                 } else if constexpr (std::is_move_assignable_v<MemberType>) {
                     if (value.is_const()) {
-                        error("Cannot move-assign property {} from const value", name());
+                        error(
+                            "Cannot move-assign property {} from const value",
+                            name()
+                        );
                         return false;
                     }
                     *m_ptr = std::move(value.get<MemberType>());
@@ -87,7 +90,10 @@ class PropertyImpl : public Property {
         } else {
             auto* p = obj.try_get<ParentType>();
             if (!p) {
-                error("Invalid or const object passed to property set {}", name());
+                error(
+                    "Invalid or const object passed to property set {}",
+                    name()
+                );
                 return false;
             }
             if constexpr (std::is_array_v<MemberType>) {
@@ -103,7 +109,10 @@ class PropertyImpl : public Property {
                     return true;
                 } else if constexpr (std::is_move_assignable_v<MemberType>) {
                     if (value.is_const()) {
-                        error("Cannot move-assign property {} from const value", name());
+                        error(
+                            "Cannot move-assign property {} from const value",
+                            name()
+                        );
                         return false;
                     }
                     p->*m_ptr = std::move(value.get<MemberType>());

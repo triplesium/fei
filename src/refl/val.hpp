@@ -34,13 +34,9 @@ class Val {
     void* inline_ptr() { return &m_storage; }
     const void* inline_ptr() const { return &m_storage; }
 
-    void* data_ptr() {
-        return m_heap ? m_heap_ptr : inline_ptr();
-    }
+    void* data_ptr() { return m_heap ? m_heap_ptr : inline_ptr(); }
 
-    const void* data_ptr() const {
-        return m_heap ? m_heap_ptr : inline_ptr();
-    }
+    const void* data_ptr() const { return m_heap ? m_heap_ptr : inline_ptr(); }
 
     void* allocate_storage(const Type& type) {
         m_heap = !fits_inline(type);
@@ -89,7 +85,10 @@ class Val {
         }
         auto copy_construct = other.m_type->copy_construct_func();
         if (!copy_construct) {
-            error("Attempting to copy non-copyable type {}", other.m_type->name());
+            error(
+                "Attempting to copy non-copyable type {}",
+                other.m_type->name()
+            );
             return false;
         }
         m_type = other.m_type;

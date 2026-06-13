@@ -101,9 +101,14 @@ Callable::invoke(Ref arg0, Ref arg1, Ref arg2, Ref arg3, Ref arg4) const {
     return invoke_variadic({arg0, arg1, arg2, arg3, arg4});
 }
 
-ReturnValue
-Callable::invoke(Ref arg0, Ref arg1, Ref arg2, Ref arg3, Ref arg4, Ref arg5)
-    const {
+ReturnValue Callable::invoke(
+    Ref arg0,
+    Ref arg1,
+    Ref arg2,
+    Ref arg3,
+    Ref arg4,
+    Ref arg5
+) const {
     return invoke_variadic({arg0, arg1, arg2, arg3, arg4, arg5});
 }
 

@@ -20,8 +20,8 @@ class GraphicsDevice {
 
     virtual std::shared_ptr<ShaderModule>
     create_shader_module(const ShaderDescription& desc) = 0;
-    virtual std::shared_ptr<Buffer> create_buffer(const BufferDescription& desc
-    ) = 0;
+    virtual std::shared_ptr<Buffer>
+    create_buffer(const BufferDescription& desc) = 0;
     virtual std::shared_ptr<Texture>
     create_texture(const TextureDescription& desc) = 0;
     virtual std::shared_ptr<TextureView>
@@ -39,8 +39,8 @@ class GraphicsDevice {
     create_resource_set(const ResourceSetDescription& desc) = 0;
     virtual std::shared_ptr<Sampler>
     create_sampler(const SamplerDescription& desc) = 0;
-    virtual void submit_commands(std::shared_ptr<CommandBuffer> command_buffer
-    ) = 0;
+    virtual void
+    submit_commands(std::shared_ptr<CommandBuffer> command_buffer) = 0;
 
     virtual void update_texture(
         std::shared_ptr<Texture> texture,
@@ -76,8 +76,10 @@ class GraphicsDevice {
         } else if (auto tex = std::dynamic_pointer_cast<Texture>(texture)) {
             return tex->full_view(*this);
         } else {
-            fatal("Resource is not a Texture or TextureView in "
-                  "GraphicsDevice::get_texture_view");
+            fatal(
+                "Resource is not a Texture or TextureView in "
+                "GraphicsDevice::get_texture_view"
+            );
             return nullptr;
         }
     }

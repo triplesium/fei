@@ -8,24 +8,29 @@ std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
     GraphicsDevice& device,
     std::shared_ptr<Texture> equirect_texture
 ) {
-    auto cubemap_texture = device.create_texture(TextureDescription {
-        .width = 1024,
-        .height = 1024,
-        .depth = 6,
-        .mip_level = 11,
-        .layer = 1,
-        .texture_format = PixelFormat::Rgba32Float,
-        .texture_usage =
-            {TextureUsage::Sampled,
-             TextureUsage::Storage,
-             TextureUsage::Cubemap,
-             TextureUsage::GenerateMipmaps},
-    });
+    auto cubemap_texture = device.create_texture(
+        TextureDescription {
+            .width = 1024,
+            .height = 1024,
+            .depth = 6,
+            .mip_level = 11,
+            .layer = 1,
+            .texture_format = PixelFormat::Rgba32Float,
+            .texture_usage = {
+                TextureUsage::Sampled,
+                TextureUsage::Storage,
+                TextureUsage::Cubemap,
+                TextureUsage::GenerateMipmaps
+            },
+        }
+    );
 
-    auto resource_set = device.create_resource_set(ResourceSetDescription {
-        .layout = equirect_to_cubemap_resource_layout,
-        .resources = {equirect_texture, cubemap_texture},
-    });
+    auto resource_set = device.create_resource_set(
+        ResourceSetDescription {
+            .layout = equirect_to_cubemap_resource_layout,
+            .resources = {equirect_texture, cubemap_texture},
+        }
+    );
 
     auto command_buffer = device.create_command_buffer();
     command_buffer->begin();
@@ -81,27 +86,30 @@ void EquirectToCubemap::setup(
         asset_server.load<Shader>("embeded://equirect2cube.comp");
     auto& shader = shaders.get(shader_handle).value();
     auto compute_shader = device.create_shader_module(shader.description());
-    equirect_to_cubemap_resource_layout =
-        device.create_resource_layout(ResourceLayoutDescription {
-            .elements =
-                {{
-                     .binding = 0,
-                     .name = "input_texture",
-                     .kind = ResourceKind::TextureReadOnly,
-                     .stages = {ShaderStages::Compute},
-                 },
-                 {
-                     .binding = 1,
-                     .name = "output_texture",
-                     .kind = ResourceKind::TextureReadWrite,
-                     .stages = {ShaderStages::Compute},
-                 }},
-        });
-    equirect_to_cubemap_pipeline =
-        device.create_compute_pipeline(ComputePipelineDescription {
+    equirect_to_cubemap_resource_layout = device.create_resource_layout(
+        ResourceLayoutDescription {
+            .elements = {
+                {
+                    .binding = 0,
+                    .name = "input_texture",
+                    .kind = ResourceKind::TextureReadOnly,
+                    .stages = {ShaderStages::Compute},
+                },
+                {
+                    .binding = 1,
+                    .name = "output_texture",
+                    .kind = ResourceKind::TextureReadWrite,
+                    .stages = {ShaderStages::Compute},
+                }
+            },
+        }
+    );
+    equirect_to_cubemap_pipeline = device.create_compute_pipeline(
+        ComputePipelineDescription {
             .shader = compute_shader,
             .resource_layouts = {equirect_to_cubemap_resource_layout},
-        });
+        }
+    );
 }
 
 void setup_equi2cubemap(

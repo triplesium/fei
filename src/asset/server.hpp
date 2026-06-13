@@ -33,8 +33,9 @@ class AssetServer {
             fatal("Asset loader for type {} already exists", type_name<T>());
         }
         (*m_app)
-            .add_resource(Assets<T>(std::unique_ptr<AssetLoader<T>>(new Loader()
-            )))
+            .add_resource(
+                Assets<T>(std::unique_ptr<AssetLoader<T>>(new Loader()))
+            )
             .template add_event<AssetEvent<T>>()
             .add_systems(PostUpdate, Assets<T>::track_assets);
     }

@@ -129,10 +129,12 @@ class Assets {
             .is_loaded = true,
             .ref_count = 0,
         };
-        m_event_queue.push_back(AssetEvent<T> {
-            .type = AssetEventType::Added,
-            .id = id,
-        });
+        m_event_queue.push_back(
+            AssetEvent<T> {
+                .type = AssetEventType::Added,
+                .id = id,
+            }
+        );
         return Handle<T>(id, m_state);
     }
 
@@ -153,10 +155,12 @@ class Assets {
             return;
         }
         m_assets.erase(it);
-        m_event_queue.push_back(AssetEvent<T> {
-            .type = AssetEventType::Removed,
-            .id = id,
-        });
+        m_event_queue.push_back(
+            AssetEvent<T> {
+                .type = AssetEventType::Removed,
+                .id = id,
+            }
+        );
     }
 
     Optional<T&> get(Handle<T> handle);
@@ -166,10 +170,12 @@ class Assets {
         if (!entry || !entry->is_loaded) {
             return {};
         }
-        m_event_queue.push_back(AssetEvent<T> {
-            .type = AssetEventType::Modified,
-            .id = id,
-        });
+        m_event_queue.push_back(
+            AssetEvent<T> {
+                .type = AssetEventType::Modified,
+                .id = id,
+            }
+        );
         return *entry->asset;
     }
 

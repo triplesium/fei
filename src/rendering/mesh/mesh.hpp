@@ -114,11 +114,14 @@ class GpuMeshAdapter : public RenderAssetAdapter<Mesh, GpuMesh> {
     Optional<GpuMesh>
     prepare_asset(const Mesh& source_asset, World& world) override {
         auto& device = world.resource<GraphicsDevice>();
-        auto vertex_buffer = device.create_buffer(BufferDescription {
-            .size =
-                static_cast<std::uint32_t>(source_asset.vertex_buffer_size()),
-            .usages = BufferUsages::Vertex,
-        });
+        auto vertex_buffer = device.create_buffer(
+            BufferDescription {
+                .size = static_cast<std::uint32_t>(
+                    source_asset.vertex_buffer_size()
+                ),
+                .usages = BufferUsages::Vertex,
+            }
+        );
         auto vertex_data = source_asset.vertex_buffer_data();
         device.update_buffer(
             vertex_buffer,
@@ -129,12 +132,14 @@ class GpuMeshAdapter : public RenderAssetAdapter<Mesh, GpuMesh> {
 
         Optional<std::shared_ptr<Buffer>> index_buffer = nullopt;
         if (source_asset.index_buffer_size() > 0) {
-            auto ibuffer = device.create_buffer(BufferDescription {
-                .size =
-                    static_cast<std::uint32_t>(source_asset.index_buffer_size()
+            auto ibuffer = device.create_buffer(
+                BufferDescription {
+                    .size = static_cast<std::uint32_t>(
+                        source_asset.index_buffer_size()
                     ),
-                .usages = BufferUsages::Index,
-            });
+                    .usages = BufferUsages::Index,
+                }
+            );
             auto index_data = source_asset.index_buffer_data();
             device.update_buffer(
                 ibuffer,

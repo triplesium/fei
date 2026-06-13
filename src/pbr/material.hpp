@@ -167,10 +167,12 @@ class StandardMaterial : public Material {
         std::vector<std::shared_ptr<BindableResource>> resources;
 
         auto uniform = create_uniform();
-        auto uniform_buffer = device.create_buffer(BufferDescription {
-            .size = sizeof(StandardMaterialUniform),
-            .usages = {BufferUsages::Uniform, BufferUsages::Dynamic},
-        });
+        auto uniform_buffer = device.create_buffer(
+            BufferDescription {
+                .size = sizeof(StandardMaterialUniform),
+                .usages = {BufferUsages::Uniform, BufferUsages::Dynamic},
+            }
+        );
         device.update_buffer(
             uniform_buffer,
             0,

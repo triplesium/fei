@@ -142,8 +142,10 @@ void Mesh::generate_tangents() {
     if (!has_attribute(ATTRIBUTE_POSITION.id) ||
         !has_attribute(ATTRIBUTE_NORMAL.id) ||
         !has_attribute(ATTRIBUTE_UV_0.id)) {
-        fei::warn("Mesh::generate_tangents requires position, normal, and UV "
-                  "attributes");
+        fei::warn(
+            "Mesh::generate_tangents requires position, normal, and UV "
+            "attributes"
+        );
         return;
     }
 

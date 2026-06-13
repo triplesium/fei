@@ -73,11 +73,13 @@ struct VertexBufferLayout {
         std::vector<VertexFormat> vertex_formats
     ) : stride(0), step_mode(step_mode) {
         for (std::uint64_t i = 0; i < vertex_formats.size(); i++) {
-            attributes.emplace_back(VertexAttributeDescription {
-                .location = i,
-                .offset = stride,
-                .format = vertex_formats[i]
-            });
+            attributes.emplace_back(
+                VertexAttributeDescription {
+                    .location = i,
+                    .offset = stride,
+                    .format = vertex_formats[i]
+                }
+            );
             stride += vertex_format_size(vertex_formats[i]);
         }
     }
@@ -91,11 +93,13 @@ struct MeshVertexBufferLayout {
         VertexLayoutDescription description;
         description.attributes.reserve(layout.attributes.size());
         for (const auto& attribute : layout.attributes) {
-            description.attributes.emplace_back(VertexAttributeDescription {
-                .location = attribute.location,
-                .offset = attribute.offset,
-                .format = attribute.format
-            });
+            description.attributes.emplace_back(
+                VertexAttributeDescription {
+                    .location = attribute.location,
+                    .offset = attribute.offset,
+                    .format = attribute.format
+                }
+            );
         }
         description.stride = layout.stride;
         return description;

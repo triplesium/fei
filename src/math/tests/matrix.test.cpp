@@ -26,32 +26,36 @@ TEST_CASE(
     REQUIRE_THAT(matrix.determinant(), WithinAbs(1.0f, EPSILON));
     REQUIRE_THAT(
         matrix.inversed(),
-        WithinAbs(Matrix3x3 {
-            -24.0f,
-            18.0f,
-            5.0f,
-            20.0f,
-            -15.0f,
-            -4.0f,
-            -5.0f,
-            4.0f,
-            1.0f,
-        })
+        WithinAbs(
+            Matrix3x3 {
+                -24.0f,
+                18.0f,
+                5.0f,
+                20.0f,
+                -15.0f,
+                -4.0f,
+                -5.0f,
+                4.0f,
+                1.0f,
+            }
+        )
     );
     REQUIRE_THAT(matrix * matrix.inversed(), WithinAbs(Matrix3x3::Identity));
     REQUIRE_THAT(
         matrix.transposed(),
-        WithinAbs(Matrix3x3 {
-            1.0f,
-            0.0f,
-            5.0f,
-            2.0f,
-            1.0f,
-            6.0f,
-            3.0f,
-            4.0f,
-            0.0f,
-        })
+        WithinAbs(
+            Matrix3x3 {
+                1.0f,
+                0.0f,
+                5.0f,
+                2.0f,
+                1.0f,
+                6.0f,
+                3.0f,
+                4.0f,
+                0.0f,
+            }
+        )
     );
     auto matrix_vector = matrix * Vector3 {1.0f, 2.0f, 3.0f};
     REQUIRE_THAT(matrix_vector, VectorWithinAbs(14.0f, 14.0f, 17.0f));

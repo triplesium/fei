@@ -137,7 +137,8 @@ class Ref {
             }
         } else if constexpr (
             std::is_enum_v<Base> && std::is_lvalue_reference_v<T> &&
-            !std::is_const_v<NoRef>) {
+            !std::is_const_v<NoRef>
+        ) {
             return get<Base>();
         } else if constexpr (std::is_enum_v<Base>) {
             Base value = m_type_id == fei::type_id<int>() ?
@@ -151,8 +152,8 @@ class Ref {
                 return get<Base>();
             }
         } else if constexpr (
-            std::is_rvalue_reference_v<T> ||
-            !std::is_copy_constructible_v<Base>) {
+            std::is_rvalue_reference_v<T> || !std::is_copy_constructible_v<Base>
+        ) {
             return get_rref<Base>();
         } else {
             return Base(get_const<Base>());

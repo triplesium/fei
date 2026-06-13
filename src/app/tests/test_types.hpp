@@ -26,7 +26,8 @@ struct AppTestResourceImpl {
     explicit AppTestResourceImpl(int value) : stored_value(value) {}
 };
 
-inline AppTestResourceAlias::AppTestResourceAlias(AppTestResourceImpl resource
+inline AppTestResourceAlias::AppTestResourceAlias(
+    AppTestResourceImpl resource
 ) : stored_value(resource.stored_value) {}
 
 struct FromWorldResource {

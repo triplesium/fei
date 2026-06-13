@@ -24,11 +24,13 @@ class WindowPlugin : public Plugin {
   public:
     void setup(App& app) override {
         int width = 1920, height = 1080;
-        app.add_resource(Window {
-            .glfw_window = setup_glfw(width, height, "Fei Engine"),
-            .width = width,
-            .height = height,
-        });
+        app.add_resource(
+            Window {
+                .glfw_window = setup_glfw(width, height, "Fei Engine"),
+                .width = width,
+                .height = height,
+            }
+        );
         app.add_systems(First, window_prepare);
         // app.add_system(RenderEnd, swap_buffers);
         app.add_systems(Last, update_should_close);

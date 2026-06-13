@@ -57,13 +57,17 @@ TEST_CASE(
     "VertexAttributeValues reports format, size, and typed access",
     "[rendering][mesh]"
 ) {
-    VertexAttributeValues positions(std::vector<std::array<float, 3>> {
-        {1.0f, 2.0f, 3.0f},
-        {4.0f, 5.0f, 6.0f},
-    });
-    VertexAttributeValues colors(std::vector<std::array<float, 4>> {
-        {1.0f, 0.0f, 0.0f, 1.0f},
-    });
+    VertexAttributeValues positions(
+        std::vector<std::array<float, 3>> {
+            {1.0f, 2.0f, 3.0f},
+            {4.0f, 5.0f, 6.0f},
+        }
+    );
+    VertexAttributeValues colors(
+        std::vector<std::array<float, 4>> {
+            {1.0f, 0.0f, 0.0f, 1.0f},
+        }
+    );
 
     REQUIRE(positions.size() == 2);
     REQUIRE(positions.vertex_format() == VertexFormat::Float3);
@@ -175,9 +179,8 @@ TEST_CASE(
 ) {
     World world;
     world.add_resource_as<GraphicsDevice>(FakeGraphicsDevice {});
-    auto& device = dynamic_cast<FakeGraphicsDevice&>(
-        world.resource<GraphicsDevice>()
-    );
+    auto& device =
+        dynamic_cast<FakeGraphicsDevice&>(world.resource<GraphicsDevice>());
 
     Mesh mesh(RenderPrimitive::Triangles);
     mesh.insert_attribute(
@@ -210,10 +213,12 @@ TEST_CASE(
     REQUIRE(device.buffer_update_calls.size() == 2);
     REQUIRE(device.buffer_update_calls[0].buffer == prepared->vertex_buffer());
     REQUIRE(device.buffer_update_calls[0].offset == 0);
-    REQUIRE(device.buffer_update_calls[0].bytes.size() ==
-            mesh.vertex_buffer_size());
+    REQUIRE(
+        device.buffer_update_calls[0].bytes.size() == mesh.vertex_buffer_size()
+    );
     REQUIRE(device.buffer_update_calls[1].buffer == *prepared->index_buffer());
     REQUIRE(device.buffer_update_calls[1].offset == 0);
-    REQUIRE(device.buffer_update_calls[1].bytes.size() ==
-            mesh.index_buffer_size());
+    REQUIRE(
+        device.buffer_update_calls[1].bytes.size() == mesh.index_buffer_size()
+    );
 }

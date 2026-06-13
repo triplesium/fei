@@ -1,4 +1,5 @@
 #include "refl/cls.hpp"
+
 #include "refl/registry.hpp"
 
 namespace fei {
@@ -35,21 +36,21 @@ Method* Cls::get_method(
         return true;
     };
 
-    auto matches_const_filter =
-        [](const Method& method, MethodConstFilter filter) {
-            switch (filter) {
-                case MethodConstFilter::Any:
-                    return true;
-                case MethodConstFilter::ConstOnly:
-                    return method.is_const();
-                case MethodConstFilter::NonConstOnly:
-                    return !method.is_const();
-                case MethodConstFilter::PreferConst:
-                case MethodConstFilter::PreferNonConst:
-                    return true;
-            }
-            return true;
-        };
+    auto matches_const_filter = [](const Method& method,
+                                   MethodConstFilter filter) {
+        switch (filter) {
+            case MethodConstFilter::Any:
+                return true;
+            case MethodConstFilter::ConstOnly:
+                return method.is_const();
+            case MethodConstFilter::NonConstOnly:
+                return !method.is_const();
+            case MethodConstFilter::PreferConst:
+            case MethodConstFilter::PreferNonConst:
+                return true;
+        }
+        return true;
+    };
 
     auto find_matching = [&](MethodConstFilter filter) -> Method* {
         for (const auto& method : it->second) {

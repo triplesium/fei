@@ -54,27 +54,29 @@ void setup_vxgi(
 
     auto command_buffer = device->create_command_buffer();
     for (int i = 0; i < 6; ++i) {
-        volumes->mipmap[i] = device->create_texture(TextureDescription {
-            .width = config.voxel_resolution / 2,
-            .height = config.voxel_resolution / 2,
-            .depth = config.voxel_resolution / 2,
-            .mip_level = static_cast<uint32>(
-                std::floor(std::log2(config.voxel_resolution))
-            ),
-            .layer = 1,
-            .texture_format = PixelFormat::Rgba8Unorm,
-            .texture_usage =
-                {TextureUsage::Sampled,
-                 TextureUsage::Storage,
-                 TextureUsage::GenerateMipmaps},
-            .texture_type = TextureType::Texture3D,
-        });
+        volumes->mipmap[i] = device->create_texture(
+            TextureDescription {
+                .width = config.voxel_resolution / 2,
+                .height = config.voxel_resolution / 2,
+                .depth = config.voxel_resolution / 2,
+                .mip_level = static_cast<uint32>(
+                    std::floor(std::log2(config.voxel_resolution))
+                ),
+                .layer = 1,
+                .texture_format = PixelFormat::Rgba8Unorm,
+                .texture_usage =
+                    {TextureUsage::Sampled,
+                     TextureUsage::Storage,
+                     TextureUsage::GenerateMipmaps},
+                .texture_type = TextureType::Texture3D,
+            }
+        );
         command_buffer->generate_mipmaps(volumes->mipmap[i]);
     }
     device->submit_commands(command_buffer);
 
-    volumes->resource_layout =
-        device->create_resource_layout(ResourceLayoutDescription::sequencial(
+    volumes->resource_layout = device->create_resource_layout(
+        ResourceLayoutDescription::sequencial(
             {ShaderStages::Vertex,
              ShaderStages::Geometry,
              ShaderStages::Fragment},
@@ -85,19 +87,21 @@ void setup_vxgi(
                 texture_read_write("voxel_radiance"),
                 texture_read_write("static_voxel_flag"),
             }
-        ));
+        )
+    );
 
-    volumes->resource_set = device->create_resource_set(ResourceSetDescription {
-        .layout = volumes->resource_layout,
-        .resources =
-            {
+    volumes->resource_set = device->create_resource_set(
+        ResourceSetDescription {
+            .layout = volumes->resource_layout,
+            .resources = {
                 volumes->albedo,
                 volumes->normal,
                 volumes->emissive,
                 volumes->radiance,
                 volumes->static_flag,
             },
-    });
+        }
+    );
 
     std::vector<Handle<Shader>> shader_handles {
         asset_server->load<Shader>("embeded://voxelization.vert"),
@@ -112,43 +116,52 @@ void setup_vxgi(
         );
     }
 
-    auto voxelization_resource_layout =
-        device->create_resource_layout(ResourceLayoutDescription::sequencial(
+    auto voxelization_resource_layout = device->create_resource_layout(
+        ResourceLayoutDescription::sequencial(
             {ShaderStages::Vertex,
              ShaderStages::Geometry,
              ShaderStages::Fragment,
              ShaderStages::Compute},
             {uniform_buffer("VxgiVoxelization")}
-        ));
+        )
+    );
 
-    auto voxelization_uniform_buffer = device->create_buffer(BufferDescription {
-        .size = sizeof(VxgiVoxelizationUniform),
-        .usages = BufferUsages::Uniform,
-    });
+    auto voxelization_uniform_buffer = device->create_buffer(
+        BufferDescription {
+            .size = sizeof(VxgiVoxelizationUniform),
+            .usages = BufferUsages::Uniform,
+        }
+    );
 
-    commands.add_resource(VxgiVoxelization {
-        .voxelization_uniform_buffer = voxelization_uniform_buffer,
-        .temp_texture = device->create_texture(TextureDescription {
-            .width = 1920,
-            .height = 1080,
-            .depth = 1,
-            .mip_level = 1,
-            .layer = 1,
-            .texture_format = PixelFormat::Rgba8Unorm,
-            .texture_usage = TextureUsage::RenderTarget,
-            .texture_type = TextureType::Texture2D,
-        }),
-        .resource_layout = voxelization_resource_layout,
-        .resource_set = device->create_resource_set(ResourceSetDescription {
-            .layout = voxelization_resource_layout,
-            .resources = {voxelization_uniform_buffer},
-        }),
-        .pipeline_specializer = VxgiVoxelizationSpecializer(
-            shader_modules,
-            volumes->resource_layout,
-            voxelization_resource_layout
-        ),
-    });
+    commands.add_resource(
+        VxgiVoxelization {
+            .voxelization_uniform_buffer = voxelization_uniform_buffer,
+            .temp_texture = device->create_texture(
+                TextureDescription {
+                    .width = 1920,
+                    .height = 1080,
+                    .depth = 1,
+                    .mip_level = 1,
+                    .layer = 1,
+                    .texture_format = PixelFormat::Rgba8Unorm,
+                    .texture_usage = TextureUsage::RenderTarget,
+                    .texture_type = TextureType::Texture2D,
+                }
+            ),
+            .resource_layout = voxelization_resource_layout,
+            .resource_set = device->create_resource_set(
+                ResourceSetDescription {
+                    .layout = voxelization_resource_layout,
+                    .resources = {voxelization_uniform_buffer},
+                }
+            ),
+            .pipeline_specializer = VxgiVoxelizationSpecializer(
+                shader_modules,
+                volumes->resource_layout,
+                voxelization_resource_layout
+            ),
+        }
+    );
 }
 
 void compute_scene_aabb(
@@ -252,16 +265,17 @@ void voxelize_scene(
     }
 
     auto command_buffer = device->create_command_buffer();
-    command_buffer->begin_render_pass(RenderPassDescription {
-        .color_attachments =
-            {
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments = {
                 RenderPassColorAttachment {
                     .texture = voxelization->temp_texture,
                     .load_op = LoadOp::Clear,
                     .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
                 },
             },
-    });
+        }
+    );
     command_buffer->set_viewport(
         0,
         0,
@@ -320,8 +334,8 @@ void setup_vxgi_generate_mipmap_base(
         asset_server->load<Shader>("embeded://aniso_mipmapbase.comp");
     auto shader = shader_assets->get(shader_handle).value();
     auto shader_module = device->create_shader_module(shader.description());
-    auto resource_layout =
-        device->create_resource_layout(ResourceLayoutDescription::sequencial(
+    auto resource_layout = device->create_resource_layout(
+        ResourceLayoutDescription::sequencial(
             {ShaderStages::Compute},
             {
                 uniform_buffer("VxgiGenerateMipmapBase"),
@@ -333,15 +347,20 @@ void setup_vxgi_generate_mipmap_base(
                 texture_read_write("voxel_mipmap[4]"),
                 texture_read_write("voxel_mipmap[5]"),
             }
-        ));
-    auto pipeline = device->create_compute_pipeline(ComputePipelineDescription {
-        .shader = shader_module,
-        .resource_layouts = {resource_layout},
-    });
-    auto uniform_buffer = device->create_buffer(BufferDescription {
-        .size = sizeof(VxgiGenerateMipmapBase::Uniform),
-        .usages = BufferUsages::Uniform,
-    });
+        )
+    );
+    auto pipeline = device->create_compute_pipeline(
+        ComputePipelineDescription {
+            .shader = shader_module,
+            .resource_layouts = {resource_layout},
+        }
+    );
+    auto uniform_buffer = device->create_buffer(
+        BufferDescription {
+            .size = sizeof(VxgiGenerateMipmapBase::Uniform),
+            .usages = BufferUsages::Uniform,
+        }
+    );
     VxgiGenerateMipmapBase::Uniform uniform {
         .mip_dimension = static_cast<int>(volumes->config.voxel_resolution / 2),
     };
@@ -351,10 +370,10 @@ void setup_vxgi_generate_mipmap_base(
         &uniform,
         sizeof(VxgiGenerateMipmapBase::Uniform)
     );
-    auto resource_set = device->create_resource_set(ResourceSetDescription {
-        .layout = resource_layout,
-        .resources =
-            {
+    auto resource_set = device->create_resource_set(
+        ResourceSetDescription {
+            .layout = resource_layout,
+            .resources = {
                 uniform_buffer,
                 volumes->radiance,
                 volumes->mipmap[0],
@@ -364,13 +383,16 @@ void setup_vxgi_generate_mipmap_base(
                 volumes->mipmap[4],
                 volumes->mipmap[5],
             },
-    });
+        }
+    );
 
-    commands.add_resource(VxgiGenerateMipmapBase {
-        .pipeline = pipeline,
-        .resource_layout = resource_layout,
-        .resource_set = resource_set,
-    });
+    commands.add_resource(
+        VxgiGenerateMipmapBase {
+            .pipeline = pipeline,
+            .resource_layout = resource_layout,
+            .resource_set = resource_set,
+        }
+    );
 }
 
 void generate_mipmap_base(
@@ -396,8 +418,8 @@ void setup_vxgi_generate_mipmap_volume(
         asset_server->load<Shader>("embeded://aniso_mipmapvolume.comp");
     auto shader = shader_assets->get(shader_handle).value();
     auto shader_module = device->create_shader_module(shader.description());
-    auto resource_layout =
-        device->create_resource_layout(ResourceLayoutDescription::sequencial(
+    auto resource_layout = device->create_resource_layout(
+        ResourceLayoutDescription::sequencial(
             {ShaderStages::Compute},
             {
                 uniform_buffer("VxgiGenerateMipmapVolume"),
@@ -414,20 +436,27 @@ void setup_vxgi_generate_mipmap_volume(
                 texture_read_only("voxel_mipmap_src[4]"),
                 texture_read_only("voxel_mipmap_src[5]"),
             }
-        ));
-    auto pipeline = device->create_compute_pipeline(ComputePipelineDescription {
-        .shader = shader_module,
-        .resource_layouts = {resource_layout},
-    });
-    auto uniform_buffer = device->create_buffer(BufferDescription {
-        .size = sizeof(VxgiGenerateMipmapVolume::Uniform),
-        .usages = BufferUsages::Uniform,
-    });
-    commands.add_resource(VxgiGenerateMipmapVolume {
-        .pipeline = pipeline,
-        .resource_layout = resource_layout,
-        .uniform_buffer = uniform_buffer,
-    });
+        )
+    );
+    auto pipeline = device->create_compute_pipeline(
+        ComputePipelineDescription {
+            .shader = shader_module,
+            .resource_layouts = {resource_layout},
+        }
+    );
+    auto uniform_buffer = device->create_buffer(
+        BufferDescription {
+            .size = sizeof(VxgiGenerateMipmapVolume::Uniform),
+            .usages = BufferUsages::Uniform,
+        }
+    );
+    commands.add_resource(
+        VxgiGenerateMipmapVolume {
+            .pipeline = pipeline,
+            .resource_layout = resource_layout,
+            .uniform_buffer = uniform_buffer,
+        }
+    );
 }
 
 void generate_mipmap_volume(
@@ -453,15 +482,17 @@ void generate_mipmap_volume(
         );
         std::array<std::shared_ptr<TextureView>, 6> dst_views;
         for (int i = 0; i < 6; ++i) {
-            dst_views[i] = device->create_texture_view(TextureViewDescription {
-                .target = volumes->mipmap[i],
-                .base_mip_level = mip_level + 1,
-            });
+            dst_views[i] = device->create_texture_view(
+                TextureViewDescription {
+                    .target = volumes->mipmap[i],
+                    .base_mip_level = mip_level + 1,
+                }
+            );
         }
-        auto resource_set = device->create_resource_set(ResourceSetDescription {
-            .layout = generate_mipmap_volume->resource_layout,
-            .resources =
-                {
+        auto resource_set = device->create_resource_set(
+            ResourceSetDescription {
+                .layout = generate_mipmap_volume->resource_layout,
+                .resources = {
                     generate_mipmap_volume->uniform_buffer,
                     dst_views[0],
                     dst_views[1],
@@ -476,7 +507,8 @@ void generate_mipmap_volume(
                     volumes->mipmap[4],
                     volumes->mipmap[5],
                 },
-        });
+            }
+        );
         command_buffer->set_resource_set(0, resource_set);
         auto work_groups = (mip_dimension + 7) / 8;
         command_buffer->dispatch(work_groups, work_groups, work_groups);
@@ -498,35 +530,41 @@ void setup_inject_radiance(
         asset_server->load<Shader>("embeded://inject_radiance.comp");
     auto shader = shader_assets->get(shader_handle).value();
     auto shader_module = device->create_shader_module(shader.description());
-    auto resource_layout =
-        device->create_resource_layout(ResourceLayoutDescription::sequencial(
+    auto resource_layout = device->create_resource_layout(
+        ResourceLayoutDescription::sequencial(
             {ShaderStages::Compute},
             {
                 uniform_buffer("VxgiInjectRadiance"),
                 texture_read_only("shadow_map"),
                 sampler("shadow_map_sampler"),
             }
-        ));
-    auto pipeline = device->create_compute_pipeline(ComputePipelineDescription {
-        .shader = shader_module,
-        .resource_layouts =
-            {
+        )
+    );
+    auto pipeline = device->create_compute_pipeline(
+        ComputePipelineDescription {
+            .shader = shader_module,
+            .resource_layouts = {
                 volumes->resource_layout,
                 voxelization->resource_layout,
                 resource_layout,
             },
-    });
-    auto uniform_buffer = device->create_buffer(BufferDescription {
-        .size = sizeof(VxgiInjectRadianceUniform),
-        .usages = BufferUsages::Uniform,
-    });
+        }
+    );
+    auto uniform_buffer = device->create_buffer(
+        BufferDescription {
+            .size = sizeof(VxgiInjectRadianceUniform),
+            .usages = BufferUsages::Uniform,
+        }
+    );
 
-    commands.add_resource(VxgiInjectRadiance {
-        .pipeline = pipeline,
-        .uniform_buffer = uniform_buffer,
-        .resource_layout = resource_layout,
-        .resource_set = nullptr,
-    });
+    commands.add_resource(
+        VxgiInjectRadiance {
+            .pipeline = pipeline,
+            .uniform_buffer = uniform_buffer,
+            .resource_layout = resource_layout,
+            .resource_set = nullptr,
+        }
+    );
 }
 
 void prepare_inject_radiance(
@@ -578,19 +616,23 @@ void prepare_inject_radiance(
         sizeof(VxgiInjectRadianceUniform)
     );
 
-    inject_radiance->resource_set =
-        device->create_resource_set(ResourceSetDescription {
+    inject_radiance->resource_set = device->create_resource_set(
+        ResourceSetDescription {
             .layout = inject_radiance->resource_layout,
-            .resources =
-                {inject_radiance->uniform_buffer,
-                 shadow_map_texture ? shadow_map_texture :
-                                      rendering_defaults->default_texture,
-                 device->create_sampler(SamplerDescription {
-                     .address_mode_u = SamplerAddressMode::ClampToEdge,
-                     .address_mode_v = SamplerAddressMode::ClampToEdge,
-                     .address_mode_w = SamplerAddressMode::ClampToEdge,
-                 })},
-        });
+            .resources = {
+                inject_radiance->uniform_buffer,
+                shadow_map_texture ? shadow_map_texture :
+                                     rendering_defaults->default_texture,
+                device->create_sampler(
+                    SamplerDescription {
+                        .address_mode_u = SamplerAddressMode::ClampToEdge,
+                        .address_mode_v = SamplerAddressMode::ClampToEdge,
+                        .address_mode_w = SamplerAddressMode::ClampToEdge,
+                    }
+                )
+            },
+        }
+    );
 }
 
 void inject_radiance(
@@ -625,8 +667,8 @@ void setup_inject_propagation(
         asset_server->load<Shader>("embeded://inject_propagation.comp");
     auto shader = shader_assets->get(shader_handle).value();
     auto shader_module = device->create_shader_module(shader.description());
-    auto resource_layout =
-        device->create_resource_layout(ResourceLayoutDescription::sequencial(
+    auto resource_layout = device->create_resource_layout(
+        ResourceLayoutDescription::sequencial(
             {ShaderStages::Compute},
             {
                 uniform_buffer("VxgiInjectPropagation"),
@@ -641,15 +683,20 @@ void setup_inject_propagation(
                 texture_read_only("voxel_tex_mipmap[5]"),
                 sampler("voxel_sampler"),
             }
-        ));
-    auto pipeline = device->create_compute_pipeline(ComputePipelineDescription {
-        .shader = shader_module,
-        .resource_layouts = {resource_layout},
-    });
-    auto uniform_buffer = device->create_buffer(BufferDescription {
-        .size = sizeof(VxgiInjectPropagationUniform),
-        .usages = BufferUsages::Uniform,
-    });
+        )
+    );
+    auto pipeline = device->create_compute_pipeline(
+        ComputePipelineDescription {
+            .shader = shader_module,
+            .resource_layouts = {resource_layout},
+        }
+    );
+    auto uniform_buffer = device->create_buffer(
+        BufferDescription {
+            .size = sizeof(VxgiInjectPropagationUniform),
+            .usages = BufferUsages::Uniform,
+        }
+    );
     VxgiInjectPropagationUniform uniform {
         .volume_dimension = static_cast<int>(volumes->config.voxel_resolution),
     };
@@ -659,10 +706,10 @@ void setup_inject_propagation(
         &uniform,
         sizeof(VxgiInjectPropagationUniform)
     );
-    auto resource_set = device->create_resource_set(ResourceSetDescription {
-        .layout = resource_layout,
-        .resources =
-            {
+    auto resource_set = device->create_resource_set(
+        ResourceSetDescription {
+            .layout = resource_layout,
+            .resources = {
                 uniform_buffer,
                 volumes->radiance,
                 volumes->albedo,
@@ -673,20 +720,25 @@ void setup_inject_propagation(
                 volumes->mipmap[3],
                 volumes->mipmap[4],
                 volumes->mipmap[5],
-                device->create_sampler(SamplerDescription {
-                    .address_mode_u = SamplerAddressMode::ClampToEdge,
-                    .address_mode_v = SamplerAddressMode::ClampToEdge,
-                    .address_mode_w = SamplerAddressMode::ClampToEdge,
-                }),
+                device->create_sampler(
+                    SamplerDescription {
+                        .address_mode_u = SamplerAddressMode::ClampToEdge,
+                        .address_mode_v = SamplerAddressMode::ClampToEdge,
+                        .address_mode_w = SamplerAddressMode::ClampToEdge,
+                    }
+                ),
             },
-    });
+        }
+    );
 
-    commands.add_resource(VxgiInjectPropagation {
-        .pipeline = pipeline,
-        .resource_layout = resource_layout,
-        .resource_set = resource_set,
-        .uniform_buffer = uniform_buffer,
-    });
+    commands.add_resource(
+        VxgiInjectPropagation {
+            .pipeline = pipeline,
+            .resource_layout = resource_layout,
+            .resource_set = resource_set,
+            .uniform_buffer = uniform_buffer,
+        }
+    );
 }
 
 void inject_propagation(
@@ -707,8 +759,8 @@ void inject_propagation(
 }
 
 void setup_vxgi_lighting(Res<GraphicsDevice> device, Commands commands) {
-    auto resource_layout =
-        device->create_resource_layout(ResourceLayoutDescription::sequencial(
+    auto resource_layout = device->create_resource_layout(
+        ResourceLayoutDescription::sequencial(
             {ShaderStages::Fragment},
             {
                 uniform_buffer("Vxgi"),
@@ -724,17 +776,22 @@ void setup_vxgi_lighting(Res<GraphicsDevice> device, Commands commands) {
                 texture_read_only("shadow_map"),
                 sampler("shadow_map_sampler"),
             }
-        ));
-    auto uniform_buffer = device->create_buffer(BufferDescription {
-        .size = sizeof(VxgiLightingUniform),
-        .usages = BufferUsages::Uniform,
-    });
+        )
+    );
+    auto uniform_buffer = device->create_buffer(
+        BufferDescription {
+            .size = sizeof(VxgiLightingUniform),
+            .usages = BufferUsages::Uniform,
+        }
+    );
 
-    commands.add_resource(VxgiLighting {
-        .uniform_buffer = uniform_buffer,
-        .resource_layout = resource_layout,
-        .resource_set = nullptr,
-    });
+    commands.add_resource(
+        VxgiLighting {
+            .uniform_buffer = uniform_buffer,
+            .resource_layout = resource_layout,
+            .resource_set = nullptr,
+        }
+    );
 }
 
 void prepare_vxgi_lighting(
@@ -797,20 +854,22 @@ void prepare_vxgi_lighting(
     uniform.volume_dimension =
         static_cast<int>(volumes->config.voxel_resolution);
 
-    auto uniform_buffer = device->create_buffer(BufferDescription {
-        .size = sizeof(VxgiLightingUniform),
-        .usages = BufferUsages::Uniform,
-    });
+    auto uniform_buffer = device->create_buffer(
+        BufferDescription {
+            .size = sizeof(VxgiLightingUniform),
+            .usages = BufferUsages::Uniform,
+        }
+    );
     device->update_buffer(
         uniform_buffer,
         0,
         &uniform,
         sizeof(VxgiLightingUniform)
     );
-    auto resource_set = device->create_resource_set(ResourceSetDescription {
-        .layout = vxgi_lighting->resource_layout,
-        .resources =
-            {
+    auto resource_set = device->create_resource_set(
+        ResourceSetDescription {
+            .layout = vxgi_lighting->resource_layout,
+            .resources = {
                 uniform_buffer,
                 volumes->normal,
                 volumes->radiance,
@@ -820,19 +879,24 @@ void prepare_vxgi_lighting(
                 volumes->mipmap[3],
                 volumes->mipmap[4],
                 volumes->mipmap[5],
-                device->create_sampler(SamplerDescription {
-                    .address_mode_u = SamplerAddressMode::ClampToEdge,
-                    .address_mode_v = SamplerAddressMode::ClampToEdge,
-                    .address_mode_w = SamplerAddressMode::ClampToEdge,
-                }),
+                device->create_sampler(
+                    SamplerDescription {
+                        .address_mode_u = SamplerAddressMode::ClampToEdge,
+                        .address_mode_v = SamplerAddressMode::ClampToEdge,
+                        .address_mode_w = SamplerAddressMode::ClampToEdge,
+                    }
+                ),
                 shadow_map ? shadow_map : rendering_defaults->default_texture,
-                device->create_sampler(SamplerDescription {
-                    .address_mode_u = SamplerAddressMode::ClampToEdge,
-                    .address_mode_v = SamplerAddressMode::ClampToEdge,
-                    .address_mode_w = SamplerAddressMode::ClampToEdge,
-                }),
+                device->create_sampler(
+                    SamplerDescription {
+                        .address_mode_u = SamplerAddressMode::ClampToEdge,
+                        .address_mode_v = SamplerAddressMode::ClampToEdge,
+                        .address_mode_w = SamplerAddressMode::ClampToEdge,
+                    }
+                ),
             },
-    });
+        }
+    );
 
     vxgi_lighting->resource_set = resource_set;
 }

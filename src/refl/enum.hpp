@@ -32,10 +32,8 @@ class Enum {
         return *this;
     }
 
-    Enum& add_enumerator(
-        const std::string& name,
-        std::int64_t underlying_value
-    ) {
+    Enum&
+    add_enumerator(const std::string& name, std::int64_t underlying_value) {
         m_enumerators[name] = underlying_value;
         return *this;
     }

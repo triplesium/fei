@@ -155,7 +155,8 @@ TEST_CASE(
         REQUIRE(world.get_component<Health>(entity) == Health(100));
     }
 
-    SECTION("Removing a component from a non-last entity keeps moved rows valid"
+    SECTION(
+        "Removing a component from a non-last entity keeps moved rows valid"
     ) {
         Entity first = world.entity();
         world.add_component(first, Position(1.0f, 1.0f));
