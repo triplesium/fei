@@ -4,6 +4,7 @@
 #include "graphics/enums.hpp"
 #include "graphics_opengl/buffer.hpp"
 #include "graphics_opengl/command_buffer.hpp"
+#include "graphics_opengl/command_buffer_executor.hpp"
 #include "graphics_opengl/framebuffer.hpp"
 #include "graphics_opengl/pipeline.hpp"
 #include "graphics_opengl/resource.hpp"
@@ -94,7 +95,19 @@ GraphicsDeviceOpenGL::create_sampler(const SamplerDescription& desc) {
 
 void GraphicsDeviceOpenGL::submit_commands(
     std::shared_ptr<CommandBuffer> command_buffer
-) {}
+) {
+    auto command_buffer_gl =
+        std::dynamic_pointer_cast<CommandBufferOpenGL>(command_buffer);
+    if (!command_buffer_gl) {
+        fatal(
+            "GraphicsDeviceOpenGL::submit_commands received a non-OpenGL "
+            "command buffer"
+        );
+    }
+
+    CommandBufferExecutorOpenGL executor(*this);
+    executor.execute(*command_buffer_gl);
+}
 
 void GraphicsDeviceOpenGL::update_texture(
     std::shared_ptr<Texture> texture,

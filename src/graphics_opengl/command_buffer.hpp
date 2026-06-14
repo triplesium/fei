@@ -1,21 +1,31 @@
 #pragma once
 #include "graphics/command_buffer.hpp"
-#include "graphics/resource.hpp"
-#include "graphics_opengl/graphics_device.hpp"
-#include "graphics_opengl/resource.hpp"
-#include "graphics_opengl/utils.hpp"
+#include "graphics_opengl/command_buffer_commands.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <vector>
 
 namespace fei {
 
+class CommandBufferExecutorOpenGL;
+class GraphicsDeviceOpenGL;
+
 class CommandBufferOpenGL : public CommandBuffer {
   private:
-    std::vector<std::shared_ptr<ResourceSetOpenGL>> m_bound_resource_sets;
+    friend class CommandBufferExecutorOpenGL;
+
+    enum class State {
+        Initial,
+        Recording,
+        Executable,
+        Submitted,
+    };
+
+    std::vector<opengl_commands::Command> m_commands;
+    State m_state {State::Initial};
     GraphicsDeviceOpenGL& m_device;
-    GLenum m_draw_elements_type;
 
   public:
     CommandBufferOpenGL(GraphicsDeviceOpenGL& device) : m_device(device) {}
@@ -85,8 +95,9 @@ class CommandBufferOpenGL : public CommandBuffer {
     ) override;
 
   private:
-    uint32 calculate_uniform_block_base_index(uint32 slot);
-    uint32 calculate_storage_buffer_base_index(uint32 slot);
+    void ensure_recording(const char* command_name) const;
+    void ensure_executable(const char* operation_name) const;
+    void mark_submitted();
 };
 
 } // namespace fei

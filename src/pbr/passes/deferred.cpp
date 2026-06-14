@@ -322,6 +322,7 @@ void defered_prepass(
     Res<DeferedRenderResources> resources
 ) {
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->begin_render_pass(
         RenderPassDescription {
             .color_attachments =
@@ -408,6 +409,9 @@ void defered_prepass(
             command_buffer->draw(0, gpu_mesh.vertex_count());
         }
     }
+    command_buffer->end_render_pass();
+    command_buffer->end();
+    device->submit_commands(command_buffer);
 }
 
 [[maybe_unused]] void defered_pass(
@@ -422,6 +426,7 @@ void defered_prepass(
     auto [mesh_view_resource_set] = query_cameras.first();
 
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->begin_render_pass(
         RenderPassDescription {
             .color_attachments =
@@ -465,6 +470,7 @@ void defered_prepass(
         gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
     );
     command_buffer->end_render_pass();
+    command_buffer->end();
     device->submit_commands(command_buffer);
 }
 
@@ -479,6 +485,7 @@ void direct_lighting_pass(
     auto [mesh_view_resource_set] = query_cameras.first();
 
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->begin_render_pass(
         RenderPassDescription {
             .color_attachments = {
@@ -514,6 +521,7 @@ void direct_lighting_pass(
         gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
     );
     command_buffer->end_render_pass();
+    command_buffer->end();
     device->submit_commands(command_buffer);
 }
 
@@ -528,6 +536,7 @@ void indirect_lighting_pass(
     auto [mesh_view_resource_set] = query_cameras.first();
 
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->begin_render_pass(
         RenderPassDescription {
             .color_attachments = {
@@ -563,6 +572,7 @@ void indirect_lighting_pass(
         gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
     );
     command_buffer->end_render_pass();
+    command_buffer->end();
     device->submit_commands(command_buffer);
 }
 
@@ -576,6 +586,7 @@ void composite_pass(
     auto [mesh_view_resource_set] = query_cameras.first();
 
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->begin_render_pass(
         RenderPassDescription {
             .color_attachments = {
@@ -611,6 +622,7 @@ void composite_pass(
         gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
     );
     command_buffer->end_render_pass();
+    command_buffer->end();
     device->submit_commands(command_buffer);
 }
 
@@ -619,6 +631,7 @@ void composite_pass(
     Res<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->begin_render_pass(
         RenderPassDescription {
             .color_attachments = {
@@ -631,6 +644,7 @@ void composite_pass(
     );
     command_buffer->end_render_pass();
     command_buffer->blit_to(device->main_framebuffer());
+    command_buffer->end();
     device->submit_commands(command_buffer);
 }
 
@@ -639,6 +653,7 @@ void blit_composite_pass(
     Res<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->begin_render_pass(
         RenderPassDescription {
             .color_attachments = {
@@ -651,6 +666,7 @@ void blit_composite_pass(
     );
     command_buffer->end_render_pass();
     command_buffer->blit_to(device->main_framebuffer());
+    command_buffer->end();
     device->submit_commands(command_buffer);
 }
 

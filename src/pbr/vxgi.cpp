@@ -53,6 +53,7 @@ void setup_vxgi(
     volumes->static_flag = device->create_texture(desc);
 
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     for (int i = 0; i < 6; ++i) {
         volumes->mipmap[i] = device->create_texture(
             TextureDescription {
@@ -73,6 +74,7 @@ void setup_vxgi(
         );
         command_buffer->generate_mipmaps(volumes->mipmap[i]);
     }
+    command_buffer->end();
     device->submit_commands(command_buffer);
 
     volumes->resource_layout = device->create_resource_layout(
@@ -265,6 +267,7 @@ void voxelize_scene(
     }
 
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->begin_render_pass(
         RenderPassDescription {
             .color_attachments = {
@@ -320,6 +323,7 @@ void voxelize_scene(
         }
     }
     command_buffer->end_render_pass();
+    command_buffer->end();
     device->submit_commands(command_buffer);
 }
 
@@ -401,10 +405,12 @@ void generate_mipmap_base(
     Res<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->set_compute_pipeline(generate_mipmap_base->pipeline);
     command_buffer->set_resource_set(0, generate_mipmap_base->resource_set);
     auto work_groups = (volumes->config.voxel_resolution / 2) / 8;
     command_buffer->dispatch(work_groups, work_groups, work_groups);
+    command_buffer->end();
     device->submit_commands(command_buffer);
 }
 
@@ -465,6 +471,7 @@ void generate_mipmap_volume(
     Res<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->set_compute_pipeline(generate_mipmap_volume->pipeline);
     uint32 mip_dimension = volumes->config.voxel_resolution / 4;
     uint32 mip_level = 0;
@@ -474,9 +481,8 @@ void generate_mipmap_volume(
             .mip_dimension = Vector3 {static_cast<float>(mip_dimension)},
             .mip_level = static_cast<int>(mip_level),
         };
-        device->update_buffer(
+        command_buffer->update_buffer(
             generate_mipmap_volume->uniform_buffer,
-            0,
             &uniform,
             sizeof(VxgiGenerateMipmapVolume::Uniform)
         );
@@ -515,6 +521,7 @@ void generate_mipmap_volume(
         mip_dimension /= 2;
         ++mip_level;
     }
+    command_buffer->end();
     device->submit_commands(command_buffer);
 }
 
@@ -644,12 +651,14 @@ void inject_radiance(
     Res<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->set_compute_pipeline(inject_radiance->pipeline);
     command_buffer->set_resource_set(0, volumes->resource_set);
     command_buffer->set_resource_set(1, voxelization->resource_set);
     command_buffer->set_resource_set(2, inject_radiance->resource_set);
     auto work_groups = (volumes->config.voxel_resolution) / 8;
     command_buffer->dispatch(work_groups, work_groups, work_groups);
+    command_buffer->end();
     device->submit_commands(command_buffer);
 
     generate_mipmap_base(volumes, mipmap_base, device);
@@ -749,10 +758,12 @@ void inject_propagation(
     Res<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->set_compute_pipeline(inject_propagation->pipeline);
     command_buffer->set_resource_set(0, inject_propagation->resource_set);
     auto work_groups = (volumes->config.voxel_resolution) / 8;
     command_buffer->dispatch(work_groups, work_groups, work_groups);
+    command_buffer->end();
     device->submit_commands(command_buffer);
     generate_mipmap_base(volumes, mipmap_base, device);
     generate_mipmap_volume(volumes, mipmap_volume, device);

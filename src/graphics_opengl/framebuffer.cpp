@@ -38,6 +38,13 @@ FramebufferOpenGL::FramebufferOpenGL(const FramebufferDescription& desc) :
             bufs.data()
         );
         opengl_check_error();
+        glNamedFramebufferReadBuffer(m_fbo, GL_COLOR_ATTACHMENT0);
+        opengl_check_error();
+    } else {
+        glNamedFramebufferDrawBuffer(m_fbo, GL_NONE);
+        opengl_check_error();
+        glNamedFramebufferReadBuffer(m_fbo, GL_NONE);
+        opengl_check_error();
     }
 
     if (m_depth_attachment.has_value()) {

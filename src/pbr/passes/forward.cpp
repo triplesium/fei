@@ -35,6 +35,7 @@ void shadow_pass(
         query_lights.first();
 
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->begin_render_pass(
         RenderPassDescription {
             .depth_stencil_attachment = RenderPassDepthStencilAttachment {
@@ -90,6 +91,7 @@ void shadow_pass(
         }
     }
     command_buffer->end_render_pass();
+    command_buffer->end();
     device->submit_commands(command_buffer);
 }
 
@@ -105,6 +107,7 @@ void forward_pass(
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras
 ) {
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->begin_render_pass(
         RenderPassDescription {
             .color_attachments =
@@ -170,6 +173,7 @@ void forward_pass(
         }
     }
     command_buffer->end_render_pass();
+    command_buffer->end();
     device->submit_commands(command_buffer);
 }
 
@@ -207,6 +211,7 @@ void skybox_pass(
     );
 
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->begin_render_pass(
         RenderPassDescription {
             .color_attachments =
@@ -273,6 +278,7 @@ void skybox_pass(
     command_buffer->set_vertex_buffer(gpu_mesh.vertex_buffer());
     command_buffer->draw(0, gpu_mesh.vertex_count());
     command_buffer->end_render_pass();
+    command_buffer->end();
     device->submit_commands(command_buffer);
 }
 
@@ -281,6 +287,7 @@ void blit_pass(
     Res<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     command_buffer->begin_render_pass(
         RenderPassDescription {
             .color_attachments = {
@@ -293,6 +300,7 @@ void blit_pass(
     );
     command_buffer->end_render_pass();
     command_buffer->blit_to(device->main_framebuffer());
+    command_buffer->end();
     device->submit_commands(command_buffer);
 }
 

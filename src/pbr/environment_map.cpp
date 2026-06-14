@@ -280,9 +280,8 @@ void generate_env_maps(
                     .roughness = static_cast<float>(level) /
                                  static_cast<float>(num_mips - 1),
                 };
-                device->update_buffer(
+                command_buffer->update_buffer(
                     uniform_buffer,
-                    0,
                     &uniform,
                     sizeof(FilteringConstants)
                 );

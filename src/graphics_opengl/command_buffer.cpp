@@ -1,101 +1,47 @@
 #include "graphics_opengl/command_buffer.hpp"
 
 #include "base/log.hpp"
-#include "base/types.hpp"
-#include "graphics/framebuffer.hpp"
-#include "graphics_opengl/buffer.hpp"
-#include "graphics_opengl/framebuffer.hpp"
-#include "graphics_opengl/pipeline.hpp"
-#include "graphics_opengl/sampler.hpp"
-#include "graphics_opengl/texture.hpp"
-#include "graphics_opengl/texture_view.hpp"
-#include "graphics_opengl/utils.hpp"
 
-#include <algorithm>
-#include <cassert>
-#include <memory>
+#include <cstring>
+#include <utility>
 
 namespace fei {
 
-void CommandBufferOpenGL::begin() {}
+namespace ogl_cmd = opengl_commands;
 
-void CommandBufferOpenGL::end() {}
-
-void CommandBufferOpenGL::begin_render_pass(const RenderPassDescription& desc) {
-    FramebufferDescription fb_desc;
-    for (const auto& attachment : desc.color_attachments) {
-        fb_desc.color_targets.push_back(
-            FramebufferAttachment {
-                .texture = attachment.texture,
-                .mip_level = 0,
-                .layer = 0
-            }
+void CommandBufferOpenGL::begin() {
+    if (m_state == State::Recording) {
+        fatal("CommandBufferOpenGL::begin called while already recording");
+    }
+    if (m_state == State::Executable) {
+        fatal(
+            "CommandBufferOpenGL::begin called before submitting the previous "
+            "recording"
         );
     }
-    if (desc.depth_stencil_attachment) {
-        fb_desc.depth_target = FramebufferAttachment {
-            .texture = desc.depth_stencil_attachment->texture,
-            .mip_level = 0,
-            .layer = 0
-        };
+
+    m_commands.clear();
+    m_framebuffer.reset();
+    m_pipeline.reset();
+    m_state = State::Recording;
+}
+
+void CommandBufferOpenGL::end() {
+    if (m_state != State::Recording) {
+        fatal("CommandBufferOpenGL::end called before begin");
     }
 
-    auto framebuffer = m_device.create_framebuffer(fb_desc);
-    set_framebuffer(framebuffer);
-    auto fb_gl = std::static_pointer_cast<FramebufferOpenGL>(framebuffer);
+    m_state = State::Executable;
+}
 
-    if (desc.color_attachments.empty()) {
-        glDrawBuffer(GL_NONE);
-        opengl_check_error();
-        glReadBuffer(GL_NONE);
-        opengl_check_error();
-    }
-
-    // Handle Color Clears
-    for (size_t i = 0; i < desc.color_attachments.size(); ++i) {
-        const auto& att = desc.color_attachments[i];
-        if (att.load_op == LoadOp::Clear) {
-            glClearNamedFramebufferfv(
-                fb_gl->id(),
-                GL_COLOR,
-                static_cast<GLint>(i),
-                att.clear_color.data()
-            );
-            opengl_check_error();
-        }
-    }
-
-    // Handle Depth/Stencil Clears
-    if (desc.depth_stencil_attachment) {
-        const auto& att = *desc.depth_stencil_attachment;
-        if (att.depth_load_op == LoadOp::Clear &&
-            att.stencil_load_op == LoadOp::Clear) {
-            glClearNamedFramebufferfi(
-                fb_gl->id(),
-                GL_DEPTH_STENCIL,
-                0,
-                att.clear_depth,
-                att.clear_stencil
-            );
-            // >>>
-        } else if (att.depth_load_op == LoadOp::Clear) {
-            glClearNamedFramebufferfv(
-                fb_gl->id(),
-                GL_DEPTH,
-                0,
-                &att.clear_depth
-            );
-        } else if (att.stencil_load_op == LoadOp::Clear) {
-            GLint s = att.clear_stencil;
-            glClearNamedFramebufferiv(fb_gl->id(), GL_STENCIL, 0, &s);
-        }
-        opengl_check_error();
-    }
+void CommandBufferOpenGL::begin_render_pass(const RenderPassDescription& desc) {
+    ensure_recording("begin_render_pass");
+    m_commands.emplace_back(ogl_cmd::BeginRenderPass {.desc = desc});
 }
 
 void CommandBufferOpenGL::end_render_pass() {
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    opengl_check_error();
+    ensure_recording("end_render_pass");
+    m_commands.emplace_back(ogl_cmd::EndRenderPass {});
 }
 
 void CommandBufferOpenGL::set_viewport(
@@ -104,196 +50,45 @@ void CommandBufferOpenGL::set_viewport(
     std::uint32_t w,
     std::uint32_t h
 ) {
-    glViewport(x, y, to_gl_sizei(w), to_gl_sizei(h));
-    opengl_check_error();
+    ensure_recording("set_viewport");
+    m_commands.emplace_back(
+        ogl_cmd::SetViewport {.x = x, .y = y, .w = w, .h = h}
+    );
 }
 
 void CommandBufferOpenGL::clear_color(const Color4F& color) {
-    glClearColor(color.r, color.g, color.b, color.a);
-    opengl_check_error();
-    glClear(GL_COLOR_BUFFER_BIT);
-    opengl_check_error();
+    ensure_recording("clear_color");
+    m_commands.emplace_back(ogl_cmd::ClearColor {.color = color});
 }
 
 void CommandBufferOpenGL::clear_depth(float depth) {
-    glClearDepth(depth);
-    opengl_check_error();
-    glClear(GL_DEPTH_BUFFER_BIT);
-    opengl_check_error();
+    ensure_recording("clear_depth");
+    m_commands.emplace_back(ogl_cmd::ClearDepth {.depth = depth});
 }
 
 void CommandBufferOpenGL::clear_stencil(std::uint8_t stencil) {
-    glClearStencil(stencil);
-    opengl_check_error();
-    glClear(GL_STENCIL_BUFFER_BIT);
-    opengl_check_error();
+    ensure_recording("clear_stencil");
+    m_commands.emplace_back(ogl_cmd::ClearStencil {.stencil = stencil});
 }
 
 void CommandBufferOpenGL::set_vertex_buffer(std::shared_ptr<Buffer> buffer) {
-    auto buffer_gl = std::static_pointer_cast<BufferOpenGL>(buffer);
-    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(m_pipeline);
-
-    glBindBuffer(GL_ARRAY_BUFFER, buffer_gl->id());
-    opengl_check_error();
-    for (auto& layout : pipeline_gl->vertex_layouts()) {
-        for (auto& attr : layout.attributes) {
-            auto location = static_cast<GLuint>(attr.location);
-            glEnableVertexAttribArray(location);
-            opengl_check_error();
-            glVertexAttribPointer(
-                location,
-                to_gl_attribute_size(attr.format),
-                to_gl_attribute_type(attr.format),
-                attr.normalized,
-                static_cast<GLsizei>(layout.stride),
-                reinterpret_cast<const GLvoid*>(
-                    static_cast<std::uintptr_t>(attr.offset)
-                )
-            );
-            opengl_check_error();
-        }
-    }
+    ensure_recording("set_vertex_buffer");
+    m_commands.emplace_back(
+        ogl_cmd::SetVertexBuffer {.buffer = std::move(buffer)}
+    );
 }
 
 void CommandBufferOpenGL::set_resource_set(
     uint32 slot,
     std::shared_ptr<ResourceSet> resource_set
 ) {
-    auto gl_pipeline = std::static_pointer_cast<PipelineOpenGL>(m_pipeline);
-    auto gl_resource_set =
-        std::static_pointer_cast<ResourceSetOpenGL>(resource_set);
-    if (slot >= gl_pipeline->resource_layouts().size()) {
-        fei::fatal(
-            "Resource set slot {} out of range (max {})",
-            slot,
-            gl_pipeline->resource_layouts().size()
-        );
-    }
-    if (m_bound_resource_sets.size() <= slot) {
-        m_bound_resource_sets.resize(slot + 1);
-    }
-    m_bound_resource_sets[slot] = gl_resource_set;
-    auto gl_layout = std::static_pointer_cast<ResourceLayoutOpenGL>(
-        gl_pipeline->resource_layouts()[slot]
+    ensure_recording("set_resource_set");
+    m_commands.emplace_back(
+        ogl_cmd::SetResourceSet {
+            .slot = slot,
+            .resource_set = std::move(resource_set),
+        }
     );
-    assert(gl_resource_set->resources().size() == gl_layout->elements().size());
-
-    uint32 uniform_block_base_index = calculate_uniform_block_base_index(slot);
-    uint32 uniform_block_offset = 0;
-
-    uint32 storage_buffer_base_index =
-        calculate_storage_buffer_base_index(slot);
-    uint32 storage_buffer_offset = 0;
-
-    auto size = static_cast<uint32>(gl_layout->elements().size());
-    for (uint32 i = 0; i < size; ++i) {
-        auto& element = gl_layout->elements()[i];
-        auto kind = element.kind;
-        auto resource = gl_resource_set->resources()[i];
-        auto& binding_info = gl_pipeline->get_resource_binding(slot, i).value();
-        if (std::holds_alternative<PipelineOpenGL::EmptyBinding>(
-                binding_info
-            )) {
-            continue;
-        }
-        switch (kind) {
-            case ResourceKind::UniformBuffer: {
-                auto buffer = std::static_pointer_cast<BufferOpenGL>(resource);
-                auto& info =
-                    std::get<PipelineOpenGL::UniformBinding>(binding_info);
-                auto binding = uniform_block_base_index + uniform_block_offset;
-                glUniformBlockBinding(
-                    gl_pipeline->program(),
-                    info.location,
-                    binding
-                );
-                opengl_check_error();
-                glBindBufferBase(GL_UNIFORM_BUFFER, binding, buffer->id());
-                opengl_check_error();
-                uniform_block_offset++;
-                break;
-            }
-            case ResourceKind::TextureReadOnly: {
-                auto texture_view = m_device.get_texture_view(resource);
-                auto texture_view_gl =
-                    std::static_pointer_cast<TextureViewOpenGL>(texture_view);
-                auto& info =
-                    std::get<PipelineOpenGL::TextureBinding>(binding_info);
-                glBindTextureUnit(
-                    info.unit,
-                    texture_view_gl->target_gl()->id()
-                );
-                opengl_check_error();
-                glUniform1i(info.location, to_gl_int(info.unit));
-                opengl_check_error();
-                break;
-            }
-            case ResourceKind::TextureReadWrite: {
-                auto texture_view = m_device.get_texture_view(resource);
-                auto texture_view_gl =
-                    std::static_pointer_cast<TextureViewOpenGL>(texture_view);
-                auto& info =
-                    std::get<PipelineOpenGL::TextureBinding>(binding_info);
-                bool layered = texture_view_gl->target_gl()->usage().is_set(
-                                   TextureUsage::Cubemap
-                               ) ||
-                               texture_view_gl->target_gl()->layer() > 1;
-                glBindImageTexture(
-                    info.unit,
-                    texture_view_gl->target_gl()->id(),
-                    to_gl_int(texture_view_gl->base_mip_level()),
-                    layered,
-                    to_gl_int(texture_view_gl->base_array_layer()),
-                    GL_READ_WRITE,
-                    texture_view_gl->target_gl()->gl_sized_internal_format()
-                );
-                opengl_check_error();
-                glUniform1i(info.location, to_gl_int(info.unit));
-                opengl_check_error();
-                break;
-            }
-            case ResourceKind::StorageBufferReadOnly:
-            case ResourceKind::StorageBufferReadWrite: {
-                auto buffer = std::static_pointer_cast<BufferOpenGL>(resource);
-                auto& info = std::get<PipelineOpenGL::ShaderStorageBinding>(
-                    binding_info
-                );
-                auto binding =
-                    storage_buffer_base_index + storage_buffer_offset;
-                glShaderStorageBlockBinding(
-                    gl_pipeline->program(),
-                    info.binding,
-                    binding
-                );
-                opengl_check_error();
-                glBindBufferBase(
-                    GL_SHADER_STORAGE_BUFFER,
-                    binding,
-                    buffer->id()
-                );
-                opengl_check_error();
-                storage_buffer_offset++;
-                break;
-            }
-            case ResourceKind::Sampler: {
-                auto sampler =
-                    std::static_pointer_cast<SamplerOpenGL>(resource);
-                auto& info =
-                    std::get<PipelineOpenGL::SamplerBinding>(binding_info);
-                for (auto unit : info.units) {
-                    glBindSampler(unit, sampler->id());
-                    opengl_check_error();
-                }
-                break;
-            }
-            default:
-                fei::fatal(
-                    "ResourceKind {} not supported in "
-                    "CommandBufferOpenGL::set_resource_set",
-                    static_cast<uint32>(kind)
-                );
-        }
-    }
 }
 
 void CommandBufferOpenGL::update_buffer(
@@ -301,46 +96,32 @@ void CommandBufferOpenGL::update_buffer(
     const void* data,
     std::size_t size
 ) {
-    auto buffer_gl = std::static_pointer_cast<BufferOpenGL>(buffer);
+    ensure_recording("update_buffer");
+    if (size > 0 && data == nullptr) {
+        fatal("CommandBufferOpenGL::update_buffer received null data");
+    }
 
-    glNamedBufferData(
-        buffer_gl->id(),
-        to_gl_sizeiptr(size),
-        data,
-        to_gl_buffer_usage(buffer_gl->usages())
+    std::vector<std::byte> bytes(size);
+    if (size > 0) {
+        std::memcpy(bytes.data(), data, size);
+    }
+
+    m_commands.emplace_back(
+        ogl_cmd::UpdateBuffer {
+            .buffer = std::move(buffer),
+            .data = std::move(bytes),
+        }
     );
-    opengl_check_error();
 }
 
 void CommandBufferOpenGL::draw(size_t start, size_t count) {
-    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(m_pipeline);
-
-    glDrawArrays(
-        to_gl_render_primitive(pipeline_gl->render_primitive()),
-        static_cast<GLint>(start),
-        static_cast<GLsizei>(count)
-    );
-    opengl_check_error();
-    if (pipeline_gl->memory_barriers() != 0) {
-        glMemoryBarrier(pipeline_gl->memory_barriers());
-        opengl_check_error();
-    }
+    ensure_recording("draw");
+    m_commands.emplace_back(ogl_cmd::Draw {.start = start, .count = count});
 }
 
 void CommandBufferOpenGL::draw_indexed(size_t count) {
-    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(m_pipeline);
-
-    glDrawElements(
-        to_gl_render_primitive(pipeline_gl->render_primitive()),
-        static_cast<GLsizei>(count),
-        m_draw_elements_type,
-        nullptr
-    );
-    opengl_check_error();
-    if (pipeline_gl->memory_barriers() != 0) {
-        glMemoryBarrier(pipeline_gl->memory_barriers());
-        opengl_check_error();
-    }
+    ensure_recording("draw_indexed");
+    m_commands.emplace_back(ogl_cmd::DrawIndexed {.count = count});
 }
 
 void CommandBufferOpenGL::dispatch(
@@ -348,87 +129,41 @@ void CommandBufferOpenGL::dispatch(
     std::size_t group_y,
     std::size_t group_z
 ) {
-    glDispatchCompute(
-        static_cast<GLuint>(group_x),
-        static_cast<GLuint>(group_y),
-        static_cast<GLuint>(group_z)
+    ensure_recording("dispatch");
+    m_commands.emplace_back(
+        ogl_cmd::Dispatch {
+            .group_x = group_x,
+            .group_y = group_y,
+            .group_z = group_z,
+        }
     );
-    opengl_check_error();
-
-    glMemoryBarrier(GL_ALL_BARRIER_BITS);
-    opengl_check_error();
 }
 
 void CommandBufferOpenGL::set_framebuffer_impl(
     std::shared_ptr<Framebuffer> framebuffer
 ) {
-    auto framebuffer_gl =
-        std::static_pointer_cast<FramebufferOpenGL>(framebuffer);
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_gl->id());
-    opengl_check_error();
+    ensure_recording("set_framebuffer");
+    m_commands.emplace_back(
+        ogl_cmd::SetFramebuffer {.framebuffer = std::move(framebuffer)}
+    );
 }
 
 void CommandBufferOpenGL::set_render_pipeline_impl(
     std::shared_ptr<Pipeline> pipeline
 ) {
-    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(pipeline);
-
-    if (m_bound_resource_sets.size() < pipeline_gl->resource_layouts().size()) {
-        m_bound_resource_sets.resize(pipeline_gl->resource_layouts().size());
-    }
-
-    glUseProgram(pipeline_gl->program());
-    opengl_check_error();
-
-    const auto& blend_state = pipeline_gl->blend_state();
-    if (!blend_state.attachment_states.empty()) {
-        const auto& att = blend_state.attachment_states[0];
-        if (att.enabled) {
-            glEnable(GL_BLEND);
-            opengl_check_error();
-            // TODO:
-        } else {
-            glDisable(GL_BLEND);
-            opengl_check_error();
-        }
-    }
-
-    const auto& depth_stencil_state = pipeline_gl->depth_stencil_state();
-    if (depth_stencil_state.depth_test_enabled) {
-        glEnable(GL_DEPTH_TEST);
-        opengl_check_error();
-        glDepthFunc(
-            to_gl_compare_function(depth_stencil_state.depth_comparison)
-        );
-        opengl_check_error();
-    } else {
-        glDisable(GL_DEPTH_TEST);
-        opengl_check_error();
-    }
-
-    const auto& rasterizer_state = pipeline_gl->rasterizer_state();
-    if (rasterizer_state.cull_mode == CullMode::None) {
-        glDisable(GL_CULL_FACE);
-        opengl_check_error();
-    } else {
-        glEnable(GL_CULL_FACE);
-        opengl_check_error();
-        glCullFace(to_gl_cull_mode(rasterizer_state.cull_mode));
-        opengl_check_error();
-    }
+    ensure_recording("set_render_pipeline");
+    m_commands.emplace_back(
+        ogl_cmd::SetRenderPipeline {.pipeline = std::move(pipeline)}
+    );
 }
 
 void CommandBufferOpenGL::set_compute_pipeline_impl(
     std::shared_ptr<Pipeline> pipeline
 ) {
-    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(pipeline);
-
-    if (m_bound_resource_sets.size() < pipeline_gl->resource_layouts().size()) {
-        m_bound_resource_sets.resize(pipeline_gl->resource_layouts().size());
-    }
-
-    glUseProgram(pipeline_gl->program());
-    opengl_check_error();
+    ensure_recording("set_compute_pipeline");
+    m_commands.emplace_back(
+        ogl_cmd::SetComputePipeline {.pipeline = std::move(pipeline)}
+    );
 }
 
 void CommandBufferOpenGL::set_index_buffer_impl(
@@ -436,44 +171,28 @@ void CommandBufferOpenGL::set_index_buffer_impl(
     IndexFormat format,
     uint32 offset
 ) {
-    auto buffer_gl = std::static_pointer_cast<BufferOpenGL>(buffer);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_gl->id());
-    opengl_check_error();
-
-    m_draw_elements_type = to_gl_draw_elements_type(format);
+    ensure_recording("set_index_buffer");
+    m_commands.emplace_back(
+        ogl_cmd::SetIndexBuffer {
+            .buffer = std::move(buffer),
+            .format = format,
+            .offset = offset,
+        }
+    );
 }
 
 void CommandBufferOpenGL::blit_to(std::shared_ptr<Framebuffer> target) {
-    auto target_gl = std::static_pointer_cast<FramebufferOpenGL>(target);
-    auto src_gl = std::static_pointer_cast<FramebufferOpenGL>(m_framebuffer);
-
-    GLint viewport[4];
-    glGetIntegerv(GL_VIEWPORT, viewport);
-    opengl_check_error();
-
-    glBlitNamedFramebuffer(
-        src_gl->id(),
-        target_gl->id(),
-        0,
-        0,
-        viewport[2],
-        viewport[3],
-        0,
-        0,
-        viewport[2],
-        viewport[3],
-        GL_COLOR_BUFFER_BIT,
-        GL_LINEAR
-    );
-    opengl_check_error();
+    ensure_recording("blit_to");
+    m_commands.emplace_back(ogl_cmd::BlitTo {.target = std::move(target)});
 }
 
 void CommandBufferOpenGL::generate_mipmaps_impl(
     std::shared_ptr<Texture> texture
 ) {
-    auto texture_gl = std::static_pointer_cast<TextureOpenGL>(texture);
-    glGenerateTextureMipmap(texture_gl->id());
-    opengl_check_error();
+    ensure_recording("generate_mipmaps");
+    m_commands.emplace_back(
+        ogl_cmd::GenerateMipmaps {.texture = std::move(texture)}
+    );
 }
 
 void CommandBufferOpenGL::copy_texture_impl(
@@ -494,49 +213,43 @@ void CommandBufferOpenGL::copy_texture_impl(
     uint32 depth,
     uint32 layer_count
 ) {
-    auto src_gl = std::static_pointer_cast<TextureOpenGL>(src);
-    auto dst_gl = std::static_pointer_cast<TextureOpenGL>(dst);
-    uint32 src_z_or_layer = std::max(src_z, src_base_array_layer);
-    uint32 dst_z_or_layer = std::max(dst_z, dst_base_array_layer);
-    uint32 depth_or_layer_count = std::max(depth, layer_count);
-    // [NOTE] Veldrid says glCopyImageSubData does not work properly when depth
-    // > 1, ignoring this for now
-    glCopyImageSubData(
-        src_gl->id(),
-        to_gl_texture_target(src->usage(), src->type()),
-        static_cast<GLint>(src_mip_level),
-        static_cast<GLint>(src_x),
-        static_cast<GLint>(src_y),
-        static_cast<GLint>(src_z_or_layer),
-        dst_gl->id(),
-        to_gl_texture_target(dst->usage(), dst->type()),
-        static_cast<GLint>(dst_mip_level),
-        static_cast<GLint>(dst_x),
-        static_cast<GLint>(dst_y),
-        static_cast<GLint>(dst_z_or_layer),
-        static_cast<GLsizei>(width),
-        static_cast<GLsizei>(height),
-        static_cast<GLsizei>(depth_or_layer_count)
+    ensure_recording("copy_texture");
+    m_commands.emplace_back(
+        ogl_cmd::CopyTexture {
+            .src = std::move(src),
+            .src_x = src_x,
+            .src_y = src_y,
+            .src_z = src_z,
+            .src_mip_level = src_mip_level,
+            .src_base_array_layer = src_base_array_layer,
+            .dst = std::move(dst),
+            .dst_x = dst_x,
+            .dst_y = dst_y,
+            .dst_z = dst_z,
+            .dst_mip_level = dst_mip_level,
+            .dst_base_array_layer = dst_base_array_layer,
+            .width = width,
+            .height = height,
+            .depth = depth,
+            .layer_count = layer_count,
+        }
     );
-    opengl_check_error();
 }
 
-uint32 CommandBufferOpenGL::calculate_uniform_block_base_index(uint32 slot) {
-    uint32 base_index = 0;
-    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(m_pipeline);
-    for (uint32 s = 0; s < slot; ++s) {
-        base_index += pipeline_gl->uniform_buffer_count(s);
+void CommandBufferOpenGL::ensure_recording(const char* command_name) const {
+    if (m_state != State::Recording) {
+        fatal("CommandBufferOpenGL::{} called outside begin/end", command_name);
     }
-    return base_index;
 }
 
-uint32 CommandBufferOpenGL::calculate_storage_buffer_base_index(uint32 slot) {
-    uint32 base_index = 0;
-    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(m_pipeline);
-    for (uint32 s = 0; s < slot; ++s) {
-        base_index += pipeline_gl->storage_buffer_count(s);
+void CommandBufferOpenGL::ensure_executable(const char* operation_name) const {
+    if (m_state != State::Executable) {
+        fatal("CommandBufferOpenGL::{} called before end", operation_name);
     }
-    return base_index;
+}
+
+void CommandBufferOpenGL::mark_submitted() {
+    m_state = State::Submitted;
 }
 
 } // namespace fei

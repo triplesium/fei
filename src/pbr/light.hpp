@@ -280,6 +280,7 @@ inline void render_shadow_map(
     Res<ShadowMappingResources> shadow_mapping_resources
 ) {
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     for (auto [light_entity, light, transform, view_resource_set, shadow_map] :
          query_light) {
         command_buffer->begin_render_pass(
@@ -349,6 +350,7 @@ inline void render_shadow_map(
         }
         command_buffer->end_render_pass();
     }
+    command_buffer->end();
     device->submit_commands(command_buffer);
 }
 
@@ -369,6 +371,7 @@ inline void blur_shadow_map(
     constexpr float blur_scale = 1.0f;
 
     auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
     for (auto [shadow_map] : query_shadow_maps) {
         // Horizontal blur
         command_buffer->begin_render_pass(
@@ -397,9 +400,8 @@ inline void blur_shadow_map(
                 },
             .type = 2,
         };
-        device->update_buffer(
+        command_buffer->update_buffer(
             blur_resources->uniform_buffer,
-            0,
             &horizontal_blur_uniform,
             sizeof(BlurUniform)
         );
@@ -453,9 +455,8 @@ inline void blur_shadow_map(
                 },
             .type = 2,
         };
-        device->update_buffer(
+        command_buffer->update_buffer(
             blur_resources->uniform_buffer,
-            0,
             &vertical_blur_uniform,
             sizeof(BlurUniform)
         );
@@ -483,6 +484,8 @@ inline void blur_shadow_map(
         command_buffer->end_render_pass();
         command_buffer->generate_mipmaps(shadow_map.texture);
     }
+    command_buffer->end();
+    device->submit_commands(command_buffer);
 }
 
 } // namespace fei
