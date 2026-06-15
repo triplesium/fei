@@ -10,6 +10,13 @@ task("reflgen")
         description = "Generate reflection metadata for the project.",
     }
 
+target("fei-reflgen")
+    set_kind("binary")
+    set_default(false)
+    add_files("reflgen/*.cpp")
+    add_headerfiles("reflgen/*.hpp")
+    add_packages("llvm-libclang")
+
 task("tidy")
     on_run(function ()
         local option = import("core.base.option")

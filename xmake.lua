@@ -5,6 +5,30 @@ set_warnings("all")
 add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace")
 add_requires("glfw", {configs = {shared = false}})
 add_requires("imgui", {configs = {glfw = true, opengl3 = true}})
+add_requires("llvm-libclang")
+
+package("llvm-libclang")
+    set_kind("library")
+    add_deps("llvm 21.1.0")
+    on_fetch(function(package)
+        local llvm = package:dep("llvm")
+        if llvm then
+            local installdir = llvm:installdir()
+            return {
+                includedirs = path.join(installdir, "include"),
+                linkdirs = path.join(installdir, "lib"),
+                links = package:is_plat("windows") and "libclang" or "clang",
+                version = llvm:version()
+            }
+        end
+    end)
+    on_load(function(package)
+        local llvm = package:dep("llvm")
+        if llvm then
+            package:addenv("PATH", path.join(llvm:installdir(), "bin"))
+        end
+    end)
+package_end()
 
 set_policy("check.auto_ignore_flags", false)
 if is_plat("windows") then
