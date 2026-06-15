@@ -24,6 +24,8 @@
 ## Build, Test, and Development Commands
 
 - `xmake`: build the default project targets and resolve xmake packages.
+- Prefer `xmake ... -y` for build/test/run commands, so package installation
+  prompts do not block execution.
 - `xmake f -m debug` or `xmake f -m release`: select the build mode.
 - `xmake test`: build and run all registered Catch2 tests, including
   `set_default(false)` targets.
