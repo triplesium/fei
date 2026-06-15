@@ -24,6 +24,8 @@ class Res {
     T* operator->() { return m_resource; }
     const T* operator->() const { return m_resource; }
 };
+template<typename T>
+struct SystemParamTraits<Res<T>> : StatelessParamTraits<Res<T>> {};
 static_assert(SystemParam<Res<int>>);
 
 template<typename T>
@@ -42,6 +44,8 @@ class CRes {
     const T& operator*() const { return *m_resource; }
     const T* operator->() const { return m_resource; }
 };
+template<typename T>
+struct SystemParamTraits<CRes<T>> : StatelessParamTraits<CRes<T>> {};
 static_assert(SystemParam<CRes<int>>);
 
 class WorldRef {
@@ -62,6 +66,8 @@ class WorldRef {
     World& operator*() { return *m_world; }
     const World& operator*() const { return *m_world; }
 };
-static_assert(StatelessSystemParam<WorldRef>);
+template<>
+struct SystemParamTraits<WorldRef> : StatelessParamTraits<WorldRef> {};
+static_assert(SystemParam<WorldRef>);
 
 } // namespace fei

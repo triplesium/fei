@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ecs/fwd.hpp"
+#include "ecs/system.hpp"
 #include "ecs/world.hpp"
 
 #include <functional>
@@ -104,5 +105,8 @@ class Commands {
 
     World& world() { return m_world; }
 };
+template<>
+struct SystemParamTraits<Commands> : StatelessParamTraits<Commands> {};
+static_assert(SystemParam<Commands>);
 
 } // namespace fei

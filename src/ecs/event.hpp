@@ -110,6 +110,9 @@ class EventReader {
         m_events(events), m_last_event_count(last_event_count) {}
 
     Optional<T&> next() {
+        if (m_last_event_count < m_events.oldest_event_count()) {
+            m_last_event_count = m_events.oldest_event_count();
+        }
         auto event = m_events.get_event(m_last_event_count);
         if (!event) {
             return nullopt;
@@ -134,7 +137,10 @@ class EventReader {
     Events<T>& m_events;
     std::size_t& m_last_event_count;
 };
-static_assert(StatefulSystemParam<EventReader<int>>);
+template<typename T>
+struct SystemParamTraits<EventReader<T>> : StatefulParamTraits<EventReader<T>> {
+};
+static_assert(SystemParam<EventReader<int>>);
 
 template<typename T>
 class EventWriter {
@@ -155,6 +161,9 @@ class EventWriter {
   private:
     Events<T>* m_events {nullptr};
 };
-static_assert(StatelessSystemParam<EventWriter<int>>);
+template<typename T>
+struct SystemParamTraits<EventWriter<T>>
+    : StatelessParamTraits<EventWriter<T>> {};
+static_assert(SystemParam<EventWriter<int>>);
 
 } // namespace fei

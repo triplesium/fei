@@ -40,6 +40,10 @@ void custom_param_system(CustomParam) {}
 
 } // namespace
 
+template<>
+struct fei::SystemParamTraits<CustomParam> :
+    fei::StatelessParamTraits<CustomParam> {};
+
 TEST_CASE("ECS systems expose resource access metadata", "[ecs][system]") {
     FunctionSystem<decltype(resource_access_system)*> system(
         resource_access_system

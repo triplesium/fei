@@ -205,6 +205,9 @@ class Query {
         }
     }
 };
+template<typename... Datas>
+struct SystemParamTraits<Query<Datas...>>
+    : StatelessParamTraits<Query<Datas...>> {};
 
 template<typename Q, typename... Filters>
     requires SpecializationOf<Q, Query>
@@ -225,5 +228,9 @@ class FilteredQuery : public Q {
                (QueryFilter<Filters>::match(archetype) && ...);
     }
 };
+template<typename Q, typename... Filters>
+    requires SpecializationOf<Q, Query>
+struct SystemParamTraits<FilteredQuery<Q, Filters...>>
+    : StatelessParamTraits<FilteredQuery<Q, Filters...>> {};
 
 } // namespace fei

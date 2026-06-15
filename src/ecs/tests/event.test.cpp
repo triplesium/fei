@@ -91,6 +91,44 @@ TEST_CASE("ECS events can be sent, read, and aged", "[ecs][event]") {
         REQUIRE(reader2_count == 1);
     }
 
+    SECTION("Event reader skips expired cursor and continues with live events") {
+        auto& events = world.resource<Events<GameEvent>>();
+        std::size_t cursor = 0;
+        EventReader<GameEvent> reader(events, cursor);
+
+        events.send(GameEvent("stale"));
+        events.update();
+        events.update();
+        events.send(GameEvent("live"));
+
+        auto event = reader.next();
+        REQUIRE(event.has_value());
+        REQUIRE(event->message == "live");
+        REQUIRE_FALSE(reader.next().has_value());
+    }
+
+    SECTION("Scheduled reader initializes cursor from current event window") {
+        world.add_resource(CommandsQueue {});
+        world.add_resource(EventStats {});
+
+        auto& events = world.resource<Events<GameEvent>>();
+        events.send(GameEvent("stale"));
+        events.update();
+        events.update();
+
+        world.add_systems(
+            TestSchedule,
+            chain(scheduled_send_event, scheduled_read_events)
+        );
+        world.sort_systems();
+
+        world.run_schedule(TestSchedule);
+        REQUIRE(
+            world.resource<EventStats>().messages ==
+            std::vector<std::string> {"tick"}
+        );
+    }
+
     SECTION("Scheduled reader keeps cursor while events age across updates") {
         world.add_resource(CommandsQueue {});
         world.add_resource(EventStats {});

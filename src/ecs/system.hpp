@@ -4,6 +4,7 @@
 #include "ecs/system_access.hpp"
 
 #include <concepts>
+#include <optional>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -15,21 +16,37 @@ class World;
 class System;
 
 template<typename T>
-concept StatefulSystemParam = requires(World& world) {
-    typename T::State;
-    { T::init_state(world) } -> std::same_as<typename T::State>;
-    {
-        T::get_param(world, std::declval<typename T::State&>())
-    } -> std::same_as<T>;
+struct SystemParamTraits;
+
+template<typename T>
+struct StatelessParamTraits {
+    using State = std::monostate;
+
+    static State init_state(World&) { return {}; }
+
+    static T get_param(World& world, State&) { return T::get_param(world); }
 };
 
 template<typename T>
-concept StatelessSystemParam = requires(World& world) {
-    { T::get_param(world) } -> std::same_as<T>;
+struct StatefulParamTraits {
+    using State = typename T::State;
+
+    static State init_state(World& world) { return T::init_state(world); }
+
+    static T get_param(World& world, State& state) {
+        return T::get_param(world, state);
+    }
 };
 
 template<typename T>
-concept SystemParam = StatefulSystemParam<T> || StatelessSystemParam<T>;
+concept SystemParam =
+    requires(World& world, typename SystemParamTraits<T>::State& state) {
+        typename SystemParamTraits<T>::State;
+        {
+            SystemParamTraits<T>::init_state(world)
+        } -> std::same_as<typename SystemParamTraits<T>::State>;
+        { SystemParamTraits<T>::get_param(world, state) } -> std::same_as<T>;
+    };
 
 // Concept to check if a type can be used as a system
 template<typename T>
@@ -73,12 +90,7 @@ class FunctionSystem : public System {
 
     template<typename T>
     struct ParamState {
-        using type = std::monostate;
-    };
-
-    template<StatefulSystemParam T>
-    struct ParamState<T> {
-        using type = typename T::State;
+        using type = std::optional<typename SystemParamTraits<T>::State>;
     };
 
     template<typename Tuple>
@@ -136,13 +148,12 @@ class FunctionSystem : public System {
 
     template<typename T, size_t I>
     T prepare_param(World& world) {
-        if constexpr (StatefulSystemParam<T>) {
-            return T::get_param(world, std::get<I>(m_states));
-        } else if constexpr (StatelessSystemParam<T>) {
-            return T::get_param(world);
-        } else {
-            static_assert(false, "Unsupported system parameter type");
+        using Traits = SystemParamTraits<T>;
+        auto& state = std::get<I>(m_states);
+        if (!state) {
+            state.emplace(Traits::init_state(world));
         }
+        return Traits::get_param(world, *state);
     }
 };
 
