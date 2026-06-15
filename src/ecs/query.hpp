@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <tuple>
+#include <type_traits>
 #include <vector>
 
 namespace fei {
@@ -19,7 +20,12 @@ struct QueryData {
         return archetype.has_component(type_id<T>());
     }
     static T& get(const Archetype& archetype, std::size_t index) {
-        return archetype.get_component(type_id<T>(), index).template get<T>();
+        auto ref = archetype.get_component(type_id<T>(), index);
+        if constexpr (std::is_const_v<std::remove_reference_t<T>>) {
+            return ref.template get_const<T>();
+        } else {
+            return ref.template get<T>();
+        }
     }
 };
 

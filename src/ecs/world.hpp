@@ -10,6 +10,7 @@
 #include "refl/ref_utils.hpp"
 
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 #include <utility>
@@ -80,6 +81,12 @@ class World {
     }
 
     void sort_systems() { m_schedules.sort_systems(); }
+
+    void set_worker_threads(std::size_t thread_count) {
+        m_schedules.set_worker_threads(thread_count);
+    }
+
+    std::size_t worker_threads() const { return m_schedules.worker_threads(); }
 
     void configure_sets(uint32_t schedule, SystemSetConfigs config) {
         m_schedules.configure_sets(schedule, std::move(config));

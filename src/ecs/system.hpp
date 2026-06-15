@@ -1,6 +1,7 @@
 #pragma once
 #include "base/log.hpp"
 #include "base/type_traits.hpp"
+#include "ecs/system_access.hpp"
 
 #include <concepts>
 #include <tuple>
@@ -58,6 +59,7 @@ class System {
     virtual ~System() = default;
 
     virtual void run(World& world) = 0;
+    virtual const SystemAccess& access() const = 0;
     virtual bool hashable() const { return false; }
     virtual std::size_t hash() const { return 0; }
 };
@@ -67,6 +69,7 @@ class FunctionSystem : public System {
   private:
     using ParamTypes = typename FunctionTraits<Func>::args_tuple;
     Func m_func;
+    SystemAccess m_access {system_access_for_params<ParamTypes>()};
 
     template<typename T>
     struct ParamState {
@@ -96,6 +99,8 @@ class FunctionSystem : public System {
         auto params = prepare_params<ParamTypes>(world);
         std::apply(m_func, params);
     }
+
+    const SystemAccess& access() const override { return m_access; }
 
     bool hashable() const override {
         return std::is_pointer_v<Func> &&
