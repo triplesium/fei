@@ -165,7 +165,6 @@ int main() {
         .add_plugin<UIPlugin>()
         .add_plugin<EnvironmentMapPlugin>()
         .add_plugin<ScenePlugin>()
-        .add_plugin<VxgiPlugin>()
         .add_plugin<ScriptingPlugin>()
         .add_systems(PreStartUp, setup)
         .add_systems(Update, update_directional_light)

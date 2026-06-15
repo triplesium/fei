@@ -1,8 +1,14 @@
 #include "app/app.hpp"
 
 namespace fei {
+
+App& App::add_plugins(PluginGroupBuilder builder) {
+    builder.finish(*this);
+    return *this;
+}
+
 void App::run() {
-    for (auto& [type, plugin] : m_plugins) {
+    for (auto& plugin : m_plugins) {
         plugin->finish(*this);
     }
     m_world.sort_systems();

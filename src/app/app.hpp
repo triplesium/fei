@@ -1,5 +1,6 @@
 #pragma once
-#include "app/plugin.hpp"
+#include "app/plugin_group.hpp"
+#include "base/log.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/event.hpp"
 #include "ecs/system_params.hpp"
@@ -11,9 +12,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <unordered_map>
+#include <string_view>
+#include <type_traits>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace fei {
 
@@ -46,8 +49,30 @@ void event_update_system(Res<Events<E>> events) {
 
 class App {
   private:
-    std::unordered_map<TypeId, std::unique_ptr<Plugin>> m_plugins;
+    friend class PluginGroupBuilder;
+
+    std::vector<std::unique_ptr<Plugin>> m_plugins;
+    std::unordered_set<TypeId> m_plugin_types;
     std::unordered_set<TypeId> m_events;
+
+    App& add_boxed_plugin(
+        TypeId plugin_type,
+        std::string_view plugin_name,
+        std::unique_ptr<Plugin> plugin
+    ) {
+        if (!plugin) {
+            fatal("Cannot add null plugin {}", plugin_name);
+        }
+        if (m_plugin_types.contains(plugin_type)) {
+            fatal("Plugin {} has already been added", plugin_name);
+        }
+
+        auto* plugin_ptr = plugin.get();
+        m_plugin_types.insert(plugin_type);
+        m_plugins.emplace_back(std::move(plugin));
+        plugin_ptr->setup(*this);
+        return *this;
+    }
 
   public:
     App() {
@@ -121,35 +146,47 @@ class App {
         return m_world.has_resource<R>();
     }
 
-    template<typename P>
+    template<std::derived_from<Plugin> P>
     App& add_plugin() {
-        auto plugin_type = type_id<P>();
-        if (m_plugins.contains(plugin_type)) {
-            return *this;
-        }
-        auto plugin = std::make_unique<P>();
-        auto* plugin_ptr = plugin.get();
-        m_plugins.emplace(plugin_type, std::move(plugin));
-        plugin_ptr->setup(*this);
+        return add_boxed_plugin(
+            type_id<P>(),
+            type_name<P>(),
+            std::make_unique<P>()
+        );
+    }
+
+    template<typename P>
+        requires std::derived_from<std::remove_cvref_t<P>, Plugin>
+    App& add_plugin(P&& plugin) {
+        using PluginT = std::remove_cvref_t<P>;
+        return add_boxed_plugin(
+            type_id<PluginT>(),
+            type_name<PluginT>(),
+            std::make_unique<PluginT>(std::forward<P>(plugin))
+        );
+    }
+
+    App& add_plugins(PluginGroupBuilder builder);
+
+    template<typename G>
+        requires std::derived_from<std::remove_cvref_t<G>, PluginGroup>
+    App& add_plugins(G&& group) {
+        return add_plugins(std::forward<G>(group).build());
+    }
+
+    template<typename... Plugins>
+        requires(
+            sizeof...(Plugins) > 0 &&
+            (std::derived_from<std::remove_cvref_t<Plugins>, Plugin> && ...)
+        )
+    App& add_plugins(Plugins&&... plugins) {
+        (add_plugin(std::forward<Plugins>(plugins)), ...);
         return *this;
     }
 
     template<std::derived_from<Plugin> P>
-    App& add_plugin(P&& plugin) {
-        auto plugin_type = type_id<P>();
-        if (m_plugins.contains(plugin_type)) {
-            return *this;
-        }
-        auto stored_plugin = std::make_unique<P>(std::forward<P>(plugin));
-        auto* plugin_ptr = stored_plugin.get();
-        m_plugins.emplace(plugin_type, std::move(stored_plugin));
-        plugin_ptr->setup(*this);
-        return *this;
-    }
-
-    App& add_plugins(std::derived_from<Plugin> auto&&... plugins) {
-        (add_plugin(std::forward<decltype(plugins)>(plugins)), ...);
-        return *this;
+    bool has_plugin() const {
+        return m_plugin_types.contains(type_id<P>());
     }
 
     template<typename R>
