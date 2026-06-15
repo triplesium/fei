@@ -2,7 +2,6 @@
 
 #include "app/app.hpp"
 #include "asset/plugin.hpp"
-#include "generated/reflgen.hpp"
 #include "refl/cls.hpp"  // IWYU pragma: keep
 #include "refl/enum.hpp" // IWYU pragma: keep
 #include "refl/registry.hpp"
@@ -13,7 +12,6 @@
 namespace fei {
 
 void ScriptingPlugin::setup(App& app) {
-    register_classes();
     app.add_resource(ScriptingEngine {})
         .add_plugins(AssetPlugin<ScriptAsset, ScriptAssetLoader> {})
         .add_systems(Update, run_script_components);

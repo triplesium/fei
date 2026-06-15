@@ -1,8 +1,9 @@
 target("fei-core")
     set_kind("static")
+    add_rules("fei.reflect")
     add_headerfiles("**.hpp")
     add_files("*.cpp")
-    add_deps("fei-base", "fei-refl", "fei-ecs", "fei-app", "fei-asset")
+    add_deps("fei-base", "fei-refl", "fei-ecs", "fei-app", "fei-asset", "fei-math")
     add_packages("stb")
 
 target("fei-core-tests")

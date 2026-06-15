@@ -1,7 +1,9 @@
 target("fei-math")
     set_kind("static")
+    add_rules("fei.reflect")
     add_headerfiles("**.hpp")
     add_files("*.cpp")
+    add_deps("fei-refl")
 
 target("fei-math-tests")
     set_kind("binary")

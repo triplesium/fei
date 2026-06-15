@@ -56,6 +56,6 @@ struct ParseResult {
 };
 
 void dedupe_reflected_types(ParseResult& result);
-void filter_bindable_members(ParseResult& result);
+void filter_codegen_unsupported_members(ParseResult& result);
 
 } // namespace fei::reflgen

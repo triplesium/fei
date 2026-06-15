@@ -1,4 +1,5 @@
 #include "app/app.hpp"
+#include "app/reflection_plugin.hpp"
 #include "asset/plugin.hpp"
 #include "asset/server.hpp"
 #include "core/time.hpp"
@@ -30,6 +31,7 @@ int main() {
             WindowPlugin {},
             TimePlugin {},
             InputPlugin {},
+            ReflectionPlugin {},
             ScriptingPlugin {}
         )
         .add_systems(StartUp, setup)

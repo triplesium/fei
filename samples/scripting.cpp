@@ -1,5 +1,5 @@
-#include "generated/reflgen.hpp"
 #include "math/vector.hpp"
+#include "refl/generated.hpp"
 #include "refl/ref_utils.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
@@ -10,7 +10,7 @@
 
 int main() {
     using namespace fei;
-    register_classes();
+    register_generated_reflection();
     ScriptingEngine engine;
     engine.register_type(type<Vector2>());
     engine.register_type(type<KeyInput>());

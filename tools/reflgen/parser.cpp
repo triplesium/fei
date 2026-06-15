@@ -381,26 +381,6 @@ cursor_access(CXCursor cursor, std::string_view fallback) {
     return original_spelling.empty() ? canonical_spelling : original_spelling;
 }
 
-[[nodiscard]] bool is_incomplete_type(CXType type) {
-    const auto canonical_type = clang_getCanonicalType(type);
-    if (canonical_type.kind == CXType_Pointer ||
-        canonical_type.kind == CXType_LValueReference ||
-        canonical_type.kind == CXType_RValueReference) {
-        return is_incomplete_type(clang_getPointeeType(canonical_type));
-    }
-
-    if (canonical_type.kind == CXType_Record ||
-        canonical_type.kind == CXType_Enum) {
-        const auto type_decl = clang_getTypeDeclaration(canonical_type);
-        if (!clang_Cursor_isNull(type_decl) &&
-            clang_getCursorKind(type_decl) != CXCursor_NoDeclFound) {
-            return !clang_isCursorDefinition(type_decl);
-        }
-    }
-
-    return false;
-}
-
 [[nodiscard]] std::string ref_qualifier(CXCursor cursor) {
     switch (clang_Type_getCXXRefQualifier(clang_getCursorType(cursor))) {
         case CXRefQualifier_LValue:
@@ -571,10 +551,11 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
         const auto member_access = cursor_access(child, current_access);
         if (kind == CXCursor_FieldDecl) {
             const auto field_type = clang_getCursorType(child);
-            if (!is_incomplete_type(field_type)) {
+            auto property_type = fully_qualified_type(field_type);
+            if (!property_type.empty()) {
                 class_info.properties.push_back({
                     .name = cursor_spelling(child),
-                    .type_name = fully_qualified_type(field_type),
+                    .type_name = std::move(property_type),
                     .access = member_access,
                 });
             }

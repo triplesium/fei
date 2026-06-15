@@ -1,9 +1,10 @@
 function add_sample(name)
     target("sample-" .. name)
         set_kind("binary")
+        add_rules("fei.reflect")
         add_headerfiles("common.hpp")
         add_files(name .. ".cpp")
-        add_deps("fei-refl", "fei-ecs", "fei-app", "fei-window", "fei-core", "fei-asset", "fei-graphics-opengl", "fei-graphics", "fei-rendering", "fei-ui", "fei-pbr", "fei-scene", "fei-scripting", "fei-generated")
+        add_deps("fei-refl", "fei-ecs", "fei-app", "fei-window", "fei-core", "fei-asset", "fei-graphics-opengl", "fei-graphics", "fei-rendering", "fei-ui", "fei-pbr", "fei-scene", "fei-scripting")
         add_packages("glfw", "glad", "imgui", "stb")
 end
 

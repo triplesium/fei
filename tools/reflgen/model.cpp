@@ -10,58 +10,6 @@
 namespace fei::reflgen {
 namespace {
 
-const std::unordered_set<std::string> primitive_bindable_types = {
-    "void",
-    "bool",
-    "char",
-    "signed char",
-    "unsigned char",
-    "short",
-    "short int",
-    "unsigned short",
-    "unsigned short int",
-    "int",
-    "unsigned int",
-    "long",
-    "long int",
-    "unsigned long",
-    "unsigned long int",
-    "long long",
-    "long long int",
-    "unsigned long long",
-    "unsigned long long int",
-    "float",
-    "double",
-    "long double",
-    "size_t",
-    "std::size_t",
-    "int8_t",
-    "std::int8_t",
-    "uint8_t",
-    "std::uint8_t",
-    "int16_t",
-    "std::int16_t",
-    "uint16_t",
-    "std::uint16_t",
-    "int32_t",
-    "std::int32_t",
-    "uint32_t",
-    "std::uint32_t",
-    "int64_t",
-    "std::int64_t",
-    "uint64_t",
-    "std::uint64_t",
-};
-
-const std::unordered_set<std::string> special_bindable_types = {
-    "std::string",
-    "string",
-    "fei::TypeId",
-    "TypeId",
-    "fei::Ref",
-    "Ref",
-};
-
 [[nodiscard]] bool starts_with(std::string_view text, std::string_view prefix) {
     return text.starts_with(prefix);
 }
@@ -90,15 +38,6 @@ const std::unordered_set<std::string> special_bindable_types = {
         result += word;
     }
     return result;
-}
-
-[[nodiscard]] std::string stripped_cpp_name(std::string_view name) {
-    auto text = std::string(name);
-    const auto pos = text.rfind("::");
-    if (pos == std::string::npos) {
-        return text;
-    }
-    return text.substr(pos + 2);
 }
 
 [[nodiscard]] std::string strip_cv_ref(std::string_view type_name) {
@@ -136,11 +75,8 @@ const std::unordered_set<std::string> special_bindable_types = {
     return text.find(needle) != std::string_view::npos;
 }
 
-[[nodiscard]] bool is_bindable_type(
-    std::string_view type_name,
-    const std::unordered_set<std::string>& reflectable_type_names,
-    bool allow_void
-) {
+[[nodiscard]] bool
+is_codegen_supported_type(std::string_view type_name, bool allow_void) {
     const auto type = strip_cv_ref(type_name);
     if (type.empty()) {
         return false;
@@ -148,20 +84,13 @@ const std::unordered_set<std::string> special_bindable_types = {
     if (type == "void") {
         return allow_void;
     }
-    if (contains(type, "*") || contains(type, "[") || contains(type, "(*)")) {
+
+    if (contains(type, "(anonymous") || contains(type, "<anonymous") ||
+        contains(type, "anonymous namespace")) {
         return false;
     }
-    if (contains(type, "<") || contains(type, ">")) {
-        return false;
-    }
-    if (primitive_bindable_types.contains(type) ||
-        special_bindable_types.contains(type)) {
-        return true;
-    }
-    if (reflectable_type_names.contains(type)) {
-        return true;
-    }
-    return reflectable_type_names.contains(stripped_cpp_name(type));
+
+    return true;
 }
 
 [[nodiscard]] std::string
@@ -230,29 +159,15 @@ void dedupe_reflected_types(ParseResult& result) {
     result.enums = std::move(enums);
 }
 
-void filter_bindable_members(ParseResult& result) {
-    std::unordered_set<std::string> reflectable_type_names;
-    for (const auto& cls : result.classes) {
-        reflectable_type_names.insert(cls.name);
-        reflectable_type_names.insert(stripped_cpp_name(cls.name));
-    }
-    for (const auto& enum_info : result.enums) {
-        reflectable_type_names.insert(enum_info.name);
-        reflectable_type_names.insert(stripped_cpp_name(enum_info.name));
-    }
-
+void filter_codegen_unsupported_members(ParseResult& result) {
     for (auto& cls : result.classes) {
         std::vector<MemberInfo> properties;
         for (auto& prop : cls.properties) {
-            if (is_bindable_type(
-                    prop.type_name,
-                    reflectable_type_names,
-                    false
-                )) {
+            if (is_codegen_supported_type(prop.type_name, false)) {
                 properties.push_back(std::move(prop));
             } else if (prop.access == "public") {
                 std::cerr << "Skipping " << cls.name << "." << prop.name
-                          << ": unbindable property type " << prop.type_name
+                          << ": unsupported property type " << prop.type_name
                           << '\n';
             }
         }
@@ -260,19 +175,12 @@ void filter_bindable_members(ParseResult& result) {
 
         std::vector<MethodInfo> methods;
         for (auto& method : cls.methods) {
-            const auto return_ok = is_bindable_type(
-                method.type_name,
-                reflectable_type_names,
-                true
-            );
+            const auto return_ok =
+                is_codegen_supported_type(method.type_name, true);
             const auto params_ok = std::ranges::all_of(
                 method.parameters,
                 [&](const ParamInfo& param) {
-                    return is_bindable_type(
-                        param.type_name,
-                        reflectable_type_names,
-                        false
-                    );
+                    return is_codegen_supported_type(param.type_name, false);
                 }
             );
             if (return_ok && params_ok) {
@@ -280,7 +188,7 @@ void filter_bindable_members(ParseResult& result) {
             } else if (method.access == "public") {
                 std::cerr << "Skipping " << cls.name << "." << method.name
                           << "(" << join_param_types(method.parameters)
-                          << "): unbindable return/parameter type\n";
+                          << "): unsupported return/parameter type\n";
             }
         }
         cls.methods = std::move(methods);
@@ -290,11 +198,7 @@ void filter_bindable_members(ParseResult& result) {
             const auto params_ok = std::ranges::all_of(
                 constructor.parameters,
                 [&](const ParamInfo& param) {
-                    return is_bindable_type(
-                        param.type_name,
-                        reflectable_type_names,
-                        false
-                    );
+                    return is_codegen_supported_type(param.type_name, false);
                 }
             );
             if (params_ok) {
@@ -302,7 +206,7 @@ void filter_bindable_members(ParseResult& result) {
             } else if (constructor.access == "public") {
                 std::cerr << "Skipping " << cls.name << " constructor("
                           << join_param_types(constructor.parameters)
-                          << "): unbindable parameter type\n";
+                          << "): unsupported parameter type\n";
             }
         }
         cls.constructors = std::move(constructors);

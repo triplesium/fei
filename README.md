@@ -8,14 +8,13 @@
 - Component memory management based on archetypes
 - Rendering stack with graphics abstractions and an OpenGL backend
 - PBR rendering pipeline, deferred shading, shadow mapping, IBL, and VXGI
-- Runtime reflection and metadata generation script
+- Runtime reflection and metadata generation
 - Lua scripting integration
 
 ## Requirements
 
 - A C++23-capable compiler
 - [xmake](https://xmake.io/)
-- Python 3 with `clang` and `jinja2` (for reflection code generation scripts)
 
 Most third-party libraries can be resolved by `xmake`.
 
@@ -35,7 +34,7 @@ To do this, run the `reflgen` xmake task.
 ```bash
 xmake reflgen
 ```
-It will run the Python script `tools/reflgen/reflgen.py` to parse all the dependencies of the `fei-generated` target, and output to `src/generated/reflgen.cpp`.
+It builds and runs the `fei-reflgen` generator for reflected xmake targets. Generated C++ files are written under `build/.gens/<target>/reflection/` and compiled into the corresponding target.
 
 ## Examples
 

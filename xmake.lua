@@ -46,6 +46,59 @@ rule("fei.test")
     end)
 rule_end()
 
+rule("fei.reflect.file")
+    set_extensions(".reflgen")
+
+    on_buildcmd_file(function(target, batchcmds, sourcefile, opt)
+        import("reflgen.rules", {
+            rootdir = path.join(os.projectdir(), "tools")
+        }).buildcmd_file(target, batchcmds, sourcefile, opt)
+    end)
+rule_end()
+
+rule("fei.reflect.module")
+    set_extensions(".reflmod")
+    add_orders("fei.reflect.file", "fei.reflect.module")
+
+    on_buildcmd_file(function(target, batchcmds, sourcefile, opt)
+        import("reflgen.rules", {
+            rootdir = path.join(os.projectdir(), "tools")
+        }).buildcmd_module(target, batchcmds, opt)
+    end)
+rule_end()
+
+rule("fei.reflect.aggregate")
+    set_extensions(".reflagg")
+    add_orders("fei.reflect.module", "fei.reflect.aggregate")
+
+    on_buildcmd_file(function(target, batchcmds, sourcefile, opt)
+        import("reflgen.rules", {
+            rootdir = path.join(os.projectdir(), "tools")
+        }).buildcmd_aggregate(target, batchcmds, opt)
+    end)
+rule_end()
+
+rule("fei.reflect")
+    add_deps(
+        "fei.reflect.file",
+        "fei.reflect.module",
+        "fei.reflect.aggregate"
+    )
+
+    on_load(function(target)
+        local reflgen = import("reflgen.rules", {
+            rootdir = path.join(os.projectdir(), "tools")
+        })
+        reflgen.configure_target(target)
+    end)
+
+    after_clean(function(target)
+        import("reflgen.rules", {
+            rootdir = path.join(os.projectdir(), "tools")
+        }).clean(target)
+    end)
+rule_end()
+
 target("fei-test-support")
     set_kind("static")
     set_default(false)

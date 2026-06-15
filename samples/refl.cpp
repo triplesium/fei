@@ -1,6 +1,6 @@
-#include "generated/reflgen.hpp"
 #include "math/vector.hpp"
 #include "refl/cls.hpp"
+#include "refl/generated.hpp"
 #include "refl/registry.hpp"
 
 #include <print>
@@ -8,7 +8,7 @@
 using namespace fei;
 
 int main() {
-    register_classes();
+    register_generated_reflection();
     {
         auto& cls = Registry::instance().get_cls<Vector3>();
         auto* property_x = cls.get_property("x");

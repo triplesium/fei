@@ -15,7 +15,7 @@ local function project_relative_path(filepath)
 end
 
 local function should_skip_file(filepath)
-    return filepath:startswith("src/generated/")
+    return filepath:startswith("build/.gens/")
 end
 
 local function insert_unique(files, seen, filepath)
