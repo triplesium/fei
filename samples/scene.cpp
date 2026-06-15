@@ -27,6 +27,7 @@
 #include "scripting/component.hpp"
 #include "scripting/plugin.hpp"
 #include "ui/plugin.hpp"
+#include "web_preview/plugin.hpp"
 #include "window/input.hpp"
 #include "window/window.hpp"
 
@@ -171,6 +172,13 @@ int main() {
         .add_systems(
             RenderUpdate,
             update_imgui | in_set<RenderingSystems::Render>()
+        )
+        .add_plugin(
+            WebPreviewPlugin {WebPreviewConfig {
+                .host = "127.0.0.1",
+                .port = 8080,
+                .jpeg_quality = 80,
+            }}
         )
         .run();
 

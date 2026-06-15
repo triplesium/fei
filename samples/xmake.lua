@@ -10,6 +10,8 @@ end
 add_sample("refl")
 add_sample("scripting")
 add_sample("scene")
+target("sample-scene")
+    add_deps("fei-web-preview")
 add_sample("script_component")
 add_sample("compute_shader")
 add_sample("schedule")

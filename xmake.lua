@@ -2,7 +2,7 @@ add_rules("mode.debug", "mode.release")
 set_languages("c++23")
 set_warnings("all")
 
-add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace")
+add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib")
 add_requires("glfw", {configs = {shared = false}})
 add_requires("imgui", {configs = {glfw = true, opengl3 = true}})
 add_requires("llvm-libclang")
