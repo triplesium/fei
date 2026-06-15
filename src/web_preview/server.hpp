@@ -1,5 +1,6 @@
 #pragma once
 #include "web_preview/frame_cache.hpp"
+#include "web_preview/frame_encoder.hpp"
 #include "web_preview/plugin.hpp"
 
 #include <memory>
@@ -31,10 +32,13 @@ class WebPreviewServer {
     std::shared_ptr<WebPreviewFrameCache> frame_cache() const {
         return m_frame_cache;
     }
+    bool can_accept_frame() const;
+    bool submit_frame(WebPreviewEncodeJob job);
 
   private:
     WebPreviewConfig m_config;
     std::shared_ptr<WebPreviewFrameCache> m_frame_cache;
+    std::unique_ptr<WebPreviewFrameEncoder> m_encoder;
     std::unique_ptr<httplib::Server> m_server;
     std::thread m_thread;
 };

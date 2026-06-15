@@ -10,24 +10,36 @@
 #include "web_preview/server.hpp"
 
 #include <memory>
+#include <string>
 #include <utility>
 
 namespace fei {
 
 namespace {
 
-std::shared_ptr<Texture> select_web_preview_target(World& world) {
+struct SelectedWebPreviewTarget {
+    std::shared_ptr<Texture> texture;
+    std::string name;
+};
+
+SelectedWebPreviewTarget select_web_preview_target(World& world) {
     if (world.has_resource<DeferedRenderResources>()) {
         auto& resources = world.resource<DeferedRenderResources>();
         if (resources.composite_lighting) {
-            return resources.composite_lighting;
+            return {
+                .texture = resources.composite_lighting,
+                .name = "deferred.composite_lighting",
+            };
         }
     }
 
     if (world.has_resource<RenderTarget>()) {
         auto& target = world.resource<RenderTarget>();
         if (target.color_texture) {
-            return target.color_texture;
+            return {
+                .texture = target.color_texture,
+                .name = "render_target.color_texture",
+            };
         }
     }
 
@@ -35,19 +47,34 @@ std::shared_ptr<Texture> select_web_preview_target(World& world) {
 }
 
 void capture_web_preview_frame(WorldRef world, Res<WebPreviewServer> server) {
-    auto texture = select_web_preview_target(*world);
-    if (!texture) {
+    auto cache = server->frame_cache();
+    cache->mark_frame_tick();
+
+    if (!server->can_accept_frame()) {
         return;
     }
 
-    auto frame =
-        capture_web_preview_texture(texture, server->config().jpeg_quality);
-    if (frame.jpeg.empty()) {
+    auto target = select_web_preview_target(*world);
+    if (!target.texture) {
+        cache->report_failure("No render target texture is available");
         return;
     }
 
-    server->frame_cache()
-        ->publish_jpeg(std::move(frame.jpeg), frame.width, frame.height);
+    auto frame = capture_web_preview_texture(target.texture);
+    if (frame.rgba.empty()) {
+        cache->report_failure(frame.error);
+        return;
+    }
+
+    server->submit_frame(
+        WebPreviewEncodeJob {
+            .rgba = std::move(frame.rgba),
+            .width = frame.width,
+            .height = frame.height,
+            .jpeg_quality = server->config().jpeg_quality,
+            .target = std::move(target.name),
+        }
+    );
 }
 
 } // namespace
