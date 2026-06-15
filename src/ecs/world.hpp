@@ -1,9 +1,10 @@
 #pragma once
 
-#include "base/debug.hpp"
+#include "base/optional.hpp"
 #include "ecs/archetype.hpp"
 #include "ecs/entity.hpp"
 #include "ecs/fwd.hpp"
+#include "ecs/hierarchy.hpp"
 #include "ecs/resource.hpp"
 #include "ecs/schedule.hpp"
 #include "ecs/system.hpp"
@@ -36,12 +37,21 @@ class World {
     void add_component(Entity entity, Ref ref);
     template<typename T>
     void add_component(Entity entity, T val) {
-        add_component(entity, make_ref<T>(val));
+        using U = std::remove_cvref_t<T>;
+        if constexpr (std::same_as<U, ChildOf>) {
+            set_parent(entity, val.parent);
+        } else {
+            add_component(entity, make_ref<T>(val));
+        }
     }
     void remove_component(Entity entity, TypeId type_id);
     template<typename T>
     void remove_component(Entity entity) {
-        remove_component(entity, type_id<T>());
+        if constexpr (std::same_as<std::remove_cvref_t<T>, ChildOf>) {
+            remove_parent(entity);
+        } else {
+            remove_component(entity, type_id<T>());
+        }
     }
     bool has_component(Entity entity, TypeId type_id) const;
     template<typename T>
@@ -56,15 +66,11 @@ class World {
 
     bool has_entity(Entity entity) const { return m_entities.contains(entity); }
 
-    void despawn(Entity entity) {
-        FEI_ASSERT(has_entity(entity));
-        auto location = m_entities.get_location(entity);
-        auto& archetype = m_archetypes.get(location.archetype_id);
-        if (auto moved_entity = archetype.remove_row(location.row)) {
-            m_entities.set_location(*moved_entity, location);
-        }
-        m_entities.remove_entity(entity);
-    }
+    void set_parent(Entity child, Entity parent);
+    void remove_parent(Entity child);
+    bool has_parent(Entity child) const;
+    Optional<Entity> parent(Entity child) const;
+    void despawn(Entity entity);
 
     void add_systems(
         ScheduleId schedule,
@@ -150,6 +156,14 @@ class World {
     }
 
     const Archetypes& archetypes() const { return m_archetypes; }
+
+  private:
+    void raw_add_component(Entity entity, Ref ref);
+    void raw_remove_component(Entity entity, TypeId type_id);
+    void raw_despawn(Entity entity);
+    void add_child(Entity parent, Entity child);
+    void remove_child(Entity parent, Entity child);
+    bool would_create_cycle(Entity child, Entity parent) const;
 };
 
 } // namespace fei

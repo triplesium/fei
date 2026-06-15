@@ -61,6 +61,23 @@ class EntityCommands {
         return m_world.has_component(m_entity, type_id<T>());
     }
 
+    EntityCommands& set_parent(Entity parent) {
+        m_world.resource<CommandsQueue>().add_command([entity = this->m_entity,
+                                                       parent](World& world) {
+            world.set_parent(entity, parent);
+        });
+        return *this;
+    }
+
+    EntityCommands& remove_parent() {
+        m_world.resource<CommandsQueue>().add_command(
+            [entity = this->m_entity](World& world) {
+                world.remove_parent(entity);
+            }
+        );
+        return *this;
+    }
+
     void despawn() {
         m_world.resource<CommandsQueue>().add_command(
             [entity = this->m_entity](World& world) {
@@ -68,6 +85,8 @@ class EntityCommands {
             }
         );
     }
+
+    void despawn_recursive() { despawn(); }
 
     Entity id() const { return m_entity; }
 };
