@@ -63,13 +63,11 @@ const std::unordered_set<std::string> special_bindable_types = {
 };
 
 [[nodiscard]] bool starts_with(std::string_view text, std::string_view prefix) {
-    return text.size() >= prefix.size() &&
-           text.substr(0, prefix.size()) == prefix;
+    return text.starts_with(prefix);
 }
 
 [[nodiscard]] bool ends_with(std::string_view text, std::string_view suffix) {
-    return text.size() >= suffix.size() &&
-           text.substr(text.size() - suffix.size()) == suffix;
+    return text.ends_with(suffix);
 }
 
 [[nodiscard]] std::string trim(std::string_view text) {
@@ -95,7 +93,7 @@ const std::unordered_set<std::string> special_bindable_types = {
 }
 
 [[nodiscard]] std::string stripped_cpp_name(std::string_view name) {
-    const auto text = std::string(name);
+    auto text = std::string(name);
     const auto pos = text.rfind("::");
     if (pos == std::string::npos) {
         return text;

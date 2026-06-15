@@ -20,8 +20,7 @@ struct Options {
 };
 
 [[nodiscard]] bool starts_with(std::string_view text, std::string_view prefix) {
-    return text.size() >= prefix.size() &&
-           text.substr(0, prefix.size()) == prefix;
+    return text.starts_with(prefix);
 }
 
 [[nodiscard]] std::string value_after_equals(std::string_view arg) {
@@ -66,13 +65,14 @@ require_next(int& index, int argc, char** argv, std::string_view option_name) {
             options.includes.push_back(require_next(i, argc, argv, arg));
         } else if (starts_with(arg, "-I") && arg.size() > 2) {
             options.includes.emplace_back(arg.substr(2));
-        } else if (arg == "--template" || arg == "-t") {
+        } else if (
+            arg == "--template" || arg == "-t" || arg == "--threads" ||
+            arg == "-j"
+        ) {
             (void)require_next(i, argc, argv, arg);
-        } else if (starts_with(arg, "--template=")) {
-            continue;
-        } else if (arg == "--threads" || arg == "-j") {
-            (void)require_next(i, argc, argv, arg);
-        } else if (starts_with(arg, "--threads=")) {
+        } else if (
+            starts_with(arg, "--template=") || starts_with(arg, "--threads=")
+        ) {
             continue;
         } else if (starts_with(arg, "-")) {
             throw std::runtime_error("unknown option: " + std::string(arg));

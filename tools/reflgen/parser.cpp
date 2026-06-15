@@ -6,8 +6,6 @@
 #include <filesystem>
 #include <iostream>
 #include <optional>
-#include <sstream>
-#include <stdexcept>
 #include <string_view>
 
 namespace fei::reflgen {
@@ -55,13 +53,11 @@ void visit_children(CXCursor cursor, Visitor visitor) {
 }
 
 [[nodiscard]] bool starts_with(std::string_view text, std::string_view prefix) {
-    return text.size() >= prefix.size() &&
-           text.substr(0, prefix.size()) == prefix;
+    return text.starts_with(prefix);
 }
 
 [[nodiscard]] bool ends_with(std::string_view text, std::string_view suffix) {
-    return text.size() >= suffix.size() &&
-           text.substr(text.size() - suffix.size()) == suffix;
+    return text.ends_with(suffix);
 }
 
 [[nodiscard]] std::string trim(std::string_view text) {
@@ -196,7 +192,7 @@ cursor_access(CXCursor cursor, std::string_view fallback) {
         parent_name = qualified_name(parent);
     }
 
-    const auto current = cursor_spelling(cursor);
+    auto current = cursor_spelling(cursor);
     if (current.empty()) {
         return parent_name;
     }
@@ -276,6 +272,9 @@ cursor_access(CXCursor cursor, std::string_view fallback) {
 
     std::vector<std::string> param_types;
     const int arg_count = clang_getNumArgTypes(function_type);
+    if (arg_count > 0) {
+        param_types.reserve(static_cast<std::size_t>(arg_count));
+    }
     for (int i = 0; i < arg_count; ++i) {
         param_types.push_back(fully_qualified_type(
             clang_getArgType(function_type, static_cast<unsigned>(i))
@@ -296,9 +295,9 @@ cursor_access(CXCursor cursor, std::string_view fallback) {
 }
 
 [[nodiscard]] std::string fully_qualified_type(CXType type) {
-    const auto original_spelling = type_spelling(type);
+    auto original_spelling = type_spelling(type);
     const auto canonical_type = clang_getCanonicalType(type);
-    const auto canonical_spelling = type_spelling(canonical_type);
+    auto canonical_spelling = type_spelling(canonical_type);
 
     if (canonical_type.kind == CXType_Pointer) {
         const auto pointee = clang_getPointeeType(canonical_type);
@@ -349,7 +348,7 @@ cursor_access(CXCursor cursor, std::string_view fallback) {
     const auto type_decl = clang_getTypeDeclaration(canonical_type);
     if (!clang_Cursor_isNull(type_decl) &&
         clang_getCursorKind(type_decl) != CXCursor_NoDeclFound) {
-        const auto qualified = qualified_name(type_decl);
+        auto qualified = qualified_name(type_decl);
         if (!qualified.empty()) {
             if (contains(original_spelling, "<") &&
                 contains(original_spelling, ">")) {
@@ -784,13 +783,13 @@ HeaderParser::HeaderParser(
     std::vector<std::string> include_paths,
     bool verbose
 ) :
-    headers_(std::move(headers)), include_paths_(std::move(include_paths)),
-    verbose_(verbose) {}
+    m_headers(std::move(headers)), m_include_paths(std::move(include_paths)),
+    m_verbose(verbose) {}
 
 ParseResult HeaderParser::parse() {
     ParseResult result;
-    for (const auto& header : headers_) {
-        auto header_result = parse_header(header, include_paths_, verbose_);
+    for (const auto& header : m_headers) {
+        auto header_result = parse_header(header, m_include_paths, m_verbose);
         result.classes.insert(
             result.classes.end(),
             std::make_move_iterator(header_result.classes.begin()),

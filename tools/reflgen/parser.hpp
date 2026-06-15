@@ -2,7 +2,6 @@
 
 #include "model.hpp"
 
-#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -19,9 +18,9 @@ class HeaderParser {
     [[nodiscard]] ParseResult parse();
 
   private:
-    std::vector<std::string> headers_;
-    std::vector<std::string> include_paths_;
-    bool verbose_ = false;
+    std::vector<std::string> m_headers;
+    std::vector<std::string> m_include_paths;
+    bool m_verbose = false;
 };
 
 } // namespace fei::reflgen
