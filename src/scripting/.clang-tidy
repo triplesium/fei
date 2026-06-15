@@ -1,0 +1,9 @@
+---
+InheritParentConfig: true
+CheckOptions:
+  - key: readability-identifier-naming.StructIgnoredRegexp
+    value: '^lua_State$'
+  - key: readability-identifier-naming.ParameterIgnoredRegexp
+    value: '^L$'
+  - key: readability-identifier-naming.LocalVariableIgnoredRegexp
+    value: '^L$'

@@ -52,18 +52,18 @@ class ShaderLoader : public AssetLoader<Shader> {
 
 class ShaderRef {
   private:
-    std::variant<Handle<Shader>, AssetPath> source;
+    std::variant<Handle<Shader>, AssetPath> m_source;
 
   public:
-    ShaderRef(Handle<Shader> handle) : source(handle) {}
-    ShaderRef(const AssetPath& path) : source(path) {}
-    ShaderRef(const char* path) : source(AssetPath(path)) {}
+    ShaderRef(Handle<Shader> handle) : m_source(handle) {}
+    ShaderRef(const AssetPath& path) : m_source(path) {}
+    ShaderRef(const char* path) : m_source(AssetPath(path)) {}
 
     Handle<Shader> resolve(AssetServer& asset_server) const {
-        if (std::holds_alternative<Handle<Shader>>(source)) {
-            return std::get<Handle<Shader>>(source);
+        if (std::holds_alternative<Handle<Shader>>(m_source)) {
+            return std::get<Handle<Shader>>(m_source);
         } else {
-            return asset_server.load<Shader>(std::get<AssetPath>(source));
+            return asset_server.load<Shader>(std::get<AssetPath>(m_source));
         }
     }
 };

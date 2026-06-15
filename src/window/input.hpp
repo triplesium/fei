@@ -20,8 +20,8 @@ constexpr KeyCode c_key_codes[] = {
 #undef KEY_CODE
 };
 
-constexpr const char* key_code_to_string(KeyCode keyCode) noexcept {
-    switch (keyCode) {
+constexpr const char* key_code_to_string(KeyCode key_code) noexcept {
+    switch (key_code) {
 #define KEY_CODE(name, code) \
     case KeyCode::name:      \
         return #name;
@@ -45,22 +45,24 @@ class FEI_REFLECT KeyInput {
   public:
     KeyInput() {
         for (auto key : c_key_codes) {
-            keys[key] = {};
+            m_keys[key] = {};
         }
     }
 
-    bool pressed(KeyCode key) const { return keys.at(key).down_this_frame; }
+    bool pressed(KeyCode key) const { return m_keys.at(key).down_this_frame; }
     bool just_pressed(KeyCode key) const {
-        return keys.at(key).down_this_frame && !keys.at(key).down_last_frame;
+        return m_keys.at(key).down_this_frame &&
+               !m_keys.at(key).down_last_frame;
     }
     bool just_released(KeyCode key) const {
-        return !keys.at(key).down_this_frame && keys.at(key).down_last_frame;
+        return !m_keys.at(key).down_this_frame &&
+               m_keys.at(key).down_last_frame;
     }
 
-    void press(KeyCode key) { keys[key].down_this_frame = true; }
-    void release(KeyCode key) { keys[key].down_this_frame = false; }
+    void press(KeyCode key) { m_keys[key].down_this_frame = true; }
+    void release(KeyCode key) { m_keys[key].down_this_frame = false; }
     void clear() {
-        for (auto& [key, state] : keys) {
+        for (auto& [key, state] : m_keys) {
             state.down_last_frame = state.down_this_frame;
             state.down_this_frame = false;
         }
@@ -71,7 +73,7 @@ class FEI_REFLECT KeyInput {
         bool down_this_frame {false};
         bool down_last_frame {false};
     };
-    std::unordered_map<KeyCode, KeyStateInternal> keys;
+    std::unordered_map<KeyCode, KeyStateInternal> m_keys;
 };
 
 enum class MouseButton : int32_t {
@@ -85,28 +87,28 @@ class MouseInput {
     MouseInput() {
         for (auto button :
              {MouseButton::Left, MouseButton::Right, MouseButton::Middle}) {
-            keys[button] = {};
+            m_keys[button] = {};
         }
     }
 
     void set_position(Vector2 position) { m_position = position; }
     Vector2 position() const { return m_position; }
 
-    void press(MouseButton button) { keys[button].down_this_frame = true; }
-    void release(MouseButton button) { keys[button].down_this_frame = false; }
+    void press(MouseButton button) { m_keys[button].down_this_frame = true; }
+    void release(MouseButton button) { m_keys[button].down_this_frame = false; }
     bool pressed(MouseButton button) const {
-        return keys.at(button).down_this_frame;
+        return m_keys.at(button).down_this_frame;
     }
     bool just_pressed(MouseButton button) const {
-        return keys.at(button).down_this_frame &&
-               !keys.at(button).down_last_frame;
+        return m_keys.at(button).down_this_frame &&
+               !m_keys.at(button).down_last_frame;
     }
     bool just_released(MouseButton button) const {
-        return !keys.at(button).down_this_frame &&
-               keys.at(button).down_last_frame;
+        return !m_keys.at(button).down_this_frame &&
+               m_keys.at(button).down_last_frame;
     }
     void clear() {
-        for (auto& [key, state] : keys) {
+        for (auto& [key, state] : m_keys) {
             state.down_last_frame = state.down_this_frame;
             state.down_this_frame = false;
         }
@@ -118,7 +120,7 @@ class MouseInput {
         bool down_this_frame {false};
         bool down_last_frame {false};
     };
-    std::unordered_map<MouseButton, KeyStateInternal> keys;
+    std::unordered_map<MouseButton, KeyStateInternal> m_keys;
 };
 
 void key_input_system(Res<Window> win, Res<KeyInput> input);

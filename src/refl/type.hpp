@@ -126,13 +126,13 @@ class Type {
 
 namespace std {
 template<>
-struct hash<fei::TypeId> {
+struct hash<fei::TypeId> { // NOLINT(readability-identifier-naming)
     size_t operator()(const fei::TypeId& id) const {
         return static_cast<size_t>(id.id());
     }
 };
 template<>
-struct hash<fei::Type> {
+struct hash<fei::Type> { // NOLINT(readability-identifier-naming)
     size_t operator()(const fei::Type& type) const {
         return static_cast<size_t>(type.hash().id());
     }

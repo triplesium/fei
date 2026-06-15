@@ -232,15 +232,16 @@ void Mesh::generate_tangents() {
         uv[1] = d->uvs[(idx * 2) + 1];
     };
     iface.m_setTSpaceBasic = [](const SMikkTSpaceContext* ctx,
-                                const float fvTangent[],
-                                const float fSign,
+                                const float fv_tangent[],
+                                const float f_sign,
                                 const int face,
                                 const int vert) {
         auto* d = static_cast<UserData*>(ctx->m_pUserData);
         const std::uint32_t idx =
             d->indices ? (*d->indices)[(face * 3) + vert] :
                          static_cast<std::uint32_t>((face * 3) + vert);
-        (*d->tangents)[idx] = {fvTangent[0], fvTangent[1], fvTangent[2], fSign};
+        (*d->tangents)[idx] =
+            {fv_tangent[0], fv_tangent[1], fv_tangent[2], f_sign};
     };
 
     SMikkTSpaceContext ctx {};

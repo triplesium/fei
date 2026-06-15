@@ -14,16 +14,17 @@ concept is_std_hashable = requires(const T& object) {
 };
 
 template<typename T>
-struct is_hash_combinable_impl;
+struct is_hash_combinable_impl; // NOLINT(readability-identifier-naming)
 
 template<typename T>
 concept is_hash_combinable = is_hash_combinable_impl<T>::value;
 
 template<typename T>
-struct is_hash_combinable_impl : std::bool_constant<is_std_hashable<T>> {};
+struct is_hash_combinable_impl // NOLINT(readability-identifier-naming)
+    : std::bool_constant<is_std_hashable<T>> {};
 
 template<std::ranges::range T>
-struct is_hash_combinable_impl<T>
+struct is_hash_combinable_impl<T> // NOLINT(readability-identifier-naming)
     : std::bool_constant<
           is_std_hashable<T> ||
           is_hash_combinable<std::ranges::range_value_t<T>>> {};

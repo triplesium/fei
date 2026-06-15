@@ -7,9 +7,10 @@
 namespace fei {
 
 template<typename T>
-struct is_array : std::false_type {};
+struct is_array : std::false_type {}; // NOLINT(readability-identifier-naming)
 template<typename T, std::size_t N>
-struct is_array<std::array<T, N>> : std::true_type {};
+struct is_array<std::array<T, N>> // NOLINT(readability-identifier-naming)
+    : std::true_type {};
 template<typename T>
 static constexpr bool is_array_v = is_array<T>::value;
 

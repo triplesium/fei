@@ -165,6 +165,8 @@ class Matrix4WithinAbsMatcher : public Catch::Matchers::MatcherBase<Matrix4x4> {
     float m_margin;
 };
 
+// Match Catch2's matcher factory naming.
+// NOLINTBEGIN(readability-identifier-naming)
 inline Vector2WithinAbsMatcher VectorWithinAbs(float x, float y) {
     return {x, y, EPSILON};
 }
@@ -202,5 +204,6 @@ inline Matrix4WithinAbsMatcher
 WithinAbs(Matrix4x4 expected, float margin = EPSILON) {
     return {expected, margin};
 }
+// NOLINTEND(readability-identifier-naming)
 
 } // namespace fei::test

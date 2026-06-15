@@ -20,11 +20,11 @@ ShaderOpenGL::ShaderOpenGL(const ShaderDescription& desc) : ShaderModule(desc) {
     GLint status = 0;
     glGetShaderiv(m_shader, GL_COMPILE_STATUS, &status);
     if (status == GL_FALSE) {
-        GLint logLength;
-        glGetShaderiv(m_shader, GL_INFO_LOG_LENGTH, &logLength);
+        GLint log_length;
+        glGetShaderiv(m_shader, GL_INFO_LOG_LENGTH, &log_length);
         std::string log;
-        log.resize(logLength);
-        glGetShaderInfoLog(m_shader, logLength, nullptr, log.data());
+        log.resize(log_length);
+        glGetShaderInfoLog(m_shader, log_length, nullptr, log.data());
         fei::fatal("Failed to compile shader\n{}", log);
     }
 }

@@ -27,14 +27,14 @@ std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
 
     auto resource_set = device.create_resource_set(
         ResourceSetDescription {
-            .layout = equirect_to_cubemap_resource_layout,
+            .layout = m_equirect_to_cubemap_resource_layout,
             .resources = {equirect_texture, cubemap_texture},
         }
     );
 
     auto command_buffer = device.create_command_buffer();
     command_buffer->begin();
-    command_buffer->set_compute_pipeline(equirect_to_cubemap_pipeline);
+    command_buffer->set_compute_pipeline(m_equirect_to_cubemap_pipeline);
     command_buffer->set_resource_set(0, resource_set);
     command_buffer->dispatch(
         equirect_texture->width() / 32,
@@ -53,8 +53,8 @@ std::shared_ptr<Texture> EquirectToCubemap::get_or_create_cubemap(
     Assets<Image>& images,
     Handle<Image> equirect_image_handle
 ) {
-    auto it = cubemaps.find(equirect_image_handle.id());
-    if (it != cubemaps.end()) {
+    auto it = m_cubemaps.find(equirect_image_handle.id());
+    if (it != m_cubemaps.end()) {
         return it->second;
     }
     const auto& equirect_image = images.get(equirect_image_handle).value();
@@ -73,7 +73,7 @@ std::shared_ptr<Texture> EquirectToCubemap::get_or_create_cubemap(
         0
     );
     auto cubemap = convert_equirect_to_cubemap(device, equirect_texture);
-    cubemaps[equirect_image_handle.id()] = cubemap;
+    m_cubemaps[equirect_image_handle.id()] = cubemap;
     return cubemap;
 }
 
@@ -86,7 +86,7 @@ void EquirectToCubemap::setup(
         asset_server.load<Shader>("embeded://equirect2cube.comp");
     auto& shader = shaders.get(shader_handle).value();
     auto compute_shader = device.create_shader_module(shader.description());
-    equirect_to_cubemap_resource_layout = device.create_resource_layout(
+    m_equirect_to_cubemap_resource_layout = device.create_resource_layout(
         ResourceLayoutDescription {
             .elements = {
                 {
@@ -104,10 +104,10 @@ void EquirectToCubemap::setup(
             },
         }
     );
-    equirect_to_cubemap_pipeline = device.create_compute_pipeline(
+    m_equirect_to_cubemap_pipeline = device.create_compute_pipeline(
         ComputePipelineDescription {
             .shader = compute_shader,
-            .resource_layouts = {equirect_to_cubemap_resource_layout},
+            .resource_layouts = {m_equirect_to_cubemap_resource_layout},
         }
     );
 }

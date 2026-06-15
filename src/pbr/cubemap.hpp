@@ -15,9 +15,9 @@ namespace fei {
 
 class EquirectToCubemap {
   private:
-    std::unordered_map<AssetId, std::shared_ptr<Texture>> cubemaps;
-    std::shared_ptr<Pipeline> equirect_to_cubemap_pipeline;
-    std::shared_ptr<ResourceLayout> equirect_to_cubemap_resource_layout;
+    std::unordered_map<AssetId, std::shared_ptr<Texture>> m_cubemaps;
+    std::shared_ptr<Pipeline> m_equirect_to_cubemap_pipeline;
+    std::shared_ptr<ResourceLayout> m_equirect_to_cubemap_resource_layout;
 
   public:
     void setup(

@@ -11,20 +11,23 @@ struct Tex2F {
     float u {.0f}, v {.0f};
 
     Tex2F() = default;
-    Tex2F(float _u, float _v) : u {_u}, v {_v} {}
+    Tex2F(float new_u, float new_v) : u {new_u}, v {new_v} {}
 };
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 struct V2F_C4F {
     Vector2 vertices;
     Color4F color;
 };
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 struct V2F_C4F_T2F {
     Vector2 vertices;
     Color4F color;
     Tex2F tex_coords;
 };
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 struct V2F_C4F_T2F_Quad {
     V2F_C4F_T2F bl;
     V2F_C4F_T2F br;

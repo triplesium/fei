@@ -49,7 +49,7 @@ class AssetPath {
 
 namespace std {
 template<>
-struct hash<fei::AssetPath> {
+struct hash<fei::AssetPath> { // NOLINT(readability-identifier-naming)
     std::size_t operator()(const fei::AssetPath& asset_path) const noexcept {
         return std::hash<std::string>()(asset_path.as_string());
     }
