@@ -1,5 +1,6 @@
 #include "web_preview/frame_cache.hpp"
 #include "web_preview/frame_encoder.hpp"
+#include "web_preview/web_input.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -39,7 +40,6 @@ TEST_CASE("WebPreviewFrameCache stores and replaces JPEG frames", "[web_preview]
     REQUIRE(first_status.jpeg_bytes == 2);
     REQUIRE(first_status.capture_fps == 0.0f);
     REQUIRE(first_status.engine_fps == 0.0f);
-    REQUIRE(first_status.engine_fps_source.empty());
     REQUIRE(first_status.target == "test.target");
     REQUIRE(first_status.last_error.empty());
 
@@ -49,7 +49,6 @@ TEST_CASE("WebPreviewFrameCache stores and replaces JPEG frames", "[web_preview]
     std::this_thread::sleep_for(std::chrono::milliseconds {1});
     cache.mark_frame_tick();
     REQUIRE(cache.status().engine_fps > 0.0f);
-    REQUIRE(cache.status().engine_fps_source == "render_last_tick");
 
     cache.report_failure("readback failed");
     REQUIRE(cache.status().last_error == "readback failed");
@@ -65,7 +64,6 @@ TEST_CASE("WebPreviewFrameCache stores and replaces JPEG frames", "[web_preview]
     REQUIRE(second.jpeg == std::vector<byte> {byte {0x03}});
     REQUIRE(cache.status().capture_fps > 0.0f);
     REQUIRE(cache.status().engine_fps > 0.0f);
-    REQUIRE(cache.status().engine_fps_source == "render_last_tick");
     REQUIRE(cache.status().last_error.empty());
 
     cache.clear();
@@ -74,7 +72,6 @@ TEST_CASE("WebPreviewFrameCache stores and replaces JPEG frames", "[web_preview]
     REQUIRE_FALSE(cache.status().has_frame);
     REQUIRE(cache.status().capture_fps == 0.0f);
     REQUIRE(cache.status().engine_fps == 0.0f);
-    REQUIRE(cache.status().engine_fps_source.empty());
 }
 
 TEST_CASE(
@@ -126,4 +123,24 @@ TEST_CASE(
     REQUIRE(frame.target == "encoder.test");
     REQUIRE(frame.jpeg.size() > 0);
     REQUIRE(cache->status().last_error.empty());
+}
+
+TEST_CASE("WebPreviewInput tracks pressed web keys", "[web_preview]") {
+    WebPreviewInput input;
+
+    REQUIRE(input.pressed_keys().empty());
+    REQUIRE_FALSE(input.set_key(KeyCode::Unknown, true));
+
+    REQUIRE(input.set_key(KeyCode::W, true));
+    REQUIRE(input.set_key(KeyCode::W, true));
+    REQUIRE(input.set_key(KeyCode::Space, true));
+
+    auto keys = input.pressed_keys();
+    REQUIRE(keys == std::vector<KeyCode> {KeyCode::W, KeyCode::Space});
+
+    REQUIRE(input.set_key(KeyCode::W, false));
+    REQUIRE(input.pressed_keys() == std::vector<KeyCode> {KeyCode::Space});
+
+    input.clear();
+    REQUIRE(input.pressed_keys().empty());
 }

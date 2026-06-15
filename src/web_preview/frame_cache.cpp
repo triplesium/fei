@@ -31,7 +31,6 @@ void WebPreviewFrameCache::mark_frame_tick() {
         m_previous_frame_tick_at,
         std::chrono::steady_clock::now()
     );
-    m_engine_fps_source = "render_last_tick";
 }
 
 void WebPreviewFrameCache::publish_jpeg(
@@ -72,7 +71,6 @@ WebPreviewStatus WebPreviewFrameCache::status() const {
         .frame_index = m_frame.index,
         .capture_fps = m_capture_fps,
         .engine_fps = m_engine_fps,
-        .engine_fps_source = m_engine_fps_source,
         .jpeg_bytes = m_frame.jpeg.size(),
         .target = m_frame.target,
         .last_error = m_last_error,
@@ -93,7 +91,6 @@ void WebPreviewFrameCache::clear() {
     m_previous_frame_tick_at = {};
     m_capture_fps = 0.0f;
     m_engine_fps = 0.0f;
-    m_engine_fps_source.clear();
     m_last_error.clear();
 }
 

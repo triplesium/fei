@@ -28,7 +28,6 @@ struct WebPreviewStatus {
     uint64 frame_age_ms {0};
     float capture_fps {0.0f};
     float engine_fps {0.0f};
-    std::string engine_fps_source;
     std::size_t jpeg_bytes {0};
     std::string target;
     std::string last_error;
@@ -55,7 +54,6 @@ class WebPreviewFrameCache {
     std::chrono::steady_clock::time_point m_previous_frame_tick_at;
     float m_capture_fps {0.0f};
     float m_engine_fps {0.0f};
-    std::string m_engine_fps_source;
     std::string m_last_error;
 };
 
