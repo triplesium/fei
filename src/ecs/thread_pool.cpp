@@ -16,7 +16,7 @@ ThreadPool::ThreadPool(std::size_t thread_count) {
 
 ThreadPool::~ThreadPool() {
     {
-        std::lock_guard lock(m_mutex);
+        std::scoped_lock lock(m_mutex);
         m_stopping = true;
     }
     m_task_available.notify_all();

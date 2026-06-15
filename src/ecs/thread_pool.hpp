@@ -39,7 +39,7 @@ class ThreadPool {
         auto future = task->get_future();
 
         {
-            std::lock_guard lock(m_mutex);
+            std::scoped_lock lock(m_mutex);
             m_tasks.emplace([task]() {
                 (*task)();
             });

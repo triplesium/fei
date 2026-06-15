@@ -143,8 +143,6 @@ TEST_CASE(
     "ECS schedule runs compatible systems in parallel",
     "[ecs][schedule]"
 ) {
-    using namespace std::chrono_literals;
-
     World world;
     world.set_worker_threads(2);
     world.add_resource(CommandsQueue {});
@@ -163,14 +161,14 @@ TEST_CASE(
                 saw_peer = true;
                 cv.notify_all();
             } else {
-                saw_peer = cv.wait_for(lock, 1s, [&]() {
+                saw_peer = cv.wait_for(lock, std::chrono::seconds {1}, [&]() {
                     return entered == 2;
                 });
             }
         }
 
         if (saw_peer) {
-            std::lock_guard lock(mutex);
+            std::scoped_lock lock(mutex);
             ++overlapped;
         }
     };

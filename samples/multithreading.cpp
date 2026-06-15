@@ -40,7 +40,7 @@ void log(std::string_view message) {
             .count();
     auto thread_id = std::hash<std::thread::id> {}(std::this_thread::get_id());
 
-    std::lock_guard lock(g_log_mutex);
+    std::scoped_lock lock(g_log_mutex);
     std::println("{:>4} ms | thread {:016x} | {}", elapsed, thread_id, message);
 }
 
