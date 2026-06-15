@@ -13,7 +13,7 @@ void setup_render_target(
         TextureDescription {
             .width = width,
             .height = height,
-            .depth = 3,
+            .depth = 1,
             .mip_level = 1,
             .layer = 1,
             .texture_format = PixelFormat::Rgba8Unorm,
