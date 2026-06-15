@@ -4,6 +4,8 @@
 #include "base/log.hpp"
 
 #include <charconv>
+#include <chrono>
+#include <cstddef>
 #include <httplib.h>
 #include <optional>
 #include <string>
@@ -15,6 +17,8 @@ EMBED(index_html, "index.html");
 namespace fei {
 
 namespace {
+
+constexpr std::string_view c_mjpeg_boundary {"fei-frame"};
 
 std::string_view index_html() {
     auto reader = EmbededAssets::get("index.html").reader();
@@ -108,16 +112,68 @@ std::optional<bool> parse_bool_param(const std::string& value) {
     return std::nullopt;
 }
 
+bool write_sink(httplib::DataSink& sink, std::string_view content) {
+    return sink.write(content.data(), content.size());
+}
+
+bool write_mjpeg_frame(httplib::DataSink& sink, const WebPreviewFrame& frame) {
+    std::string header;
+    header.reserve(128);
+    header += "--";
+    header += c_mjpeg_boundary;
+    header += "\r\nContent-Type: image/jpeg\r\nContent-Length: ";
+    header += std::to_string(frame.jpeg.size());
+    header += "\r\nX-Frame-Index: ";
+    header += std::to_string(frame.index);
+    header += "\r\n\r\n";
+
+    return write_sink(sink, header) &&
+           sink.write(
+               reinterpret_cast<const char*>(frame.jpeg.data()),
+               frame.jpeg.size()
+           ) &&
+           write_sink(sink, "\r\n");
+}
+
 void install_routes(
     httplib::Server& server,
     std::shared_ptr<WebPreviewFrameCache> frame_cache,
-    std::shared_ptr<WebPreviewInput> input
+    std::shared_ptr<WebPreviewInput> input,
+    bool handle_input
 ) {
     server.Get("/", [](const httplib::Request&, httplib::Response& res) {
         res.set_header("Cache-Control", "no-store");
         auto html = index_html();
         res.set_content(html.data(), html.size(), "text/html; charset=utf-8");
     });
+
+    server.Get(
+        "/stream.mjpg",
+        [frame_cache](const httplib::Request&, httplib::Response& res) {
+            res.set_header("Cache-Control", "no-store");
+            res.set_chunked_content_provider(
+                "multipart/x-mixed-replace; boundary=fei-frame",
+                [frame_cache,
+                 frame_index =
+                     uint64 {0}](std::size_t, httplib::DataSink& sink) mutable {
+                    if (!sink.is_writable()) {
+                        return false;
+                    }
+
+                    auto frame = frame_cache->wait_for_frame_after(
+                        frame_index,
+                        std::chrono::milliseconds {1000}
+                    );
+                    if (frame.empty()) {
+                        return sink.is_writable();
+                    }
+
+                    frame_index = frame.index;
+                    return write_mjpeg_frame(sink, frame);
+                }
+            );
+        }
+    );
 
     server.Get(
         "/frame.jpg",
@@ -150,42 +206,50 @@ void install_routes(
         }
     );
 
-    server.Post(
-        "/input/key",
-        [input](const httplib::Request& req, httplib::Response& res) {
-            res.set_header("Cache-Control", "no-store");
-            if (!req.has_param("key") || !req.has_param("down")) {
-                res.status = 400;
-                res.set_content("Missing key or down parameter", "text/plain");
-                return;
+    if (handle_input) {
+        server.Post(
+            "/input/key",
+            [input](const httplib::Request& req, httplib::Response& res) {
+                res.set_header("Cache-Control", "no-store");
+                if (!req.has_param("key") || !req.has_param("down")) {
+                    res.status = 400;
+                    res.set_content(
+                        "Missing key or down parameter",
+                        "text/plain"
+                    );
+                    return;
+                }
+
+                auto key = parse_int(req.get_param_value("key"));
+                auto down = parse_bool_param(req.get_param_value("down"));
+                if (!key || !down) {
+                    res.status = 400;
+                    res.set_content(
+                        "Invalid key or down parameter",
+                        "text/plain"
+                    );
+                    return;
+                }
+
+                if (!input->set_key(static_cast<KeyCode>(*key), *down)) {
+                    res.status = 400;
+                    res.set_content("Unsupported key code", "text/plain");
+                    return;
+                }
+
+                res.set_content("ok", "text/plain");
             }
+        );
 
-            auto key = parse_int(req.get_param_value("key"));
-            auto down = parse_bool_param(req.get_param_value("down"));
-            if (!key || !down) {
-                res.status = 400;
-                res.set_content("Invalid key or down parameter", "text/plain");
-                return;
+        server.Post(
+            "/input/clear",
+            [input](const httplib::Request&, httplib::Response& res) {
+                input->clear();
+                res.set_header("Cache-Control", "no-store");
+                res.set_content("ok", "text/plain");
             }
-
-            if (!input->set_key(static_cast<KeyCode>(*key), *down)) {
-                res.status = 400;
-                res.set_content("Unsupported key code", "text/plain");
-                return;
-            }
-
-            res.set_content("ok", "text/plain");
-        }
-    );
-
-    server.Post(
-        "/input/clear",
-        [input](const httplib::Request&, httplib::Response& res) {
-            input->clear();
-            res.set_header("Cache-Control", "no-store");
-            res.set_content("ok", "text/plain");
-        }
-    );
+        );
+    }
 }
 
 } // namespace
@@ -196,7 +260,7 @@ WebPreviewServer::WebPreviewServer(WebPreviewConfig config) :
     m_input(std::make_shared<WebPreviewInput>()),
     m_encoder(std::make_unique<WebPreviewFrameEncoder>(m_frame_cache)),
     m_server(std::make_unique<httplib::Server>()) {
-    install_routes(*m_server, m_frame_cache, m_input);
+    install_routes(*m_server, m_frame_cache, m_input, m_config.handle_input);
 }
 
 WebPreviewServer::~WebPreviewServer() {

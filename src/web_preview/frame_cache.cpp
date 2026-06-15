@@ -39,17 +39,20 @@ void WebPreviewFrameCache::publish_jpeg(
     uint32 height,
     std::string target
 ) {
-    std::scoped_lock lock(m_mutex);
-    auto captured_at = std::chrono::steady_clock::now();
-    update_smoothed_fps(m_capture_fps, m_previous_capture_at, captured_at);
+    {
+        std::scoped_lock lock(m_mutex);
+        auto captured_at = std::chrono::steady_clock::now();
+        update_smoothed_fps(m_capture_fps, m_previous_capture_at, captured_at);
 
-    m_frame.jpeg = std::move(jpeg);
-    m_frame.width = width;
-    m_frame.height = height;
-    m_frame.target = std::move(target);
-    m_frame.captured_at = captured_at;
-    ++m_frame.index;
-    m_last_error.clear();
+        m_frame.jpeg = std::move(jpeg);
+        m_frame.width = width;
+        m_frame.height = height;
+        m_frame.target = std::move(target);
+        m_frame.captured_at = captured_at;
+        ++m_frame.index;
+        m_last_error.clear();
+    }
+    m_frame_available.notify_all();
 }
 
 void WebPreviewFrameCache::report_failure(std::string error) {
@@ -59,6 +62,20 @@ void WebPreviewFrameCache::report_failure(std::string error) {
 
 WebPreviewFrame WebPreviewFrameCache::snapshot() const {
     std::scoped_lock lock(m_mutex);
+    return m_frame;
+}
+
+WebPreviewFrame WebPreviewFrameCache::wait_for_frame_after(
+    uint64 frame_index,
+    std::chrono::milliseconds timeout
+) const {
+    std::unique_lock lock(m_mutex);
+    m_frame_available.wait_for(lock, timeout, [&]() {
+        return !m_frame.empty() && m_frame.index > frame_index;
+    });
+    if (m_frame.empty() || m_frame.index <= frame_index) {
+        return {};
+    }
     return m_frame;
 }
 

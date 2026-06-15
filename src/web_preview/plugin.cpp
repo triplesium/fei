@@ -1,6 +1,7 @@
 #include "web_preview/plugin.hpp"
 
 #include "app/app.hpp"
+#include "base/log.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
 #include "graphics/texture.hpp"
@@ -77,16 +78,13 @@ void capture_web_preview_frame(WorldRef world, Res<WebPreviewServer> server) {
     );
 }
 
-void apply_web_preview_keyboard_input(WorldRef world) {
-    if (!world->has_resource<KeyInput>() ||
-        !world->has_resource<WebPreviewServer>()) {
-        return;
-    }
-
-    auto keys = world->resource<WebPreviewServer>().input()->pressed_keys();
-    auto& input = world->resource<KeyInput>();
+void apply_web_preview_keyboard_input(
+    Res<WebPreviewServer> server,
+    Res<KeyInput> input
+) {
+    auto keys = server->input()->pressed_keys();
     for (auto key : keys) {
-        input.press(key);
+        input->press(key);
     }
 }
 
@@ -96,12 +94,21 @@ WebPreviewPlugin::WebPreviewPlugin(WebPreviewConfig config) :
     m_config(std::move(config)) {}
 
 void WebPreviewPlugin::setup(App& app) {
+    if (m_config.handle_input && !app.has_resource<KeyInput>()) {
+        fatal(
+            "WebPreviewPlugin input handling requires InputPlugin. Add "
+            "InputPlugin before WebPreviewPlugin or set handle_input=false."
+        );
+    }
+
     app.add_resource(WebPreviewServer(m_config));
     app.resource<WebPreviewServer>().start();
-    app.add_systems(
-        PreUpdate,
-        apply_web_preview_keyboard_input | after(key_input_system)
-    );
+    if (m_config.handle_input) {
+        app.add_systems(
+            PreUpdate,
+            apply_web_preview_keyboard_input | after(key_input_system)
+        );
+    }
     app.add_systems(RenderLast, capture_web_preview_frame);
 }
 

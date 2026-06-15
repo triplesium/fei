@@ -31,6 +31,12 @@ TEST_CASE("WebPreviewFrameCache stores and replaces JPEG frames", "[web_preview]
     REQUIRE(first.index == 1);
     REQUIRE(first.target == "test.target");
     REQUIRE(first.jpeg == std::vector<byte> {byte {0x01}, byte {0x02}});
+    REQUIRE(
+        cache.wait_for_frame_after(0, std::chrono::milliseconds {1}).index == 1
+    );
+    REQUIRE(
+        cache.wait_for_frame_after(1, std::chrono::milliseconds {1}).empty()
+    );
 
     auto first_status = cache.status();
     REQUIRE(first_status.has_frame);

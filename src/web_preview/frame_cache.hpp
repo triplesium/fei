@@ -2,6 +2,7 @@
 #include "base/types.hpp"
 
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <mutex>
 #include <string>
@@ -44,11 +45,16 @@ class WebPreviewFrameCache {
     );
     void report_failure(std::string error);
     WebPreviewFrame snapshot() const;
+    WebPreviewFrame wait_for_frame_after(
+        uint64 frame_index,
+        std::chrono::milliseconds timeout
+    ) const;
     WebPreviewStatus status() const;
     void clear();
 
   private:
     mutable std::mutex m_mutex;
+    mutable std::condition_variable m_frame_available;
     WebPreviewFrame m_frame;
     std::chrono::steady_clock::time_point m_previous_capture_at;
     std::chrono::steady_clock::time_point m_previous_frame_tick_at;

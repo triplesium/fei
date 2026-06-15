@@ -15,6 +15,7 @@ struct WebPreviewConfig {
     uint16 port {8080};
     int jpeg_quality {80};
     WebPreviewTarget target {WebPreviewTarget::Auto};
+    bool handle_input {true};
 };
 
 class WebPreviewPlugin : public Plugin {

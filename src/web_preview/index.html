@@ -31,7 +31,6 @@
   <script>
     const frame = document.getElementById("frame");
     const hud = document.getElementById("hud");
-    const delayMs = 100;
     const keyCodes = {
       Space: 32,
       Quote: 39,
@@ -152,8 +151,8 @@
       ContextMenu: 348,
     };
     const pressedKeys = new Set();
-    function refresh() {
-      frame.src = "/frame.jpg?t=" + Date.now();
+    function connectStream() {
+      frame.src = "/stream.mjpg?t=" + Date.now();
     }
     function postKey(key, down) {
       fetch(`/input/key?key=${key}&down=${down ? 1 : 0}`, {
@@ -189,8 +188,7 @@
         keepalive: true,
       }).catch(() => {});
     }
-    frame.onload = () => setTimeout(refresh, delayMs);
-    frame.onerror = () => setTimeout(refresh, delayMs);
+    frame.onerror = () => setTimeout(connectStream, 1000);
     window.addEventListener("keydown", event => handleKey(event, true), { capture: true });
     window.addEventListener("keyup", event => handleKey(event, false), { capture: true });
     window.addEventListener("blur", releaseAllKeys);
@@ -227,7 +225,7 @@ catch (error) {
         "fei web preview\n<span class=\"error\">status unavailable</span>";
 }
 }
-refresh();
+connectStream();
 refreshStatus();
 setInterval(refreshStatus, 500);
   </script>
