@@ -2,6 +2,7 @@
 
 #include "base/concepts.hpp"
 #include "ecs/fwd.hpp"
+#include "ecs/resource_traits.hpp"
 #include "refl/type.hpp"
 
 #include <tuple>
@@ -42,11 +43,12 @@ struct SystemAccess {
     std::unordered_set<TypeId> read_components;
     std::unordered_set<TypeId> write_components;
     bool world_exclusive {false};
+    bool main_thread_only {false};
     bool commands {false};
 
     bool conflicts_with(const SystemAccess& other) const {
-        if (world_exclusive || other.world_exclusive || commands ||
-            other.commands) {
+        if (world_exclusive || other.world_exclusive || main_thread_only ||
+            other.main_thread_only || commands || other.commands) {
             return true;
         }
 
@@ -58,7 +60,9 @@ struct SystemAccess {
                intersects(read_components, other.write_components);
     }
 
-    bool is_barrier() const { return world_exclusive || commands; }
+    bool is_barrier() const {
+        return world_exclusive || main_thread_only || commands;
+    }
 
   private:
     static bool intersects(
@@ -88,6 +92,9 @@ template<typename T>
 struct SystemParamAccess<Res<T>> {
     static void add(SystemAccess& access) {
         access.write_resources.insert(type_id<T>());
+        if constexpr (ResourceTraits<T>::main_thread_only) {
+            access.main_thread_only = true;
+        }
     }
 };
 
@@ -95,6 +102,9 @@ template<typename T>
 struct SystemParamAccess<CRes<T>> {
     static void add(SystemAccess& access) {
         access.read_resources.insert(type_id<T>());
+        if constexpr (ResourceTraits<T>::main_thread_only) {
+            access.main_thread_only = true;
+        }
     }
 };
 

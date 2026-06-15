@@ -1,4 +1,5 @@
 #pragma once
+#include "ecs/resource_traits.hpp"
 #include "graphics/buffer.hpp"
 #include "graphics/command_buffer.hpp"
 #include "graphics/framebuffer.hpp"
@@ -83,6 +84,11 @@ class GraphicsDevice {
             return nullptr;
         }
     }
+};
+
+template<>
+struct ResourceTraits<GraphicsDevice> {
+    static constexpr bool main_thread_only = true;
 };
 
 } // namespace fei

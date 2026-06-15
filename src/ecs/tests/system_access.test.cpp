@@ -32,6 +32,10 @@ void world_ref_system(WorldRef) {}
 
 void event_access_system(EventReader<GameEvent>, EventWriter<PlayerMoved>) {}
 
+struct MainThreadResource {};
+
+void main_thread_resource_system(Res<MainThreadResource>) {}
+
 struct CustomParam {
     static CustomParam get_param(World&) { return {}; }
 };
@@ -44,6 +48,11 @@ template<>
 struct fei::SystemParamTraits<CustomParam> :
     fei::StatelessParamTraits<CustomParam> {};
 
+template<>
+struct fei::ResourceTraits<MainThreadResource> {
+    static constexpr bool main_thread_only = true;
+};
+
 TEST_CASE("ECS systems expose resource access metadata", "[ecs][system]") {
     FunctionSystem<decltype(resource_access_system)*> system(
         resource_access_system
@@ -53,6 +62,7 @@ TEST_CASE("ECS systems expose resource access metadata", "[ecs][system]") {
     REQUIRE(access.write_resources.contains(type_id<GameConfig>()));
     REQUIRE(access.read_resources.contains(type_id<EventQueue>()));
     REQUIRE_FALSE(access.world_exclusive);
+    REQUIRE_FALSE(access.main_thread_only);
     REQUIRE_FALSE(access.commands);
 }
 
@@ -214,4 +224,29 @@ TEST_CASE(
         type_id<Events<PlayerMoved>>()
     ));
     REQUIRE(custom_param.access().world_exclusive);
+}
+
+TEST_CASE(
+    "ECS main-thread-only resource traits create scheduler barriers",
+    "[ecs][system]"
+) {
+    FunctionSystem<decltype(main_thread_resource_system)*> main_thread(
+        main_thread_resource_system
+    );
+    FunctionSystem<decltype(read_position_system)*> read_position(
+        read_position_system
+    );
+
+    REQUIRE(main_thread.access().main_thread_only);
+    REQUIRE_FALSE(main_thread.access().world_exclusive);
+    REQUIRE(main_thread.access().is_barrier());
+    REQUIRE(main_thread.access().conflicts_with(read_position.access()));
+
+    Schedule schedule;
+    schedule.add_systems(main_thread_resource_system, read_position_system);
+    schedule.sort_systems();
+
+    REQUIRE(schedule.execution_batches().size() == 2);
+    REQUIRE(schedule.execution_batches()[0].size() == 1);
+    REQUIRE(schedule.execution_batches()[1].size() == 1);
 }
