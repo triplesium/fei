@@ -18,6 +18,13 @@ target("fei-reflgen")
     add_headerfiles("reflgen/*.hpp")
     add_packages("llvm-libclang")
 
+target("fei-shadergen")
+    set_kind("binary")
+    set_default(false)
+    set_policy("build.fence", true)
+    add_files("shadergen/*.cpp")
+    add_packages("spirv-cross", "cli11")
+
 task("tidy")
     on_run(function ()
         local option = import("core.base.option")

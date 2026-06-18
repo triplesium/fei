@@ -2,7 +2,7 @@ add_rules("mode.debug", "mode.release")
 set_languages("c++23")
 set_warnings("all")
 
-add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib")
+add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "cli11", "spirv-cross")
 add_requires("glfw", {configs = {shared = false}})
 add_requires("imgui", {configs = {glfw = true, opengl3 = true}})
 add_requires("llvm-libclang")
@@ -37,6 +37,7 @@ end
 
 local project_dir = os.scriptdir():gsub("\\", "/")
 add_defines("FEI_ASSETS_PATH=\"" .. project_dir .. "/assets\"")
+add_defines("FEI_SHADER_ASSETS_PATH=\"" .. project_dir .. "/build/generated/shaders\"")
 
 rule("fei.test")
     on_load(function(target)
@@ -96,6 +97,20 @@ rule("fei.reflect")
         import("reflgen.rules", {
             rootdir = path.join(os.projectdir(), "tools")
         }).clean(target)
+    end)
+rule_end()
+
+rule("fei.shader")
+    set_extensions(".vert", ".geom", ".frag", ".comp")
+
+    on_load(function(target)
+        target:add("deps", "fei-shadergen")
+    end)
+
+    on_buildcmd_file(function(target, batchcmds, sourcefile, opt)
+        import("shadergen.rules", {
+            rootdir = path.join(os.projectdir(), "tools")
+        }).buildcmd_file(target, batchcmds, sourcefile, opt)
     end)
 rule_end()
 
