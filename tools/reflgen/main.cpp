@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <CLI/CLI.hpp>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -26,32 +27,63 @@ struct Options {
     bool verbose = false;
 };
 
-[[nodiscard]] bool starts_with(std::string_view text, std::string_view prefix) {
-    return text.starts_with(prefix);
-}
-
-[[nodiscard]] std::string value_after_equals(std::string_view arg) {
-    const auto pos = arg.find('=');
-    if (pos == std::string_view::npos) {
-        return {};
-    }
-    return std::string(arg.substr(pos + 1));
-}
-
-[[nodiscard]] std::string
-require_next(int& index, int argc, char** argv, std::string_view option_name) {
-    if (index + 1 >= argc) {
-        throw std::runtime_error(
-            "missing value for " + std::string(option_name)
-        );
-    }
-    ++index;
-    return argv[index];
-}
-
 [[nodiscard]] bool is_header_path(std::string_view path) {
     const auto ext = std::filesystem::path(path).extension().string();
     return ext == ".h" || ext == ".hh" || ext == ".hpp" || ext == ".hxx";
+}
+
+void configure_options(CLI::App& app, Options& options) {
+    app.add_option("headers", options.headers, "Header files to parse");
+    auto* include_option = app.add_option_function<std::string>(
+        "-I,--include",
+        [&options](const std::string& include) {
+            options.includes.push_back(include);
+        },
+        "Include directory"
+    );
+    include_option->trigger_on_parse();
+    app.add_flag("-v,--verbose", options.verbose, "Enable verbose output");
+    app.add_flag("--aggregate", options.aggregate, "Generate aggregate output");
+    app.add_option(
+        "--rootdir",
+        options.root_dir,
+        "Root directory for relative paths"
+    );
+    app.add_option("-o,--output", options.output_file, "Output C++ file");
+    app.add_option(
+        "--function",
+        options.function_name,
+        "Generated registration function name"
+    );
+    auto* registrar_option = app.add_option_function<std::string>(
+        "--registrar",
+        [&options](const std::string& registrar) {
+            options.registrars.push_back(registrar);
+        },
+        "Registration function to call from aggregate output"
+    );
+    registrar_option->trigger_on_parse();
+    app.add_option("--stamp", options.stamp_file, "Stamp file to write");
+}
+
+void normalize_options(Options& options) {
+    options.headers.erase(
+        std::remove_if(
+            options.headers.begin(),
+            options.headers.end(),
+            [](const std::string& header) {
+                return !is_header_path(header);
+            }
+        ),
+        options.headers.end()
+    );
+
+    if (options.headers.empty() && !options.aggregate) {
+        throw std::runtime_error("no headers provided");
+    }
+    if (options.aggregate && options.output_file.empty()) {
+        throw std::runtime_error("aggregate output file is required");
+    }
 }
 
 void write_stamp_file(const std::filesystem::path& stamp_file) {
@@ -71,72 +103,18 @@ void write_stamp_file(const std::filesystem::path& stamp_file) {
     out << std::chrono::system_clock::now().time_since_epoch().count() << '\n';
 }
 
-[[nodiscard]] Options parse_options(int argc, char** argv) {
-    Options options;
-    for (int i = 1; i < argc; ++i) {
-        const std::string_view arg(argv[i]);
-        if (arg == "--verbose" || arg == "-v") {
-            options.verbose = true;
-        } else if (arg == "--aggregate") {
-            options.aggregate = true;
-        } else if (arg == "--rootdir") {
-            options.root_dir = require_next(i, argc, argv, arg);
-        } else if (starts_with(arg, "--rootdir=")) {
-            options.root_dir = value_after_equals(arg);
-        } else if (arg == "--output" || arg == "-o") {
-            options.output_file = require_next(i, argc, argv, arg);
-        } else if (starts_with(arg, "--output=")) {
-            options.output_file = value_after_equals(arg);
-        } else if (arg == "--function") {
-            options.function_name = require_next(i, argc, argv, arg);
-        } else if (starts_with(arg, "--function=")) {
-            options.function_name = value_after_equals(arg);
-        } else if (arg == "--registrar") {
-            options.registrars.push_back(require_next(i, argc, argv, arg));
-        } else if (starts_with(arg, "--registrar=")) {
-            options.registrars.push_back(value_after_equals(arg));
-        } else if (arg == "--stamp") {
-            options.stamp_file = require_next(i, argc, argv, arg);
-        } else if (starts_with(arg, "--stamp=")) {
-            options.stamp_file = value_after_equals(arg);
-        } else if (arg == "--include" || arg == "-I") {
-            options.includes.push_back(require_next(i, argc, argv, arg));
-        } else if (starts_with(arg, "-I") && arg.size() > 2) {
-            options.includes.emplace_back(arg.substr(2));
-        } else if (
-            arg == "--template" || arg == "-t" || arg == "--threads" ||
-            arg == "-j"
-        ) {
-            (void)require_next(i, argc, argv, arg);
-        } else if (
-            starts_with(arg, "--template=") || starts_with(arg, "--threads=")
-        ) {
-            continue;
-        } else if (starts_with(arg, "-")) {
-            throw std::runtime_error("unknown option: " + std::string(arg));
-        } else {
-            if (is_header_path(arg)) {
-                options.headers.emplace_back(arg);
-            }
-        }
-    }
-
-    if (options.headers.empty() && !options.aggregate) {
-        throw std::runtime_error("no headers provided");
-    }
-    return options;
-}
-
 } // namespace
 
 int main(int argc, char** argv) {
+    Options options;
+    CLI::App app {"Generate C++ reflection metadata"};
+    configure_options(app, options);
+    CLI11_PARSE(app, argc, argv);
+
     try {
-        auto options = parse_options(argc, argv);
+        normalize_options(options);
 
         if (options.aggregate) {
-            if (options.output_file.empty()) {
-                throw std::runtime_error("aggregate output file is required");
-            }
             fei::reflgen::generate_aggregate_cpp_file(
                 options.registrars,
                 options.output_file

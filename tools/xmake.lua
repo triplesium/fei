@@ -16,7 +16,7 @@ target("fei-reflgen")
     set_policy("build.fence", true)
     add_files("reflgen/*.cpp")
     add_headerfiles("reflgen/*.hpp")
-    add_packages("llvm-libclang")
+    add_packages("llvm-libclang", "cli11")
 
 target("fei-shadergen")
     set_kind("binary")

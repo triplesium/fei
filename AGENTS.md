@@ -13,7 +13,7 @@
 |-- samples/             # runnable sample-* targets
 |-- assets/              # runtime assets via FEI_ASSETS_PATH
 |-- docs/images/         # documentation screenshots
-`-- tools/               # reflection generator scripts/templates
+`-- tools/               # generator tools and build helper scripts
 ```
 
 - Module targets follow `fei-<module>`, for example `fei-ecs`, `fei-refl`,
@@ -33,7 +33,7 @@
 - `xmake test fei-math-tests/*`: run every registered test case for one target.
 - `xmake test -vD`: show detailed failure output and generated log paths.
 - `xmake run sample-scene`: run a sample target from `samples/`.
-- `xmake reflgen`: regenerate reflection metadata via `tools/reflgen/reflgen.py`.
+- `xmake reflgen`: regenerate reflection metadata via `fei-reflgen`.
 - `xmake format`: run clang-format for all xmake targets, excluding generated
   reflection metadata.
 - `xmake format --check` or `xmake format fei-math`: check formatting without
