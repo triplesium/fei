@@ -71,7 +71,7 @@ void equirect_to_cubemap(
         }
     );
     auto shader_handle =
-        asset_server->load<Shader>("embeded://equirect2cube.comp");
+        asset_server->load<Shader>("shader://equirect2cube.comp");
     auto& shader = shaders->get(shader_handle).value();
     auto compute_shader = device->create_shader_module(shader.description());
     auto resource_layout = device->create_resource_layout(
@@ -167,7 +167,8 @@ void cubemap_to_irradiance_map(
             .texture_type = TextureType::Texture2D,
         }
     );
-    auto shader_handle = asset_server->load<Shader>("cubemap2irradiance.comp");
+    auto shader_handle =
+        asset_server->load<Shader>("shader://cubemap2irradiance.comp");
     auto& shader = shaders->get(shader_handle).value();
     auto compute_shader = device->create_shader_module(shader.description());
     auto resource_layout = device->create_resource_layout(

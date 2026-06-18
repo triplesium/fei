@@ -83,7 +83,7 @@ void EquirectToCubemap::setup(
     Assets<Shader>& shaders
 ) {
     auto shader_handle =
-        asset_server.load<Shader>("embeded://equirect2cube.comp");
+        asset_server.load<Shader>("shader://equirect2cube.comp");
     auto& shader = shaders.get(shader_handle).value();
     auto compute_shader = device.create_shader_module(shader.description());
     m_equirect_to_cubemap_resource_layout = device.create_resource_layout(

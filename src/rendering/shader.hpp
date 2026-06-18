@@ -5,49 +5,74 @@
 #include "asset/loader.hpp"
 #include "asset/path.hpp"
 #include "asset/server.hpp"
-#include "base/log.hpp"
+#include "asset/source.hpp"
+#include "base/optional.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/shader_module.hpp"
 
+#include <cstddef>
 #include <expected>
 #include <filesystem>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <variant>
+#include <vector>
 
 namespace fei {
 
 struct Shader {
     std::filesystem::path path;
     std::string source;
+    std::vector<std::byte> spirv;
     ShaderStages stage;
+    std::vector<ShaderResourceBinding> resources;
 
     ShaderDescription description() const {
-        return ShaderDescription {.stage = stage, .source = source};
+        return ShaderDescription {
+            .stage = stage,
+            .source = source,
+            .spirv = spirv,
+            .path = path.string(),
+            .resources = resources,
+        };
     }
 };
+
+Optional<std::filesystem::path>
+compiled_opengl_shader_path(const AssetPath& asset_path);
+
+Optional<std::filesystem::path>
+compiled_vulkan_shader_path(const AssetPath& asset_path);
+
+Optional<std::filesystem::path>
+shader_reflection_path(const AssetPath& asset_path);
+
+std::vector<std::byte> read_shader_binary(const std::filesystem::path& path);
+
+std::vector<ShaderResourceBinding>
+parse_shader_reflection_bindings(std::string_view json);
+
+std::vector<ShaderResourceBinding>
+load_shader_reflection_bindings(const AssetPath& asset_path);
 
 class ShaderLoader : public AssetLoader<Shader> {
   public:
     std::expected<std::unique_ptr<Shader>, std::error_code>
-    load(Reader& reader, const LoadContext& context) override {
-        auto path = context.asset_path().path();
-        ShaderStages stage;
-        if (path.extension() == ".vert") {
-            stage = ShaderStages::Vertex;
-        } else if (path.extension() == ".geom") {
-            stage = ShaderStages::Geometry;
-        } else if (path.extension() == ".frag") {
-            stage = ShaderStages::Fragment;
-        } else if (path.extension() == ".comp") {
-            stage = ShaderStages::Compute;
-        } else {
-            fei::error("Unknown shader extension: {}", path.string());
-            return nullptr;
-        }
-        std::string source = reader.as_string();
+    load(Reader& reader, const LoadContext& context) override;
+};
 
-        return std::make_unique<Shader>(Shader {path, source, stage});
-    }
+class ShaderAssetSource : public AssetSource {
+  private:
+    std::filesystem::path m_root;
+
+  public:
+    ShaderAssetSource();
+    explicit ShaderAssetSource(std::filesystem::path root);
+
+    std::string name() const override;
+    bool exists(const std::filesystem::path& path) const override;
+    Reader get_reader(const std::filesystem::path& path) const override;
 };
 
 class ShaderRef {

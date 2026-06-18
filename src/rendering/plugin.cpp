@@ -38,6 +38,8 @@ void render_end(Res<Window> win) {
 }
 
 void RenderingPlugin::setup(App& app) {
+    app.resource<AssetServer>().emplace_source<ShaderAssetSource>();
+
     app.configure_sets(
            RenderUpdate,
            chain(

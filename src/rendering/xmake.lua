@@ -3,7 +3,7 @@ target("fei-rendering")
     add_headerfiles("**.hpp")
     add_files("*.cpp", "mesh/*.cpp")
     add_deps("fei-base", "fei-refl", "fei-ecs", "fei-app", "fei-math", "fei-asset", "fei-core", "fei-graphics", "fei-window")
-    add_packages("tinyobjloader", "glfw", "mikktspace")
+    add_packages("tinyobjloader", "glfw", "mikktspace", "nlohmann_json")
 
 target("fei-rendering-tests")
     set_kind("binary")

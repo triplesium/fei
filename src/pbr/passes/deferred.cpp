@@ -130,9 +130,9 @@ void setup_gbuffer(
         return device->create_shader_module(shader.description());
     };
 
-    auto quad_vert_shader = create_shader_module("embeded://quad.vert");
+    auto quad_vert_shader = create_shader_module("shader://quad.vert");
     auto deferred_gi_frag_shader =
-        create_shader_module("embeded://deferred_gi.frag");
+        create_shader_module("shader://deferred_gi.frag");
 
     resources->defered_resource_set = device->create_resource_set(
         ResourceSetDescription {
@@ -215,7 +215,7 @@ void setup_gbuffer(
     );
 
     auto direct_lighting_shader =
-        create_shader_module("embeded://deferred_gi_direct.frag");
+        create_shader_module("shader://deferred_gi_direct.frag");
     resources->direct_lighting_pipeline = device->create_render_pipeline(
         RenderPipelineDescription {
             .depth_stencil_state = DepthStencilStateDescription::Disabled,
@@ -240,7 +240,7 @@ void setup_gbuffer(
     );
 
     auto indirect_lighting_shader =
-        create_shader_module("embeded://deferred_gi_indirect.frag");
+        create_shader_module("shader://deferred_gi_indirect.frag");
     resources->indirect_lighting_pipeline = device->create_render_pipeline(
         RenderPipelineDescription {
             .depth_stencil_state = DepthStencilStateDescription::Disabled,
@@ -265,7 +265,7 @@ void setup_gbuffer(
     );
 
     auto composite_shader =
-        create_shader_module("embeded://deferred_gi_composite.frag");
+        create_shader_module("shader://deferred_gi_composite.frag");
     resources->composite_resource_layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Vertex, ShaderStages::Fragment},

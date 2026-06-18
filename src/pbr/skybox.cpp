@@ -3,7 +3,6 @@
 #include "asset/assets.hpp"
 #include "asset/server.hpp"
 #include "ecs/system_params.hpp"
-#include "graphics/shader_module.hpp"
 #include "rendering/mesh/mesh.hpp"
 #include "rendering/shader.hpp"
 
@@ -37,21 +36,15 @@ void setup_skybox_resources(
     mesh->insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     skybox_resource->mesh = meshes->add(std::move(mesh));
     auto vertex_shader_handle =
-        asset_server->load<Shader>("embeded://skybox.vert");
+        asset_server->load<Shader>("shader://skybox.vert");
     auto fragment_shader_handle =
-        asset_server->load<Shader>("embeded://skybox.frag");
+        asset_server->load<Shader>("shader://skybox.frag");
     skybox_resource->shader_modules = {
         device->create_shader_module(
-            ShaderDescription {
-                .stage = ShaderStages::Vertex,
-                .source = shaders->get(vertex_shader_handle)->source,
-            }
+            shaders->get(vertex_shader_handle)->description()
         ),
         device->create_shader_module(
-            ShaderDescription {
-                .stage = ShaderStages::Fragment,
-                .source = shaders->get(fragment_shader_handle)->source,
-            }
+            shaders->get(fragment_shader_handle)->description()
         )
     };
 }

@@ -5,17 +5,17 @@ layout (location = 2) out vec4 g_albedo_metallic;
 layout (location = 3) out vec4 g_specular;
 layout (location = 4) out vec4 g_emissive_depth;
 
-in vec3 Frag_Position;
-in vec3 Frag_Normal;
-in vec2 Frag_TexCoords;
-in vec3 Frag_Tangent;
+layout(location = 0) in vec3 Frag_Position;
+layout(location = 1) in vec3 Frag_Normal;
+layout(location = 2) in vec2 Frag_TexCoords;
+layout(location = 3) in vec3 Frag_Tangent;
 
-uniform sampler2D albedo_map;
-uniform sampler2D normal_map;
-uniform sampler2D metallic_map;
-uniform sampler2D roughness_map;
-uniform sampler2D emissive_map;
-uniform sampler2D specular_map;
+layout(set = 2, binding = 1) uniform sampler2D albedo_map;
+layout(set = 2, binding = 2) uniform sampler2D normal_map;
+layout(set = 2, binding = 3) uniform sampler2D metallic_map;
+layout(set = 2, binding = 4) uniform sampler2D roughness_map;
+layout(set = 2, binding = 5) uniform sampler2D emissive_map;
+layout(set = 2, binding = 6) uniform sampler2D specular_map;
 
 const int STANDARD_MATERIAL_FLAGS_ALBEDO_MAP_BIT = 1 << 0;
 const int STANDARD_MATERIAL_FLAGS_NORMAL_MAP_BIT = 1 << 1;
@@ -24,18 +24,18 @@ const int STANDARD_MATERIAL_FLAGS_ROUGHNESS_MAP_BIT = 1 << 3;
 const int STANDARD_MATERIAL_FLAGS_EMISSIVE_MAP_BIT = 1 << 4;
 const int STANDARD_MATERIAL_FLAGS_SPECULAR_MAP_BIT = 1 << 5;
 
-layout(row_major, std140) uniform View {
+layout(set = 0, binding = 0, row_major, std140) uniform View {
     mat4 clip_from_world;
     mat4 view_from_world;
     mat4 clip_from_view;
     vec3 world_position;
 } view;
 
-layout(row_major, std140) uniform Mesh {
+layout(set = 1, binding = 0, row_major, std140) uniform Mesh {
     mat4 world_from_local;
 } mesh;
 
-layout(row_major, std140) uniform Material {
+layout(set = 2, binding = 0, row_major, std140) uniform Material {
     vec3 albedo;
     float metallic;
     float roughness;

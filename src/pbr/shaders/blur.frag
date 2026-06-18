@@ -1,14 +1,14 @@
 #version 450 core
-in vec2 Frag_TexCoords;
+layout(location = 0) in vec2 Frag_TexCoords;
 
-uniform sampler2D source;
+layout(set = 0, binding = 1) uniform sampler2D source;
 
-layout(row_major, std140) uniform Blur {
+layout(set = 0, binding = 0, row_major, std140) uniform Blur {
     vec2 direction;
     int type;
 };
 
-out vec4 Out_Color;
+layout(location = 0) out vec4 Out_Color;
 
 vec4 blur13(sampler2D image, vec2 uv, vec2 direction) {
     vec4 color = vec4(0.0);
@@ -55,4 +55,4 @@ void main() {
         Out_Color = blur13(source, Frag_TexCoords, direction);
     else
         Out_Color = blur5(source, Frag_TexCoords, direction);
-};
+}

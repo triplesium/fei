@@ -10,33 +10,7 @@
 #include "pbr/vxgi.hpp"
 #include "rendering/material.hpp"
 
-EMBED(shadow_vert, "shadow.vert");
-EMBED(shadow_frag, "shadow.frag");
-EMBED(forward_vert, "forward.vert");
-EMBED(forward_frag, "forward.frag");
-EMBED(color_frag, "color.frag");
-EMBED(skybox_vert, "skybox.vert");
-EMBED(skybox_frag, "skybox.frag");
-EMBED(equirect2cube_comp, "equirect2cube.comp");
-EMBED(cubemap2irradiance_comp, "cubemap2irradiance.comp");
-EMBED(cubemap2radiance_comp, "cubemap2radiance.comp");
 EMBED(ibl_brdf_lut_png, "ibl_brdf_lut.png");
-EMBED(deferred_prepass_vert, "deferred_prepass.vert");
-EMBED(deferred_prepass_frag, "deferred_prepass.frag");
-EMBED(quad_vert, "quad.vert");
-EMBED(deferred_frag, "deferred.frag");
-EMBED(voxelization_vert, "voxelization.vert");
-EMBED(voxelization_geom, "voxelization.geom");
-EMBED(voxelization_frag, "voxelization.frag");
-EMBED(inject_radiance_comp, "inject_radiance.comp");
-EMBED(inject_propagation_comp, "inject_propagation.comp");
-EMBED(aniso_mipmapbase_comp, "aniso_mipmapbase.comp");
-EMBED(aniso_mipmapvolume_comp, "aniso_mipmapvolume.comp");
-EMBED(deferred_gi_frag, "deferred_gi.frag");
-EMBED(blur_frag, "blur.frag");
-EMBED(deferred_gi_direct_frag, "deferred_gi_direct.frag");
-EMBED(deferred_gi_indirect_frag, "deferred_gi_indirect.frag");
-EMBED(deferred_gi_composite_frag, "deferred_gi_composite.frag");
 
 namespace fei {
 

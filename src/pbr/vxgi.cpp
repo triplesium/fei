@@ -106,9 +106,9 @@ void setup_vxgi(
     );
 
     std::vector<Handle<Shader>> shader_handles {
-        asset_server->load<Shader>("embeded://voxelization.vert"),
-        asset_server->load<Shader>("embeded://voxelization.geom"),
-        asset_server->load<Shader>("embeded://voxelization.frag"),
+        asset_server->load<Shader>("shader://voxelization.vert"),
+        asset_server->load<Shader>("shader://voxelization.geom"),
+        asset_server->load<Shader>("shader://voxelization.frag"),
     };
     std::vector<std::shared_ptr<ShaderModule>> shader_modules;
     for (const auto& handle : shader_handles) {
@@ -335,7 +335,7 @@ void setup_vxgi_generate_mipmap_base(
     Commands commands
 ) {
     auto shader_handle =
-        asset_server->load<Shader>("embeded://aniso_mipmapbase.comp");
+        asset_server->load<Shader>("shader://aniso_mipmapbase.comp");
     auto shader = shader_assets->get(shader_handle).value();
     auto shader_module = device->create_shader_module(shader.description());
     auto resource_layout = device->create_resource_layout(
@@ -421,7 +421,7 @@ void setup_vxgi_generate_mipmap_volume(
     Commands commands
 ) {
     auto shader_handle =
-        asset_server->load<Shader>("embeded://aniso_mipmapvolume.comp");
+        asset_server->load<Shader>("shader://aniso_mipmapvolume.comp");
     auto shader = shader_assets->get(shader_handle).value();
     auto shader_module = device->create_shader_module(shader.description());
     auto resource_layout = device->create_resource_layout(
@@ -534,7 +534,7 @@ void setup_inject_radiance(
     Commands commands
 ) {
     auto shader_handle =
-        asset_server->load<Shader>("embeded://inject_radiance.comp");
+        asset_server->load<Shader>("shader://inject_radiance.comp");
     auto shader = shader_assets->get(shader_handle).value();
     auto shader_module = device->create_shader_module(shader.description());
     auto resource_layout = device->create_resource_layout(
@@ -673,7 +673,7 @@ void setup_inject_propagation(
     Commands commands
 ) {
     auto shader_handle =
-        asset_server->load<Shader>("embeded://inject_propagation.comp");
+        asset_server->load<Shader>("shader://inject_propagation.comp");
     auto shader = shader_assets->get(shader_handle).value();
     auto shader_module = device->create_shader_module(shader.description());
     auto resource_layout = device->create_resource_layout(

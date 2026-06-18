@@ -1,9 +1,9 @@
 #version 450 core
-out vec4 Frag_Color;
+layout(location = 0) out vec4 Frag_Color;
 
-in vec3 Frag_TexCoords;
+layout(location = 0) in vec3 Frag_TexCoords;
 
-uniform samplerCube skybox;
+layout(set = 1, binding = 0) uniform samplerCube skybox;
 
 void main()
 {

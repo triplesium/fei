@@ -152,7 +152,7 @@ void generate_env_maps(
 
         {
             auto shader_handle =
-                asset_server->load<Shader>("embeded://cubemap2irradiance.comp");
+                asset_server->load<Shader>("shader://cubemap2irradiance.comp");
             auto& shader = shaders->get(shader_handle).value();
             auto compute_shader =
                 device->create_shader_module(shader.description());
@@ -172,7 +172,7 @@ void generate_env_maps(
                             .stages = {ShaderStages::Compute},
                         },
                         {
-                            .binding = 1,
+                            .binding = 2,
                             .name = "output_texture",
                             .kind = ResourceKind::TextureReadWrite,
                             .stages = {ShaderStages::Compute},
@@ -211,7 +211,7 @@ void generate_env_maps(
 
         {
             auto shader_handle =
-                asset_server->load<Shader>("embeded://cubemap2radiance.comp");
+                asset_server->load<Shader>("shader://cubemap2radiance.comp");
             auto& shader = shaders->get(shader_handle).value();
             auto compute_shader =
                 device->create_shader_module(shader.description());
@@ -237,13 +237,13 @@ void generate_env_maps(
                             .stages = {ShaderStages::Compute},
                         },
                         {
-                            .binding = 1,
+                            .binding = 2,
                             .name = "output_texture",
                             .kind = ResourceKind::TextureReadWrite,
                             .stages = {ShaderStages::Compute},
                         },
                         {
-                            .binding = 2,
+                            .binding = 3,
                             .name = "Constants",
                             .kind = ResourceKind::UniformBuffer,
                             .stages = {ShaderStages::Compute},

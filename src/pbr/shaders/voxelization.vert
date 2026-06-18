@@ -1,18 +1,18 @@
-#version 430
+#version 450 core
 
-out Vertex
+layout(location = 0) out Vertex
 {
     vec2 texCoord;
     vec3 normal;
 };
 
-layout(row_major, std140) uniform Mesh {
+layout(set = 1, binding = 0, row_major, std140) uniform Mesh {
     mat4 world_from_local;
 } mesh;
 
-layout (location = 0) in vec3 Vertex_Position;
-layout (location = 1) in vec3 Vertex_Normal;
-layout (location = 2) in vec2 Vertex_Uv;
+layout(location = 0) in vec3 Vertex_Position;
+layout(location = 1) in vec3 Vertex_Normal;
+layout(location = 2) in vec2 Vertex_Uv;
 
 void main()
 {

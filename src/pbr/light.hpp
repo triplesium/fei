@@ -122,12 +122,12 @@ inline void setup_shadow_mapping(
     Commands commands
 ) {
     auto shadow_vert_shader_handle =
-        asset_server->load<Shader>("embeded://shadow.vert");
+        asset_server->load<Shader>("shader://shadow.vert");
     auto shadow_vert_shader =
         shader_assets->get(shadow_vert_shader_handle).value();
 
     auto shadow_frag_shader_handle =
-        asset_server->load<Shader>("embeded://shadow.frag");
+        asset_server->load<Shader>("shader://shadow.frag");
     auto shadow_frag_shader =
         shader_assets->get(shadow_frag_shader_handle).value();
 
@@ -157,11 +157,11 @@ inline void setup_shadow_mapping(
     );
 
     auto blur_vert_shader_handle =
-        asset_server->load<Shader>("embeded://quad.vert");
+        asset_server->load<Shader>("shader://quad.vert");
     auto blur_vert_shader = shader_assets->get(blur_vert_shader_handle).value();
 
     auto blur_frag_shader_handle =
-        asset_server->load<Shader>("embeded://blur.frag");
+        asset_server->load<Shader>("shader://blur.frag");
     auto blur_frag_shader = shader_assets->get(blur_frag_shader_handle).value();
 
     std::vector<std::shared_ptr<ShaderModule>> blur_shader_modules {

@@ -1,7 +1,7 @@
 #version 450 core
-layout(local_size_x=32, local_size_y=32, local_size_z=1) in;
-uniform sampler2D input_texture;
-layout(rgba32f) uniform writeonly imageCube output_texture;
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+layout(set = 0, binding = 0) uniform sampler2D input_texture;
+layout(set = 0, binding = 1, rgba32f) uniform writeonly imageCube output_texture;
 
 const float PI = 3.141592;
 const float TwoPI = 2 * PI;

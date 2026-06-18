@@ -43,8 +43,13 @@ struct Floor {};
 class ColorOnlyMaterial : public StandardMaterial {
   public:
     ShaderRef fragment_shader() const override {
-        return "embeded://color.frag";
+        return "shader://color.frag";
     }
+    ShaderRef deferred_fragment_shader() const override {
+        return "shader://color.frag";
+    }
+
+    std::size_t hash() const override { return type_id<ColorOnlyMaterial>(); }
 };
 
 void setup(
@@ -57,7 +62,7 @@ void setup(
     spot_material->albedo = {1.0f, 1.0f, 1.0f};
     // spot_material->albedo_map =
     //     asset_server->load<Image>("rustediron2_basecolor.png");
-    spot_material->metallic = 1.0f;
+    spot_material->metallic = 0.0f;
     // spot_material->metallic_map =
     //     asset_server->load<Image>("rustediron2_metallic.png");
     spot_material->roughness = 0.2f;
@@ -126,7 +131,10 @@ void setup(
     );
 
     commands.spawn().add(
-        DirectionalLight {.color = {5.0f, 5.0f, 5.0f}},
+        DirectionalLight {
+            .color = {5.0f, 5.0f, 5.0f},
+            .shadow_map_enabled = true,
+        },
         Transform3d {
             .position = {2.0f, 1.0f, 0.0f},
             .rotation = {-45.0f, 60.0f, 0.0f},
@@ -239,6 +247,8 @@ void update_imgui(
         );
         ImGui::Text("Roughness");
         ImGui::SliderFloat("##Roughness", &spot_material.roughness, 0.0f, 1.0f);
+        ImGui::Text("Metallic");
+        ImGui::SliderFloat("##Metallic", &spot_material.metallic, 0.0f, 1.0f);
     }
     ImGui::End();
 }

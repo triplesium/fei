@@ -40,23 +40,21 @@ struct alignas(16) StandardMaterialUniform {
 
 class StandardMaterial : public Material {
   public:
-    ShaderRef vertex_shader() const override {
-        return "embeded://forward.vert";
-    }
+    ShaderRef vertex_shader() const override { return "shader://forward.vert"; }
     ShaderRef fragment_shader() const override {
-        return "embeded://forward.frag";
+        return "shader://forward.frag";
     }
     ShaderRef prepass_vertex_shader() const override {
-        return "embeded://deferred_prepass.vert";
+        return "shader://deferred_prepass.vert";
     }
     ShaderRef prepass_fragment_shader() const override {
-        return "embeded://deferred_prepass.frag";
+        return "shader://deferred_prepass.frag";
     }
     ShaderRef deferred_vertex_shader() const override {
-        return "embeded://quad.vert";
+        return "shader://quad.vert";
     }
     ShaderRef deferred_fragment_shader() const override {
-        return "embeded://deferred_gi.frag";
+        return "shader://deferred_gi.frag";
     }
 
     Color3F albedo {1.0f, 1.0f, 1.0f};

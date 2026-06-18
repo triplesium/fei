@@ -2,7 +2,7 @@
 
 layout(location = 0) out vec4 outColor;
 
-in vec2 Frag_TexCoords;
+layout(location = 0) in vec2 Frag_TexCoords;
 
 // uniform vec2 exponents;
 // uniform float alphaCutoff = 0.01f;

@@ -39,10 +39,10 @@ using namespace fei;
 class ColorOnlyMaterial : public StandardMaterial {
   public:
     ShaderRef fragment_shader() const override {
-        return "embeded://color.frag";
+        return "shader://color.frag";
     }
     ShaderRef deferred_fragment_shader() const override {
-        return "embeded://color.frag";
+        return "shader://color.frag";
     }
 
     std::size_t hash() const override { return type_id<ColorOnlyMaterial>(); }

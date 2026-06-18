@@ -2,6 +2,7 @@
 #include "base/log.hpp"
 
 #include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <span>
@@ -18,6 +19,14 @@ class Reader {
 
   public:
     Reader(const std::byte* data, std::size_t size) : m_data(data, size) {}
+
+    explicit Reader(std::string_view text) {
+        m_buffer.resize(text.size());
+        if (!text.empty()) {
+            std::memcpy(m_buffer.data(), text.data(), text.size());
+        }
+        m_data = m_buffer;
+    }
 
     Reader(const std::filesystem::path& path) {
         std::ifstream file(path, std::ios::binary | std::ios::ate);

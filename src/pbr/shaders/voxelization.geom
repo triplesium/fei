@@ -1,15 +1,15 @@
-#version 430
+#version 450 core
 
 layout(triangles) in;
 layout(triangle_strip, max_vertices = 3) out;
 
-in Vertex
+layout(location = 0) in Vertex
 {
     vec2 texCoord;
     vec3 normal;
 } In[3];
 
-out GeometryOut
+layout(location = 0) out GeometryOut
 {
 	vec3 wsPosition;
     vec3 position;
@@ -18,7 +18,7 @@ out GeometryOut
     flat vec4 triangleAABB;
 } Out;
 
-layout(row_major, std140) uniform VxgiVoxelization {
+layout(set = 4, binding = 0, row_major, std140) uniform VxgiVoxelization {
     mat4 view_projections[3];
     mat4 inv_view_projections[3];
     uint volume_dimension;

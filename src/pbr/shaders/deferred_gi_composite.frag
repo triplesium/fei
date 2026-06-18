@@ -1,20 +1,14 @@
-#version 430
+#version 450 core
 
 layout(location = 0) out vec4 fragColor;
 
-in vec2 Frag_TexCoords;
+layout(location = 0) in vec2 Frag_TexCoords;
 
-uniform sampler2D g_position_ao;
-uniform sampler2D g_normal_roughness;
-uniform sampler2D g_albedo_metallic;
-uniform sampler2D g_specular;
-uniform sampler2D g_emissive_depth;
-
-uniform sampler2D shadow_map;
-uniform sampler3D voxel_visibility;
-
-uniform sampler3D voxel_tex;
-uniform sampler3D voxel_tex_mipmap[6];
+layout(set = 1, binding = 0) uniform sampler2D g_position_ao;
+layout(set = 1, binding = 1) uniform sampler2D g_normal_roughness;
+layout(set = 1, binding = 2) uniform sampler2D g_albedo_metallic;
+layout(set = 1, binding = 3) uniform sampler2D g_specular;
+layout(set = 1, binding = 4) uniform sampler2D g_emissive_depth;
 
 const float PI = 3.14159265f;
 const float HALF_PI = 1.57079f;
@@ -24,15 +18,15 @@ const uint MAX_DIRECTIONAL_LIGHTS = 3;
 const uint MAX_POINT_LIGHTS = 6;
 const uint MAX_SPOT_LIGHTS = 6;
 
-layout(row_major, std140) uniform View {
+layout(set = 0, binding = 0, row_major, std140) uniform View {
     mat4 clip_from_world;
     mat4 view_from_world;
     mat4 clip_from_view;
     vec3 world_position;
 } view;
 
-uniform sampler2D direct_lighting;
-uniform sampler2D indirect_lighting;
+layout(set = 2, binding = 0) uniform sampler2D direct_lighting;
+layout(set = 2, binding = 1) uniform sampler2D indirect_lighting;
 
 const float normalPower = 64.0f;
 const float positionSigma = 24.0f;

@@ -1,14 +1,14 @@
 #version 450 core
-layout (location = 0) in vec3 Vertex_Position;
+layout(location = 0) in vec3 Vertex_Position;
 
-layout(row_major, std140) uniform View {
+layout(set = 0, binding = 0, row_major, std140) uniform View {
     mat4 clip_from_world;
     mat4 view_from_world;
     mat4 clip_from_view;
     vec3 world_position;
 } view;
 
-out vec3 Frag_TexCoords;
+layout(location = 0) out vec3 Frag_TexCoords;
 
 void main()
 {
