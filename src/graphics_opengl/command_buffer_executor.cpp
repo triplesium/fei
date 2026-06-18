@@ -383,14 +383,6 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
     );
     assert(gl_resource_set->resources().size() == gl_layout->elements().size());
 
-    uint32 uniform_block_base_index =
-        calculate_uniform_block_base_index(*gl_pipeline, slot);
-    uint32 uniform_block_offset = 0;
-
-    uint32 storage_buffer_base_index =
-        calculate_storage_buffer_base_index(*gl_pipeline, slot);
-    uint32 storage_buffer_offset = 0;
-
     auto size = static_cast<uint32>(gl_layout->elements().size());
     for (uint32 i = 0; i < size; ++i) {
         auto& element = gl_layout->elements()[i];
@@ -411,16 +403,8 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                 auto buffer = std::static_pointer_cast<BufferOpenGL>(resource);
                 auto& info =
                     std::get<PipelineOpenGL::UniformBinding>(binding_info);
-                auto binding = uniform_block_base_index + uniform_block_offset;
-                glUniformBlockBinding(
-                    gl_pipeline->program(),
-                    info.location,
-                    binding
-                );
+                glBindBufferBase(GL_UNIFORM_BUFFER, info.binding, buffer->id());
                 opengl_check_error();
-                glBindBufferBase(GL_UNIFORM_BUFFER, binding, buffer->id());
-                opengl_check_error();
-                uniform_block_offset++;
                 break;
             }
             case ResourceKind::TextureReadOnly: {
@@ -433,8 +417,6 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                     info.unit,
                     texture_view_gl->target_gl()->id()
                 );
-                opengl_check_error();
-                glUniform1i(info.location, to_gl_int(info.unit));
                 opengl_check_error();
                 break;
             }
@@ -458,8 +440,6 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                     texture_view_gl->target_gl()->gl_sized_internal_format()
                 );
                 opengl_check_error();
-                glUniform1i(info.location, to_gl_int(info.unit));
-                opengl_check_error();
                 break;
             }
             case ResourceKind::StorageBufferReadOnly:
@@ -468,21 +448,12 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                 auto& info = std::get<PipelineOpenGL::ShaderStorageBinding>(
                     binding_info
                 );
-                auto binding =
-                    storage_buffer_base_index + storage_buffer_offset;
-                glShaderStorageBlockBinding(
-                    gl_pipeline->program(),
-                    info.binding,
-                    binding
-                );
-                opengl_check_error();
                 glBindBufferBase(
                     GL_SHADER_STORAGE_BUFFER,
-                    binding,
+                    info.binding,
                     buffer->id()
                 );
                 opengl_check_error();
-                storage_buffer_offset++;
                 break;
             }
             case ResourceKind::Sampler: {
@@ -673,28 +644,6 @@ void CommandBufferExecutorOpenGL::execute_copy_texture(
         static_cast<GLsizei>(depth_or_layer_count)
     );
     opengl_check_error();
-}
-
-uint32 CommandBufferExecutorOpenGL::calculate_uniform_block_base_index(
-    const PipelineOpenGL& pipeline,
-    uint32 slot
-) {
-    uint32 base_index = 0;
-    for (uint32 s = 0; s < slot; ++s) {
-        base_index += pipeline.uniform_buffer_count(s);
-    }
-    return base_index;
-}
-
-uint32 CommandBufferExecutorOpenGL::calculate_storage_buffer_base_index(
-    const PipelineOpenGL& pipeline,
-    uint32 slot
-) {
-    uint32 base_index = 0;
-    for (uint32 s = 0; s < slot; ++s) {
-        base_index += pipeline.storage_buffer_count(s);
-    }
-    return base_index;
 }
 
 } // namespace fei

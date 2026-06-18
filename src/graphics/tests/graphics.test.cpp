@@ -222,6 +222,29 @@ TEST_CASE(
         REQUIRE(desc.elements[0].name == "camera");
         REQUIRE(desc.elements[1].name == "albedo");
         REQUIRE(desc.elements[2].name == "linear_sampler");
+        REQUIRE_NOTHROW(ResourceLayout(desc));
+    }
+
+    SECTION("explicit bindings may be sparse and out of declaration order") {
+        auto desc = ResourceLayoutDescription {
+            .elements =
+                {
+                    ResourceLayoutElementDescription {
+                        .binding = 4,
+                        .name = "source",
+                        .kind = ResourceKind::TextureReadOnly,
+                        .stages = ShaderStages::Fragment,
+                    },
+                    ResourceLayoutElementDescription {
+                        .binding = 0,
+                        .name = "Constants",
+                        .kind = ResourceKind::UniformBuffer,
+                        .stages = ShaderStages::Fragment,
+                    },
+                },
+        };
+
+        REQUIRE_NOTHROW(ResourceLayout(desc));
     }
 }
 

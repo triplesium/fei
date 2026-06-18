@@ -76,15 +76,6 @@ class CommandBufferExecutorOpenGL {
     execute_blit_to(ExecutionState& state, std::shared_ptr<Framebuffer> target);
     void execute_generate_mipmaps(std::shared_ptr<Texture> texture);
     void execute_copy_texture(const opengl_commands::CopyTexture& command);
-
-    static uint32 calculate_uniform_block_base_index(
-        const PipelineOpenGL& pipeline,
-        uint32 slot
-    );
-    static uint32 calculate_storage_buffer_base_index(
-        const PipelineOpenGL& pipeline,
-        uint32 slot
-    );
 };
 
 } // namespace fei

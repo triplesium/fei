@@ -1,9 +1,13 @@
 #pragma once
 #include "base/bitflags.hpp"
+#include "base/log.hpp"
 #include "base/types.hpp"
 #include "graphics/enums.hpp"
 
+#include <cstddef>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace fei {
@@ -17,7 +21,26 @@ enum class ResourceKind : uint8 {
     Sampler,
 };
 
+inline std::string_view resource_kind_name(ResourceKind kind) {
+    switch (kind) {
+        case ResourceKind::UniformBuffer:
+            return "uniform buffer";
+        case ResourceKind::TextureReadOnly:
+            return "read-only texture";
+        case ResourceKind::TextureReadWrite:
+            return "read-write texture";
+        case ResourceKind::StorageBufferReadOnly:
+            return "read-only storage buffer";
+        case ResourceKind::StorageBufferReadWrite:
+            return "read-write storage buffer";
+        case ResourceKind::Sampler:
+            return "sampler";
+    }
+    return "unknown resource";
+}
+
 struct ResourceLayoutElementDescription {
+    // Binding within the resource set that owns this layout.
     uint32 binding;
     std::string name;
     ResourceKind kind;
@@ -25,6 +48,7 @@ struct ResourceLayoutElementDescription {
 };
 
 struct ResourceLayoutDescription {
+    // The index of this layout in a pipeline description is its resource set.
     std::vector<ResourceLayoutElementDescription> elements;
 
     static ResourceLayoutDescription sequencial(
@@ -41,6 +65,23 @@ struct ResourceLayoutDescription {
         return desc;
     }
 };
+
+inline void
+validate_resource_layout_description(const ResourceLayoutDescription& desc) {
+    for (std::size_t i = 0; i < desc.elements.size(); ++i) {
+        for (std::size_t j = i + 1; j < desc.elements.size(); ++j) {
+            if (desc.elements[i].binding == desc.elements[j].binding) {
+                fei::fatal(
+                    "ResourceLayout has duplicate binding {} for '{}' and "
+                    "'{}'",
+                    desc.elements[i].binding,
+                    desc.elements[i].name,
+                    desc.elements[j].name
+                );
+            }
+        }
+    }
+}
 
 inline ResourceLayoutElementDescription uniform_buffer(std::string name) {
     return ResourceLayoutElementDescription {
@@ -100,7 +141,9 @@ storage_buffer_read_write(std::string name) {
 
 class ResourceLayout {
   public:
-    ResourceLayout(const ResourceLayoutDescription& desc) {}
+    ResourceLayout(const ResourceLayoutDescription& desc) {
+        validate_resource_layout_description(desc);
+    }
     virtual ~ResourceLayout() = default;
 };
 

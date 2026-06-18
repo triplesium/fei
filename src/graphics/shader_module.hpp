@@ -1,24 +1,45 @@
 #pragma once
 #include "graphics/enums.hpp"
+#include "graphics/resource.hpp"
 
+#include <cstddef>
 #include <string>
+#include <vector>
 
 namespace fei {
+
+struct ShaderResourceBinding {
+    std::string name;
+    ResourceKind kind;
+    uint32 set;
+    uint32 binding;
+    uint32 array_size {1};
+};
 
 struct ShaderDescription {
     ShaderStages stage;
     std::string source;
+    std::vector<std::byte> spirv;
+    std::string path;
+    std::vector<ShaderResourceBinding> resources;
 };
 
 class ShaderModule {
   private:
     ShaderStages m_stage;
+    std::string m_path;
+    std::vector<ShaderResourceBinding> m_resources;
 
   public:
-    ShaderModule(const ShaderDescription& desc) : m_stage(desc.stage) {}
+    ShaderModule(const ShaderDescription& desc) :
+        m_stage(desc.stage), m_path(desc.path), m_resources(desc.resources) {}
     virtual ~ShaderModule() = default;
 
     ShaderStages stage() const { return m_stage; }
+    const std::string& path() const { return m_path; }
+    const std::vector<ShaderResourceBinding>& resources() const {
+        return m_resources;
+    }
 };
 
 } // namespace fei

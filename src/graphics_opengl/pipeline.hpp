@@ -7,7 +7,6 @@
 #include "graphics/shader_module.hpp"
 #include "graphics_opengl/utils.hpp"
 
-#include <algorithm>
 #include <memory>
 #include <variant>
 #include <vector>
@@ -26,10 +25,12 @@ class PipelineOpenGL : public Pipeline {
     };
 
     struct UniformBinding {
-        GLuint location;
+        GLuint block_index;
+        GLuint binding;
     };
 
     struct ShaderStorageBinding {
+        GLuint block_index;
         GLuint binding;
     };
 
@@ -68,24 +69,6 @@ class PipelineOpenGL : public Pipeline {
     const auto& resource_layouts() const { return m_resource_layouts; }
     GLuint program() const { return m_program; }
 
-    uint32 uniform_buffer_count(uint32 slot) const {
-        return static_cast<uint32>(std::ranges::count_if(
-            m_resource_bindings[slot],
-            [](const ResourceBindingInfo& binding) {
-                return std::holds_alternative<UniformBinding>(binding);
-            }
-        ));
-    }
-
-    uint32 storage_buffer_count(uint32 slot) const {
-        return static_cast<uint32>(std::ranges::count_if(
-            m_resource_bindings[slot],
-            [](const ResourceBindingInfo& binding) {
-                return std::holds_alternative<ShaderStorageBinding>(binding);
-            }
-        ));
-    }
-
     Optional<ResourceBindingInfo&>
     get_resource_binding(uint32 slot, uint32 index) {
         if (slot >= m_resource_bindings.size()) {
@@ -109,6 +92,7 @@ class PipelineOpenGL : public Pipeline {
     }
 
     void process_resource_layouts();
+    void validate_shader_resource_layouts() const;
 
     GLbitfield memory_barriers() const { return m_memory_barriers; }
 };
