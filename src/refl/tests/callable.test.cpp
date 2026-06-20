@@ -56,6 +56,8 @@ struct CallableFixture {
 };
 
 struct ResultFixture {
+    int value {5};
+
     Result<int, CallableError> result_value(bool succeed) const {
         if (succeed) {
             return 42;
@@ -68,6 +70,13 @@ struct ResultFixture {
             return {};
         }
         return failure(CallableError {.code = 9});
+    }
+
+    Result<int&, CallableError> result_ref(bool succeed) {
+        if (succeed) {
+            return value;
+        }
+        return failure(CallableError {.code = 11});
     }
 };
 
@@ -520,7 +529,8 @@ TEST_CASE("Method adapts Result and Status returns", "[refl][method]") {
     auto& cls = Registry::instance()
                     .register_cls<ResultFixture>()
                     .add_method("result_value", &ResultFixture::result_value)
-                    .add_method("status_value", &ResultFixture::status_value);
+                    .add_method("status_value", &ResultFixture::status_value)
+                    .add_method("result_ref", &ResultFixture::result_ref);
 
     ResultFixture obj;
     bool succeed = true;
@@ -550,6 +560,21 @@ TEST_CASE("Method adapts Result and Status returns", "[refl][method]") {
     REQUIRE_FALSE(status_err);
     REQUIRE(status_err.error().kind == InvokeFailure::Kind::ReturnedError);
     REQUIRE(status_err.error().error.get<CallableError>().code == 9);
+
+    auto* ref_method = cls.get_method("result_ref", {type_id<bool>()});
+    REQUIRE(ref_method != nullptr);
+
+    auto ref_ok = ref_method->invoke(make_ref(obj), make_ref(succeed));
+    REQUIRE(ref_ok);
+    REQUIRE(ref_ok->is_ref());
+    REQUIRE(&ref_ok->ref().get<int>() == &obj.value);
+    ref_ok->ref().get<int>() = 17;
+    REQUIRE(obj.value == 17);
+
+    auto ref_err = ref_method->invoke(make_ref(obj), make_ref(fail));
+    REQUIRE_FALSE(ref_err);
+    REQUIRE(ref_err.error().kind == InvokeFailure::Kind::ReturnedError);
+    REQUIRE(ref_err.error().error.get<CallableError>().code == 11);
 }
 
 TEST_CASE("Method lookup filters const overloads", "[refl][method]") {

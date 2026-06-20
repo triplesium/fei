@@ -63,6 +63,8 @@ struct ReturnAdapter<Result<T, E>> {
 
         if constexpr (std::same_as<T, void>) {
             return ReturnValue::status();
+        } else if constexpr (std::is_lvalue_reference_v<T>) {
+            return ReturnAdapter<T>::adapt(*result);
         } else {
             return ReturnAdapter<T>::adapt(std::move(*result));
         }
