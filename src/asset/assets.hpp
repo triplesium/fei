@@ -11,7 +11,6 @@
 #include "refl/type.hpp"
 
 #include <concepts>
-#include <expected>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -90,33 +89,46 @@ class Assets {
         return *this;
     }
 
-    Handle<T> load(Reader& reader, const LoadContext& context) {
+    Result<Handle<T>, AssetLoadError>
+    try_load(Reader& reader, const LoadContext& context) {
         if (!m_loader) {
-            fei::fatal(
-                "AssetLoader not set for {}",
-                context.asset_path().as_string()
-            );
+            return failure(AssetLoadError(
+                context.asset_path(),
+                "AssetLoader not set for " + context.asset_path().as_string()
+            ));
         }
-        if (m_cache.contains(context.asset_path())) {
-            AssetId cached_id = m_cache[context.asset_path()];
-            if (auto asset_opt = get(cached_id)) {
+
+        auto cached = m_cache.find(context.asset_path());
+        if (cached != m_cache.end()) {
+            AssetId cached_id = cached->second;
+            auto entry = get_entry(cached_id);
+            if (entry && entry->is_loaded) {
                 return Handle<T>(cached_id, m_state);
             } else {
-                // Cache is stale, remove it
-                m_cache.erase(context.asset_path());
+                m_cache.erase(cached);
             }
         }
-        std::expected<std::unique_ptr<T>, std::error_code> asset =
-            m_loader->load(reader, context);
+
+        auto asset = m_loader->load(reader, context);
         if (!asset) {
-            fei::fatal(
-                "Failed to load asset: {}",
-                context.asset_path().as_string()
-            );
+            return failure(std::move(asset.error()));
         }
+
         auto handle = add(std::move(*asset));
         m_cache[context.asset_path()] = handle.id();
-        return handle;
+        return std::move(handle);
+    }
+
+    Handle<T> load(Reader& reader, const LoadContext& context) {
+        auto result = try_load(reader, context);
+        if (!result) {
+            fei::fatal(
+                "Failed to load asset '{}': {}",
+                result.error().path.as_string(),
+                result.error().message
+            );
+        }
+        return std::move(*result);
     }
 
     Handle<T> add(std::unique_ptr<T> asset) {

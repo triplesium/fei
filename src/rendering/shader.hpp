@@ -11,7 +11,6 @@
 #include "graphics/shader_module.hpp"
 
 #include <cstddef>
-#include <expected>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -58,7 +57,7 @@ load_shader_reflection_bindings(const AssetPath& asset_path);
 
 class ShaderLoader : public AssetLoader<Shader> {
   public:
-    std::expected<std::unique_ptr<Shader>, std::error_code>
+    AssetLoadResult<Shader>
     load(Reader& reader, const LoadContext& context) override;
 };
 

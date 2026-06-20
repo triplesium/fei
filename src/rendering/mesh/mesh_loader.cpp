@@ -1,20 +1,23 @@
 #include "rendering/mesh/mesh_loader.hpp"
 
 #include <tiny_obj_loader.h>
+#include <utility>
 #include <vector>
 
 namespace fei {
 
-std::expected<std::unique_ptr<Mesh>, std::error_code>
-MeshLoader::load(Reader& reader, const LoadContext& /*context*/) {
+AssetLoadResult<Mesh>
+MeshLoader::load(Reader& reader, const LoadContext& context) {
     tinyobj::ObjReaderConfig reader_config;
     tinyobj::ObjReader obj_reader;
 
     if (!obj_reader.ParseFromString(reader.as_string(), "", reader_config)) {
-        if (!obj_reader.Error().empty()) {
-            fei::error("TinyObjReader: {}", obj_reader.Error());
-        }
-        return std::unexpected(std::make_error_code(std::errc::io_error));
+        auto message = obj_reader.Error().empty() ?
+                           "Failed to parse OBJ mesh" :
+                           "TinyObjReader: " + obj_reader.Error();
+        return failure(
+            AssetLoadError(context.asset_path(), std::move(message))
+        );
     }
 
     if (!obj_reader.Warning().empty()) {
@@ -23,6 +26,12 @@ MeshLoader::load(Reader& reader, const LoadContext& /*context*/) {
 
     const auto& attrib = obj_reader.GetAttrib();
     const auto& shapes = obj_reader.GetShapes();
+    if (shapes.empty()) {
+        return failure(
+            AssetLoadError(context.asset_path(), "OBJ mesh has no shapes")
+        );
+    }
+
     if (shapes.size() > 1) {
         fei::warn(
             "MeshLoader: only the first shape is loaded, {} shapes found",

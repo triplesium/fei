@@ -1,13 +1,12 @@
 #include "core/image.hpp"
 
 #include "asset/io.hpp"
-#include "base/log.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/texture.hpp"
 
 #include <cstring>
 #include <memory>
-#include <system_error>
+#include <string>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <cstdint>
@@ -72,6 +71,17 @@ std::uint32_t pixel_format_channels(PixelFormat format) {
     }
 }
 
+std::string stbi_error_message(const char* operation) {
+    const char* reason = stbi_failure_reason();
+    return std::string(operation) + ": " +
+           (reason ? reason : "unknown stb_image error");
+}
+
+AssetLoadError
+image_load_error(const LoadContext& context, std::string message) {
+    return AssetLoadError(context.asset_path(), std::move(message));
+}
+
 } // namespace
 
 Image::Image(
@@ -115,7 +125,7 @@ std::unique_ptr<Image> Image::create_empty(
     );
 }
 
-std::expected<std::unique_ptr<Image>, std::error_code>
+AssetLoadResult<Image>
 ImageLoader::load(Reader& reader, const LoadContext& context) {
     int width = 0;
     int height = 0;
@@ -127,8 +137,10 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
             &height,
             &channels
         )) {
-        error("Failed to read image info: {}", stbi_failure_reason());
-        return std::unexpected(std::error_code {});
+        return failure(image_load_error(
+            context,
+            stbi_error_message("Failed to read image info")
+        ));
     }
 
     PixelFormat format;
@@ -147,8 +159,10 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
             req_comp
         );
         if (!data) {
-            error("Failed to load HDR image: {}", stbi_failure_reason());
-            return std::unexpected(std::error_code {});
+            return failure(image_load_error(
+                context,
+                stbi_error_message("Failed to load HDR image")
+            ));
         }
         format = PixelFormat::Rgba32Float;
         loaded_channels = static_cast<std::uint32_t>(req_comp);
@@ -165,8 +179,10 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
             req_comp
         );
         if (!data) {
-            error("Failed to load image: {}", stbi_failure_reason());
-            return std::unexpected(std::error_code {});
+            return failure(image_load_error(
+                context,
+                stbi_error_message("Failed to load image")
+            ));
         }
         switch (channels) {
             case 1:
@@ -184,7 +200,11 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
                 break;
             default:
                 stbi_image_free(data);
-                return std::unexpected(std::error_code {});
+                return failure(image_load_error(
+                    context,
+                    "Unsupported image channel count: " +
+                        std::to_string(channels)
+                ));
         }
     }
     TextureDescription texture_description = TextureDescription {

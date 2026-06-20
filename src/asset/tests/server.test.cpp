@@ -9,11 +9,9 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
-#include <expected>
 #include <filesystem>
 #include <memory>
 #include <string>
-#include <system_error>
 
 using namespace fei;
 
@@ -47,7 +45,7 @@ class MemorySource : public AssetSource {
 
 class ServerLoader : public AssetLoader<ServerAsset> {
   public:
-    std::expected<std::unique_ptr<ServerAsset>, std::error_code>
+    AssetLoadResult<ServerAsset>
     load(Reader& reader, const LoadContext& context) override {
         return std::make_unique<ServerAsset>(ServerAsset {
             .byte_count = static_cast<int>(reader.size()),
@@ -77,4 +75,22 @@ TEST_CASE(
     REQUIRE(asset.has_value());
     REQUIRE(asset->byte_count == 4);
     REQUIRE(asset->path == "memory://asset.bin");
+}
+
+TEST_CASE(
+    "AssetServer try_load returns missing source errors",
+    "[asset][server]"
+) {
+    App app;
+    AssetServer server(&app);
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
+
+    auto result = app.resource<AssetServer>().try_load<ServerAsset>(
+        AssetPath("missing://asset.bin")
+    );
+
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error().path.as_string() == "missing://asset.bin");
+    REQUIRE(result.error().message.contains("No asset source found"));
 }

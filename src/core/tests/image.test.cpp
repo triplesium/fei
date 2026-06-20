@@ -10,28 +10,12 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
-#include <expected>
-#include <iostream>
 #include <memory>
-#include <sstream>
 #include <string>
-#include <system_error>
 
 using namespace fei;
 
 namespace {
-
-class StdoutCapture {
-  private:
-    std::ostringstream m_stream;
-    std::streambuf* m_old_buffer;
-
-  public:
-    StdoutCapture() : m_old_buffer(std::cout.rdbuf(m_stream.rdbuf())) {}
-    ~StdoutCapture() { std::cout.rdbuf(m_old_buffer); }
-
-    std::string str() const { return m_stream.str(); }
-};
 
 consteval unsigned char hex_digit(char c) {
     if (c >= '0' && c <= '9') {
@@ -88,7 +72,7 @@ constexpr auto rgba_png = bytes_from_hex(
 );
 
 template<std::size_t Size>
-std::expected<std::unique_ptr<Image>, std::error_code>
+AssetLoadResult<Image>
 load_image(const std::array<std::byte, Size>& bytes, const char* path) {
     App app;
     AssetServer server(&app);
@@ -197,9 +181,9 @@ TEST_CASE("Core ImageLoader loads PNG channel formats", "[core][image]") {
 TEST_CASE("Core ImageLoader rejects invalid image data", "[core][image]") {
     static constexpr auto invalid = bytes_from_hex("6e6f742d706e6700");
 
-    StdoutCapture logs;
     auto image = load_image(invalid, "invalid.png");
 
     REQUIRE_FALSE(image.has_value());
-    REQUIRE(logs.str().contains("Failed to read image info"));
+    REQUIRE(image.error().path.as_string() == "invalid.png");
+    REQUIRE(image.error().message.contains("Failed to read image info"));
 }

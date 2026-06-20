@@ -294,7 +294,7 @@ load_shader_reflection_bindings(const AssetPath& asset_path) {
     );
 }
 
-std::expected<std::unique_ptr<Shader>, std::error_code>
+AssetLoadResult<Shader>
 ShaderLoader::load(Reader& reader, const LoadContext& context) {
     auto manifest = parse_shader_manifest(
         reader.as_string_view(),
@@ -302,11 +302,10 @@ ShaderLoader::load(Reader& reader, const LoadContext& context) {
     );
     auto stage = shader_stage_from_path(manifest.logical_path);
     if (!stage) {
-        fei::error(
-            "Unknown shader extension: {}",
-            manifest.logical_path.string()
-        );
-        return nullptr;
+        return failure(AssetLoadError(
+            context.asset_path(),
+            "Unknown shader extension: " + manifest.logical_path.string()
+        ));
     }
 
     std::string source = Reader(manifest.opengl_path).as_string();

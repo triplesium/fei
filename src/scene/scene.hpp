@@ -35,7 +35,7 @@ struct SceneSpawnEvent {};
 
 class SceneLoader : public AssetLoader<Scene> {
   public:
-    std::expected<std::unique_ptr<Scene>, std::error_code>
+    AssetLoadResult<Scene>
     load(Reader& reader, const LoadContext& context) override;
 };
 

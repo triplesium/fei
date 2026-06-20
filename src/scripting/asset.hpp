@@ -17,7 +17,7 @@ class ScriptAsset {
 
 class ScriptAssetLoader : public AssetLoader<ScriptAsset> {
   public:
-    std::expected<std::unique_ptr<ScriptAsset>, std::error_code>
+    AssetLoadResult<ScriptAsset>
     load(Reader& reader, const LoadContext& /*context*/) override {
         return std::make_unique<ScriptAsset>(reader.as_string());
     }

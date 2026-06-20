@@ -8,7 +8,6 @@
 #include "graphics/texture.hpp"
 
 #include <cstdint>
-#include <expected>
 #include <memory>
 
 namespace fei {
@@ -51,7 +50,7 @@ class Image {
 
 class ImageLoader : public AssetLoader<Image> {
   public:
-    std::expected<std::unique_ptr<Image>, std::error_code>
+    AssetLoadResult<Image>
     load(Reader& reader, const LoadContext& context) override;
 };
 

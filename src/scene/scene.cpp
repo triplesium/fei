@@ -15,11 +15,12 @@
 #include <tiny_obj_loader.h>
 #include <tuple>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace fei {
 
-std::expected<std::unique_ptr<Scene>, std::error_code>
+AssetLoadResult<Scene>
 SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
     auto scene = std::make_unique<Scene>();
 
@@ -28,10 +29,12 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
 
     auto obj_path = FEI_ASSETS_PATH / context.asset_path().path();
     if (!obj_reader.ParseFromFile(obj_path.string(), reader_config)) {
-        if (!obj_reader.Error().empty()) {
-            fei::error("TinyObjReader: {}", obj_reader.Error());
-        }
-        return std::unexpected(std::make_error_code(std::errc::io_error));
+        auto message = obj_reader.Error().empty() ?
+                           "Failed to parse OBJ scene" :
+                           "TinyObjReader: " + obj_reader.Error();
+        return failure(
+            AssetLoadError(context.asset_path(), std::move(message))
+        );
     }
 
     if (!obj_reader.Warning().empty()) {

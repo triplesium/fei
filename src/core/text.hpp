@@ -4,7 +4,6 @@
 #include "asset/loader.hpp"
 #include "asset/plugin.hpp"
 
-#include <expected>
 #include <string>
 
 namespace fei {
@@ -21,7 +20,7 @@ class TextAsset {
 
 class TextAssetLoader : public AssetLoader<TextAsset> {
   protected:
-    std::expected<std::unique_ptr<TextAsset>, std::error_code>
+    AssetLoadResult<TextAsset>
     load(Reader& reader, const LoadContext& context) override {
         return std::make_unique<TextAsset>(reader.as_string());
     }

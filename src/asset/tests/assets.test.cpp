@@ -11,9 +11,7 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
-#include <expected>
 #include <memory>
-#include <system_error>
 
 using namespace fei;
 
@@ -27,11 +25,21 @@ class CountingLoader : public AssetLoader<TestAsset> {
   public:
     static inline int load_count = 0;
 
-    std::expected<std::unique_ptr<TestAsset>, std::error_code>
+    AssetLoadResult<TestAsset>
     load(Reader& reader, const LoadContext&) override {
         ++load_count;
         return std::make_unique<TestAsset>(
             TestAsset {.value = static_cast<int>(reader.size())}
+        );
+    }
+};
+
+class FailingLoader : public AssetLoader<TestAsset> {
+  public:
+    AssetLoadResult<TestAsset>
+    load(Reader&, const LoadContext& context) override {
+        return failure(
+            AssetLoadError(context.asset_path(), "test loader failed")
         );
     }
 };
@@ -182,4 +190,19 @@ TEST_CASE(
     REQUIRE(second.id() != first_id);
     REQUIRE(CountingLoader::load_count == 2);
     REQUIRE(assets.get(second)->value == 2);
+}
+
+TEST_CASE("Assets try_load returns loader errors", "[asset][loader]") {
+    App app;
+    AssetServer server(&app);
+    Assets<TestAsset> assets(std::make_unique<FailingLoader>());
+    static constexpr std::array<std::byte, 1> bytes = {std::byte {1}};
+    LoadContext context(server, AssetPath("memory://asset.bin"));
+
+    auto reader = reader_for(bytes);
+    auto result = assets.try_load(reader, context);
+
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error().path.as_string() == "memory://asset.bin");
+    REQUIRE(result.error().message == "test loader failed");
 }

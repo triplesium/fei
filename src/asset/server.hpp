@@ -7,6 +7,7 @@
 
 #include <concepts>
 #include <memory>
+#include <string>
 #include <unordered_map>
 
 namespace fei {
@@ -52,26 +53,45 @@ class AssetServer {
     }
 
     template<typename T>
-    Handle<T> load(const AssetPath& path) const {
+    Result<Handle<T>, AssetLoadError> try_load(const AssetPath& path) const {
         if (!m_app->has_resource<Assets<T>>()) {
-            fatal("No asset found for type: {}", type_name<T>());
+            return failure(AssetLoadError(
+                path,
+                "No asset found for type: " + std::string(type_name<T>())
+            ));
         }
         auto& assets = m_app->resource<Assets<T>>();
         auto source_name = path.source().value_or("default");
         if (!m_sources.contains(source_name)) {
-            fatal("No asset source found with name: {}", source_name);
+            return failure(AssetLoadError(
+                path,
+                "No asset source found with name: " + source_name
+            ));
         }
         auto& source = m_sources.at(source_name);
         if (!source->exists(path.path())) {
-            fatal(
-                "Asset not found at path: {} in source: {}",
-                path.path().string(),
-                source_name
-            );
+            return failure(AssetLoadError(
+                path,
+                "Asset not found at path: " + path.path().string() +
+                    " in source: " + source_name
+            ));
         }
         LoadContext context(*this, path);
         auto reader = source->get_reader(path.path());
-        return assets.load(reader, context);
+        return assets.try_load(reader, context);
+    }
+
+    template<typename T>
+    Handle<T> load(const AssetPath& path) const {
+        auto result = try_load<T>(path);
+        if (!result) {
+            fatal(
+                "Failed to load asset '{}': {}",
+                result.error().path.as_string(),
+                result.error().message
+            );
+        }
+        return std::move(*result);
     }
 
     template<std::derived_from<AssetSource> Source, typename... Args>
@@ -88,6 +108,12 @@ class AssetServer {
 template<typename T>
 Handle<T> LoadContext::load(const AssetPath& path) const {
     return m_asset_server.template load<T>(path);
+}
+
+template<typename T>
+Result<Handle<T>, AssetLoadError>
+LoadContext::try_load(const AssetPath& path) const {
+    return m_asset_server.template try_load<T>(path);
 }
 
 } // namespace fei
