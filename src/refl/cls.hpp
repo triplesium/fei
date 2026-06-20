@@ -71,6 +71,11 @@ class Cls {
         std::vector<TypeId> arg_types,
         MethodConstFilter const_filter = MethodConstFilter::Any
     );
+    Result<Method*, InvokeFailure> get_method_for_args(
+        const std::string& name,
+        const std::vector<Ref>& args,
+        MethodConstFilter const_filter = MethodConstFilter::Any
+    );
 
     bool has_method(const std::string& name) const;
 
@@ -93,6 +98,8 @@ class Cls {
     }
 
     Constructor* get_constructor(const std::vector<TypeId>& arg_types);
+    Result<Constructor*, InvokeFailure>
+    get_constructor_for_args(const std::vector<Ref>& args);
 
     Cls& set_to_string(ToStringFunc func);
 

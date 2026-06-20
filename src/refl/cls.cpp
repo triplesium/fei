@@ -83,6 +83,107 @@ Method* Cls::get_method(
     return nullptr;
 }
 
+Result<Method*, InvokeFailure> Cls::get_method_for_args(
+    const std::string& name,
+    const std::vector<Ref>& args,
+    MethodConstFilter const_filter
+) {
+    auto it = m_methods.find(name);
+    if (it == m_methods.end()) {
+        return failure(
+            InvokeFailure::invalid_call(
+                "No matching method '" + type_name(m_type_id) + "." + name +
+                "' found"
+            )
+        );
+    }
+
+    struct Match {
+        Method* method {nullptr};
+        bool ambiguous {false};
+    };
+
+    auto matches_const_filter = [](const Method& method,
+                                   MethodConstFilter filter) {
+        switch (filter) {
+            case MethodConstFilter::Any:
+                return true;
+            case MethodConstFilter::ConstOnly:
+                return method.is_const();
+            case MethodConstFilter::NonConstOnly:
+                return !method.is_const();
+            case MethodConstFilter::PreferConst:
+            case MethodConstFilter::PreferNonConst:
+                return true;
+        }
+        return true;
+    };
+
+    auto find_best = [&](MethodConstFilter filter) -> Match {
+        Match best;
+        int best_score = 0;
+        for (const auto& method : it->second) {
+            if (!matches_const_filter(*method, filter)) {
+                continue;
+            }
+            auto score = method->match_score(args);
+            if (!score) {
+                continue;
+            }
+            if (best.method == nullptr || *score < best_score) {
+                best.method = method.get();
+                best.ambiguous = false;
+                best_score = *score;
+            } else if (*score == best_score) {
+                best.ambiguous = true;
+            }
+        }
+        return best;
+    };
+
+    auto finish = [&](Match match) -> Result<Method*, InvokeFailure> {
+        if (match.ambiguous) {
+            return failure(
+                InvokeFailure::invalid_call(
+                    "Ambiguous method '" + type_name(m_type_id) + "." + name +
+                    "'"
+                )
+            );
+        }
+        if (match.method != nullptr) {
+            return match.method;
+        }
+        return failure(
+            InvokeFailure::invalid_call(
+                "No matching method '" + type_name(m_type_id) + "." + name +
+                "' found"
+            )
+        );
+    };
+
+    switch (const_filter) {
+        case MethodConstFilter::Any:
+        case MethodConstFilter::ConstOnly:
+        case MethodConstFilter::NonConstOnly:
+            return finish(find_best(const_filter));
+        case MethodConstFilter::PreferConst: {
+            auto preferred = find_best(MethodConstFilter::ConstOnly);
+            if (preferred.ambiguous || preferred.method != nullptr) {
+                return finish(preferred);
+            }
+            return finish(find_best(MethodConstFilter::NonConstOnly));
+        }
+        case MethodConstFilter::PreferNonConst: {
+            auto preferred = find_best(MethodConstFilter::NonConstOnly);
+            if (preferred.ambiguous || preferred.method != nullptr) {
+                return finish(preferred);
+            }
+            return finish(find_best(MethodConstFilter::ConstOnly));
+        }
+    }
+    return finish({});
+}
+
 bool Cls::has_method(const std::string& name) const {
     return m_methods.contains(name);
 }
@@ -115,6 +216,42 @@ Constructor* Cls::get_constructor(const std::vector<TypeId>& arg_types) {
         }
     }
     return nullptr;
+}
+
+Result<Constructor*, InvokeFailure>
+Cls::get_constructor_for_args(const std::vector<Ref>& args) {
+    Constructor* best = nullptr;
+    int best_score = 0;
+    bool ambiguous = false;
+
+    for (const auto& ctor : m_constructors) {
+        auto score = ctor->match_score(args);
+        if (!score) {
+            continue;
+        }
+        if (best == nullptr || *score < best_score) {
+            best = ctor.get();
+            best_score = *score;
+            ambiguous = false;
+        } else if (*score == best_score) {
+            ambiguous = true;
+        }
+    }
+    if (ambiguous) {
+        return failure(
+            InvokeFailure::invalid_call(
+                "Ambiguous constructor for " + type_name(m_type_id)
+            )
+        );
+    }
+    if (best != nullptr) {
+        return best;
+    }
+    return failure(
+        InvokeFailure::invalid_call(
+            "No matching constructor found for " + type_name(m_type_id)
+        )
+    );
 }
 
 Cls& Cls::set_to_string(ToStringFunc func) {

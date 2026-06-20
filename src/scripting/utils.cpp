@@ -1,6 +1,5 @@
 #include "scripting/utils.hpp"
 
-#include "refl/callable.hpp"
 #include "refl/enum.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"

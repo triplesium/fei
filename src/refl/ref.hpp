@@ -17,34 +17,6 @@ class Ref {
     TypeId m_type_id;
     bool m_is_const;
 
-    template<typename T>
-    struct AsTraits {
-        using NoRef = std::remove_reference_t<T>;
-        using NoPtr = std::remove_pointer_t<NoRef>;
-        using Base = std::remove_cv_t<NoPtr>;
-    };
-
-    template<typename T>
-    static constexpr bool accepts_enum_int_as() {
-        using Traits = AsTraits<T>;
-        return std::is_enum_v<typename Traits::Base> &&
-               !std::is_pointer_v<typename Traits::NoRef> &&
-               !(std::is_lvalue_reference_v<T> &&
-                 !std::is_const_v<typename Traits::NoRef>);
-    }
-
-    template<typename T>
-    static constexpr bool needs_mutable_as() {
-        using Traits = AsTraits<T>;
-        return (std::is_pointer_v<typename Traits::NoRef> &&
-                !std::is_const_v<typename Traits::NoPtr>) ||
-               std::is_rvalue_reference_v<T> ||
-               (std::is_lvalue_reference_v<T> &&
-                !std::is_const_v<typename Traits::NoRef>) ||
-               (!std::is_reference_v<T> &&
-                !std::is_copy_constructible_v<typename Traits::Base>);
-    }
-
   public:
     Ref() : m_ptr(nullptr), m_type_id(0), m_is_const(false) {}
     Ref(std::nullptr_t) : Ref() {}
@@ -104,62 +76,6 @@ class Ref {
         return std::move(*ptr);
     }
 
-    template<typename T>
-    bool can_as() const {
-        using Base = typename AsTraits<T>::Base;
-
-        if (!*this) {
-            return false;
-        }
-        if constexpr (accepts_enum_int_as<T>()) {
-            if (m_type_id == fei::type_id<int>()) {
-                return true;
-            }
-        }
-        if (m_type_id != fei::type_id<Base>()) {
-            return false;
-        }
-        return !needs_mutable_as<T>() || !m_is_const;
-    }
-
-    template<typename T>
-    decltype(auto) as() const {
-        using Traits = AsTraits<T>;
-        using NoRef = typename Traits::NoRef;
-        using NoPtr = typename Traits::NoPtr;
-        using Base = typename Traits::Base;
-
-        if constexpr (std::is_pointer_v<NoRef>) {
-            if constexpr (std::is_const_v<NoPtr>) {
-                return try_get_const<std::remove_const_t<NoPtr>>();
-            } else {
-                return try_get<NoPtr>();
-            }
-        } else if constexpr (
-            std::is_enum_v<Base> && std::is_lvalue_reference_v<T> &&
-            !std::is_const_v<NoRef>
-        ) {
-            return get<Base>();
-        } else if constexpr (std::is_enum_v<Base>) {
-            Base value = m_type_id == fei::type_id<int>() ?
-                             static_cast<Base>(get_const<int>()) :
-                             get_const<Base>();
-            return value;
-        } else if constexpr (std::is_lvalue_reference_v<T>) {
-            if constexpr (std::is_const_v<NoRef>) {
-                return get_const<Base>();
-            } else {
-                return get<Base>();
-            }
-        } else if constexpr (
-            std::is_rvalue_reference_v<T> || !std::is_copy_constructible_v<Base>
-        ) {
-            return get_rref<Base>();
-        } else {
-            return Base(get_const<Base>());
-        }
-    }
-
     TypeId type_id() const {
         FEI_ASSERT(m_type_id);
         return m_type_id;
@@ -191,6 +107,8 @@ class Ref {
             return static_cast<T>(get_const<short int>());
         } else if (m_type_id == fei::type_id<unsigned short int>()) {
             return static_cast<T>(get_const<unsigned short int>());
+        } else if (m_type_id == fei::type_id<unsigned int>()) {
+            return static_cast<T>(get_const<unsigned int>());
         } else if (m_type_id == fei::type_id<long int>()) {
             return static_cast<T>(get_const<long int>());
         } else if (m_type_id == fei::type_id<unsigned long int>()) {

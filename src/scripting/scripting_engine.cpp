@@ -33,6 +33,58 @@ lua_Integer to_lua_integer(std::uint64_t value) {
     return static_cast<lua_Integer>(value);
 }
 
+int lua_raise_failure(lua_State* L, const InvokeFailure& failure) {
+    const auto& message = failure.message.empty() ?
+                              std::string("Reflected call failed") :
+                              failure.message;
+    luaL_error(L, "%s", message.c_str());
+    return 0;
+}
+
+int lua_push_return_item(lua_State* L, const ReturnItem& item) {
+    if (item.is_ref()) {
+        lua_push_ref(L, item.ref());
+    } else {
+        lua_push_val(L, item.value());
+    }
+    return 1;
+}
+
+int lua_push_return_value(lua_State* L, const ReturnValue& value) {
+    switch (value.kind()) {
+        case ReturnValue::Kind::Void:
+            return 0;
+        case ReturnValue::Kind::Status:
+            lua_pushboolean(L, 1);
+            return 1;
+        case ReturnValue::Kind::One:
+            return lua_push_return_item(L, value.item());
+        case ReturnValue::Kind::Many: {
+            int count = 0;
+            for (const auto& item : value.items()) {
+                count += lua_push_return_item(L, item);
+            }
+            return count;
+        }
+    }
+    return 0;
+}
+
+int lua_push_invoke_result(lua_State* L, const InvokeResult& result) {
+    if (result) {
+        return lua_push_return_value(L, *result);
+    }
+
+    const auto& failure = result.error();
+    if (failure.kind == InvokeFailure::Kind::ReturnedError) {
+        lua_pushnil(L);
+        lua_push_val(L, failure.error);
+        return 2;
+    }
+
+    return lua_raise_failure(L, failure);
+}
+
 } // namespace
 
 ScriptingEngine::ScriptingEngine() : m_state(luaL_newstate()) {
@@ -177,7 +229,6 @@ int ScriptingEngine::dispatch_new(lua_State* L) {
     auto& type = Registry::instance().get_type(type_id);
     auto& cls = Registry::instance().get_cls(type_id);
     auto arg_count = lua_gettop(L);
-    std::vector<TypeId> arg_types;
     std::vector<ReturnValue> args;
 
     for (int i = 1; i <= arg_count; ++i) {
@@ -186,14 +237,7 @@ int ScriptingEngine::dispatch_new(lua_State* L) {
             luaL_error(L, "Invalid argument type at index %d", i);
             return 0;
         }
-        arg_types.push_back(arg_type);
         args.push_back(lua_to_argument(L, i));
-    }
-
-    auto* ctor = cls.get_constructor(arg_types);
-    if (ctor == nullptr) {
-        luaL_error(L, "No matching constructor found");
-        return 0;
     }
 
     std::vector<Ref> refs;
@@ -206,8 +250,23 @@ int ScriptingEngine::dispatch_new(lua_State* L) {
         }
     );
 
+    auto ctor_result = cls.get_constructor_for_args(refs);
+    if (!ctor_result) {
+        return lua_raise_failure(L, ctor_result.error());
+    }
+    auto* ctor = *ctor_result;
+
+    auto ret = ctor->invoke_variadic(refs);
+    if (!ret) {
+        return lua_raise_failure(L, ret.error());
+    }
+    if (!ret->is_value()) {
+        luaL_error(L, "Constructor returned an invalid value");
+        return 0;
+    }
+
     auto* ud = lua_newuserdata(L, sizeof(LuaObject));
-    new (ud) LuaObject(ctor->invoke_variadic(refs).value());
+    new (ud) LuaObject(std::move(ret->value()));
     luaL_getmetatable(L, type.stripped_name().c_str());
     lua_setmetatable(L, -2);
 
@@ -217,13 +276,11 @@ int ScriptingEngine::dispatch_new(lua_State* L) {
 int ScriptingEngine::dispatch_method(lua_State* L) {
     const auto* name = lua_tostring(L, lua_upvalueindex(1));
     TypeId type_id = lua_tointeger(L, lua_upvalueindex(2));
-    auto& type = Registry::instance().get_type(type_id);
     auto& cls = Registry::instance().get_cls(type_id);
 
     auto instance = lua_to_ref(L, 1);
 
     auto arg_count = lua_gettop(L) - 1;
-    std::vector<TypeId> arg_types;
     std::vector<ReturnValue> args;
     for (int i = 1; i <= arg_count; ++i) {
         // Skip the first argument (the instance)
@@ -238,21 +295,7 @@ int ScriptingEngine::dispatch_method(lua_State* L) {
             );
             return 0;
         }
-        arg_types.push_back(arg_type);
         args.push_back(lua_to_argument(L, i + 1));
-    }
-
-    auto const_filter = instance.is_const() ? MethodConstFilter::ConstOnly :
-                                              MethodConstFilter::PreferNonConst;
-    auto* method = cls.get_method(name, arg_types, const_filter);
-    if (method == nullptr) {
-        luaL_error(
-            L,
-            "No matching method '%s.%s' found",
-            type.stripped_name().c_str(),
-            name
-        );
-        return 0;
     }
 
     std::vector<Ref> refs;
@@ -266,20 +309,15 @@ int ScriptingEngine::dispatch_method(lua_State* L) {
         }
     );
 
-    auto ret = method->invoke_variadic(refs);
-    if (ret.is_void()) {
-        return 0;
+    auto const_filter = instance.is_const() ? MethodConstFilter::ConstOnly :
+                                              MethodConstFilter::PreferNonConst;
+    auto method_result = cls.get_method_for_args(name, refs, const_filter);
+    if (!method_result) {
+        return lua_raise_failure(L, method_result.error());
     }
-    if (ret.ref().type_id() == ::fei::type_id<Ref>()) {
-        lua_push_ref(L, ret.ref().get<Ref>());
-    } else if (ret.is_ref()) {
-        lua_push_ref(L, ret.ref());
-    } else if (ret.is_value()) {
-        lua_push_val(L, ret.value());
-    } else {
-        lua_pushnil(L);
-    }
-    return 1;
+    auto* method = *method_result;
+
+    return lua_push_invoke_result(L, method->invoke_variadic(refs));
 }
 
 int ScriptingEngine::dispatch_gc(lua_State* L) {
@@ -302,15 +340,18 @@ int ScriptingEngine::dispatch_index(lua_State* L) {
 
     auto* prop = cls.get_property(key);
     if (prop) {
+        Result<Ref, InvokeFailure> value;
         if (lua_can_ref(L, 1)) {
             auto instance = lua_to_ref(L, 1);
-            auto value = prop->get(instance);
-            lua_push_ref(L, value);
+            value = prop->get(instance);
         } else {
             auto instance = lua_to_val(L, 1);
-            auto value = prop->get(instance);
-            lua_push_ref(L, value);
+            value = prop->get(instance);
         }
+        if (!value) {
+            return lua_raise_failure(L, value.error());
+        }
+        lua_push_ref(L, *value);
         return 1;
     }
 
@@ -355,14 +396,18 @@ int ScriptingEngine::dispatch_newindex(lua_State* L) {
     }
 
     auto instance = lua_to_ref(L, 1);
+    Status<InvokeFailure> assigned;
     if (lua_can_ref(L, 3)) {
         auto ref = lua_to_ref(L, 3);
-        prop->set(instance, ref);
+        assigned = prop->set(instance, ref);
     } else {
         auto value = lua_to_val(L, 3);
-        prop->set(instance, value.ref());
+        assigned = prop->set(instance, value.ref());
     }
-    return 1;
+    if (!assigned) {
+        return lua_raise_failure(L, assigned.error());
+    }
+    return 0;
 }
 
 int ScriptingEngine::dispatch_operator(lua_State* L) {
@@ -374,7 +419,6 @@ int ScriptingEngine::dispatch_operator(lua_State* L) {
     auto instance = lua_to_ref(L, 1);
 
     auto arg_count = lua_gettop(L) - 1;
-    std::vector<TypeId> arg_types;
     std::vector<ReturnValue> args;
     for (int i = 1; i <= arg_count; ++i) {
         auto arg_type = lua_type_of(L, i + 1);
@@ -388,20 +432,7 @@ int ScriptingEngine::dispatch_operator(lua_State* L) {
             );
             return 0;
         }
-        arg_types.push_back(arg_type);
         args.push_back(lua_to_argument(L, i + 1));
-    }
-    auto const_filter = instance.is_const() ? MethodConstFilter::ConstOnly :
-                                              MethodConstFilter::PreferNonConst;
-    Method* method = get_operator(cls, op, arg_types, const_filter);
-    if (!method) {
-        luaL_error(
-            L,
-            "Operator method not found for operator %d in class %s",
-            static_cast<int>(op),
-            type.stripped_name().c_str()
-        );
-        return 0;
     }
 
     std::vector<Ref> refs;
@@ -415,20 +446,19 @@ int ScriptingEngine::dispatch_operator(lua_State* L) {
         }
     );
 
-    auto ret = method->invoke_variadic(refs);
-    if (ret.is_void()) {
-        return 0;
+    auto const_filter = instance.is_const() ? MethodConstFilter::ConstOnly :
+                                              MethodConstFilter::PreferNonConst;
+    auto method_result = cls.get_method_for_args(
+        get_operator_method_name(op),
+        refs,
+        const_filter
+    );
+    if (!method_result) {
+        return lua_raise_failure(L, method_result.error());
     }
-    if (ret.ref().type_id() == ::fei::type_id<Ref>()) {
-        lua_push_ref(L, ret.ref().get<Ref>());
-    } else if (ret.is_ref()) {
-        lua_push_ref(L, ret.ref());
-    } else if (ret.is_value()) {
-        lua_push_val(L, ret.value());
-    } else {
-        lua_pushnil(L);
-    }
-    return 1;
+    Method* method = *method_result;
+
+    return lua_push_invoke_result(L, method->invoke_variadic(refs));
 }
 
 } // namespace fei

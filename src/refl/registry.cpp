@@ -47,6 +47,14 @@ Type& Registry::get_type(TypeId id) {
     return it->second;
 }
 
+const Type* Registry::try_get_type(TypeId id) const {
+    auto it = m_types.find(id);
+    if (it == m_types.end()) {
+        return nullptr;
+    }
+    return &it->second;
+}
+
 Cls& Registry::add_cls(TypeId id) {
     auto it = m_classes.find(id);
     if (it != m_classes.end()) {

@@ -1,12 +1,12 @@
 #pragma once
-#include "base/log.hpp"
+#include "refl/argument_adapter.hpp"
 #include "refl/callable.hpp"
-#include "refl/ref_utils.hpp"
+#include "refl/return_adapter.hpp"
 #include "refl/type.hpp"
-#include "refl/val.hpp"
 
 #include <array>
-#include <type_traits>
+#include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -53,8 +53,11 @@ class Method : public Callable {
     ) : Callable(name, params, return_type) {}
     ~Method() override = default;
 
-    ReturnValue
+    InvokeResult
     invoke_variadic(const std::vector<Ref>& args) const override = 0;
+    virtual bool accepts_variadic(const std::vector<Ref>& args) const = 0;
+    virtual std::optional<int>
+    match_score(const std::vector<Ref>& args) const = 0;
     virtual bool is_const() const = 0;
     virtual bool is_static() const = 0;
 };
@@ -91,50 +94,106 @@ class MethodImpl : public Method {
 
     bool is_static() const override { return c_is_static; }
 
-    ReturnValue invoke_variadic(const std::vector<Ref>& args) const override {
+    bool accepts_variadic(const std::vector<Ref>& args) const override {
+        return match_score(args).has_value();
+    }
+
+    std::optional<int>
+    match_score(const std::vector<Ref>& args) const override {
         if constexpr (c_is_static) {
             if (args.size() != c_params_count) {
-                error(
-                    "Invalid argument count for static method {}: expected {}, "
-                    "got {}",
-                    name(),
-                    c_params_count,
-                    args.size()
-                );
-                return {};
+                return std::nullopt;
             }
             return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
-                if (!validate_params<0, ArgIdx...>(args)) {
-                    error(
-                        "Invalid argument type passed to static method {}",
-                        name()
-                    );
-                    return ReturnValue {};
+                return match_params<0, ArgIdx...>(args);
+            }(std::make_index_sequence<c_params_count>());
+        } else {
+            if (args.empty() || args.size() - 1 != c_params_count) {
+                return std::nullopt;
+            }
+            if (!validate_instance(args[0])) {
+                return std::nullopt;
+            }
+            return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
+                return match_params<1, ArgIdx...>(args);
+            }(std::make_index_sequence<c_params_count>());
+        }
+    }
+
+    static int score_of(ConversionRank rank) {
+        switch (rank) {
+            case ConversionRank::Exact:
+                return 0;
+            case ConversionRank::Weak:
+                return 1;
+            case ConversionRank::None:
+                return 0;
+        }
+        return 0;
+    }
+
+    template<std::size_t Offset, std::size_t... ArgIdx>
+    std::optional<int> match_params(const std::vector<Ref>& args) const {
+        int score = 0;
+        bool matched = true;
+        (
+            [&] {
+                if (!matched) {
+                    return;
                 }
-                // static method does not need an instance
+                auto rank = ArgumentAdapter<TypeOfParam<ArgIdx>>::match(
+                    args[ArgIdx + Offset]
+                );
+                if (rank == ConversionRank::None) {
+                    matched = false;
+                    return;
+                }
+                score += score_of(rank);
+            }(),
+            ...);
+        if (!matched) {
+            return std::nullopt;
+        }
+        return score;
+    }
+
+    InvokeResult invoke_variadic(const std::vector<Ref>& args) const override {
+        if constexpr (c_is_static) {
+            if (args.size() != c_params_count) {
+                return invalid_call(
+                    "Invalid argument count for static method " + name() +
+                    ": expected " + std::to_string(c_params_count) + ", got " +
+                    std::to_string(args.size())
+                );
+            }
+            return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
+                auto invalid_param =
+                    find_invalid_param<0, ArgIdx...>(args, "static method");
+                if (!invalid_param.empty()) {
+                    return invalid_call(std::move(invalid_param));
+                }
                 return invoke_template(Ref(), args[ArgIdx]...);
             }(std::make_index_sequence<c_params_count>());
         } else {
             if (args.empty() || args.size() - 1 != c_params_count) {
-                error(
-                    "Invalid argument count for method {}: expected {}, got "
-                    "{}",
-                    name(),
-                    c_params_count,
-                    args.empty() ? 0 : args.size() - 1
+                return invalid_call(
+                    "Invalid argument count for method " + name() +
+                    ": expected instance plus " +
+                    std::to_string(c_params_count) + ", got " +
+                    std::to_string(args.size())
                 );
-                return {};
             }
             if (!validate_instance(args[0])) {
-                error("Invalid instance passed to method {}", name());
-                return {};
+                return invalid_call(
+                    "Invalid instance passed to method " + name()
+                );
             }
             return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
-                if (!validate_params<1, ArgIdx...>(args)) {
-                    error("Invalid argument type passed to method {}", name());
-                    return ReturnValue {};
+                auto invalid_param =
+                    find_invalid_param<1, ArgIdx...>(args, "method");
+                if (!invalid_param.empty()) {
+                    return invalid_call(std::move(invalid_param));
                 }
-                // arg[0] is the object instance itself
                 return invoke_template(args[0], args[ArgIdx + 1]...);
             }(std::make_index_sequence<c_params_count>());
         }
@@ -151,6 +210,10 @@ class MethodImpl : public Method {
         return params;
     }
 
+    InvokeResult invalid_call(std::string message) const {
+        return failure(InvokeFailure::invalid_call(std::move(message)));
+    }
+
     bool validate_instance(const Ref& instance) const {
         if constexpr (c_is_static) {
             return true;
@@ -164,9 +227,36 @@ class MethodImpl : public Method {
         }
     }
 
+    template<std::size_t Offset, std::size_t ArgIdx>
+    std::string describe_invalid_param(
+        const std::vector<Ref>& args,
+        const char* kind
+    ) const {
+        return "Invalid argument " + std::to_string(ArgIdx + 1) + " for " +
+               kind + " " + name() + ": " +
+               ArgumentAdapter<TypeOfParam<ArgIdx>>::describe_mismatch(
+                   args[ArgIdx + Offset]
+               );
+    }
+
     template<std::size_t Offset, std::size_t... ArgIdx>
-    bool validate_params(const std::vector<Ref>& args) const {
-        return (args[ArgIdx + Offset].can_as<TypeOfParam<ArgIdx>>() && ...);
+    std::string
+    find_invalid_param(const std::vector<Ref>& args, const char* kind) const {
+        std::string message;
+        (
+            [&] {
+                if (!message.empty()) {
+                    return;
+                }
+                if (!ArgumentAdapter<TypeOfParam<ArgIdx>>::accepts(
+                        args[ArgIdx + Offset]
+                    )) {
+                    message =
+                        describe_invalid_param<Offset, ArgIdx>(args, kind);
+                }
+            }(),
+            ...);
+        return message;
     }
 
     template<class... Args, size_t... N>
@@ -178,27 +268,35 @@ class MethodImpl : public Method {
         if constexpr (c_is_static) {
             return std::invoke(
                 m_ptr,
-                std::forward<Args>(args).template as<TypeOfParam<N>>()...
+                ArgumentAdapter<TypeOfParam<N>>::get(
+                    std::forward<Args>(args)
+                )...
             );
         } else if constexpr (c_is_const) {
             return std::invoke(
                 m_ptr,
                 instance.get_const<typename MemberTrait<P>::ParentType>(),
-                std::forward<Args>(args).template as<TypeOfParam<N>>()...
+                ArgumentAdapter<TypeOfParam<N>>::get(
+                    std::forward<Args>(args)
+                )...
             );
         } else {
             return std::invoke(
                 m_ptr,
                 instance.get<typename MemberTrait<P>::ParentType>(),
-                std::forward<Args>(args).template as<TypeOfParam<N>>()...
+                ArgumentAdapter<TypeOfParam<N>>::get(
+                    std::forward<Args>(args)
+                )...
             );
         }
     }
 
     template<class... Args>
-    ReturnValue invoke_template(Ref instance, Args&&... args) const {
+    InvokeResult invoke_template(Ref instance, Args&&... args) const {
         if constexpr (c_params_count != sizeof...(Args)) {
-            return ReturnValue {};
+            return invalid_call(
+                "Internal reflection argument expansion mismatch"
+            );
         } else {
             if constexpr (std::same_as<ReturnType, void>) {
                 invoke_template_expand(
@@ -206,21 +304,16 @@ class MethodImpl : public Method {
                     instance,
                     std::forward<Args>(args)...
                 );
-                return ReturnValue {};
+                return ReturnAdapter<void>::adapt();
             } else {
                 decltype(auto) ret = invoke_template_expand(
                     std::make_index_sequence<c_params_count>(),
                     instance,
                     std::forward<Args>(args)...
                 );
-                if constexpr (
-                    std::is_pointer_v<ReturnType> ||
-                    std::is_reference_v<ReturnType>
-                ) {
-                    return make_ref(ret);
-                } else {
-                    return make_val<ReturnType>(std::move(ret));
-                }
+                return ReturnAdapter<ReturnType>::adapt(
+                    std::forward<decltype(ret)>(ret)
+                );
             }
         }
     }

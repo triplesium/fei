@@ -29,6 +29,7 @@ class Registry {
         TypeOps ops
     );
     Type& get_type(TypeId id);
+    const Type* try_get_type(TypeId id) const;
     Cls& add_cls(TypeId id);
     Cls& get_cls(TypeId id);
     Enum& add_enum(TypeId id);

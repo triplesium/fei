@@ -124,52 +124,35 @@ TEST_CASE("Ref converts arithmetic values through to_number", "[refl][ref]") {
     REQUIRE(make_ref(flag).to_number<int>() == 1);
 }
 
-TEST_CASE("Ref exposes typed values through as", "[refl][ref]") {
+TEST_CASE("Ref exposes typed values through direct accessors", "[refl][ref]") {
     int value = 42;
     Ref ref = make_ref(value);
 
-    static_assert(std::is_same_v<decltype(ref.as<int>()), int>);
-    static_assert(std::is_same_v<decltype(ref.as<int&>()), int&>);
+    static_assert(std::is_same_v<decltype(ref.get<int>()), int&>);
+    static_assert(std::is_same_v<decltype(ref.get_const<int>()), const int&>);
 
-    REQUIRE(ref.can_as<int>());
-    REQUIRE(ref.can_as<int&>());
-    REQUIRE(ref.can_as<const int&>());
-    REQUIRE(ref.can_as<int*>());
-    REQUIRE(ref.can_as<const int*>());
-
-    REQUIRE(ref.as<int>() == 42);
-    ref.as<int&>() = 7;
+    REQUIRE(ref.try_get<int>() == &value);
+    REQUIRE(ref.try_get_const<int>() == &value);
+    REQUIRE(ref.get<int>() == 42);
+    ref.get<int>() = 7;
     REQUIRE(value == 7);
-    REQUIRE(ref.as<const int&>() == 7);
-    REQUIRE(ref.as<int*>() == &value);
+    REQUIRE(ref.get_const<int>() == 7);
+    REQUIRE(ref.get_rref<int>() == 7);
 
     const int const_value = 9;
     Ref const_ref = make_ref(const_value);
 
-    REQUIRE(const_ref.can_as<int>());
-    REQUIRE(const_ref.can_as<const int&>());
-    REQUIRE(const_ref.can_as<const int*>());
-    REQUIRE_FALSE(const_ref.can_as<int&>());
-    REQUIRE_FALSE(const_ref.can_as<int*>());
-    REQUIRE(const_ref.as<int>() == 9);
-    REQUIRE(const_ref.as<const int*>() == &const_value);
+    REQUIRE(const_ref.try_get<int>() == nullptr);
+    REQUIRE(const_ref.try_get_const<int>() == &const_value);
+    REQUIRE(const_ref.get_const<int>() == 9);
 }
 
-TEST_CASE("Ref can view ints as enum values", "[refl][ref]") {
-    int raw = 2;
-    Ref ref = make_ref(raw);
-
-    REQUIRE(ref.can_as<RefAsEnum>());
-    REQUIRE(ref.can_as<const RefAsEnum&>());
-    REQUIRE_FALSE(ref.can_as<RefAsEnum&>());
-    REQUIRE_FALSE(ref.can_as<RefAsEnum*>());
-    REQUIRE(ref.as<RefAsEnum>() == RefAsEnum::Two);
-    REQUIRE(ref.as<const RefAsEnum&>() == RefAsEnum::Two);
-
+TEST_CASE("Ref exposes enum objects through direct accessors", "[refl][ref]") {
     RefAsEnum actual = RefAsEnum::One;
     Ref enum_ref = make_ref(actual);
 
-    REQUIRE(enum_ref.can_as<RefAsEnum&>());
-    enum_ref.as<RefAsEnum&>() = RefAsEnum::Two;
+    REQUIRE(enum_ref.type_id() == type_id<RefAsEnum>());
+    REQUIRE(enum_ref.get<RefAsEnum>() == RefAsEnum::One);
+    enum_ref.get<RefAsEnum>() = RefAsEnum::Two;
     REQUIRE(actual == RefAsEnum::Two);
 }
