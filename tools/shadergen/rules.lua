@@ -109,11 +109,16 @@ local function shadergen_program()
 end
 
 local function helper_depfiles(shadergen)
-    return {
-        path.join(os.projectdir(), "tools/shadergen/rules.lua"),
-        path.join(os.projectdir(), "tools/shadergen/main.cpp"),
-        shadergen,
-    }
+    local files = {}
+    insert_unique(files, path.join(os.projectdir(), "tools/shadergen/rules.lua"))
+    for _, file in ipairs(os.files(path.join(os.projectdir(), "tools/shadergen/*.cpp"))) do
+        insert_unique(files, file)
+    end
+    for _, file in ipairs(os.files(path.join(os.projectdir(), "tools/shadergen/*.hpp"))) do
+        insert_unique(files, file)
+    end
+    insert_unique(files, shadergen)
+    return files
 end
 
 local function shader_depfiles(sourcefile, make_depfile, shadergen)
