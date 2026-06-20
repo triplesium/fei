@@ -350,6 +350,19 @@ local function reflgen_sources()
     return files
 end
 
+local function reflection_runtime_headers()
+    -- Generated reflection files instantiate MethodImpl/PropertyImpl templates.
+    -- Rebuild them whenever the reflection runtime ABI changes.
+    local files = {}
+    for _, file in ipairs(os.files(path.join(os.projectdir(), "src/refl/**.hpp"))) do
+        if not normalize_path(file):find("/tests/", 1, true) then
+            insert_unique(files, file)
+        end
+    end
+    insert_unique(files, path.join(os.projectdir(), "src/base/result.hpp"))
+    return files
+end
+
 local function reflgen_program()
     local target = assert(project.target("fei-reflgen"), "target fei-reflgen not found")
     local program = target:targetfile()
@@ -366,7 +379,60 @@ local function reflgen_program()
     raise("missing fei-reflgen executable: %s", program)
 end
 
-local function make_reflgen_args(headers, include_dirs, output_file, function_name, stamp_file)
+local function reflgen_depfile(entry)
+    return project_absolute_path(entry.output_file .. ".mk.d")
+end
+
+local function reflgen_dep_target(entry)
+    return normalize_path(project_relative_path(entry.output_file))
+end
+
+local function unescape_make_depfile_token(token)
+    token = token:gsub("%$%$", "$")
+    token = token:gsub("\\ ", " ")
+    token = token:gsub("\\#", "#")
+    token = token:gsub("\\:", ":")
+    token = token:gsub("\\\\", "\\")
+    return token
+end
+
+local function parse_reflgen_depfile(depfile, fallback_files)
+    local depfiles = {}
+    for _, file in ipairs(fallback_files or {}) do
+        insert_unique(depfiles, file)
+    end
+
+    if not os.isfile(depfile) then
+        return depfiles
+    end
+
+    local content = io.readfile(depfile)
+    if not content then
+        return depfiles
+    end
+    content = content:gsub("\\\r?\n", " ")
+
+    local colon = content:find(":", 1, true)
+    if not colon then
+        return depfiles
+    end
+
+    local body = content:sub(colon + 1)
+    for token in body:gmatch("%S+") do
+        insert_unique(depfiles, unescape_make_depfile_token(token))
+    end
+    return depfiles
+end
+
+local function make_reflgen_args(
+    headers,
+    include_dirs,
+    output_file,
+    function_name,
+    stamp_file,
+    depfile,
+    dep_target
+)
     local args = {
         "--rootdir",
         normalize_path(os.projectdir()),
@@ -379,6 +445,14 @@ local function make_reflgen_args(headers, include_dirs, output_file, function_na
     if stamp_file then
         table.insert(args, "--stamp")
         table.insert(args, normalize_path(stamp_file))
+    end
+    if depfile then
+        table.insert(args, "--depfile")
+        table.insert(args, normalize_path(depfile))
+    end
+    if dep_target then
+        table.insert(args, "--dep-target")
+        table.insert(args, normalize_path(dep_target))
     end
     for _, incdir in ipairs(include_dirs) do
         table.insert(args, "-I")
@@ -410,6 +484,9 @@ local function depfiles_with_reflgen(files)
     for _, file in ipairs(files) do
         insert_unique(depfiles, file)
     end
+    for _, file in ipairs(reflection_runtime_headers()) do
+        insert_unique(depfiles, file)
+    end
     for _, file in ipairs(reflgen_sources()) do
         insert_unique(depfiles, file)
     end
@@ -431,6 +508,9 @@ local function aggregate_inputs(target)
         end
     end
     for _, file in ipairs(reflgen_sources()) do
+        insert_unique(files, file)
+    end
+    for _, file in ipairs(reflection_runtime_headers()) do
         insert_unique(files, file)
     end
     return output_file, functions, files
@@ -599,6 +679,7 @@ local function generate_files(target)
     cleanup_legacy_runner_files(target)
     for _, entry in ipairs(inputs.entries) do
         local dependfile = project_absolute_path(entry.output_file .. ".d")
+        local header_depfile = reflgen_depfile(entry)
         ensure_directory(path.directory(dependfile))
 
         depend.on_changed(function ()
@@ -609,13 +690,17 @@ local function generate_files(target)
                     inputs.include_dirs,
                     entry.output_file,
                     entry.function_name,
-                    entry.marker
+                    entry.marker,
+                    header_depfile,
+                    reflgen_dep_target(entry)
                 )
             )
         end, {
-            files = depfiles_with_reflgen({entry.header}),
+            files = depfiles_with_reflgen(
+                parse_reflgen_depfile(header_depfile, {entry.header})
+            ),
             values = {
-                "fei.reflect.file.v2",
+                "fei.reflect.file.v5",
                 entry.output_file,
                 entry.function_name,
                 entry.header,
@@ -643,6 +728,9 @@ local function generate_module(target)
         table.insert(functions, entry.function_name)
         insert_unique(depfiles, entry.output_file)
     end
+    for _, file in ipairs(reflection_runtime_headers()) do
+        insert_unique(depfiles, file)
+    end
     insert_unique(depfiles, path.join(os.projectdir(), "tools/reflgen/rules.lua"))
 
     local dependfile = project_absolute_path(inputs.module_file .. ".d")
@@ -654,7 +742,7 @@ local function generate_module(target)
     end, {
         files = depfiles,
         values = {
-            "fei.reflect.module.v3",
+            "fei.reflect.module.v5",
             inputs.module_file,
             inputs.module_function,
             table.concat(functions, ";")
@@ -680,7 +768,7 @@ local function generate_aggregate(target)
     end, {
         files = files,
         values = {
-            "fei.reflect.aggregate.v3",
+            "fei.reflect.aggregate.v5",
             output_file,
             table.concat(functions, ";")
         },
@@ -702,6 +790,7 @@ function buildcmd_file(target, batchcmds, sourcefile, opt)
     validate_reflect_dependencies(target, inputs)
     cleanup_legacy_runner_files(target)
     local objectfile = target:objectfile(entry.output_file)
+    local header_depfile = reflgen_depfile(entry)
     table.insert(target:objectfiles(), objectfile)
 
     batchcmds:show_progress(
@@ -717,13 +806,19 @@ function buildcmd_file(target, batchcmds, sourcefile, opt)
             inputs.include_dirs,
             entry.output_file,
             entry.function_name,
-            entry.marker
+            entry.marker,
+            header_depfile,
+            reflgen_dep_target(entry)
         )
     )
     batchcmds:compile(entry.output_file, objectfile)
-    batchcmds:add_depfiles(depfiles_with_reflgen({entry.header}))
+    batchcmds:add_depfiles(
+        depfiles_with_reflgen(
+            parse_reflgen_depfile(header_depfile, {entry.header})
+        )
+    )
     batchcmds:add_depvalues(
-        "fei.reflect.file.v2",
+        "fei.reflect.file.v5",
         entry.output_file,
         entry.function_name,
         entry.header,
@@ -750,6 +845,9 @@ function buildcmd_module(target, batchcmds, opt)
         table.insert(functions, entry.function_name)
         insert_unique(depfiles, entry.output_file)
     end
+    for _, file in ipairs(reflection_runtime_headers()) do
+        insert_unique(depfiles, file)
+    end
     insert_unique(depfiles, path.join(os.projectdir(), "tools/reflgen/rules.lua"))
 
     local objectfile = target:objectfile(inputs.module_file)
@@ -766,7 +864,7 @@ function buildcmd_module(target, batchcmds, opt)
     batchcmds:compile(inputs.module_file, objectfile)
     batchcmds:add_depfiles(depfiles)
     batchcmds:add_depvalues(
-        "fei.reflect.module.v3",
+        "fei.reflect.module.v5",
         inputs.module_file,
         inputs.module_function,
         table.concat(functions, ";")
@@ -795,7 +893,7 @@ function buildcmd_aggregate(target, batchcmds, opt)
     batchcmds:compile(output_file, objectfile)
     batchcmds:add_depfiles(files)
     batchcmds:add_depvalues(
-        "fei.reflect.aggregate.v3",
+        "fei.reflect.aggregate.v5",
         output_file,
         table.concat(functions, ";")
     )

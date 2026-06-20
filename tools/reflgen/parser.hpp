@@ -7,6 +7,11 @@
 
 namespace fei::reflgen {
 
+struct HeaderParseOutput {
+    ParseResult result;
+    std::vector<std::string> dependencies;
+};
+
 class HeaderParser {
   public:
     HeaderParser(
@@ -15,7 +20,7 @@ class HeaderParser {
         bool verbose
     );
 
-    [[nodiscard]] ParseResult parse();
+    [[nodiscard]] HeaderParseOutput parse();
 
   private:
     std::vector<std::string> m_headers;

@@ -94,6 +94,48 @@ generic_absolute_path(const std::filesystem::path& path) {
     return path;
 }
 
+void insert_dependency(
+    std::vector<std::string>& dependencies,
+    const std::filesystem::path& dependency
+) {
+    auto normalized = generic_absolute_path(dependency);
+    if (normalized.empty()) {
+        return;
+    }
+
+    const auto comparable = comparable_path(normalized);
+    const auto found = std::ranges::find_if(
+        dependencies,
+        [&comparable](const std::string& existing) {
+            return comparable_path(existing) == comparable;
+        }
+    );
+    if (found == dependencies.end()) {
+        dependencies.push_back(std::move(normalized));
+    }
+}
+
+void collect_translation_unit_dependencies(
+    CXTranslationUnit translation_unit,
+    std::vector<std::string>& dependencies
+) {
+    clang_getInclusions(
+        translation_unit,
+        [](CXFile included_file,
+           CXSourceLocation*,
+           unsigned,
+           CXClientData data) {
+            auto& deps = *static_cast<std::vector<std::string>*>(data);
+            const auto filename =
+                clang_string(clang_getFileName(included_file));
+            if (!filename.empty()) {
+                insert_dependency(deps, filename);
+            }
+        },
+        &dependencies
+    );
+}
+
 [[nodiscard]] std::optional<std::string> cursor_file_path(CXCursor cursor) {
     CXSourceLocation location = clang_getCursorLocation(cursor);
     if (clang_equalLocations(location, clang_getNullLocation())) {
@@ -686,15 +728,17 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
     return result;
 }
 
-[[nodiscard]] ParseResult parse_header(
+[[nodiscard]] HeaderParseOutput parse_header(
     const std::string& header,
     const std::vector<std::string>& include_paths,
     bool verbose
 ) {
+    HeaderParseOutput output;
     const auto header_path = generic_absolute_path(header);
+    insert_dependency(output.dependencies, header_path);
     if (!std::filesystem::exists(header_path)) {
         std::cerr << "Warning: Header file '" << header << "' not found\n";
-        return {};
+        return output;
     }
 
     CXIndex index = clang_createIndex(0, 0);
@@ -724,7 +768,7 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
     if (!translation_unit) {
         clang_disposeIndex(index);
         std::cerr << "Warning: Failed to parse " << header << '\n';
-        return {};
+        return output;
     }
 
     const unsigned diagnostic_count = clang_getNumDiagnostics(translation_unit);
@@ -749,12 +793,18 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
         .comparable_header_path = comparable_path(header_path),
     };
 
-    auto result =
+    collect_translation_unit_dependencies(
+        translation_unit,
+        output.dependencies
+    );
+
+    output.result =
         parse_cursor(clang_getTranslationUnitCursor(translation_unit), context);
+    std::ranges::sort(output.dependencies);
 
     clang_disposeTranslationUnit(translation_unit);
     clang_disposeIndex(index);
-    return result;
+    return output;
 }
 
 } // namespace
@@ -767,22 +817,26 @@ HeaderParser::HeaderParser(
     m_headers(std::move(headers)), m_include_paths(std::move(include_paths)),
     m_verbose(verbose) {}
 
-ParseResult HeaderParser::parse() {
-    ParseResult result;
+HeaderParseOutput HeaderParser::parse() {
+    HeaderParseOutput output;
     for (const auto& header : m_headers) {
         auto header_result = parse_header(header, m_include_paths, m_verbose);
-        result.classes.insert(
-            result.classes.end(),
-            std::make_move_iterator(header_result.classes.begin()),
-            std::make_move_iterator(header_result.classes.end())
+        output.result.classes.insert(
+            output.result.classes.end(),
+            std::make_move_iterator(header_result.result.classes.begin()),
+            std::make_move_iterator(header_result.result.classes.end())
         );
-        result.enums.insert(
-            result.enums.end(),
-            std::make_move_iterator(header_result.enums.begin()),
-            std::make_move_iterator(header_result.enums.end())
+        output.result.enums.insert(
+            output.result.enums.end(),
+            std::make_move_iterator(header_result.result.enums.begin()),
+            std::make_move_iterator(header_result.result.enums.end())
         );
+        for (const auto& dependency : header_result.dependencies) {
+            insert_dependency(output.dependencies, dependency);
+        }
     }
-    return result;
+    std::ranges::sort(output.dependencies);
+    return output;
 }
 
 } // namespace fei::reflgen
