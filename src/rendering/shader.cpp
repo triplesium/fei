@@ -3,6 +3,7 @@
 #include "asset/io.hpp"
 #include "asset/path.hpp"
 #include "base/optional.hpp"
+#include "base/result.hpp"
 #include "graphics/resource.hpp"
 
 #include <filesystem>
@@ -111,8 +112,60 @@ manifest_field(std::string_view manifest, std::string_view name) {
     return nullopt;
 }
 
-ShaderArtifactManifest
-parse_shader_manifest(std::string_view manifest, std::string_view asset_path) {
+AssetLoadError
+shader_load_error(const AssetPath& asset_path, std::string message) {
+    return AssetLoadError(asset_path, std::move(message));
+}
+
+AssetLoadError
+shader_load_error(const LoadContext& context, std::string message) {
+    return shader_load_error(context.asset_path(), std::move(message));
+}
+
+Status<AssetLoadError> require_shader_artifact(
+    const LoadContext& context,
+    const std::filesystem::path& path,
+    std::string_view description
+) {
+    if (std::filesystem::exists(path)) {
+        return {};
+    }
+    return failure(shader_load_error(
+        context,
+        std::string("Generated ") + std::string(description) +
+            " is missing: " + path.string()
+    ));
+}
+
+struct ShaderArtifactFile {
+    std::string_view description;
+    const std::filesystem::path& path;
+};
+
+Status<AssetLoadError> require_shader_artifacts(
+    const LoadContext& context,
+    const ShaderArtifactManifest& manifest
+) {
+    const ShaderArtifactFile artifacts[] = {
+        {"OpenGL shader", manifest.opengl_path},
+        {"SPIR-V shader", manifest.spirv_path},
+        {"shader reflection", manifest.reflection_path},
+    };
+    for (const auto& artifact : artifacts) {
+        auto status = require_shader_artifact(
+            context,
+            artifact.path,
+            artifact.description
+        );
+        if (!status) {
+            return failure(std::move(status).error());
+        }
+    }
+    return {};
+}
+
+Result<ShaderArtifactManifest, AssetLoadError>
+parse_shader_manifest(std::string_view manifest, const AssetPath& asset_path) {
     auto format = manifest_field(manifest, "format");
     auto logical_path = manifest_field(manifest, "logical");
     auto opengl_path = manifest_field(manifest, "opengl");
@@ -120,7 +173,11 @@ parse_shader_manifest(std::string_view manifest, std::string_view asset_path) {
     auto reflection_path = manifest_field(manifest, "reflection");
     if (!format || *format != "fei.shader.v1" || !logical_path ||
         !opengl_path || !spirv_path || !reflection_path) {
-        fatal("Invalid shader manifest for '{}'", asset_path);
+        return failure(shader_load_error(
+            asset_path,
+            "Invalid shader manifest: expected format=fei.shader.v1 with "
+            "logical, opengl, spirv, and reflection fields"
+        ));
     }
     return ShaderArtifactManifest {
         .logical_path = *logical_path,
@@ -132,17 +189,21 @@ parse_shader_manifest(std::string_view manifest, std::string_view asset_path) {
 
 using ReflectionJson = nlohmann::json;
 
-ReflectionJson parse_shader_reflection_json(std::string_view json) {
+Result<ReflectionJson, std::string>
+parse_shader_reflection_json(std::string_view json) {
     try {
         auto document = ReflectionJson::parse(json);
         if (!document.is_object()) {
-            fatal("Shader reflection root is not a JSON object");
+            return failure(
+                std::string("Shader reflection root is not a JSON object")
+            );
         }
         return document;
     } catch (const ReflectionJson::exception& e) {
-        fatal("Invalid shader reflection JSON: {}", e.what());
+        return failure(
+            std::string("Invalid shader reflection JSON: ") + e.what()
+        );
     }
-    return {};
 }
 
 uint32 shader_resource_array_size(const ReflectionJson& object) {
@@ -155,7 +216,7 @@ uint32 shader_resource_array_size(const ReflectionJson& object) {
     return value == 0 ? 1 : value;
 }
 
-void append_shader_reflection_bindings(
+Status<std::string> append_shader_reflection_bindings(
     std::vector<ShaderResourceBinding>& bindings,
     const ReflectionJson& document,
     std::string_view array_name,
@@ -163,17 +224,20 @@ void append_shader_reflection_bindings(
 ) {
     auto array = document.find(array_name);
     if (array == document.end()) {
-        return;
+        return {};
     }
     if (!array->is_array()) {
-        fatal("Shader reflection field '{}' is not an array", array_name);
+        return failure(
+            "Shader reflection field '" + std::string(array_name) +
+            "' is not an array"
+        );
     }
 
     for (const auto& object : *array) {
         if (!object.is_object()) {
-            fatal(
-                "Shader reflection field '{}' contains a non-object entry",
-                array_name
+            return failure(
+                "Shader reflection field '" + std::string(array_name) +
+                "' contains a non-object entry"
             );
         }
 
@@ -195,7 +259,24 @@ void append_shader_reflection_bindings(
             }
         );
     }
+    return {};
 }
+
+struct ShaderReflectionResourceArray {
+    std::string_view name;
+    ResourceKind kind;
+};
+
+constexpr ShaderReflectionResourceArray shader_reflection_resource_arrays[] = {
+    {"ubos", ResourceKind::UniformBuffer},
+    {"ssbos", ResourceKind::StorageBufferReadWrite},
+    {"textures", ResourceKind::TextureReadOnly},
+    {"sampled_images", ResourceKind::TextureReadOnly},
+    {"separate_images", ResourceKind::TextureReadOnly},
+    {"images", ResourceKind::TextureReadWrite},
+    {"storage_images", ResourceKind::TextureReadWrite},
+    {"separate_samplers", ResourceKind::Sampler},
+};
 
 } // namespace
 
@@ -223,103 +304,87 @@ std::vector<std::byte> read_shader_binary(const std::filesystem::path& path) {
     return std::vector<std::byte>(reader.data(), reader.data() + reader.size());
 }
 
-std::vector<ShaderResourceBinding>
-parse_shader_reflection_bindings(std::string_view json) {
+ShaderReflectionResult parse_shader_reflection_bindings(std::string_view json) {
     try {
         auto document = parse_shader_reflection_json(json);
+        if (!document) {
+            return failure(std::move(document).error());
+        }
+
         std::vector<ShaderResourceBinding> bindings;
-        append_shader_reflection_bindings(
-            bindings,
-            document,
-            "ubos",
-            ResourceKind::UniformBuffer
-        );
-        append_shader_reflection_bindings(
-            bindings,
-            document,
-            "ssbos",
-            ResourceKind::StorageBufferReadWrite
-        );
-        append_shader_reflection_bindings(
-            bindings,
-            document,
-            "textures",
-            ResourceKind::TextureReadOnly
-        );
-        append_shader_reflection_bindings(
-            bindings,
-            document,
-            "sampled_images",
-            ResourceKind::TextureReadOnly
-        );
-        append_shader_reflection_bindings(
-            bindings,
-            document,
-            "separate_images",
-            ResourceKind::TextureReadOnly
-        );
-        append_shader_reflection_bindings(
-            bindings,
-            document,
-            "images",
-            ResourceKind::TextureReadWrite
-        );
-        append_shader_reflection_bindings(
-            bindings,
-            document,
-            "storage_images",
-            ResourceKind::TextureReadWrite
-        );
-        append_shader_reflection_bindings(
-            bindings,
-            document,
-            "separate_samplers",
-            ResourceKind::Sampler
-        );
+        for (const auto& resource_array : shader_reflection_resource_arrays) {
+            auto status = append_shader_reflection_bindings(
+                bindings,
+                *document,
+                resource_array.name,
+                resource_array.kind
+            );
+            if (!status) {
+                return failure(std::move(status).error());
+            }
+        }
         return bindings;
     } catch (const ReflectionJson::exception& e) {
-        fatal("Invalid shader reflection JSON: {}", e.what());
+        return failure(
+            std::string("Invalid shader reflection JSON: ") + e.what()
+        );
     }
-    return {};
 }
 
-std::vector<ShaderResourceBinding>
+Result<std::vector<ShaderResourceBinding>, AssetLoadError>
 load_shader_reflection_bindings(const AssetPath& asset_path) {
     auto reflection_path = shader_reflection_path(asset_path);
     if (!reflection_path) {
-        return {};
+        return failure(shader_load_error(
+            asset_path,
+            "Generated shader reflection is missing: " +
+                shader_output_path(asset_path.path(), "reflection", ".json")
+                    .string()
+        ));
     }
-    return parse_shader_reflection_bindings(
+    auto bindings = parse_shader_reflection_bindings(
         Reader(reflection_path.value()).as_string()
     );
+    if (!bindings) {
+        return failure(shader_load_error(asset_path, bindings.error()));
+    }
+    return std::move(bindings).value();
 }
 
 AssetLoadResult<Shader>
 ShaderLoader::load(Reader& reader, const LoadContext& context) {
-    auto manifest = parse_shader_manifest(
-        reader.as_string_view(),
-        context.asset_path().as_string()
-    );
-    auto stage = shader_stage_from_path(manifest.logical_path);
-    if (!stage) {
-        return failure(AssetLoadError(
-            context.asset_path(),
-            "Unknown shader extension: " + manifest.logical_path.string()
-        ));
+    auto manifest =
+        parse_shader_manifest(reader.as_string_view(), context.asset_path());
+    if (!manifest) {
+        return failure(std::move(manifest).error());
     }
 
-    std::string source = Reader(manifest.opengl_path).as_string();
-    auto spirv = read_shader_binary(manifest.spirv_path);
+    auto stage = shader_stage_from_path(manifest->logical_path);
+    if (!stage) {
+        return failure(shader_load_error(
+            context,
+            "Unknown shader extension: " + manifest->logical_path.string()
+        ));
+    }
+    if (auto status = require_shader_artifacts(context, *manifest); !status) {
+        return failure(std::move(status).error());
+    }
+
+    std::string source = Reader(manifest->opengl_path).as_string();
+    auto spirv = read_shader_binary(manifest->spirv_path);
     auto resources = parse_shader_reflection_bindings(
-        Reader(manifest.reflection_path).as_string()
+        Reader(manifest->reflection_path).as_string()
     );
+    if (!resources) {
+        return failure(shader_load_error(context, resources.error()));
+    }
 
     return std::make_unique<Shader>(Shader {
-        .path = manifest.logical_path,
+        .path = manifest->logical_path,
         .source = std::move(source),
         .spirv = std::move(spirv),
         .stage = stage.value(),
-        .resources = std::move(resources),
+        .resources = std::move(resources).value(),
     });
 }
 

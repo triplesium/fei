@@ -12,7 +12,6 @@
 
 #include <cstddef>
 #include <filesystem>
-#include <memory>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -49,10 +48,12 @@ shader_reflection_path(const AssetPath& asset_path);
 
 std::vector<std::byte> read_shader_binary(const std::filesystem::path& path);
 
-std::vector<ShaderResourceBinding>
-parse_shader_reflection_bindings(std::string_view json);
+using ShaderReflectionResult =
+    Result<std::vector<ShaderResourceBinding>, std::string>;
 
-std::vector<ShaderResourceBinding>
+ShaderReflectionResult parse_shader_reflection_bindings(std::string_view json);
+
+Result<std::vector<ShaderResourceBinding>, AssetLoadError>
 load_shader_reflection_bindings(const AssetPath& asset_path);
 
 class ShaderLoader : public AssetLoader<Shader> {

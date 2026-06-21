@@ -24,9 +24,11 @@ void require_shader_resources(
     std::initializer_list<ExpectedBinding> expected
 ) {
     AssetPath shader_path("shader://" + std::string(shader_name));
-    auto bindings = load_shader_reflection_bindings(shader_path);
+    auto bindings_result = load_shader_reflection_bindings(shader_path);
 
     CAPTURE(shader_name);
+    REQUIRE(bindings_result);
+    const auto& bindings = *bindings_result;
     REQUIRE(bindings.size() == expected.size());
 
     for (const auto& resource : expected) {
