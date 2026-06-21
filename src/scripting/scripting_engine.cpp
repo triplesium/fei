@@ -41,6 +41,11 @@ int lua_raise_failure(lua_State* L, const InvokeFailure& failure) {
     return 0;
 }
 
+int lua_raise_registry_error(lua_State* L, const RegistryError& failure) {
+    luaL_error(L, "%s", failure.message.c_str());
+    return 0;
+}
+
 int lua_push_return_item(lua_State* L, const ReturnItem& item) {
     if (item.is_ref()) {
         lua_push_ref(L, item.ref());
@@ -102,7 +107,8 @@ void ScriptingEngine::register_type(Type& type) {
     auto id = type.id();
 
     auto register_operator = [&](LuaOperator op) {
-        if (has_operator(Registry::instance().get_cls(id), op)) {
+        auto cls = Registry::instance().try_get_cls(id);
+        if (cls && has_operator(*cls, op)) {
             lua_pushinteger(L, to_lua_integer(id.id()));
             lua_pushinteger(L, static_cast<int>(op));
             lua_pushcclosure(L, &dispatch_operator, 2);
@@ -153,13 +159,17 @@ void ScriptingEngine::unregister_type(Type& type) {
 
 void ScriptingEngine::register_enum(const Enum& enm) {
     auto* L = m_state;
-    auto& type = Registry::instance().get_type(enm.type_id());
+    auto type = Registry::instance().try_get_type(enm.type_id());
+    if (!type) {
+        error("Cannot register enum in Lua: {}", type.error().message);
+        return;
+    }
     lua_newtable(L);
     for (const auto& [name, underlying_value] : enm.enumerators()) {
         lua_pushstring(L, name.c_str());
         lua_newtable(L);
 
-        lua_pushinteger(L, to_lua_integer(type.id().id()));
+        lua_pushinteger(L, to_lua_integer(type->id().id()));
         lua_setfield(L, -2, "__enum_type_id");
 
         lua_pushinteger(L, static_cast<lua_Integer>(underlying_value));
@@ -167,14 +177,18 @@ void ScriptingEngine::register_enum(const Enum& enm) {
 
         lua_settable(L, -3);
     }
-    lua_setglobal(L, type.stripped_name().c_str());
+    lua_setglobal(L, type->stripped_name().c_str());
 }
 
 void ScriptingEngine::unregister_enum(const Enum& enm) {
     auto* L = m_state;
-    auto& type = Registry::instance().get_type(enm.type_id());
+    auto type = Registry::instance().try_get_type(enm.type_id());
+    if (!type) {
+        error("Cannot unregister enum from Lua: {}", type.error().message);
+        return;
+    }
     lua_pushnil(L);
-    lua_setglobal(L, type.stripped_name().c_str());
+    lua_setglobal(L, type->stripped_name().c_str());
 }
 
 void ScriptingEngine::set_global(const std::string& name, const Val& val) {
@@ -226,8 +240,14 @@ bool ScriptingEngine::call_function(
 
 int ScriptingEngine::dispatch_new(lua_State* L) {
     TypeId type_id = lua_tointeger(L, lua_upvalueindex(1));
-    auto& type = Registry::instance().get_type(type_id);
-    auto& cls = Registry::instance().get_cls(type_id);
+    auto type = Registry::instance().try_get_type(type_id);
+    if (!type) {
+        return lua_raise_registry_error(L, type.error());
+    }
+    auto cls = Registry::instance().try_get_cls(type_id);
+    if (!cls) {
+        return lua_raise_registry_error(L, cls.error());
+    }
     auto arg_count = lua_gettop(L);
     std::vector<ReturnValue> args;
 
@@ -250,7 +270,7 @@ int ScriptingEngine::dispatch_new(lua_State* L) {
         }
     );
 
-    auto ctor_result = cls.get_constructor_for_args(refs);
+    auto ctor_result = cls->get_constructor_for_args(refs);
     if (!ctor_result) {
         return lua_raise_failure(L, ctor_result.error());
     }
@@ -267,7 +287,7 @@ int ScriptingEngine::dispatch_new(lua_State* L) {
 
     auto* ud = lua_newuserdata(L, sizeof(LuaObject));
     new (ud) LuaObject(std::move(ret->value()));
-    luaL_getmetatable(L, type.stripped_name().c_str());
+    luaL_getmetatable(L, type->stripped_name().c_str());
     lua_setmetatable(L, -2);
 
     return 1;
@@ -276,7 +296,10 @@ int ScriptingEngine::dispatch_new(lua_State* L) {
 int ScriptingEngine::dispatch_method(lua_State* L) {
     const auto* name = lua_tostring(L, lua_upvalueindex(1));
     TypeId type_id = lua_tointeger(L, lua_upvalueindex(2));
-    auto& cls = Registry::instance().get_cls(type_id);
+    auto cls = Registry::instance().try_get_cls(type_id);
+    if (!cls) {
+        return lua_raise_registry_error(L, cls.error());
+    }
 
     auto instance = lua_to_ref(L, 1);
 
@@ -311,7 +334,7 @@ int ScriptingEngine::dispatch_method(lua_State* L) {
 
     auto const_filter = instance.is_const() ? MethodConstFilter::ConstOnly :
                                               MethodConstFilter::PreferNonConst;
-    auto method_result = cls.get_method_for_args(name, refs, const_filter);
+    auto method_result = cls->get_method_for_args(name, refs, const_filter);
     if (!method_result) {
         return lua_raise_failure(L, method_result.error());
     }
@@ -329,8 +352,14 @@ int ScriptingEngine::dispatch_gc(lua_State* L) {
 
 int ScriptingEngine::dispatch_index(lua_State* L) {
     TypeId type_id = lua_tointeger(L, lua_upvalueindex(1));
-    auto& type = Registry::instance().get_type(type_id);
-    auto& cls = Registry::instance().get_cls(type_id);
+    auto type = Registry::instance().try_get_type(type_id);
+    if (!type) {
+        return lua_raise_registry_error(L, type.error());
+    }
+    auto cls = Registry::instance().try_get_cls(type_id);
+    if (!cls) {
+        return lua_raise_registry_error(L, cls.error());
+    }
 
     const char* key = lua_tostring(L, 2);
     if (!key) {
@@ -338,7 +367,7 @@ int ScriptingEngine::dispatch_index(lua_State* L) {
         return 0;
     }
 
-    auto* prop = cls.get_property(key);
+    auto* prop = cls->get_property(key);
     if (prop) {
         Result<Ref, InvokeFailure> value;
         if (lua_can_ref(L, 1)) {
@@ -355,7 +384,7 @@ int ScriptingEngine::dispatch_index(lua_State* L) {
         return 1;
     }
 
-    if (cls.has_method(key)) {
+    if (cls->has_method(key)) {
         lua_pushstring(L, key);
         lua_pushinteger(L, to_lua_integer(type_id.id()));
         lua_pushcclosure(L, &dispatch_method, 2);
@@ -366,7 +395,7 @@ int ScriptingEngine::dispatch_index(lua_State* L) {
         L,
         "Property/Method %s not found in class %s",
         key,
-        type.stripped_name().c_str()
+        type->stripped_name().c_str()
     );
     return 0;
 }
@@ -375,8 +404,14 @@ int ScriptingEngine::dispatch_newindex(lua_State* L) {
     // Stack: [instance, key, value]
 
     TypeId type_id = lua_tointeger(L, lua_upvalueindex(1));
-    auto& type = Registry::instance().get_type(type_id);
-    auto& cls = Registry::instance().get_cls(type_id);
+    auto type = Registry::instance().try_get_type(type_id);
+    if (!type) {
+        return lua_raise_registry_error(L, type.error());
+    }
+    auto cls = Registry::instance().try_get_cls(type_id);
+    if (!cls) {
+        return lua_raise_registry_error(L, cls.error());
+    }
 
     const char* key = lua_tostring(L, 2);
     if (!key) {
@@ -384,13 +419,13 @@ int ScriptingEngine::dispatch_newindex(lua_State* L) {
         return 0;
     }
 
-    auto* prop = cls.get_property(key);
+    auto* prop = cls->get_property(key);
     if (!prop) {
         luaL_error(
             L,
             "Property %s not found in class %s",
             key,
-            type.stripped_name().c_str()
+            type->stripped_name().c_str()
         );
         return 0;
     }
@@ -413,8 +448,14 @@ int ScriptingEngine::dispatch_newindex(lua_State* L) {
 int ScriptingEngine::dispatch_operator(lua_State* L) {
     auto type_id = lua_tointeger(L, lua_upvalueindex(1));
     auto op = static_cast<LuaOperator>(lua_tointeger(L, lua_upvalueindex(2)));
-    auto& type = Registry::instance().get_type(type_id);
-    auto& cls = Registry::instance().get_cls(type_id);
+    auto type = Registry::instance().try_get_type(type_id);
+    if (!type) {
+        return lua_raise_registry_error(L, type.error());
+    }
+    auto cls = Registry::instance().try_get_cls(type_id);
+    if (!cls) {
+        return lua_raise_registry_error(L, cls.error());
+    }
 
     auto instance = lua_to_ref(L, 1);
 
@@ -428,7 +469,7 @@ int ScriptingEngine::dispatch_operator(lua_State* L) {
                 "Invalid argument type at index %d in operator %d for class %s",
                 i,
                 static_cast<int>(op),
-                type.stripped_name().c_str()
+                type->stripped_name().c_str()
             );
             return 0;
         }
@@ -448,7 +489,7 @@ int ScriptingEngine::dispatch_operator(lua_State* L) {
 
     auto const_filter = instance.is_const() ? MethodConstFilter::ConstOnly :
                                               MethodConstFilter::PreferNonConst;
-    auto method_result = cls.get_method_for_args(
+    auto method_result = cls->get_method_for_args(
         get_operator_method_name(op),
         refs,
         const_filter

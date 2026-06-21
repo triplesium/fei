@@ -27,6 +27,10 @@ struct ScriptTestError {
     int code {0};
 };
 
+struct ScriptBareType {
+    int value {0};
+};
+
 struct ScriptTestReceiver {
     ScriptTestEnum mode {ScriptTestEnum::Idle};
     int value {0};
@@ -484,4 +488,27 @@ TEST_CASE(
 
     REQUIRE(receiver.value == 55);
     REQUIRE(receiver.method_calls == 0);
+}
+
+TEST_CASE(
+    "ScriptingEngine reports missing class metadata to Lua",
+    "[scripting]"
+) {
+    auto engine = make_test_engine();
+    Registry::instance().register_type<ScriptBareType>();
+    engine.register_type(type<ScriptBareType>());
+
+    ScriptTestReceiver receiver;
+    engine.set_global("receiver", make_ref(receiver));
+    engine.run_script(R"(
+        local ok, err = pcall(function()
+            ScriptBareType.new()
+        end)
+        if not ok and string.find(err, "Class not found") then
+            receiver:set_value(64)
+        end
+    )");
+
+    REQUIRE(receiver.value == 64);
+    REQUIRE(receiver.method_calls == 1);
 }
