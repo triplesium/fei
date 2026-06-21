@@ -11,9 +11,15 @@ void compute_mesh_aabb(
     Commands commands
 ) {
     for (const auto& [entity, mesh3d] : query) {
-        auto& mesh = meshes->get(mesh3d.mesh).value();
-        const auto& positions =
-            mesh.get_attribute(Mesh::ATTRIBUTE_POSITION.id).as_float3().value();
+        auto mesh = meshes->get(mesh3d.mesh);
+        if (!mesh) {
+            continue;
+        }
+        auto positions =
+            mesh->get_attribute(Mesh::ATTRIBUTE_POSITION.id).as_float3();
+        if (!positions) {
+            continue;
+        }
 
         Vector3 min {
             std::numeric_limits<float>::max(),
@@ -26,7 +32,7 @@ void compute_mesh_aabb(
             std::numeric_limits<float>::lowest(),
         };
 
-        for (const auto& pos : positions) {
+        for (const auto& pos : *positions) {
             min.x = std::min(min.x, pos[0]);
             min.y = std::min(min.y, pos[1]);
             min.z = std::min(min.z, pos[2]);

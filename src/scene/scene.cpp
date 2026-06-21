@@ -179,22 +179,25 @@ void spawn_scene(
     Commands commands
 ) {
     for (const auto& [entity, spawner] : scene_query) {
-        auto& scene = scenes->get(spawner.scene).value();
+        auto scene = scenes->get(spawner.scene);
+        if (!scene) {
+            continue;
+        }
 
         std::vector<Handle<Mesh>> mesh_handles;
-        for (auto& mesh : scene.meshes) {
+        for (auto& mesh : scene->meshes) {
             mesh->scale_by(spawner.options.scale);
             auto mesh_handle = meshes->add(std::move(mesh));
             mesh_handles.push_back(mesh_handle);
         }
 
         std::vector<Handle<StandardMaterial>> material_handles;
-        for (auto& material : scene.materials) {
+        for (auto& material : scene->materials) {
             auto material_handle = materials->add(std::move(material));
             material_handles.push_back(material_handle);
         }
 
-        for (const auto& object : scene.objects) {
+        for (const auto& object : scene->objects) {
             commands.spawn().add(
                 Mesh3d {.mesh = mesh_handles[object.mesh_index]},
                 MeshMaterial3d<StandardMaterial> {

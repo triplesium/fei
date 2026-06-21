@@ -6,6 +6,7 @@ namespace fei {
 
 struct AssetSystems {
     struct ApplyAsyncLoads : SystemSet<ApplyAsyncLoads> {};
+    struct CollectUnused : SystemSet<CollectUnused> {};
     struct TrackAssets : SystemSet<TrackAssets> {};
 };
 

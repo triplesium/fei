@@ -82,7 +82,7 @@ TEST_CASE("Assets emit queued events", "[asset][event]") {
     REQUIRE_FALSE(reader.next().has_value());
 }
 
-TEST_CASE("Assets unload when the last handle is released", "[asset][handle]") {
+TEST_CASE("Assets collect unused handles", "[asset][handle]") {
     using Event = AssetEvent<TestAsset>;
 
     World world;
@@ -96,7 +96,9 @@ TEST_CASE("Assets unload when the last handle is released", "[asset][handle]") {
         REQUIRE(assets.get(id).has_value());
     }
 
-    REQUIRE_FALSE(assets.get(id).has_value());
+    REQUIRE(assets.load_state(id).has_value());
+    REQUIRE(assets.unload_unused() == 1);
+    REQUIRE_FALSE(assets.load_state(id).has_value());
 
     world.run_system_once(Assets<TestAsset>::track_assets);
 
@@ -126,6 +128,14 @@ TEST_CASE("Handle copies and moves keep assets alive", "[asset][handle]") {
     auto asset = assets.get(id);
     REQUIRE(asset.has_value());
     REQUIRE(asset->value == 3);
+}
+
+TEST_CASE("Default handles are invalid", "[asset][handle]") {
+    Handle<TestAsset> handle;
+
+    REQUIRE_FALSE(handle);
+    REQUIRE_FALSE(handle.is_valid());
+    REQUIRE(handle.id() == invalid_asset_id);
 }
 
 TEST_CASE(
@@ -183,6 +193,8 @@ TEST_CASE(
         auto first = assets.load(first_reader, context);
         first_id = first.id();
     }
+
+    REQUIRE(assets.unload_unused() == 1);
 
     auto second_reader = reader_for(second_bytes);
     auto second = assets.load(second_reader, context);

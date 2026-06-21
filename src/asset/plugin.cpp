@@ -15,6 +15,7 @@ void AssetsPlugin::setup(App& app) {
         chain(
             TaskSystems::DrainCompletions {},
             AssetSystems::ApplyAsyncLoads {},
+            AssetSystems::CollectUnused {},
             AssetSystems::TrackAssets {}
         )
     );

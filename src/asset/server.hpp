@@ -46,6 +46,8 @@ class AssetServer {
                 PostUpdate,
                 Assets<T>::apply_async_loads |
                     in_set<AssetSystems::ApplyAsyncLoads>(),
+                Assets<T>::collect_unused |
+                    in_set<AssetSystems::CollectUnused>(),
                 Assets<T>::track_assets | in_set<AssetSystems::TrackAssets>()
             );
     }
@@ -62,6 +64,8 @@ class AssetServer {
                 PostUpdate,
                 Assets<T>::apply_async_loads |
                     in_set<AssetSystems::ApplyAsyncLoads>(),
+                Assets<T>::collect_unused |
+                    in_set<AssetSystems::CollectUnused>(),
                 Assets<T>::track_assets | in_set<AssetSystems::TrackAssets>()
             );
     }

@@ -352,6 +352,7 @@ TEST_CASE(
     }
 
     auto& assets = app.resource<Assets<ServerAsset>>();
+    app.run_schedule(PostUpdate);
     REQUIRE_FALSE(assets.load_state(id).has_value());
 
     run_post_update_until(app, [&]() {

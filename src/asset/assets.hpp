@@ -1,5 +1,6 @@
 #pragma once
 #include "asset/event.hpp"
+#include "asset/handle.hpp"
 #include "asset/id.hpp"
 #include "asset/io.hpp"
 #include "asset/loader.hpp"
@@ -16,9 +17,6 @@
 #include <vector>
 
 namespace fei {
-
-template<typename T>
-class Handle;
 
 template<typename T>
 class Assets;
@@ -39,12 +37,12 @@ class Assets {
   public:
     struct Entry {
         AssetId id;
+        std::shared_ptr<AssetHandleState> handle_state;
         Optional<AssetPath> path;
         TypeId type_id;
         std::unique_ptr<T> asset;
         AssetLoadState state;
         Optional<AssetLoadError> error;
-        int ref_count;
     };
 
     struct AsyncLoadResult {
@@ -118,7 +116,7 @@ class Assets {
             AssetId cached_id = cached->second;
             auto entry = get_entry(cached_id);
             if (entry && entry->state != AssetLoadState::Failed) {
-                return Handle<T>(cached_id, m_state);
+                return make_handle(*entry);
             }
             m_cache.erase(cached);
         }
@@ -154,17 +152,19 @@ class Assets {
         }
 
         AssetId id = m_next_id++;
+        auto handle_state = std::make_shared<AssetHandleState>(id);
+        auto handle = Handle<T>(handle_state);
         m_assets[id] = {
             .id = id,
+            .handle_state = std::move(handle_state),
             .path = path,
             .type_id = m_type_id,
             .asset = nullptr,
             .state = AssetLoadState::Loading,
             .error = nullopt,
-            .ref_count = 0,
         };
         m_cache[path] = id;
-        return Handle<T>(id, m_state);
+        return handle;
     }
 
     bool finish_loading(AssetId id, std::unique_ptr<T> asset) {
@@ -172,7 +172,7 @@ class Assets {
         if (!entry || entry->state != AssetLoadState::Loading) {
             return false;
         }
-        if (entry->ref_count <= 0) {
+        if (!has_external_handles(*entry)) {
             unload(id);
             return false;
         }
@@ -197,7 +197,7 @@ class Assets {
         if (!entry || entry->state != AssetLoadState::Loading) {
             return false;
         }
-        if (entry->ref_count <= 0) {
+        if (!has_external_handles(*entry)) {
             unload(id);
             return false;
         }
@@ -233,7 +233,7 @@ class Assets {
         AssetId cached_id = cached->second;
         auto entry = get_entry(cached_id);
         if (entry && entry->state != AssetLoadState::Failed) {
-            return Handle<T>(cached_id, m_state);
+            return make_handle(*entry);
         }
 
         m_cache.erase(cached);
@@ -266,7 +266,7 @@ class Assets {
         );
     }
 
-    Optional<T&> get(Handle<T> handle);
+    Optional<T&> get(const Handle<T>& handle);
 
     Optional<T&> get(AssetId id) {
         Optional<Entry&> entry = get_entry(id);
@@ -282,7 +282,7 @@ class Assets {
         return *entry->asset;
     }
 
-    Optional<const T&> get(Handle<T> handle) const {
+    Optional<const T&> get(const Handle<T>& handle) const {
         auto it = m_assets.find(handle.id());
         if (it != m_assets.end() &&
             it->second.state == AssetLoadState::Loaded) {
@@ -292,7 +292,12 @@ class Assets {
     }
 
     Optional<const T&> get(AssetId id) const {
-        return get(Handle<T>(id, m_state));
+        auto it = m_assets.find(id);
+        if (it != m_assets.end() &&
+            it->second.state == AssetLoadState::Loaded) {
+            return *it->second.asset;
+        }
+        return nullopt;
     }
 
     Optional<AssetLoadState> load_state(AssetId id) const {
@@ -323,26 +328,19 @@ class Assets {
 
     std::shared_ptr<AssetsState<T>> state() const { return m_state; }
 
-    void acquire(AssetId id) {
-        auto entry = get_entry(id);
-        if (entry) {
-            entry->ref_count++;
-        } else {
-            error("Attempted to acquire non-existent asset: {}", id);
-        }
-    }
-
-    void release(AssetId id) {
-        auto entry = get_entry(id);
-        if (entry) {
-            entry->ref_count--;
-            // TODO: Queue unloading, and unload after some time
-            if (entry->ref_count == 0) {
-                unload(id);
+    std::size_t unload_unused() {
+        std::vector<AssetId> unused;
+        for (auto& [id, entry] : m_assets) {
+            if (!has_external_handles(entry)) {
+                unused.push_back(id);
             }
-        } else {
-            error("Attempted to release non-existent asset: {}", id);
         }
+
+        for (auto id : unused) {
+            unload(id);
+        }
+
+        return unused.size();
     }
 
     static void apply_async_loads(Res<Assets<T>> assets) {
@@ -362,6 +360,10 @@ class Assets {
         }
     }
 
+    static void collect_unused(Res<Assets<T>> assets) {
+        assets->unload_unused();
+    }
+
     static void
     track_assets(Res<Assets<T>> assets, EventWriter<AssetEvent<T>> events) {
         for (auto& event : assets->m_event_queue) {
@@ -373,14 +375,16 @@ class Assets {
   private:
     Handle<T> add_loaded(std::unique_ptr<T> asset, Optional<AssetPath> path) {
         AssetId id = m_next_id++;
+        auto handle_state = std::make_shared<AssetHandleState>(id);
+        auto handle = Handle<T>(handle_state);
         m_assets[id] = {
             .id = id,
+            .handle_state = std::move(handle_state),
             .path = std::move(path),
             .type_id = m_type_id,
             .asset = std::move(asset),
             .state = AssetLoadState::Loaded,
             .error = nullopt,
-            .ref_count = 0,
         };
         auto& entry = m_assets.at(id);
         if (entry.path) {
@@ -392,7 +396,15 @@ class Assets {
                 .id = id,
             }
         );
-        return Handle<T>(id, m_state);
+        return handle;
+    }
+
+    Handle<T> make_handle(Entry& entry) {
+        return Handle<T>(entry.handle_state);
+    }
+
+    static bool has_external_handles(const Entry& entry) {
+        return entry.handle_state && entry.handle_state.use_count() > 1;
     }
 
     void erase_cache_entry(const Entry& entry) {
@@ -422,14 +434,8 @@ class Assets {
     }
 };
 
-} // namespace fei
-
-#include "asset/handle.hpp"
-
-namespace fei {
-
 template<typename T>
-Optional<T&> Assets<T>::get(Handle<T> handle) {
+Optional<T&> Assets<T>::get(const Handle<T>& handle) {
     return get(handle.id());
 }
 

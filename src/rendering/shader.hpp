@@ -1,5 +1,4 @@
 #pragma once
-#include "asset/assets.hpp"
 #include "asset/handle.hpp"
 #include "asset/io.hpp"
 #include "asset/loader.hpp"
