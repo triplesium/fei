@@ -1,4 +1,6 @@
 #pragma once
+#include "base/optional.hpp"
+#include "base/result.hpp"
 #include "refl/enum.hpp"
 #include "refl/type.hpp"
 #include "refl/utils.hpp"
@@ -13,6 +15,43 @@
 namespace fei {
 
 class Cls;
+
+struct RegistryError {
+    enum class Kind { TypeNotFound, ClassNotFound, EnumNotFound };
+
+    Kind kind;
+    TypeId type_id;
+    Optional<std::string> type_name;
+    std::string message;
+
+    static RegistryError
+    type_not_found(TypeId id, Optional<std::string> name = nullopt) {
+        return make(Kind::TypeNotFound, id, std::move(name), "Type");
+    }
+
+    static RegistryError
+    class_not_found(TypeId id, Optional<std::string> name = nullopt) {
+        return make(Kind::ClassNotFound, id, std::move(name), "Class");
+    }
+
+    static RegistryError
+    enum_not_found(TypeId id, Optional<std::string> name = nullopt) {
+        return make(Kind::EnumNotFound, id, std::move(name), "Enum");
+    }
+
+  private:
+    static RegistryError
+    make(Kind kind, TypeId id, Optional<std::string> name, const char* label) {
+        std::string target =
+            name ? "'" + *name + "'" : "id " + std::to_string(id.id());
+        return RegistryError {
+            .kind = kind,
+            .type_id = id,
+            .type_name = std::move(name),
+            .message = std::string(label) + " not found for " + target,
+        };
+    }
+};
 
 class Registry {
   public:
@@ -29,11 +68,13 @@ class Registry {
         TypeOps ops
     );
     Type& get_type(TypeId id);
-    const Type* try_get_type(TypeId id) const;
+    Result<Type&, RegistryError> try_get_type(TypeId id);
     Cls& add_cls(TypeId id);
     Cls& get_cls(TypeId id);
+    Result<Cls&, RegistryError> try_get_cls(TypeId id);
     Enum& add_enum(TypeId id);
     Enum& get_enum(TypeId id);
+    Result<Enum&, RegistryError> try_get_enum(TypeId id);
     bool has_enum(TypeId id) const;
     void clear_generated_metadata();
 
@@ -47,6 +88,20 @@ class Registry {
     template<typename T>
     Cls& get_cls() {
         return get_cls(type_id<T>());
+    }
+
+    template<typename T>
+    Result<Cls&, RegistryError> try_get_cls() {
+        auto result = try_get_cls(type_id<T>());
+        if (!result) {
+            return failure(
+                RegistryError::class_not_found(
+                    type_id<T>(),
+                    std::string(type_name<T>())
+                )
+            );
+        }
+        return *result;
     }
 
     const auto& clses() const { return m_classes; }
@@ -68,6 +123,21 @@ class Registry {
     Enum& get_enum() {
         static_assert(std::is_enum_v<T>, "T must be an enum type");
         return get_enum(type_id<T>());
+    }
+
+    template<typename T>
+    Result<Enum&, RegistryError> try_get_enum() {
+        static_assert(std::is_enum_v<T>, "T must be an enum type");
+        auto result = try_get_enum(type_id<T>());
+        if (!result) {
+            return failure(
+                RegistryError::enum_not_found(
+                    type_id<T>(),
+                    std::string(type_name<T>())
+                )
+            );
+        }
+        return *result;
     }
 
     template<typename T>
@@ -136,9 +206,25 @@ class Registry {
         return get_type(type_id<T>());
     }
 
+    template<typename T>
+    Result<Type&, RegistryError> try_get_type() {
+        auto result = try_get_type(type_id<T>());
+        if (!result) {
+            return failure(
+                RegistryError::type_not_found(
+                    type_id<T>(),
+                    std::string(type_name<T>())
+                )
+            );
+        }
+        return *result;
+    }
+
   private:
     Registry() = default;
     static Registry* s_instance;
+
+    Optional<std::string> registered_type_name(TypeId id) const;
 
     std::unordered_map<TypeId, Type> m_types;
     std::unordered_map<TypeId, Cls> m_classes;

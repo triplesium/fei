@@ -125,7 +125,7 @@ inline std::string describe_ref(const Ref& ref) {
     if (ref.is_const()) {
         result += "const ";
     }
-    if (auto* type = Registry::instance().try_get_type(ref.type_id())) {
+    if (auto type = Registry::instance().try_get_type(ref.type_id())) {
         result += type->name();
     } else {
         result += "type_id(" + std::to_string(ref.type_id().id()) + ")";

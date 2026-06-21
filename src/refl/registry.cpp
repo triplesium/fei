@@ -40,19 +40,27 @@ Type& Registry::register_type(
 }
 
 Type& Registry::get_type(TypeId id) {
-    auto it = m_types.find(id);
-    if (it == m_types.end()) {
-        fatal("Type not found for id: {}", id.id());
+    auto result = try_get_type(id);
+    if (!result) {
+        fatal("{}", result.error().message);
     }
-    return it->second;
+    return *result;
 }
 
-const Type* Registry::try_get_type(TypeId id) const {
+Optional<std::string> Registry::registered_type_name(TypeId id) const {
     auto it = m_types.find(id);
     if (it == m_types.end()) {
-        return nullptr;
+        return nullopt;
     }
-    return &it->second;
+    return it->second.name();
+}
+
+Result<Type&, RegistryError> Registry::try_get_type(TypeId id) {
+    auto it = m_types.find(id);
+    if (it == m_types.end()) {
+        return failure(RegistryError::type_not_found(id));
+    }
+    return it->second;
 }
 
 Cls& Registry::add_cls(TypeId id) {
@@ -66,11 +74,21 @@ Cls& Registry::add_cls(TypeId id) {
 }
 
 Cls& Registry::get_cls(TypeId id) {
-    auto it = m_classes.find(id);
-    if (it != m_classes.end()) {
-        return it->second;
+    auto result = try_get_cls(id);
+    if (!result) {
+        fatal("{}", result.error().message);
     }
-    throw std::runtime_error("Class not found");
+    return *result;
+}
+
+Result<Cls&, RegistryError> Registry::try_get_cls(TypeId id) {
+    auto it = m_classes.find(id);
+    if (it == m_classes.end()) {
+        return failure(
+            RegistryError::class_not_found(id, registered_type_name(id))
+        );
+    }
+    return it->second;
 }
 
 Enum& Registry::add_enum(TypeId id) {
@@ -84,11 +102,21 @@ Enum& Registry::add_enum(TypeId id) {
 }
 
 Enum& Registry::get_enum(TypeId id) {
-    auto it = m_enums.find(id);
-    if (it != m_enums.end()) {
-        return it->second;
+    auto result = try_get_enum(id);
+    if (!result) {
+        fatal("{}", result.error().message);
     }
-    throw std::runtime_error("Enum not found");
+    return *result;
+}
+
+Result<Enum&, RegistryError> Registry::try_get_enum(TypeId id) {
+    auto it = m_enums.find(id);
+    if (it == m_enums.end()) {
+        return failure(
+            RegistryError::enum_not_found(id, registered_type_name(id))
+        );
+    }
+    return it->second;
 }
 
 bool Registry::has_enum(TypeId id) const {
