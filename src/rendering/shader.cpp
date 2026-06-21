@@ -408,12 +408,13 @@ bool ShaderAssetSource::exists(const std::filesystem::path& path) const {
            );
 }
 
-Reader ShaderAssetSource::get_reader(const std::filesystem::path& path) const {
+Result<Reader, std::string>
+ShaderAssetSource::try_get_reader(const std::filesystem::path& path) const {
     if (!exists(path)) {
-        fatal(
-            "Generated shader output is missing for '{}'. Build the shader "
-            "owner target, for example `xmake build -y fei-pbr`.",
-            path.string()
+        return failure(
+            "Generated shader output is missing for '" + path.string() +
+            "'. Build the shader owner target, for example "
+            "`xmake build -y fei-pbr`."
         );
     }
     auto opengl_path = m_root / "opengl" / path;

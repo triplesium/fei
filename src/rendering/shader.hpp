@@ -72,7 +72,8 @@ class ShaderAssetSource : public AssetSource {
 
     std::string name() const override;
     bool exists(const std::filesystem::path& path) const override;
-    Reader get_reader(const std::filesystem::path& path) const override;
+    Result<Reader, std::string>
+    try_get_reader(const std::filesystem::path& path) const override;
 };
 
 class ShaderRef {

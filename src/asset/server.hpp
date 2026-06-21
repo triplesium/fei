@@ -77,8 +77,15 @@ class AssetServer {
             ));
         }
         LoadContext context(*this, path);
-        auto reader = source->get_reader(path.path());
-        return assets.try_load(reader, context);
+        auto reader = source->try_get_reader(path.path());
+        if (!reader) {
+            return failure(AssetLoadError(
+                path,
+                "Failed to read asset from source '" + source_name +
+                    "': " + reader.error()
+            ));
+        }
+        return assets.try_load(*reader, context);
     }
 
     template<typename T>

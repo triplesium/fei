@@ -1,10 +1,8 @@
 #pragma once
-#include "base/log.hpp"
+#include "base/result.hpp"
 
 #include <cstddef>
-#include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <span>
 #include <string>
 #include <string_view>
@@ -12,49 +10,39 @@
 
 namespace fei {
 
+struct ReaderError {
+    std::filesystem::path path;
+    std::string message;
+
+    ReaderError(std::filesystem::path path, std::string message);
+};
+
 class Reader {
   private:
     std::vector<std::byte> m_buffer;
     std::span<const std::byte> m_data;
+    bool m_owns_data {false};
+
+    explicit Reader(std::vector<std::byte> buffer);
+
+    void bind_owned_data();
 
   public:
-    Reader(const std::byte* data, std::size_t size) : m_data(data, size) {}
+    Reader(const std::byte* data, std::size_t size);
+    explicit Reader(std::string_view text);
+    Reader(const std::filesystem::path& path);
+    Reader(const Reader& other);
+    Reader(Reader&& other) noexcept;
+    Reader& operator=(const Reader& other);
+    Reader& operator=(Reader&& other) noexcept;
 
-    explicit Reader(std::string_view text) {
-        m_buffer.resize(text.size());
-        if (!text.empty()) {
-            std::memcpy(m_buffer.data(), text.data(), text.size());
-        }
-        m_data = m_buffer;
-    }
+    static Result<Reader, ReaderError>
+    try_from_file(const std::filesystem::path& path);
 
-    Reader(const std::filesystem::path& path) {
-        std::ifstream file(path, std::ios::binary | std::ios::ate);
-        if (!file) {
-            error("Failed to open file: {}", path.string());
-        }
-        auto file_size = file.tellg();
-        file.seekg(0, std::ios::beg);
-        m_buffer.resize(static_cast<std::size_t>(file_size));
-        file.read(reinterpret_cast<char*>(m_buffer.data()), file_size);
-
-        m_data = m_buffer;
-    }
-
-    const std::byte* data() const { return m_data.data(); }
-    std::size_t size() const { return m_data.size(); }
-    std::string_view as_string_view() const {
-        return std::string_view(
-            reinterpret_cast<const char*>(m_data.data()),
-            m_data.size()
-        );
-    }
-    std::string as_string() const {
-        return std::string(
-            reinterpret_cast<const char*>(m_data.data()),
-            m_data.size()
-        );
-    }
+    const std::byte* data() const;
+    std::size_t size() const;
+    std::string_view as_string_view() const;
+    std::string as_string() const;
 };
 
 } // namespace fei

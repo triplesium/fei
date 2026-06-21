@@ -38,8 +38,23 @@ class MemorySource : public AssetSource {
         return path.generic_string() == "asset.bin";
     }
 
-    Reader get_reader(const std::filesystem::path& /*path*/) const override {
+    Result<Reader, std::string>
+    try_get_reader(const std::filesystem::path& /*path*/) const override {
         return Reader(m_bytes.data(), m_bytes.size());
+    }
+};
+
+class FailingReadSource : public AssetSource {
+  public:
+    std::string name() const override { return "broken"; }
+
+    bool exists(const std::filesystem::path& path) const override {
+        return path.generic_string() == "asset.bin";
+    }
+
+    Result<Reader, std::string>
+    try_get_reader(const std::filesystem::path& /*path*/) const override {
+        return failure(std::string("source read failed"));
     }
 };
 
@@ -93,4 +108,23 @@ TEST_CASE(
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error().path.as_string() == "missing://asset.bin");
     REQUIRE(result.error().message.contains("No asset source found"));
+}
+
+TEST_CASE(
+    "AssetServer try_load returns source reader errors",
+    "[asset][server]"
+) {
+    App app;
+    AssetServer server(&app);
+    server.emplace_source<FailingReadSource>();
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
+
+    auto result = app.resource<AssetServer>().try_load<ServerAsset>(
+        AssetPath("broken://asset.bin")
+    );
+
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error().path.as_string() == "broken://asset.bin");
+    REQUIRE(result.error().message.contains("source read failed"));
 }

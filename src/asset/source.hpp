@@ -1,7 +1,8 @@
 #pragma once
-#include "asset/embed.hpp"
 #include "asset/io.hpp"
+#include "base/result.hpp"
 
+#include <filesystem>
 #include <string>
 
 namespace fei {
@@ -11,7 +12,10 @@ class AssetSource {
     virtual ~AssetSource() = default;
     virtual std::string name() const = 0;
     virtual bool exists(const std::filesystem::path& path) const = 0;
-    virtual Reader get_reader(const std::filesystem::path& path) const = 0;
+    virtual Result<Reader, std::string>
+    try_get_reader(const std::filesystem::path& path) const = 0;
+
+    Reader get_reader(const std::filesystem::path& path) const;
 };
 
 class DefaultAssetSource : public AssetSource {
@@ -19,36 +23,24 @@ class DefaultAssetSource : public AssetSource {
     std::filesystem::path m_base_path;
 
   public:
-    DefaultAssetSource() {
-#ifdef FEI_ASSETS_PATH
-        m_base_path = FEI_ASSETS_PATH;
-#else
-        m_base_path = std::filesystem::current_path();
-#endif
-    }
+    DefaultAssetSource();
 
-    std::string name() const override { return "default"; }
+    std::string name() const override;
 
-    bool exists(const std::filesystem::path& path) const override {
-        return std::filesystem::exists(m_base_path / path);
-    }
+    bool exists(const std::filesystem::path& path) const override;
 
-    Reader get_reader(const std::filesystem::path& path) const override {
-        return Reader(m_base_path / path);
-    }
+    Result<Reader, std::string>
+    try_get_reader(const std::filesystem::path& path) const override;
 };
 
 class EmbededAssetSource : public AssetSource {
   public:
-    std::string name() const override { return "embeded"; }
+    std::string name() const override;
 
-    bool exists(const std::filesystem::path& path) const override {
-        return EmbededAssets::has(path.string());
-    }
+    bool exists(const std::filesystem::path& path) const override;
 
-    Reader get_reader(const std::filesystem::path& path) const override {
-        return EmbededAssets::get(path.string()).reader();
-    }
+    Result<Reader, std::string>
+    try_get_reader(const std::filesystem::path& path) const override;
 };
 
 } // namespace fei
