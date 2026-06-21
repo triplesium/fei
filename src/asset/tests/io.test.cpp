@@ -36,7 +36,7 @@ TEST_CASE(
     REQUIRE(move_assigned.as_string() == "reader data");
 }
 
-TEST_CASE("Reader try_from_file returns file contents", "[asset][io]") {
+TEST_CASE("Reader from_file returns file contents", "[asset][io]") {
     auto path = reader_test_path("fei-reader-test.bin");
     std::filesystem::remove(path);
     {
@@ -44,18 +44,18 @@ TEST_CASE("Reader try_from_file returns file contents", "[asset][io]") {
         file << "file data";
     }
 
-    auto reader = Reader::try_from_file(path);
+    auto reader = Reader::from_file(path);
 
     std::filesystem::remove(path);
     REQUIRE(reader);
     REQUIRE(reader->as_string() == "file data");
 }
 
-TEST_CASE("Reader try_from_file returns errors", "[asset][io]") {
+TEST_CASE("Reader from_file returns errors", "[asset][io]") {
     auto path = reader_test_path("fei-reader-missing.bin");
     std::filesystem::remove(path);
 
-    auto reader = Reader::try_from_file(path);
+    auto reader = Reader::from_file(path);
 
     REQUIRE_FALSE(reader);
     REQUIRE(reader.error().path == path);

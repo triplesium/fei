@@ -1,7 +1,5 @@
 #include "asset/io.hpp"
 
-#include "base/log.hpp"
-
 #include <cstring>
 #include <fstream>
 #include <utility>
@@ -31,14 +29,6 @@ Reader::Reader(std::string_view text) {
     }
     m_owns_data = true;
     bind_owned_data();
-}
-
-Reader::Reader(const std::filesystem::path& path) {
-    auto reader = try_from_file(path);
-    if (!reader) {
-        fatal("{}", reader.error().message);
-    }
-    *this = std::move(*reader);
 }
 
 Reader::Reader(const Reader& other) :
@@ -80,7 +70,7 @@ Reader& Reader::operator=(Reader&& other) noexcept {
 }
 
 Result<Reader, ReaderError>
-Reader::try_from_file(const std::filesystem::path& path) {
+Reader::from_file(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file) {
         return failure(

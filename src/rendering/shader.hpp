@@ -46,7 +46,8 @@ compiled_vulkan_shader_path(const AssetPath& asset_path);
 Optional<std::filesystem::path>
 shader_reflection_path(const AssetPath& asset_path);
 
-std::vector<std::byte> read_shader_binary(const std::filesystem::path& path);
+Result<std::vector<std::byte>, ReaderError>
+read_shader_binary(const std::filesystem::path& path);
 
 using ShaderReflectionResult =
     Result<std::vector<ShaderResourceBinding>, std::string>;

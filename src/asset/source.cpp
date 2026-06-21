@@ -37,7 +37,7 @@ bool DefaultAssetSource::exists(const std::filesystem::path& path) const {
 
 Result<Reader, std::string>
 DefaultAssetSource::try_get_reader(const std::filesystem::path& path) const {
-    auto reader = Reader::try_from_file(m_base_path / path);
+    auto reader = Reader::from_file(m_base_path / path);
     if (!reader) {
         return failure(std::move(reader).error().message);
     }

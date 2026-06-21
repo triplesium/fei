@@ -30,14 +30,13 @@ class Reader {
   public:
     Reader(const std::byte* data, std::size_t size);
     explicit Reader(std::string_view text);
-    Reader(const std::filesystem::path& path);
     Reader(const Reader& other);
     Reader(Reader&& other) noexcept;
     Reader& operator=(const Reader& other);
     Reader& operator=(Reader&& other) noexcept;
 
     static Result<Reader, ReaderError>
-    try_from_file(const std::filesystem::path& path);
+    from_file(const std::filesystem::path& path);
 
     const std::byte* data() const;
     std::size_t size() const;

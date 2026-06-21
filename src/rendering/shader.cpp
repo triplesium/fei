@@ -122,6 +122,24 @@ shader_load_error(const LoadContext& context, std::string message) {
     return shader_load_error(context.asset_path(), std::move(message));
 }
 
+Result<Reader, AssetLoadError> read_shader_text_file(
+    const AssetPath& asset_path,
+    const std::filesystem::path& path
+) {
+    auto reader = Reader::from_file(path);
+    if (!reader) {
+        return failure(shader_load_error(asset_path, reader.error().message));
+    }
+    return std::move(*reader);
+}
+
+Result<Reader, AssetLoadError> read_shader_text_file(
+    const LoadContext& context,
+    const std::filesystem::path& path
+) {
+    return read_shader_text_file(context.asset_path(), path);
+}
+
 Status<AssetLoadError> require_shader_artifact(
     const LoadContext& context,
     const std::filesystem::path& path,
@@ -299,9 +317,16 @@ shader_reflection_path(const AssetPath& asset_path) {
     );
 }
 
-std::vector<std::byte> read_shader_binary(const std::filesystem::path& path) {
-    Reader reader(path);
-    return std::vector<std::byte>(reader.data(), reader.data() + reader.size());
+Result<std::vector<std::byte>, ReaderError>
+read_shader_binary(const std::filesystem::path& path) {
+    auto reader = Reader::from_file(path);
+    if (!reader) {
+        return failure(std::move(reader).error());
+    }
+    return std::vector<std::byte>(
+        reader->data(),
+        reader->data() + reader->size()
+    );
 }
 
 ShaderReflectionResult parse_shader_reflection_bindings(std::string_view json) {
@@ -342,9 +367,13 @@ load_shader_reflection_bindings(const AssetPath& asset_path) {
                     .string()
         ));
     }
-    auto bindings = parse_shader_reflection_bindings(
-        Reader(reflection_path.value()).as_string()
-    );
+    auto reflection_reader =
+        read_shader_text_file(asset_path, reflection_path.value());
+    if (!reflection_reader) {
+        return failure(std::move(reflection_reader).error());
+    }
+    auto bindings =
+        parse_shader_reflection_bindings(reflection_reader->as_string());
     if (!bindings) {
         return failure(shader_load_error(asset_path, bindings.error()));
     }
@@ -370,11 +399,22 @@ ShaderLoader::load(Reader& reader, const LoadContext& context) {
         return failure(std::move(status).error());
     }
 
-    std::string source = Reader(manifest->opengl_path).as_string();
+    auto source_reader = read_shader_text_file(context, manifest->opengl_path);
+    if (!source_reader) {
+        return failure(std::move(source_reader).error());
+    }
+    std::string source = source_reader->as_string();
     auto spirv = read_shader_binary(manifest->spirv_path);
-    auto resources = parse_shader_reflection_bindings(
-        Reader(manifest->reflection_path).as_string()
-    );
+    if (!spirv) {
+        return failure(shader_load_error(context, spirv.error().message));
+    }
+    auto reflection_reader =
+        read_shader_text_file(context, manifest->reflection_path);
+    if (!reflection_reader) {
+        return failure(std::move(reflection_reader).error());
+    }
+    auto resources =
+        parse_shader_reflection_bindings(reflection_reader->as_string());
     if (!resources) {
         return failure(shader_load_error(context, resources.error()));
     }
@@ -382,7 +422,7 @@ ShaderLoader::load(Reader& reader, const LoadContext& context) {
     return std::make_unique<Shader>(Shader {
         .path = manifest->logical_path,
         .source = std::move(source),
-        .spirv = std::move(spirv),
+        .spirv = std::move(*spirv),
         .stage = stage.value(),
         .resources = std::move(resources).value(),
     });
