@@ -95,6 +95,11 @@ void extract_render_assets(
                 modified.erase(id);
                 break;
             }
+            case AssetEventType::Failed: {
+                need_extracting.erase(id);
+                modified.erase(id);
+                break;
+            }
         }
     }
     std::vector<typename ExtractedAssets<Source>::Entry> extracted;

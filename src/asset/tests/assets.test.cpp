@@ -149,7 +149,7 @@ TEST_CASE(
         std::byte {4},
         std::byte {5},
     };
-    LoadContext context(server, AssetPath("memory://asset.bin"));
+    SyncLoadContext context(server, AssetPath("memory://asset.bin"));
 
     auto first_reader = reader_for(first_bytes);
     auto first = assets.load(first_reader, context);
@@ -175,7 +175,7 @@ TEST_CASE(
         std::byte {1},
         std::byte {2},
     };
-    LoadContext context(server, AssetPath("memory://asset.bin"));
+    SyncLoadContext context(server, AssetPath("memory://asset.bin"));
 
     AssetId first_id = 0;
     {
@@ -197,7 +197,7 @@ TEST_CASE("Assets try_load returns loader errors", "[asset][loader]") {
     AssetServer server(&app);
     Assets<TestAsset> assets(std::make_unique<FailingLoader>());
     static constexpr std::array<std::byte, 1> bytes = {std::byte {1}};
-    LoadContext context(server, AssetPath("memory://asset.bin"));
+    SyncLoadContext context(server, AssetPath("memory://asset.bin"));
 
     auto reader = reader_for(bytes);
     auto result = assets.try_load(reader, context);

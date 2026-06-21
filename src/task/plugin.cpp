@@ -1,6 +1,7 @@
 #include "task/plugin.hpp"
 
 #include "app/app.hpp"
+#include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
 
 namespace fei {
@@ -20,7 +21,10 @@ void TaskPlugin::setup(App& app) {
     if (!app.has_resource<Tasks>()) {
         app.add_resource(Tasks {});
     }
-    app.add_systems(PostUpdate, Tasks::drain_completion_system);
+    app.add_systems(
+        PostUpdate,
+        Tasks::drain_completion_system | in_set<TaskSystems::DrainCompletions>()
+    );
 }
 
 } // namespace fei

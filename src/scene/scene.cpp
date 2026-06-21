@@ -44,6 +44,7 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
     const auto& attrib = obj_reader.GetAttrib();
     const auto& shapes = obj_reader.GetShapes();
     const auto& materials = obj_reader.GetMaterials();
+    auto* sync_context = dynamic_cast<const SyncLoadContext*>(&context);
 
     fei::info(
         "Loading scene '{}' with {} shapes and {} materials",
@@ -59,7 +60,13 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
         standard_material->metallic = 0.0f;
         standard_material->roughness = 1.0f;
         if (!material.diffuse_texname.empty()) {
-            standard_material->albedo_map = context.load<Image>(
+            if (!sync_context) {
+                return failure(AssetLoadError(
+                    context.asset_path(),
+                    "SceneLoader requires synchronous dependency loading"
+                ));
+            }
+            standard_material->albedo_map = sync_context->load<Image>(
                 obj_path.parent_path() / material.diffuse_texname
             );
         }

@@ -23,6 +23,12 @@ class Handle;
 template<typename T>
 class Assets;
 
+enum class AssetLoadState {
+    Loading,
+    Loaded,
+    Failed,
+};
+
 template<typename T>
 struct AssetsState {
     Assets<T>* assets = nullptr;
@@ -36,8 +42,14 @@ class Assets {
         Optional<AssetPath> path;
         TypeId type_id;
         std::unique_ptr<T> asset;
-        bool is_loaded;
+        AssetLoadState state;
+        Optional<AssetLoadError> error;
         int ref_count;
+    };
+
+    struct AsyncLoadResult {
+        AssetId id;
+        AssetLoadResult<T> result;
     };
 
   private:
@@ -47,6 +59,7 @@ class Assets {
     std::unique_ptr<AssetLoader<T>> m_loader;
     TypeId m_type_id;
     std::vector<AssetEvent<T>> m_event_queue;
+    std::vector<AsyncLoadResult> m_pending_async_results;
     std::shared_ptr<AssetsState<T>> m_state;
 
   public:
@@ -68,6 +81,7 @@ class Assets {
         m_next_id(other.m_next_id), m_loader(std::move(other.m_loader)),
         m_type_id(other.m_type_id),
         m_event_queue(std::move(other.m_event_queue)),
+        m_pending_async_results(std::move(other.m_pending_async_results)),
         m_state(std::move(other.m_state)) {
         if (m_state) {
             m_state->assets = this;
@@ -81,6 +95,7 @@ class Assets {
             m_loader = std::move(other.m_loader);
             m_type_id = other.m_type_id;
             m_event_queue = std::move(other.m_event_queue);
+            m_pending_async_results = std::move(other.m_pending_async_results);
             m_state = std::move(other.m_state);
             if (m_state) {
                 m_state->assets = this;
@@ -102,11 +117,10 @@ class Assets {
         if (cached != m_cache.end()) {
             AssetId cached_id = cached->second;
             auto entry = get_entry(cached_id);
-            if (entry && entry->is_loaded) {
+            if (entry && entry->state != AssetLoadState::Failed) {
                 return Handle<T>(cached_id, m_state);
-            } else {
-                m_cache.erase(cached);
             }
+            m_cache.erase(cached);
         }
 
         auto asset = m_loader->load(reader, context);
@@ -114,8 +128,7 @@ class Assets {
             return failure(std::move(asset.error()));
         }
 
-        auto handle = add(std::move(*asset));
-        m_cache[context.asset_path()] = handle.id();
+        auto handle = add_loaded(std::move(*asset), context.asset_path());
         return std::move(handle);
     }
 
@@ -132,22 +145,99 @@ class Assets {
     }
 
     Handle<T> add(std::unique_ptr<T> asset) {
+        return add_loaded(std::move(asset), nullopt);
+    }
+
+    Handle<T> reserve_loading(const AssetPath& path) {
+        if (auto cached = cached_handle(path)) {
+            return std::move(*cached);
+        }
+
         AssetId id = m_next_id++;
         m_assets[id] = {
             .id = id,
-            .path = nullopt,
+            .path = path,
             .type_id = m_type_id,
-            .asset = std::move(asset),
-            .is_loaded = true,
+            .asset = nullptr,
+            .state = AssetLoadState::Loading,
+            .error = nullopt,
             .ref_count = 0,
         };
+        m_cache[path] = id;
+        return Handle<T>(id, m_state);
+    }
+
+    bool finish_loading(AssetId id, std::unique_ptr<T> asset) {
+        auto entry = get_entry(id);
+        if (!entry || entry->state != AssetLoadState::Loading) {
+            return false;
+        }
+        if (entry->ref_count <= 0) {
+            unload(id);
+            return false;
+        }
+
+        entry->asset = std::move(asset);
+        entry->state = AssetLoadState::Loaded;
+        entry->error = nullopt;
+        if (entry->path) {
+            m_cache[*entry->path] = id;
+        }
         m_event_queue.push_back(
             AssetEvent<T> {
                 .type = AssetEventType::Added,
                 .id = id,
             }
         );
-        return Handle<T>(id, m_state);
+        return true;
+    }
+
+    bool fail_loading(AssetId id, AssetLoadError error) {
+        auto entry = get_entry(id);
+        if (!entry || entry->state != AssetLoadState::Loading) {
+            return false;
+        }
+        if (entry->ref_count <= 0) {
+            unload(id);
+            return false;
+        }
+
+        erase_cache_entry(*entry);
+        entry->asset.reset();
+        entry->state = AssetLoadState::Failed;
+        entry->error = std::move(error);
+        m_event_queue.push_back(
+            AssetEvent<T> {
+                .type = AssetEventType::Failed,
+                .id = id,
+            }
+        );
+        return true;
+    }
+
+    void enqueue_async_load_result(AssetId id, AssetLoadResult<T> result) {
+        m_pending_async_results.push_back(
+            AsyncLoadResult {
+                .id = id,
+                .result = std::move(result),
+            }
+        );
+    }
+
+    Optional<Handle<T>> cached_handle(const AssetPath& path) {
+        auto cached = m_cache.find(path);
+        if (cached == m_cache.end()) {
+            return nullopt;
+        }
+
+        AssetId cached_id = cached->second;
+        auto entry = get_entry(cached_id);
+        if (entry && entry->state != AssetLoadState::Failed) {
+            return Handle<T>(cached_id, m_state);
+        }
+
+        m_cache.erase(cached);
+        return nullopt;
     }
 
     template<typename... Args>
@@ -166,6 +256,7 @@ class Assets {
             error("Asset not found: {}", id);
             return;
         }
+        erase_cache_entry(it->second);
         m_assets.erase(it);
         m_event_queue.push_back(
             AssetEvent<T> {
@@ -179,7 +270,7 @@ class Assets {
 
     Optional<T&> get(AssetId id) {
         Optional<Entry&> entry = get_entry(id);
-        if (!entry || !entry->is_loaded) {
+        if (!entry || entry->state != AssetLoadState::Loaded) {
             return {};
         }
         m_event_queue.push_back(
@@ -193,7 +284,8 @@ class Assets {
 
     Optional<const T&> get(Handle<T> handle) const {
         auto it = m_assets.find(handle.id());
-        if (it != m_assets.end() && it->second.is_loaded) {
+        if (it != m_assets.end() &&
+            it->second.state == AssetLoadState::Loaded) {
             return *it->second.asset;
         }
         return nullopt;
@@ -202,6 +294,34 @@ class Assets {
     Optional<const T&> get(AssetId id) const {
         return get(Handle<T>(id, m_state));
     }
+
+    Optional<AssetLoadState> load_state(AssetId id) const {
+        auto entry = get_entry(id);
+        if (!entry) {
+            return nullopt;
+        }
+        return entry->state;
+    }
+
+    Optional<AssetLoadState> load_state(const Handle<T>& handle) const {
+        return load_state(handle.id());
+    }
+
+    Optional<const AssetLoadError&> load_error(AssetId id) const {
+        auto entry = get_entry(id);
+        if (!entry || !entry->error) {
+            return nullopt;
+        }
+        return *entry->error;
+    }
+
+    Optional<const AssetLoadError&> load_error(const Handle<T>& handle) const {
+        return load_error(handle.id());
+    }
+
+    AssetLoader<T>* loader() const { return m_loader.get(); }
+
+    std::shared_ptr<AssetsState<T>> state() const { return m_state; }
 
     void acquire(AssetId id) {
         auto entry = get_entry(id);
@@ -225,6 +345,23 @@ class Assets {
         }
     }
 
+    static void apply_async_loads(Res<Assets<T>> assets) {
+        std::vector<AsyncLoadResult> pending;
+        pending.swap(assets->m_pending_async_results);
+
+        for (auto& result : pending) {
+            if (!result.result) {
+                assets->fail_loading(
+                    result.id,
+                    std::move(result.result).error()
+                );
+                continue;
+            }
+
+            assets->finish_loading(result.id, std::move(result.result).value());
+        }
+    }
+
     static void
     track_assets(Res<Assets<T>> assets, EventWriter<AssetEvent<T>> events) {
         for (auto& event : assets->m_event_queue) {
@@ -234,7 +371,49 @@ class Assets {
     }
 
   private:
+    Handle<T> add_loaded(std::unique_ptr<T> asset, Optional<AssetPath> path) {
+        AssetId id = m_next_id++;
+        m_assets[id] = {
+            .id = id,
+            .path = std::move(path),
+            .type_id = m_type_id,
+            .asset = std::move(asset),
+            .state = AssetLoadState::Loaded,
+            .error = nullopt,
+            .ref_count = 0,
+        };
+        auto& entry = m_assets.at(id);
+        if (entry.path) {
+            m_cache[*entry.path] = id;
+        }
+        m_event_queue.push_back(
+            AssetEvent<T> {
+                .type = AssetEventType::Added,
+                .id = id,
+            }
+        );
+        return Handle<T>(id, m_state);
+    }
+
+    void erase_cache_entry(const Entry& entry) {
+        if (!entry.path) {
+            return;
+        }
+        auto cached = m_cache.find(*entry.path);
+        if (cached != m_cache.end() && cached->second == entry.id) {
+            m_cache.erase(cached);
+        }
+    }
+
     Optional<Entry&> get_entry(AssetId id) {
+        auto it = m_assets.find(id);
+        if (it == m_assets.end()) {
+            return {};
+        }
+        return it->second;
+    }
+
+    Optional<const Entry&> get_entry(AssetId id) const {
         auto it = m_assets.find(id);
         if (it == m_assets.end()) {
             return {};

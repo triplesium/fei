@@ -7,6 +7,7 @@ enum class AssetEventType {
     Added,
     Modified,
     Removed,
+    Failed,
 };
 
 template<typename T>

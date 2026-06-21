@@ -58,6 +58,9 @@ void check_events(EventReader<AssetEvent<TextAsset>> event_reader) {
             case AssetEventType::Removed:
                 std::println("Asset removed: {}", event->id);
                 break;
+            case AssetEventType::Failed:
+                std::println("Asset failed: {}", event->id);
+                break;
         }
     }
 }

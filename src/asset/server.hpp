@@ -4,8 +4,12 @@
 #include "asset/loader.hpp"
 #include "asset/path.hpp"
 #include "asset/source.hpp"
+#include "asset/systems.hpp"
+#include "ecs/system_config.hpp"
+#include "task/plugin.hpp"
 
 #include <concepts>
+#include <exception>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -38,7 +42,12 @@ class AssetServer {
                 Assets<T>(std::unique_ptr<AssetLoader<T>>(new Loader()))
             )
             .template add_event<AssetEvent<T>>()
-            .add_systems(PostUpdate, Assets<T>::track_assets);
+            .add_systems(
+                PostUpdate,
+                Assets<T>::apply_async_loads |
+                    in_set<AssetSystems::ApplyAsyncLoads>(),
+                Assets<T>::track_assets | in_set<AssetSystems::TrackAssets>()
+            );
     }
 
     template<typename T>
@@ -49,7 +58,12 @@ class AssetServer {
         (*m_app)
             .add_resource(Assets<T>(nullptr))
             .template add_event<AssetEvent<T>>()
-            .add_systems(PostUpdate, Assets<T>::track_assets);
+            .add_systems(
+                PostUpdate,
+                Assets<T>::apply_async_loads |
+                    in_set<AssetSystems::ApplyAsyncLoads>(),
+                Assets<T>::track_assets | in_set<AssetSystems::TrackAssets>()
+            );
     }
 
     template<typename T>
@@ -76,7 +90,7 @@ class AssetServer {
                     " in source: " + source_name
             ));
         }
-        LoadContext context(*this, path);
+        SyncLoadContext context(*this, path);
         auto reader = source->try_get_reader(path.path());
         if (!reader) {
             return failure(AssetLoadError(
@@ -89,8 +103,119 @@ class AssetServer {
     }
 
     template<typename T>
+    Result<Handle<T>, AssetLoadError>
+    try_load_async(const AssetPath& path) const {
+        if (!m_app->has_resource<Assets<T>>()) {
+            return failure(AssetLoadError(
+                path,
+                "No asset found for type: " + std::string(type_name<T>())
+            ));
+        }
+
+        auto& assets = m_app->resource<Assets<T>>();
+        if (auto cached = assets.cached_handle(path)) {
+            return std::move(*cached);
+        }
+
+        auto* loader = assets.loader();
+        if (!loader) {
+            return failure(AssetLoadError(
+                path,
+                "AssetLoader not set for " + path.as_string()
+            ));
+        }
+
+        if (!m_app->has_resource<Tasks>()) {
+            return failure(AssetLoadError(
+                path,
+                "Tasks resource not found for async asset loading"
+            ));
+        }
+
+        auto source_name = path.source().value_or("default");
+        if (!m_sources.contains(source_name)) {
+            return failure(AssetLoadError(
+                path,
+                "No asset source found with name: " + source_name
+            ));
+        }
+        auto* source = m_sources.at(source_name).get();
+        if (!source->exists(path.path())) {
+            return failure(AssetLoadError(
+                path,
+                "Asset not found at path: " + path.path().string() +
+                    " in source: " + source_name
+            ));
+        }
+
+        auto handle = assets.reserve_loading(path);
+        auto id = handle.id();
+        auto assets_state = assets.state();
+        m_app->resource<Tasks>().general().submit(
+            [source, loader, source_name, path]() mutable
+                -> AssetLoadResult<T> {
+                auto reader = source->try_get_reader(path.path());
+                if (!reader) {
+                    return failure(AssetLoadError(
+                        path,
+                        "Failed to read asset from source '" + source_name +
+                            "': " + reader.error()
+                    ));
+                }
+
+                LoadContext context(path);
+                return loader->load(*reader, context);
+            },
+            [assets_state,
+             id,
+             path](TaskResult<AssetLoadResult<T>> result) mutable {
+                if (!assets_state || !assets_state->assets) {
+                    return;
+                }
+
+                auto& assets = *assets_state->assets;
+                try {
+                    auto load_result = std::move(result).value();
+                    assets.enqueue_async_load_result(
+                        id,
+                        std::move(load_result)
+                    );
+                } catch (const std::exception& error) {
+                    assets.enqueue_async_load_result(
+                        id,
+                        failure(AssetLoadError(path, error.what()))
+                    );
+                } catch (...) {
+                    assets.enqueue_async_load_result(
+                        id,
+                        failure(AssetLoadError(
+                            path,
+                            "Unknown async asset load error"
+                        ))
+                    );
+                }
+            }
+        );
+
+        return std::move(handle);
+    }
+
+    template<typename T>
     Handle<T> load(const AssetPath& path) const {
         auto result = try_load<T>(path);
+        if (!result) {
+            fatal(
+                "Failed to load asset '{}': {}",
+                result.error().path.as_string(),
+                result.error().message
+            );
+        }
+        return std::move(*result);
+    }
+
+    template<typename T>
+    Handle<T> load_async(const AssetPath& path) const {
+        auto result = try_load_async<T>(path);
         if (!result) {
             fatal(
                 "Failed to load asset '{}': {}",
@@ -113,13 +238,13 @@ class AssetServer {
 };
 
 template<typename T>
-Handle<T> LoadContext::load(const AssetPath& path) const {
+Handle<T> SyncLoadContext::load(const AssetPath& path) const {
     return m_asset_server.template load<T>(path);
 }
 
 template<typename T>
 Result<Handle<T>, AssetLoadError>
-LoadContext::try_load(const AssetPath& path) const {
+SyncLoadContext::try_load(const AssetPath& path) const {
     return m_asset_server.template try_load<T>(path);
 }
 

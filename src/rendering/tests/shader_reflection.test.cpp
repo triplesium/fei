@@ -98,7 +98,7 @@ TEST_CASE(
 ) {
     App app;
     AssetServer server(&app);
-    LoadContext context(server, AssetPath("shader://broken.vert"));
+    SyncLoadContext context(server, AssetPath("shader://broken.vert"));
     ShaderLoader loader;
 
     SECTION("invalid manifest") {

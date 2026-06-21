@@ -3,8 +3,6 @@
 #include "asset/loader.hpp"
 #include "rendering/mesh/mesh.hpp"
 
-#include <memory>
-
 namespace fei {
 
 class MeshLoader : public AssetLoader<Mesh> {

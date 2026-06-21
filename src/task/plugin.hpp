@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/plugin.hpp"
+#include "ecs/system_set.hpp"
 #include "task/task_pool.hpp"
 
 #include <cstddef>
@@ -10,6 +11,10 @@ namespace fei {
 
 template<typename T>
 class Res;
+
+struct TaskSystems {
+    struct DrainCompletions : SystemSet<DrainCompletions> {};
+};
 
 class Tasks {
   private:

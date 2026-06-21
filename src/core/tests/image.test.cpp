@@ -76,7 +76,7 @@ AssetLoadResult<Image>
 load_image(const std::array<std::byte, Size>& bytes, const char* path) {
     App app;
     AssetServer server(&app);
-    LoadContext context(server, AssetPath(path));
+    SyncLoadContext context(server, AssetPath(path));
     Reader reader(bytes.data(), bytes.size());
     ImageLoader loader;
     return loader.load(reader, context);

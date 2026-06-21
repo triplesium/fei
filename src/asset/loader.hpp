@@ -26,14 +26,23 @@ using AssetLoadResult = Result<std::unique_ptr<T>, AssetLoadError>;
 
 class LoadContext {
   private:
-    const AssetServer& m_asset_server;
     AssetPath m_asset_path;
 
   public:
-    LoadContext(const AssetServer& asset_server, AssetPath asset_path) :
-        m_asset_server(asset_server), m_asset_path(std::move(asset_path)) {}
+    explicit LoadContext(AssetPath asset_path) :
+        m_asset_path(std::move(asset_path)) {}
+    virtual ~LoadContext() = default;
 
     const AssetPath& asset_path() const { return m_asset_path; }
+};
+
+class SyncLoadContext : public LoadContext {
+  private:
+    const AssetServer& m_asset_server;
+
+  public:
+    SyncLoadContext(const AssetServer& asset_server, AssetPath asset_path) :
+        LoadContext(std::move(asset_path)), m_asset_server(asset_server) {}
 
     template<typename T>
     Handle<T> load(const AssetPath& path) const;

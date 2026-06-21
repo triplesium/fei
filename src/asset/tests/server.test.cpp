@@ -4,17 +4,22 @@
 #include "asset/io.hpp"
 #include "asset/loader.hpp"
 #include "asset/path.hpp"
+#include "asset/plugin.hpp"
 #include "asset/source.hpp"
+#include "ecs/event.hpp"
+#include "task/plugin.hpp"
 
 #include <array>
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <thread>
 
 using namespace fei;
-
 namespace {
 
 struct ServerAsset {
@@ -60,8 +65,11 @@ class FailingReadSource : public AssetSource {
 
 class ServerLoader : public AssetLoader<ServerAsset> {
   public:
+    static inline std::atomic<int> load_count = 0;
+
     AssetLoadResult<ServerAsset>
     load(Reader& reader, const LoadContext& context) override {
+        ++load_count;
         return std::make_unique<ServerAsset>(ServerAsset {
             .byte_count = static_cast<int>(reader.size()),
             .path = context.asset_path().as_string(),
@@ -69,7 +77,48 @@ class ServerLoader : public AssetLoader<ServerAsset> {
     }
 };
 
+class FailingServerLoader : public AssetLoader<ServerAsset> {
+  public:
+    AssetLoadResult<ServerAsset>
+    load(Reader&, const LoadContext& context) override {
+        return failure(
+            AssetLoadError(context.asset_path(), "server loader failed")
+        );
+    }
+};
+
+class ContextKindLoader : public AssetLoader<ServerAsset> {
+  public:
+    AssetLoadResult<ServerAsset>
+    load(Reader& reader, const LoadContext& context) override {
+        auto has_sync_context =
+            dynamic_cast<const SyncLoadContext*>(&context) != nullptr;
+        return std::make_unique<ServerAsset>(ServerAsset {
+            .byte_count = has_sync_context ? 1 : 2,
+            .path = context.asset_path().as_string(),
+        });
+    }
+};
+
+template<typename Done>
+void run_post_update_until(App& app, Done done) {
+    for (int i = 0; i < 1000 && !done(); ++i) {
+        app.run_schedule(PostUpdate);
+        std::this_thread::sleep_for(std::chrono::milliseconds {1});
+    }
+    REQUIRE(done());
+}
+
 } // namespace
+
+TEST_CASE("AssetsPlugin installs task resources", "[asset][plugin]") {
+    App app;
+    app.add_plugin<AssetsPlugin>();
+
+    REQUIRE(app.has_resource<AssetServer>());
+    REQUIRE(app.has_resource<Tasks>());
+    REQUIRE(app.has_plugin<TaskPlugin>());
+}
 
 TEST_CASE(
     "AssetServer loads assets through registered sources and loaders",
@@ -127,4 +176,186 @@ TEST_CASE(
     REQUIRE_FALSE(result.has_value());
     REQUIRE(result.error().path.as_string() == "broken://asset.bin");
     REQUIRE(result.error().message.contains("source read failed"));
+}
+
+TEST_CASE(
+    "AssetServer load_async passes read-only load contexts",
+    "[asset][server][async]"
+) {
+    App app;
+    app.add_plugin<TaskPlugin>();
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>().add_loader<ServerAsset, ContextKindLoader>();
+    app.world().sort_systems();
+
+    auto handle = app.resource<AssetServer>().load_async<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+    auto& assets = app.resource<Assets<ServerAsset>>();
+
+    run_post_update_until(app, [&]() {
+        return assets.get(handle).has_value();
+    });
+
+    auto asset = assets.get(handle);
+    REQUIRE(asset.has_value());
+    REQUIRE(asset->byte_count == 2);
+}
+
+TEST_CASE(
+    "AssetServer load_async completes assets through task completions",
+    "[asset][server][async]"
+) {
+    ServerLoader::load_count = 0;
+
+    App app;
+    app.add_plugin<TaskPlugin>();
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
+    app.world().sort_systems();
+
+    auto handle = app.resource<AssetServer>().load_async<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+    auto& assets = app.resource<Assets<ServerAsset>>();
+
+    auto state = assets.load_state(handle);
+    REQUIRE(state.has_value());
+    REQUIRE(*state == AssetLoadState::Loading);
+    REQUIRE_FALSE(assets.get(handle).has_value());
+
+    for (int i = 0; i < 1000 && ServerLoader::load_count.load() != 1; ++i) {
+        app.resource<Tasks>().drain_completions();
+        std::this_thread::sleep_for(std::chrono::milliseconds {1});
+    }
+    REQUIRE(ServerLoader::load_count.load() == 1);
+
+    state = assets.load_state(handle);
+    REQUIRE(state.has_value());
+    REQUIRE(*state == AssetLoadState::Loading);
+    REQUIRE_FALSE(assets.get(handle).has_value());
+
+    run_post_update_until(app, [&]() {
+        return assets.get(handle).has_value();
+    });
+
+    auto asset = assets.get(handle);
+    REQUIRE(asset.has_value());
+    REQUIRE(asset->byte_count == 4);
+    REQUIRE(asset->path == "memory://asset.bin");
+    state = assets.load_state(handle);
+    REQUIRE(state.has_value());
+    REQUIRE(*state == AssetLoadState::Loaded);
+    REQUIRE(ServerLoader::load_count.load() == 1);
+}
+
+TEST_CASE(
+    "AssetServer load_async reuses pending cached paths",
+    "[asset][server][async]"
+) {
+    ServerLoader::load_count = 0;
+
+    App app;
+    app.add_plugin<TaskPlugin>();
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
+    app.world().sort_systems();
+
+    auto first = app.resource<AssetServer>().load_async<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+    auto second = app.resource<AssetServer>().load_async<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+
+    REQUIRE(first.id() == second.id());
+
+    auto& assets = app.resource<Assets<ServerAsset>>();
+    run_post_update_until(app, [&]() {
+        return assets.get(first).has_value();
+    });
+
+    REQUIRE(ServerLoader::load_count.load() == 1);
+}
+
+TEST_CASE(
+    "AssetServer load_async stores loader failures",
+    "[asset][server][async]"
+) {
+    App app;
+    app.add_plugin<TaskPlugin>();
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>().add_loader<ServerAsset, FailingServerLoader>();
+    app.world().sort_systems();
+
+    auto handle = app.resource<AssetServer>().load_async<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+    auto& assets = app.resource<Assets<ServerAsset>>();
+
+    run_post_update_until(app, [&]() {
+        auto state = assets.load_state(handle);
+        return state && *state == AssetLoadState::Failed;
+    });
+
+    REQUIRE_FALSE(assets.get(handle).has_value());
+    auto error = assets.load_error(handle);
+    REQUIRE(error.has_value());
+    REQUIRE(error->path.as_string() == "memory://asset.bin");
+    REQUIRE(error->message == "server loader failed");
+
+    std::size_t last_event = 0;
+    EventReader<AssetEvent<ServerAsset>> reader(
+        app.resource<Events<AssetEvent<ServerAsset>>>(),
+        last_event
+    );
+    bool saw_failed = false;
+    while (auto event = reader.next()) {
+        if (event->type == AssetEventType::Failed && event->id == handle.id()) {
+            saw_failed = true;
+        }
+    }
+    REQUIRE(saw_failed);
+}
+
+TEST_CASE(
+    "AssetServer load_async discards completions for released handles",
+    "[asset][server][async]"
+) {
+    ServerLoader::load_count = 0;
+
+    App app;
+    app.add_plugin<TaskPlugin>();
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
+    app.world().sort_systems();
+
+    AssetId id = 0;
+    {
+        auto handle = app.resource<AssetServer>().load_async<ServerAsset>(
+            AssetPath("memory://asset.bin")
+        );
+        id = handle.id();
+        auto state = app.resource<Assets<ServerAsset>>().load_state(id);
+        REQUIRE(state.has_value());
+        REQUIRE(*state == AssetLoadState::Loading);
+    }
+
+    auto& assets = app.resource<Assets<ServerAsset>>();
+    REQUIRE_FALSE(assets.load_state(id).has_value());
+
+    run_post_update_until(app, [&]() {
+        return ServerLoader::load_count.load() == 1;
+    });
+    REQUIRE_FALSE(assets.load_state(id).has_value());
 }
