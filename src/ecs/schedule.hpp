@@ -74,13 +74,18 @@ class Schedule {
 
     void configure_set(SystemSetConfigs config) {
         for (auto& set_config : config.sets) {
-            m_system_set_configs[set_config.set_id] = std::move(set_config);
+            auto set_id = set_config.set_id;
+            auto [it, inserted] =
+                m_system_set_configs.try_emplace(set_id, std::move(set_config));
+            if (!inserted) {
+                it->second.merge(set_config);
+            }
         }
     }
 
     void
     configure_sets(std::convertible_to<SystemSetConfigs> auto&&... configs) {
-        (configure_set(std::forward<SystemSetConfigs>(configs)), ...);
+        (configure_set(std::forward<decltype(configs)>(configs)), ...);
     }
 
     void run_systems(World& world);
@@ -187,7 +192,7 @@ class Schedules {
     }
 
     void configure_sets(
-        uint32_t schedule,
+        ScheduleId schedule,
         std::convertible_to<SystemSetConfigs> auto&&... configs
     ) {
         m_schedules[schedule].configure_sets(

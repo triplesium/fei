@@ -12,7 +12,6 @@
 
 #include <concepts>
 #include <cstddef>
-#include <cstdint>
 #include <type_traits>
 #include <utility>
 
@@ -94,8 +93,14 @@ class World {
 
     std::size_t worker_threads() const { return m_schedules.worker_threads(); }
 
-    void configure_sets(uint32_t schedule, SystemSetConfigs config) {
-        m_schedules.configure_sets(schedule, std::move(config));
+    void configure_sets(
+        ScheduleId schedule,
+        std::convertible_to<SystemSetConfigs> auto&&... configs
+    ) {
+        m_schedules.configure_sets(
+            schedule,
+            std::forward<decltype(configs)>(configs)...
+        );
     }
 
     template<typename T>

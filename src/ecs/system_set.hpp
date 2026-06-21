@@ -2,7 +2,9 @@
 #include "refl/type.hpp"
 
 #include <concepts>
+#include <cstddef>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace fei {
@@ -14,6 +16,12 @@ struct SystemSetDependencies {
     std::unordered_set<TypeId> before;
     std::unordered_set<TypeId> after;
     std::unordered_set<TypeId> in_sets;
+
+    void merge(const SystemSetDependencies& other) {
+        before.insert(other.before.begin(), other.before.end());
+        after.insert(other.after.begin(), other.after.end());
+        in_sets.insert(other.in_sets.begin(), other.in_sets.end());
+    }
 };
 
 struct SystemSetConfig {
@@ -49,6 +57,10 @@ struct SystemSetConfig {
     SystemSetConfig& in_set(TypeId set_id) {
         dependencies.in_sets.insert(set_id);
         return *this;
+    }
+
+    void merge(const SystemSetConfig& other) {
+        dependencies.merge(other.dependencies);
     }
 };
 

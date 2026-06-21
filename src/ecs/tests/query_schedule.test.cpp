@@ -1,3 +1,4 @@
+#include "ecs/schedule.hpp"
 #include "test_types.hpp"
 
 #include <algorithm>
@@ -7,6 +8,20 @@
 
 using namespace fei;
 using namespace fei::ecs_test;
+
+namespace {
+
+struct ScheduleMergeFirstSet : SystemSet<ScheduleMergeFirstSet> {};
+struct ScheduleMergeSecondSet : SystemSet<ScheduleMergeSecondSet> {};
+struct ScheduleMergeThirdSet : SystemSet<ScheduleMergeThirdSet> {};
+
+void schedule_merge_first() {}
+
+void schedule_merge_second() {}
+
+void schedule_merge_third() {}
+
+} // namespace
 
 TEST_CASE("ECS queries select matching component sets", "[ecs][query]") {
     register_components();
@@ -126,4 +141,29 @@ TEST_CASE("ECS schedule ordering respects configured sets", "[ecs][schedule]") {
 
     std::vector<std::string> expected = {"first", "second"};
     REQUIRE(world.resource<ScheduleTrace>().entries == expected);
+}
+
+TEST_CASE(
+    "ECS schedule merges repeated set configuration",
+    "[ecs][schedule]"
+) {
+    Schedule schedule;
+
+    schedule.configure_sets(
+        ScheduleMergeSecondSet {}.after<ScheduleMergeFirstSet>()
+    );
+    schedule.configure_sets(
+        ScheduleMergeSecondSet {}.before<ScheduleMergeThirdSet>()
+    );
+    schedule.add_systems(
+        schedule_merge_first | in_set<ScheduleMergeFirstSet>(),
+        schedule_merge_second | in_set<ScheduleMergeSecondSet>(),
+        schedule_merge_third | in_set<ScheduleMergeThirdSet>()
+    );
+    schedule.sort_systems();
+
+    REQUIRE(schedule.execution_batches().size() == 3);
+    REQUIRE(schedule.execution_batches()[0].size() == 1);
+    REQUIRE(schedule.execution_batches()[1].size() == 1);
+    REQUIRE(schedule.execution_batches()[2].size() == 1);
 }
