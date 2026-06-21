@@ -1,10 +1,10 @@
 #pragma once
 #include "base/log.hpp"
+#include "base/thread_pool.hpp"
 #include "ecs/fwd.hpp"
 #include "ecs/system.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_set.hpp"
-#include "ecs/thread_pool.hpp"
 #include "refl/type.hpp"
 
 #include <concepts>

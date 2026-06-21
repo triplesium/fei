@@ -1,0 +1,12 @@
+target("fei-task")
+    set_kind("static")
+    add_headerfiles("**.hpp")
+    add_files("*.cpp")
+    add_deps("fei-base", "fei-app")
+
+target("fei-task-tests")
+    set_kind("binary")
+    set_default(false)
+    add_rules("fei.test")
+    add_files("tests/*.cpp")
+    add_deps("fei-task")

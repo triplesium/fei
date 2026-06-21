@@ -1,4 +1,4 @@
-#include "ecs/thread_pool.hpp"
+#include "base/thread_pool.hpp"
 
 #include <algorithm>
 
