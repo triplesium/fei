@@ -1,25 +1,141 @@
 #include "refl/cls.hpp"
 
+#include "base/log.hpp"
 #include "refl/registry.hpp"
+
+#include <string>
+#include <utility>
 
 namespace fei {
 
-Property* Cls::get_property(const std::string& name) {
-    auto it = m_properties.find(name);
-    if (it != m_properties.end()) {
-        return it->second.get();
+namespace {
+
+Optional<std::string> registered_type_name(TypeId id) {
+    auto type = Registry::instance().try_get_type(id);
+    if (!type) {
+        return nullopt;
     }
-    return nullptr;
+    return type->name();
 }
 
-Method* Cls::get_method(
+std::string describe_type(TypeId id) {
+    auto type = Registry::instance().try_get_type(id);
+    if (type) {
+        return type->name();
+    }
+    return "id " + std::to_string(id.id());
+}
+
+std::string
+describe_owner(TypeId id, const Optional<std::string>& owner_type_name) {
+    if (owner_type_name) {
+        return "'" + *owner_type_name + "'";
+    }
+    return "id " + std::to_string(id.id());
+}
+
+std::string describe_args(const std::vector<TypeId>& arg_types) {
+    std::string args;
+    for (std::size_t i = 0; i < arg_types.size(); ++i) {
+        if (i > 0) {
+            args += ", ";
+        }
+        args += describe_type(arg_types[i]);
+    }
+    return args;
+}
+
+} // namespace
+
+ClsError ClsError::property_not_found(TypeId owner_id, std::string name) {
+    auto owner_name = registered_type_name(owner_id);
+    auto message = "Property '" + name + "' not found in class " +
+                   describe_owner(owner_id, owner_name);
+    return ClsError {
+        .kind = Kind::PropertyNotFound,
+        .owner_type_id = owner_id,
+        .owner_type_name = std::move(owner_name),
+        .member_name = std::move(name),
+        .arg_types = {},
+        .message = std::move(message),
+    };
+}
+
+ClsError ClsError::method_not_found(
+    TypeId owner_id,
+    std::string name,
+    std::vector<TypeId> arg_types
+) {
+    auto owner_name = registered_type_name(owner_id);
+    auto message = "Method '" + name + "(" + describe_args(arg_types) +
+                   ")' not found in class " +
+                   describe_owner(owner_id, owner_name);
+    return ClsError {
+        .kind = Kind::MethodNotFound,
+        .owner_type_id = owner_id,
+        .owner_type_name = std::move(owner_name),
+        .member_name = std::move(name),
+        .arg_types = std::move(arg_types),
+        .message = std::move(message),
+    };
+}
+
+ClsError ClsError::constructor_not_found(
+    TypeId owner_id,
+    std::vector<TypeId> arg_types
+) {
+    auto owner_name = registered_type_name(owner_id);
+    auto message = "Constructor (" + describe_args(arg_types) +
+                   ") not found for class " +
+                   describe_owner(owner_id, owner_name);
+    return ClsError {
+        .kind = Kind::ConstructorNotFound,
+        .owner_type_id = owner_id,
+        .owner_type_name = std::move(owner_name),
+        .member_name = {},
+        .arg_types = std::move(arg_types),
+        .message = std::move(message),
+    };
+}
+
+Property& Cls::get_property(const std::string& name) {
+    auto result = try_get_property(name);
+    if (!result) {
+        fatal("{}", result.error().message);
+    }
+    return *result;
+}
+
+Result<Property&, ClsError> Cls::try_get_property(const std::string& name) {
+    auto it = m_properties.find(name);
+    if (it != m_properties.end()) {
+        return *it->second;
+    }
+    return failure(ClsError::property_not_found(m_type_id, name));
+}
+
+Method& Cls::get_method(
+    const std::string& name,
+    std::vector<TypeId> arg_types,
+    MethodConstFilter const_filter
+) {
+    auto result = try_get_method(name, std::move(arg_types), const_filter);
+    if (!result) {
+        fatal("{}", result.error().message);
+    }
+    return *result;
+}
+
+Result<Method&, ClsError> Cls::try_get_method(
     const std::string& name,
     std::vector<TypeId> arg_types,
     MethodConstFilter const_filter
 ) {
     auto it = m_methods.find(name);
     if (it == m_methods.end()) {
-        return nullptr;
+        return failure(
+            ClsError::method_not_found(m_type_id, name, std::move(arg_types))
+        );
     }
 
     auto matches_args = [&](const Method& method) {
@@ -68,22 +184,33 @@ Method* Cls::get_method(
         case MethodConstFilter::Any:
         case MethodConstFilter::ConstOnly:
         case MethodConstFilter::NonConstOnly:
-            return find_matching(const_filter);
+            if (auto* method = find_matching(const_filter)) {
+                return *method;
+            }
+            break;
         case MethodConstFilter::PreferConst:
             if (auto* method = find_matching(MethodConstFilter::ConstOnly)) {
-                return method;
+                return *method;
             }
-            return find_matching(MethodConstFilter::NonConstOnly);
+            if (auto* method = find_matching(MethodConstFilter::NonConstOnly)) {
+                return *method;
+            }
+            break;
         case MethodConstFilter::PreferNonConst:
             if (auto* method = find_matching(MethodConstFilter::NonConstOnly)) {
-                return method;
+                return *method;
             }
-            return find_matching(MethodConstFilter::ConstOnly);
+            if (auto* method = find_matching(MethodConstFilter::ConstOnly)) {
+                return *method;
+            }
+            break;
     }
-    return nullptr;
+    return failure(
+        ClsError::method_not_found(m_type_id, name, std::move(arg_types))
+    );
 }
 
-Result<Method*, InvokeFailure> Cls::get_method_for_args(
+Result<Method&, InvokeFailure> Cls::get_method_for_args(
     const std::string& name,
     const std::vector<Ref>& args,
     MethodConstFilter const_filter
@@ -92,7 +219,7 @@ Result<Method*, InvokeFailure> Cls::get_method_for_args(
     if (it == m_methods.end()) {
         return failure(
             InvokeFailure::invalid_call(
-                "No matching method '" + type_name(m_type_id) + "." + name +
+                "No matching method '" + describe_type(m_type_id) + "." + name +
                 "' found"
             )
         );
@@ -141,21 +268,21 @@ Result<Method*, InvokeFailure> Cls::get_method_for_args(
         return best;
     };
 
-    auto finish = [&](Match match) -> Result<Method*, InvokeFailure> {
+    auto finish = [&](Match match) -> Result<Method&, InvokeFailure> {
         if (match.ambiguous) {
             return failure(
                 InvokeFailure::invalid_call(
-                    "Ambiguous method '" + type_name(m_type_id) + "." + name +
-                    "'"
+                    "Ambiguous method '" + describe_type(m_type_id) + "." +
+                    name + "'"
                 )
             );
         }
         if (match.method != nullptr) {
-            return match.method;
+            return *match.method;
         }
         return failure(
             InvokeFailure::invalid_call(
-                "No matching method '" + type_name(m_type_id) + "." + name +
+                "No matching method '" + describe_type(m_type_id) + "." + name +
                 "' found"
             )
         );
@@ -209,16 +336,27 @@ std::vector<Method*> Cls::get_methods(const std::string& name) const {
     return methods;
 }
 
-Constructor* Cls::get_constructor(const std::vector<TypeId>& arg_types) {
-    for (const auto& ctor : m_constructors) {
-        if (ctor->arg_types() == arg_types) {
-            return ctor.get();
-        }
+Constructor& Cls::get_constructor(const std::vector<TypeId>& arg_types) {
+    auto result = try_get_constructor(arg_types);
+    if (!result) {
+        fatal("{}", result.error().message);
     }
-    return nullptr;
+    return *result;
 }
 
-Result<Constructor*, InvokeFailure>
+Result<Constructor&, ClsError>
+Cls::try_get_constructor(std::vector<TypeId> arg_types) {
+    for (const auto& ctor : m_constructors) {
+        if (ctor->arg_types() == arg_types) {
+            return *ctor;
+        }
+    }
+    return failure(
+        ClsError::constructor_not_found(m_type_id, std::move(arg_types))
+    );
+}
+
+Result<Constructor&, InvokeFailure>
 Cls::get_constructor_for_args(const std::vector<Ref>& args) {
     Constructor* best = nullptr;
     int best_score = 0;
@@ -240,16 +378,16 @@ Cls::get_constructor_for_args(const std::vector<Ref>& args) {
     if (ambiguous) {
         return failure(
             InvokeFailure::invalid_call(
-                "Ambiguous constructor for " + type_name(m_type_id)
+                "Ambiguous constructor for " + describe_type(m_type_id)
             )
         );
     }
     if (best != nullptr) {
-        return best;
+        return *best;
     }
     return failure(
         InvokeFailure::invalid_call(
-            "No matching constructor found for " + type_name(m_type_id)
+            "No matching constructor found for " + describe_type(m_type_id)
         )
     );
 }

@@ -12,6 +12,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <vector>
 
 using namespace fei;
 
@@ -115,6 +116,14 @@ struct NumericConstructorFixture {
     explicit NumericConstructorFixture(double) : selected(2) {}
 };
 
+struct LookupFixture {
+    int value {0};
+
+    explicit LookupFixture(int value) : value(value) {}
+
+    void set_value(int next) { value = next; }
+};
+
 } // namespace
 
 TEST_CASE(
@@ -126,20 +135,19 @@ TEST_CASE(
             "value",
             &CallableFixture::value
         );
-    auto* prop = cls.get_property("value");
-    REQUIRE(prop != nullptr);
+    auto& prop = cls.get_property("value");
 
     CallableFixture obj {3};
     int next = 9;
     float wrong = 2.0f;
 
-    auto initial_value = prop->get(make_ref(obj));
+    auto initial_value = prop.get(make_ref(obj));
     REQUIRE(initial_value);
     REQUIRE(initial_value->get<int>() == 3);
-    REQUIRE(prop->set(make_ref(obj), make_ref(next)));
+    REQUIRE(prop.set(make_ref(obj), make_ref(next)));
     REQUIRE(obj.value == 9);
 
-    auto wrong_value = prop->set(make_ref(obj), make_ref(wrong));
+    auto wrong_value = prop.set(make_ref(obj), make_ref(wrong));
     REQUIRE_FALSE(wrong_value);
     REQUIRE(wrong_value.error().kind == InvokeFailure::Kind::InvalidCall);
     REQUIRE(
@@ -148,12 +156,12 @@ TEST_CASE(
     REQUIRE(wrong_value.error().message.find("got float") != std::string::npos);
 
     const CallableFixture const_obj {7};
-    auto const_value = prop->get(make_ref(const_obj));
+    auto const_value = prop.get(make_ref(const_obj));
     REQUIRE(const_value);
     REQUIRE(const_value->is_const());
     REQUIRE(const_value->get_const<int>() == 7);
 
-    auto const_set = prop->set(make_ref(const_obj), make_ref(next));
+    auto const_set = prop.set(make_ref(const_obj), make_ref(next));
     REQUIRE_FALSE(const_set);
     REQUIRE(const_set.error().kind == InvokeFailure::Kind::InvalidCall);
     REQUIRE(
@@ -161,7 +169,7 @@ TEST_CASE(
         std::string::npos
     );
 
-    auto invalid_get = prop->get(make_ref(wrong));
+    auto invalid_get = prop.get(make_ref(wrong));
     REQUIRE_FALSE(invalid_get);
     REQUIRE(invalid_get.error().kind == InvokeFailure::Kind::InvalidCall);
     REQUIRE(
@@ -176,14 +184,13 @@ TEST_CASE("Property accepts runtime enum values", "[refl][property]") {
         "value",
         &EnumPropertyFixture::value
     );
-    auto* prop = cls.get_property("value");
-    REQUIRE(prop != nullptr);
+    auto& prop = cls.get_property("value");
 
     EnumPropertyFixture obj;
     auto value = enm.make_val(2);
 
     REQUIRE(value.type_id() == type_id<TestEnum>());
-    REQUIRE(prop->set(make_ref(obj), value.ref()));
+    REQUIRE(prop.set(make_ref(obj), value.ref()));
     REQUIRE(obj.value == TestEnum::Two);
 }
 
@@ -197,16 +204,11 @@ TEST_CASE("Property set applies safe value conversions", "[refl][property]") {
             .add_property("mode", &PropertyConversionFixture::mode)
             .add_property("view", &PropertyConversionFixture::view);
 
-    auto* scale = cls.get_property("scale");
-    auto* precise = cls.get_property("precise");
-    auto* value = cls.get_property("value");
-    auto* mode = cls.get_property("mode");
-    auto* view = cls.get_property("view");
-    REQUIRE(scale != nullptr);
-    REQUIRE(precise != nullptr);
-    REQUIRE(value != nullptr);
-    REQUIRE(mode != nullptr);
-    REQUIRE(view != nullptr);
+    auto& scale = cls.get_property("scale");
+    auto& precise = cls.get_property("precise");
+    auto& value = cls.get_property("value");
+    auto& mode = cls.get_property("mode");
+    auto& view = cls.get_property("view");
 
     PropertyConversionFixture obj;
     int integer = 4;
@@ -215,28 +217,28 @@ TEST_CASE("Property set applies safe value conversions", "[refl][property]") {
     double too_precise = 2.5;
     std::string text = "hello";
 
-    REQUIRE(scale->set(make_ref(obj), make_ref(integer)));
+    REQUIRE(scale.set(make_ref(obj), make_ref(integer)));
     REQUIRE(obj.scale == 4.0f);
 
-    REQUIRE(precise->set(make_ref(obj), make_ref(real)));
+    REQUIRE(precise.set(make_ref(obj), make_ref(real)));
     REQUIRE(obj.precise == 2.5);
 
-    REQUIRE(mode->set(make_ref(obj), make_ref(raw_enum)));
+    REQUIRE(mode.set(make_ref(obj), make_ref(raw_enum)));
     REQUIRE(obj.mode == TestEnum::Two);
 
-    auto int_set = value->set(make_ref(obj), make_ref(real));
+    auto int_set = value.set(make_ref(obj), make_ref(real));
     REQUIRE_FALSE(int_set);
     REQUIRE(int_set.error().message.find("expected int") != std::string::npos);
     REQUIRE(obj.value == 0);
 
-    auto scale_set = scale->set(make_ref(obj), make_ref(too_precise));
+    auto scale_set = scale.set(make_ref(obj), make_ref(too_precise));
     REQUIRE_FALSE(scale_set);
     REQUIRE(
         scale_set.error().message.find("expected float") != std::string::npos
     );
     REQUIRE(obj.scale == 4.0f);
 
-    auto view_set = view->set(make_ref(obj), make_ref(text));
+    auto view_set = view.set(make_ref(obj), make_ref(text));
     REQUIRE_FALSE(view_set);
     REQUIRE(
         view_set.error().message.find("property set view") != std::string::npos
@@ -358,24 +360,21 @@ TEST_CASE("Method accepts weakly converted arguments", "[refl][method]") {
     float real = 2.5f;
     std::string text = "hello";
 
-    auto* scale_float = cls.get_method("scale_float", {type_id<float>()});
-    REQUIRE(scale_float != nullptr);
-    auto scale_ret = scale_float->invoke(make_ref(obj), make_ref(integer));
+    auto& scale_float = cls.get_method("scale_float", {type_id<float>()});
+    auto scale_ret = scale_float.invoke(make_ref(obj), make_ref(integer));
     REQUIRE(scale_ret);
     REQUIRE(scale_ret->is_value());
     REQUIRE(scale_ret->value().get<float>() == 10.0f);
 
-    auto* add_double = cls.get_method("add_double", {type_id<double>()});
-    REQUIRE(add_double != nullptr);
-    auto double_ret = add_double->invoke(make_ref(obj), make_ref(real));
+    auto& add_double = cls.get_method("add_double", {type_id<double>()});
+    auto double_ret = add_double.invoke(make_ref(obj), make_ref(real));
     REQUIRE(double_ret);
     REQUIRE(double_ret->is_value());
     REQUIRE(double_ret->value().get<double>() == 7.5);
 
-    auto* text_size =
+    auto& text_size =
         cls.get_method("text_size", {type_id<std::string_view>()});
-    REQUIRE(text_size != nullptr);
-    auto text_ret = text_size->invoke(make_ref(obj), make_ref(text));
+    auto text_ret = text_size.invoke(make_ref(obj), make_ref(text));
     REQUIRE(text_ret);
     REQUIRE(text_ret->is_value());
     REQUIRE(text_ret->value().get<std::size_t>() == 5);
@@ -410,7 +409,7 @@ TEST_CASE(
         MethodConstFilter::PreferNonConst
     );
     REQUIRE(exact);
-    auto exact_ret = (*exact)->invoke_variadic({make_ref(obj), make_ref(real)});
+    auto exact_ret = exact->invoke_variadic({make_ref(obj), make_ref(real)});
     REQUIRE(exact_ret);
     REQUIRE(obj.selected == 1);
 
@@ -446,14 +445,13 @@ TEST_CASE("Method validates instances and argument types", "[refl][method]") {
     int rhs = 4;
     float wrong = 4.0f;
 
-    auto* add = cls.get_method("add", {type_id<int>()});
-    REQUIRE(add != nullptr);
-    auto add_ret = add->invoke(make_ref(obj), make_ref(rhs));
+    auto& add = cls.get_method("add", {type_id<int>()});
+    auto add_ret = add.invoke(make_ref(obj), make_ref(rhs));
     REQUIRE(add_ret);
     REQUIRE(add_ret->is_value());
     REQUIRE(add_ret->value().get<int>() == 9);
 
-    auto wrong_ret = add->invoke(make_ref(obj), make_ref(wrong));
+    auto wrong_ret = add.invoke(make_ref(obj), make_ref(wrong));
     REQUIRE_FALSE(wrong_ret);
     REQUIRE(wrong_ret.error().kind == InvokeFailure::Kind::InvalidCall);
     REQUIRE(
@@ -464,53 +462,51 @@ TEST_CASE("Method validates instances and argument types", "[refl][method]") {
     REQUIRE(wrong_ret.error().message.find("got float") != std::string::npos);
 
     const CallableFixture const_obj {8};
-    auto* read = cls.get_method("read", {});
-    REQUIRE(read != nullptr);
-    auto read_ret = read->invoke(make_ref(const_obj));
+    auto& read = cls.get_method("read", {});
+    auto read_ret = read.invoke(make_ref(const_obj));
     REQUIRE(read_ret);
     REQUIRE(read_ret->is_value());
     REQUIRE(read_ret->value().get<int>() == 8);
 
-    auto const_add_ret = add->invoke(make_ref(const_obj), make_ref(rhs));
+    auto const_add_ret = add.invoke(make_ref(const_obj), make_ref(rhs));
     REQUIRE_FALSE(const_add_ret);
     REQUIRE(const_add_ret.error().kind == InvokeFailure::Kind::InvalidCall);
 
     int lhs = 2;
-    auto* sum = cls.get_method("sum", {type_id<int>(), type_id<int>()});
-    REQUIRE(sum != nullptr);
-    auto sum_ret = sum->invoke(make_ref(lhs), make_ref(rhs));
+    auto& sum = cls.get_method("sum", {type_id<int>(), type_id<int>()});
+    auto sum_ret = sum.invoke(make_ref(lhs), make_ref(rhs));
     REQUIRE(sum_ret);
     REQUIRE(sum_ret->is_value());
     REQUIRE(sum_ret->value().get<int>() == 6);
 
-    REQUIRE(cls.get_method("enum_value", {type_id<int>()}) == nullptr);
-    auto* enum_method = cls.get_method("enum_value", {type_id<TestEnum>()});
-    REQUIRE(enum_method != nullptr);
+    auto missing_enum_method =
+        cls.try_get_method("enum_value", {type_id<int>()});
+    REQUIRE_FALSE(missing_enum_method);
+    REQUIRE(missing_enum_method.error().kind == ClsError::Kind::MethodNotFound);
+    auto& enum_method = cls.get_method("enum_value", {type_id<TestEnum>()});
     auto enum_arg = enm.make_val(2);
     REQUIRE(enum_arg.type_id() == type_id<TestEnum>());
-    auto enum_ret = enum_method->invoke(make_ref(obj), enum_arg.ref());
+    auto enum_ret = enum_method.invoke(make_ref(obj), enum_arg.ref());
     REQUIRE(enum_ret);
     REQUIRE(enum_ret->is_value());
     REQUIRE(enum_ret->value().get<int>() == 2);
 
     int pointed = 11;
-    auto* read_ptr = cls.get_method("read_ptr", {type_id<int>()});
-    REQUIRE(read_ptr != nullptr);
-    auto read_ptr_ret = read_ptr->invoke(make_ref(obj), make_ref(pointed));
+    auto& read_ptr = cls.get_method("read_ptr", {type_id<int>()});
+    auto read_ptr_ret = read_ptr.invoke(make_ref(obj), make_ref(pointed));
     REQUIRE(read_ptr_ret);
     REQUIRE(read_ptr_ret->is_value());
     REQUIRE(read_ptr_ret->value().get<int>() == 11);
 
-    auto* write_ptr = cls.get_method("write_ptr", {type_id<int>()});
-    REQUIRE(write_ptr != nullptr);
-    auto write_ptr_ret = write_ptr->invoke(make_ref(obj), make_ref(pointed));
+    auto& write_ptr = cls.get_method("write_ptr", {type_id<int>()});
+    auto write_ptr_ret = write_ptr.invoke(make_ref(obj), make_ref(pointed));
     REQUIRE(write_ptr_ret);
     REQUIRE(write_ptr_ret->is_void());
     REQUIRE(pointed == 5);
 
     const int const_pointed = 13;
     auto const_write_ret =
-        write_ptr->invoke(make_ref(obj), make_ref(const_pointed));
+        write_ptr.invoke(make_ref(obj), make_ref(const_pointed));
     REQUIRE_FALSE(const_write_ret);
     REQUIRE(const_write_ret.error().kind == InvokeFailure::Kind::InvalidCall);
     REQUIRE(
@@ -536,42 +532,39 @@ TEST_CASE("Method adapts Result and Status returns", "[refl][method]") {
     bool succeed = true;
     bool fail = false;
 
-    auto* result_method = cls.get_method("result_value", {type_id<bool>()});
-    REQUIRE(result_method != nullptr);
+    auto& result_method = cls.get_method("result_value", {type_id<bool>()});
 
-    auto result_ok = result_method->invoke(make_ref(obj), make_ref(succeed));
+    auto result_ok = result_method.invoke(make_ref(obj), make_ref(succeed));
     REQUIRE(result_ok);
     REQUIRE(result_ok->is_value());
     REQUIRE(result_ok->value().get<int>() == 42);
 
-    auto result_err = result_method->invoke(make_ref(obj), make_ref(fail));
+    auto result_err = result_method.invoke(make_ref(obj), make_ref(fail));
     REQUIRE_FALSE(result_err);
     REQUIRE(result_err.error().kind == InvokeFailure::Kind::ReturnedError);
     REQUIRE(result_err.error().error.get<CallableError>().code == 7);
 
-    auto* status_method = cls.get_method("status_value", {type_id<bool>()});
-    REQUIRE(status_method != nullptr);
+    auto& status_method = cls.get_method("status_value", {type_id<bool>()});
 
-    auto status_ok = status_method->invoke(make_ref(obj), make_ref(succeed));
+    auto status_ok = status_method.invoke(make_ref(obj), make_ref(succeed));
     REQUIRE(status_ok);
     REQUIRE(status_ok->is_status());
 
-    auto status_err = status_method->invoke(make_ref(obj), make_ref(fail));
+    auto status_err = status_method.invoke(make_ref(obj), make_ref(fail));
     REQUIRE_FALSE(status_err);
     REQUIRE(status_err.error().kind == InvokeFailure::Kind::ReturnedError);
     REQUIRE(status_err.error().error.get<CallableError>().code == 9);
 
-    auto* ref_method = cls.get_method("result_ref", {type_id<bool>()});
-    REQUIRE(ref_method != nullptr);
+    auto& ref_method = cls.get_method("result_ref", {type_id<bool>()});
 
-    auto ref_ok = ref_method->invoke(make_ref(obj), make_ref(succeed));
+    auto ref_ok = ref_method.invoke(make_ref(obj), make_ref(succeed));
     REQUIRE(ref_ok);
     REQUIRE(ref_ok->is_ref());
     REQUIRE(&ref_ok->ref().get<int>() == &obj.value);
     ref_ok->ref().get<int>() = 17;
     REQUIRE(obj.value == 17);
 
-    auto ref_err = ref_method->invoke(make_ref(obj), make_ref(fail));
+    auto ref_err = ref_method.invoke(make_ref(obj), make_ref(fail));
     REQUIRE_FALSE(ref_err);
     REQUIRE(ref_err.error().kind == InvokeFailure::Kind::ReturnedError);
     REQUIRE(ref_err.error().error.get<CallableError>().code == 11);
@@ -595,40 +588,38 @@ TEST_CASE("Method lookup filters const overloads", "[refl][method]") {
 
     REQUIRE(cls.get_methods("read").size() == 2);
 
-    auto* any = cls.get_method("read", {}, MethodConstFilter::Any);
-    auto* non_const =
+    auto& any = cls.get_method("read", {}, MethodConstFilter::Any);
+    auto& non_const =
         cls.get_method("read", {}, MethodConstFilter::NonConstOnly);
-    auto* const_only = cls.get_method("read", {}, MethodConstFilter::ConstOnly);
-    auto* prefer_non_const =
+    auto& const_only = cls.get_method("read", {}, MethodConstFilter::ConstOnly);
+    auto& prefer_non_const =
         cls.get_method("read", {}, MethodConstFilter::PreferNonConst);
-    auto* prefer_const =
+    auto& prefer_const =
         cls.get_method("read", {}, MethodConstFilter::PreferConst);
 
-    REQUIRE(any == non_const);
-    REQUIRE(non_const != nullptr);
-    REQUIRE(const_only != nullptr);
-    REQUIRE(non_const != const_only);
-    REQUIRE(prefer_non_const == non_const);
-    REQUIRE(prefer_const == const_only);
+    REQUIRE(&any == &non_const);
+    REQUIRE(&non_const != &const_only);
+    REQUIRE(&prefer_non_const == &non_const);
+    REQUIRE(&prefer_const == &const_only);
 
     ConstOverloadFixture obj;
     const ConstOverloadFixture const_obj;
 
-    auto non_const_ret = non_const->invoke(make_ref(obj));
+    auto non_const_ret = non_const.invoke(make_ref(obj));
     REQUIRE(non_const_ret);
     REQUIRE(non_const_ret->value().get<int>() == 1);
 
-    auto non_const_on_const_ret = non_const->invoke(make_ref(const_obj));
+    auto non_const_on_const_ret = non_const.invoke(make_ref(const_obj));
     REQUIRE_FALSE(non_const_on_const_ret);
     REQUIRE(
         non_const_on_const_ret.error().kind == InvokeFailure::Kind::InvalidCall
     );
 
-    auto const_from_mut_ret = const_only->invoke(make_ref(obj));
+    auto const_from_mut_ret = const_only.invoke(make_ref(obj));
     REQUIRE(const_from_mut_ret);
     REQUIRE(const_from_mut_ret->value().get<int>() == 2);
 
-    auto const_from_const_ret = const_only->invoke(make_ref(const_obj));
+    auto const_from_const_ret = const_only.invoke(make_ref(const_obj));
     REQUIRE(const_from_const_ret);
     REQUIRE(const_from_const_ret->value().get<int>() == 2);
 }
@@ -647,7 +638,7 @@ TEST_CASE(
 
     auto exact = cls.get_constructor_for_args({make_ref(real)});
     REQUIRE(exact);
-    auto exact_ret = (*exact)->invoke_variadic({make_ref(real)});
+    auto exact_ret = exact->invoke_variadic({make_ref(real)});
     REQUIRE(exact_ret);
     REQUIRE(exact_ret->value().get<NumericConstructorFixture>().selected == 1);
 
@@ -668,15 +659,14 @@ TEST_CASE("Constructor validates argument types", "[refl][constructor]") {
     int value = 12;
     float wrong = 12.0f;
 
-    auto* ctor = cls.get_constructor({type_id<int>()});
-    REQUIRE(ctor != nullptr);
+    auto& ctor = cls.get_constructor({type_id<int>()});
 
-    auto ret = ctor->invoke_variadic({make_ref(value)});
+    auto ret = ctor.invoke_variadic({make_ref(value)});
     REQUIRE(ret);
     REQUIRE(ret->is_value());
     REQUIRE(ret->value().get<CallableFixture>().value == 12);
 
-    auto wrong_ret = ctor->invoke_variadic({make_ref(wrong)});
+    auto wrong_ret = ctor.invoke_variadic({make_ref(wrong)});
     REQUIRE_FALSE(wrong_ret);
     REQUIRE(wrong_ret.error().kind == InvokeFailure::Kind::InvalidCall);
     REQUIRE(
@@ -688,17 +678,16 @@ TEST_CASE("Constructor validates argument types", "[refl][constructor]") {
     auto& ptr_cls = Registry::instance()
                         .register_cls<PointerCtorFixture>()
                         .add_constructor<PointerCtorFixture, int*>();
-    auto* ptr_ctor = ptr_cls.get_constructor({type_id<int>()});
-    REQUIRE(ptr_ctor != nullptr);
+    auto& ptr_ctor = ptr_cls.get_constructor({type_id<int>()});
 
     int pointed = 7;
-    auto ptr_ret = ptr_ctor->invoke_variadic({make_ref(pointed)});
+    auto ptr_ret = ptr_ctor.invoke_variadic({make_ref(pointed)});
     REQUIRE(ptr_ret);
     REQUIRE(ptr_ret->is_value());
     REQUIRE(ptr_ret->value().get<PointerCtorFixture>().ptr == &pointed);
 
     const int const_pointed = 9;
-    auto const_ptr_ret = ptr_ctor->invoke_variadic({make_ref(const_pointed)});
+    auto const_ptr_ret = ptr_ctor.invoke_variadic({make_ref(const_pointed)});
     REQUIRE_FALSE(const_ptr_ret);
     REQUIRE(const_ptr_ret.error().kind == InvokeFailure::Kind::InvalidCall);
     REQUIRE(
@@ -708,5 +697,40 @@ TEST_CASE("Constructor validates argument types", "[refl][constructor]") {
     );
     REQUIRE(
         const_ptr_ret.error().message.find("got const int") != std::string::npos
+    );
+}
+
+TEST_CASE("Cls try_get reports missing members", "[refl][cls]") {
+    auto& cls = Registry::instance()
+                    .register_cls<LookupFixture>()
+                    .add_property("value", &LookupFixture::value)
+                    .add_method("set_value", &LookupFixture::set_value)
+                    .add_constructor<LookupFixture, int>();
+
+    auto property = cls.try_get_property("missing");
+    REQUIRE_FALSE(property);
+    REQUIRE(property.error().kind == ClsError::Kind::PropertyNotFound);
+    REQUIRE(property.error().owner_type_id == type_id<LookupFixture>());
+    REQUIRE(property.error().owner_type_name);
+    REQUIRE(property.error().member_name == "missing");
+    REQUIRE(
+        property.error().message.find("LookupFixture") != std::string::npos
+    );
+
+    auto method = cls.try_get_method("set_value", {type_id<float>()});
+    REQUIRE_FALSE(method);
+    REQUIRE(method.error().kind == ClsError::Kind::MethodNotFound);
+    REQUIRE(method.error().member_name == "set_value");
+    REQUIRE(method.error().arg_types == std::vector<TypeId> {type_id<float>()});
+    REQUIRE(method.error().message.find("float") != std::string::npos);
+
+    auto constructor = cls.try_get_constructor({type_id<float>()});
+    REQUIRE_FALSE(constructor);
+    REQUIRE(constructor.error().kind == ClsError::Kind::ConstructorNotFound);
+    REQUIRE(
+        constructor.error().arg_types == std::vector<TypeId> {type_id<float>()}
+    );
+    REQUIRE(
+        constructor.error().message.find("LookupFixture") != std::string::npos
     );
 }

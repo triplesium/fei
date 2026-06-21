@@ -46,6 +46,11 @@ int lua_raise_registry_error(lua_State* L, const RegistryError& failure) {
     return 0;
 }
 
+int lua_raise_cls_error(lua_State* L, const ClsError& failure) {
+    luaL_error(L, "%s", failure.message.c_str());
+    return 0;
+}
+
 int lua_push_return_item(lua_State* L, const ReturnItem& item) {
     if (item.is_ref()) {
         lua_push_ref(L, item.ref());
@@ -274,9 +279,9 @@ int ScriptingEngine::dispatch_new(lua_State* L) {
     if (!ctor_result) {
         return lua_raise_failure(L, ctor_result.error());
     }
-    auto* ctor = *ctor_result;
+    auto& ctor = *ctor_result;
 
-    auto ret = ctor->invoke_variadic(refs);
+    auto ret = ctor.invoke_variadic(refs);
     if (!ret) {
         return lua_raise_failure(L, ret.error());
     }
@@ -338,9 +343,9 @@ int ScriptingEngine::dispatch_method(lua_State* L) {
     if (!method_result) {
         return lua_raise_failure(L, method_result.error());
     }
-    auto* method = *method_result;
+    auto& method = *method_result;
 
-    return lua_push_invoke_result(L, method->invoke_variadic(refs));
+    return lua_push_invoke_result(L, method.invoke_variadic(refs));
 }
 
 int ScriptingEngine::dispatch_gc(lua_State* L) {
@@ -367,7 +372,7 @@ int ScriptingEngine::dispatch_index(lua_State* L) {
         return 0;
     }
 
-    auto* prop = cls->get_property(key);
+    auto prop = cls->try_get_property(key);
     if (prop) {
         Result<Ref, InvokeFailure> value;
         if (lua_can_ref(L, 1)) {
@@ -391,13 +396,7 @@ int ScriptingEngine::dispatch_index(lua_State* L) {
         return 1;
     }
 
-    luaL_error(
-        L,
-        "Property/Method %s not found in class %s",
-        key,
-        type->stripped_name().c_str()
-    );
-    return 0;
+    return lua_raise_cls_error(L, prop.error());
 }
 
 int ScriptingEngine::dispatch_newindex(lua_State* L) {
@@ -419,15 +418,9 @@ int ScriptingEngine::dispatch_newindex(lua_State* L) {
         return 0;
     }
 
-    auto* prop = cls->get_property(key);
+    auto prop = cls->try_get_property(key);
     if (!prop) {
-        luaL_error(
-            L,
-            "Property %s not found in class %s",
-            key,
-            type->stripped_name().c_str()
-        );
-        return 0;
+        return lua_raise_cls_error(L, prop.error());
     }
 
     auto instance = lua_to_ref(L, 1);
@@ -497,9 +490,9 @@ int ScriptingEngine::dispatch_operator(lua_State* L) {
     if (!method_result) {
         return lua_raise_failure(L, method_result.error());
     }
-    Method* method = *method_result;
+    auto& method = *method_result;
 
-    return lua_push_invoke_result(L, method->invoke_variadic(refs));
+    return lua_push_invoke_result(L, method.invoke_variadic(refs));
 }
 
 } // namespace fei

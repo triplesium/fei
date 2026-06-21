@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base/optional.hpp"
+#include "base/result.hpp"
 #include "refl/constructor.hpp"
 #include "refl/method.hpp"
 #include "refl/property.hpp"
@@ -12,6 +14,26 @@
 #include <vector>
 
 namespace fei {
+
+struct ClsError {
+    enum class Kind { PropertyNotFound, MethodNotFound, ConstructorNotFound };
+
+    Kind kind;
+    TypeId owner_type_id;
+    Optional<std::string> owner_type_name;
+    std::string member_name;
+    std::vector<TypeId> arg_types;
+    std::string message;
+
+    static ClsError property_not_found(TypeId owner_id, std::string name);
+    static ClsError method_not_found(
+        TypeId owner_id,
+        std::string name,
+        std::vector<TypeId> arg_types
+    );
+    static ClsError
+    constructor_not_found(TypeId owner_id, std::vector<TypeId> arg_types);
+};
 
 class Cls {
   private:
@@ -40,7 +62,8 @@ class Cls {
         return *this;
     }
 
-    Property* get_property(const std::string& name);
+    Property& get_property(const std::string& name);
+    Result<Property&, ClsError> try_get_property(const std::string& name);
 
     template<typename P>
     Cls& add_method(std::string name, P method_ptr) {
@@ -66,12 +89,17 @@ class Cls {
         return *this;
     }
 
-    Method* get_method(
+    Method& get_method(
         const std::string& name,
         std::vector<TypeId> arg_types,
         MethodConstFilter const_filter = MethodConstFilter::Any
     );
-    Result<Method*, InvokeFailure> get_method_for_args(
+    Result<Method&, ClsError> try_get_method(
+        const std::string& name,
+        std::vector<TypeId> arg_types,
+        MethodConstFilter const_filter = MethodConstFilter::Any
+    );
+    Result<Method&, InvokeFailure> get_method_for_args(
         const std::string& name,
         const std::vector<Ref>& args,
         MethodConstFilter const_filter = MethodConstFilter::Any
@@ -97,8 +125,10 @@ class Cls {
         return *this;
     }
 
-    Constructor* get_constructor(const std::vector<TypeId>& arg_types);
-    Result<Constructor*, InvokeFailure>
+    Constructor& get_constructor(const std::vector<TypeId>& arg_types);
+    Result<Constructor&, ClsError>
+    try_get_constructor(std::vector<TypeId> arg_types);
+    Result<Constructor&, InvokeFailure>
     get_constructor_for_args(const std::vector<Ref>& args);
 
     Cls& set_to_string(ToStringFunc func);
