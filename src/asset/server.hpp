@@ -12,17 +12,26 @@
 #include <concepts>
 #include <condition_variable>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace fei {
 
 class AssetServer {
   private:
+    struct AssetTypeAccess {
+        std::function<Optional<AssetLoadState>(AssetId)> load_state;
+        std::function<std::vector<AssetKey>(AssetId)> dependencies;
+    };
+
     App* m_app;
     std::unordered_map<std::string, std::unique_ptr<AssetSource>> m_sources;
+    std::unordered_map<TypeId, AssetTypeAccess> m_asset_types;
 
   public:
     AssetServer(App* app) : m_app(app) {}
@@ -53,6 +62,7 @@ class AssetServer {
                     in_set<AssetSystems::CollectUnused>(),
                 Assets<T>::track_assets | in_set<AssetSystems::TrackAssets>()
             );
+        register_asset_type_access<T>();
     }
 
     template<typename T>
@@ -71,6 +81,7 @@ class AssetServer {
                     in_set<AssetSystems::CollectUnused>(),
                 Assets<T>::track_assets | in_set<AssetSystems::TrackAssets>()
             );
+        register_asset_type_access<T>();
     }
 
     template<typename T>
@@ -161,29 +172,46 @@ class AssetServer {
         auto load_requests = m_app->has_resource<AssetLoadRequests>() ?
                                  m_app->resource<AssetLoadRequests>().sender() :
                                  std::shared_ptr<AssetLoadRequestSender> {};
+        struct LoadTaskResult {
+            AssetLoadResult<T> result;
+            std::vector<AssetKey> dependencies;
+        };
         m_app->resource<Tasks>().general().submit(
             [source, loader, source_name, path, load_requests]() mutable
-                -> AssetLoadResult<T> {
+                -> LoadTaskResult {
                 auto reader = source->try_get_reader(path.path());
                 if (!reader) {
-                    return failure(AssetLoadError(
-                        path,
-                        "Failed to read asset from source '" + source_name +
-                            "': " + reader.error()
-                    ));
+                    return {
+                        .result = failure(AssetLoadError(
+                            path,
+                            "Failed to read asset from source '" + source_name +
+                                "': " + reader.error()
+                        )),
+                        .dependencies = {},
+                    };
                 }
 
                 if (load_requests) {
                     AsyncLoadContext context(std::move(load_requests), path);
-                    return loader->load(*reader, context);
+                    auto result = loader->load(*reader, context);
+                    auto dependencies = context.dependencies();
+                    return {
+                        .result = std::move(result),
+                        .dependencies = std::move(dependencies),
+                    };
                 }
 
                 LoadContext context(path);
-                return loader->load(*reader, context);
+                auto result = loader->load(*reader, context);
+                auto dependencies = context.dependencies();
+                return {
+                    .result = std::move(result),
+                    .dependencies = std::move(dependencies),
+                };
             },
             [assets_state,
              id,
-             path](TaskResult<AssetLoadResult<T>> result) mutable {
+             path](TaskResult<LoadTaskResult> result) mutable {
                 if (!assets_state || !assets_state->assets) {
                     return;
                 }
@@ -193,7 +221,8 @@ class AssetServer {
                     auto load_result = std::move(result).value();
                     assets.enqueue_async_load_result(
                         id,
-                        std::move(load_result)
+                        std::move(load_result.result),
+                        std::move(load_result.dependencies)
                     );
                 } catch (const std::exception& error) {
                     assets.enqueue_async_load_result(
@@ -250,6 +279,176 @@ class AssetServer {
         }
         m_sources.emplace(std::move(name), std::move(source));
     }
+
+    Optional<AssetLoadState> load_state(AssetKey key) const {
+        auto it = m_asset_types.find(key.type);
+        if (it == m_asset_types.end()) {
+            return nullopt;
+        }
+        return it->second.load_state(key.id);
+    }
+
+    template<typename T>
+    Optional<AssetLoadState> load_state(const Handle<T>& handle) const {
+        return load_state(asset_key(handle));
+    }
+
+    bool is_loaded(AssetKey key) const {
+        auto state = load_state(key);
+        return state && *state == AssetLoadState::Loaded;
+    }
+
+    template<typename T>
+    bool is_loaded(const Handle<T>& handle) const {
+        return is_loaded(asset_key(handle));
+    }
+
+    std::vector<AssetKey> dependencies(AssetKey key) const {
+        auto it = m_asset_types.find(key.type);
+        if (it == m_asset_types.end()) {
+            return {};
+        }
+        return it->second.dependencies(key.id);
+    }
+
+    template<typename T>
+    std::vector<AssetKey> dependencies(const Handle<T>& handle) const {
+        return dependencies(asset_key(handle));
+    }
+
+    AssetLoadState dependency_load_state(AssetKey key) const {
+        auto state = load_state(key);
+        if (!state) {
+            return AssetLoadState::Loading;
+        }
+        if (*state != AssetLoadState::Loaded) {
+            return *state;
+        }
+        return aggregate_load_state(dependencies(key));
+    }
+
+    template<typename T>
+    AssetLoadState dependency_load_state(const Handle<T>& handle) const {
+        return dependency_load_state(asset_key(handle));
+    }
+
+    AssetLoadState recursive_dependency_load_state(AssetKey key) const {
+        auto state = load_state(key);
+        if (!state) {
+            return AssetLoadState::Loading;
+        }
+        if (*state != AssetLoadState::Loaded) {
+            return *state;
+        }
+
+        std::unordered_set<AssetKey> visited;
+        visited.insert(key);
+        return recursive_dependency_load_state(key, visited);
+    }
+
+    template<typename T>
+    AssetLoadState
+    recursive_dependency_load_state(const Handle<T>& handle) const {
+        return recursive_dependency_load_state(asset_key(handle));
+    }
+
+    bool is_loaded_with_dependencies(AssetKey key) const {
+        return is_loaded(key) &&
+               recursive_dependency_load_state(key) == AssetLoadState::Loaded;
+    }
+
+    template<typename T>
+    bool is_loaded_with_dependencies(const Handle<T>& handle) const {
+        return is_loaded_with_dependencies(asset_key(handle));
+    }
+
+    template<typename T>
+    static AssetKey asset_key(const Handle<T>& handle) {
+        return AssetKey {
+            .type = type_id<T>(),
+            .id = handle.id(),
+        };
+    }
+
+  private:
+    template<typename T>
+    void register_asset_type_access() {
+        auto* app = m_app;
+        m_asset_types[type_id<T>()] = AssetTypeAccess {
+            .load_state = [app](AssetId id) -> Optional<AssetLoadState> {
+                if (!app || !app->template has_resource<Assets<T>>()) {
+                    return nullopt;
+                }
+                return app->template resource<Assets<T>>().load_state(id);
+            },
+            .dependencies = [app](AssetId id) -> std::vector<AssetKey> {
+                if (!app || !app->template has_resource<Assets<T>>()) {
+                    return {};
+                }
+                auto dependencies =
+                    app->template resource<Assets<T>>().dependencies(id);
+                if (!dependencies) {
+                    return {};
+                }
+                return std::vector<AssetKey>(
+                    dependencies->begin(),
+                    dependencies->end()
+                );
+            },
+        };
+    }
+
+    AssetLoadState
+    aggregate_load_state(const std::vector<AssetKey>& keys) const {
+        auto state = AssetLoadState::Loaded;
+        for (auto key : keys) {
+            auto dependency_state = load_state(key);
+            if (!dependency_state) {
+                return AssetLoadState::Loading;
+            }
+            if (*dependency_state == AssetLoadState::Failed) {
+                return AssetLoadState::Failed;
+            }
+            if (*dependency_state == AssetLoadState::Loading) {
+                state = AssetLoadState::Loading;
+            }
+        }
+        return state;
+    }
+
+    AssetLoadState recursive_dependency_load_state(
+        AssetKey key,
+        std::unordered_set<AssetKey>& visited
+    ) const {
+        auto state = AssetLoadState::Loaded;
+        for (auto dependency : dependencies(key)) {
+            if (!visited.insert(dependency).second) {
+                continue;
+            }
+
+            auto dependency_state = load_state(dependency);
+            if (!dependency_state) {
+                return AssetLoadState::Loading;
+            }
+            if (*dependency_state == AssetLoadState::Failed) {
+                return AssetLoadState::Failed;
+            }
+            if (*dependency_state == AssetLoadState::Loading) {
+                state = AssetLoadState::Loading;
+                continue;
+            }
+
+            auto child_state =
+                recursive_dependency_load_state(dependency, visited);
+            if (child_state == AssetLoadState::Failed) {
+                return AssetLoadState::Failed;
+            }
+            if (child_state == AssetLoadState::Loading) {
+                state = AssetLoadState::Loading;
+            }
+        }
+        return state;
+    }
 };
 
 template<typename T>
@@ -269,10 +468,18 @@ template<typename T>
 Result<Handle<T>, AssetLoadError>
 LoadContext::try_load(const AssetPath& path) const {
     if (auto* context = dynamic_cast<const SyncLoadContext*>(this)) {
-        return context->template try_load<T>(path);
+        auto result = context->template try_load<T>(path);
+        if (result) {
+            add_dependency(AssetServer::asset_key(*result));
+        }
+        return result;
     }
     if (auto* context = dynamic_cast<const AsyncLoadContext*>(this)) {
-        return context->template try_load<T>(path);
+        auto result = context->template try_load<T>(path);
+        if (result) {
+            add_dependency(AssetServer::asset_key(*result));
+        }
+        return result;
     }
     return failure(AssetLoadError(
         path,

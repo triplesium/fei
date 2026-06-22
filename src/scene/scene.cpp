@@ -170,6 +170,7 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
 
 void spawn_scene(
     Query<Entity, SceneSpawner> scene_query,
+    Res<AssetServer> asset_server,
     Res<Assets<Scene>> scenes,
     Res<Assets<Mesh>> meshes,
     Res<Assets<StandardMaterial>> materials,
@@ -177,6 +178,10 @@ void spawn_scene(
     Commands commands
 ) {
     for (const auto& [entity, spawner] : scene_query) {
+        if (!asset_server->is_loaded_with_dependencies(spawner.scene)) {
+            continue;
+        }
+
         auto scene = scenes->get(spawner.scene);
         if (!scene) {
             continue;

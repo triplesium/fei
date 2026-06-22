@@ -12,6 +12,8 @@
 
 namespace fei {
 
+class AssetServer;
+
 struct Scene {
     std::vector<std::unique_ptr<Mesh>> meshes;
     std::vector<std::unique_ptr<StandardMaterial>> materials;
@@ -41,6 +43,7 @@ class SceneLoader : public AssetLoader<Scene> {
 
 void spawn_scene(
     Query<Entity, SceneSpawner> scene_query,
+    Res<AssetServer> asset_server,
     Res<Assets<Scene>> scenes,
     Res<Assets<Mesh>> meshes,
     Res<Assets<StandardMaterial>> materials,

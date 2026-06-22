@@ -1,4 +1,5 @@
 #pragma once
+#include "asset/id.hpp"
 #include "asset/io.hpp"
 #include "asset/path.hpp"
 #include "base/result.hpp"
@@ -6,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace fei {
 
@@ -28,6 +30,11 @@ using AssetLoadResult = Result<std::unique_ptr<T>, AssetLoadError>;
 class LoadContext {
   private:
     AssetPath m_asset_path;
+    mutable std::vector<AssetKey> m_dependencies;
+
+    void add_dependency(AssetKey dependency) const {
+        m_dependencies.push_back(dependency);
+    }
 
   public:
     explicit LoadContext(AssetPath asset_path) :
@@ -35,6 +42,7 @@ class LoadContext {
     virtual ~LoadContext() = default;
 
     const AssetPath& asset_path() const { return m_asset_path; }
+    const std::vector<AssetKey>& dependencies() const { return m_dependencies; }
 
     // Requests a dependency asset and returns its handle.
     //

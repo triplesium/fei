@@ -110,6 +110,16 @@ class DependencyLoader : public AssetLoader<DependencyAsset> {
     }
 };
 
+class FailingDependencyLoader : public AssetLoader<DependencyAsset> {
+  public:
+    AssetLoadResult<DependencyAsset>
+    load(Reader&, const LoadContext& context) override {
+        return failure(
+            AssetLoadError(context.asset_path(), "dependency loader failed")
+        );
+    }
+};
+
 class DependentServerLoader : public AssetLoader<ServerAsset> {
   public:
     static inline std::atomic<int> load_count = 0;
@@ -215,6 +225,43 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "AssetServer records sync dependency load states",
+    "[asset][server]"
+) {
+    App app;
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>()
+        .add_loader<ServerAsset, DependentServerLoader>();
+    app.resource<AssetServer>().add_loader<DependencyAsset, DependencyLoader>();
+
+    auto handle = app.resource<AssetServer>().load<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+    auto& server_resource = app.resource<AssetServer>();
+    auto& assets = app.resource<Assets<ServerAsset>>();
+    auto asset = assets.get(handle);
+
+    REQUIRE(asset.has_value());
+    REQUIRE(asset->dependency.id() != invalid_asset_id);
+
+    auto dependencies = server_resource.dependencies(handle);
+    REQUIRE(dependencies.size() == 1);
+    REQUIRE(dependencies[0].type == type_id<DependencyAsset>());
+    REQUIRE(dependencies[0].id == asset->dependency.id());
+    REQUIRE(server_resource.is_loaded(handle));
+    REQUIRE(
+        server_resource.dependency_load_state(handle) == AssetLoadState::Loaded
+    );
+    REQUIRE(
+        server_resource.recursive_dependency_load_state(handle) ==
+        AssetLoadState::Loaded
+    );
+    REQUIRE(server_resource.is_loaded_with_dependencies(handle));
+}
+
+TEST_CASE(
     "AssetServer try_load returns missing source errors",
     "[asset][server]"
 ) {
@@ -267,6 +314,13 @@ TEST_CASE(
         AssetPath("memory://asset.bin")
     );
     auto& assets = app.resource<Assets<ServerAsset>>();
+    REQUIRE(
+        app.resource<AssetServer>().dependency_load_state(handle) ==
+        AssetLoadState::Loading
+    );
+    REQUIRE_FALSE(
+        app.resource<AssetServer>().is_loaded_with_dependencies(handle)
+    );
 
     run_post_update_until(app, [&]() {
         return assets.get(handle).has_value();
@@ -363,6 +417,11 @@ TEST_CASE(
     auto& dependencies = app.resource<Assets<DependencyAsset>>();
     auto state = dependencies.load_state(dependency_id);
     REQUIRE(state.has_value());
+    auto recorded_dependencies =
+        app.resource<AssetServer>().dependencies(handle);
+    REQUIRE(recorded_dependencies.size() == 1);
+    REQUIRE(recorded_dependencies[0].type == type_id<DependencyAsset>());
+    REQUIRE(recorded_dependencies[0].id == dependency_id);
 
     run_post_update_until(app, [&]() {
         return dependencies.get(dependency_id).has_value();
@@ -374,6 +433,60 @@ TEST_CASE(
     REQUIRE(dependency->path == "memory://dependency.bin");
     REQUIRE(DependentServerLoader::load_count.load() == 1);
     REQUIRE(DependencyLoader::load_count.load() == 1);
+    REQUIRE(
+        app.resource<AssetServer>().dependency_load_state(handle) ==
+        AssetLoadState::Loaded
+    );
+    REQUIRE(
+        app.resource<AssetServer>().recursive_dependency_load_state(handle) ==
+        AssetLoadState::Loaded
+    );
+    REQUIRE(app.resource<AssetServer>().is_loaded_with_dependencies(handle));
+}
+
+TEST_CASE(
+    "AssetServer reports async dependency load failures",
+    "[asset][server][async]"
+) {
+    App app;
+    app.add_plugin<AssetsPlugin>();
+    auto& server = app.resource<AssetServer>();
+    server.emplace_source<MemorySource>();
+    server.add_loader<ServerAsset, DependentServerLoader>();
+    server.add_loader<DependencyAsset, FailingDependencyLoader>();
+    app.world().sort_systems();
+
+    auto handle = app.resource<AssetServer>().load_async<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+    auto& assets = app.resource<Assets<ServerAsset>>();
+
+    run_post_update_until(app, [&]() {
+        return assets.get(handle).has_value();
+    });
+
+    auto asset = assets.get(handle);
+    REQUIRE(asset.has_value());
+    auto dependency_id = asset->dependency.id();
+    auto& dependencies = app.resource<Assets<DependencyAsset>>();
+
+    run_post_update_until(app, [&]() {
+        auto state = dependencies.load_state(dependency_id);
+        return state && *state == AssetLoadState::Failed;
+    });
+
+    REQUIRE(app.resource<AssetServer>().is_loaded(handle));
+    REQUIRE(
+        app.resource<AssetServer>().dependency_load_state(handle) ==
+        AssetLoadState::Failed
+    );
+    REQUIRE(
+        app.resource<AssetServer>().recursive_dependency_load_state(handle) ==
+        AssetLoadState::Failed
+    );
+    REQUIRE_FALSE(
+        app.resource<AssetServer>().is_loaded_with_dependencies(handle)
+    );
 }
 
 TEST_CASE(

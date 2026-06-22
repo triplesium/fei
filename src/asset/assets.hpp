@@ -43,11 +43,13 @@ class Assets {
         std::unique_ptr<T> asset;
         AssetLoadState state;
         Optional<AssetLoadError> error;
+        std::vector<AssetKey> dependencies;
     };
 
     struct AsyncLoadResult {
         AssetId id;
         AssetLoadResult<T> result;
+        std::vector<AssetKey> dependencies;
     };
 
   private:
@@ -126,7 +128,11 @@ class Assets {
             return failure(std::move(asset.error()));
         }
 
-        auto handle = add_loaded(std::move(*asset), context.asset_path());
+        auto handle = add_loaded(
+            std::move(*asset),
+            context.asset_path(),
+            context.dependencies()
+        );
         return std::move(handle);
     }
 
@@ -162,12 +168,17 @@ class Assets {
             .asset = nullptr,
             .state = AssetLoadState::Loading,
             .error = nullopt,
+            .dependencies = {},
         };
         m_cache[path] = id;
         return handle;
     }
 
-    bool finish_loading(AssetId id, std::unique_ptr<T> asset) {
+    bool finish_loading(
+        AssetId id,
+        std::unique_ptr<T> asset,
+        std::vector<AssetKey> dependencies = {}
+    ) {
         auto entry = get_entry(id);
         if (!entry || entry->state != AssetLoadState::Loading) {
             return false;
@@ -180,6 +191,7 @@ class Assets {
         entry->asset = std::move(asset);
         entry->state = AssetLoadState::Loaded;
         entry->error = nullopt;
+        entry->dependencies = std::move(dependencies);
         if (entry->path) {
             m_cache[*entry->path] = id;
         }
@@ -206,6 +218,7 @@ class Assets {
         entry->asset.reset();
         entry->state = AssetLoadState::Failed;
         entry->error = std::move(error);
+        entry->dependencies.clear();
         m_event_queue.push_back(
             AssetEvent<T> {
                 .type = AssetEventType::Failed,
@@ -215,11 +228,16 @@ class Assets {
         return true;
     }
 
-    void enqueue_async_load_result(AssetId id, AssetLoadResult<T> result) {
+    void enqueue_async_load_result(
+        AssetId id,
+        AssetLoadResult<T> result,
+        std::vector<AssetKey> dependencies = {}
+    ) {
         m_pending_async_results.push_back(
             AsyncLoadResult {
                 .id = id,
                 .result = std::move(result),
+                .dependencies = std::move(dependencies),
             }
         );
     }
@@ -312,6 +330,19 @@ class Assets {
         return load_state(handle.id());
     }
 
+    Optional<const std::vector<AssetKey>&> dependencies(AssetId id) const {
+        auto entry = get_entry(id);
+        if (!entry) {
+            return nullopt;
+        }
+        return entry->dependencies;
+    }
+
+    Optional<const std::vector<AssetKey>&>
+    dependencies(const Handle<T>& handle) const {
+        return dependencies(handle.id());
+    }
+
     Optional<const AssetLoadError&> load_error(AssetId id) const {
         auto entry = get_entry(id);
         if (!entry || !entry->error) {
@@ -356,7 +387,11 @@ class Assets {
                 continue;
             }
 
-            assets->finish_loading(result.id, std::move(result.result).value());
+            assets->finish_loading(
+                result.id,
+                std::move(result.result).value(),
+                std::move(result.dependencies)
+            );
         }
     }
 
@@ -373,7 +408,11 @@ class Assets {
     }
 
   private:
-    Handle<T> add_loaded(std::unique_ptr<T> asset, Optional<AssetPath> path) {
+    Handle<T> add_loaded(
+        std::unique_ptr<T> asset,
+        Optional<AssetPath> path,
+        std::vector<AssetKey> dependencies = {}
+    ) {
         AssetId id = m_next_id++;
         auto handle_state = std::make_shared<AssetHandleState>(id);
         auto handle = Handle<T>(handle_state);
@@ -385,6 +424,7 @@ class Assets {
             .asset = std::move(asset),
             .state = AssetLoadState::Loaded,
             .error = nullopt,
+            .dependencies = std::move(dependencies),
         };
         auto& entry = m_assets.at(id);
         if (entry.path) {
