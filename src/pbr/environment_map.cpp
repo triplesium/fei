@@ -125,12 +125,15 @@ void convert_equirect_to_cubemap(
         if (!equirect_gpu_image) {
             continue;
         }
-        gpu_env_map.environment_cubemap =
-            equirect_to_cubemap->get_or_create_cubemap(
-                *device,
-                *images,
-                gen_env_map.equirect_image
-            );
+        auto environment_cubemap = equirect_to_cubemap->get_or_create_cubemap(
+            *device,
+            *images,
+            gen_env_map.equirect_image
+        );
+        if (!environment_cubemap) {
+            continue;
+        }
+        gpu_env_map.environment_cubemap = *environment_cubemap;
     }
 }
 

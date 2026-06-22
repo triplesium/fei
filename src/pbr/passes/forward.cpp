@@ -200,7 +200,10 @@ void skybox_pass(
         *images,
         skybox.equirect_map
     );
-    auto gpu_mesh = gpu_meshes->get(skybox_resource->mesh.id()).value();
+    auto gpu_mesh = gpu_meshes->get(skybox_resource->mesh.id());
+    if (!cubemap_texture || !gpu_mesh) {
+        return;
+    }
 
     auto cubemap_sampler = device->create_sampler(
         SamplerDescription {
@@ -250,7 +253,7 @@ void skybox_pass(
     auto resource_set = device->create_resource_set(
         ResourceSetDescription {
             .layout = layout,
-            .resources = {cubemap_texture, cubemap_sampler},
+            .resources = {*cubemap_texture, cubemap_sampler},
         }
     );
 
@@ -262,7 +265,7 @@ void skybox_pass(
             .render_primitive = RenderPrimitive::Triangles,
             .shader_program =
                 ShaderProgramDescription {
-                    .vertex_layouts = {gpu_mesh.vertex_buffer_layout()
+                    .vertex_layouts = {gpu_mesh->vertex_buffer_layout()
                                            .to_vertex_layout_description()},
                     .shaders = skybox_resource->shader_modules,
                 },
@@ -275,8 +278,8 @@ void skybox_pass(
     command_buffer->set_render_pipeline(pipeline);
     command_buffer->set_resource_set(0, mesh_view_resource_set->resource_set);
     command_buffer->set_resource_set(1, resource_set);
-    command_buffer->set_vertex_buffer(gpu_mesh.vertex_buffer());
-    command_buffer->draw(0, gpu_mesh.vertex_count());
+    command_buffer->set_vertex_buffer(gpu_mesh->vertex_buffer());
+    command_buffer->draw(0, gpu_mesh->vertex_count());
     command_buffer->end_render_pass();
     command_buffer->end();
     device->submit_commands(command_buffer);

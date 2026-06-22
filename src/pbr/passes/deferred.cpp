@@ -35,6 +35,11 @@ void setup_gbuffer(
     Res<MeshViewLayout> mesh_view_layout,
     Res<VxgiLighting> vxgi_lighting
 ) {
+    auto mesh = meshes->get(fullscreen_quad->fullscreen_quad_mesh);
+    if (!mesh) {
+        fatal("Fullscreen quad mesh is not available while setting up gbuffer");
+    }
+
     uint32 width = window->width;
     uint32 height = window->height;
 
@@ -108,8 +113,6 @@ void setup_gbuffer(
         }
     );
 
-    auto& mesh = meshes->get(fullscreen_quad->fullscreen_quad_mesh).value();
-
     resources->defered_resource_layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Vertex, ShaderStages::Fragment},
@@ -156,7 +159,7 @@ void setup_gbuffer(
             .render_primitive = RenderPrimitive::Triangles,
             .shader_program =
                 ShaderProgramDescription {
-                    .vertex_layouts = {mesh.vertex_buffer_layout()
+                    .vertex_layouts = {mesh->vertex_buffer_layout()
                                            .to_vertex_layout_description()},
                     .shaders =
                         {
@@ -223,7 +226,7 @@ void setup_gbuffer(
             .render_primitive = RenderPrimitive::Triangles,
             .shader_program =
                 ShaderProgramDescription {
-                    .vertex_layouts = {mesh.vertex_buffer_layout()
+                    .vertex_layouts = {mesh->vertex_buffer_layout()
                                            .to_vertex_layout_description()},
                     .shaders =
                         {
@@ -248,7 +251,7 @@ void setup_gbuffer(
             .render_primitive = RenderPrimitive::Triangles,
             .shader_program =
                 ShaderProgramDescription {
-                    .vertex_layouts = {mesh.vertex_buffer_layout()
+                    .vertex_layouts = {mesh->vertex_buffer_layout()
                                            .to_vertex_layout_description()},
                     .shaders =
                         {
@@ -291,7 +294,7 @@ void setup_gbuffer(
             .render_primitive = RenderPrimitive::Triangles,
             .shader_program =
                 ShaderProgramDescription {
-                    .vertex_layouts = {mesh.vertex_buffer_layout()
+                    .vertex_layouts = {mesh->vertex_buffer_layout()
                                            .to_vertex_layout_description()},
                     .shaders =
                         {
@@ -424,6 +427,10 @@ void defered_prepass(
     Res<FullscreenQuad> fullscreen_quad
 ) {
     auto [mesh_view_resource_set] = query_cameras.first();
+    auto gpu_mesh = gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id());
+    if (!gpu_mesh) {
+        return;
+    }
 
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -456,18 +463,13 @@ void defered_prepass(
     command_buffer->set_resource_set(0, mesh_view_resource_set.resource_set);
     command_buffer->set_resource_set(1, resources->defered_resource_set);
     command_buffer->set_resource_set(2, vxgi_lighting->resource_set);
-    command_buffer->set_vertex_buffer(
-        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id())
-            ->vertex_buffer()
-    );
-    auto gpu_mesh =
-        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id()).value();
+    command_buffer->set_vertex_buffer(gpu_mesh->vertex_buffer());
     command_buffer->set_index_buffer(
-        *gpu_mesh.index_buffer(),
+        *gpu_mesh->index_buffer(),
         IndexFormat::Uint32
     );
     command_buffer->draw_indexed(
-        gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
+        gpu_mesh->index_buffer_size() / sizeof(std::uint32_t)
     );
     command_buffer->end_render_pass();
     command_buffer->end();
@@ -483,6 +485,10 @@ void direct_lighting_pass(
     Res<FullscreenQuad> fullscreen_quad
 ) {
     auto [mesh_view_resource_set] = query_cameras.first();
+    auto gpu_mesh = gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id());
+    if (!gpu_mesh) {
+        return;
+    }
 
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -507,18 +513,13 @@ void direct_lighting_pass(
     command_buffer->set_resource_set(0, mesh_view_resource_set.resource_set);
     command_buffer->set_resource_set(1, resources->defered_resource_set);
     command_buffer->set_resource_set(2, vxgi_lighting->resource_set);
-    command_buffer->set_vertex_buffer(
-        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id())
-            ->vertex_buffer()
-    );
-    auto gpu_mesh =
-        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id()).value();
+    command_buffer->set_vertex_buffer(gpu_mesh->vertex_buffer());
     command_buffer->set_index_buffer(
-        *gpu_mesh.index_buffer(),
+        *gpu_mesh->index_buffer(),
         IndexFormat::Uint32
     );
     command_buffer->draw_indexed(
-        gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
+        gpu_mesh->index_buffer_size() / sizeof(std::uint32_t)
     );
     command_buffer->end_render_pass();
     command_buffer->end();
@@ -534,6 +535,10 @@ void indirect_lighting_pass(
     Res<FullscreenQuad> fullscreen_quad
 ) {
     auto [mesh_view_resource_set] = query_cameras.first();
+    auto gpu_mesh = gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id());
+    if (!gpu_mesh) {
+        return;
+    }
 
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -558,18 +563,13 @@ void indirect_lighting_pass(
     command_buffer->set_resource_set(0, mesh_view_resource_set.resource_set);
     command_buffer->set_resource_set(1, resources->defered_resource_set);
     command_buffer->set_resource_set(2, vxgi_lighting->resource_set);
-    command_buffer->set_vertex_buffer(
-        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id())
-            ->vertex_buffer()
-    );
-    auto gpu_mesh =
-        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id()).value();
+    command_buffer->set_vertex_buffer(gpu_mesh->vertex_buffer());
     command_buffer->set_index_buffer(
-        *gpu_mesh.index_buffer(),
+        *gpu_mesh->index_buffer(),
         IndexFormat::Uint32
     );
     command_buffer->draw_indexed(
-        gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
+        gpu_mesh->index_buffer_size() / sizeof(std::uint32_t)
     );
     command_buffer->end_render_pass();
     command_buffer->end();
@@ -584,6 +584,10 @@ void composite_pass(
     Res<FullscreenQuad> fullscreen_quad
 ) {
     auto [mesh_view_resource_set] = query_cameras.first();
+    auto gpu_mesh = gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id());
+    if (!gpu_mesh) {
+        return;
+    }
 
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -608,18 +612,13 @@ void composite_pass(
     command_buffer->set_resource_set(0, mesh_view_resource_set.resource_set);
     command_buffer->set_resource_set(1, resources->defered_resource_set);
     command_buffer->set_resource_set(2, resources->composite_resource_set);
-    command_buffer->set_vertex_buffer(
-        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id())
-            ->vertex_buffer()
-    );
-    auto gpu_mesh =
-        gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id()).value();
+    command_buffer->set_vertex_buffer(gpu_mesh->vertex_buffer());
     command_buffer->set_index_buffer(
-        *gpu_mesh.index_buffer(),
+        *gpu_mesh->index_buffer(),
         IndexFormat::Uint32
     );
     command_buffer->draw_indexed(
-        gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
+        gpu_mesh->index_buffer_size() / sizeof(std::uint32_t)
     );
     command_buffer->end_render_pass();
     command_buffer->end();

@@ -79,6 +79,11 @@ class Material {
         const RenderAssets<GpuImage>& gpu_images
     ) const = 0;
 
+    virtual bool
+    resources_ready(const RenderAssets<GpuImage>& /*gpu_images*/) const {
+        return true;
+    }
+
     // Used for caching prepared materials and pipelines. Materials with the
     // same hash value will share the same resource layout.
     virtual std::size_t hash() const = 0;
@@ -125,6 +130,10 @@ class MaterialAdapter
         auto& rendering_defaults = world.resource<RenderingDefaults>();
         auto& gpu_images = world.resource<RenderAssets<GpuImage>>();
         auto& shader_cache = world.resource<ShaderCache>();
+
+        if (!source_asset.resources_ready(gpu_images)) {
+            return nullopt;
+        }
 
         auto layout = source_asset.create_resource_layout(
             device,

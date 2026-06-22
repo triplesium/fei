@@ -127,24 +127,31 @@ class StandardMaterial : public Material {
         };
     }
 
-    StandardMaterialUniform create_uniform() const {
+    StandardMaterialUniform
+    create_uniform(const RenderAssets<GpuImage>* gpu_images = nullptr) const {
         BitFlags<StandardMaterialFlags> flags = StandardMaterialFlags::None;
-        if (albedo_map.has_value()) {
+        auto image_ready = [&](const Optional<Handle<Image>>& image_handle) {
+            return image_handle &&
+                   (!gpu_images ||
+                    gpu_images->get(image_handle->id()).has_value());
+        };
+
+        if (image_ready(albedo_map)) {
             flags |= StandardMaterialFlags::AlbedoMap;
         }
-        if (normal_map.has_value()) {
+        if (image_ready(normal_map)) {
             flags |= StandardMaterialFlags::NormalMap;
         }
-        if (metallic_map.has_value()) {
+        if (image_ready(metallic_map)) {
             flags |= StandardMaterialFlags::MetallicMap;
         }
-        if (roughness_map.has_value()) {
+        if (image_ready(roughness_map)) {
             flags |= StandardMaterialFlags::RoughnessMap;
         }
-        if (emissive_map.has_value()) {
+        if (image_ready(emissive_map)) {
             flags |= StandardMaterialFlags::EmissiveMap;
         }
-        if (specular_map.has_value()) {
+        if (image_ready(specular_map)) {
             flags |= StandardMaterialFlags::SpecularMap;
         }
         return StandardMaterialUniform {
@@ -164,7 +171,7 @@ class StandardMaterial : public Material {
     ) const override {
         std::vector<std::shared_ptr<BindableResource>> resources;
 
-        auto uniform = create_uniform();
+        auto uniform = create_uniform(&gpu_images);
         auto uniform_buffer = device.create_buffer(
             BufferDescription {
                 .size = sizeof(StandardMaterialUniform),
@@ -180,13 +187,13 @@ class StandardMaterial : public Material {
         resources.push_back(uniform_buffer);
 
         auto push_image = [&](const Optional<Handle<Image>>& image_handle) {
-            resources.push_back(
-                image_handle
-                    .transform([&](const Handle<Image>& handle) {
-                        return gpu_images.get(handle.id())->texture();
-                    })
-                    .value_or(defaults.default_texture)
-            );
+            if (image_handle) {
+                if (auto gpu_image = gpu_images.get(image_handle->id())) {
+                    resources.push_back(gpu_image->texture());
+                    return;
+                }
+            }
+            resources.push_back(defaults.default_texture);
         };
 
         push_image(albedo_map);
@@ -198,6 +205,18 @@ class StandardMaterial : public Material {
         resources.push_back(device.create_sampler(SamplerDescription::Linear));
 
         return resources;
+    }
+
+    bool
+    resources_ready(const RenderAssets<GpuImage>& gpu_images) const override {
+        auto image_ready = [&](const Optional<Handle<Image>>& image_handle) {
+            return !image_handle ||
+                   gpu_images.get(image_handle->id()).has_value();
+        };
+
+        return image_ready(albedo_map) && image_ready(normal_map) &&
+               image_ready(metallic_map) && image_ready(roughness_map) &&
+               image_ready(emissive_map) && image_ready(specular_map);
     }
 
     std::size_t hash() const override { return type_id<StandardMaterial>(); }

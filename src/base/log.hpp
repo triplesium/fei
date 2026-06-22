@@ -62,7 +62,7 @@ void error(const FormatString& format, Args&&... args) {
 }
 
 template<typename... Args>
-void fatal(const FormatString& format, Args&&... args) {
+[[noreturn]] void fatal(const FormatString& format, Args&&... args) {
     detail::log(LogLevel::Fatal, format, std::make_format_args(args...));
     std::terminate();
 }

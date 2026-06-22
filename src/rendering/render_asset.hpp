@@ -4,7 +4,6 @@
 #include "asset/event.hpp"
 #include "asset/handle.hpp"
 #include "asset/id.hpp"
-#include "base/log.hpp"
 #include "base/optional.hpp"
 #include "ecs/event.hpp"
 #include "ecs/system.hpp"
@@ -76,6 +75,15 @@ void extract_render_assets(
     CRes<Assets<Source>> assets
 ) {
     std::unordered_set<AssetId> need_extracting, added, removed, modified;
+    if (world->has_resource<ExtractedAssets<Source>>()) {
+        auto& previous = world->resource<ExtractedAssets<Source>>();
+        for (auto& entry : previous.extracted) {
+            if (assets->get(entry.id)) {
+                need_extracting.insert(entry.id);
+            }
+        }
+    }
+
     for (auto event = events.next(); event; event = events.next()) {
         AssetEventType type = event->type;
         AssetId id = event->id;
@@ -139,24 +147,22 @@ void prepare_assets(
     }
     extracted_assets->removed.clear();
 
+    std::vector<typename ExtractedAssets<Source>::Entry> pending;
     for (const auto& entry : extracted_assets->extracted) {
         auto id = entry.id;
         auto* source_asset = entry.asset;
-        render_assets->remove(id);
         auto render_asset = Adapter().prepare_asset(*source_asset, *world);
         if (!render_asset) {
-            error(
-                "Failed to prepare render asset for source asset with id {}",
-                id
-            );
+            pending.push_back(entry);
             continue;
         }
+        render_assets->remove(id);
         render_assets->insert(
             id,
             std::make_unique<Target>(std::move(*render_asset))
         );
     }
-    extracted_assets->extracted.clear();
+    extracted_assets->extracted = std::move(pending);
 }
 
 template<typename Source, typename Target, typename Adapter>

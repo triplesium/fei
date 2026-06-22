@@ -36,9 +36,17 @@ class LoadContext {
 
     const AssetPath& asset_path() const { return m_asset_path; }
 
+    // Requests a dependency asset and returns its handle.
+    //
+    // With SyncLoadContext the dependency is loaded before this returns.
+    // With AsyncLoadContext the dependency is scheduled on the asset task
+    // system and the returned handle may still be in the Loading state.
+    // Asset loaders should store dependency handles instead of dereferencing
+    // dependency asset contents during async loading.
     template<typename T>
     Handle<T> load(const AssetPath& path) const;
 
+    // Non-fatal variant of load<T>; see load<T> for readiness semantics.
     template<typename T>
     Result<Handle<T>, AssetLoadError> try_load(const AssetPath& path) const;
 };

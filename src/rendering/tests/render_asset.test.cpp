@@ -27,6 +27,19 @@ class DoublingAdapter : public RenderAssetAdapter<SourceAsset, PreparedAsset> {
     }
 };
 
+class RetryingAdapter : public RenderAssetAdapter<SourceAsset, PreparedAsset> {
+  public:
+    static inline bool ready = false;
+
+    Optional<PreparedAsset>
+    prepare_asset(const SourceAsset& source_asset, World&) override {
+        if (!ready) {
+            return nullopt;
+        }
+        return PreparedAsset {.value = source_asset.value * 2};
+    }
+};
+
 } // namespace
 
 TEST_CASE(
@@ -129,4 +142,84 @@ TEST_CASE(
         world.resource<ExtractedAssets<SourceAsset>>();
     REQUIRE(extracted_after.extracted.empty());
     REQUIRE(extracted_after.removed.empty());
+}
+
+TEST_CASE(
+    "prepare_assets keeps failed assets pending for retry",
+    "[rendering][render-asset]"
+) {
+    RetryingAdapter::ready = false;
+
+    constexpr AssetId prepared_id = 1;
+    SourceAsset source {.value = 21};
+
+    ExtractedAssets<SourceAsset> extracted;
+    extracted.extracted.push_back(
+        ExtractedAssets<SourceAsset>::Entry {
+            .id = prepared_id,
+            .asset = &source,
+        }
+    );
+
+    RenderAssets<PreparedAsset> render_assets;
+    render_assets.insert(
+        prepared_id,
+        std::make_unique<PreparedAsset>(PreparedAsset {1})
+    );
+
+    World world;
+    world.add_resource(std::move(extracted));
+    world.add_resource(std::move(render_assets));
+
+    world.run_system_once(
+        prepare_assets<SourceAsset, PreparedAsset, RetryingAdapter>
+    );
+
+    auto& prepared_assets = world.resource<RenderAssets<PreparedAsset>>();
+    auto prepared = prepared_assets.get(prepared_id);
+    REQUIRE(prepared.has_value());
+    REQUIRE(prepared->value == 1);
+    REQUIRE(
+        world.resource<ExtractedAssets<SourceAsset>>().extracted.size() == 1
+    );
+
+    RetryingAdapter::ready = true;
+    world.run_system_once(
+        prepare_assets<SourceAsset, PreparedAsset, RetryingAdapter>
+    );
+
+    prepared = prepared_assets.get(prepared_id);
+    REQUIRE(prepared.has_value());
+    REQUIRE(prepared->value == 42);
+    REQUIRE(world.resource<ExtractedAssets<SourceAsset>>().extracted.empty());
+}
+
+TEST_CASE(
+    "extract_render_assets preserves pending retries across frames",
+    "[rendering][render-asset]"
+) {
+    World world;
+    Assets<SourceAsset> source_assets(nullptr);
+    auto live =
+        source_assets.add(std::make_unique<SourceAsset>(SourceAsset {5}));
+
+    ExtractedAssets<SourceAsset> pending;
+    pending.extracted.push_back(
+        ExtractedAssets<SourceAsset>::Entry {
+            .id = live.id(),
+            .asset = nullptr,
+        }
+    );
+
+    world.add_resource(Events<AssetEvent<SourceAsset>> {});
+    world.add_resource(std::move(source_assets));
+    world.add_resource(std::move(pending));
+
+    world.run_system_once(extract_render_assets<SourceAsset>);
+
+    const auto& extracted = world.resource<ExtractedAssets<SourceAsset>>();
+    REQUIRE(extracted.extracted.size() == 1);
+    REQUIRE(extracted.extracted[0].id == live.id());
+    REQUIRE(extracted.extracted[0].asset != nullptr);
+    REQUIRE(extracted.extracted[0].asset->value == 5);
 }

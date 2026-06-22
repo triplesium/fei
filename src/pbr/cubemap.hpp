@@ -1,6 +1,7 @@
 #pragma once
 #include "asset/handle.hpp"
 #include "asset/id.hpp"
+#include "base/optional.hpp"
 #include "core/image.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics/pipeline.hpp"
@@ -31,7 +32,7 @@ class EquirectToCubemap {
         std::shared_ptr<Texture> equirect_texture
     );
 
-    std::shared_ptr<Texture> get_or_create_cubemap(
+    Optional<std::shared_ptr<Texture>> get_or_create_cubemap(
         GraphicsDevice& device,
         Assets<Image>& images,
         Handle<Image> equirect_image_handle
