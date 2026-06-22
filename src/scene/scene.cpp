@@ -2,6 +2,7 @@
 
 #include "asset/assets.hpp"
 #include "asset/handle.hpp"
+#include "asset/server.hpp" // NOLINT(misc-include-cleaner)
 #include "base/hash.hpp"
 #include "base/log.hpp"
 #include "core/transform.hpp"
@@ -44,7 +45,6 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
     const auto& attrib = obj_reader.GetAttrib();
     const auto& shapes = obj_reader.GetShapes();
     const auto& materials = obj_reader.GetMaterials();
-    auto* sync_context = dynamic_cast<const SyncLoadContext*>(&context);
 
     fei::info(
         "Loading scene '{}' with {} shapes and {} materials",
@@ -60,15 +60,13 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
         standard_material->metallic = 0.0f;
         standard_material->roughness = 1.0f;
         if (!material.diffuse_texname.empty()) {
-            if (!sync_context) {
-                return failure(AssetLoadError(
-                    context.asset_path(),
-                    "SceneLoader requires synchronous dependency loading"
-                ));
-            }
-            standard_material->albedo_map = sync_context->load<Image>(
+            auto image = context.try_load<Image>(
                 obj_path.parent_path() / material.diffuse_texname
             );
+            if (!image) {
+                return failure(std::move(image).error());
+            }
+            standard_material->albedo_map = std::move(*image);
         }
         scene->materials.push_back(std::move(standard_material));
     }

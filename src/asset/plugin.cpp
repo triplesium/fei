@@ -1,5 +1,6 @@
 #include "asset/plugin.hpp"
 
+#include "asset/request.hpp"
 #include "asset/systems.hpp"
 #include "task/plugin.hpp"
 
@@ -13,11 +14,21 @@ void AssetsPlugin::setup(App& app) {
     app.configure_sets(
         PostUpdate,
         chain(
+            AssetSystems::ProcessLoadRequests {},
             TaskSystems::DrainCompletions {},
             AssetSystems::ApplyAsyncLoads {},
             AssetSystems::CollectUnused {},
             AssetSystems::TrackAssets {}
         )
+    );
+
+    if (!app.has_resource<AssetLoadRequests>()) {
+        app.add_resource(AssetLoadRequests {});
+    }
+    app.add_systems(
+        PostUpdate,
+        AssetLoadRequests::process_system |
+            in_set<AssetSystems::ProcessLoadRequests>()
     );
 
     AssetServer server {&app};

@@ -5,6 +5,7 @@
 #include "asset/loader.hpp"
 #include "asset/path.hpp"
 #include "asset/plugin.hpp"
+#include "asset/request.hpp"
 #include "asset/source.hpp"
 #include "ecs/event.hpp"
 #include "task/plugin.hpp"
@@ -15,6 +16,7 @@
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
+#include <future>
 #include <memory>
 #include <string>
 #include <thread>
@@ -22,9 +24,15 @@
 using namespace fei;
 namespace {
 
+struct DependencyAsset {
+    int byte_count {0};
+    std::string path;
+};
+
 struct ServerAsset {
     int byte_count {0};
     std::string path;
+    Handle<DependencyAsset> dependency;
 };
 
 class MemorySource : public AssetSource {
@@ -35,16 +43,27 @@ class MemorySource : public AssetSource {
         std::byte {3},
         std::byte {4},
     };
+    std::array<std::byte, 2> m_dependency_bytes {
+        std::byte {5},
+        std::byte {6},
+    };
 
   public:
     std::string name() const override { return "memory"; }
 
     bool exists(const std::filesystem::path& path) const override {
-        return path.generic_string() == "asset.bin";
+        auto asset_path = path.generic_string();
+        return asset_path == "asset.bin" || asset_path == "dependency.bin";
     }
 
     Result<Reader, std::string>
-    try_get_reader(const std::filesystem::path& /*path*/) const override {
+    try_get_reader(const std::filesystem::path& path) const override {
+        if (path.generic_string() == "dependency.bin") {
+            return Reader(m_dependency_bytes.data(), m_dependency_bytes.size());
+        }
+        if (path.generic_string() != "asset.bin") {
+            return failure("memory asset not found: " + path.generic_string());
+        }
         return Reader(m_bytes.data(), m_bytes.size());
     }
 };
@@ -73,6 +92,42 @@ class ServerLoader : public AssetLoader<ServerAsset> {
         return std::make_unique<ServerAsset>(ServerAsset {
             .byte_count = static_cast<int>(reader.size()),
             .path = context.asset_path().as_string(),
+        });
+    }
+};
+
+class DependencyLoader : public AssetLoader<DependencyAsset> {
+  public:
+    static inline std::atomic<int> load_count = 0;
+
+    AssetLoadResult<DependencyAsset>
+    load(Reader& reader, const LoadContext& context) override {
+        ++load_count;
+        return std::make_unique<DependencyAsset>(DependencyAsset {
+            .byte_count = static_cast<int>(reader.size()),
+            .path = context.asset_path().as_string(),
+        });
+    }
+};
+
+class DependentServerLoader : public AssetLoader<ServerAsset> {
+  public:
+    static inline std::atomic<int> load_count = 0;
+
+    AssetLoadResult<ServerAsset>
+    load(Reader& reader, const LoadContext& context) override {
+        ++load_count;
+        auto dependency = context.try_load<DependencyAsset>(
+            AssetPath("memory://dependency.bin")
+        );
+        if (!dependency) {
+            return failure(std::move(dependency).error());
+        }
+
+        return std::make_unique<ServerAsset>(ServerAsset {
+            .byte_count = static_cast<int>(reader.size()),
+            .path = context.asset_path().as_string(),
+            .dependency = std::move(*dependency),
         });
     }
 };
@@ -116,8 +171,26 @@ TEST_CASE("AssetsPlugin installs task resources", "[asset][plugin]") {
     app.add_plugin<AssetsPlugin>();
 
     REQUIRE(app.has_resource<AssetServer>());
+    REQUIRE(app.has_resource<AssetLoadRequests>());
     REQUIRE(app.has_resource<Tasks>());
     REQUIRE(app.has_plugin<TaskPlugin>());
+}
+
+TEST_CASE(
+    "AssetLoadRequests close cancels pending dependency requests",
+    "[asset][server][async]"
+) {
+    AssetLoadRequests requests;
+    auto result = std::async(std::launch::async, [&]() {
+        return requests.try_load<ServerAsset>(AssetPath("memory://asset.bin"));
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds {1});
+    requests.close();
+
+    auto dependency = result.get();
+    REQUIRE_FALSE(dependency.has_value());
+    REQUIRE(dependency.error().message.contains("closed"));
 }
 
 TEST_CASE(
@@ -251,6 +324,56 @@ TEST_CASE(
     REQUIRE(state.has_value());
     REQUIRE(*state == AssetLoadState::Loaded);
     REQUIRE(ServerLoader::load_count.load() == 1);
+}
+
+TEST_CASE(
+    "AssetServer load_async lets loaders request dependencies",
+    "[asset][server][async]"
+) {
+    DependentServerLoader::load_count = 0;
+    DependencyLoader::load_count = 0;
+
+    App app;
+    app.add_plugin<AssetsPlugin>();
+    auto& server = app.resource<AssetServer>();
+    server.emplace_source<MemorySource>();
+    server.add_loader<ServerAsset, DependentServerLoader>();
+    server.add_loader<DependencyAsset, DependencyLoader>();
+    app.world().sort_systems();
+
+    auto handle = app.resource<AssetServer>().load_async<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+    auto& assets = app.resource<Assets<ServerAsset>>();
+
+    run_post_update_until(app, [&]() {
+        return assets.get(handle).has_value();
+    });
+
+    AssetId dependency_id = invalid_asset_id;
+    {
+        auto asset = assets.get(handle);
+        REQUIRE(asset.has_value());
+        REQUIRE(asset->byte_count == 4);
+        REQUIRE(asset->path == "memory://asset.bin");
+        REQUIRE(asset->dependency.id() != invalid_asset_id);
+        dependency_id = asset->dependency.id();
+    }
+
+    auto& dependencies = app.resource<Assets<DependencyAsset>>();
+    auto state = dependencies.load_state(dependency_id);
+    REQUIRE(state.has_value());
+
+    run_post_update_until(app, [&]() {
+        return dependencies.get(dependency_id).has_value();
+    });
+
+    auto dependency = dependencies.get(dependency_id);
+    REQUIRE(dependency.has_value());
+    REQUIRE(dependency->byte_count == 2);
+    REQUIRE(dependency->path == "memory://dependency.bin");
+    REQUIRE(DependentServerLoader::load_count.load() == 1);
+    REQUIRE(DependencyLoader::load_count.load() == 1);
 }
 
 TEST_CASE(

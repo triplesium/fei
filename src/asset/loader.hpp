@@ -10,6 +10,7 @@
 namespace fei {
 
 class AssetServer;
+class AssetLoadRequestSender;
 template<typename T>
 class Handle;
 
@@ -34,6 +35,12 @@ class LoadContext {
     virtual ~LoadContext() = default;
 
     const AssetPath& asset_path() const { return m_asset_path; }
+
+    template<typename T>
+    Handle<T> load(const AssetPath& path) const;
+
+    template<typename T>
+    Result<Handle<T>, AssetLoadError> try_load(const AssetPath& path) const;
 };
 
 class SyncLoadContext : public LoadContext {
@@ -43,6 +50,23 @@ class SyncLoadContext : public LoadContext {
   public:
     SyncLoadContext(const AssetServer& asset_server, AssetPath asset_path) :
         LoadContext(std::move(asset_path)), m_asset_server(asset_server) {}
+
+    template<typename T>
+    Handle<T> load(const AssetPath& path) const;
+
+    template<typename T>
+    Result<Handle<T>, AssetLoadError> try_load(const AssetPath& path) const;
+};
+
+class AsyncLoadContext : public LoadContext {
+  private:
+    std::shared_ptr<AssetLoadRequestSender> m_requests;
+
+  public:
+    AsyncLoadContext(
+        std::shared_ptr<AssetLoadRequestSender> requests,
+        AssetPath asset_path
+    ) : LoadContext(std::move(asset_path)), m_requests(std::move(requests)) {}
 
     template<typename T>
     Handle<T> load(const AssetPath& path) const;

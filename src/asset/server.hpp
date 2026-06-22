@@ -3,16 +3,19 @@
 #include "asset/assets.hpp"
 #include "asset/loader.hpp"
 #include "asset/path.hpp"
+#include "asset/request.hpp"
 #include "asset/source.hpp"
 #include "asset/systems.hpp"
 #include "ecs/system_config.hpp"
 #include "task/plugin.hpp"
 
 #include <concepts>
+#include <condition_variable>
 #include <exception>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 namespace fei {
 
@@ -155,8 +158,11 @@ class AssetServer {
         auto handle = assets.reserve_loading(path);
         auto id = handle.id();
         auto assets_state = assets.state();
+        auto load_requests = m_app->has_resource<AssetLoadRequests>() ?
+                                 m_app->resource<AssetLoadRequests>().sender() :
+                                 std::shared_ptr<AssetLoadRequestSender> {};
         m_app->resource<Tasks>().general().submit(
-            [source, loader, source_name, path]() mutable
+            [source, loader, source_name, path, load_requests]() mutable
                 -> AssetLoadResult<T> {
                 auto reader = source->try_get_reader(path.path());
                 if (!reader) {
@@ -165,6 +171,11 @@ class AssetServer {
                         "Failed to read asset from source '" + source_name +
                             "': " + reader.error()
                     ));
+                }
+
+                if (load_requests) {
+                    AsyncLoadContext context(std::move(load_requests), path);
+                    return loader->load(*reader, context);
                 }
 
                 LoadContext context(path);
@@ -242,6 +253,34 @@ class AssetServer {
 };
 
 template<typename T>
+Handle<T> LoadContext::load(const AssetPath& path) const {
+    auto result = try_load<T>(path);
+    if (!result) {
+        fatal(
+            "Failed to load asset '{}': {}",
+            result.error().path.as_string(),
+            result.error().message
+        );
+    }
+    return std::move(*result);
+}
+
+template<typename T>
+Result<Handle<T>, AssetLoadError>
+LoadContext::try_load(const AssetPath& path) const {
+    if (auto* context = dynamic_cast<const SyncLoadContext*>(this)) {
+        return context->template try_load<T>(path);
+    }
+    if (auto* context = dynamic_cast<const AsyncLoadContext*>(this)) {
+        return context->template try_load<T>(path);
+    }
+    return failure(AssetLoadError(
+        path,
+        "LoadContext does not support asset dependency loading"
+    ));
+}
+
+template<typename T>
 Handle<T> SyncLoadContext::load(const AssetPath& path) const {
     return m_asset_server.template load<T>(path);
 }
@@ -250,6 +289,93 @@ template<typename T>
 Result<Handle<T>, AssetLoadError>
 SyncLoadContext::try_load(const AssetPath& path) const {
     return m_asset_server.template try_load<T>(path);
+}
+
+template<typename T>
+Handle<T> AsyncLoadContext::load(const AssetPath& path) const {
+    auto result = try_load<T>(path);
+    if (!result) {
+        fatal(
+            "Failed to load asset '{}': {}",
+            result.error().path.as_string(),
+            result.error().message
+        );
+    }
+    return std::move(*result);
+}
+
+template<typename T>
+Result<Handle<T>, AssetLoadError>
+AsyncLoadContext::try_load(const AssetPath& path) const {
+    if (!m_requests) {
+        return failure(AssetLoadError(
+            path,
+            "Asset dependency request sender is not available"
+        ));
+    }
+    return m_requests->template try_load<T>(path);
+}
+
+template<typename T>
+Result<Handle<T>, AssetLoadError>
+AssetLoadRequestSender::try_load(const AssetPath& path) {
+    struct Pending {
+        std::mutex mutex;
+        std::condition_variable completed;
+        bool ready {false};
+        Result<Handle<T>, AssetLoadError> result;
+    };
+
+    auto pending = std::make_shared<Pending>();
+    auto enqueued = enqueue(
+        Request {
+            .process =
+                [pending, path](AssetServer& server) mutable {
+                    auto result = server.template try_load_async<T>(path);
+                    {
+                        std::scoped_lock state_lock(pending->mutex);
+                        pending->result = std::move(result);
+                        pending->ready = true;
+                    }
+                    pending->completed.notify_one();
+                },
+            .cancel =
+                [pending, path]() mutable {
+                    {
+                        std::scoped_lock state_lock(pending->mutex);
+                        pending->result = failure(AssetLoadError(
+                            path,
+                            "Asset dependency request queue is closed"
+                        ));
+                        pending->ready = true;
+                    }
+                    pending->completed.notify_one();
+                },
+        }
+    );
+    if (!enqueued) {
+        return failure(
+            AssetLoadError(path, "Asset dependency request queue is closed")
+        );
+    }
+
+    std::unique_lock lock(pending->mutex);
+    pending->completed.wait(lock, [&]() {
+        return pending->ready;
+    });
+    return std::move(pending->result);
+}
+
+template<typename T>
+Result<Handle<T>, AssetLoadError>
+AssetLoadRequests::try_load(const AssetPath& path) {
+    if (!m_sender) {
+        return failure(AssetLoadError(
+            path,
+            "Asset dependency request sender is not available"
+        ));
+    }
+    return m_sender->template try_load<T>(path);
 }
 
 } // namespace fei
