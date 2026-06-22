@@ -5,8 +5,10 @@
 #include "refl/type.hpp"
 
 #include <array>
+#include <functional>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -158,45 +160,13 @@ class MethodImpl : public Method {
     }
 
     InvokeResult invoke_variadic(const std::vector<Ref>& args) const override {
-        if constexpr (c_is_static) {
-            if (args.size() != c_params_count) {
-                return invalid_call(
-                    "Invalid argument count for static method " + name() +
-                    ": expected " + std::to_string(c_params_count) + ", got " +
-                    std::to_string(args.size())
-                );
-            }
-            return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
-                auto invalid_param =
-                    find_invalid_param<0, ArgIdx...>(args, "static method");
-                if (!invalid_param.empty()) {
-                    return invalid_call(std::move(invalid_param));
-                }
-                return invoke_template(Ref(), args[ArgIdx]...);
-            }(std::make_index_sequence<c_params_count>());
-        } else {
-            if (args.empty() || args.size() - 1 != c_params_count) {
-                return invalid_call(
-                    "Invalid argument count for method " + name() +
-                    ": expected instance plus " +
-                    std::to_string(c_params_count) + ", got " +
-                    std::to_string(args.size())
-                );
-            }
-            if (!validate_instance(args[0])) {
-                return invalid_call(
-                    "Invalid instance passed to method " + name()
-                );
-            }
-            return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
-                auto invalid_param =
-                    find_invalid_param<1, ArgIdx...>(args, "method");
-                if (!invalid_param.empty()) {
-                    return invalid_call(std::move(invalid_param));
-                }
-                return invoke_template(args[0], args[ArgIdx + 1]...);
-            }(std::make_index_sequence<c_params_count>());
+        if (auto invalid_call_message = validate_call(args)) {
+            return invalid_call(std::move(*invalid_call_message));
         }
+        return invoke_from_refs(
+            args,
+            std::make_index_sequence<c_params_count>()
+        );
     }
 
   private:
@@ -212,6 +182,37 @@ class MethodImpl : public Method {
 
     InvokeResult invalid_call(std::string message) const {
         return failure(InvokeFailure::invalid_call(std::move(message)));
+    }
+
+    std::optional<std::string>
+    validate_call(const std::vector<Ref>& args) const {
+        if constexpr (c_is_static) {
+            if (args.size() != c_params_count) {
+                return "Invalid argument count for static method " + name() +
+                       ": expected " + std::to_string(c_params_count) +
+                       ", got " + std::to_string(args.size());
+            }
+            if (auto invalid_param =
+                    find_invalid_param<0>(args, "static method");
+                !invalid_param.empty()) {
+                return invalid_param;
+            }
+        } else {
+            if (args.empty() || args.size() - 1 != c_params_count) {
+                return "Invalid argument count for method " + name() +
+                       ": expected instance plus " +
+                       std::to_string(c_params_count) + ", got " +
+                       std::to_string(args.size());
+            }
+            if (!validate_instance(args[0])) {
+                return "Invalid instance passed to method " + name();
+            }
+            if (auto invalid_param = find_invalid_param<1>(args, "method");
+                !invalid_param.empty()) {
+                return invalid_param;
+            }
+        }
+        return std::nullopt;
     }
 
     bool validate_instance(const Ref& instance) const {
@@ -239,9 +240,19 @@ class MethodImpl : public Method {
                );
     }
 
-    template<std::size_t Offset, std::size_t... ArgIdx>
+    template<std::size_t Offset>
     std::string
     find_invalid_param(const std::vector<Ref>& args, const char* kind) const {
+        return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
+            return find_invalid_param_impl<Offset, ArgIdx...>(args, kind);
+        }(std::make_index_sequence<c_params_count>());
+    }
+
+    template<std::size_t Offset, std::size_t... ArgIdx>
+    std::string find_invalid_param_impl(
+        const std::vector<Ref>& args,
+        const char* kind
+    ) const {
         std::string message;
         (
             [&] {
@@ -257,6 +268,18 @@ class MethodImpl : public Method {
             }(),
             ...);
         return message;
+    }
+
+    template<std::size_t... ArgIdx>
+    InvokeResult invoke_from_refs(
+        const std::vector<Ref>& args,
+        std::index_sequence<ArgIdx...>
+    ) const {
+        if constexpr (c_is_static) {
+            return invoke_template(Ref(), args[ArgIdx]...);
+        } else {
+            return invoke_template(args[0], args[ArgIdx + 1]...);
+        }
     }
 
     template<class... Args, size_t... N>
