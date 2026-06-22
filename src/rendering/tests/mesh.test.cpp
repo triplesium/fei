@@ -1,5 +1,8 @@
 #include "rendering/mesh/mesh.hpp"
 
+#include "app/app.hpp"
+#include "asset/server.hpp"
+#include "rendering/mesh/mesh_loader.hpp"
 #include "test_graphics_device.hpp"
 
 #include <array>
@@ -8,6 +11,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <string>
+#include <string_view>
 #include <vector>
 
 using namespace fei;
@@ -79,6 +84,83 @@ TEST_CASE(
     REQUIRE_FALSE(colors.as_float3().has_value());
     REQUIRE(colors.as_float4().has_value());
     REQUIRE(colors.vertex_format() == VertexFormat::Float4);
+
+    VertexAttributeValues empty_positions(std::vector<std::array<float, 3>> {});
+    REQUIRE(empty_positions.size() == 0);
+    REQUIRE(empty_positions.vertex_format() == VertexFormat::Float3);
+}
+
+TEST_CASE(
+    "Mesh handles empty CPU-side data without out-of-bounds access",
+    "[rendering][mesh]"
+) {
+    Mesh empty_mesh(RenderPrimitive::Triangles);
+    empty_mesh.center_positions();
+    empty_mesh.compute_smooth_normals();
+    require_bounds(
+        empty_mesh.compute_aabb(),
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f
+    );
+
+    Mesh empty_positions(RenderPrimitive::Triangles);
+    empty_positions.insert_attribute(
+        Mesh::ATTRIBUTE_POSITION,
+        std::vector<std::array<float, 3>> {}
+    );
+    empty_positions.center_positions();
+    empty_positions.compute_smooth_normals();
+    require_bounds(
+        empty_positions.compute_aabb(),
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f
+    );
+}
+
+TEST_CASE(
+    "MeshLoader splits OBJ vertices by position, texcoord, and normal",
+    "[rendering][mesh-loader]"
+) {
+    const std::string obj = R"(
+v 0 0 0
+v 1 0 0
+v 1 1 0
+vt 0 0
+vt 1 0
+vt 1 1
+vt 0.5 0.5
+f 1/1 2/2 3/3
+f 1/4 3/3 2/2
+)";
+
+    App app;
+    AssetServer server(&app);
+    SyncLoadContext context(server, AssetPath("memory://seam.obj"));
+    Reader reader(std::string_view(obj.data(), obj.size()));
+    MeshLoader loader;
+
+    auto loaded = loader.load(reader, context);
+
+    REQUIRE(loaded);
+    REQUIRE((*loaded)->vertex_count() == 4);
+    REQUIRE((*loaded)->index_buffer_size() == 6 * sizeof(std::uint32_t));
+
+    auto bytes = (*loaded)->index_buffer_data();
+    const auto* data = bytes.get();
+    REQUIRE(read_uint32(data, 0) == 0);
+    REQUIRE(read_uint32(data, 4) == 1);
+    REQUIRE(read_uint32(data, 8) == 2);
+    REQUIRE(read_uint32(data, 12) == 3);
+    REQUIRE(read_uint32(data, 16) == 2);
+    REQUIRE(read_uint32(data, 20) == 1);
 }
 
 TEST_CASE(

@@ -57,14 +57,33 @@ std::size_t Mesh::vertex_count() const {
 }
 
 void Mesh::compute_smooth_normals() {
-    const auto& positions =
-        m_attributes.at(ATTRIBUTE_POSITION.id).values.as_float3().value();
+    if (!has_attribute(ATTRIBUTE_POSITION.id)) {
+        fei::warn("Mesh has no position attribute, cannot compute normals");
+        return;
+    }
+    const auto positions_opt =
+        m_attributes.at(ATTRIBUTE_POSITION.id).values.as_float3();
+    if (!positions_opt || positions_opt->empty()) {
+        fei::warn("Mesh has no positions, cannot compute normals");
+        return;
+    }
+    if (!m_indices || m_indices->size() < 3) {
+        fei::warn("Mesh has no triangle indices, cannot compute normals");
+        return;
+    }
+
+    const auto& positions = *positions_opt;
     std::vector<Vector3> normals(positions.size(), Vector3::Zero);
     const auto& indices = m_indices.value();
-    for (std::size_t i = 0; i < indices.size(); i += 3) {
+    for (std::size_t i = 0; i + 2 < indices.size(); i += 3) {
         std::uint32_t a = indices[i];
         std::uint32_t b = indices[i + 1];
         std::uint32_t c = indices[i + 2];
+        if (a >= positions.size() || b >= positions.size() ||
+            c >= positions.size()) {
+            fei::warn("Mesh contains an out-of-range index");
+            return;
+        }
 
         Vector3 pa(positions[a]), pb(positions[b]), pc(positions[c]);
         auto ab = pb - pa;
@@ -85,14 +104,21 @@ void Mesh::compute_smooth_normals() {
                              ca.angle(cb) :
                              0.0f;
 
-        Vector3 face_normal = ab.cross(ac).normalized();
+        auto face_normal = ab.cross(ac);
+        if (face_normal.sqr_magnitude() <= epsilon) {
+            continue;
+        }
+        face_normal.normalize();
         normals[a] += face_normal * weight_a;
         normals[b] += face_normal * weight_b;
         normals[c] += face_normal * weight_c;
     }
     std::vector<std::array<float, 3>> normalized_normals;
     normalized_normals.reserve(normals.size());
-    for (const auto& normal : normals) {
+    for (auto normal : normals) {
+        if (normal.sqr_magnitude() > std::numeric_limits<float>::epsilon()) {
+            normal.normalize();
+        }
         normalized_normals.push_back({normal.x, normal.y, normal.z});
     }
     insert_attribute(
@@ -108,10 +134,18 @@ void Mesh::center_positions() {
     }
     auto& positions =
         m_attributes.at(ATTRIBUTE_POSITION.id).values.as_float3().value();
+    if (positions.empty()) {
+        fei::warn("Mesh has no positions, cannot center");
+        return;
+    }
     std::array<float, 3> min = positions[0];
     std::array<float, 3> max = positions[0];
-    if (m_indices) {
+    if (m_indices && !m_indices->empty()) {
         for (auto index : m_indices.value()) {
+            if (index >= positions.size()) {
+                fei::warn("Mesh contains an out-of-range index");
+                return;
+            }
             const auto& pos = positions[index];
             for (int i = 0; i < 3; i++) {
                 min[i] = std::min(min[i], pos[i]);
@@ -262,10 +296,18 @@ Aabb Mesh::compute_aabb() const {
     }
     const auto& positions =
         m_attributes.at(ATTRIBUTE_POSITION.id).values.as_float3().value();
+    if (positions.empty()) {
+        fei::warn("Mesh has no positions, cannot compute AABB");
+        return {};
+    }
     std::array<float, 3> min = positions[0];
     std::array<float, 3> max = positions[0];
-    if (m_indices) {
+    if (m_indices && !m_indices->empty()) {
         for (auto index : m_indices.value()) {
+            if (index >= positions.size()) {
+                fei::warn("Mesh contains an out-of-range index");
+                return {};
+            }
             const auto& pos = positions[index];
             for (int i = 0; i < 3; i++) {
                 min[i] = std::min(min[i], pos[i]);

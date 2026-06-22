@@ -3,6 +3,7 @@
 #include "base/optional.hpp"
 
 #include <tuple>
+#include <type_traits>
 
 namespace fei {
 
@@ -35,9 +36,10 @@ const void* VertexAttributeValues::data() const {
 VertexFormat VertexAttributeValues::vertex_format() const {
     return std::visit(
         [](auto&& arg) {
-            using T = std::decay_t<decltype(arg[0])>;
+            using VectorType = std::decay_t<decltype(arg)>;
+            using T = typename VectorType::value_type;
             if constexpr (is_array_v<T>) {
-                using ElementType = std::decay_t<decltype(arg[0][0])>;
+                using ElementType = typename T::value_type;
                 return to_vertex_format<ElementType, std::tuple_size_v<T>>();
             } else {
                 return to_vertex_format<T>();

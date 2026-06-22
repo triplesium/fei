@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 namespace fei {
@@ -91,6 +92,10 @@ void build_ring(
             }
         }
     }
+}
+
+float positive_or_epsilon(float value) {
+    return std::max(value, std::numeric_limits<float>::epsilon());
 }
 
 } // namespace
@@ -223,6 +228,10 @@ std::unique_ptr<Mesh> MeshFactory::create_sphere(
     std::uint32_t segments,
     std::uint32_t rings
 ) {
+    radius = positive_or_epsilon(radius);
+    segments = std::max(segments, 3u);
+    rings = std::max(rings, 2u);
+
     auto mesh = std::make_unique<Mesh>(RenderPrimitive::Triangles);
 
     std::vector<std::array<float, 3>> positions;
@@ -286,6 +295,11 @@ std::unique_ptr<Mesh> MeshFactory::create_capsule(
     std::uint32_t segments,
     std::uint32_t rings
 ) {
+    radius = positive_or_epsilon(radius);
+    length = std::max(length, 0.0f);
+    segments = std::max(segments, 3u);
+    rings = std::max(rings, 1u);
+
     auto mesh = std::make_unique<Mesh>(RenderPrimitive::Triangles);
     std::vector<std::array<float, 3>> positions;
     std::vector<std::array<float, 3>> normals;
@@ -376,6 +390,10 @@ std::unique_ptr<Mesh> MeshFactory::create_cylinder(
     float height,
     std::uint32_t segments
 ) {
+    radius = positive_or_epsilon(radius);
+    height = positive_or_epsilon(height);
+    segments = std::max(segments, 3u);
+
     auto mesh = std::make_unique<Mesh>(RenderPrimitive::Triangles);
     std::vector<std::array<float, 3>> positions;
     std::vector<std::array<float, 3>> normals;
@@ -488,6 +506,8 @@ std::unique_ptr<Mesh> MeshFactory::create_plane(
     float depth,
     std::uint32_t subdivisions
 ) {
+    subdivisions = std::max(subdivisions, 1u);
+
     auto mesh = std::make_unique<Mesh>(RenderPrimitive::Triangles);
 
     std::vector<std::array<float, 3>> positions;
@@ -558,6 +578,12 @@ std::unique_ptr<Mesh> MeshFactory::create_arrow(
     float head_radius,
     std::uint32_t segments
 ) {
+    length = positive_or_epsilon(length);
+    shaft_radius = positive_or_epsilon(shaft_radius);
+    head_length = std::clamp(head_length, 0.0f, length);
+    head_radius = positive_or_epsilon(head_radius);
+    segments = std::max(segments, 3u);
+
     auto mesh = std::make_unique<Mesh>(RenderPrimitive::Triangles);
     std::vector<std::array<float, 3>> positions;
     std::vector<std::array<float, 3>> normals;
