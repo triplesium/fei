@@ -66,7 +66,10 @@ void shadow_pass(
         auto pipeline_id =
             mesh_material_pipelines
                 ->get(entity, *material_opt, gpu_mesh, PipelineSpecializer {});
-        auto pipeline = pipeline_cache->get_pipeline(pipeline_id);
+        auto pipeline = pipeline_cache->get_render_pipeline(pipeline_id);
+        if (!pipeline) {
+            continue;
+        }
         command_buffer->set_render_pipeline(pipeline);
         command_buffer->set_resource_set(
             0,
@@ -148,7 +151,10 @@ void forward_pass(
         auto pipeline_id =
             mesh_material_pipelines
                 ->get(entity, material, gpu_mesh, PipelineSpecializer {});
-        auto pipeline = pipeline_cache->get_pipeline(pipeline_id);
+        auto pipeline = pipeline_cache->get_render_pipeline(pipeline_id);
+        if (!pipeline) {
+            continue;
+        }
         command_buffer->set_render_pipeline(pipeline);
         command_buffer->set_resource_set(
             0,

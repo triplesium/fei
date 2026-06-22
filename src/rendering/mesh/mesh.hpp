@@ -10,6 +10,7 @@
 #include "rendering/render_asset.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <utility>
@@ -81,6 +82,7 @@ class GpuMesh {
     Optional<std::shared_ptr<Buffer>> m_index_buffer;
     RenderPrimitive m_primitive;
     MeshVertexBufferLayout m_vertex_layout;
+    std::size_t m_vertex_layout_hash {0};
     std::size_t m_index_buffer_size;
     std::size_t m_vertex_count;
 
@@ -96,7 +98,11 @@ class GpuMesh {
         m_vertex_buffer(std::move(vertex_buffer)),
         m_index_buffer(std::move(index_buffer)), m_primitive(primitive),
         m_vertex_layout(std::move(vertex_layout)),
-        m_index_buffer_size(index_buffer_size), m_vertex_count(vertex_count) {}
+        m_index_buffer_size(index_buffer_size), m_vertex_count(vertex_count) {
+        m_vertex_layout_hash =
+            std::hash<MeshVertexBufferLayout> {}(m_vertex_layout);
+    }
+
     std::shared_ptr<Buffer> vertex_buffer() const { return m_vertex_buffer; }
     Optional<std::shared_ptr<Buffer>> index_buffer() const {
         return m_index_buffer;
@@ -105,6 +111,7 @@ class GpuMesh {
     const MeshVertexBufferLayout& vertex_buffer_layout() const {
         return m_vertex_layout;
     }
+    std::size_t vertex_layout_hash() const { return m_vertex_layout_hash; }
     std::size_t index_buffer_size() const { return m_index_buffer_size; }
     std::size_t vertex_count() const { return m_vertex_count; }
 };

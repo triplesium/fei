@@ -1,5 +1,6 @@
 #pragma once
 #include "asset/assets.hpp"
+#include "base/hash.hpp"
 #include "core/transform.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
@@ -26,6 +27,7 @@
 #include "rendering/view.hpp"
 
 #include <cmath>
+#include <cstddef>
 #include <memory>
 #include <vector>
 
@@ -54,11 +56,18 @@ struct SpotLight {
 
 class ShadowMapPipelineSpecializer : public PipelineSpecializer {
     std::vector<std::shared_ptr<ShaderModule>> m_shader_modules;
+    std::size_t m_cache_key {0};
 
   public:
     ShadowMapPipelineSpecializer(
         std::vector<std::shared_ptr<ShaderModule>> shader_modules
-    ) : m_shader_modules(std::move(shader_modules)) {}
+    ) : m_shader_modules(std::move(shader_modules)) {
+        for (const auto& shader_module : m_shader_modules) {
+            hash_combine(m_cache_key, shader_module.get());
+        }
+    }
+
+    std::size_t cache_key() const override { return m_cache_key; }
 
     void specialize(
         RenderPipelineDescription& desc,
@@ -327,7 +336,10 @@ inline void render_shadow_map(
                 gpu_mesh,
                 shadow_mapping_resources->pipeline_specializer
             );
-            auto pipeline = pipeline_cache->get_pipeline(pipeline_id);
+            auto pipeline = pipeline_cache->get_render_pipeline(pipeline_id);
+            if (!pipeline) {
+                continue;
+            }
             command_buffer->set_render_pipeline(pipeline);
             command_buffer->set_resource_set(0, view_resource_set.resource_set);
             command_buffer->set_resource_set(

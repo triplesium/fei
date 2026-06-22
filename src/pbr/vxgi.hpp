@@ -31,6 +31,7 @@
 #include "scene/scene.hpp"
 
 #include <array>
+#include <cstddef>
 #include <memory>
 #include <vector>
 
@@ -68,6 +69,7 @@ class VxgiVoxelizationSpecializer : public PipelineSpecializer {
     std::vector<std::shared_ptr<ShaderModule>> m_shader_modules;
     std::shared_ptr<ResourceLayout> m_volumes_layout;
     std::shared_ptr<ResourceLayout> m_voxelization_layout;
+    std::size_t m_cache_key {0};
 
   public:
     VxgiVoxelizationSpecializer(
@@ -75,6 +77,8 @@ class VxgiVoxelizationSpecializer : public PipelineSpecializer {
         std::shared_ptr<ResourceLayout> volumes_layout,
         std::shared_ptr<ResourceLayout> voxelization_layout
     );
+
+    std::size_t cache_key() const override { return m_cache_key; }
 
     void specialize(
         RenderPipelineDescription& desc,

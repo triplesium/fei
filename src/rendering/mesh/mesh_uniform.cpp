@@ -12,6 +12,15 @@ void prepare_mesh_uniforms(
     Res<MeshUniforms> mesh_uniforms
 ) {
     // TODO: Cleanup unused uniforms
+    if (!mesh_uniforms->resource_layout) {
+        mesh_uniforms->resource_layout = device->create_resource_layout(
+            ResourceLayoutDescription::sequencial(
+                {ShaderStages::Vertex, ShaderStages::Fragment},
+                {uniform_buffer("Mesh")}
+            )
+        );
+    }
+
     for (const auto& [entity, mesh3d, transform3d] : query) {
         MeshUniform uniform {
             .world_from_local = transform3d.to_matrix(),
@@ -26,15 +35,9 @@ void prepare_mesh_uniforms(
                     .usages = {BufferUsages::Uniform, BufferUsages::Dynamic},
                 }
             );
-            entry.resource_layout = device->create_resource_layout(
-                ResourceLayoutDescription::sequencial(
-                    {ShaderStages::Vertex, ShaderStages::Fragment},
-                    {uniform_buffer("Mesh")}
-                )
-            );
             entry.resource_set = device->create_resource_set(
                 ResourceSetDescription {
-                    .layout = entry.resource_layout,
+                    .layout = mesh_uniforms->resource_layout,
                     .resources = {entry.uniform_buffer},
                 }
             );

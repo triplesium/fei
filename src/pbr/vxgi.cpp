@@ -1,5 +1,7 @@
 #include "pbr/vxgi.hpp"
 
+#include "base/hash.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -14,7 +16,13 @@ VxgiVoxelizationSpecializer::VxgiVoxelizationSpecializer(
 ) :
     m_shader_modules(std::move(shader_modules)),
     m_volumes_layout(std::move(volumes_layout)),
-    m_voxelization_layout(std::move(voxelization_layout)) {}
+    m_voxelization_layout(std::move(voxelization_layout)) {
+    for (const auto& shader_module : m_shader_modules) {
+        hash_combine(m_cache_key, shader_module.get());
+    }
+    hash_combine(m_cache_key, m_volumes_layout.get());
+    hash_combine(m_cache_key, m_voxelization_layout.get());
+}
 
 void VxgiVoxelizationSpecializer::specialize(
     RenderPipelineDescription& desc,
@@ -300,7 +308,10 @@ void voxelize_scene(
             gpu_mesh,
             voxelization->pipeline_specializer
         );
-        auto pipeline = pipeline_cache->get_pipeline(pipeline_id);
+        auto pipeline = pipeline_cache->get_render_pipeline(pipeline_id);
+        if (!pipeline) {
+            continue;
+        }
         command_buffer->set_render_pipeline(pipeline);
         command_buffer->set_resource_set(
             1,

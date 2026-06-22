@@ -388,7 +388,10 @@ void defered_prepass(
             gpu_mesh,
             DeferredPipelineSpecializer {}
         );
-        auto pipeline = pipeline_cache->get_pipeline(pipeline_id);
+        auto pipeline = pipeline_cache->get_render_pipeline(pipeline_id);
+        if (!pipeline) {
+            continue;
+        }
         command_buffer->set_render_pipeline(pipeline);
         command_buffer->set_resource_set(
             0,

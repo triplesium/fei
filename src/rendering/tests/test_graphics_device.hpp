@@ -91,6 +91,8 @@ class FakeGraphicsDevice : public GraphicsDevice {
     std::vector<std::shared_ptr<FakeTexture>> textures;
     std::vector<std::shared_ptr<Pipeline>> render_pipelines;
     std::vector<std::shared_ptr<Pipeline>> compute_pipelines;
+    bool fail_render_pipeline_creation {false};
+    bool fail_compute_pipeline_creation {false};
 
     std::shared_ptr<ShaderModule>
     create_shader_module(const ShaderDescription& desc) override {
@@ -127,6 +129,9 @@ class FakeGraphicsDevice : public GraphicsDevice {
     std::shared_ptr<Pipeline>
     create_render_pipeline(const RenderPipelineDescription& desc) override {
         render_pipeline_descriptions.push_back(desc);
+        if (fail_render_pipeline_creation) {
+            return nullptr;
+        }
         auto pipeline = std::make_shared<FakePipeline>();
         render_pipelines.push_back(pipeline);
         return pipeline;
@@ -135,6 +140,9 @@ class FakeGraphicsDevice : public GraphicsDevice {
     std::shared_ptr<Pipeline>
     create_compute_pipeline(const ComputePipelineDescription& desc) override {
         compute_pipeline_descriptions.push_back(desc);
+        if (fail_compute_pipeline_creation) {
+            return nullptr;
+        }
         auto pipeline = std::make_shared<FakePipeline>();
         compute_pipelines.push_back(pipeline);
         return pipeline;
