@@ -33,9 +33,15 @@ struct SceneSpawner {
     SceneSpawnOptions options;
 };
 
+struct SceneInstance {
+    Handle<Scene> scene;
+    std::vector<Entity> entities;
+};
+
 struct SceneSpawnedEvent {
     Entity entity;
     Handle<Scene> scene;
+    std::vector<Entity> spawned_entities;
 };
 
 struct SceneSpawnFailedEvent {

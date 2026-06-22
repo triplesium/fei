@@ -239,8 +239,11 @@ void spawn_scene(
             material_handles.push_back(material_handle);
         }
 
+        std::vector<Entity> spawned_entities;
         for (const auto& object : scene->objects) {
-            commands.spawn().add(
+            auto spawned_entity = commands.spawn();
+            spawned_entities.push_back(spawned_entity.id());
+            spawned_entity.add(
                 Mesh3d {.mesh = mesh_handles[object.mesh_index]},
                 MeshMaterial3d<StandardMaterial> {
                     .material = material_handles[object.material_index]
@@ -248,11 +251,17 @@ void spawn_scene(
                 Transform3d {}
             );
         }
-        commands.entity(entity).despawn();
+        commands.entity(entity).remove<SceneSpawner>().add(
+            SceneInstance {
+                .scene = spawner.scene,
+                .entities = spawned_entities,
+            }
+        );
         spawned_events.send(
             SceneSpawnedEvent {
                 .entity = entity,
                 .scene = spawner.scene,
+                .spawned_entities = std::move(spawned_entities),
             }
         );
     }

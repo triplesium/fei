@@ -174,8 +174,15 @@ TEST_CASE(
 
     app.run_schedule(Update);
 
-    REQUIRE_FALSE(app.world().has_entity(spawner_entity));
+    REQUIRE(app.world().has_entity(spawner_entity));
+    REQUIRE_FALSE(app.world().has_component<SceneSpawner>(spawner_entity));
+    REQUIRE(app.world().has_component<SceneInstance>(spawner_entity));
     REQUIRE(spawned_scene_object_count(app) == 1);
+
+    const auto& scene_instance =
+        app.world().get_component<SceneInstance>(spawner_entity);
+    REQUIRE(scene_instance.scene.id() == scene_handle.id());
+    REQUIRE(scene_instance.entities.size() == 1);
 
     std::size_t last_spawned_event = 0;
     EventReader<SceneSpawnedEvent> spawned_reader(
@@ -186,6 +193,7 @@ TEST_CASE(
     REQUIRE(spawned_event.has_value());
     REQUIRE(spawned_event->entity == spawner_entity);
     REQUIRE(spawned_event->scene.id() == scene_handle.id());
+    REQUIRE(spawned_event->spawned_entities == scene_instance.entities);
     REQUIRE_FALSE(spawned_reader.next().has_value());
 }
 
