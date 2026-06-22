@@ -38,9 +38,7 @@ using namespace fei;
 
 class ColorOnlyMaterial : public StandardMaterial {
   public:
-    ShaderRef fragment_shader() const override {
-        return "shader://color.frag";
-    }
+    ShaderRef fragment_shader() const override { return "shader://color.frag"; }
     ShaderRef deferred_fragment_shader() const override {
         return "shader://color.frag";
     }

@@ -121,7 +121,7 @@ void voxelize_scene(
     Res<GraphicsDevice> device,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
     Res<RenderAssets<PreparedMaterial>> materials,
-    EventReader<SceneSpawnEvent> spawn_events,
+    EventReader<SceneSpawnedEvent> spawn_events,
     Res<MeshUniforms> mesh_uniforms
 );
 

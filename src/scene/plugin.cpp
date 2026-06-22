@@ -7,7 +7,8 @@
 namespace fei {
 
 void ScenePlugin::setup(App& app) {
-    app.add_event<SceneSpawnEvent>()
+    app.add_event<SceneSpawnedEvent>()
+        .add_event<SceneSpawnFailedEvent>()
         .add_plugin<AssetPlugin<Scene, SceneLoader>>()
         .add_systems(Update, spawn_scene);
 }

@@ -22,10 +22,16 @@
 
 namespace fei {
 
+struct AssetLoadFailure {
+    AssetKey asset;
+    AssetLoadError error;
+};
+
 class AssetServer {
   private:
     struct AssetTypeAccess {
         std::function<Optional<AssetLoadState>(AssetId)> load_state;
+        std::function<Optional<AssetLoadError>(AssetId)> load_error;
         std::function<std::vector<AssetKey>(AssetId)> dependencies;
     };
 
@@ -293,6 +299,19 @@ class AssetServer {
         return load_state(asset_key(handle));
     }
 
+    Optional<AssetLoadError> load_error(AssetKey key) const {
+        auto it = m_asset_types.find(key.type);
+        if (it == m_asset_types.end()) {
+            return nullopt;
+        }
+        return it->second.load_error(key.id);
+    }
+
+    template<typename T>
+    Optional<AssetLoadError> load_error(const Handle<T>& handle) const {
+        return load_error(asset_key(handle));
+    }
+
     bool is_loaded(AssetKey key) const {
         auto state = load_state(key);
         return state && *state == AssetLoadState::Loaded;
@@ -330,6 +349,18 @@ class AssetServer {
     template<typename T>
     AssetLoadState dependency_load_state(const Handle<T>& handle) const {
         return dependency_load_state(asset_key(handle));
+    }
+
+    Optional<AssetLoadFailure> first_failed_dependency(AssetKey key) const {
+        std::unordered_set<AssetKey> visited;
+        visited.insert(key);
+        return first_failed_dependency(key, visited);
+    }
+
+    template<typename T>
+    Optional<AssetLoadFailure>
+    first_failed_dependency(const Handle<T>& handle) const {
+        return first_failed_dependency(asset_key(handle));
     }
 
     AssetLoadState recursive_dependency_load_state(AssetKey key) const {
@@ -381,6 +412,16 @@ class AssetServer {
                 }
                 return app->template resource<Assets<T>>().load_state(id);
             },
+            .load_error = [app](AssetId id) -> Optional<AssetLoadError> {
+                if (!app || !app->template has_resource<Assets<T>>()) {
+                    return nullopt;
+                }
+                auto error = app->template resource<Assets<T>>().load_error(id);
+                if (!error) {
+                    return nullopt;
+                }
+                return *error;
+            },
             .dependencies = [app](AssetId id) -> std::vector<AssetKey> {
                 if (!app || !app->template has_resource<Assets<T>>()) {
                     return {};
@@ -414,6 +455,42 @@ class AssetServer {
             }
         }
         return state;
+    }
+
+    Optional<AssetLoadFailure> first_failed_dependency(
+        AssetKey key,
+        std::unordered_set<AssetKey>& visited
+    ) const {
+        for (auto dependency : dependencies(key)) {
+            if (!visited.insert(dependency).second) {
+                continue;
+            }
+
+            auto dependency_state = load_state(dependency);
+            if (!dependency_state) {
+                continue;
+            }
+            if (*dependency_state == AssetLoadState::Failed) {
+                auto error = load_error(dependency);
+                if (!error) {
+                    continue;
+                }
+                return AssetLoadFailure {
+                    .asset = dependency,
+                    .error = std::move(*error),
+                };
+            }
+            if (*dependency_state != AssetLoadState::Loaded) {
+                continue;
+            }
+
+            auto failed_dependency =
+                first_failed_dependency(dependency, visited);
+            if (failed_dependency) {
+                return failed_dependency;
+            }
+        }
+        return nullopt;
     }
 
     AssetLoadState recursive_dependency_load_state(

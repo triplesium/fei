@@ -487,6 +487,26 @@ TEST_CASE(
     REQUIRE_FALSE(
         app.resource<AssetServer>().is_loaded_with_dependencies(handle)
     );
+
+    auto load_error = app.resource<AssetServer>().load_error(
+        AssetKey {
+            .type = type_id<DependencyAsset>(),
+            .id = dependency_id,
+        }
+    );
+    REQUIRE(load_error.has_value());
+    REQUIRE(load_error->path.as_string() == "memory://dependency.bin");
+    REQUIRE(load_error->message == "dependency loader failed");
+
+    auto failed_dependency =
+        app.resource<AssetServer>().first_failed_dependency(handle);
+    REQUIRE(failed_dependency.has_value());
+    REQUIRE(failed_dependency->asset.type == type_id<DependencyAsset>());
+    REQUIRE(failed_dependency->asset.id == dependency_id);
+    REQUIRE(
+        failed_dependency->error.path.as_string() == "memory://dependency.bin"
+    );
+    REQUIRE(failed_dependency->error.message == "dependency loader failed");
 }
 
 TEST_CASE(

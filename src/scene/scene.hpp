@@ -33,7 +33,17 @@ struct SceneSpawner {
     SceneSpawnOptions options;
 };
 
-struct SceneSpawnEvent {};
+struct SceneSpawnedEvent {
+    Entity entity;
+    Handle<Scene> scene;
+};
+
+struct SceneSpawnFailedEvent {
+    Entity entity;
+    Handle<Scene> scene;
+    AssetKey asset;
+    AssetLoadError error;
+};
 
 class SceneLoader : public AssetLoader<Scene> {
   public:
@@ -47,7 +57,8 @@ void spawn_scene(
     Res<Assets<Scene>> scenes,
     Res<Assets<Mesh>> meshes,
     Res<Assets<StandardMaterial>> materials,
-    EventWriter<SceneSpawnEvent> spawn_events,
+    EventWriter<SceneSpawnedEvent> spawned_events,
+    EventWriter<SceneSpawnFailedEvent> spawn_failed_events,
     Commands commands
 );
 

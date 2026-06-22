@@ -259,7 +259,7 @@ void voxelize_scene(
     Res<GraphicsDevice> device,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
     Res<RenderAssets<PreparedMaterial>> materials,
-    EventReader<SceneSpawnEvent> spawn_events,
+    EventReader<SceneSpawnedEvent> spawn_events,
     Res<MeshUniforms> mesh_uniforms
 ) {
     if (!spawn_events.next()) {
@@ -913,7 +913,7 @@ void prepare_vxgi_lighting(
 }
 
 void VxgiPlugin::setup(App& app) {
-    app.add_event<SceneSpawnEvent>()
+    app.add_event<SceneSpawnedEvent>()
         .add_resource<VxgiVolumes>()
         .add_systems(
             StartUp,

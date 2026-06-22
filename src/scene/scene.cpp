@@ -174,11 +174,50 @@ void spawn_scene(
     Res<Assets<Scene>> scenes,
     Res<Assets<Mesh>> meshes,
     Res<Assets<StandardMaterial>> materials,
-    EventWriter<SceneSpawnEvent> spawn_events,
+    EventWriter<SceneSpawnedEvent> spawned_events,
+    EventWriter<SceneSpawnFailedEvent> spawn_failed_events,
     Commands commands
 ) {
     for (const auto& [entity, spawner] : scene_query) {
-        if (!asset_server->is_loaded_with_dependencies(spawner.scene)) {
+        auto scene_state = asset_server->load_state(spawner.scene);
+        if (!scene_state || *scene_state == AssetLoadState::Loading) {
+            continue;
+        }
+        if (*scene_state == AssetLoadState::Failed) {
+            auto error = asset_server->load_error(spawner.scene);
+            if (error) {
+                spawn_failed_events.send(
+                    SceneSpawnFailedEvent {
+                        .entity = entity,
+                        .scene = spawner.scene,
+                        .asset = AssetServer::asset_key(spawner.scene),
+                        .error = std::move(*error),
+                    }
+                );
+            }
+            commands.entity(entity).despawn();
+            continue;
+        }
+
+        auto dependency_state =
+            asset_server->recursive_dependency_load_state(spawner.scene);
+        if (dependency_state == AssetLoadState::Loading) {
+            continue;
+        }
+        if (dependency_state == AssetLoadState::Failed) {
+            auto failed_dependency =
+                asset_server->first_failed_dependency(spawner.scene);
+            if (failed_dependency) {
+                spawn_failed_events.send(
+                    SceneSpawnFailedEvent {
+                        .entity = entity,
+                        .scene = spawner.scene,
+                        .asset = failed_dependency->asset,
+                        .error = std::move(failed_dependency->error),
+                    }
+                );
+            }
+            commands.entity(entity).despawn();
             continue;
         }
 
@@ -210,7 +249,12 @@ void spawn_scene(
             );
         }
         commands.entity(entity).despawn();
-        spawn_events.send(SceneSpawnEvent {});
+        spawned_events.send(
+            SceneSpawnedEvent {
+                .entity = entity,
+                .scene = spawner.scene,
+            }
+        );
     }
 }
 

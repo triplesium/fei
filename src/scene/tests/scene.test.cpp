@@ -7,6 +7,7 @@
 #include "asset/source.hpp"
 #include "core/image.hpp"
 #include "core/transform.hpp"
+#include "ecs/event.hpp"
 #include "rendering/components.hpp"
 
 #include <array>
@@ -61,6 +62,13 @@ class BlockingImageLoader : public AssetLoader<Image> {
             TextureUsage::Sampled,
             TextureType::Texture2D
         );
+    }
+};
+
+class FailingImageLoader : public AssetLoader<Image> {
+  public:
+    AssetLoadResult<Image> load(Reader&, const LoadContext& context) override {
+        return failure(AssetLoadError(context.asset_path(), "image failed"));
     }
 };
 
@@ -131,7 +139,9 @@ TEST_CASE(
     asset_server.add_loader<Image, BlockingImageLoader>();
     asset_server.add_without_loader<Mesh>();
     asset_server.add_without_loader<StandardMaterial>();
-    app.add_event<SceneSpawnEvent>().add_systems(Update, spawn_scene);
+    app.add_event<SceneSpawnedEvent>()
+        .add_event<SceneSpawnFailedEvent>()
+        .add_systems(Update, spawn_scene);
     app.world().sort_systems();
 
     auto scene_handle =
@@ -166,4 +176,79 @@ TEST_CASE(
 
     REQUIRE_FALSE(app.world().has_entity(spawner_entity));
     REQUIRE(spawned_scene_object_count(app) == 1);
+
+    std::size_t last_spawned_event = 0;
+    EventReader<SceneSpawnedEvent> spawned_reader(
+        app.resource<Events<SceneSpawnedEvent>>(),
+        last_spawned_event
+    );
+    auto spawned_event = spawned_reader.next();
+    REQUIRE(spawned_event.has_value());
+    REQUIRE(spawned_event->entity == spawner_entity);
+    REQUIRE(spawned_event->scene.id() == scene_handle.id());
+    REQUIRE_FALSE(spawned_reader.next().has_value());
+}
+
+TEST_CASE(
+    "spawn_scene reports failed recursive asset dependencies",
+    "[scene][asset]"
+) {
+    App app;
+    app.add_plugin<AssetsPlugin>();
+    auto& asset_server = app.resource<AssetServer>();
+    asset_server.emplace_source<MemorySource>();
+    asset_server.add_loader<Scene, DependentSceneLoader>();
+    asset_server.add_loader<Image, FailingImageLoader>();
+    asset_server.add_without_loader<Mesh>();
+    asset_server.add_without_loader<StandardMaterial>();
+    app.add_event<SceneSpawnedEvent>()
+        .add_event<SceneSpawnFailedEvent>()
+        .add_systems(Update, spawn_scene);
+    app.world().sort_systems();
+
+    auto scene_handle =
+        asset_server.load_async<Scene>(AssetPath("memory://scene.obj"));
+    auto spawner_entity = app.world().entity();
+    app.world().add_component(
+        spawner_entity,
+        SceneSpawner {
+            .scene = scene_handle,
+            .options = {},
+        }
+    );
+
+    run_post_update_until(app, [&]() {
+        return app.resource<Assets<Scene>>().get(scene_handle).has_value();
+    });
+
+    auto scene = app.resource<Assets<Scene>>().get(scene_handle);
+    REQUIRE(scene.has_value());
+    REQUIRE(scene->materials.size() == 1);
+    REQUIRE(scene->materials[0]->albedo_map.has_value());
+    auto dependency_id = scene->materials[0]->albedo_map->id();
+
+    run_post_update_until(app, [&]() {
+        return asset_server.recursive_dependency_load_state(scene_handle) ==
+               AssetLoadState::Failed;
+    });
+
+    app.run_schedule(Update);
+
+    REQUIRE_FALSE(app.world().has_entity(spawner_entity));
+    REQUIRE(spawned_scene_object_count(app) == 0);
+
+    std::size_t last_event = 0;
+    EventReader<SceneSpawnFailedEvent> reader(
+        app.resource<Events<SceneSpawnFailedEvent>>(),
+        last_event
+    );
+    auto event = reader.next();
+    REQUIRE(event.has_value());
+    REQUIRE(event->entity == spawner_entity);
+    REQUIRE(event->scene.id() == scene_handle.id());
+    REQUIRE(event->asset.type == type_id<Image>());
+    REQUIRE(event->asset.id == dependency_id);
+    REQUIRE(event->error.path.as_string() == "memory://albedo.png");
+    REQUIRE(event->error.message == "image failed");
+    REQUIRE_FALSE(reader.next().has_value());
 }
