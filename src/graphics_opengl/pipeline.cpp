@@ -25,8 +25,7 @@ struct ResourceBindingLimits {
 
 GLuint get_gl_limit(GLenum name) {
     GLint value = 0;
-    glGetIntegerv(name, &value);
-    opengl_check_error();
+    FEI_GL_CALL(glGetIntegerv(name, &value));
     return static_cast<GLuint>(value);
 }
 
@@ -104,31 +103,29 @@ PipelineOpenGL::PipelineOpenGL(const ComputePipelineDescription& desc) :
 }
 
 void PipelineOpenGL::create_gl_resource() const {
-    m_program = glCreateProgram();
+    m_program = FEI_GL_CALL(glCreateProgram());
     for (const auto& shader : m_shaders) {
         auto shader_gl = std::static_pointer_cast<ShaderOpenGL>(shader);
         shader_gl->ensure_created();
-        glAttachShader(m_program, shader_gl->id());
-        opengl_check_error();
+        FEI_GL_CALL(glAttachShader(m_program, shader_gl->id()));
     }
 
-    glLinkProgram(m_program);
-    opengl_check_error();
+    FEI_GL_CALL(glLinkProgram(m_program));
 
     GLint link_status;
-    glGetProgramiv(m_program, GL_LINK_STATUS, &link_status);
-    opengl_check_error();
+    FEI_GL_CALL(glGetProgramiv(m_program, GL_LINK_STATUS, &link_status));
     if (link_status == GL_FALSE) {
         GLint info_log_length;
-        glGetProgramiv(m_program, GL_INFO_LOG_LENGTH, &info_log_length);
-        opengl_check_error();
+        FEI_GL_CALL(
+            glGetProgramiv(m_program, GL_INFO_LOG_LENGTH, &info_log_length)
+        );
         std::string info_log(info_log_length, ' ');
-        glGetProgramInfoLog(
+        FEI_GL_CALL(glGetProgramInfoLog(
             m_program,
             info_log_length,
             nullptr,
             info_log.data()
-        );
+        ));
         fei::fatal("Failed to link OpenGL program: {}", info_log);
     }
 
@@ -137,8 +134,7 @@ void PipelineOpenGL::create_gl_resource() const {
 
 void PipelineOpenGL::destroy_gl_resource() {
     if (m_program != 0) {
-        glDeleteProgram(m_program);
-        opengl_check_error();
+        FEI_GL_CALL(glDeleteProgram(m_program));
         m_program = 0;
         m_resource_bindings.clear();
         m_memory_barriers = 0;
@@ -250,9 +246,9 @@ void PipelineOpenGL::process_resource_layouts() const {
             const auto& element = elements[i];
             switch (element.kind) {
                 case ResourceKind::UniformBuffer: {
-                    auto index =
-                        glGetUniformBlockIndex(m_program, element.name.c_str());
-                    opengl_check_error();
+                    auto index = FEI_GL_CALL(
+                        glGetUniformBlockIndex(m_program, element.name.c_str())
+                    );
                     if (index == GL_INVALID_INDEX) {
                         continue;
                     }
@@ -263,8 +259,9 @@ void PipelineOpenGL::process_resource_layouts() const {
                         element.name
                     );
                     auto binding = next_uniform_binding++;
-                    glUniformBlockBinding(m_program, index, binding);
-                    opengl_check_error();
+                    FEI_GL_CALL(
+                        glUniformBlockBinding(m_program, index, binding)
+                    );
                     m_resource_bindings[slot][i] = UniformBinding {
                         .block_index = index,
                         .binding = binding,
@@ -272,9 +269,9 @@ void PipelineOpenGL::process_resource_layouts() const {
                     break;
                 }
                 case ResourceKind::TextureReadOnly: {
-                    auto location =
-                        glGetUniformLocation(m_program, element.name.c_str());
-                    opengl_check_error();
+                    auto location = FEI_GL_CALL(
+                        glGetUniformLocation(m_program, element.name.c_str())
+                    );
                     if (location == -1) {
                         continue;
                     }
@@ -285,8 +282,9 @@ void PipelineOpenGL::process_resource_layouts() const {
                         element.name
                     );
                     auto unit = next_texture_unit++;
-                    glProgramUniform1i(m_program, location, to_gl_int(unit));
-                    opengl_check_error();
+                    FEI_GL_CALL(
+                        glProgramUniform1i(m_program, location, to_gl_int(unit))
+                    );
                     m_resource_bindings[slot][i] = TextureBinding {
                         .unit = unit,
                         .location = location,
@@ -295,9 +293,9 @@ void PipelineOpenGL::process_resource_layouts() const {
                     break;
                 }
                 case ResourceKind::TextureReadWrite: {
-                    auto location =
-                        glGetUniformLocation(m_program, element.name.c_str());
-                    opengl_check_error();
+                    auto location = FEI_GL_CALL(
+                        glGetUniformLocation(m_program, element.name.c_str())
+                    );
                     if (location == -1) {
                         continue;
                     }
@@ -308,8 +306,9 @@ void PipelineOpenGL::process_resource_layouts() const {
                         element.name
                     );
                     auto unit = next_image_unit++;
-                    glProgramUniform1i(m_program, location, to_gl_int(unit));
-                    opengl_check_error();
+                    FEI_GL_CALL(
+                        glProgramUniform1i(m_program, location, to_gl_int(unit))
+                    );
                     m_resource_bindings[slot][i] = TextureBinding {
                         .unit = unit,
                         .location = location,
@@ -320,12 +319,11 @@ void PipelineOpenGL::process_resource_layouts() const {
                 }
                 case ResourceKind::StorageBufferReadOnly:
                 case ResourceKind::StorageBufferReadWrite: {
-                    auto index = glGetProgramResourceIndex(
+                    auto index = FEI_GL_CALL(glGetProgramResourceIndex(
                         m_program,
                         GL_SHADER_STORAGE_BLOCK,
                         element.name.c_str()
-                    );
-                    opengl_check_error();
+                    ));
                     if (index == GL_INVALID_INDEX) {
                         continue;
                     }
@@ -336,8 +334,9 @@ void PipelineOpenGL::process_resource_layouts() const {
                         element.name
                     );
                     auto binding = next_storage_binding++;
-                    glShaderStorageBlockBinding(m_program, index, binding);
-                    opengl_check_error();
+                    FEI_GL_CALL(
+                        glShaderStorageBlockBinding(m_program, index, binding)
+                    );
                     m_resource_bindings[slot][i] = ShaderStorageBinding {
                         .block_index = index,
                         .binding = binding,

@@ -94,20 +94,14 @@ OpenGLDeviceState::take_pending_disposals() {
 GraphicsDeviceOpenGL::GraphicsDeviceOpenGL() :
     m_state(std::make_shared<OpenGLDeviceState>()) {
     GLuint vao;
-    glGenVertexArrays(1, &vao);
-    opengl_check_error();
-    glBindVertexArray(vao);
-    opengl_check_error();
+    FEI_GL_CALL(glGenVertexArrays(1, &vao));
+    FEI_GL_CALL(glBindVertexArray(vao));
 
     // TODO: Abstract these states to be configurable
-    glEnable(GL_CULL_FACE);
-    opengl_check_error();
-    glCullFace(GL_BACK);
-    opengl_check_error();
-    glEnable(GL_DEPTH_TEST);
-    opengl_check_error();
-    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
-    opengl_check_error();
+    FEI_GL_CALL(glEnable(GL_CULL_FACE));
+    FEI_GL_CALL(glCullFace(GL_BACK));
+    FEI_GL_CALL(glEnable(GL_DEPTH_TEST));
+    FEI_GL_CALL(glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS));
 }
 
 GraphicsDeviceOpenGL::~GraphicsDeviceOpenGL() {
@@ -267,15 +261,14 @@ MappedResource GraphicsDeviceOpenGL::map(
             static_cast<std::size_t>(depth) * bytes_per_pixel;
 
         auto* data = new std::byte[total_size];
-        glGetTextureImage(
+        FEI_GL_CALL(glGetTextureImage(
             texture_gl->id(),
             0, // mip level
             texture_gl->gl_format(),
             texture_gl->gl_type(),
             static_cast<GLsizei>(total_size),
             data
-        );
-        opengl_check_error();
+        ));
 
         {
             std::scoped_lock lock(m_state->m_mutex);
@@ -291,11 +284,10 @@ MappedResource GraphicsDeviceOpenGL::map(
         auto buffer_gl = std::dynamic_pointer_cast<BufferOpenGL>(resource)
     ) {
         buffer_gl->ensure_created();
-        void* ptr = glMapNamedBuffer(
+        void* ptr = FEI_GL_CALL(glMapNamedBuffer(
             buffer_gl->id(),
             map_mode == MapMode::Read ? GL_READ_ONLY : GL_WRITE_ONLY
-        );
-        opengl_check_error();
+        ));
 
         return MappedResource(
             resource,
@@ -327,8 +319,7 @@ void GraphicsDeviceOpenGL::unmap(
         auto buffer_gl = std::dynamic_pointer_cast<BufferOpenGL>(resource)
     ) {
         buffer_gl->ensure_created();
-        glUnmapNamedBuffer(buffer_gl->id());
-        opengl_check_error();
+        FEI_GL_CALL(glUnmapNamedBuffer(buffer_gl->id()));
         return;
     }
     fei::fatal("Unknown MappableResource type in GraphicsDeviceOpenGL::unmap");
@@ -387,23 +378,21 @@ void GraphicsDeviceOpenGL::execute_update_buffer(
     buffer_gl->ensure_created();
 
     if (update.offset == 0 && update.data.size() == buffer_gl->size()) {
-        glNamedBufferData(
+        FEI_GL_CALL(glNamedBufferData(
             buffer_gl->id(),
             to_gl_sizeiptr(update.data.size()),
             update.data.data(),
             to_gl_buffer_usage(buffer_gl->usages())
-        );
-        opengl_check_error();
+        ));
         return;
     }
 
-    glNamedBufferSubData(
+    FEI_GL_CALL(glNamedBufferSubData(
         buffer_gl->id(),
         static_cast<GLintptr>(update.offset),
         to_gl_sizeiptr(update.data.size()),
         update.data.data()
-    );
-    opengl_check_error();
+    ));
 }
 
 void GraphicsDeviceOpenGL::execute_update_texture(
@@ -413,7 +402,7 @@ void GraphicsDeviceOpenGL::execute_update_texture(
     gl_texture->ensure_created();
 
     if (update.texture->usage().is_set(TextureUsage::Cubemap)) {
-        glTextureSubImage3D(
+        FEI_GL_CALL(glTextureSubImage3D(
             gl_texture->id(),
             static_cast<GLint>(update.mip_level),
             static_cast<GLint>(update.x),
@@ -425,10 +414,9 @@ void GraphicsDeviceOpenGL::execute_update_texture(
             gl_texture->gl_format(),
             gl_texture->gl_type(),
             update.data.data()
-        );
-        opengl_check_error();
+        ));
     } else {
-        glTextureSubImage2D(
+        FEI_GL_CALL(glTextureSubImage2D(
             gl_texture->id(),
             static_cast<GLint>(update.mip_level),
             static_cast<GLint>(update.x),
@@ -438,8 +426,7 @@ void GraphicsDeviceOpenGL::execute_update_texture(
             gl_texture->gl_format(),
             gl_texture->gl_type(),
             update.data.data()
-        );
-        opengl_check_error();
+        ));
     }
 }
 

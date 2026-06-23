@@ -31,17 +31,14 @@ capture_web_preview_texture(const std::shared_ptr<Texture>& texture) {
     std::vector<byte> rgba(byte_count);
 
     texture_gl->ensure_created();
-    glGetTextureImage(
+    FEI_GL_CALL(glGetTextureImage(
         texture_gl->id(),
         0,
         texture_gl->gl_format(),
         texture_gl->gl_type(),
         static_cast<GLsizei>(rgba.size()),
         rgba.data()
-    );
-    if (opengl_check_error()) {
-        return {.error = "OpenGL texture readback failed"};
-    }
+    ));
 
     return {
         .rgba = std::move(rgba),

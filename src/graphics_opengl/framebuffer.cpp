@@ -12,8 +12,7 @@ FramebufferOpenGL::FramebufferOpenGL(const FramebufferDescription& desc) :
     Framebuffer(desc) {}
 
 void FramebufferOpenGL::create_gl_resource() const {
-    glCreateFramebuffers(1, &m_fbo);
-    opengl_check_error();
+    FEI_GL_CALL(glCreateFramebuffers(1, &m_fbo));
 
     if (!m_color_attachments.empty()) {
         for (std::size_t i = 0; i < m_color_attachments.size(); i++) {
@@ -23,31 +22,26 @@ void FramebufferOpenGL::create_gl_resource() const {
             );
             tex_gl->ensure_created();
 
-            glNamedFramebufferTexture(
+            FEI_GL_CALL(glNamedFramebufferTexture(
                 m_fbo,
                 static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i),
                 tex_gl->id(),
                 to_gl_int(color_attachment.mip_level)
-            );
-            opengl_check_error();
+            ));
         }
         std::vector<GLenum> bufs(m_color_attachments.size());
         for (std::size_t i = 0; i < m_color_attachments.size(); i++) {
             bufs[i] = static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i);
         }
-        glNamedFramebufferDrawBuffers(
+        FEI_GL_CALL(glNamedFramebufferDrawBuffers(
             m_fbo,
             to_gl_sizei(bufs.size()),
             bufs.data()
-        );
-        opengl_check_error();
-        glNamedFramebufferReadBuffer(m_fbo, GL_COLOR_ATTACHMENT0);
-        opengl_check_error();
+        ));
+        FEI_GL_CALL(glNamedFramebufferReadBuffer(m_fbo, GL_COLOR_ATTACHMENT0));
     } else {
-        glNamedFramebufferDrawBuffer(m_fbo, GL_NONE);
-        opengl_check_error();
-        glNamedFramebufferReadBuffer(m_fbo, GL_NONE);
-        opengl_check_error();
+        FEI_GL_CALL(glNamedFramebufferDrawBuffer(m_fbo, GL_NONE));
+        FEI_GL_CALL(glNamedFramebufferReadBuffer(m_fbo, GL_NONE));
     }
 
     if (m_depth_attachment.has_value()) {
@@ -55,20 +49,18 @@ void FramebufferOpenGL::create_gl_resource() const {
             m_depth_attachment->texture
         );
         depth_tex_gl->ensure_created();
-        glNamedFramebufferTexture(
+        FEI_GL_CALL(glNamedFramebufferTexture(
             m_fbo,
             GL_DEPTH_ATTACHMENT,
             depth_tex_gl->id(),
             to_gl_int(m_depth_attachment->mip_level)
-        );
-        opengl_check_error();
+        ));
     }
 }
 
 void FramebufferOpenGL::destroy_gl_resource() {
     if (m_owns_fbo && m_fbo != 0) {
-        glDeleteFramebuffers(1, &m_fbo);
-        opengl_check_error();
+        FEI_GL_CALL(glDeleteFramebuffers(1, &m_fbo));
         m_fbo = 0;
     }
 }

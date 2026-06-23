@@ -14,8 +14,7 @@ TextureViewOpenGL::TextureViewOpenGL(const TextureViewDescription& desc) :
 
 void TextureViewOpenGL::create_gl_resource() const {
     m_target_gl->ensure_created();
-    glGenTextures(1, &m_texture_view);
-    opengl_check_error();
+    FEI_GL_CALL(glGenTextures(1, &m_texture_view));
 
     GLenum original_target =
         to_gl_texture_target(m_target_gl->usage(), m_target_gl->type());
@@ -41,7 +40,7 @@ void TextureViewOpenGL::create_gl_resource() const {
         return;
     }
     auto internal_format = m_target_gl->gl_sized_internal_format();
-    glTextureView(
+    FEI_GL_CALL(glTextureView(
         m_texture_view,
         m_texture_target,
         m_target_gl->id(),
@@ -50,14 +49,12 @@ void TextureViewOpenGL::create_gl_resource() const {
         mip_levels(),
         base_array_layer(),
         effective_array_layers
-    );
-    opengl_check_error();
+    ));
 }
 
 void TextureViewOpenGL::destroy_gl_resource() {
     if (m_texture_view != 0) {
-        glDeleteTextures(1, &m_texture_view);
-        opengl_check_error();
+        FEI_GL_CALL(glDeleteTextures(1, &m_texture_view));
         m_texture_view = 0;
     }
 }

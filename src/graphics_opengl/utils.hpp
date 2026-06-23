@@ -3,12 +3,44 @@
 #include "graphics/enums.hpp"
 
 #include <glad/glad.h>
+#include <source_location>
 #include <string>
+#include <type_traits>
+#include <utility>
 
 namespace fei {
 
 std::string opengl_error_string(GLenum const err) noexcept;
-bool opengl_check_error();
+void opengl_check_error(
+    const char* call,
+    std::source_location loc = std::source_location::current()
+);
+
+template<typename Fn>
+decltype(auto) opengl_call(
+    Fn&& fn,
+    const char* call,
+    std::source_location loc = std::source_location::current()
+) {
+    if constexpr (std::is_void_v<std::invoke_result_t<Fn>>) {
+        std::forward<Fn>(fn)();
+        opengl_check_error(call, loc);
+    } else {
+        auto result = std::forward<Fn>(fn)();
+        opengl_check_error(call, loc);
+        return result;
+    }
+}
+
+#define FEI_GL_CALL(call)               \
+    ::fei::opengl_call(                 \
+        [&]() -> decltype(call) {       \
+            return (call);              \
+        },                              \
+        #call,                          \
+        std::source_location::current() \
+    )
+
 GLint to_gl_address_mode(SamplerAddressMode address_mode);
 GLuint to_gl_mag_filter(SamplerFilter mag_filter);
 GLint to_gl_min_filter(

@@ -19,36 +19,32 @@ TextureOpenGL::TextureOpenGL(const TextureDescription& desc) :
 void TextureOpenGL::create_gl_resource() const {
     auto gl_target = to_gl_texture_target(m_texture_usage, m_texture_type);
 
-    glCreateTextures(gl_target, 1, &m_texture);
-    opengl_check_error();
+    FEI_GL_CALL(glCreateTextures(gl_target, 1, &m_texture));
 
     if (gl_target == GL_TEXTURE_1D) {
-        glTextureStorage1D(
+        FEI_GL_CALL(glTextureStorage1D(
             m_texture,
             to_gl_sizei(m_mip_level),
             m_gl_sized_internal_format,
             to_gl_sizei(m_width)
-        );
-        opengl_check_error();
+        ));
     } else if (gl_target == GL_TEXTURE_2D || gl_target == GL_TEXTURE_CUBE_MAP) {
-        glTextureStorage2D(
+        FEI_GL_CALL(glTextureStorage2D(
             m_texture,
             to_gl_sizei(m_mip_level),
             m_gl_sized_internal_format,
             to_gl_sizei(m_width),
             to_gl_sizei(m_height)
-        );
-        opengl_check_error();
+        ));
     } else if (gl_target == GL_TEXTURE_3D) {
-        glTextureStorage3D(
+        FEI_GL_CALL(glTextureStorage3D(
             m_texture,
             to_gl_sizei(m_mip_level),
             m_gl_sized_internal_format,
             to_gl_sizei(m_width),
             to_gl_sizei(m_height),
             to_gl_sizei(m_depth)
-        );
-        opengl_check_error();
+        ));
     } else {
         fei::fatal("Unsupported texture type for OpenGL");
         return;
@@ -57,8 +53,7 @@ void TextureOpenGL::create_gl_resource() const {
 
 void TextureOpenGL::destroy_gl_resource() {
     if (m_texture != 0) {
-        glDeleteTextures(1, &m_texture);
-        opengl_check_error();
+        FEI_GL_CALL(glDeleteTextures(1, &m_texture));
         m_texture = 0;
     }
 }

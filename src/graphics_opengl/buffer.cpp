@@ -9,21 +9,18 @@ BufferOpenGL::BufferOpenGL(const BufferDescription& desc) :
     m_size(desc.size), m_usages(desc.usages) {}
 
 void BufferOpenGL::create_gl_resource() const {
-    glCreateBuffers(1, &m_buffer);
-    opengl_check_error();
-    glNamedBufferData(
+    FEI_GL_CALL(glCreateBuffers(1, &m_buffer));
+    FEI_GL_CALL(glNamedBufferData(
         m_buffer,
         to_gl_sizeiptr(m_size),
         nullptr,
         to_gl_buffer_usage(m_usages)
-    );
-    opengl_check_error();
+    ));
 }
 
 void BufferOpenGL::destroy_gl_resource() {
     if (m_buffer != 0) {
-        glDeleteBuffers(1, &m_buffer);
-        opengl_check_error();
+        FEI_GL_CALL(glDeleteBuffers(1, &m_buffer));
         m_buffer = 0;
     }
 }

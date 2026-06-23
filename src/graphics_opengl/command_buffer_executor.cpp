@@ -29,8 +29,7 @@ template<class>
 inline constexpr bool always_false_v = false;
 
 void set_default_framebuffer_draw_buffer() {
-    glDrawBuffer(GL_BACK);
-    opengl_check_error();
+    FEI_GL_CALL(glDrawBuffer(GL_BACK));
 }
 
 } // namespace
@@ -70,8 +69,7 @@ void CommandBufferExecutorOpenGL::execute_command(
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::EndRenderPass>
             ) {
-                glBindFramebuffer(GL_FRAMEBUFFER, 0);
-                opengl_check_error();
+                FEI_GL_CALL(glBindFramebuffer(GL_FRAMEBUFFER, 0));
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::SetFramebuffer>
             ) {
@@ -79,39 +77,32 @@ void CommandBufferExecutorOpenGL::execute_command(
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::SetViewport>
             ) {
-                glViewport(
+                FEI_GL_CALL(glViewport(
                     cmd.x,
                     cmd.y,
                     to_gl_sizei(cmd.w),
                     to_gl_sizei(cmd.h)
-                );
-                opengl_check_error();
+                ));
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::ClearColor>
             ) {
-                glClearColor(
+                FEI_GL_CALL(glClearColor(
                     cmd.color.r,
                     cmd.color.g,
                     cmd.color.b,
                     cmd.color.a
-                );
-                opengl_check_error();
-                glClear(GL_COLOR_BUFFER_BIT);
-                opengl_check_error();
+                ));
+                FEI_GL_CALL(glClear(GL_COLOR_BUFFER_BIT));
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::ClearDepth>
             ) {
-                glClearDepth(cmd.depth);
-                opengl_check_error();
-                glClear(GL_DEPTH_BUFFER_BIT);
-                opengl_check_error();
+                FEI_GL_CALL(glClearDepth(cmd.depth));
+                FEI_GL_CALL(glClear(GL_DEPTH_BUFFER_BIT));
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::ClearStencil>
             ) {
-                glClearStencil(cmd.stencil);
-                opengl_check_error();
-                glClear(GL_STENCIL_BUFFER_BIT);
-                opengl_check_error();
+                FEI_GL_CALL(glClearStencil(cmd.stencil));
+                FEI_GL_CALL(glClear(GL_STENCIL_BUFFER_BIT));
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::SetRenderPipeline>
             ) {
@@ -130,8 +121,9 @@ void CommandBufferExecutorOpenGL::execute_command(
                 auto buffer_gl =
                     std::static_pointer_cast<BufferOpenGL>(cmd.buffer);
                 buffer_gl->ensure_created();
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_gl->id());
-                opengl_check_error();
+                FEI_GL_CALL(
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_gl->id())
+                );
 
                 state.draw_elements_type = to_gl_draw_elements_type(cmd.format);
                 state.index_buffer_offset = cmd.offset;
@@ -198,13 +190,12 @@ void CommandBufferExecutorOpenGL::execute_begin_render_pass(
     for (size_t i = 0; i < desc.color_attachments.size(); ++i) {
         const auto& att = desc.color_attachments[i];
         if (att.load_op == LoadOp::Clear) {
-            glClearNamedFramebufferfv(
+            FEI_GL_CALL(glClearNamedFramebufferfv(
                 fb_gl->id(),
                 GL_COLOR,
                 static_cast<GLint>(i),
                 att.clear_color.data()
-            );
-            opengl_check_error();
+            ));
         }
     }
 
@@ -212,25 +203,26 @@ void CommandBufferExecutorOpenGL::execute_begin_render_pass(
         const auto& att = *desc.depth_stencil_attachment;
         if (att.depth_load_op == LoadOp::Clear &&
             att.stencil_load_op == LoadOp::Clear) {
-            glClearNamedFramebufferfi(
+            FEI_GL_CALL(glClearNamedFramebufferfi(
                 fb_gl->id(),
                 GL_DEPTH_STENCIL,
                 0,
                 att.clear_depth,
                 att.clear_stencil
-            );
+            ));
         } else if (att.depth_load_op == LoadOp::Clear) {
-            glClearNamedFramebufferfv(
+            FEI_GL_CALL(glClearNamedFramebufferfv(
                 fb_gl->id(),
                 GL_DEPTH,
                 0,
                 &att.clear_depth
-            );
+            ));
         } else if (att.stencil_load_op == LoadOp::Clear) {
             GLint s = att.clear_stencil;
-            glClearNamedFramebufferiv(fb_gl->id(), GL_STENCIL, 0, &s);
+            FEI_GL_CALL(
+                glClearNamedFramebufferiv(fb_gl->id(), GL_STENCIL, 0, &s)
+            );
         }
-        opengl_check_error();
     }
 }
 
@@ -241,8 +233,7 @@ void CommandBufferExecutorOpenGL::execute_set_framebuffer(
     auto framebuffer_gl =
         std::static_pointer_cast<FramebufferOpenGL>(framebuffer);
     framebuffer_gl->ensure_created();
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_gl->id());
-    opengl_check_error();
+    FEI_GL_CALL(glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_gl->id()));
     if (framebuffer_gl->id() == 0) {
         set_default_framebuffer_draw_buffer();
     }
@@ -264,44 +255,35 @@ void CommandBufferExecutorOpenGL::execute_set_render_pipeline(
         );
     }
 
-    glUseProgram(pipeline_gl->program());
-    opengl_check_error();
+    FEI_GL_CALL(glUseProgram(pipeline_gl->program()));
 
     const auto& blend_state = pipeline_gl->blend_state();
     if (!blend_state.attachment_states.empty()) {
         const auto& att = blend_state.attachment_states[0];
         if (att.enabled) {
-            glEnable(GL_BLEND);
-            opengl_check_error();
+            FEI_GL_CALL(glEnable(GL_BLEND));
             // TODO: configure blend factors and operations.
         } else {
-            glDisable(GL_BLEND);
-            opengl_check_error();
+            FEI_GL_CALL(glDisable(GL_BLEND));
         }
     }
 
     const auto& depth_stencil_state = pipeline_gl->depth_stencil_state();
     if (depth_stencil_state.depth_test_enabled) {
-        glEnable(GL_DEPTH_TEST);
-        opengl_check_error();
-        glDepthFunc(
+        FEI_GL_CALL(glEnable(GL_DEPTH_TEST));
+        FEI_GL_CALL(glDepthFunc(
             to_gl_compare_function(depth_stencil_state.depth_comparison)
-        );
-        opengl_check_error();
+        ));
     } else {
-        glDisable(GL_DEPTH_TEST);
-        opengl_check_error();
+        FEI_GL_CALL(glDisable(GL_DEPTH_TEST));
     }
 
     const auto& rasterizer_state = pipeline_gl->rasterizer_state();
     if (rasterizer_state.cull_mode == CullMode::None) {
-        glDisable(GL_CULL_FACE);
-        opengl_check_error();
+        FEI_GL_CALL(glDisable(GL_CULL_FACE));
     } else {
-        glEnable(GL_CULL_FACE);
-        opengl_check_error();
-        glCullFace(to_gl_cull_mode(rasterizer_state.cull_mode));
-        opengl_check_error();
+        FEI_GL_CALL(glEnable(GL_CULL_FACE));
+        FEI_GL_CALL(glCullFace(to_gl_cull_mode(rasterizer_state.cull_mode)));
     }
 
     state.pipeline = std::move(pipeline);
@@ -321,8 +303,7 @@ void CommandBufferExecutorOpenGL::execute_set_compute_pipeline(
         );
     }
 
-    glUseProgram(pipeline_gl->program());
-    opengl_check_error();
+    FEI_GL_CALL(glUseProgram(pipeline_gl->program()));
 
     state.pipeline = std::move(pipeline);
 }
@@ -342,14 +323,12 @@ void CommandBufferExecutorOpenGL::execute_set_vertex_buffer(
     buffer_gl->ensure_created();
     pipeline_gl->ensure_created();
 
-    glBindBuffer(GL_ARRAY_BUFFER, buffer_gl->id());
-    opengl_check_error();
+    FEI_GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, buffer_gl->id()));
     for (auto& layout : pipeline_gl->vertex_layouts()) {
         for (auto& attr : layout.attributes) {
             auto location = static_cast<GLuint>(attr.location);
-            glEnableVertexAttribArray(location);
-            opengl_check_error();
-            glVertexAttribPointer(
+            FEI_GL_CALL(glEnableVertexAttribArray(location));
+            FEI_GL_CALL(glVertexAttribPointer(
                 location,
                 to_gl_attribute_size(attr.format),
                 to_gl_attribute_type(attr.format),
@@ -358,8 +337,7 @@ void CommandBufferExecutorOpenGL::execute_set_vertex_buffer(
                 reinterpret_cast<const GLvoid*>(
                     static_cast<std::uintptr_t>(attr.offset)
                 )
-            );
-            opengl_check_error();
+            ));
         }
     }
 }
@@ -416,8 +394,11 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                 buffer->ensure_created();
                 auto& info =
                     std::get<PipelineOpenGL::UniformBinding>(binding_info);
-                glBindBufferBase(GL_UNIFORM_BUFFER, info.binding, buffer->id());
-                opengl_check_error();
+                FEI_GL_CALL(glBindBufferBase(
+                    GL_UNIFORM_BUFFER,
+                    info.binding,
+                    buffer->id()
+                ));
                 break;
             }
             case ResourceKind::TextureReadOnly: {
@@ -427,8 +408,9 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                 texture_view_gl->ensure_created();
                 auto& info =
                     std::get<PipelineOpenGL::TextureBinding>(binding_info);
-                glBindTextureUnit(info.unit, texture_view_gl->id());
-                opengl_check_error();
+                FEI_GL_CALL(
+                    glBindTextureUnit(info.unit, texture_view_gl->id())
+                );
                 break;
             }
             case ResourceKind::TextureReadWrite: {
@@ -442,7 +424,7 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                                    TextureUsage::Cubemap
                                ) ||
                                texture_view_gl->target_gl()->layer() > 1;
-                glBindImageTexture(
+                FEI_GL_CALL(glBindImageTexture(
                     info.unit,
                     texture_view_gl->target_gl()->id(),
                     to_gl_int(texture_view_gl->base_mip_level()),
@@ -450,8 +432,7 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                     to_gl_int(texture_view_gl->base_array_layer()),
                     GL_READ_WRITE,
                     texture_view_gl->target_gl()->gl_sized_internal_format()
-                );
-                opengl_check_error();
+                ));
                 break;
             }
             case ResourceKind::StorageBufferReadOnly:
@@ -461,12 +442,11 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                 auto& info = std::get<PipelineOpenGL::ShaderStorageBinding>(
                     binding_info
                 );
-                glBindBufferBase(
+                FEI_GL_CALL(glBindBufferBase(
                     GL_SHADER_STORAGE_BUFFER,
                     info.binding,
                     buffer->id()
-                );
-                opengl_check_error();
+                ));
                 break;
             }
             case ResourceKind::Sampler: {
@@ -476,8 +456,7 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                 auto& info =
                     std::get<PipelineOpenGL::SamplerBinding>(binding_info);
                 for (auto unit : info.units) {
-                    glBindSampler(unit, sampler->id());
-                    opengl_check_error();
+                    FEI_GL_CALL(glBindSampler(unit, sampler->id()));
                 }
                 break;
             }
@@ -498,13 +477,12 @@ void CommandBufferExecutorOpenGL::execute_update_buffer(
     auto buffer_gl = std::static_pointer_cast<BufferOpenGL>(buffer);
     buffer_gl->ensure_created();
 
-    glNamedBufferData(
+    FEI_GL_CALL(glNamedBufferData(
         buffer_gl->id(),
         to_gl_sizeiptr(data.size()),
         data.data(),
         to_gl_buffer_usage(buffer_gl->usages())
-    );
-    opengl_check_error();
+    ));
 }
 
 void CommandBufferExecutorOpenGL::execute_draw(
@@ -519,15 +497,13 @@ void CommandBufferExecutorOpenGL::execute_draw(
     auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(state.pipeline);
     pipeline_gl->ensure_created();
 
-    glDrawArrays(
+    FEI_GL_CALL(glDrawArrays(
         to_gl_render_primitive(pipeline_gl->render_primitive()),
         static_cast<GLint>(start),
         static_cast<GLsizei>(count)
-    );
-    opengl_check_error();
+    ));
     if (pipeline_gl->memory_barriers() != 0) {
-        glMemoryBarrier(pipeline_gl->memory_barriers());
-        opengl_check_error();
+        FEI_GL_CALL(glMemoryBarrier(pipeline_gl->memory_barriers()));
     }
 }
 
@@ -545,16 +521,14 @@ void CommandBufferExecutorOpenGL::execute_draw_indexed(
         static_cast<std::uintptr_t>(state.index_buffer_offset)
     );
 
-    glDrawElements(
+    FEI_GL_CALL(glDrawElements(
         to_gl_render_primitive(pipeline_gl->render_primitive()),
         static_cast<GLsizei>(count),
         state.draw_elements_type,
         index_offset
-    );
-    opengl_check_error();
+    ));
     if (pipeline_gl->memory_barriers() != 0) {
-        glMemoryBarrier(pipeline_gl->memory_barriers());
-        opengl_check_error();
+        FEI_GL_CALL(glMemoryBarrier(pipeline_gl->memory_barriers()));
     }
 }
 
@@ -563,15 +537,13 @@ void CommandBufferExecutorOpenGL::execute_dispatch(
     std::size_t group_y,
     std::size_t group_z
 ) {
-    glDispatchCompute(
+    FEI_GL_CALL(glDispatchCompute(
         static_cast<GLuint>(group_x),
         static_cast<GLuint>(group_y),
         static_cast<GLuint>(group_z)
-    );
-    opengl_check_error();
+    ));
 
-    glMemoryBarrier(GL_ALL_BARRIER_BITS);
-    opengl_check_error();
+    FEI_GL_CALL(glMemoryBarrier(GL_ALL_BARRIER_BITS));
 }
 
 void CommandBufferExecutorOpenGL::execute_blit_to(
@@ -599,17 +571,15 @@ void CommandBufferExecutorOpenGL::execute_blit_to(
 
     if (target_gl->id() == 0) {
         GLint draw_framebuffer;
-        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_framebuffer);
-        opengl_check_error();
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-        opengl_check_error();
-        glDrawBuffer(GL_BACK);
-        opengl_check_error();
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, draw_framebuffer);
-        opengl_check_error();
+        FEI_GL_CALL(
+            glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_framebuffer)
+        );
+        FEI_GL_CALL(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0));
+        FEI_GL_CALL(glDrawBuffer(GL_BACK));
+        FEI_GL_CALL(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, draw_framebuffer));
     }
 
-    glBlitNamedFramebuffer(
+    FEI_GL_CALL(glBlitNamedFramebuffer(
         src_gl->id(),
         target_gl->id(),
         0,
@@ -622,8 +592,7 @@ void CommandBufferExecutorOpenGL::execute_blit_to(
         src_height,
         GL_COLOR_BUFFER_BIT,
         GL_LINEAR
-    );
-    opengl_check_error();
+    ));
 }
 
 void CommandBufferExecutorOpenGL::execute_generate_mipmaps(
@@ -631,8 +600,7 @@ void CommandBufferExecutorOpenGL::execute_generate_mipmaps(
 ) {
     auto texture_gl = std::static_pointer_cast<TextureOpenGL>(texture);
     texture_gl->ensure_created();
-    glGenerateTextureMipmap(texture_gl->id());
-    opengl_check_error();
+    FEI_GL_CALL(glGenerateTextureMipmap(texture_gl->id()));
 }
 
 void CommandBufferExecutorOpenGL::execute_copy_texture(
@@ -648,7 +616,7 @@ void CommandBufferExecutorOpenGL::execute_copy_texture(
         std::max(command.dst_z, command.dst_base_array_layer);
     uint32 depth_or_layer_count = std::max(command.depth, command.layer_count);
 
-    glCopyImageSubData(
+    FEI_GL_CALL(glCopyImageSubData(
         src_gl->id(),
         to_gl_texture_target(command.src->usage(), command.src->type()),
         static_cast<GLint>(command.src_mip_level),
@@ -664,8 +632,7 @@ void CommandBufferExecutorOpenGL::execute_copy_texture(
         static_cast<GLsizei>(command.width),
         static_cast<GLsizei>(command.height),
         static_cast<GLsizei>(depth_or_layer_count)
-    );
-    opengl_check_error();
+    ));
 }
 
 } // namespace fei

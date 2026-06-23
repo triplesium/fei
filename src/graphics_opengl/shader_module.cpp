@@ -12,31 +12,30 @@ ShaderOpenGL::ShaderOpenGL(const ShaderDescription& desc) : ShaderModule(desc) {
 }
 
 void ShaderOpenGL::create_gl_resource() const {
-    m_shader = glCreateShader(m_stage);
+    m_shader = FEI_GL_CALL(glCreateShader(m_stage));
 
     const char* src_ptr = m_source.c_str();
-    glShaderSource(m_shader, 1, &src_ptr, nullptr);
-    opengl_check_error();
+    FEI_GL_CALL(glShaderSource(m_shader, 1, &src_ptr, nullptr));
 
-    glCompileShader(m_shader);
-    opengl_check_error();
+    FEI_GL_CALL(glCompileShader(m_shader));
 
     GLint status = 0;
-    glGetShaderiv(m_shader, GL_COMPILE_STATUS, &status);
+    FEI_GL_CALL(glGetShaderiv(m_shader, GL_COMPILE_STATUS, &status));
     if (status == GL_FALSE) {
         GLint log_length;
-        glGetShaderiv(m_shader, GL_INFO_LOG_LENGTH, &log_length);
+        FEI_GL_CALL(glGetShaderiv(m_shader, GL_INFO_LOG_LENGTH, &log_length));
         std::string log;
         log.resize(log_length);
-        glGetShaderInfoLog(m_shader, log_length, nullptr, log.data());
+        FEI_GL_CALL(
+            glGetShaderInfoLog(m_shader, log_length, nullptr, log.data())
+        );
         fei::fatal("Failed to compile shader\n{}", log);
     }
 }
 
 void ShaderOpenGL::destroy_gl_resource() {
     if (m_shader != 0) {
-        glDeleteShader(m_shader);
-        opengl_check_error();
+        FEI_GL_CALL(glDeleteShader(m_shader));
         m_shader = 0;
     }
 }

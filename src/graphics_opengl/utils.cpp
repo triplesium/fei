@@ -28,18 +28,17 @@ std::string opengl_error_string(GLenum const err) noexcept {
     }
 }
 
-bool opengl_check_error() {
+void opengl_check_error(const char* call, std::source_location loc) {
     GLenum error = glGetError();
     if (error) {
         auto error_str = opengl_error_string(error);
-        fei::error(
-            "OpenGL error 0x{:04X}: {}",
+        fei::fatal(
+            FormatString("OpenGL call `{}` failed with 0x{:04X}: {}", loc),
+            call,
             static_cast<unsigned int>(error),
-            error_str
+            error_str.empty() ? "unknown OpenGL error" : error_str
         );
-        return true;
     }
-    return false;
 }
 
 GLint to_gl_address_mode(SamplerAddressMode address_mode) {
