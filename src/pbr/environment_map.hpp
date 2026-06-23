@@ -29,7 +29,7 @@ void generate_env_maps(
     Query<Entity, GpuEnvironmentMap>::Filter<
         Without<EnvironmentMapGeneratedTag>> query,
     Res<EquirectToCubemap> equirect_to_cubemap,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<RenderAssets<GpuImage>> gpu_images,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shaders,

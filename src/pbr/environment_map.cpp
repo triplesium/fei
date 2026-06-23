@@ -27,7 +27,7 @@ void generated_equirect_env_map_to_env_map(
         Without<EnvironmentMap>> query,
     Res<Assets<Image>> images,
     Res<EquirectToCubemap> equirect_to_cubemap,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Commands commands
 ) {
     for (auto [entity, gen_env_map] : query) {
@@ -84,7 +84,7 @@ void insert_gpu_env_map(
     Query<Entity, GeneratedEquirectEnvironmentMap, EnvironmentMap>::Filter<
         Without<GpuEnvironmentMap>> query,
     Res<Assets<Image>> images,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<RenderAssets<GpuImage>> gpu_images,
     Commands commands
 ) {
@@ -111,7 +111,7 @@ void insert_gpu_env_map(
 
 void convert_equirect_to_cubemap(
     Query<Entity, GeneratedEquirectEnvironmentMap, GpuEnvironmentMap> query,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<Assets<Image>> images,
     Res<RenderAssets<GpuImage>> gpu_images,
     Res<AssetServer> asset_server,
@@ -142,7 +142,7 @@ void generate_env_maps(
     Query<Entity, GpuEnvironmentMap>::Filter<
         Without<EnvironmentMapGeneratedTag>> query,
     Res<EquirectToCubemap> equirect_to_cubemap,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<RenderAssets<GpuImage>> gpu_images,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shaders,

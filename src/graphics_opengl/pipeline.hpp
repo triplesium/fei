@@ -5,6 +5,7 @@
 #include "graphics/enums.hpp"
 #include "graphics/pipeline.hpp"
 #include "graphics/shader_module.hpp"
+#include "graphics_opengl/deferred_resource.hpp"
 #include "graphics_opengl/utils.hpp"
 
 #include <memory>
@@ -13,7 +14,7 @@
 
 namespace fei {
 
-class PipelineOpenGL : public Pipeline {
+class PipelineOpenGL : public Pipeline, public DeferredResourceOpenGL {
   public:
     struct TextureBinding {
         GLuint unit;
@@ -44,7 +45,7 @@ class PipelineOpenGL : public Pipeline {
         EmptyBinding>;
 
   private:
-    GLuint m_program;
+    mutable GLuint m_program {0};
     std::vector<std::shared_ptr<ShaderModule>> m_shaders;
     std::vector<VertexLayoutDescription> m_vertex_layouts;
     BlendStateDescription m_blend_state;
@@ -53,13 +54,13 @@ class PipelineOpenGL : public Pipeline {
     RenderPrimitive m_render_primitive;
     std::vector<std::shared_ptr<ResourceLayout>> m_resource_layouts;
 
-    std::vector<std::vector<ResourceBindingInfo>> m_resource_bindings;
+    mutable std::vector<std::vector<ResourceBindingInfo>> m_resource_bindings;
 
-    GLbitfield m_memory_barriers {0};
+    mutable GLbitfield m_memory_barriers {0};
 
   public:
-    PipelineOpenGL(const RenderPipelineDescription& desc);
-    PipelineOpenGL(const ComputePipelineDescription& desc);
+    explicit PipelineOpenGL(const RenderPipelineDescription& desc);
+    explicit PipelineOpenGL(const ComputePipelineDescription& desc);
 
     const auto& vertex_layouts() const { return m_vertex_layouts; }
     const auto& blend_state() const { return m_blend_state; }
@@ -69,8 +70,8 @@ class PipelineOpenGL : public Pipeline {
     const auto& resource_layouts() const { return m_resource_layouts; }
     GLuint program() const { return m_program; }
 
-    Optional<ResourceBindingInfo&>
-    get_resource_binding(uint32 slot, uint32 index) {
+    Optional<const ResourceBindingInfo&>
+    get_resource_binding(uint32 slot, uint32 index) const {
         if (slot >= m_resource_bindings.size()) {
             fei::error(
                 "Resource binding slot {} out of range (max {})",
@@ -91,10 +92,14 @@ class PipelineOpenGL : public Pipeline {
         return bindings[index];
     }
 
-    void process_resource_layouts();
+    void process_resource_layouts() const;
     void validate_shader_resource_layouts() const;
 
     GLbitfield memory_barriers() const { return m_memory_barriers; }
+
+  private:
+    void create_gl_resource() const override;
+    void destroy_gl_resource() override;
 };
 
 } // namespace fei

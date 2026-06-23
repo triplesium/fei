@@ -20,7 +20,9 @@ inline Color4F to_color(SamplerBorderColor border_color) {
     }
 }
 
-SamplerOpenGL::SamplerOpenGL(const SamplerDescription& desc) : m_desc(desc) {
+SamplerOpenGL::SamplerOpenGL(const SamplerDescription& desc) : m_desc(desc) {}
+
+void SamplerOpenGL::create_gl_resource() const {
     glGenSamplers(1, &m_sampler);
     opengl_check_error();
 
@@ -43,10 +45,10 @@ SamplerOpenGL::SamplerOpenGL(const SamplerDescription& desc) : m_desc(desc) {
     );
     opengl_check_error();
 
-    if (desc.address_mode_u == SamplerAddressMode::ClampToBorder ||
-        desc.address_mode_v == SamplerAddressMode::ClampToBorder ||
-        desc.address_mode_w == SamplerAddressMode::ClampToBorder) {
-        auto border_color = to_color(desc.border_color);
+    if (m_desc.address_mode_u == SamplerAddressMode::ClampToBorder ||
+        m_desc.address_mode_v == SamplerAddressMode::ClampToBorder ||
+        m_desc.address_mode_w == SamplerAddressMode::ClampToBorder) {
+        auto border_color = to_color(m_desc.border_color);
         glSamplerParameterfv(
             m_sampler,
             GL_TEXTURE_BORDER_COLOR,
@@ -59,7 +61,7 @@ SamplerOpenGL::SamplerOpenGL(const SamplerDescription& desc) : m_desc(desc) {
     opengl_check_error();
     glSamplerParameterf(m_sampler, GL_TEXTURE_MAX_LOD, m_desc.max_lod);
     opengl_check_error();
-    if (desc.lod_bias != 0) {
+    if (m_desc.lod_bias != 0) {
         glSamplerParameterf(m_sampler, GL_TEXTURE_LOD_BIAS, m_desc.lod_bias);
         opengl_check_error();
     }
@@ -95,8 +97,8 @@ SamplerOpenGL::SamplerOpenGL(const SamplerDescription& desc) : m_desc(desc) {
     }
 }
 
-SamplerOpenGL::~SamplerOpenGL() {
-    if (m_sampler) {
+void SamplerOpenGL::destroy_gl_resource() {
+    if (m_sampler != 0) {
         glDeleteSamplers(1, &m_sampler);
         opengl_check_error();
         m_sampler = 0;

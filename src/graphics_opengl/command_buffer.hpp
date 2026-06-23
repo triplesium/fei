@@ -15,6 +15,7 @@ class GraphicsDeviceOpenGL;
 class CommandBufferOpenGL : public CommandBuffer {
   private:
     friend class CommandBufferExecutorOpenGL;
+    friend class GraphicsDeviceOpenGL;
 
     enum class State {
         Initial,
@@ -25,10 +26,11 @@ class CommandBufferOpenGL : public CommandBuffer {
 
     std::vector<opengl_commands::Command> m_commands;
     State m_state {State::Initial};
-    GraphicsDeviceOpenGL& m_device;
+    const GraphicsDeviceOpenGL& m_device;
 
   public:
-    CommandBufferOpenGL(GraphicsDeviceOpenGL& device) : m_device(device) {}
+    CommandBufferOpenGL(const GraphicsDeviceOpenGL& device) :
+        m_device(device) {}
     void begin() override;
     void end() override;
 

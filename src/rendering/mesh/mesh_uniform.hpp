@@ -31,7 +31,7 @@ struct Mesh3d;
 
 void prepare_mesh_uniforms(
     Query<Entity, Mesh3d, Transform3d> query,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<MeshUniforms> mesh_uniforms
 );
 

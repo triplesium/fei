@@ -165,7 +165,7 @@ class StandardMaterial : public Material {
     }
 
     std::vector<std::shared_ptr<BindableResource>> resources(
-        GraphicsDevice& device,
+        const GraphicsDevice& device,
         const RenderingDefaults& defaults,
         const RenderAssets<GpuImage>& gpu_images
     ) const override {

@@ -5,6 +5,7 @@
 #include "graphics/resource.hpp"
 
 #include <memory>
+#include <mutex>
 
 namespace fei {
 
@@ -27,6 +28,7 @@ class Texture : public BindableResource,
                 public std::enable_shared_from_this<Texture> {
   private:
     std::shared_ptr<TextureView> m_full_view;
+    mutable std::mutex m_full_view_mutex;
 
   public:
     ~Texture() override = default;
@@ -38,6 +40,6 @@ class Texture : public BindableResource,
     virtual uint32 layer() const = 0;
     virtual BitFlags<TextureUsage> usage() const = 0;
     virtual TextureType type() const = 0;
-    std::shared_ptr<TextureView> full_view(GraphicsDevice& device);
+    std::shared_ptr<TextureView> full_view(const GraphicsDevice& device);
 };
 } // namespace fei

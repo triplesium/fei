@@ -5,7 +5,7 @@
 namespace fei {
 
 std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
-    GraphicsDevice& device,
+    const GraphicsDevice& device,
     std::shared_ptr<Texture> equirect_texture
 ) {
     auto cubemap_texture = device.create_texture(
@@ -49,7 +49,7 @@ std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
 }
 
 Optional<std::shared_ptr<Texture>> EquirectToCubemap::get_or_create_cubemap(
-    GraphicsDevice& device,
+    const GraphicsDevice& device,
     Assets<Image>& images,
     Handle<Image> equirect_image_handle
 ) {
@@ -81,7 +81,7 @@ Optional<std::shared_ptr<Texture>> EquirectToCubemap::get_or_create_cubemap(
 }
 
 void EquirectToCubemap::setup(
-    GraphicsDevice& device,
+    const GraphicsDevice& device,
     AssetServer& asset_server,
     Assets<Shader>& shaders
 ) {
@@ -117,7 +117,7 @@ void EquirectToCubemap::setup(
 
 void setup_equi2cubemap(
     Res<EquirectToCubemap> ibl,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shaders
 ) {

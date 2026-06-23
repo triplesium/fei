@@ -75,33 +75,34 @@ struct BufferUpdateCall {
 
 class FakeGraphicsDevice : public GraphicsDevice {
   public:
-    std::vector<ShaderDescription> shader_descriptions;
-    std::vector<BufferDescription> buffer_descriptions;
-    std::vector<TextureDescription> texture_descriptions;
-    std::vector<TextureViewDescription> texture_view_descriptions;
-    std::vector<RenderPipelineDescription> render_pipeline_descriptions;
-    std::vector<ComputePipelineDescription> compute_pipeline_descriptions;
-    std::vector<ResourceLayoutDescription> resource_layout_descriptions;
-    std::vector<ResourceSetDescription> resource_set_descriptions;
-    std::vector<SamplerDescription> sampler_descriptions;
-    std::vector<TextureUpdateCall> texture_update_calls;
-    std::vector<BufferUpdateCall> buffer_update_calls;
+    mutable std::vector<ShaderDescription> shader_descriptions;
+    mutable std::vector<BufferDescription> buffer_descriptions;
+    mutable std::vector<TextureDescription> texture_descriptions;
+    mutable std::vector<TextureViewDescription> texture_view_descriptions;
+    mutable std::vector<RenderPipelineDescription> render_pipeline_descriptions;
+    mutable std::vector<ComputePipelineDescription>
+        compute_pipeline_descriptions;
+    mutable std::vector<ResourceLayoutDescription> resource_layout_descriptions;
+    mutable std::vector<ResourceSetDescription> resource_set_descriptions;
+    mutable std::vector<SamplerDescription> sampler_descriptions;
+    mutable std::vector<TextureUpdateCall> texture_update_calls;
+    mutable std::vector<BufferUpdateCall> buffer_update_calls;
 
-    std::vector<std::shared_ptr<FakeBuffer>> buffers;
-    std::vector<std::shared_ptr<FakeTexture>> textures;
-    std::vector<std::shared_ptr<Pipeline>> render_pipelines;
-    std::vector<std::shared_ptr<Pipeline>> compute_pipelines;
+    mutable std::vector<std::shared_ptr<FakeBuffer>> buffers;
+    mutable std::vector<std::shared_ptr<FakeTexture>> textures;
+    mutable std::vector<std::shared_ptr<Pipeline>> render_pipelines;
+    mutable std::vector<std::shared_ptr<Pipeline>> compute_pipelines;
     bool fail_render_pipeline_creation {false};
     bool fail_compute_pipeline_creation {false};
 
     std::shared_ptr<ShaderModule>
-    create_shader_module(const ShaderDescription& desc) override {
+    create_shader_module(const ShaderDescription& desc) const override {
         shader_descriptions.push_back(desc);
         return std::make_shared<ShaderModule>(desc);
     }
 
     std::shared_ptr<Buffer>
-    create_buffer(const BufferDescription& desc) override {
+    create_buffer(const BufferDescription& desc) const override {
         buffer_descriptions.push_back(desc);
         auto buffer = std::make_shared<FakeBuffer>(desc);
         buffers.push_back(buffer);
@@ -109,7 +110,7 @@ class FakeGraphicsDevice : public GraphicsDevice {
     }
 
     std::shared_ptr<Texture>
-    create_texture(const TextureDescription& desc) override {
+    create_texture(const TextureDescription& desc) const override {
         texture_descriptions.push_back(desc);
         auto texture = std::make_shared<FakeTexture>(desc);
         textures.push_back(texture);
@@ -117,17 +118,18 @@ class FakeGraphicsDevice : public GraphicsDevice {
     }
 
     std::shared_ptr<TextureView>
-    create_texture_view(const TextureViewDescription& desc) override {
+    create_texture_view(const TextureViewDescription& desc) const override {
         texture_view_descriptions.push_back(desc);
         return std::make_shared<TextureView>(desc);
     }
 
-    std::shared_ptr<CommandBuffer> create_command_buffer() override {
+    std::shared_ptr<CommandBuffer> create_command_buffer() const override {
         return nullptr;
     }
 
-    std::shared_ptr<Pipeline>
-    create_render_pipeline(const RenderPipelineDescription& desc) override {
+    std::shared_ptr<Pipeline> create_render_pipeline(
+        const RenderPipelineDescription& desc
+    ) const override {
         render_pipeline_descriptions.push_back(desc);
         if (fail_render_pipeline_creation) {
             return nullptr;
@@ -137,8 +139,9 @@ class FakeGraphicsDevice : public GraphicsDevice {
         return pipeline;
     }
 
-    std::shared_ptr<Pipeline>
-    create_compute_pipeline(const ComputePipelineDescription& desc) override {
+    std::shared_ptr<Pipeline> create_compute_pipeline(
+        const ComputePipelineDescription& desc
+    ) const override {
         compute_pipeline_descriptions.push_back(desc);
         if (fail_compute_pipeline_creation) {
             return nullptr;
@@ -149,29 +152,30 @@ class FakeGraphicsDevice : public GraphicsDevice {
     }
 
     std::shared_ptr<Framebuffer>
-    create_framebuffer(const FramebufferDescription& desc) override {
+    create_framebuffer(const FramebufferDescription& desc) const override {
         return std::make_shared<Framebuffer>(desc);
     }
 
-    std::shared_ptr<ResourceLayout>
-    create_resource_layout(const ResourceLayoutDescription& desc) override {
+    std::shared_ptr<ResourceLayout> create_resource_layout(
+        const ResourceLayoutDescription& desc
+    ) const override {
         resource_layout_descriptions.push_back(desc);
         return std::make_shared<ResourceLayout>(desc);
     }
 
     std::shared_ptr<ResourceSet>
-    create_resource_set(const ResourceSetDescription& desc) override {
+    create_resource_set(const ResourceSetDescription& desc) const override {
         resource_set_descriptions.push_back(desc);
         return std::make_shared<ResourceSet>(desc);
     }
 
     std::shared_ptr<Sampler>
-    create_sampler(const SamplerDescription& desc) override {
+    create_sampler(const SamplerDescription& desc) const override {
         sampler_descriptions.push_back(desc);
         return std::make_shared<Sampler>();
     }
 
-    void submit_commands(std::shared_ptr<CommandBuffer>) override {}
+    void submit_commands(std::shared_ptr<CommandBuffer>) const override {}
 
     void update_texture(
         std::shared_ptr<Texture> texture,
@@ -184,7 +188,7 @@ class FakeGraphicsDevice : public GraphicsDevice {
         std::uint32_t depth,
         std::uint32_t mip_level,
         std::uint32_t layer
-    ) override {
+    ) const override {
         TextureUpdateCall call {
             .texture = std::move(texture),
             .source_data = data,
@@ -214,7 +218,7 @@ class FakeGraphicsDevice : public GraphicsDevice {
         std::uint32_t offset,
         const void* data,
         std::uint32_t size
-    ) override {
+    ) const override {
         BufferUpdateCall call {
             .buffer = std::move(buffer),
             .offset = offset,
@@ -227,13 +231,15 @@ class FakeGraphicsDevice : public GraphicsDevice {
     }
 
     MappedResource
-    map(std::shared_ptr<MappableResource>, MapMode map_mode) override {
+    map(std::shared_ptr<MappableResource>, MapMode map_mode) const override {
         return MappedResource(nullptr, map_mode, std::span<std::byte> {});
     }
 
-    void unmap(std::shared_ptr<MappableResource>) override {}
+    void unmap(std::shared_ptr<MappableResource>) const override {}
 
-    std::shared_ptr<Framebuffer> main_framebuffer() override { return nullptr; }
+    std::shared_ptr<Framebuffer> main_framebuffer() const override {
+        return nullptr;
+    }
 };
 
 } // namespace fei::rendering_test

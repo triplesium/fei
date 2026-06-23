@@ -6,6 +6,8 @@
 #include "graphics/texture.hpp"
 #include "graphics/texture_view.hpp"
 #include "graphics/utils.hpp"
+#include "ecs/schedule.hpp"
+#include "ecs/system_params.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
@@ -17,6 +19,12 @@
 using namespace fei;
 
 namespace {
+
+void read_graphics_device_system(CRes<GraphicsDevice>) {}
+
+void read_graphics_device_again_system(CRes<GraphicsDevice>) {}
+
+void write_graphics_device_system(Res<GraphicsDevice>) {}
 
 TextureDescription make_texture_description(
     std::uint32_t width = 64,
@@ -59,63 +67,64 @@ class FakeTexture : public Texture {
 
 class FakeGraphicsDevice : public GraphicsDevice {
   public:
-    std::vector<TextureViewDescription> texture_view_requests;
+    mutable std::vector<TextureViewDescription> texture_view_requests;
 
     std::shared_ptr<ShaderModule>
-    create_shader_module(const ShaderDescription&) override {
+    create_shader_module(const ShaderDescription&) const override {
         return nullptr;
     }
 
-    std::shared_ptr<Buffer> create_buffer(const BufferDescription&) override {
+    std::shared_ptr<Buffer>
+    create_buffer(const BufferDescription&) const override {
         return nullptr;
     }
 
     std::shared_ptr<Texture>
-    create_texture(const TextureDescription&) override {
+    create_texture(const TextureDescription&) const override {
         return nullptr;
     }
 
     std::shared_ptr<TextureView>
-    create_texture_view(const TextureViewDescription& desc) override {
+    create_texture_view(const TextureViewDescription& desc) const override {
         texture_view_requests.push_back(desc);
         return std::make_shared<TextureView>(desc);
     }
 
-    std::shared_ptr<CommandBuffer> create_command_buffer() override {
+    std::shared_ptr<CommandBuffer> create_command_buffer() const override {
         return nullptr;
     }
 
     std::shared_ptr<Pipeline>
-    create_render_pipeline(const RenderPipelineDescription&) override {
+    create_render_pipeline(const RenderPipelineDescription&) const override {
         return nullptr;
     }
 
     std::shared_ptr<Pipeline>
-    create_compute_pipeline(const ComputePipelineDescription&) override {
+    create_compute_pipeline(const ComputePipelineDescription&) const override {
         return nullptr;
     }
 
     std::shared_ptr<Framebuffer>
-    create_framebuffer(const FramebufferDescription&) override {
+    create_framebuffer(const FramebufferDescription&) const override {
         return nullptr;
     }
 
     std::shared_ptr<ResourceLayout>
-    create_resource_layout(const ResourceLayoutDescription&) override {
+    create_resource_layout(const ResourceLayoutDescription&) const override {
         return nullptr;
     }
 
     std::shared_ptr<ResourceSet>
-    create_resource_set(const ResourceSetDescription&) override {
+    create_resource_set(const ResourceSetDescription&) const override {
         return nullptr;
     }
 
     std::shared_ptr<Sampler>
-    create_sampler(const SamplerDescription&) override {
+    create_sampler(const SamplerDescription&) const override {
         return nullptr;
     }
 
-    void submit_commands(std::shared_ptr<CommandBuffer>) override {}
+    void submit_commands(std::shared_ptr<CommandBuffer>) const override {}
 
     void update_texture(
         std::shared_ptr<Texture>,
@@ -128,25 +137,68 @@ class FakeGraphicsDevice : public GraphicsDevice {
         std::uint32_t,
         std::uint32_t,
         std::uint32_t
-    ) override {}
+    ) const override {}
 
     void update_buffer(
         std::shared_ptr<Buffer>,
         std::uint32_t,
         const void*,
         std::uint32_t
-    ) override {}
+    ) const override {}
 
-    MappedResource map(std::shared_ptr<MappableResource>, MapMode) override {
+    MappedResource
+    map(std::shared_ptr<MappableResource>, MapMode) const override {
         return MappedResource(nullptr, MapMode::Read, {});
     }
 
-    void unmap(std::shared_ptr<MappableResource>) override {}
+    void unmap(std::shared_ptr<MappableResource>) const override {}
 
-    std::shared_ptr<Framebuffer> main_framebuffer() override { return nullptr; }
+    std::shared_ptr<Framebuffer> main_framebuffer() const override {
+        return nullptr;
+    }
 };
 
 } // namespace
+
+TEST_CASE(
+    "GraphicsDevice is a worker-readable ECS resource",
+    "[graphics][ecs]"
+) {
+    FunctionSystem<decltype(read_graphics_device_system)*> read_device(
+        read_graphics_device_system
+    );
+
+    REQUIRE_FALSE(read_device.access().main_thread_only);
+    REQUIRE_FALSE(read_device.access().is_barrier());
+    REQUIRE(read_device.access().read_resources.contains(
+        type_id<GraphicsDevice>()
+    ));
+
+    SECTION("read-only device systems share a batch") {
+        Schedule schedule;
+        schedule.add_systems(
+            read_graphics_device_system,
+            read_graphics_device_again_system
+        );
+        schedule.sort_systems();
+
+        REQUIRE(schedule.execution_batches().size() == 1);
+        REQUIRE(schedule.execution_batches().front().size() == 2);
+    }
+
+    SECTION("mutable device systems still conflict with readers") {
+        Schedule schedule;
+        schedule.add_systems(
+            read_graphics_device_system,
+            write_graphics_device_system
+        );
+        schedule.sort_systems();
+
+        REQUIRE(schedule.execution_batches().size() == 2);
+        REQUIRE(schedule.execution_batches()[0].size() == 1);
+        REQUIRE(schedule.execution_batches()[1].size() == 1);
+    }
+}
 
 TEST_CASE(
     "Graphics utils compute texture mip dimensions",

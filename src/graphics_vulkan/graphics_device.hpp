@@ -9,28 +9,32 @@ class GraphicsDeviceVulkan : public GraphicsDevice {
     ~GraphicsDeviceVulkan() override = default;
 
     std::shared_ptr<ShaderModule>
-    create_shader_module(const ShaderDescription& desc) override;
+    create_shader_module(const ShaderDescription& desc) const override;
     std::shared_ptr<Buffer>
-    create_buffer(const BufferDescription& desc) override;
+    create_buffer(const BufferDescription& desc) const override;
     std::shared_ptr<Texture>
-    create_texture(const TextureDescription& desc) override;
+    create_texture(const TextureDescription& desc) const override;
     std::shared_ptr<TextureView>
-    create_texture_view(const TextureViewDescription& desc) override;
-    std::shared_ptr<CommandBuffer> create_command_buffer() override;
-    std::shared_ptr<Pipeline>
-    create_render_pipeline(const RenderPipelineDescription& desc) override;
-    std::shared_ptr<Pipeline>
-    create_compute_pipeline(const ComputePipelineDescription& desc) override;
+    create_texture_view(const TextureViewDescription& desc) const override;
+    std::shared_ptr<CommandBuffer> create_command_buffer() const override;
+    std::shared_ptr<Pipeline> create_render_pipeline(
+        const RenderPipelineDescription& desc
+    ) const override;
+    std::shared_ptr<Pipeline> create_compute_pipeline(
+        const ComputePipelineDescription& desc
+    ) const override;
     std::shared_ptr<Framebuffer>
-    create_framebuffer(const FramebufferDescription& desc) override;
-    std::shared_ptr<ResourceLayout>
-    create_resource_layout(const ResourceLayoutDescription& desc) override;
+    create_framebuffer(const FramebufferDescription& desc) const override;
+    std::shared_ptr<ResourceLayout> create_resource_layout(
+        const ResourceLayoutDescription& desc
+    ) const override;
     std::shared_ptr<ResourceSet>
-    create_resource_set(const ResourceSetDescription& desc) override;
+    create_resource_set(const ResourceSetDescription& desc) const override;
     std::shared_ptr<Sampler>
-    create_sampler(const SamplerDescription& desc) override;
-    void
-    submit_commands(std::shared_ptr<CommandBuffer> command_buffer) override;
+    create_sampler(const SamplerDescription& desc) const override;
+    void submit_commands(
+        std::shared_ptr<CommandBuffer> command_buffer
+    ) const override;
 
     void update_texture(
         std::shared_ptr<Texture> texture,
@@ -43,20 +47,21 @@ class GraphicsDeviceVulkan : public GraphicsDevice {
         std::uint32_t depth,
         std::uint32_t mip_level,
         std::uint32_t layer
-    ) override;
+    ) const override;
 
     void update_buffer(
         std::shared_ptr<Buffer> buffer,
         std::uint32_t offset,
         const void* data,
         std::uint32_t size
-    ) override;
+    ) const override;
 
     MappedResource
-    map(std::shared_ptr<MappableResource> resource, MapMode map_mode) override;
-    void unmap(std::shared_ptr<MappableResource> resource) override;
+    map(std::shared_ptr<MappableResource> resource,
+        MapMode map_mode) const override;
+    void unmap(std::shared_ptr<MappableResource> resource) const override;
 
-    std::shared_ptr<Framebuffer> main_framebuffer() override;
+    std::shared_ptr<Framebuffer> main_framebuffer() const override;
 };
 
 } // namespace fei

@@ -40,12 +40,12 @@ class PipelineCache {
         m_render_pipelines;
     std::unordered_map<CachedComputePipelineId, CachedComputePipeline>
         m_compute_pipelines;
-    GraphicsDevice& m_device;
+    const GraphicsDevice& m_device;
     CachedRenderPipelineId m_next_render_pipeline_id {0};
     CachedComputePipelineId m_next_compute_pipeline_id {0};
 
   public:
-    PipelineCache(GraphicsDevice& device) : m_device(device) {}
+    PipelineCache(const GraphicsDevice& device) : m_device(device) {}
 
     std::shared_ptr<Pipeline>
     get_render_pipeline(CachedRenderPipelineId id) const {

@@ -98,7 +98,7 @@ struct VxgiVoxelization {
 
 void setup_vxgi(
     Res<VxgiVolumes> volumes,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shader_assets,
     Commands commands
@@ -112,7 +112,7 @@ void compute_scene_aabb(
 void prepare_vxgi_voxelization(
     Res<VxgiVoxelization> voxelization,
     Res<VxgiVolumes> volumes,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 );
 
 void voxelize_scene(
@@ -122,7 +122,7 @@ void voxelize_scene(
     Res<VxgiVolumes> volumes,
     Res<MeshMaterialPipelines> pipelines,
     Res<PipelineCache> pipeline_cache,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
     Res<RenderAssets<PreparedMaterial>> materials,
     EventReader<SceneSpawnedEvent> spawn_events,
@@ -140,7 +140,7 @@ struct VxgiGenerateMipmapBase {
 
 void setup_vxgi_generate_mipmap_base(
     Res<VxgiVolumes> volumes,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shader_assets,
     Commands commands
@@ -149,7 +149,7 @@ void setup_vxgi_generate_mipmap_base(
 void generate_mipmap_base(
     Res<VxgiVolumes> volumes,
     Res<VxgiGenerateMipmapBase> generate_mipmap_base,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 );
 
 struct VxgiGenerateMipmapVolume {
@@ -163,7 +163,7 @@ struct VxgiGenerateMipmapVolume {
 };
 
 void setup_vxgi_generate_mipmap_volume(
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shader_assets,
     Commands commands
@@ -172,7 +172,7 @@ void setup_vxgi_generate_mipmap_volume(
 void generate_mipmap_volume(
     Res<VxgiVolumes> volumes,
     Res<VxgiGenerateMipmapVolume> generate_mipmap_volume,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 );
 
 struct alignas(16) VxgiLight {
@@ -212,7 +212,7 @@ struct VxgiInjectRadiance {
 void setup_inject_radiance(
     Res<VxgiVolumes> volumes,
     Res<VxgiVoxelization> voxelization,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shader_assets,
     Commands commands
@@ -223,7 +223,7 @@ void prepare_inject_radiance(
         query_directional_lights,
     Query<PointLight, Transform3d> query_point_lights,
     Res<VxgiInjectRadiance> inject_radiance,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<RenderingDefaults> rendering_defaults
 );
 
@@ -233,7 +233,7 @@ void inject_radiance(
     Res<VxgiInjectRadiance> inject_radiance,
     Res<VxgiGenerateMipmapBase> mipmap_base,
     Res<VxgiGenerateMipmapVolume> mipmap_volume,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 );
 
 struct alignas(16) VxgiInjectPropagationUniform {
@@ -251,7 +251,7 @@ struct VxgiInjectPropagation {
 
 void setup_inject_propagation(
     Res<VxgiVolumes> volumes,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shader_assets,
     Commands commands
@@ -262,7 +262,7 @@ void inject_propagation(
     Res<VxgiInjectPropagation> inject_propagation,
     Res<VxgiGenerateMipmapBase> mipmap_base,
     Res<VxgiGenerateMipmapVolume> mipmap_volume,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 );
 
 struct alignas(16) VxgiLightingUniform {
@@ -309,7 +309,7 @@ struct VxgiLighting {
     std::shared_ptr<ResourceSet> resource_set;
 };
 
-void setup_vxgi_lighting(Res<GraphicsDevice> device, Commands commands);
+void setup_vxgi_lighting(CRes<GraphicsDevice> device, Commands commands);
 
 void prepare_vxgi_lighting(
     Query<DirectionalLight, Transform3d, ViewUniformBuffer, ShadowMap>
@@ -318,7 +318,7 @@ void prepare_vxgi_lighting(
     Res<VxgiLighting> vxgi_lighting,
     Res<VxgiVolumes> volumes,
     Res<VxgiVoxelization> voxelization,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<RenderingDefaults> rendering_defaults
 );
 

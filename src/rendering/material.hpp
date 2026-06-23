@@ -37,7 +37,7 @@ class Material {
     virtual ShaderRef deferred_fragment_shader() const = 0;
 
     virtual std::shared_ptr<ResourceLayout> create_resource_layout(
-        GraphicsDevice& device,
+        const GraphicsDevice& device,
         const RenderingDefaults& /*defaults*/,
         const RenderAssets<GpuImage>& /*gpu_images*/
     ) const {
@@ -53,7 +53,7 @@ class Material {
     }
 
     virtual std::shared_ptr<ResourceSet> create_resource_set(
-        GraphicsDevice& device,
+        const GraphicsDevice& device,
         const RenderingDefaults& defaults,
         const RenderAssets<GpuImage>& gpu_images
     ) const {
@@ -74,7 +74,7 @@ class Material {
     resource_layout_elements() const = 0;
 
     virtual std::vector<std::shared_ptr<BindableResource>> resources(
-        GraphicsDevice& device,
+        const GraphicsDevice& device,
         const RenderingDefaults& defaults,
         const RenderAssets<GpuImage>& gpu_images
     ) const = 0;

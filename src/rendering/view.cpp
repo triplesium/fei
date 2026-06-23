@@ -9,7 +9,7 @@ namespace fei {
 void init_camera_view_uniform(
     Query<Entity, Camera3d, Transform3d>::Filter<Without<ViewUniformBuffer>>
         query,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Commands commands
 ) {
     for (auto [entity, camera, transform] : query) {
@@ -25,7 +25,7 @@ void init_camera_view_uniform(
 
 void prepare_camera_view_uniform(
     Query<Camera3d, Transform3d, ViewUniformBuffer> query,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 ) {
     for (auto [camera, transform, view_uniform_buffer_component] : query) {
         auto view = look_at(

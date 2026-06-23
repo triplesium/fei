@@ -17,13 +17,13 @@ class ShaderCache {
     std::unordered_map<AssetId, std::shared_ptr<ShaderModule>> m_cache;
     AssetServer& m_asset_server;
     Assets<Shader>& m_shaders;
-    GraphicsDevice& m_device;
+    const GraphicsDevice& m_device;
 
   public:
     ShaderCache(
         AssetServer& asset_server,
         Assets<Shader>& shaders,
-        GraphicsDevice& device
+        const GraphicsDevice& device
     ) : m_asset_server(asset_server), m_shaders(shaders), m_device(device) {}
 
     std::shared_ptr<ShaderModule> get(const AssetId& id) {

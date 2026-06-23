@@ -7,7 +7,7 @@
 namespace fei {
 
 void init_rendering_defaults(
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<RenderingDefaults> defaults
 ) {
     defaults->default_texture = device->create_texture(

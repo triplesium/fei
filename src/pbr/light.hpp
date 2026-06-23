@@ -113,17 +113,17 @@ struct alignas(16) LightUniform {
 void init_light_view_uniform_buffer(
     Query<Entity, DirectionalLight, Transform3d>::Filter<
         Without<ViewUniformBuffer>> query_light,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Commands commands
 );
 
 void prepare_light_view_uniform_buffer(
     Query<Entity, DirectionalLight, Transform3d, ViewUniformBuffer> query_light,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 );
 
 inline void setup_shadow_mapping(
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shader_assets,
     Res<Assets<Mesh>> mesh_assets,
@@ -244,7 +244,7 @@ inline void setup_shadow_mapping(
 inline void setup_shadow_map(
     Query<Entity, DirectionalLight, Transform3d>::Filter<Without<ShadowMap>>
         query_light,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Commands commands
 ) {
     for (auto [entity, light, transform] : query_light) {
@@ -280,7 +280,7 @@ inline void render_shadow_map(
         query_light,
     Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
         query_meshes,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<PipelineCache> pipeline_cache,
     Res<RenderAssets<PreparedMaterial>> materials,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
@@ -368,7 +368,7 @@ inline void render_shadow_map(
 
 inline void blur_shadow_map(
     Query<ShadowMap> query_shadow_maps,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<BlurResources> blur_resources,
     Res<FullscreenQuad> fullscreen_quad_resource,
     Res<RenderAssets<GpuMesh>> gpu_meshes

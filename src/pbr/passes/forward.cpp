@@ -18,7 +18,7 @@ void shadow_pass(
     Query<DirectionalLight, Transform3d, MeshViewResourceSet> query_lights,
     Res<RenderTarget> target,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<MeshUniforms> mesh_uniforms,
     Res<MeshMaterialPipelines> mesh_material_pipelines,
     Res<RenderAssets<PreparedMaterial>> materials,
@@ -103,7 +103,7 @@ void forward_pass(
     Res<RenderTarget> forward_render_resources,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
     Res<RenderAssets<PreparedMaterial>> materials,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<MeshUniforms> mesh_uniforms,
     Res<MeshMaterialPipelines> mesh_material_pipelines,
     Res<PipelineCache> pipeline_cache,
@@ -187,7 +187,7 @@ void skybox_pass(
     Query<Skybox> query,
     Res<RenderTarget> forward_render_resources,
     Res<EquirectToCubemap> equirect_to_cubemap,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<Assets<Image>> images,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
     Res<SkyboxResource> skybox_resource,
@@ -293,7 +293,7 @@ void skybox_pass(
 
 void blit_pass(
     Res<RenderTarget> forward_render_resources,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();

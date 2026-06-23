@@ -12,7 +12,7 @@
 namespace fei {
 
 void init_mesh_view_layout(
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<MeshViewLayout> mesh_view_layout
 ) {
     mesh_view_layout->layout = device->create_resource_layout(
@@ -31,7 +31,7 @@ void init_mesh_view_layout(
 }
 
 void prepare_mesh_view_resource_set(
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<MeshViewLayout> mesh_view_layout,
     Res<GpuLUTs> luts,
     Query<GpuEnvironmentMap> query_env_maps,

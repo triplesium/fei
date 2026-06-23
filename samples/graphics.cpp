@@ -49,7 +49,7 @@ struct alignas(16) Uniforms {
 void start_up(
     Res<AssetServer> asset_server,
     Commands commands,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<Renderer> renderer,
     Res<Assets<TextAsset>> text_assets,
     Res<Assets<Image>> image_assets
@@ -202,7 +202,7 @@ void render_start(WorldRef world) {}
 
 void render_update(
     WorldRef world,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<Renderer> renderer,
     Res<Time> time,
     Res<Window> win
@@ -248,7 +248,8 @@ void render_update(
     device->submit_commands(command_buffer);
 }
 
-void render_end(WorldRef world, Res<GraphicsDevice> device, Res<Window> win) {
+void render_end(WorldRef world, CRes<GraphicsDevice> device, Res<Window> win) {
+    device->flush();
     glfwSwapBuffers(win->glfw_window);
 }
 

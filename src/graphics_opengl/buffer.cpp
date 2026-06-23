@@ -6,7 +6,9 @@
 namespace fei {
 
 BufferOpenGL::BufferOpenGL(const BufferDescription& desc) :
-    m_size(desc.size), m_usages(desc.usages) {
+    m_size(desc.size), m_usages(desc.usages) {}
+
+void BufferOpenGL::create_gl_resource() const {
     glCreateBuffers(1, &m_buffer);
     opengl_check_error();
     glNamedBufferData(
@@ -18,9 +20,11 @@ BufferOpenGL::BufferOpenGL(const BufferDescription& desc) :
     opengl_check_error();
 }
 
-BufferOpenGL::~BufferOpenGL() {
-    if (m_buffer) {
+void BufferOpenGL::destroy_gl_resource() {
+    if (m_buffer != 0) {
         glDeleteBuffers(1, &m_buffer);
+        opengl_check_error();
+        m_buffer = 0;
     }
 }
 

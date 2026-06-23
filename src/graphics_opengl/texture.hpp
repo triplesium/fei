@@ -1,13 +1,14 @@
 #pragma once
 #include "base/types.hpp"
 #include "graphics/texture.hpp"
+#include "graphics_opengl/deferred_resource.hpp"
 #include "graphics_opengl/utils.hpp"
 
 namespace fei {
 
-class TextureOpenGL : public Texture {
+class TextureOpenGL : public Texture, public DeferredResourceOpenGL {
   private:
-    GLuint m_texture {0};
+    mutable GLuint m_texture {0};
     uint32 m_width, m_height, m_depth;
     uint32 m_mip_level {1};
     uint32 m_layer {1};
@@ -19,9 +20,8 @@ class TextureOpenGL : public Texture {
     GLenum m_gl_sized_internal_format;
 
   public:
-    TextureOpenGL(const TextureDescription& desc);
+    explicit TextureOpenGL(const TextureDescription& desc);
     TextureOpenGL(const TextureOpenGL&) = delete;
-    ~TextureOpenGL() override;
 
     GLuint id() const { return m_texture; }
     uint32 width() const override { return m_width; }
@@ -37,6 +37,10 @@ class TextureOpenGL : public Texture {
     GLenum gl_sized_internal_format() const {
         return m_gl_sized_internal_format;
     }
+
+  private:
+    void create_gl_resource() const override;
+    void destroy_gl_resource() override;
 };
 
 } // namespace fei

@@ -12,7 +12,7 @@
 namespace fei {
 
 void setup_skybox_resources(
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<Assets<Mesh>> meshes,
     Res<Assets<Shader>> shaders,
     Res<SkyboxResource> skybox_resource,

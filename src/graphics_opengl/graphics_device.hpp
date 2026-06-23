@@ -1,42 +1,99 @@
 #pragma once
 #include "graphics/graphics_device.hpp"
 #include "graphics/shader_module.hpp"
+#include "graphics_opengl/command_buffer_commands.hpp"
+#include "graphics_opengl/deferred_resource.hpp"
 
 #include <cstddef>
+#include <deque>
+#include <memory>
+#include <mutex>
 #include <unordered_map>
+#include <variant>
+#include <vector>
 
 namespace fei {
+
+struct OpenGLPendingCommandSubmit {
+    std::vector<opengl_commands::Command> commands;
+};
+
+struct OpenGLPendingBufferUpdate {
+    std::shared_ptr<Buffer> buffer;
+    std::uint32_t offset {0};
+    std::vector<std::byte> data;
+};
+
+struct OpenGLPendingTextureUpdate {
+    std::shared_ptr<Texture> texture;
+    std::vector<std::byte> data;
+    std::uint32_t x {0};
+    std::uint32_t y {0};
+    std::uint32_t z {0};
+    std::uint32_t width {0};
+    std::uint32_t height {0};
+    std::uint32_t depth {0};
+    std::uint32_t mip_level {0};
+    std::uint32_t layer {0};
+};
+
+using OpenGLPendingOperation = std::variant<
+    OpenGLPendingCommandSubmit,
+    OpenGLPendingBufferUpdate,
+    OpenGLPendingTextureUpdate>;
+
+class OpenGLDeviceState {
+  public:
+    void enqueue_operation(OpenGLPendingOperation operation);
+    void enqueue_disposal(std::unique_ptr<DeferredResourceOpenGL> resource);
+    std::deque<OpenGLPendingOperation> take_pending_operations();
+    std::vector<std::unique_ptr<DeferredResourceOpenGL>>
+    take_pending_disposals();
+
+  private:
+    friend class GraphicsDeviceOpenGL;
+
+    mutable std::mutex m_mutex;
+    std::deque<OpenGLPendingOperation> m_pending_operations;
+    std::vector<std::unique_ptr<DeferredResourceOpenGL>> m_pending_disposals;
+    std::unordered_map<MappableResource*, std::byte*> m_mapped_resources;
+};
+
 class GraphicsDeviceOpenGL : public GraphicsDevice {
   private:
-    std::unordered_map<MappableResource*, std::byte*> m_mapped_resources;
+    std::shared_ptr<OpenGLDeviceState> m_state;
 
   public:
     GraphicsDeviceOpenGL();
-    ~GraphicsDeviceOpenGL() override = default;
+    ~GraphicsDeviceOpenGL() override;
 
     std::shared_ptr<ShaderModule>
-    create_shader_module(const ShaderDescription& desc) override;
+    create_shader_module(const ShaderDescription& desc) const override;
     std::shared_ptr<Buffer>
-    create_buffer(const BufferDescription& desc) override;
+    create_buffer(const BufferDescription& desc) const override;
     std::shared_ptr<Texture>
-    create_texture(const TextureDescription& desc) override;
+    create_texture(const TextureDescription& desc) const override;
     std::shared_ptr<TextureView>
-    create_texture_view(const TextureViewDescription& desc) override;
-    std::shared_ptr<CommandBuffer> create_command_buffer() override;
-    std::shared_ptr<Pipeline>
-    create_render_pipeline(const RenderPipelineDescription& desc) override;
-    std::shared_ptr<Pipeline>
-    create_compute_pipeline(const ComputePipelineDescription& desc) override;
+    create_texture_view(const TextureViewDescription& desc) const override;
+    std::shared_ptr<CommandBuffer> create_command_buffer() const override;
+    std::shared_ptr<Pipeline> create_render_pipeline(
+        const RenderPipelineDescription& desc
+    ) const override;
+    std::shared_ptr<Pipeline> create_compute_pipeline(
+        const ComputePipelineDescription& desc
+    ) const override;
     std::shared_ptr<Framebuffer>
-    create_framebuffer(const FramebufferDescription& desc) override;
-    std::shared_ptr<ResourceLayout>
-    create_resource_layout(const ResourceLayoutDescription& desc) override;
+    create_framebuffer(const FramebufferDescription& desc) const override;
+    std::shared_ptr<ResourceLayout> create_resource_layout(
+        const ResourceLayoutDescription& desc
+    ) const override;
     std::shared_ptr<ResourceSet>
-    create_resource_set(const ResourceSetDescription& desc) override;
+    create_resource_set(const ResourceSetDescription& desc) const override;
     std::shared_ptr<Sampler>
-    create_sampler(const SamplerDescription& desc) override;
-    void
-    submit_commands(std::shared_ptr<CommandBuffer> command_buffer) override;
+    create_sampler(const SamplerDescription& desc) const override;
+    void submit_commands(
+        std::shared_ptr<CommandBuffer> command_buffer
+    ) const override;
 
     void update_texture(
         std::shared_ptr<Texture> texture,
@@ -49,20 +106,31 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
         std::uint32_t depth,
         std::uint32_t mip_level,
         std::uint32_t layer
-    ) override;
+    ) const override;
 
     void update_buffer(
         std::shared_ptr<Buffer> buffer,
         std::uint32_t offset,
         const void* data,
         std::uint32_t size
-    ) override;
+    ) const override;
 
     MappedResource
-    map(std::shared_ptr<MappableResource> resource, MapMode map_mode) override;
-    void unmap(std::shared_ptr<MappableResource> resource) override;
+    map(std::shared_ptr<MappableResource> resource,
+        MapMode map_mode) const override;
+    void unmap(std::shared_ptr<MappableResource> resource) const override;
 
-    std::shared_ptr<Framebuffer> main_framebuffer() override;
+    std::shared_ptr<Framebuffer> main_framebuffer() const override;
+    void flush() const override;
+
+    std::shared_ptr<OpenGLDeviceState> state() const { return m_state; }
+
+  private:
+    void flush_pending_work() const;
+    void execute_operation(const OpenGLPendingOperation& operation) const;
+    void execute_update_buffer(const OpenGLPendingBufferUpdate& update) const;
+    void execute_update_texture(const OpenGLPendingTextureUpdate& update) const;
+    void flush_disposals() const;
 };
 
 } // namespace fei

@@ -22,18 +22,18 @@ class EquirectToCubemap {
 
   public:
     void setup(
-        GraphicsDevice& device,
+        const GraphicsDevice& device,
         AssetServer& asset_server,
         Assets<Shader>& shaders
     );
 
     std::shared_ptr<Texture> convert_equirect_to_cubemap(
-        GraphicsDevice& device,
+        const GraphicsDevice& device,
         std::shared_ptr<Texture> equirect_texture
     );
 
     Optional<std::shared_ptr<Texture>> get_or_create_cubemap(
-        GraphicsDevice& device,
+        const GraphicsDevice& device,
         Assets<Image>& images,
         Handle<Image> equirect_image_handle
     );

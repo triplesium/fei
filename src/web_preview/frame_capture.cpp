@@ -30,6 +30,7 @@ capture_web_preview_texture(const std::shared_ptr<Texture>& texture) {
         static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4;
     std::vector<byte> rgba(byte_count);
 
+    texture_gl->ensure_created();
     glGetTextureImage(
         texture_gl->id(),
         0,

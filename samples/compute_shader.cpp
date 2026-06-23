@@ -25,7 +25,7 @@ struct Global {
 };
 
 void equirect_to_cubemap(
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shaders,
     Res<Assets<Image>> images,
@@ -144,7 +144,7 @@ void equirect_to_cubemap(
 }
 
 void cubemap_to_irradiance_map(
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shaders,
     Res<Assets<Image>> images,

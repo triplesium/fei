@@ -38,7 +38,7 @@ void VxgiVoxelizationSpecializer::specialize(
 
 void setup_vxgi(
     Res<VxgiVolumes> volumes,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shader_assets,
     Commands commands
@@ -214,7 +214,7 @@ void compute_scene_aabb(
 void prepare_vxgi_voxelization(
     Res<VxgiVoxelization> voxelization,
     Res<VxgiVolumes> volumes,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 ) {
     auto axis_size = voxelization->scene_aabb.extent() * 2.0f;
     auto center = voxelization->scene_aabb.center();
@@ -264,7 +264,7 @@ void voxelize_scene(
     Res<VxgiVolumes> volumes,
     Res<MeshMaterialPipelines> pipelines,
     Res<PipelineCache> pipeline_cache,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
     Res<RenderAssets<PreparedMaterial>> materials,
     EventReader<SceneSpawnedEvent> spawn_events,
@@ -340,7 +340,7 @@ void voxelize_scene(
 
 void setup_vxgi_generate_mipmap_base(
     Res<VxgiVolumes> volumes,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shader_assets,
     Commands commands
@@ -413,7 +413,7 @@ void setup_vxgi_generate_mipmap_base(
 void generate_mipmap_base(
     Res<VxgiVolumes> volumes,
     Res<VxgiGenerateMipmapBase> generate_mipmap_base,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -426,7 +426,7 @@ void generate_mipmap_base(
 }
 
 void setup_vxgi_generate_mipmap_volume(
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shader_assets,
     Commands commands
@@ -479,7 +479,7 @@ void setup_vxgi_generate_mipmap_volume(
 void generate_mipmap_volume(
     Res<VxgiVolumes> volumes,
     Res<VxgiGenerateMipmapVolume> generate_mipmap_volume,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -539,7 +539,7 @@ void generate_mipmap_volume(
 void setup_inject_radiance(
     Res<VxgiVolumes> volumes,
     Res<VxgiVoxelization> voxelization,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shader_assets,
     Commands commands
@@ -590,7 +590,7 @@ void prepare_inject_radiance(
         query_directional_lights,
     Query<PointLight, Transform3d> query_point_lights,
     Res<VxgiInjectRadiance> inject_radiance,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<RenderingDefaults> rendering_defaults
 ) {
     VxgiInjectRadianceUniform uniform {};
@@ -659,7 +659,7 @@ void inject_radiance(
     Res<VxgiInjectRadiance> inject_radiance,
     Res<VxgiGenerateMipmapBase> mipmap_base,
     Res<VxgiGenerateMipmapVolume> mipmap_volume,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -678,7 +678,7 @@ void inject_radiance(
 
 void setup_inject_propagation(
     Res<VxgiVolumes> volumes,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<AssetServer> asset_server,
     Res<Assets<Shader>> shader_assets,
     Commands commands
@@ -766,7 +766,7 @@ void inject_propagation(
     Res<VxgiInjectPropagation> inject_propagation,
     Res<VxgiGenerateMipmapBase> mipmap_base,
     Res<VxgiGenerateMipmapVolume> mipmap_volume,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -780,7 +780,7 @@ void inject_propagation(
     generate_mipmap_volume(volumes, mipmap_volume, device);
 }
 
-void setup_vxgi_lighting(Res<GraphicsDevice> device, Commands commands) {
+void setup_vxgi_lighting(CRes<GraphicsDevice> device, Commands commands) {
     auto resource_layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Fragment},
@@ -823,7 +823,7 @@ void prepare_vxgi_lighting(
     Res<VxgiLighting> vxgi_lighting,
     Res<VxgiVolumes> volumes,
     Res<VxgiVoxelization> voxelization,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<RenderingDefaults> rendering_defaults
 ) {
     VxgiLightingUniform uniform {};

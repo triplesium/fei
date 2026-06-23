@@ -8,9 +8,13 @@ namespace fei {
 
 ShaderOpenGL::ShaderOpenGL(const ShaderDescription& desc) : ShaderModule(desc) {
     m_stage = to_gl_shader_stage(desc.stage);
+    m_source = desc.source;
+}
+
+void ShaderOpenGL::create_gl_resource() const {
     m_shader = glCreateShader(m_stage);
 
-    const char* src_ptr = desc.source.c_str();
+    const char* src_ptr = m_source.c_str();
     glShaderSource(m_shader, 1, &src_ptr, nullptr);
     opengl_check_error();
 
@@ -29,9 +33,10 @@ ShaderOpenGL::ShaderOpenGL(const ShaderDescription& desc) : ShaderModule(desc) {
     }
 }
 
-ShaderOpenGL::~ShaderOpenGL() {
-    if (m_shader) {
+void ShaderOpenGL::destroy_gl_resource() {
+    if (m_shader != 0) {
         glDeleteShader(m_shader);
+        opengl_check_error();
         m_shader = 0;
     }
 }

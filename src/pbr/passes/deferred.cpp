@@ -25,7 +25,7 @@ namespace fei {
 namespace {
 
 void setup_gbuffer(
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<Window> window,
     Res<DeferedRenderResources> resources,
     Res<FullscreenQuad> fullscreen_quad,
@@ -317,7 +317,7 @@ void defered_prepass(
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     Res<RenderTarget> target,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<MeshUniforms> mesh_uniforms,
     Res<MeshMaterialPipelines> mesh_material_pipelines,
     Res<RenderAssets<PreparedMaterial>> materials,
@@ -424,7 +424,7 @@ void defered_prepass(
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     Res<RenderTarget> target,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<VxgiLighting> vxgi_lighting,
     Res<DeferedRenderResources> resources,
     Res<FullscreenQuad> fullscreen_quad
@@ -482,7 +482,7 @@ void defered_prepass(
 void direct_lighting_pass(
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<VxgiLighting> vxgi_lighting,
     Res<DeferedRenderResources> resources,
     Res<FullscreenQuad> fullscreen_quad
@@ -532,7 +532,7 @@ void direct_lighting_pass(
 void indirect_lighting_pass(
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<VxgiLighting> vxgi_lighting,
     Res<DeferedRenderResources> resources,
     Res<FullscreenQuad> fullscreen_quad
@@ -582,7 +582,7 @@ void indirect_lighting_pass(
 void composite_pass(
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     Res<RenderAssets<GpuMesh>> gpu_meshes,
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<DeferedRenderResources> resources,
     Res<FullscreenQuad> fullscreen_quad
 ) {
@@ -630,7 +630,7 @@ void composite_pass(
 
 [[maybe_unused]] void blit_pass(
     Res<RenderTarget> forward_render_resources,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -652,7 +652,7 @@ void composite_pass(
 
 void blit_composite_pass(
     Res<DeferedRenderResources> resources,
-    Res<GraphicsDevice> device
+    CRes<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();

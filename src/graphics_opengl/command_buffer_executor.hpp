@@ -22,13 +22,14 @@ class CommandBufferExecutorOpenGL {
   private:
     struct ExecutionState;
 
-    GraphicsDeviceOpenGL& m_device;
+    const GraphicsDeviceOpenGL& m_device;
 
   public:
-    explicit CommandBufferExecutorOpenGL(GraphicsDeviceOpenGL& device) :
+    explicit CommandBufferExecutorOpenGL(const GraphicsDeviceOpenGL& device) :
         m_device(device) {}
 
     void execute(CommandBufferOpenGL& command_buffer);
+    void execute(const std::vector<opengl_commands::Command>& commands);
 
   private:
     void execute_command(

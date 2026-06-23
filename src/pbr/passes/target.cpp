@@ -3,7 +3,7 @@
 namespace fei {
 
 void setup_render_target(
-    Res<GraphicsDevice> device,
+    CRes<GraphicsDevice> device,
     Res<Window> window,
     Res<RenderTarget> target
 ) {

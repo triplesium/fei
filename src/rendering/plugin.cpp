@@ -23,7 +23,7 @@
 
 namespace fei {
 
-void render_begin(Res<GraphicsDevice> device) {
+void render_begin(CRes<GraphicsDevice> device) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
     command_buffer->set_framebuffer(device->main_framebuffer());
@@ -31,6 +31,10 @@ void render_begin(Res<GraphicsDevice> device) {
     command_buffer->clear_depth(1.0f);
     command_buffer->end();
     device->submit_commands(command_buffer);
+}
+
+void flush_graphics_device(WorldRef world) {
+    world->resource<GraphicsDevice>().flush();
 }
 
 void render_end(Res<Window> win) {
@@ -61,7 +65,7 @@ void RenderingPlugin::setup(App& app) {
             [](Commands commands,
                Res<AssetServer> asset_server,
                Res<Assets<Shader>> shaders,
-               Res<GraphicsDevice> device) {
+               CRes<GraphicsDevice> device) {
                 commands.add_resource(
                     ShaderCache(*asset_server, *shaders, *device)
                 );
@@ -78,7 +82,7 @@ void RenderingPlugin::setup(App& app) {
         )
         .add_resource<MeshUniforms>()
         .add_systems(RenderFirst, render_begin)
-        .add_systems(RenderLast, render_end);
+        .add_systems(RenderLast, chain(flush_graphics_device, render_end));
 }
 
 } // namespace fei
