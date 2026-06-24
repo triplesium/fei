@@ -43,7 +43,7 @@ struct FEI_REFLECT AppStates {
 };
 
 template<typename E>
-void event_update_system(Res<Events<E>> events) {
+void event_update_system(ResRW<Events<E>> events) {
     events->update();
 }
 

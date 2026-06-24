@@ -28,11 +28,9 @@ struct EnvironmentMapGeneratedTag {};
 void generate_env_maps(
     Query<Entity, GpuEnvironmentMap>::Filter<
         Without<EnvironmentMapGeneratedTag>> query,
-    Res<EquirectToCubemap> equirect_to_cubemap,
-    CRes<GraphicsDevice> device,
-    Res<RenderAssets<GpuImage>> gpu_images,
-    Res<AssetServer> asset_server,
-    Res<Assets<Shader>> shaders,
+    ResRO<GraphicsDevice> device,
+    ResRW<AssetServer> asset_server,
+    ResRW<Assets<Shader>> shaders,
     Commands commands
 );
 

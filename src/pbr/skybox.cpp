@@ -12,11 +12,11 @@
 namespace fei {
 
 void setup_skybox_resources(
-    CRes<GraphicsDevice> device,
-    Res<Assets<Mesh>> meshes,
-    Res<Assets<Shader>> shaders,
-    Res<SkyboxResource> skybox_resource,
-    Res<AssetServer> asset_server
+    ResRO<GraphicsDevice> device,
+    ResRW<Assets<Mesh>> meshes,
+    ResRW<Assets<Shader>> shaders,
+    ResRW<SkyboxResource> skybox_resource,
+    ResRW<AssetServer> asset_server
 ) {
     auto mesh = std::make_unique<Mesh>(RenderPrimitive::Triangles);
     std::vector<std::array<float, 3>> positions {

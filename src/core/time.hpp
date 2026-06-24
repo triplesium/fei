@@ -50,7 +50,7 @@ class Timer {
     bool m_just_finished {false};
 };
 
-void time_system(Res<Time> time);
+void time_system(ResRW<Time> time);
 
 class TimePlugin : public Plugin {
   public:

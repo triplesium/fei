@@ -42,9 +42,7 @@ struct Floor {};
 
 class ColorOnlyMaterial : public StandardMaterial {
   public:
-    ShaderRef fragment_shader() const override {
-        return "shader://color.frag";
-    }
+    ShaderRef fragment_shader() const override { return "shader://color.frag"; }
     ShaderRef deferred_fragment_shader() const override {
         return "shader://color.frag";
     }
@@ -53,10 +51,10 @@ class ColorOnlyMaterial : public StandardMaterial {
 };
 
 void setup(
-    Res<AssetServer> asset_server,
+    ResRW<AssetServer> asset_server,
     Commands commands,
-    Res<Assets<Mesh>> mesh_assets,
-    Res<Assets<StandardMaterial>> material_assets
+    ResRW<Assets<Mesh>> mesh_assets,
+    ResRW<Assets<StandardMaterial>> material_assets
 ) {
     auto spot_material = std::make_unique<StandardMaterial>();
     spot_material->albedo = {1.0f, 1.0f, 1.0f};
@@ -160,9 +158,9 @@ void setup(
 
 void handle_control(
     Query<Transform3d>::Filter<With<Camera3d>> query,
-    Res<KeyInput> key_input,
-    Res<Time> time,
-    Res<AppStates> app_states
+    ResRO<KeyInput> key_input,
+    ResRO<Time> time,
+    ResRW<AppStates> app_states
 ) {
     auto [transform] = query.first();
     float move_speed = 1.0f;
@@ -216,7 +214,7 @@ void update_imgui(
     Query<DirectionalLight, Transform3d> query_light,
     Query<Floor, Transform3d> query_floor,
     Query<MeshMaterial3d<StandardMaterial>>::Filter<With<Spot>> query_spot,
-    Res<Assets<StandardMaterial>> material_assets
+    ResRW<Assets<StandardMaterial>> material_assets
 ) {
     auto [light, light_transform] = query_light.first();
     auto [floor, floor_transform] = query_floor.first();

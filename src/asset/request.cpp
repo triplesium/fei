@@ -83,8 +83,8 @@ void AssetLoadRequests::close() {
 }
 
 void AssetLoadRequests::process_system(
-    Res<AssetLoadRequests> requests,
-    Res<AssetServer> server
+    ResRW<AssetLoadRequests> requests,
+    ResRW<AssetServer> server
 ) {
     requests->process(*server);
 }

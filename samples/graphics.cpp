@@ -47,12 +47,12 @@ struct alignas(16) Uniforms {
 };
 
 void start_up(
-    Res<AssetServer> asset_server,
+    ResRW<AssetServer> asset_server,
     Commands commands,
-    CRes<GraphicsDevice> device,
-    Res<Renderer> renderer,
-    Res<Assets<TextAsset>> text_assets,
-    Res<Assets<Image>> image_assets
+    ResRO<GraphicsDevice> device,
+    ResRW<Renderer> renderer,
+    ResRW<Assets<TextAsset>> text_assets,
+    ResRW<Assets<Image>> image_assets
 ) {
     // Create vertex buffer
     struct Vertex {
@@ -198,14 +198,13 @@ void start_up(
     );
 }
 
-void render_start(WorldRef world) {}
+void render_start() {}
 
 void render_update(
-    WorldRef world,
-    CRes<GraphicsDevice> device,
-    Res<Renderer> renderer,
-    Res<Time> time,
-    Res<Window> win
+    ResRO<GraphicsDevice> device,
+    ResRO<Renderer> renderer,
+    ResRO<Time> time,
+    ResRO<Window> win
 ) {
     // Update uniform buffer
     Uniforms uniforms = {
@@ -248,7 +247,7 @@ void render_update(
     device->submit_commands(command_buffer);
 }
 
-void render_end(WorldRef world, CRes<GraphicsDevice> device, Res<Window> win) {
+void render_end(ResRO<GraphicsDevice> device, ResRO<Window> win) {
     device->flush();
     glfwSwapBuffers(win->glfw_window);
 }

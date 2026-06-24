@@ -6,8 +6,8 @@
 namespace fei {
 
 void run_script_components(
-    Res<ScriptingEngine> engine,
-    Res<Assets<ScriptAsset>> scripts,
+    ResRW<ScriptingEngine> engine,
+    ResRO<Assets<ScriptAsset>> scripts,
     Query<Entity, const ScriptComponent> query,
     WorldRef world
 ) {

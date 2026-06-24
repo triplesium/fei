@@ -13,10 +13,10 @@
 namespace fei {
 
 template<typename T>
-class Res;
+class ResRO;
 
 template<typename T>
-class CRes;
+class ResRW;
 
 class WorldRef;
 class Commands;
@@ -90,7 +90,7 @@ struct SystemParamAccess {
 };
 
 template<typename T>
-struct SystemParamAccess<Res<T>> {
+struct SystemParamAccess<ResRW<T>> {
     static void add(SystemAccess& access) {
         access.write_resources.insert(type_id<T>());
         if constexpr (ResourceTraits<T>::main_thread_only) {
@@ -100,7 +100,7 @@ struct SystemParamAccess<Res<T>> {
 };
 
 template<typename T>
-struct SystemParamAccess<CRes<T>> {
+struct SystemParamAccess<ResRO<T>> {
     static void add(SystemAccess& access) {
         access.read_resources.insert(type_id<T>());
         if constexpr (ResourceTraits<T>::main_thread_only) {
@@ -110,7 +110,7 @@ struct SystemParamAccess<CRes<T>> {
 };
 
 template<typename T>
-struct SystemParamAccess<Optional<Res<T>>> {
+struct SystemParamAccess<Optional<ResRW<T>>> {
     static void add(SystemAccess& access) {
         access.write_resources.insert(type_id<T>());
         if constexpr (ResourceTraits<T>::main_thread_only) {
@@ -120,7 +120,7 @@ struct SystemParamAccess<Optional<Res<T>>> {
 };
 
 template<typename T>
-struct SystemParamAccess<Optional<CRes<T>>> {
+struct SystemParamAccess<Optional<ResRO<T>>> {
     static void add(SystemAccess& access) {
         access.read_resources.insert(type_id<T>());
         if constexpr (ResourceTraits<T>::main_thread_only) {

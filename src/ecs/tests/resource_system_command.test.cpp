@@ -77,7 +77,8 @@ TEST_CASE(
     }
 
     SECTION("System with resource access") {
-        world.run_system_once([](Query<Entity> query, Res<EventQueue> events) {
+        world.run_system_once([](Query<Entity> query,
+                                 ResRW<EventQueue> events) {
             events->push("system_executed");
 
             int entity_count = 0;
@@ -104,14 +105,14 @@ TEST_CASE("ECS optional resource params can be absent", "[ecs][resource]") {
     World world;
 
     bool missing_system_ran = false;
-    world.run_system_once(
-        [&missing_system_ran](Optional<CRes<GameConfig>> config,
-                              Optional<Res<EventQueue>> events) {
-            missing_system_ran = true;
-            REQUIRE_FALSE(config);
-            REQUIRE_FALSE(events);
-        }
-    );
+    world.run_system_once([&missing_system_ran](
+                              Optional<ResRO<GameConfig>> config,
+                              Optional<ResRW<EventQueue>> events
+                          ) {
+        missing_system_ran = true;
+        REQUIRE_FALSE(config);
+        REQUIRE_FALSE(events);
+    });
 
     REQUIRE(missing_system_ran);
 
@@ -120,8 +121,8 @@ TEST_CASE("ECS optional resource params can be absent", "[ecs][resource]") {
     world.add_resource(config);
     world.add_resource(EventQueue {});
 
-    world.run_system_once([](Optional<CRes<GameConfig>> config,
-                             Optional<Res<EventQueue>> events) {
+    world.run_system_once([](Optional<ResRO<GameConfig>> config,
+                             Optional<ResRW<EventQueue>> events) {
         REQUIRE(config);
         REQUIRE((*config)->max_entities == 256);
         REQUIRE(events);
@@ -227,7 +228,7 @@ TEST_CASE(
         }
     });
 
-    world.run_system_once([](Commands commands, Res<GameConfig> config) {
+    world.run_system_once([](Commands commands, ResRW<GameConfig> config) {
         (void)config;
         commands.spawn()
             .add(Position(20.0f, 20.0f))

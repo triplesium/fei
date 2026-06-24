@@ -16,13 +16,13 @@ void shadow_pass(
     Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
         query_meshes,
     Query<DirectionalLight, Transform3d, MeshViewResourceSet> query_lights,
-    Res<RenderTarget> target,
-    Res<RenderAssets<GpuMesh>> gpu_meshes,
-    CRes<GraphicsDevice> device,
-    Res<MeshUniforms> mesh_uniforms,
-    Res<MeshMaterialPipelines> mesh_material_pipelines,
-    Res<RenderAssets<PreparedMaterial>> materials,
-    Res<PipelineCache> pipeline_cache
+    ResRW<RenderTarget> target,
+    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
+    ResRO<GraphicsDevice> device,
+    ResRO<MeshUniforms> mesh_uniforms,
+    ResRW<MeshMaterialPipelines> mesh_material_pipelines,
+    ResRO<RenderAssets<PreparedMaterial>> materials,
+    ResRW<PipelineCache> pipeline_cache
 ) {
     if (query_lights.empty()) {
         return;
@@ -100,13 +100,13 @@ void shadow_pass(
 
 void forward_pass(
     Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d> query,
-    Res<RenderTarget> forward_render_resources,
-    Res<RenderAssets<GpuMesh>> gpu_meshes,
-    Res<RenderAssets<PreparedMaterial>> materials,
-    CRes<GraphicsDevice> device,
-    Res<MeshUniforms> mesh_uniforms,
-    Res<MeshMaterialPipelines> mesh_material_pipelines,
-    Res<PipelineCache> pipeline_cache,
+    ResRW<RenderTarget> forward_render_resources,
+    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
+    ResRO<RenderAssets<PreparedMaterial>> materials,
+    ResRO<GraphicsDevice> device,
+    ResRO<MeshUniforms> mesh_uniforms,
+    ResRW<MeshMaterialPipelines> mesh_material_pipelines,
+    ResRW<PipelineCache> pipeline_cache,
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras
 ) {
     auto command_buffer = device->create_command_buffer();
@@ -185,14 +185,14 @@ void forward_pass(
 
 void skybox_pass(
     Query<Skybox> query,
-    Res<RenderTarget> forward_render_resources,
-    Res<EquirectToCubemap> equirect_to_cubemap,
-    CRes<GraphicsDevice> device,
-    Res<Assets<Image>> images,
-    Res<RenderAssets<GpuMesh>> gpu_meshes,
-    Res<SkyboxResource> skybox_resource,
-    Res<MeshViewLayout> mesh_view_layout,
-    Res<MeshViewResourceSet> mesh_view_resource_set
+    ResRW<RenderTarget> forward_render_resources,
+    ResRW<EquirectToCubemap> equirect_to_cubemap,
+    ResRO<GraphicsDevice> device,
+    ResRO<Assets<Image>> images,
+    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
+    ResRO<SkyboxResource> skybox_resource,
+    ResRO<MeshViewLayout> mesh_view_layout,
+    ResRO<MeshViewResourceSet> mesh_view_resource_set
 ) {
     if (query.empty()) {
         return;
@@ -292,8 +292,8 @@ void skybox_pass(
 }
 
 void blit_pass(
-    Res<RenderTarget> forward_render_resources,
-    CRes<GraphicsDevice> device
+    ResRO<RenderTarget> forward_render_resources,
+    ResRO<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();

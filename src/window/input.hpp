@@ -123,8 +123,8 @@ class MouseInput {
     std::unordered_map<MouseButton, KeyStateInternal> m_keys;
 };
 
-void key_input_system(Res<Window> win, Res<KeyInput> input);
-void mouse_input_system(Res<Window> win, Res<MouseInput> input);
+void key_input_system(ResRO<Window> win, ResRW<KeyInput> input);
+void mouse_input_system(ResRO<Window> win, ResRW<MouseInput> input);
 
 class InputPlugin : public Plugin {
   public:

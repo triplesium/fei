@@ -34,7 +34,7 @@ class EquirectToCubemap {
 
     Optional<std::shared_ptr<Texture>> get_or_create_cubemap(
         const GraphicsDevice& device,
-        Assets<Image>& images,
+        const Assets<Image>& images,
         Handle<Image> equirect_image_handle
     );
 };

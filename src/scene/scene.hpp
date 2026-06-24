@@ -59,10 +59,10 @@ class SceneLoader : public AssetLoader<Scene> {
 
 void spawn_scene(
     Query<Entity, SceneSpawner> scene_query,
-    Res<AssetServer> asset_server,
-    Res<Assets<Scene>> scenes,
-    Res<Assets<Mesh>> meshes,
-    Res<Assets<StandardMaterial>> materials,
+    ResRO<AssetServer> asset_server,
+    ResRW<Assets<Scene>> scenes,
+    ResRW<Assets<Mesh>> meshes,
+    ResRW<Assets<StandardMaterial>> materials,
     EventWriter<SceneSpawnedEvent> spawned_events,
     EventWriter<SceneSpawnFailedEvent> spawn_failed_events,
     Commands commands

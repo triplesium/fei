@@ -25,9 +25,7 @@ struct FilteringConstants {
 void generated_equirect_env_map_to_env_map(
     Query<Entity, GeneratedEquirectEnvironmentMap>::Filter<
         Without<EnvironmentMap>> query,
-    Res<Assets<Image>> images,
-    Res<EquirectToCubemap> equirect_to_cubemap,
-    CRes<GraphicsDevice> device,
+    ResRW<Assets<Image>> images,
     Commands commands
 ) {
     for (auto [entity, gen_env_map] : query) {
@@ -83,9 +81,7 @@ void generated_equirect_env_map_to_env_map(
 void insert_gpu_env_map(
     Query<Entity, GeneratedEquirectEnvironmentMap, EnvironmentMap>::Filter<
         Without<GpuEnvironmentMap>> query,
-    Res<Assets<Image>> images,
-    CRes<GraphicsDevice> device,
-    Res<RenderAssets<GpuImage>> gpu_images,
+    ResRO<RenderAssets<GpuImage>> gpu_images,
     Commands commands
 ) {
     for (auto [entity, gen_env_map, env_map] : query) {
@@ -111,13 +107,10 @@ void insert_gpu_env_map(
 
 void convert_equirect_to_cubemap(
     Query<Entity, GeneratedEquirectEnvironmentMap, GpuEnvironmentMap> query,
-    CRes<GraphicsDevice> device,
-    Res<Assets<Image>> images,
-    Res<RenderAssets<GpuImage>> gpu_images,
-    Res<AssetServer> asset_server,
-    Res<Assets<Shader>> shaders,
-    Res<EquirectToCubemap> equirect_to_cubemap,
-    Commands commands
+    ResRO<GraphicsDevice> device,
+    ResRO<Assets<Image>> images,
+    ResRO<RenderAssets<GpuImage>> gpu_images,
+    ResRW<EquirectToCubemap> equirect_to_cubemap
 ) {
     for (auto [entity, gen_env_map, gpu_env_map] : query) {
         auto equirect_gpu_image =
@@ -141,11 +134,9 @@ void convert_equirect_to_cubemap(
 void generate_env_maps(
     Query<Entity, GpuEnvironmentMap>::Filter<
         Without<EnvironmentMapGeneratedTag>> query,
-    Res<EquirectToCubemap> equirect_to_cubemap,
-    CRes<GraphicsDevice> device,
-    Res<RenderAssets<GpuImage>> gpu_images,
-    Res<AssetServer> asset_server,
-    Res<Assets<Shader>> shaders,
+    ResRO<GraphicsDevice> device,
+    ResRW<AssetServer> asset_server,
+    ResRW<Assets<Shader>> shaders,
     Commands commands
 ) {
     for (auto [entity, gpu_env_map] : query) {

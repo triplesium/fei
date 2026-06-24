@@ -25,7 +25,7 @@
 
 namespace fei {
 
-void render_begin(CRes<GraphicsDevice> device) {
+void render_begin(ResRO<GraphicsDevice> device) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
     command_buffer->set_framebuffer(device->main_framebuffer());
@@ -35,11 +35,11 @@ void render_begin(CRes<GraphicsDevice> device) {
     device->submit_commands(command_buffer);
 }
 
-void flush_graphics_device(WorldRef world) {
-    world->resource<GraphicsDevice>().flush();
+void flush_graphics_device(ResRW<GraphicsDevice> device) {
+    device->flush();
 }
 
-void render_end(Res<Window> win) {
+void render_end(ResRO<Window> win) {
     FEI_PROFILE_SCOPE("Swap Buffers");
     glfwSwapBuffers(win->glfw_window);
 }
@@ -68,9 +68,9 @@ void RenderingPlugin::setup(App& app) {
             FEI_SYSTEM_NAME(
                 "init_shader_cache",
                 [](Commands commands,
-                   Res<AssetServer> asset_server,
-                   Res<Assets<Shader>> shaders,
-                   CRes<GraphicsDevice> device) {
+                   ResRW<AssetServer> asset_server,
+                   ResRW<Assets<Shader>> shaders,
+                   ResRO<GraphicsDevice> device) {
                     commands.add_resource(
                         ShaderCache(*asset_server, *shaders, *device)
                     );

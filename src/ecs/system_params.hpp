@@ -9,13 +9,36 @@
 namespace fei {
 
 template<typename T>
-class Res {
+class ResRO {
+  private:
+    const T* m_resource = nullptr;
+
+  public:
+    static ResRO get_param(World& world) {
+        ResRO res;
+        res.m_resource = &world.resource<T>();
+        return res;
+    }
+
+    const T& get() const { return *m_resource; }
+    const T& operator*() const { return *m_resource; }
+    const T* operator->() const { return m_resource; }
+};
+template<typename T>
+struct SystemParamTraits<ResRO<T>> : StatelessParamTraits<ResRO<T>> {};
+static_assert(SystemParam<ResRO<int>>);
+
+template<typename T>
+using Res = ResRO<T>;
+
+template<typename T>
+class ResRW {
   private:
     T* m_resource = nullptr;
 
   public:
-    static Res get_param(World& world) {
-        Res res;
+    static ResRW get_param(World& world) {
+        ResRW res;
         res.m_resource = &world.resource<T>();
         return res;
     }
@@ -28,58 +51,38 @@ class Res {
     const T* operator->() const { return m_resource; }
 };
 template<typename T>
-struct SystemParamTraits<Res<T>> : StatelessParamTraits<Res<T>> {};
-static_assert(SystemParam<Res<int>>);
+struct SystemParamTraits<ResRW<T>> : StatelessParamTraits<ResRW<T>> {};
+static_assert(SystemParam<ResRW<int>>);
 
 template<typename T>
-class CRes {
-  private:
-    const T* m_resource = nullptr;
-
-  public:
-    static CRes get_param(World& world) {
-        CRes res;
-        res.m_resource = &world.resource<T>();
-        return res;
-    }
-
-    const T& get() const { return *m_resource; }
-    const T& operator*() const { return *m_resource; }
-    const T* operator->() const { return m_resource; }
-};
-template<typename T>
-struct SystemParamTraits<CRes<T>> : StatelessParamTraits<CRes<T>> {};
-static_assert(SystemParam<CRes<int>>);
-
-template<typename T>
-struct SystemParamTraits<Optional<Res<T>>> {
+struct SystemParamTraits<Optional<ResRW<T>>> {
     using State = std::monostate;
 
     static State init_state(World&) { return {}; }
 
-    static Optional<Res<T>> get_param(World& world, State&) {
+    static Optional<ResRW<T>> get_param(World& world, State&) {
         if (!world.has_resource<T>()) {
             return nullopt;
         }
-        return Res<T>::get_param(world);
+        return ResRW<T>::get_param(world);
     }
 };
-static_assert(SystemParam<Optional<Res<int>>>);
+static_assert(SystemParam<Optional<ResRW<int>>>);
 
 template<typename T>
-struct SystemParamTraits<Optional<CRes<T>>> {
+struct SystemParamTraits<Optional<ResRO<T>>> {
     using State = std::monostate;
 
     static State init_state(World&) { return {}; }
 
-    static Optional<CRes<T>> get_param(World& world, State&) {
+    static Optional<ResRO<T>> get_param(World& world, State&) {
         if (!world.has_resource<T>()) {
             return nullopt;
         }
-        return CRes<T>::get_param(world);
+        return ResRO<T>::get_param(world);
     }
 };
-static_assert(SystemParam<Optional<CRes<int>>>);
+static_assert(SystemParam<Optional<ResRO<int>>>);
 
 class WorldRef {
   private:

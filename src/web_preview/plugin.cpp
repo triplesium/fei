@@ -77,8 +77,8 @@ void mark_capture_enqueued(
 }
 
 SelectedWebPreviewTarget select_web_preview_target(
-    const Optional<CRes<DeferedRenderResources>>& deferred_resources,
-    const Optional<CRes<RenderTarget>>& render_target
+    const Optional<ResRO<DeferedRenderResources>>& deferred_resources,
+    const Optional<ResRO<RenderTarget>>& render_target
 ) {
     if (deferred_resources) {
         if ((*deferred_resources)->composite_lighting) {
@@ -102,10 +102,10 @@ SelectedWebPreviewTarget select_web_preview_target(
 }
 
 void capture_web_preview_frame(
-    Optional<CRes<DeferedRenderResources>> deferred_resources,
-    Optional<CRes<RenderTarget>> render_target,
-    Res<WebPreviewServer> server,
-    Res<WebPreviewReadbackState> readback_state
+    Optional<ResRO<DeferedRenderResources>> deferred_resources,
+    Optional<ResRO<RenderTarget>> render_target,
+    ResRW<WebPreviewServer> server,
+    ResRW<WebPreviewReadbackState> readback_state
 ) {
     auto cache = server->frame_cache();
     cache->mark_frame_tick();
@@ -166,8 +166,8 @@ void capture_web_preview_frame(
 }
 
 void apply_web_preview_keyboard_input(
-    Res<WebPreviewServer> server,
-    Res<KeyInput> input
+    ResRO<WebPreviewServer> server,
+    ResRW<KeyInput> input
 ) {
     auto keys = server->input()->pressed_keys();
     for (auto key : keys) {

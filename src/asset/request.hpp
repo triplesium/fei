@@ -11,7 +11,7 @@ namespace fei {
 
 class AssetServer;
 template<typename T>
-class Res;
+class ResRW;
 
 class AssetLoadRequestSender {
   private:
@@ -67,8 +67,10 @@ class AssetLoadRequests {
     void process(AssetServer& server);
     void close();
 
-    static void
-    process_system(Res<AssetLoadRequests> requests, Res<AssetServer> server);
+    static void process_system(
+        ResRW<AssetLoadRequests> requests,
+        ResRW<AssetServer> server
+    );
 };
 
 } // namespace fei

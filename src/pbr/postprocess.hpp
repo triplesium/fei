@@ -11,7 +11,7 @@ struct FullscreenQuad {
 };
 
 inline void
-setup_fullscreen_quad(Res<Assets<Mesh>> mesh_assets, Commands commands) {
+setup_fullscreen_quad(ResRW<Assets<Mesh>> mesh_assets, Commands commands) {
     auto quad_mesh_handle =
         mesh_assets->add(MeshFactory::create_quad(2.0f, 2.0f));
     auto quad_mesh = mesh_assets->get(quad_mesh_handle).value();

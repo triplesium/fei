@@ -9,7 +9,7 @@ namespace fei {
 void init_light_view_uniform_buffer(
     Query<Entity, DirectionalLight, Transform3d>::Filter<
         Without<ViewUniformBuffer>> query_light,
-    CRes<GraphicsDevice> device,
+    ResRO<GraphicsDevice> device,
     Commands commands
 ) {
     for (auto [entity, light, transform] : query_light) {
@@ -25,7 +25,7 @@ void init_light_view_uniform_buffer(
 
 void prepare_light_view_uniform_buffer(
     Query<Entity, DirectionalLight, Transform3d, ViewUniformBuffer> query_light,
-    CRes<GraphicsDevice> device
+    ResRO<GraphicsDevice> device
 ) {
     for (auto [entity, light, transform, view_uniform_buffer] : query_light) {
         auto view = look_at(

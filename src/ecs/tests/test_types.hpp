@@ -114,16 +114,16 @@ inline void scheduled_spawn_position(Commands commands) {
 
 inline void scheduled_count_positions(
     Query<Entity, Position> query,
-    Res<ScheduleTrace> trace
+    ResRW<ScheduleTrace> trace
 ) {
     trace->entries.push_back("count:" + std::to_string(query.size()));
 }
 
-inline void scheduled_first(Res<ScheduleTrace> trace) {
+inline void scheduled_first(ResRW<ScheduleTrace> trace) {
     trace->entries.emplace_back("first");
 }
 
-inline void scheduled_second(Res<ScheduleTrace> trace) {
+inline void scheduled_second(ResRW<ScheduleTrace> trace) {
     trace->entries.emplace_back("second");
 }
 
@@ -132,13 +132,13 @@ inline void scheduled_send_event(EventWriter<GameEvent> writer) {
 }
 
 inline void
-scheduled_read_events(EventReader<GameEvent> reader, Res<EventStats> stats) {
+scheduled_read_events(EventReader<GameEvent> reader, ResRW<EventStats> stats) {
     while (auto event = reader.next()) {
         stats->messages.push_back(event->message);
     }
 }
 
-inline void scheduled_update_events(Res<Events<GameEvent>> events) {
+inline void scheduled_update_events(ResRW<Events<GameEvent>> events) {
     events->update();
 }
 

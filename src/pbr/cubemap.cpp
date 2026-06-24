@@ -50,7 +50,7 @@ std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
 
 Optional<std::shared_ptr<Texture>> EquirectToCubemap::get_or_create_cubemap(
     const GraphicsDevice& device,
-    Assets<Image>& images,
+    const Assets<Image>& images,
     Handle<Image> equirect_image_handle
 ) {
     auto it = m_cubemaps.find(equirect_image_handle.id());
@@ -116,10 +116,10 @@ void EquirectToCubemap::setup(
 }
 
 void setup_equi2cubemap(
-    Res<EquirectToCubemap> ibl,
-    CRes<GraphicsDevice> device,
-    Res<AssetServer> asset_server,
-    Res<Assets<Shader>> shaders
+    ResRW<EquirectToCubemap> ibl,
+    ResRO<GraphicsDevice> device,
+    ResRW<AssetServer> asset_server,
+    ResRW<Assets<Shader>> shaders
 ) {
     ibl->setup(*device, *asset_server, *shaders);
 }

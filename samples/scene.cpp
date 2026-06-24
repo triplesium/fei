@@ -46,12 +46,7 @@ class ColorOnlyMaterial : public StandardMaterial {
     std::size_t hash() const override { return type_id<ColorOnlyMaterial>(); }
 };
 
-void setup(
-    Res<AssetServer> asset_server,
-    Commands commands,
-    Res<Assets<Mesh>> mesh_assets,
-    Res<Assets<StandardMaterial>> material_assets
-) {
+void setup(ResRW<AssetServer> asset_server, Commands commands) {
     commands.spawn().add(
         SceneSpawner {
             .scene = asset_server->load<Scene>("sponza/sponza.obj"),
@@ -97,7 +92,7 @@ void setup(
 
 void update_directional_light(
     Query<DirectionalLight, Transform3d> query_directional_lights,
-    Res<VxgiVoxelization> voxelization
+    ResRO<VxgiVoxelization> voxelization
 ) {
     auto& aabb = voxelization->scene_aabb;
     for (auto [light, transform] : query_directional_lights) {
@@ -110,7 +105,7 @@ void update_directional_light(
 void update_imgui(
     Query<DirectionalLight, Transform3d> query_directional_lights,
     Query<PointLight, Transform3d> query_point_lights,
-    Res<FpsCounter> fps_counter
+    ResRO<FpsCounter> fps_counter
 ) {
     ImGui::Begin("FPS");
     ImGui::Text("FPS: %.2f", fps_counter->fps);

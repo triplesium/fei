@@ -25,15 +25,15 @@ namespace fei {
 namespace {
 
 void setup_gbuffer(
-    CRes<GraphicsDevice> device,
-    Res<Window> window,
-    Res<DeferedRenderResources> resources,
-    Res<FullscreenQuad> fullscreen_quad,
-    Res<Assets<Mesh>> meshes,
-    Res<Assets<Shader>> shader_assets,
-    Res<AssetServer> asset_server,
-    Res<MeshViewLayout> mesh_view_layout,
-    Res<VxgiLighting> vxgi_lighting
+    ResRO<GraphicsDevice> device,
+    ResRO<Window> window,
+    ResRW<DeferedRenderResources> resources,
+    ResRO<FullscreenQuad> fullscreen_quad,
+    ResRO<Assets<Mesh>> meshes,
+    ResRW<Assets<Shader>> shader_assets,
+    ResRW<AssetServer> asset_server,
+    ResRO<MeshViewLayout> mesh_view_layout,
+    ResRO<VxgiLighting> vxgi_lighting
 ) {
     auto mesh = meshes->get(fullscreen_quad->fullscreen_quad_mesh);
     if (!mesh) {
@@ -315,14 +315,14 @@ void defered_prepass(
     Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
         query_meshes,
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
-    Res<RenderTarget> target,
-    Res<RenderAssets<GpuMesh>> gpu_meshes,
-    CRes<GraphicsDevice> device,
-    Res<MeshUniforms> mesh_uniforms,
-    Res<MeshMaterialPipelines> mesh_material_pipelines,
-    Res<RenderAssets<PreparedMaterial>> materials,
-    Res<PipelineCache> pipeline_cache,
-    Res<DeferedRenderResources> resources
+    ResRW<RenderTarget> target,
+    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
+    ResRO<GraphicsDevice> device,
+    ResRO<MeshUniforms> mesh_uniforms,
+    ResRW<MeshMaterialPipelines> mesh_material_pipelines,
+    ResRO<RenderAssets<PreparedMaterial>> materials,
+    ResRW<PipelineCache> pipeline_cache,
+    ResRW<DeferedRenderResources> resources
 ) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -422,12 +422,12 @@ void defered_prepass(
 
 [[maybe_unused]] void defered_pass(
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
-    Res<RenderTarget> target,
-    Res<RenderAssets<GpuMesh>> gpu_meshes,
-    CRes<GraphicsDevice> device,
-    Res<VxgiLighting> vxgi_lighting,
-    Res<DeferedRenderResources> resources,
-    Res<FullscreenQuad> fullscreen_quad
+    ResRW<RenderTarget> target,
+    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
+    ResRO<GraphicsDevice> device,
+    ResRO<VxgiLighting> vxgi_lighting,
+    ResRO<DeferedRenderResources> resources,
+    ResRO<FullscreenQuad> fullscreen_quad
 ) {
     auto [mesh_view_resource_set] = query_cameras.first();
     auto gpu_mesh = gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id());
@@ -481,11 +481,11 @@ void defered_prepass(
 
 void direct_lighting_pass(
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
-    Res<RenderAssets<GpuMesh>> gpu_meshes,
-    CRes<GraphicsDevice> device,
-    Res<VxgiLighting> vxgi_lighting,
-    Res<DeferedRenderResources> resources,
-    Res<FullscreenQuad> fullscreen_quad
+    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
+    ResRO<GraphicsDevice> device,
+    ResRO<VxgiLighting> vxgi_lighting,
+    ResRW<DeferedRenderResources> resources,
+    ResRO<FullscreenQuad> fullscreen_quad
 ) {
     auto [mesh_view_resource_set] = query_cameras.first();
     auto gpu_mesh = gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id());
@@ -531,11 +531,11 @@ void direct_lighting_pass(
 
 void indirect_lighting_pass(
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
-    Res<RenderAssets<GpuMesh>> gpu_meshes,
-    CRes<GraphicsDevice> device,
-    Res<VxgiLighting> vxgi_lighting,
-    Res<DeferedRenderResources> resources,
-    Res<FullscreenQuad> fullscreen_quad
+    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
+    ResRO<GraphicsDevice> device,
+    ResRO<VxgiLighting> vxgi_lighting,
+    ResRW<DeferedRenderResources> resources,
+    ResRO<FullscreenQuad> fullscreen_quad
 ) {
     auto [mesh_view_resource_set] = query_cameras.first();
     auto gpu_mesh = gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id());
@@ -581,10 +581,10 @@ void indirect_lighting_pass(
 
 void composite_pass(
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
-    Res<RenderAssets<GpuMesh>> gpu_meshes,
-    CRes<GraphicsDevice> device,
-    Res<DeferedRenderResources> resources,
-    Res<FullscreenQuad> fullscreen_quad
+    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
+    ResRO<GraphicsDevice> device,
+    ResRW<DeferedRenderResources> resources,
+    ResRO<FullscreenQuad> fullscreen_quad
 ) {
     auto [mesh_view_resource_set] = query_cameras.first();
     auto gpu_mesh = gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id());
@@ -629,8 +629,8 @@ void composite_pass(
 }
 
 [[maybe_unused]] void blit_pass(
-    Res<RenderTarget> forward_render_resources,
-    CRes<GraphicsDevice> device
+    ResRO<RenderTarget> forward_render_resources,
+    ResRO<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -651,8 +651,8 @@ void composite_pass(
 }
 
 void blit_composite_pass(
-    Res<DeferedRenderResources> resources,
-    CRes<GraphicsDevice> device
+    ResRO<DeferedRenderResources> resources,
+    ResRO<GraphicsDevice> device
 ) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();

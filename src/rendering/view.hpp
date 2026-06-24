@@ -28,13 +28,13 @@ struct ViewUniformBuffer {
 void init_camera_view_uniform(
     Query<Entity, Camera3d, Transform3d>::Filter<Without<ViewUniformBuffer>>
         query,
-    CRes<GraphicsDevice> device,
+    ResRO<GraphicsDevice> device,
     Commands commands
 );
 
 void prepare_camera_view_uniform(
     Query<Camera3d, Transform3d, ViewUniformBuffer> query,
-    CRes<GraphicsDevice> device
+    ResRO<GraphicsDevice> device
 );
 
 } // namespace fei

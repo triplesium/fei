@@ -3,7 +3,7 @@
 #include <GLFW/glfw3.h>
 
 namespace fei {
-void key_input_system(Res<Window> win, Res<KeyInput> input) {
+void key_input_system(ResRO<Window> win, ResRW<KeyInput> input) {
     auto glfw_window = win->glfw_window;
     input->clear();
     for (KeyCode key_code : c_key_codes) {
@@ -16,7 +16,7 @@ void key_input_system(Res<Window> win, Res<KeyInput> input) {
     }
 }
 
-void mouse_input_system(Res<Window> win, Res<MouseInput> input) {
+void mouse_input_system(ResRO<Window> win, ResRW<MouseInput> input) {
     auto glfw_window = win->glfw_window;
     input->clear();
     for (MouseButton button :

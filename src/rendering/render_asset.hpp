@@ -73,7 +73,7 @@ template<typename Source>
 void extract_render_assets(
     WorldRef world,
     EventReader<AssetEvent<Source>> events,
-    CRes<Assets<Source>> assets
+    ResRO<Assets<Source>> assets
 ) {
     std::unordered_set<AssetId> need_extracting, added, removed, modified;
     if (world->has_resource<ExtractedAssets<Source>>()) {
@@ -139,8 +139,8 @@ void extract_render_assets(
 
 template<typename Source, typename Target, typename Adapter>
 void prepare_assets(
-    Res<ExtractedAssets<Source>> extracted_assets,
-    Res<RenderAssets<Target>> render_assets,
+    ResRW<ExtractedAssets<Source>> extracted_assets,
+    ResRW<RenderAssets<Target>> render_assets,
     WorldRef world
 ) {
     for (auto id : extracted_assets->removed) {

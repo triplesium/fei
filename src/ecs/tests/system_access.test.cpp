@@ -14,11 +14,11 @@ using namespace fei::ecs_test;
 
 namespace {
 
-void resource_access_system(Res<GameConfig>, CRes<EventQueue>) {}
+void resource_access_system(ResRW<GameConfig>, ResRO<EventQueue>) {}
 
 void optional_resource_access_system(
-    Optional<Res<GameConfig>>,
-    Optional<CRes<EventQueue>>
+    Optional<ResRW<GameConfig>>,
+    Optional<ResRO<EventQueue>>
 ) {}
 
 void write_position_system(Query<Position>) {}
@@ -51,7 +51,7 @@ void event_access_system(EventReader<GameEvent>, EventWriter<PlayerMoved>) {}
 
 struct MainThreadResource {};
 
-void main_thread_resource_system(Res<MainThreadResource>) {}
+void main_thread_resource_system(ResRW<MainThreadResource>) {}
 
 struct CustomParam {
     static CustomParam get_param(World&) { return {}; }
@@ -165,8 +165,7 @@ TEST_CASE(
     );
     REQUIRE(template_static_profile.has_value());
     INFO(
-        "template static symbol function: "
-        << template_static_profile->function
+        "template static symbol function: " << template_static_profile->function
     );
     INFO("template static symbol name: " << template_static_profile->name);
     REQUIRE(

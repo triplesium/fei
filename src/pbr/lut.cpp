@@ -7,14 +7,14 @@
 
 namespace fei {
 
-void init_luts(Res<LUTs> luts, Res<AssetServer> asset_server) {
+void init_luts(ResRW<LUTs> luts, ResRW<AssetServer> asset_server) {
     luts->brdf_lut = asset_server->load<Image>("embeded://ibl_brdf_lut.png");
 }
 
 void init_gpu_luts(
-    Res<LUTs> luts,
-    Res<RenderAssets<GpuImage>> gpu_images,
-    Res<GpuLUTs> gpu_luts
+    ResRO<LUTs> luts,
+    ResRO<RenderAssets<GpuImage>> gpu_images,
+    ResRW<GpuLUTs> gpu_luts
 ) {
     auto brdf_lut_gpu_image = gpu_images->get(luts->brdf_lut.id());
     if (!brdf_lut_gpu_image) {

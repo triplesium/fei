@@ -13,7 +13,7 @@
 
 namespace fei {
 
-void setup_imgui(Res<Window> window, Res<AssetServer> asset_server) {
+void setup_imgui(ResRO<Window> window, ResRO<AssetServer> asset_server) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
@@ -38,7 +38,7 @@ void begin_imgui() {
     ImGui::NewFrame();
 }
 
-void end_imgui(CRes<GraphicsDevice> device) {
+void end_imgui(ResRO<GraphicsDevice> device) {
     ImGui::Render();
     device->flush();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

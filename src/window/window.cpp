@@ -30,17 +30,17 @@ GLFWwindow* setup_glfw(int width, int height, const std::string& title) {
     return win;
 }
 
-void window_prepare(Res<Window> win_res) {
+void window_prepare(ResRW<Window> win_res) {
     glfwPollEvents();
     Window& win = *win_res;
     glfwGetFramebufferSize(win.glfw_window, &win.width, &win.height);
 }
 
-void swap_buffers(Res<Window> win_res) {
+void swap_buffers(ResRO<Window> win_res) {
     glfwSwapBuffers(win_res->glfw_window);
 }
 
-void update_should_close(Res<Window> win_res, Res<AppStates> app_states) {
+void update_should_close(ResRO<Window> win_res, ResRW<AppStates> app_states) {
     if (glfwWindowShouldClose(win_res->glfw_window)) {
         app_states->should_stop = true;
     }

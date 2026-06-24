@@ -13,7 +13,7 @@
 
 using namespace fei;
 
-void setup(Res<AssetServer> asset_server, Commands commands) {
+void setup(ResRW<AssetServer> asset_server, Commands commands) {
     commands.spawn().add(
         ScriptComponent {
             .script = asset_server->load<ScriptAsset>("camera_control.lua")

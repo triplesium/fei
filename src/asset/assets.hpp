@@ -374,7 +374,7 @@ class Assets {
         return unused.size();
     }
 
-    static void apply_async_loads(Res<Assets<T>> assets) {
+    static void apply_async_loads(ResRW<Assets<T>> assets) {
         std::vector<AsyncLoadResult> pending;
         pending.swap(assets->m_pending_async_results);
 
@@ -395,12 +395,12 @@ class Assets {
         }
     }
 
-    static void collect_unused(Res<Assets<T>> assets) {
+    static void collect_unused(ResRW<Assets<T>> assets) {
         assets->unload_unused();
     }
 
     static void
-    track_assets(Res<Assets<T>> assets, EventWriter<AssetEvent<T>> events) {
+    track_assets(ResRW<Assets<T>> assets, EventWriter<AssetEvent<T>> events) {
         for (auto& event : assets->m_event_queue) {
             events.send(event);
         }

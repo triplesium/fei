@@ -1,3 +1,5 @@
+#include "ecs/schedule.hpp"
+#include "ecs/system_params.hpp"
 #include "graphics/framebuffer.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics/mapped_resource.hpp"
@@ -7,8 +9,6 @@
 #include "graphics/texture_readback.hpp"
 #include "graphics/texture_view.hpp"
 #include "graphics/utils.hpp"
-#include "ecs/schedule.hpp"
-#include "ecs/system_params.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
@@ -21,11 +21,11 @@ using namespace fei;
 
 namespace {
 
-void read_graphics_device_system(CRes<GraphicsDevice>) {}
+void read_graphics_device_system(ResRO<GraphicsDevice>) {}
 
-void read_graphics_device_again_system(CRes<GraphicsDevice>) {}
+void read_graphics_device_again_system(ResRO<GraphicsDevice>) {}
 
-void write_graphics_device_system(Res<GraphicsDevice>) {}
+void write_graphics_device_system(ResRW<GraphicsDevice>) {}
 
 TextureDescription make_texture_description(
     std::uint32_t width = 64,
@@ -176,9 +176,9 @@ TEST_CASE(
 
     REQUIRE_FALSE(read_device.access().main_thread_only);
     REQUIRE_FALSE(read_device.access().is_barrier());
-    REQUIRE(read_device.access().read_resources.contains(
-        type_id<GraphicsDevice>()
-    ));
+    REQUIRE(
+        read_device.access().read_resources.contains(type_id<GraphicsDevice>())
+    );
 
     SECTION("read-only device systems share a batch") {
         Schedule schedule;
@@ -285,21 +285,20 @@ TEST_CASE(
 
     SECTION("explicit bindings may be sparse and out of declaration order") {
         auto desc = ResourceLayoutDescription {
-            .elements =
-                {
-                    ResourceLayoutElementDescription {
-                        .binding = 4,
-                        .name = "source",
-                        .kind = ResourceKind::TextureReadOnly,
-                        .stages = ShaderStages::Fragment,
-                    },
-                    ResourceLayoutElementDescription {
-                        .binding = 0,
-                        .name = "Constants",
-                        .kind = ResourceKind::UniformBuffer,
-                        .stages = ShaderStages::Fragment,
-                    },
+            .elements = {
+                ResourceLayoutElementDescription {
+                    .binding = 4,
+                    .name = "source",
+                    .kind = ResourceKind::TextureReadOnly,
+                    .stages = ShaderStages::Fragment,
                 },
+                ResourceLayoutElementDescription {
+                    .binding = 0,
+                    .name = "Constants",
+                    .kind = ResourceKind::UniformBuffer,
+                    .stages = ShaderStages::Fragment,
+                },
+            },
         };
 
         REQUIRE_NOTHROW(ResourceLayout(desc));

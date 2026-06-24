@@ -53,7 +53,7 @@ bool Timer::just_finished() const {
     return m_just_finished;
 }
 
-void time_system(Res<Time> time) {
+void time_system(ResRW<Time> time) {
     time->tick();
 }
 

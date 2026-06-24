@@ -10,7 +10,7 @@
 namespace fei {
 
 template<typename T>
-class Res;
+class ResRW;
 
 struct TaskSystems {
     struct DrainCompletions : SystemSet<DrainCompletions> {};
@@ -36,7 +36,7 @@ class Tasks {
 
     std::size_t drain_completions();
 
-    static void drain_completion_system(Res<Tasks> tasks);
+    static void drain_completion_system(ResRW<Tasks> tasks);
 };
 
 class TaskPlugin : public Plugin {

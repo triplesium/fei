@@ -26,7 +26,7 @@ struct Global {
 };
 
 std::shared_ptr<Texture> copy_to_staging_texture(
-    CRes<GraphicsDevice> device,
+    ResRO<GraphicsDevice> device,
     const std::shared_ptr<Texture>& texture
 ) {
     auto usage = BitFlags<TextureUsage> {TextureUsage::Staging};
@@ -57,11 +57,11 @@ std::shared_ptr<Texture> copy_to_staging_texture(
 }
 
 void equirect_to_cubemap(
-    CRes<GraphicsDevice> device,
-    Res<AssetServer> asset_server,
-    Res<Assets<Shader>> shaders,
-    Res<Assets<Image>> images,
-    Res<Global> global
+    ResRO<GraphicsDevice> device,
+    ResRW<AssetServer> asset_server,
+    ResRW<Assets<Shader>> shaders,
+    ResRW<Assets<Image>> images,
+    ResRW<Global> global
 ) {
     auto equirect_image_handle =
         asset_server->load<Image>("the_sky_is_on_fire_4k.hdr");
@@ -177,14 +177,11 @@ void equirect_to_cubemap(
 }
 
 void cubemap_to_irradiance_map(
-    CRes<GraphicsDevice> device,
-    Res<AssetServer> asset_server,
-    Res<Assets<Shader>> shaders,
-    Res<Assets<Image>> images,
-    Res<Global> global
+    ResRO<GraphicsDevice> device,
+    ResRW<AssetServer> asset_server,
+    ResRW<Assets<Shader>> shaders,
+    ResRO<Global> global
 ) {
-    (void)images;
-
     auto irradiance_texture = device->create_texture(
         TextureDescription {
             .width = 32,
@@ -292,7 +289,7 @@ int main() {
         )
         .add_systems(
             Update,
-            [](Res<AppStates> states) {
+            [](ResRW<AppStates> states) {
                 states->should_stop = true;
             }
         )

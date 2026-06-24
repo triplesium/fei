@@ -34,7 +34,8 @@ struct FpsCounter {
     float m_update_interval_seconds {0.5f};
 };
 
-inline void fps_counter_system(CRes<Time> time, Res<FpsCounter> fps_counter) {
+inline void
+fps_counter_system(ResRO<Time> time, ResRW<FpsCounter> fps_counter) {
     fps_counter->tick(time->delta());
 }
 

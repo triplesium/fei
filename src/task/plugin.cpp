@@ -13,7 +13,7 @@ std::size_t Tasks::drain_completions() {
     return m_general->drain_completions();
 }
 
-void Tasks::drain_completion_system(Res<Tasks> tasks) {
+void Tasks::drain_completion_system(ResRW<Tasks> tasks) {
     tasks->drain_completions();
 }
 

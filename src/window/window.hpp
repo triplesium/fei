@@ -22,9 +22,9 @@ struct ResourceTraits<Window> {
 
 GLFWwindow* setup_glfw(int width, int height, const std::string& title);
 
-void window_prepare(Res<Window> win_res);
-void swap_buffers(Res<Window> win_res);
-void update_should_close(Res<Window> win_res, Res<AppStates> app_states);
+void window_prepare(ResRW<Window> win_res);
+void swap_buffers(ResRO<Window> win_res);
+void update_should_close(ResRO<Window> win_res, ResRW<AppStates> app_states);
 
 class WindowPlugin : public Plugin {
   public:

@@ -31,8 +31,8 @@ struct Mesh3d;
 
 void prepare_mesh_uniforms(
     Query<Entity, Mesh3d, Transform3d> query,
-    CRes<GraphicsDevice> device,
-    Res<MeshUniforms> mesh_uniforms
+    ResRO<GraphicsDevice> device,
+    ResRW<MeshUniforms> mesh_uniforms
 );
 
 } // namespace fei

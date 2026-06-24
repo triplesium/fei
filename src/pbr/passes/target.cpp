@@ -3,9 +3,9 @@
 namespace fei {
 
 void setup_render_target(
-    CRes<GraphicsDevice> device,
-    Res<Window> window,
-    Res<RenderTarget> target
+    ResRO<GraphicsDevice> device,
+    ResRO<Window> window,
+    ResRW<RenderTarget> target
 ) {
     uint32 width = window->width;
     uint32 height = window->height;

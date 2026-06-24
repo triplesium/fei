@@ -17,8 +17,8 @@ struct MeshViewLayout {
 };
 
 void init_mesh_view_layout(
-    CRes<GraphicsDevice> device,
-    Res<MeshViewLayout> mesh_view_layout
+    ResRO<GraphicsDevice> device,
+    ResRW<MeshViewLayout> mesh_view_layout
 );
 
 struct MeshViewResourceSet {
@@ -26,9 +26,9 @@ struct MeshViewResourceSet {
 };
 
 void prepare_mesh_view_resource_set(
-    CRes<GraphicsDevice> device,
-    Res<MeshViewLayout> mesh_view_layout,
-    Res<GpuLUTs> luts,
+    ResRO<GraphicsDevice> device,
+    ResRO<MeshViewLayout> mesh_view_layout,
+    ResRO<GpuLUTs> luts,
     Query<GpuEnvironmentMap> query_env_maps,
     Query<Entity, ViewUniformBuffer> query_cameras,
     Query<DirectionalLight, Transform3d> query_directional_lights,

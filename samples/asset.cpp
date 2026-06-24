@@ -20,9 +20,9 @@ struct Foo {
 };
 
 void startup(
-    Res<AssetServer> asset_server,
+    ResRW<AssetServer> asset_server,
     Commands commands,
-    Res<Assets<TextAsset>> assets
+    ResRW<Assets<TextAsset>> assets
 ) {
     commands.spawn().add(Foo {asset_server->load<TextAsset>("test.txt")});
     commands.spawn().add(
@@ -30,7 +30,7 @@ void startup(
     );
 }
 
-void update(Query<Foo> query, Res<Assets<TextAsset>> assets) {
+void update(Query<Foo> query, ResRW<Assets<TextAsset>> assets) {
     for (auto [foo] : query) {
         if (auto text = assets->get(foo.handle)) {
             auto now = std::chrono::system_clock::now();

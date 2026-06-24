@@ -97,36 +97,36 @@ struct VxgiVoxelization {
 };
 
 void setup_vxgi(
-    Res<VxgiVolumes> volumes,
-    CRes<GraphicsDevice> device,
-    Res<AssetServer> asset_server,
-    Res<Assets<Shader>> shader_assets,
+    ResRW<VxgiVolumes> volumes,
+    ResRO<GraphicsDevice> device,
+    ResRW<AssetServer> asset_server,
+    ResRW<Assets<Shader>> shader_assets,
     Commands commands
 );
 
 void compute_scene_aabb(
-    Res<VxgiVoxelization> voxelization,
+    ResRW<VxgiVoxelization> voxelization,
     Query<Mesh3d, Transform3d, Aabb> query
 );
 
 void prepare_vxgi_voxelization(
-    Res<VxgiVoxelization> voxelization,
-    Res<VxgiVolumes> volumes,
-    CRes<GraphicsDevice> device
+    ResRW<VxgiVoxelization> voxelization,
+    ResRO<VxgiVolumes> volumes,
+    ResRO<GraphicsDevice> device
 );
 
 void voxelize_scene(
     Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
         query_meshes,
-    Res<VxgiVoxelization> voxelization,
-    Res<VxgiVolumes> volumes,
-    Res<MeshMaterialPipelines> pipelines,
-    Res<PipelineCache> pipeline_cache,
-    CRes<GraphicsDevice> device,
-    Res<RenderAssets<GpuMesh>> gpu_meshes,
-    Res<RenderAssets<PreparedMaterial>> materials,
+    ResRW<VxgiVoxelization> voxelization,
+    ResRW<VxgiVolumes> volumes,
+    ResRW<MeshMaterialPipelines> pipelines,
+    ResRW<PipelineCache> pipeline_cache,
+    ResRO<GraphicsDevice> device,
+    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
+    ResRO<RenderAssets<PreparedMaterial>> materials,
     EventReader<SceneSpawnedEvent> spawn_events,
-    Res<MeshUniforms> mesh_uniforms
+    ResRO<MeshUniforms> mesh_uniforms
 );
 
 struct VxgiGenerateMipmapBase {
@@ -139,17 +139,17 @@ struct VxgiGenerateMipmapBase {
 };
 
 void setup_vxgi_generate_mipmap_base(
-    Res<VxgiVolumes> volumes,
-    CRes<GraphicsDevice> device,
-    Res<AssetServer> asset_server,
-    Res<Assets<Shader>> shader_assets,
+    ResRO<VxgiVolumes> volumes,
+    ResRO<GraphicsDevice> device,
+    ResRW<AssetServer> asset_server,
+    ResRW<Assets<Shader>> shader_assets,
     Commands commands
 );
 
 void generate_mipmap_base(
-    Res<VxgiVolumes> volumes,
-    Res<VxgiGenerateMipmapBase> generate_mipmap_base,
-    CRes<GraphicsDevice> device
+    ResRW<VxgiVolumes> volumes,
+    ResRO<VxgiGenerateMipmapBase> generate_mipmap_base,
+    ResRO<GraphicsDevice> device
 );
 
 struct VxgiGenerateMipmapVolume {
@@ -163,16 +163,16 @@ struct VxgiGenerateMipmapVolume {
 };
 
 void setup_vxgi_generate_mipmap_volume(
-    CRes<GraphicsDevice> device,
-    Res<AssetServer> asset_server,
-    Res<Assets<Shader>> shader_assets,
+    ResRO<GraphicsDevice> device,
+    ResRW<AssetServer> asset_server,
+    ResRW<Assets<Shader>> shader_assets,
     Commands commands
 );
 
 void generate_mipmap_volume(
-    Res<VxgiVolumes> volumes,
-    Res<VxgiGenerateMipmapVolume> generate_mipmap_volume,
-    CRes<GraphicsDevice> device
+    ResRW<VxgiVolumes> volumes,
+    ResRW<VxgiGenerateMipmapVolume> generate_mipmap_volume,
+    ResRO<GraphicsDevice> device
 );
 
 struct alignas(16) VxgiLight {
@@ -210,11 +210,11 @@ struct VxgiInjectRadiance {
 };
 
 void setup_inject_radiance(
-    Res<VxgiVolumes> volumes,
-    Res<VxgiVoxelization> voxelization,
-    CRes<GraphicsDevice> device,
-    Res<AssetServer> asset_server,
-    Res<Assets<Shader>> shader_assets,
+    ResRO<VxgiVolumes> volumes,
+    ResRO<VxgiVoxelization> voxelization,
+    ResRO<GraphicsDevice> device,
+    ResRW<AssetServer> asset_server,
+    ResRW<Assets<Shader>> shader_assets,
     Commands commands
 );
 
@@ -222,18 +222,18 @@ void prepare_inject_radiance(
     Query<DirectionalLight, Transform3d, ViewUniformBuffer, ShadowMap>
         query_directional_lights,
     Query<PointLight, Transform3d> query_point_lights,
-    Res<VxgiInjectRadiance> inject_radiance,
-    CRes<GraphicsDevice> device,
-    Res<RenderingDefaults> rendering_defaults
+    ResRW<VxgiInjectRadiance> inject_radiance,
+    ResRO<GraphicsDevice> device,
+    ResRO<RenderingDefaults> rendering_defaults
 );
 
 void inject_radiance(
-    Res<VxgiVolumes> volumes,
-    Res<VxgiVoxelization> voxelization,
-    Res<VxgiInjectRadiance> inject_radiance,
-    Res<VxgiGenerateMipmapBase> mipmap_base,
-    Res<VxgiGenerateMipmapVolume> mipmap_volume,
-    CRes<GraphicsDevice> device
+    ResRW<VxgiVolumes> volumes,
+    ResRO<VxgiVoxelization> voxelization,
+    ResRO<VxgiInjectRadiance> inject_radiance,
+    ResRO<VxgiGenerateMipmapBase> mipmap_base,
+    ResRW<VxgiGenerateMipmapVolume> mipmap_volume,
+    ResRO<GraphicsDevice> device
 );
 
 struct alignas(16) VxgiInjectPropagationUniform {
@@ -250,19 +250,19 @@ struct VxgiInjectPropagation {
 };
 
 void setup_inject_propagation(
-    Res<VxgiVolumes> volumes,
-    CRes<GraphicsDevice> device,
-    Res<AssetServer> asset_server,
-    Res<Assets<Shader>> shader_assets,
+    ResRO<VxgiVolumes> volumes,
+    ResRO<GraphicsDevice> device,
+    ResRW<AssetServer> asset_server,
+    ResRW<Assets<Shader>> shader_assets,
     Commands commands
 );
 
 void inject_propagation(
-    Res<VxgiVolumes> volumes,
-    Res<VxgiInjectPropagation> inject_propagation,
-    Res<VxgiGenerateMipmapBase> mipmap_base,
-    Res<VxgiGenerateMipmapVolume> mipmap_volume,
-    CRes<GraphicsDevice> device
+    ResRW<VxgiVolumes> volumes,
+    ResRO<VxgiInjectPropagation> inject_propagation,
+    ResRO<VxgiGenerateMipmapBase> mipmap_base,
+    ResRW<VxgiGenerateMipmapVolume> mipmap_volume,
+    ResRO<GraphicsDevice> device
 );
 
 struct alignas(16) VxgiLightingUniform {
@@ -309,17 +309,17 @@ struct VxgiLighting {
     std::shared_ptr<ResourceSet> resource_set;
 };
 
-void setup_vxgi_lighting(CRes<GraphicsDevice> device, Commands commands);
+void setup_vxgi_lighting(ResRO<GraphicsDevice> device, Commands commands);
 
 void prepare_vxgi_lighting(
     Query<DirectionalLight, Transform3d, ViewUniformBuffer, ShadowMap>
         query_directional_lights,
     Query<PointLight, Transform3d> query_point_lights,
-    Res<VxgiLighting> vxgi_lighting,
-    Res<VxgiVolumes> volumes,
-    Res<VxgiVoxelization> voxelization,
-    CRes<GraphicsDevice> device,
-    Res<RenderingDefaults> rendering_defaults
+    ResRW<VxgiLighting> vxgi_lighting,
+    ResRO<VxgiVolumes> volumes,
+    ResRO<VxgiVoxelization> voxelization,
+    ResRO<GraphicsDevice> device,
+    ResRO<RenderingDefaults> rendering_defaults
 );
 
 class VxgiPlugin : public Plugin {
