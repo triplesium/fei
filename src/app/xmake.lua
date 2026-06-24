@@ -3,7 +3,7 @@ target("fei-app")
     add_rules("fei.reflect")
     add_headerfiles("**.hpp")
     add_files("*.cpp")
-    add_deps("fei-base", "fei-refl", "fei-ecs")
+    add_deps("fei-base", "fei-refl", "fei-ecs", "fei-profiling")
 
 target("fei-app-tests")
     set_kind("binary")
