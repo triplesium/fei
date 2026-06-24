@@ -1,7 +1,10 @@
 #pragma once
 
+#include "base/optional.hpp"
 #include "ecs/system.hpp"
 #include "ecs/world.hpp"
+
+#include <variant>
 
 namespace fei {
 
@@ -47,6 +50,36 @@ class CRes {
 template<typename T>
 struct SystemParamTraits<CRes<T>> : StatelessParamTraits<CRes<T>> {};
 static_assert(SystemParam<CRes<int>>);
+
+template<typename T>
+struct SystemParamTraits<Optional<Res<T>>> {
+    using State = std::monostate;
+
+    static State init_state(World&) { return {}; }
+
+    static Optional<Res<T>> get_param(World& world, State&) {
+        if (!world.has_resource<T>()) {
+            return nullopt;
+        }
+        return Res<T>::get_param(world);
+    }
+};
+static_assert(SystemParam<Optional<Res<int>>>);
+
+template<typename T>
+struct SystemParamTraits<Optional<CRes<T>>> {
+    using State = std::monostate;
+
+    static State init_state(World&) { return {}; }
+
+    static Optional<CRes<T>> get_param(World& world, State&) {
+        if (!world.has_resource<T>()) {
+            return nullopt;
+        }
+        return CRes<T>::get_param(world);
+    }
+};
+static_assert(SystemParam<Optional<CRes<int>>>);
 
 class WorldRef {
   private:

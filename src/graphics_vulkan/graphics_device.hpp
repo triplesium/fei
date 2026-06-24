@@ -60,6 +60,8 @@ class GraphicsDeviceVulkan : public GraphicsDevice {
     map(std::shared_ptr<MappableResource> resource,
         MapMode map_mode) const override;
     void unmap(std::shared_ptr<MappableResource> resource) const override;
+    std::shared_ptr<TextureReadback>
+    create_texture_readback(uint32 max_in_flight = 3) const override;
 
     std::shared_ptr<Framebuffer> main_framebuffer() const override;
 };

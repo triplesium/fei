@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/concepts.hpp"
+#include "base/optional.hpp"
 #include "ecs/fwd.hpp"
 #include "ecs/resource_traits.hpp"
 #include "refl/type.hpp"
@@ -100,6 +101,26 @@ struct SystemParamAccess<Res<T>> {
 
 template<typename T>
 struct SystemParamAccess<CRes<T>> {
+    static void add(SystemAccess& access) {
+        access.read_resources.insert(type_id<T>());
+        if constexpr (ResourceTraits<T>::main_thread_only) {
+            access.main_thread_only = true;
+        }
+    }
+};
+
+template<typename T>
+struct SystemParamAccess<Optional<Res<T>>> {
+    static void add(SystemAccess& access) {
+        access.write_resources.insert(type_id<T>());
+        if constexpr (ResourceTraits<T>::main_thread_only) {
+            access.main_thread_only = true;
+        }
+    }
+};
+
+template<typename T>
+struct SystemParamAccess<Optional<CRes<T>>> {
     static void add(SystemAccess& access) {
         access.read_resources.insert(type_id<T>());
         if constexpr (ResourceTraits<T>::main_thread_only) {

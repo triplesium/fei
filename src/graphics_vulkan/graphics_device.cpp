@@ -118,6 +118,11 @@ void GraphicsDeviceVulkan::unmap(std::shared_ptr<MappableResource>) const {
     vulkan_not_implemented("unmap");
 }
 
+std::shared_ptr<TextureReadback>
+GraphicsDeviceVulkan::create_texture_readback(uint32) const {
+    vulkan_not_implemented("create_texture_readback");
+}
+
 std::shared_ptr<Framebuffer> GraphicsDeviceVulkan::main_framebuffer() const {
     vulkan_not_implemented("main_framebuffer");
 }

@@ -97,6 +97,43 @@ TEST_CASE(
     }
 }
 
+TEST_CASE("ECS optional resource params can be absent", "[ecs][resource]") {
+    Registry::instance().register_type<GameConfig>();
+    Registry::instance().register_type<EventQueue>();
+
+    World world;
+
+    bool missing_system_ran = false;
+    world.run_system_once(
+        [&missing_system_ran](Optional<CRes<GameConfig>> config,
+                              Optional<Res<EventQueue>> events) {
+            missing_system_ran = true;
+            REQUIRE_FALSE(config);
+            REQUIRE_FALSE(events);
+        }
+    );
+
+    REQUIRE(missing_system_ran);
+
+    GameConfig config;
+    config.max_entities = 256;
+    world.add_resource(config);
+    world.add_resource(EventQueue {});
+
+    world.run_system_once([](Optional<CRes<GameConfig>> config,
+                             Optional<Res<EventQueue>> events) {
+        REQUIRE(config);
+        REQUIRE((*config)->max_entities == 256);
+        REQUIRE(events);
+        (*events)->push("optional_resource_present");
+    });
+
+    REQUIRE(world.resource<EventQueue>().events.size() == 1);
+    REQUIRE(
+        world.resource<EventQueue>().events[0] == "optional_resource_present"
+    );
+}
+
 TEST_CASE("ECS commands defer entity and component edits", "[ecs][commands]") {
     Registry::instance().register_type<Position>();
     Registry::instance().register_type<Name>();

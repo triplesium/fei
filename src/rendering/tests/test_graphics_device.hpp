@@ -10,6 +10,7 @@
 #include "graphics/sampler.hpp"
 #include "graphics/shader_module.hpp"
 #include "graphics/texture.hpp"
+#include "graphics/texture_readback.hpp"
 #include "graphics/texture_view.hpp"
 
 #include <cstddef>
@@ -236,6 +237,11 @@ class FakeGraphicsDevice : public GraphicsDevice {
     }
 
     void unmap(std::shared_ptr<MappableResource>) const override {}
+
+    std::shared_ptr<TextureReadback>
+    create_texture_readback(uint32 = 3) const override {
+        return nullptr;
+    }
 
     std::shared_ptr<Framebuffer> main_framebuffer() const override {
         return nullptr;

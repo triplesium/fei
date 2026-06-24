@@ -8,11 +8,14 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <unordered_map>
 #include <variant>
 #include <vector>
 
 namespace fei {
+
+struct OpenGLTextureReadbackState;
 
 struct OpenGLPendingCommandSubmit {
     std::vector<opengl_commands::Command> commands;
@@ -37,18 +40,31 @@ struct OpenGLPendingTextureUpdate {
     std::uint32_t layer {0};
 };
 
+struct OpenGLPendingTextureReadback {
+    std::shared_ptr<OpenGLTextureReadbackState> state;
+    std::shared_ptr<Texture> texture;
+    std::size_t slot_index {0};
+    std::uint32_t mip_level {0};
+};
+
 using OpenGLPendingOperation = std::variant<
     OpenGLPendingCommandSubmit,
     OpenGLPendingBufferUpdate,
-    OpenGLPendingTextureUpdate>;
+    OpenGLPendingTextureUpdate,
+    OpenGLPendingTextureReadback>;
 
 class OpenGLDeviceState {
   public:
     void enqueue_operation(OpenGLPendingOperation operation);
     void enqueue_disposal(std::unique_ptr<DeferredResourceOpenGL> resource);
+    void register_texture_readback(
+        std::weak_ptr<OpenGLTextureReadbackState> readback
+    );
     std::deque<OpenGLPendingOperation> take_pending_operations();
     std::vector<std::unique_ptr<DeferredResourceOpenGL>>
     take_pending_disposals();
+    std::vector<std::shared_ptr<OpenGLTextureReadbackState>>
+    live_texture_readbacks();
 
   private:
     friend class GraphicsDeviceOpenGL;
@@ -56,16 +72,23 @@ class OpenGLDeviceState {
     mutable std::mutex m_mutex;
     std::deque<OpenGLPendingOperation> m_pending_operations;
     std::vector<std::unique_ptr<DeferredResourceOpenGL>> m_pending_disposals;
+    std::vector<std::weak_ptr<OpenGLTextureReadbackState>> m_texture_readbacks;
     std::unordered_map<MappableResource*, std::byte*> m_mapped_resources;
 };
 
 class GraphicsDeviceOpenGL : public GraphicsDevice {
   private:
     std::shared_ptr<OpenGLDeviceState> m_state;
+    std::thread::id m_context_thread;
 
   public:
     GraphicsDeviceOpenGL();
     ~GraphicsDeviceOpenGL() override;
+
+    GraphicsDeviceOpenGL(const GraphicsDeviceOpenGL&) = delete;
+    GraphicsDeviceOpenGL& operator=(const GraphicsDeviceOpenGL&) = delete;
+    GraphicsDeviceOpenGL(GraphicsDeviceOpenGL&&) noexcept = default;
+    GraphicsDeviceOpenGL& operator=(GraphicsDeviceOpenGL&&) noexcept = default;
 
     std::shared_ptr<ShaderModule>
     create_shader_module(const ShaderDescription& desc) const override;
@@ -119,6 +142,8 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
     map(std::shared_ptr<MappableResource> resource,
         MapMode map_mode) const override;
     void unmap(std::shared_ptr<MappableResource> resource) const override;
+    std::shared_ptr<TextureReadback>
+    create_texture_readback(uint32 max_in_flight = 3) const override;
 
     std::shared_ptr<Framebuffer> main_framebuffer() const override;
     void flush() const override;
@@ -130,7 +155,12 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
     void execute_operation(const OpenGLPendingOperation& operation) const;
     void execute_update_buffer(const OpenGLPendingBufferUpdate& update) const;
     void execute_update_texture(const OpenGLPendingTextureUpdate& update) const;
+    void execute_texture_readback(
+        const OpenGLPendingTextureReadback& readback
+    ) const;
+    void collect_texture_readbacks() const;
     void flush_disposals() const;
+    void assert_context_thread(const char* operation) const;
 };
 
 } // namespace fei

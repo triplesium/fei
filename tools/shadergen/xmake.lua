@@ -11,7 +11,7 @@ rule("fei.shader")
     set_extensions(".vert", ".geom", ".frag", ".comp")
 
     on_load(function(target)
-        target:add("deps", "fei-shadergen")
+        target:add("deps", "fei-shadergen", {links = false})
     end)
 
     on_buildcmd_file(function(target, batchcmds, sourcefile, opt)

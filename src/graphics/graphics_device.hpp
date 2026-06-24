@@ -8,6 +8,7 @@
 #include "graphics/sampler.hpp"
 #include "graphics/shader_module.hpp"
 #include "graphics/texture.hpp"
+#include "graphics/texture_readback.hpp"
 #include "graphics/texture_view.hpp"
 
 #include <cstdint>
@@ -66,6 +67,9 @@ class GraphicsDevice {
     virtual MappedResource
     map(std::shared_ptr<MappableResource> resource, MapMode map_mode) const = 0;
     virtual void unmap(std::shared_ptr<MappableResource> resource) const = 0;
+
+    virtual std::shared_ptr<TextureReadback>
+    create_texture_readback(uint32 max_in_flight = 3) const = 0;
 
     virtual std::shared_ptr<Framebuffer> main_framebuffer() const = 0;
 

@@ -1,6 +1,7 @@
 #pragma once
 #include "app/app.hpp"
 #include "app/plugin.hpp"
+#include "ecs/resource_traits.hpp"
 #include "ecs/system_params.hpp"
 
 #include <string>
@@ -12,6 +13,11 @@ namespace fei {
 struct Window {
     GLFWwindow* glfw_window;
     int width, height;
+};
+
+template<>
+struct ResourceTraits<Window> {
+    static constexpr bool main_thread_only = true;
 };
 
 GLFWwindow* setup_glfw(int width, int height, const std::string& title);

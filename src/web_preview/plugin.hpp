@@ -14,6 +14,7 @@ struct WebPreviewConfig {
     std::string host {"127.0.0.1"};
     uint16 port {8080};
     int jpeg_quality {80};
+    uint32 max_capture_fps {15};
     WebPreviewTarget target {WebPreviewTarget::Auto};
     bool handle_input {true};
 };

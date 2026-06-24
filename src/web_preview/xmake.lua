@@ -8,11 +8,10 @@ target("fei-web-preview")
         "fei-base",
         "fei-ecs",
         "fei-graphics",
-        "fei-graphics-opengl",
         "fei-pbr",
         "fei-window"
     )
-    add_packages("cpp-httplib", "glad", "stb")
+    add_packages("cpp-httplib", "stb")
     add_rules("utils.bin2obj", {extensions = {".html"}})
     add_files("index.html", {zeroend = true})
     if is_plat("windows") then

@@ -2,6 +2,7 @@
 
 #include "base/log.hpp"
 #include "graphics/enums.hpp"
+#include "graphics/utils.hpp"
 #include "graphics_opengl/buffer.hpp"
 #include "graphics_opengl/command_buffer.hpp"
 #include "graphics_opengl/command_buffer_executor.hpp"
@@ -11,6 +12,7 @@
 #include "graphics_opengl/sampler.hpp"
 #include "graphics_opengl/shader_module.hpp"
 #include "graphics_opengl/texture.hpp"
+#include "graphics_opengl/texture_readback.hpp"
 #include "graphics_opengl/texture_view.hpp"
 #include "graphics_opengl/utils.hpp"
 #include "profiling/profiling.hpp"
@@ -19,6 +21,7 @@
 #include <deque>
 #include <memory>
 #include <span>
+#include <thread>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -76,6 +79,13 @@ void OpenGLDeviceState::enqueue_disposal(
     m_pending_disposals.push_back(std::move(resource));
 }
 
+void OpenGLDeviceState::register_texture_readback(
+    std::weak_ptr<OpenGLTextureReadbackState> readback
+) {
+    std::scoped_lock lock(m_mutex);
+    m_texture_readbacks.push_back(std::move(readback));
+}
+
 std::deque<OpenGLPendingOperation>
 OpenGLDeviceState::take_pending_operations() {
     std::deque<OpenGLPendingOperation> operations;
@@ -92,8 +102,27 @@ OpenGLDeviceState::take_pending_disposals() {
     return disposals;
 }
 
+std::vector<std::shared_ptr<OpenGLTextureReadbackState>>
+OpenGLDeviceState::live_texture_readbacks() {
+    std::vector<std::shared_ptr<OpenGLTextureReadbackState>> readbacks;
+    std::scoped_lock lock(m_mutex);
+
+    std::vector<std::weak_ptr<OpenGLTextureReadbackState>> live;
+    live.reserve(m_texture_readbacks.size());
+    for (auto& readback : m_texture_readbacks) {
+        if (auto locked = readback.lock()) {
+            readbacks.push_back(locked);
+            live.push_back(locked);
+        }
+    }
+    m_texture_readbacks = std::move(live);
+
+    return readbacks;
+}
+
 GraphicsDeviceOpenGL::GraphicsDeviceOpenGL() :
-    m_state(std::make_shared<OpenGLDeviceState>()) {
+    m_state(std::make_shared<OpenGLDeviceState>()),
+    m_context_thread(std::this_thread::get_id()) {
     GLuint vao;
     FEI_GL_CALL(glGenVertexArrays(1, &vao));
     FEI_GL_CALL(glBindVertexArray(vao));
@@ -106,6 +135,9 @@ GraphicsDeviceOpenGL::GraphicsDeviceOpenGL() :
 }
 
 GraphicsDeviceOpenGL::~GraphicsDeviceOpenGL() {
+    if (!m_state) {
+        return;
+    }
     flush_pending_work();
 }
 
@@ -251,9 +283,20 @@ MappedResource GraphicsDeviceOpenGL::map(
     MapMode map_mode
 ) const {
     FEI_PROFILE_SCOPE("OpenGL Map Resource");
+    assert_context_thread("GraphicsDeviceOpenGL::map");
     flush();
 
     if (auto texture_gl = std::dynamic_pointer_cast<TextureOpenGL>(resource)) {
+        if (!texture_gl->usage().is_set(TextureUsage::Staging)) {
+            fatal(
+                "GraphicsDeviceOpenGL::map can only map staging textures. "
+                "Use TextureReadback for GPU texture readback."
+            );
+        }
+        if (map_mode != MapMode::Read) {
+            fatal("GraphicsDeviceOpenGL::map supports read-only texture maps");
+        }
+
         texture_gl->ensure_created();
         std::uint32_t width = texture_gl->width();
         std::uint32_t height = texture_gl->height();
@@ -311,6 +354,7 @@ void GraphicsDeviceOpenGL::unmap(
     std::shared_ptr<MappableResource> resource
 ) const {
     FEI_PROFILE_SCOPE("OpenGL Unmap Resource");
+    assert_context_thread("GraphicsDeviceOpenGL::unmap");
     flush();
 
     if (std::dynamic_pointer_cast<TextureOpenGL>(resource)) {
@@ -331,6 +375,11 @@ void GraphicsDeviceOpenGL::unmap(
     fei::fatal("Unknown MappableResource type in GraphicsDeviceOpenGL::unmap");
 }
 
+std::shared_ptr<TextureReadback>
+GraphicsDeviceOpenGL::create_texture_readback(uint32 max_in_flight) const {
+    return std::make_shared<TextureReadbackOpenGL>(m_state, max_in_flight);
+}
+
 std::shared_ptr<Framebuffer> GraphicsDeviceOpenGL::main_framebuffer() const {
     // Return the default framebuffer (ID 0)
     return std::shared_ptr<FramebufferOpenGL>(new FramebufferOpenGL(0));
@@ -338,17 +387,20 @@ std::shared_ptr<Framebuffer> GraphicsDeviceOpenGL::main_framebuffer() const {
 
 void GraphicsDeviceOpenGL::flush() const {
     FEI_PROFILE_SCOPE("OpenGL Device Flush");
+    assert_context_thread("GraphicsDeviceOpenGL::flush");
     flush_pending_work();
 }
 
 void GraphicsDeviceOpenGL::flush_pending_work() const {
     FEI_PROFILE_SCOPE("OpenGL Flush Pending Work");
+    assert_context_thread("GraphicsDeviceOpenGL::flush_pending_work");
     auto operations = m_state->take_pending_operations();
 
     for (const auto& operation : operations) {
         execute_operation(operation);
     }
 
+    collect_texture_readbacks();
     flush_disposals();
 }
 
@@ -371,6 +423,10 @@ void GraphicsDeviceOpenGL::execute_operation(
                 std::is_same_v<OperationT, OpenGLPendingTextureUpdate>
             ) {
                 execute_update_texture(op);
+            } else if constexpr (
+                std::is_same_v<OperationT, OpenGLPendingTextureReadback>
+            ) {
+                execute_texture_readback(op);
             } else {
                 static_assert(always_false_v<OperationT>);
             }
@@ -440,6 +496,18 @@ void GraphicsDeviceOpenGL::execute_update_texture(
     }
 }
 
+void GraphicsDeviceOpenGL::execute_texture_readback(
+    const OpenGLPendingTextureReadback& readback
+) const {
+    fei::execute_texture_readback(readback);
+}
+
+void GraphicsDeviceOpenGL::collect_texture_readbacks() const {
+    for (const auto& readback : m_state->live_texture_readbacks()) {
+        fei::collect_ready_texture_readbacks(readback);
+    }
+}
+
 void GraphicsDeviceOpenGL::flush_disposals() const {
     while (true) {
         auto disposals = m_state->take_pending_disposals();
@@ -451,6 +519,14 @@ void GraphicsDeviceOpenGL::flush_disposals() const {
             resource->dispose();
         }
     }
+}
+
+void GraphicsDeviceOpenGL::assert_context_thread(const char* operation) const {
+    if (std::this_thread::get_id() == m_context_thread) {
+        return;
+    }
+
+    fatal("{} must run on the OpenGL context thread", operation);
 }
 
 } // namespace fei

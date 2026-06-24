@@ -16,6 +16,11 @@ namespace {
 
 void resource_access_system(Res<GameConfig>, CRes<EventQueue>) {}
 
+void optional_resource_access_system(
+    Optional<Res<GameConfig>>,
+    Optional<CRes<EventQueue>>
+) {}
+
 void write_position_system(Query<Position>) {}
 
 void read_position_system(Query<const Position>) {}
@@ -76,6 +81,23 @@ TEST_CASE("ECS systems expose resource access metadata", "[ecs][system]") {
     REQUIRE_FALSE(access.world_exclusive);
     REQUIRE_FALSE(access.main_thread_only);
     REQUIRE_FALSE(access.commands);
+}
+
+TEST_CASE(
+    "ECS optional resource params expose precise access metadata",
+    "[ecs][system]"
+) {
+    FunctionSystem<decltype(optional_resource_access_system)*> system(
+        optional_resource_access_system
+    );
+    const auto& access = system.access();
+
+    REQUIRE(access.write_resources.contains(type_id<GameConfig>()));
+    REQUIRE(access.read_resources.contains(type_id<EventQueue>()));
+    REQUIRE_FALSE(access.world_exclusive);
+    REQUIRE_FALSE(access.main_thread_only);
+    REQUIRE_FALSE(access.commands);
+    REQUIRE_FALSE(access.is_barrier());
 }
 
 TEST_CASE("ECS systems expose query access metadata", "[ecs][system]") {

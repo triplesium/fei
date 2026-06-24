@@ -13,6 +13,7 @@
 #include "window/window.hpp"
 
 #include <cstddef>
+#include <format>
 #include <print>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -23,6 +24,37 @@ using namespace fei;
 struct Global {
     std::shared_ptr<Texture> cubemap;
 };
+
+std::shared_ptr<Texture> copy_to_staging_texture(
+    CRes<GraphicsDevice> device,
+    const std::shared_ptr<Texture>& texture
+) {
+    auto usage = BitFlags<TextureUsage> {TextureUsage::Staging};
+    if (texture->usage().is_set(TextureUsage::Cubemap)) {
+        usage.set(TextureUsage::Cubemap);
+    }
+
+    auto staging_texture = device->create_texture(
+        TextureDescription {
+            .width = texture->width(),
+            .height = texture->height(),
+            .depth = texture->depth(),
+            .mip_level = texture->mip_level(),
+            .layer = texture->layer(),
+            .texture_format = texture->format(),
+            .texture_usage = usage,
+            .texture_type = texture->type(),
+        }
+    );
+
+    auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
+    command_buffer->copy_texture(texture, staging_texture);
+    command_buffer->end();
+    device->submit_commands(command_buffer);
+
+    return staging_texture;
+}
 
 void equirect_to_cubemap(
     CRes<GraphicsDevice> device,
@@ -116,7 +148,8 @@ void equirect_to_cubemap(
     command_buffer->end();
     device->submit_commands(command_buffer);
 
-    auto mapped = device->map(cubemap_texture, MapMode::Read);
+    auto staging_texture = copy_to_staging_texture(device, cubemap_texture);
+    auto mapped = device->map(staging_texture, MapMode::Read);
     auto data = mapped.data();
     std::println("{}", data.size_bytes());
 
@@ -138,7 +171,7 @@ void equirect_to_cubemap(
             fei::fatal("Failed to write cubemap face {}", face);
         }
     }
-    device->unmap(cubemap_texture);
+    device->unmap(staging_texture);
 
     global->cubemap = cubemap_texture;
 }
@@ -150,6 +183,8 @@ void cubemap_to_irradiance_map(
     Res<Assets<Image>> images,
     Res<Global> global
 ) {
+    (void)images;
+
     auto irradiance_texture = device->create_texture(
         TextureDescription {
             .width = 32,
@@ -213,7 +248,8 @@ void cubemap_to_irradiance_map(
     command_buffer->end();
     device->submit_commands(command_buffer);
 
-    auto mapped = device->map(irradiance_texture, MapMode::Read);
+    auto staging_texture = copy_to_staging_texture(device, irradiance_texture);
+    auto mapped = device->map(staging_texture, MapMode::Read);
     auto data = mapped.data();
     std::println("{}", data.size_bytes());
 
@@ -236,7 +272,7 @@ void cubemap_to_irradiance_map(
             fei::fatal("Failed to write irradiance face {}", face);
         }
     }
-    device->unmap(irradiance_texture);
+    device->unmap(staging_texture);
 }
 
 int main() {
