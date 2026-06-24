@@ -2,6 +2,7 @@
 
 #include "graphics_opengl/texture.hpp"
 #include "graphics_opengl/utils.hpp"
+#include "profiling/profiling.hpp"
 
 #include <memory>
 #include <vector>
@@ -12,6 +13,7 @@ FramebufferOpenGL::FramebufferOpenGL(const FramebufferDescription& desc) :
     Framebuffer(desc) {}
 
 void FramebufferOpenGL::create_gl_resource() const {
+    FEI_PROFILE_SCOPE("OpenGL Framebuffer Create");
     FEI_GL_CALL(glCreateFramebuffers(1, &m_fbo));
 
     if (!m_color_attachments.empty()) {

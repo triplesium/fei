@@ -13,6 +13,7 @@
 #include "graphics_opengl/texture.hpp"
 #include "graphics_opengl/texture_view.hpp"
 #include "graphics_opengl/utils.hpp"
+#include "profiling/profiling.hpp"
 
 #include <cstring>
 #include <deque>
@@ -173,6 +174,7 @@ GraphicsDeviceOpenGL::create_sampler(const SamplerDescription& desc) const {
 void GraphicsDeviceOpenGL::submit_commands(
     std::shared_ptr<CommandBuffer> command_buffer
 ) const {
+    FEI_PROFILE_SCOPE("OpenGL Submit Commands");
     auto command_buffer_gl =
         std::dynamic_pointer_cast<CommandBufferOpenGL>(command_buffer);
     if (!command_buffer_gl) {
@@ -203,6 +205,7 @@ void GraphicsDeviceOpenGL::update_texture(
     std::uint32_t mip_level,
     std::uint32_t layer
 ) const {
+    FEI_PROFILE_SCOPE("OpenGL Queue Texture Update");
     const auto byte_count = static_cast<std::size_t>(width) *
                             static_cast<std::size_t>(height) *
                             static_cast<std::size_t>(depth) *
@@ -231,6 +234,7 @@ void GraphicsDeviceOpenGL::update_buffer(
     const void* data,
     std::uint32_t size
 ) const {
+    FEI_PROFILE_SCOPE("OpenGL Queue Buffer Update");
     auto bytes = copy_bytes(data, size);
 
     m_state->enqueue_operation(
@@ -246,6 +250,7 @@ MappedResource GraphicsDeviceOpenGL::map(
     std::shared_ptr<MappableResource> resource,
     MapMode map_mode
 ) const {
+    FEI_PROFILE_SCOPE("OpenGL Map Resource");
     flush();
 
     if (auto texture_gl = std::dynamic_pointer_cast<TextureOpenGL>(resource)) {
@@ -305,6 +310,7 @@ MappedResource GraphicsDeviceOpenGL::map(
 void GraphicsDeviceOpenGL::unmap(
     std::shared_ptr<MappableResource> resource
 ) const {
+    FEI_PROFILE_SCOPE("OpenGL Unmap Resource");
     flush();
 
     if (std::dynamic_pointer_cast<TextureOpenGL>(resource)) {
@@ -331,10 +337,12 @@ std::shared_ptr<Framebuffer> GraphicsDeviceOpenGL::main_framebuffer() const {
 }
 
 void GraphicsDeviceOpenGL::flush() const {
+    FEI_PROFILE_SCOPE("OpenGL Device Flush");
     flush_pending_work();
 }
 
 void GraphicsDeviceOpenGL::flush_pending_work() const {
+    FEI_PROFILE_SCOPE("OpenGL Flush Pending Work");
     auto operations = m_state->take_pending_operations();
 
     for (const auto& operation : operations) {
@@ -374,6 +382,7 @@ void GraphicsDeviceOpenGL::execute_operation(
 void GraphicsDeviceOpenGL::execute_update_buffer(
     const OpenGLPendingBufferUpdate& update
 ) const {
+    FEI_PROFILE_SCOPE("OpenGL Buffer Upload");
     auto buffer_gl = std::static_pointer_cast<BufferOpenGL>(update.buffer);
     buffer_gl->ensure_created();
 
@@ -398,6 +407,7 @@ void GraphicsDeviceOpenGL::execute_update_buffer(
 void GraphicsDeviceOpenGL::execute_update_texture(
     const OpenGLPendingTextureUpdate& update
 ) const {
+    FEI_PROFILE_SCOPE("OpenGL Texture Upload");
     auto gl_texture = std::static_pointer_cast<TextureOpenGL>(update.texture);
     gl_texture->ensure_created();
 

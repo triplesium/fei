@@ -6,6 +6,7 @@
 #include "graphics_opengl/resource.hpp"
 #include "graphics_opengl/shader_module.hpp"
 #include "graphics_opengl/utils.hpp"
+#include "profiling/profiling.hpp"
 
 #include <algorithm>
 #include <numeric>
@@ -103,6 +104,7 @@ PipelineOpenGL::PipelineOpenGL(const ComputePipelineDescription& desc) :
 }
 
 void PipelineOpenGL::create_gl_resource() const {
+    FEI_PROFILE_SCOPE("OpenGL Pipeline Create");
     m_program = FEI_GL_CALL(glCreateProgram());
     for (const auto& shader : m_shaders) {
         auto shader_gl = std::static_pointer_cast<ShaderOpenGL>(shader);

@@ -5,7 +5,9 @@
 #include "ecs/commands.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
+#include "ecs/system_profile.hpp"
 #include "graphics/graphics_device.hpp"
+#include "profiling/profiling.hpp"
 #include "rendering/defaults.hpp"
 #include "rendering/gpu_image.hpp"
 #include "rendering/mesh/mesh.hpp"
@@ -38,6 +40,7 @@ void flush_graphics_device(WorldRef world) {
 }
 
 void render_end(Res<Window> win) {
+    FEI_PROFILE_SCOPE("Swap Buffers");
     glfwSwapBuffers(win->glfw_window);
 }
 
@@ -62,14 +65,17 @@ void RenderingPlugin::setup(App& app) {
         .add_resource(PipelineCache(app.resource<GraphicsDevice>()))
         .add_systems(
             First,
-            [](Commands commands,
-               Res<AssetServer> asset_server,
-               Res<Assets<Shader>> shaders,
-               CRes<GraphicsDevice> device) {
-                commands.add_resource(
-                    ShaderCache(*asset_server, *shaders, *device)
-                );
-            }
+            FEI_SYSTEM_NAME(
+                "init_shader_cache",
+                [](Commands commands,
+                   Res<AssetServer> asset_server,
+                   Res<Assets<Shader>> shaders,
+                   CRes<GraphicsDevice> device) {
+                    commands.add_resource(
+                        ShaderCache(*asset_server, *shaders, *device)
+                    );
+                }
+            )
         )
         .add_systems(PostUpdate, compute_mesh_aabb)
         .add_systems(

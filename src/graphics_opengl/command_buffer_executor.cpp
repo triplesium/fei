@@ -11,6 +11,7 @@
 #include "graphics_opengl/texture.hpp"
 #include "graphics_opengl/texture_view.hpp"
 #include "graphics_opengl/utils.hpp"
+#include "profiling/profiling.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -43,6 +44,7 @@ struct CommandBufferExecutorOpenGL::ExecutionState {
 };
 
 void CommandBufferExecutorOpenGL::execute(CommandBufferOpenGL& command_buffer) {
+    FEI_PROFILE_SCOPE("OpenGL CommandBuffer Execute");
     command_buffer.ensure_executable("execute");
     execute(command_buffer.m_commands);
     command_buffer.mark_submitted();
@@ -51,6 +53,7 @@ void CommandBufferExecutorOpenGL::execute(CommandBufferOpenGL& command_buffer) {
 void CommandBufferExecutorOpenGL::execute(
     const std::vector<ogl_cmd::Command>& commands
 ) {
+    FEI_PROFILE_SCOPE("OpenGL Command List Execute");
     ExecutionState state;
     for (const auto& command : commands) {
         execute_command(state, command);

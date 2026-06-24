@@ -3,6 +3,7 @@
 #include "base/log.hpp"
 #include "graphics/texture_view.hpp"
 #include "graphics_opengl/utils.hpp"
+#include "profiling/profiling.hpp"
 
 namespace fei {
 
@@ -13,6 +14,7 @@ TextureViewOpenGL::TextureViewOpenGL(const TextureViewDescription& desc) :
 }
 
 void TextureViewOpenGL::create_gl_resource() const {
+    FEI_PROFILE_SCOPE("OpenGL TextureView Create");
     m_target_gl->ensure_created();
     FEI_GL_CALL(glGenTextures(1, &m_texture_view));
 

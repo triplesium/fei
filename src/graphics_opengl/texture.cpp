@@ -2,6 +2,7 @@
 
 #include "base/log.hpp"
 #include "graphics_opengl/utils.hpp"
+#include "profiling/profiling.hpp"
 
 namespace fei {
 
@@ -17,6 +18,7 @@ TextureOpenGL::TextureOpenGL(const TextureDescription& desc) :
 }
 
 void TextureOpenGL::create_gl_resource() const {
+    FEI_PROFILE_SCOPE("OpenGL Texture Create");
     auto gl_target = to_gl_texture_target(m_texture_usage, m_texture_type);
 
     FEI_GL_CALL(glCreateTextures(gl_target, 1, &m_texture));

@@ -3,6 +3,7 @@
 #include "base/log.hpp"
 #include "graphics/shader_module.hpp"
 #include "graphics_opengl/utils.hpp"
+#include "profiling/profiling.hpp"
 
 namespace fei {
 
@@ -12,6 +13,7 @@ ShaderOpenGL::ShaderOpenGL(const ShaderDescription& desc) : ShaderModule(desc) {
 }
 
 void ShaderOpenGL::create_gl_resource() const {
+    FEI_PROFILE_SCOPE("OpenGL Shader Compile");
     m_shader = FEI_GL_CALL(glCreateShader(m_stage));
 
     const char* src_ptr = m_source.c_str();

@@ -9,6 +9,7 @@
 #include "ecs/system.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
+#include "ecs/system_profile.hpp"
 #include "ecs/world.hpp"
 #include "rendering/plugin.hpp"
 
@@ -176,8 +177,14 @@ struct RenderAssetPlugin : public Plugin {
         app.add_systems(
             RenderUpdate,
             chain(
-                extract_render_assets<Source>,
-                prepare_assets<Source, Target, Adapter>
+                FEI_SYSTEM_NAME(
+                    "extract_render_assets",
+                    (extract_render_assets<Source>)
+                ),
+                FEI_SYSTEM_NAME(
+                    "prepare_render_assets",
+                    (prepare_assets<Source, Target, Adapter>)
+                )
             ) | in_set<RenderingSystems::PrepareAssets>()
         );
     }
