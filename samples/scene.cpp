@@ -170,7 +170,7 @@ int main() {
         .add_systems(Update, update_directional_light)
         .add_systems(
             RenderUpdate,
-            update_imgui | in_set<RenderingSystems::Render>()
+            update_imgui | in_set<RenderingSystems::Render>() | main_thread()
         )
         .add_plugin(
             WebPreviewPlugin {WebPreviewConfig {

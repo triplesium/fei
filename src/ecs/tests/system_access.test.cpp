@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <type_traits>
 
 using namespace fei;
@@ -342,4 +343,47 @@ TEST_CASE(
     REQUIRE(schedule.execution_batches().size() == 2);
     REQUIRE(schedule.execution_batches()[0].size() == 1);
     REQUIRE(schedule.execution_batches()[1].size() == 1);
+}
+
+TEST_CASE(
+    "ECS explicit main-thread system config creates scheduler barriers",
+    "[ecs][system]"
+) {
+    auto config = read_position_system | main_thread();
+    REQUIRE(config.main_thread_only);
+
+    Schedule schedule;
+    schedule.add_systems(
+        read_position_system | main_thread(),
+        read_velocity_system
+    );
+    schedule.sort_systems();
+
+    REQUIRE(schedule.execution_batches().size() == 2);
+    REQUIRE(schedule.execution_batches()[0].size() == 1);
+    REQUIRE(schedule.execution_batches()[1].size() == 1);
+}
+
+TEST_CASE(
+    "ECS explicit main-thread systems run on the caller thread",
+    "[ecs][schedule]"
+) {
+    World world;
+    world.set_worker_threads(2);
+    world.add_resource(CommandsQueue {});
+
+    auto caller_thread = std::this_thread::get_id();
+    std::thread::id system_thread;
+
+    world.add_systems(
+        TestSchedule,
+        [&system_thread]() {
+            system_thread = std::this_thread::get_id();
+        } | main_thread(),
+        read_position_system
+    );
+    world.sort_systems();
+    world.run_schedule(TestSchedule);
+
+    REQUIRE(system_thread == caller_thread);
 }

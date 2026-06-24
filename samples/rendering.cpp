@@ -269,7 +269,7 @@ int main() {
         .add_systems(Update, handle_control, update_light_cube)
         .add_systems(
             RenderUpdate,
-            update_imgui | in_set<RenderingSystems::Render>()
+            update_imgui | in_set<RenderingSystems::Render>() | main_thread()
         )
         .run();
 

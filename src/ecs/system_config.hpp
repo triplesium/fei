@@ -31,6 +31,7 @@ struct SystemConfig {
     SystemDependencies dependencies;
     std::unique_ptr<System> system;
     SystemProfileInfo profile;
+    bool main_thread_only {false};
     SystemId id;
     static SystemId next_id;
 
@@ -66,6 +67,10 @@ struct SystemConfig {
     }
     SystemConfig&& in_set(TypeId set_id) && {
         dependencies.in_sets.insert(set_id);
+        return std::move(*this);
+    }
+    SystemConfig&& main_thread() && {
+        main_thread_only = true;
         return std::move(*this);
     }
 };
@@ -153,6 +158,23 @@ inline SystemConfig operator|(SystemConfig&& config, SystemInSetTag tag) {
     return std::move(config).in_set(tag.set_id);
 }
 
+struct SystemMainThreadTag {};
+inline SystemMainThreadTag main_thread() {
+    return {};
+}
+inline SystemConfig
+operator|(IntoSystem auto&& system, SystemMainThreadTag /*tag*/) {
+    return SystemConfig(system).main_thread();
+}
+inline SystemConfig
+operator|(NamedIntoSystem auto&& system, SystemMainThreadTag /*tag*/) {
+    return SystemConfig(std::forward<decltype(system)>(system)).main_thread();
+}
+inline SystemConfig
+operator|(SystemConfig&& config, SystemMainThreadTag /*tag*/) {
+    return std::move(config).main_thread();
+}
+
 inline SystemConfigs all(std::convertible_to<SystemConfigs> auto&&... configs) {
     std::vector<SystemConfig> systems;
     (
@@ -216,6 +238,14 @@ inline SystemConfigs operator|(SystemConfigs&& config, SystemAfterTag tag) {
 inline SystemConfigs operator|(SystemConfigs&& config, SystemInSetTag tag) {
     for (auto& sys_config : config.systems) {
         sys_config.dependencies.in_sets.insert(tag.set_id);
+    }
+    return std::move(config);
+}
+
+inline SystemConfigs
+operator|(SystemConfigs&& config, SystemMainThreadTag /*tag*/) {
+    for (auto& sys_config : config.systems) {
+        sys_config.main_thread_only = true;
     }
     return std::move(config);
 }

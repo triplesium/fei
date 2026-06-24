@@ -58,6 +58,13 @@ void run_profiled_system(
     config.system->run(world);
 }
 
+SystemAccess effective_access(const SystemConfig& config) {
+    auto access = config.system->access();
+    access.main_thread_only =
+        access.main_thread_only || config.main_thread_only;
+    return access;
+}
+
 } // namespace
 
 SystemId SystemConfig::next_id = 0;
@@ -208,11 +215,11 @@ void Schedule::build_execution_batches() {
                 continue;
             }
 
-            const auto& access = m_systems.at(system_id).system->access();
+            auto access = effective_access(m_systems.at(system_id));
             bool has_conflict = false;
             for (auto batch_system_id : batch) {
-                const auto& batch_access =
-                    m_systems.at(batch_system_id).system->access();
+                auto batch_access =
+                    effective_access(m_systems.at(batch_system_id));
                 if (access.conflicts_with(batch_access)) {
                     has_conflict = true;
                     break;

@@ -3,6 +3,7 @@
 #include "app/app.hpp"
 #include "asset/embed.hpp"
 #include "asset/server.hpp"
+#include "graphics/graphics_device.hpp"
 #include "window/window.hpp"
 
 #include <cstddef>
@@ -37,15 +38,16 @@ void begin_imgui() {
     ImGui::NewFrame();
 }
 
-void end_imgui() {
+void end_imgui(CRes<GraphicsDevice> device) {
     ImGui::Render();
+    device->flush();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
 void UIPlugin::setup(App& app) {
     app.add_systems(StartUp, setup_imgui)
-        .add_systems(RenderStart, begin_imgui)
-        .add_systems(RenderEnd, end_imgui);
+        .add_systems(RenderStart, begin_imgui | main_thread())
+        .add_systems(RenderEnd, end_imgui | main_thread());
 }
 
 } // namespace fei
