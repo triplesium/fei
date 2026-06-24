@@ -1,7 +1,6 @@
 function add_sample(name)
     target("sample-" .. name)
         set_kind("binary")
-        set_rundir(os.projectdir())
         add_rules("fei.reflect")
         add_headerfiles("common.hpp")
         add_files(name .. ".cpp")
