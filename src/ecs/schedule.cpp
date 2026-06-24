@@ -11,7 +11,54 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#if defined(FEI_ENABLE_TRACY) || defined(FEI_ENABLE_PROFILE_SUMMARY)
+#    include "ecs/system_profile.hpp"
+#    include "profiling/profiling.hpp"
+
+#    include <string>
+#endif
+
 namespace fei {
+namespace {
+
+#if defined(FEI_ENABLE_TRACY) || defined(FEI_ENABLE_PROFILE_SUMMARY)
+void resolve_system_profile(SystemConfig& config) {
+    if (!config.profile.named() && config.system->hashable()) {
+        auto& registry = SystemProfileRegistry::instance();
+        auto profile = registry.symbolize(config.system->hash());
+        if (!profile) {
+            profile = registry.find(config.system->hash());
+        }
+        if (profile && profile->named()) {
+            config.profile = std::move(*profile);
+        }
+    }
+
+    if (!config.profile.named()) {
+        config.profile.name = "system#" + std::to_string(config.id);
+    }
+    if (config.profile.file.empty()) {
+        config.profile.file = "<unknown>";
+    }
+    if (config.profile.function.empty()) {
+        config.profile.function = config.profile.name;
+    }
+}
+#endif
+
+void run_profiled_system(
+    ScheduleId schedule,
+    SystemConfig& config,
+    World& world
+) {
+#if defined(FEI_ENABLE_TRACY) || defined(FEI_ENABLE_PROFILE_SUMMARY)
+    resolve_system_profile(config);
+    FEI_PROFILE_SYSTEM_SCOPE(schedule, config.profile);
+#endif
+    config.system->run(world);
+}
+
+} // namespace
 
 SystemId SystemConfig::next_id = 0;
 
@@ -52,7 +99,7 @@ void ScheduleGraph::sort() {
 void Schedules::run_systems(ScheduleId schedule, World& world) {
     auto it = m_schedules.find(schedule);
     if (it != m_schedules.end()) {
-        it->second.run_systems(world, *m_thread_pool);
+        it->second.run_systems(schedule, world, *m_thread_pool);
     }
 }
 
@@ -65,11 +112,15 @@ std::size_t Schedules::worker_threads() const {
 }
 
 void Schedule::run_systems(World& world) {
+    run_systems(0, world);
+}
+
+void Schedule::run_systems(ScheduleId schedule, World& world) {
     for (const auto& batch : m_execution_batches) {
         for (auto system_id : batch) {
             auto it = m_systems.find(system_id);
             if (it != m_systems.end()) {
-                it->second.system->run(world);
+                run_profiled_system(schedule, it->second, world);
             }
         }
         world.resource<CommandsQueue>().execute(world);
@@ -77,10 +128,18 @@ void Schedule::run_systems(World& world) {
 }
 
 void Schedule::run_systems(World& world, ThreadPool& thread_pool) {
-    auto run_one = [this, &world](SystemId system_id) {
+    run_systems(0, world, thread_pool);
+}
+
+void Schedule::run_systems(
+    ScheduleId schedule,
+    World& world,
+    ThreadPool& thread_pool
+) {
+    auto run_one = [this, schedule, &world](SystemId system_id) {
         auto it = m_systems.find(system_id);
         if (it != m_systems.end()) {
-            it->second.system->run(world);
+            run_profiled_system(schedule, it->second, world);
         }
     };
 
@@ -114,6 +173,14 @@ void Schedule::run_systems(World& world, ThreadPool& thread_pool) {
         }
         world.resource<CommandsQueue>().execute(world);
     }
+}
+
+void Schedule::resolve_system_profiles() {
+#if defined(FEI_ENABLE_TRACY) || defined(FEI_ENABLE_PROFILE_SUMMARY)
+    for (auto& [_, config] : m_systems) {
+        resolve_system_profile(config);
+    }
+#endif
 }
 
 void Schedule::build_execution_batches() {

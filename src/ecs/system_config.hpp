@@ -1,15 +1,24 @@
 #pragma once
 #include "ecs/fwd.hpp"
 #include "ecs/system.hpp"
+#include "ecs/system_profile.hpp"
 #include "ecs/system_set.hpp"
 
 #include <concepts>
 #include <memory>
+#include <type_traits>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 namespace fei {
+
+template<typename T>
+concept NamedIntoSystem = NamedSystemWrapper<T> &&
+                          IntoSystem<typename std::remove_cvref_t<T>::FuncType>;
+
+template<typename T>
+concept IntoSystemConfig = IntoSystem<T> || NamedIntoSystem<T>;
 
 struct SystemDependencies {
     // These are hashes of systems
@@ -21,6 +30,7 @@ struct SystemDependencies {
 struct SystemConfig {
     SystemDependencies dependencies;
     std::unique_ptr<System> system;
+    SystemProfileInfo profile;
     SystemId id;
     static SystemId next_id;
 
@@ -29,6 +39,17 @@ struct SystemConfig {
     template<IntoSystem F>
     SystemConfig(F func) :
         SystemConfig(std::make_unique<FunctionSystem<F>>(func)) {}
+    template<NamedIntoSystem F>
+    SystemConfig(F&& named) :
+        SystemConfig(
+            std::make_unique<
+                FunctionSystem<typename std::remove_cvref_t<F>::FuncType>>(
+                std::forward<F>(named).func
+            )
+        ) {
+        profile =
+            SystemProfileInfo::from_source_location(named.name, named.location);
+    }
 
     SystemConfig(const SystemConfig&) = delete;
     SystemConfig& operator=(const SystemConfig&) = delete;
@@ -54,7 +75,7 @@ struct SystemConfigs {
     SystemConfigs(SystemConfig config) { systems.push_back(std::move(config)); }
     SystemConfigs(std::vector<SystemConfig>&& configs) :
         systems(std::move(configs)) {}
-    SystemConfigs(IntoSystem auto&&... configs) {
+    SystemConfigs(IntoSystemConfig auto&&... configs) {
         (systems.push_back(
              SystemConfig(std::forward<decltype(configs)>(configs))
          ),
@@ -73,8 +94,18 @@ struct SystemBeforeTag {
 inline SystemBeforeTag before(HashableSystem auto&& system) {
     return {.hash = hash_system(system)};
 }
+template<NamedIntoSystem T>
+    requires HashableSystem<typename std::remove_cvref_t<T>::FuncType>
+inline SystemBeforeTag before(T&& system) {
+    return {.hash = hash_system(system.func)};
+}
 inline SystemConfig operator|(IntoSystem auto&& system, SystemBeforeTag tag) {
     return SystemConfig(system).before(tag.hash);
+}
+inline SystemConfig
+operator|(NamedIntoSystem auto&& system, SystemBeforeTag tag) {
+    return SystemConfig(std::forward<decltype(system)>(system))
+        .before(tag.hash);
 }
 inline SystemConfig operator|(SystemConfig&& config, SystemBeforeTag tag) {
     return std::move(config).before(tag.hash);
@@ -86,8 +117,17 @@ struct SystemAfterTag {
 inline SystemAfterTag after(HashableSystem auto&& system) {
     return {.hash = hash_system(system)};
 }
+template<NamedIntoSystem T>
+    requires HashableSystem<typename std::remove_cvref_t<T>::FuncType>
+inline SystemAfterTag after(T&& system) {
+    return {.hash = hash_system(system.func)};
+}
 inline SystemConfig operator|(IntoSystem auto&& system, SystemAfterTag tag) {
     return SystemConfig(system).after(tag.hash);
+}
+inline SystemConfig
+operator|(NamedIntoSystem auto&& system, SystemAfterTag tag) {
+    return SystemConfig(std::forward<decltype(system)>(system)).after(tag.hash);
 }
 inline SystemConfig operator|(SystemConfig&& config, SystemAfterTag tag) {
     return std::move(config).after(tag.hash);
@@ -103,6 +143,11 @@ inline SystemInSetTag in_set() {
 }
 inline SystemConfig operator|(IntoSystem auto&& system, SystemInSetTag tag) {
     return SystemConfig(system).in_set(tag.set_id);
+}
+inline SystemConfig
+operator|(NamedIntoSystem auto&& system, SystemInSetTag tag) {
+    return SystemConfig(std::forward<decltype(system)>(system))
+        .in_set(tag.set_id);
 }
 inline SystemConfig operator|(SystemConfig&& config, SystemInSetTag tag) {
     return std::move(config).in_set(tag.set_id);

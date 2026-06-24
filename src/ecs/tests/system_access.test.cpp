@@ -5,6 +5,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <string>
 #include <type_traits>
 
 using namespace fei;
@@ -19,6 +20,16 @@ void write_position_system(Query<Position>) {}
 void read_position_system(Query<const Position>) {}
 
 void read_position_again_system(Query<const Position>) {}
+
+void named_profile_system(Query<const Position>) {}
+
+template<typename T>
+void template_profile_system(Query<const T>) {}
+
+template<typename T>
+struct TemplateProfileSystems {
+    static void static_profile_system(Query<const T>) {}
+};
 
 void read_velocity_system(Query<const Velocity>) {}
 
@@ -45,8 +56,8 @@ void custom_param_system(CustomParam) {}
 } // namespace
 
 template<>
-struct fei::SystemParamTraits<CustomParam> :
-    fei::StatelessParamTraits<CustomParam> {};
+struct fei::SystemParamTraits<CustomParam>
+    : fei::StatelessParamTraits<CustomParam> {};
 
 template<>
 struct fei::ResourceTraits<MainThreadResource> {
@@ -76,6 +87,73 @@ TEST_CASE("ECS systems expose query access metadata", "[ecs][system]") {
     REQUIRE(access.write_components.contains(type_id<Velocity>()));
     REQUIRE_FALSE(access.read_components.contains(type_id<Entity>()));
     REQUIRE_FALSE(access.write_components.contains(type_id<Entity>()));
+}
+
+TEST_CASE("ECS named systems preserve system metadata", "[ecs][system]") {
+    SystemConfig named(FEI_NAMED_SYSTEM(named_profile_system));
+    FunctionSystem<decltype(named_profile_system)*> bare(named_profile_system);
+
+    REQUIRE(named.profile.name == "named_profile_system");
+    REQUIRE(named.profile.named());
+    REQUIRE(named.system->hashable());
+    REQUIRE(named.system->hash() == hash_system(named_profile_system));
+    REQUIRE(
+        named.system->access().read_components == bare.access().read_components
+    );
+    REQUIRE(
+        named.system->access().write_components ==
+        bare.access().write_components
+    );
+}
+
+TEST_CASE(
+    "ECS system profile registry symbolizes function pointers",
+    "[ecs][system][profile]"
+) {
+#if defined(_WIN32)
+    auto profile = SystemProfileRegistry::instance().symbolize(
+        hash_system(named_profile_system)
+    );
+
+    REQUIRE(profile.has_value());
+    INFO("symbol function: " << profile->function);
+    INFO("symbol name: " << profile->name);
+    INFO("symbol file: " << profile->file);
+    REQUIRE(
+        profile->function.find("named_profile_system") != std::string::npos
+    );
+    REQUIRE(profile->function.find("ILT+") == std::string::npos);
+    REQUIRE(profile->name == "named_profile_system");
+
+    auto template_profile = SystemProfileRegistry::instance().symbolize(
+        hash_system(template_profile_system<Position>)
+    );
+    REQUIRE(template_profile.has_value());
+    INFO("template symbol function: " << template_profile->function);
+    INFO("template symbol name: " << template_profile->name);
+    REQUIRE(
+        template_profile->function.find("template_profile_system") !=
+        std::string::npos
+    );
+    REQUIRE(template_profile->name == "template_profile_system");
+
+    auto template_static_profile = SystemProfileRegistry::instance().symbolize(
+        hash_system(TemplateProfileSystems<Position>::static_profile_system)
+    );
+    REQUIRE(template_static_profile.has_value());
+    INFO(
+        "template static symbol function: "
+        << template_static_profile->function
+    );
+    INFO("template static symbol name: " << template_static_profile->name);
+    REQUIRE(
+        template_static_profile->function.find("static_profile_system") !=
+        std::string::npos
+    );
+    REQUIRE(template_static_profile->name == "static_profile_system");
+#else
+    SUCCEED("Function pointer symbolization is only implemented on Windows");
+#endif
 }
 
 TEST_CASE("ECS const queries expose read-only components", "[ecs][query]") {
@@ -151,6 +229,21 @@ TEST_CASE(
         REQUIRE(schedule.execution_batches()[0].size() == 1);
         REQUIRE(schedule.execution_batches()[1].size() == 1);
     }
+}
+
+TEST_CASE("ECS named lambda systems run", "[ecs][system]") {
+    World world;
+    world.add_resource(CommandsQueue {});
+
+    int calls = 0;
+    Schedule schedule;
+    schedule.add_systems(FEI_SYSTEM_NAME("named_lambda", [&calls]() {
+        ++calls;
+    }));
+    schedule.sort_systems();
+    schedule.run_systems(world);
+
+    REQUIRE(calls == 1);
 }
 
 TEST_CASE(

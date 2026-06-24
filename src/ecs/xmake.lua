@@ -2,7 +2,10 @@ target("fei-ecs")
     set_kind("static")
     add_headerfiles("**.hpp")
     add_files("*.cpp")
-    add_deps("fei-base", "fei-refl")
+    add_deps("fei-base", "fei-refl", "fei-profiling")
+    if is_plat("windows") then
+        add_syslinks("dbghelp")
+    end
 
 target("fei-ecs-tests")
     set_kind("binary")

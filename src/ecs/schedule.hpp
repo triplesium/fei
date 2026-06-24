@@ -67,6 +67,7 @@ class Schedule {
 
     void sort_systems() {
         resolve_dependencies();
+        resolve_system_profiles();
         build_graph();
         m_graph.sort();
         build_execution_batches();
@@ -89,13 +90,17 @@ class Schedule {
     }
 
     void run_systems(World& world);
+    void run_systems(ScheduleId schedule, World& world);
     void run_systems(World& world, ThreadPool& thread_pool);
+    void
+    run_systems(ScheduleId schedule, World& world, ThreadPool& thread_pool);
 
     const std::vector<std::vector<SystemId>>& execution_batches() const {
         return m_execution_batches;
     }
 
   private:
+    void resolve_system_profiles();
     void build_execution_batches();
 
     void resolve_dependencies() {
