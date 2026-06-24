@@ -2,6 +2,7 @@ add_includedirs(".", {public = true})
 
 includes("app")
 includes("asset")
+includes("profiling")
 includes("base")
 includes("refl")
 includes("ecs")
