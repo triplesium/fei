@@ -103,9 +103,16 @@ class GpuMesh {
             std::hash<MeshVertexBufferLayout> {}(m_vertex_layout);
     }
 
-    std::shared_ptr<Buffer> vertex_buffer() const { return m_vertex_buffer; }
-    Optional<std::shared_ptr<Buffer>> index_buffer() const {
-        return m_index_buffer;
+    std::shared_ptr<Buffer> vertex_buffer() { return m_vertex_buffer; }
+    std::shared_ptr<const Buffer> vertex_buffer() const {
+        return m_vertex_buffer;
+    }
+    Optional<std::shared_ptr<Buffer>> index_buffer() { return m_index_buffer; }
+    Optional<std::shared_ptr<const Buffer>> index_buffer() const {
+        if (!m_index_buffer) {
+            return nullopt;
+        }
+        return std::shared_ptr<const Buffer>(*m_index_buffer);
     }
     RenderPrimitive primitive() const { return m_primitive; }
     const MeshVertexBufferLayout& vertex_buffer_layout() const {

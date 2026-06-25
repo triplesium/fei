@@ -19,7 +19,7 @@ void FramebufferOpenGL::create_gl_resource() const {
     if (!m_color_attachments.empty()) {
         for (std::size_t i = 0; i < m_color_attachments.size(); i++) {
             const auto& color_attachment = m_color_attachments[i];
-            auto tex_gl = std::static_pointer_cast<TextureOpenGL>(
+            auto tex_gl = std::static_pointer_cast<const TextureOpenGL>(
                 color_attachment.texture
             );
             tex_gl->ensure_created();
@@ -47,7 +47,7 @@ void FramebufferOpenGL::create_gl_resource() const {
     }
 
     if (m_depth_attachment.has_value()) {
-        auto depth_tex_gl = std::static_pointer_cast<TextureOpenGL>(
+        auto depth_tex_gl = std::static_pointer_cast<const TextureOpenGL>(
             m_depth_attachment->texture
         );
         depth_tex_gl->ensure_created();

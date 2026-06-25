@@ -66,16 +66,16 @@ struct alignas(16) VxgiVoxelizationUniform {
 
 class VxgiVoxelizationSpecializer : public PipelineSpecializer {
   private:
-    std::vector<std::shared_ptr<ShaderModule>> m_shader_modules;
-    std::shared_ptr<ResourceLayout> m_volumes_layout;
-    std::shared_ptr<ResourceLayout> m_voxelization_layout;
+    std::vector<std::shared_ptr<const ShaderModule>> m_shader_modules;
+    std::shared_ptr<const ResourceLayout> m_volumes_layout;
+    std::shared_ptr<const ResourceLayout> m_voxelization_layout;
     std::size_t m_cache_key {0};
 
   public:
     VxgiVoxelizationSpecializer(
-        std::vector<std::shared_ptr<ShaderModule>> shader_modules,
-        std::shared_ptr<ResourceLayout> volumes_layout,
-        std::shared_ptr<ResourceLayout> voxelization_layout
+        std::vector<std::shared_ptr<const ShaderModule>> shader_modules,
+        std::shared_ptr<const ResourceLayout> volumes_layout,
+        std::shared_ptr<const ResourceLayout> voxelization_layout
     );
 
     std::size_t cache_key() const override { return m_cache_key; }

@@ -71,7 +71,9 @@ void CommandBufferOpenGL::clear_stencil(std::uint8_t stencil) {
     m_commands.emplace_back(ogl_cmd::ClearStencil {.stencil = stencil});
 }
 
-void CommandBufferOpenGL::set_vertex_buffer(std::shared_ptr<Buffer> buffer) {
+void CommandBufferOpenGL::set_vertex_buffer(
+    std::shared_ptr<const Buffer> buffer
+) {
     ensure_recording("set_vertex_buffer");
     m_commands.emplace_back(
         ogl_cmd::SetVertexBuffer {.buffer = std::move(buffer)}
@@ -80,7 +82,7 @@ void CommandBufferOpenGL::set_vertex_buffer(std::shared_ptr<Buffer> buffer) {
 
 void CommandBufferOpenGL::set_resource_set(
     uint32 slot,
-    std::shared_ptr<ResourceSet> resource_set
+    std::shared_ptr<const ResourceSet> resource_set
 ) {
     ensure_recording("set_resource_set");
     m_commands.emplace_back(
@@ -140,7 +142,7 @@ void CommandBufferOpenGL::dispatch(
 }
 
 void CommandBufferOpenGL::set_framebuffer_impl(
-    std::shared_ptr<Framebuffer> framebuffer
+    std::shared_ptr<const Framebuffer> framebuffer
 ) {
     ensure_recording("set_framebuffer");
     m_commands.emplace_back(
@@ -149,7 +151,7 @@ void CommandBufferOpenGL::set_framebuffer_impl(
 }
 
 void CommandBufferOpenGL::set_render_pipeline_impl(
-    std::shared_ptr<Pipeline> pipeline
+    std::shared_ptr<const Pipeline> pipeline
 ) {
     ensure_recording("set_render_pipeline");
     m_commands.emplace_back(
@@ -158,7 +160,7 @@ void CommandBufferOpenGL::set_render_pipeline_impl(
 }
 
 void CommandBufferOpenGL::set_compute_pipeline_impl(
-    std::shared_ptr<Pipeline> pipeline
+    std::shared_ptr<const Pipeline> pipeline
 ) {
     ensure_recording("set_compute_pipeline");
     m_commands.emplace_back(
@@ -167,7 +169,7 @@ void CommandBufferOpenGL::set_compute_pipeline_impl(
 }
 
 void CommandBufferOpenGL::set_index_buffer_impl(
-    std::shared_ptr<Buffer> buffer,
+    std::shared_ptr<const Buffer> buffer,
     IndexFormat format,
     uint32 offset
 ) {
@@ -181,13 +183,13 @@ void CommandBufferOpenGL::set_index_buffer_impl(
     );
 }
 
-void CommandBufferOpenGL::blit_to(std::shared_ptr<Framebuffer> target) {
+void CommandBufferOpenGL::blit_to(std::shared_ptr<const Framebuffer> target) {
     ensure_recording("blit_to");
     m_commands.emplace_back(ogl_cmd::BlitTo {.target = std::move(target)});
 }
 
 void CommandBufferOpenGL::generate_mipmaps_impl(
-    std::shared_ptr<Texture> texture
+    std::shared_ptr<const Texture> texture
 ) {
     ensure_recording("generate_mipmaps");
     m_commands.emplace_back(
@@ -196,13 +198,13 @@ void CommandBufferOpenGL::generate_mipmaps_impl(
 }
 
 void CommandBufferOpenGL::copy_texture_impl(
-    std::shared_ptr<Texture> src,
+    std::shared_ptr<const Texture> src,
     uint32 src_x,
     uint32 src_y,
     uint32 src_z,
     uint32 src_mip_level,
     uint32 src_base_array_layer,
-    std::shared_ptr<Texture> dst,
+    std::shared_ptr<const Texture> dst,
     uint32 dst_x,
     uint32 dst_y,
     uint32 dst_z,

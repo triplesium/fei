@@ -164,12 +164,12 @@ class StandardMaterial : public Material {
         };
     }
 
-    std::vector<std::shared_ptr<BindableResource>> resources(
+    std::vector<std::shared_ptr<const BindableResource>> resources(
         const GraphicsDevice& device,
         const RenderingDefaults& defaults,
         const RenderAssets<GpuImage>& gpu_images
     ) const override {
-        std::vector<std::shared_ptr<BindableResource>> resources;
+        std::vector<std::shared_ptr<const BindableResource>> resources;
 
         auto uniform = create_uniform(&gpu_images);
         auto uniform_buffer = device.create_buffer(

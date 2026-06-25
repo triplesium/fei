@@ -15,6 +15,8 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 using namespace fei;
@@ -26,6 +28,25 @@ void read_graphics_device_system(ResRO<GraphicsDevice>) {}
 void read_graphics_device_again_system(ResRO<GraphicsDevice>) {}
 
 void write_graphics_device_system(ResRW<GraphicsDevice>) {}
+
+static_assert(std::is_same_v<
+              decltype(std::declval<const TextureView&>().target()),
+              std::shared_ptr<const Texture>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<MappedResource&>().resource()),
+              std::shared_ptr<MappableResource>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const MappedResource&>().resource()),
+              std::shared_ptr<const MappableResource>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const Texture&>()
+                           .full_view(std::declval<const GraphicsDevice&>())),
+              std::shared_ptr<const TextureView>>);
+static_assert(
+    std::is_same_v<
+        decltype(std::declval<const GraphicsDevice&>().main_framebuffer()),
+        std::shared_ptr<const Framebuffer>>
+);
 
 TextureDescription make_texture_description(
     std::uint32_t width = 64,
@@ -159,7 +180,7 @@ class FakeGraphicsDevice : public GraphicsDevice {
         return nullptr;
     }
 
-    std::shared_ptr<Framebuffer> main_framebuffer() const override {
+    std::shared_ptr<const Framebuffer> main_framebuffer() const override {
         return nullptr;
     }
 };

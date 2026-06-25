@@ -46,10 +46,10 @@ class CommandBufferOpenGL : public CommandBuffer {
     void clear_color(const Color4F& color) override;
     void clear_depth(float depth) override;
     void clear_stencil(std::uint8_t stencil) override;
-    void set_vertex_buffer(std::shared_ptr<Buffer> buffer) override;
+    void set_vertex_buffer(std::shared_ptr<const Buffer> buffer) override;
     void set_resource_set(
         uint32 slot,
-        std::shared_ptr<ResourceSet> resource_set
+        std::shared_ptr<const ResourceSet> resource_set
     ) override;
     void update_buffer(
         std::shared_ptr<Buffer> buffer,
@@ -64,27 +64,31 @@ class CommandBufferOpenGL : public CommandBuffer {
         std::size_t group_z
     ) override;
 
-    void blit_to(std::shared_ptr<Framebuffer> target) override;
+    void blit_to(std::shared_ptr<const Framebuffer> target) override;
 
   protected:
+    void set_framebuffer_impl(
+        std::shared_ptr<const Framebuffer> framebuffer
+    ) override;
     void
-    set_framebuffer_impl(std::shared_ptr<Framebuffer> framebuffer) override;
-    void set_render_pipeline_impl(std::shared_ptr<Pipeline> pipeline) override;
-    void set_compute_pipeline_impl(std::shared_ptr<Pipeline> pipeline) override;
+    set_render_pipeline_impl(std::shared_ptr<const Pipeline> pipeline) override;
+    void set_compute_pipeline_impl(
+        std::shared_ptr<const Pipeline> pipeline
+    ) override;
     void set_index_buffer_impl(
-        std::shared_ptr<Buffer> buffer,
+        std::shared_ptr<const Buffer> buffer,
         IndexFormat format,
         uint32 offset
     ) override;
-    void generate_mipmaps_impl(std::shared_ptr<Texture> texture) override;
+    void generate_mipmaps_impl(std::shared_ptr<const Texture> texture) override;
     void copy_texture_impl(
-        std::shared_ptr<Texture> src,
+        std::shared_ptr<const Texture> src,
         uint32 src_x,
         uint32 src_y,
         uint32 src_z,
         uint32 src_mip_level,
         uint32 src_base_array_layer,
-        std::shared_ptr<Texture> dst,
+        std::shared_ptr<const Texture> dst,
         uint32 dst_x,
         uint32 dst_y,
         uint32 dst_z,

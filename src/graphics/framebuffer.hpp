@@ -8,7 +8,7 @@
 namespace fei {
 
 struct FramebufferAttachment {
-    std::shared_ptr<Texture> texture;
+    std::shared_ptr<const Texture> texture;
     std::uint32_t mip_level {0};
     std::uint32_t layer {0};
 };

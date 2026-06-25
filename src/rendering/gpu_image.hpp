@@ -18,7 +18,8 @@ class GpuImage {
     GpuImage(std::shared_ptr<Texture> texture) :
         m_texture(std::move(texture)) {}
 
-    std::shared_ptr<Texture> texture() const { return m_texture; }
+    std::shared_ptr<Texture> texture() { return m_texture; }
+    std::shared_ptr<const Texture> texture() const { return m_texture; }
 };
 
 class GpuImageAdapter : public RenderAssetAdapter<Image, GpuImage> {

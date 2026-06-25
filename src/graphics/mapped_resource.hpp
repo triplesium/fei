@@ -21,7 +21,10 @@ class MappedResource {
         std::span<std::byte> data
     ) : m_resource(resource), m_map_mode(map_mode), m_data(data) {}
 
-    std::shared_ptr<MappableResource> resource() const { return m_resource; }
+    std::shared_ptr<MappableResource> resource() { return m_resource; }
+    std::shared_ptr<const MappableResource> resource() const {
+        return m_resource;
+    }
     MapMode map_mode() const { return m_map_mode; }
     std::span<std::byte> data() const { return m_data; }
 };

@@ -11,13 +11,29 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 using namespace fei;
 using namespace fei::rendering_test;
 using Catch::Matchers::WithinAbs;
+
+static_assert(std::is_same_v<
+              decltype(std::declval<GpuMesh&>().vertex_buffer()),
+              std::shared_ptr<Buffer>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const GpuMesh&>().vertex_buffer()),
+              std::shared_ptr<const Buffer>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<GpuMesh&>().index_buffer()),
+              Optional<std::shared_ptr<Buffer>>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const GpuMesh&>().index_buffer()),
+              Optional<std::shared_ptr<const Buffer>>>);
 
 namespace {
 

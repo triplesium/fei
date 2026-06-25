@@ -12,7 +12,7 @@ namespace fei {
 
 struct SkyboxResource {
     Handle<Mesh> mesh;
-    std::vector<std::shared_ptr<ShaderModule>> shader_modules;
+    std::vector<std::shared_ptr<const ShaderModule>> shader_modules;
     std::shared_ptr<Pipeline> pipeline;
 };
 

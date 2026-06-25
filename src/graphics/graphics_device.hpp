@@ -76,16 +76,18 @@ class GraphicsDevice {
     virtual std::shared_ptr<TextureReadback>
     create_texture_readback(uint32 max_in_flight = 3) const = 0;
 
-    virtual std::shared_ptr<Framebuffer> main_framebuffer() const = 0;
+    virtual std::shared_ptr<const Framebuffer> main_framebuffer() const = 0;
 
     virtual void flush() const {}
 
-    virtual std::shared_ptr<TextureView>
-    get_texture_view(std::shared_ptr<BindableResource> texture) const {
+    virtual std::shared_ptr<const TextureView>
+    get_texture_view(std::shared_ptr<const BindableResource> texture) const {
         if (auto texture_view =
-                std::dynamic_pointer_cast<TextureView>(texture)) {
+                std::dynamic_pointer_cast<const TextureView>(texture)) {
             return texture_view;
-        } else if (auto tex = std::dynamic_pointer_cast<Texture>(texture)) {
+        } else if (
+            auto tex = std::dynamic_pointer_cast<const Texture>(texture)
+        ) {
             return tex->full_view(*this);
         } else {
             fatal(

@@ -107,7 +107,7 @@ void PipelineOpenGL::create_gl_resource() const {
     FEI_PROFILE_SCOPE("OpenGL Pipeline Create");
     m_program = FEI_GL_CALL(glCreateProgram());
     for (const auto& shader : m_shaders) {
-        auto shader_gl = std::static_pointer_cast<ShaderOpenGL>(shader);
+        auto shader_gl = std::static_pointer_cast<const ShaderOpenGL>(shader);
         shader_gl->ensure_created();
         FEI_GL_CALL(glAttachShader(m_program, shader_gl->id()));
     }
@@ -158,7 +158,7 @@ void PipelineOpenGL::validate_shader_resource_layouts() const {
                 );
             }
 
-            auto layout = std::static_pointer_cast<ResourceLayoutOpenGL>(
+            auto layout = std::static_pointer_cast<const ResourceLayoutOpenGL>(
                 m_resource_layouts[resource.set]
             );
             const auto& elements = layout->elements();
@@ -228,7 +228,7 @@ void PipelineOpenGL::process_resource_layouts() const {
     const auto limits = get_resource_binding_limits();
 
     for (size_t slot = 0; slot < m_resource_layouts.size(); ++slot) {
-        auto layout = std::static_pointer_cast<ResourceLayoutOpenGL>(
+        auto layout = std::static_pointer_cast<const ResourceLayoutOpenGL>(
             m_resource_layouts[slot]
         );
         const auto& elements = layout->elements();

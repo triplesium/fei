@@ -158,8 +158,8 @@ class MappableResource {
 };
 
 struct ResourceSetDescription {
-    std::shared_ptr<ResourceLayout> layout;
-    std::vector<std::shared_ptr<BindableResource>> resources;
+    std::shared_ptr<const ResourceLayout> layout;
+    std::vector<std::shared_ptr<const BindableResource>> resources;
 };
 
 class ResourceSet {

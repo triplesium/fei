@@ -380,7 +380,8 @@ GraphicsDeviceOpenGL::create_texture_readback(uint32 max_in_flight) const {
     return std::make_shared<TextureReadbackOpenGL>(m_state, max_in_flight);
 }
 
-std::shared_ptr<Framebuffer> GraphicsDeviceOpenGL::main_framebuffer() const {
+std::shared_ptr<const Framebuffer>
+GraphicsDeviceOpenGL::main_framebuffer() const {
     // Return the default framebuffer (ID 0)
     return std::shared_ptr<FramebufferOpenGL>(new FramebufferOpenGL(0));
 }

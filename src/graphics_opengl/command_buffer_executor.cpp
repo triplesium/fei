@@ -36,9 +36,9 @@ void set_default_framebuffer_draw_buffer() {
 } // namespace
 
 struct CommandBufferExecutorOpenGL::ExecutionState {
-    std::shared_ptr<Framebuffer> framebuffer;
-    std::shared_ptr<Pipeline> pipeline;
-    std::vector<std::shared_ptr<ResourceSetOpenGL>> bound_resource_sets;
+    std::shared_ptr<const Framebuffer> framebuffer;
+    std::shared_ptr<const Pipeline> pipeline;
+    std::vector<std::shared_ptr<const ResourceSetOpenGL>> bound_resource_sets;
     GLenum draw_elements_type {GL_UNSIGNED_INT};
     uint32 index_buffer_offset {0};
 };
@@ -122,7 +122,7 @@ void CommandBufferExecutorOpenGL::execute_command(
                 std::is_same_v<CommandT, ogl_cmd::SetIndexBuffer>
             ) {
                 auto buffer_gl =
-                    std::static_pointer_cast<BufferOpenGL>(cmd.buffer);
+                    std::static_pointer_cast<const BufferOpenGL>(cmd.buffer);
                 buffer_gl->ensure_created();
                 FEI_GL_CALL(
                     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_gl->id())
@@ -231,10 +231,10 @@ void CommandBufferExecutorOpenGL::execute_begin_render_pass(
 
 void CommandBufferExecutorOpenGL::execute_set_framebuffer(
     ExecutionState& state,
-    std::shared_ptr<Framebuffer> framebuffer
+    std::shared_ptr<const Framebuffer> framebuffer
 ) {
     auto framebuffer_gl =
-        std::static_pointer_cast<FramebufferOpenGL>(framebuffer);
+        std::static_pointer_cast<const FramebufferOpenGL>(framebuffer);
     framebuffer_gl->ensure_created();
     FEI_GL_CALL(glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_gl->id()));
     if (framebuffer_gl->id() == 0) {
@@ -246,9 +246,9 @@ void CommandBufferExecutorOpenGL::execute_set_framebuffer(
 
 void CommandBufferExecutorOpenGL::execute_set_render_pipeline(
     ExecutionState& state,
-    std::shared_ptr<Pipeline> pipeline
+    std::shared_ptr<const Pipeline> pipeline
 ) {
-    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(pipeline);
+    auto pipeline_gl = std::static_pointer_cast<const PipelineOpenGL>(pipeline);
     pipeline_gl->ensure_created();
 
     if (state.bound_resource_sets.size() <
@@ -294,9 +294,9 @@ void CommandBufferExecutorOpenGL::execute_set_render_pipeline(
 
 void CommandBufferExecutorOpenGL::execute_set_compute_pipeline(
     ExecutionState& state,
-    std::shared_ptr<Pipeline> pipeline
+    std::shared_ptr<const Pipeline> pipeline
 ) {
-    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(pipeline);
+    auto pipeline_gl = std::static_pointer_cast<const PipelineOpenGL>(pipeline);
     pipeline_gl->ensure_created();
 
     if (state.bound_resource_sets.size() <
@@ -313,7 +313,7 @@ void CommandBufferExecutorOpenGL::execute_set_compute_pipeline(
 
 void CommandBufferExecutorOpenGL::execute_set_vertex_buffer(
     ExecutionState& state,
-    std::shared_ptr<Buffer> buffer
+    std::shared_ptr<const Buffer> buffer
 ) {
     if (!state.pipeline) {
         fatal(
@@ -321,8 +321,9 @@ void CommandBufferExecutorOpenGL::execute_set_vertex_buffer(
         );
     }
 
-    auto buffer_gl = std::static_pointer_cast<BufferOpenGL>(buffer);
-    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(state.pipeline);
+    auto buffer_gl = std::static_pointer_cast<const BufferOpenGL>(buffer);
+    auto pipeline_gl =
+        std::static_pointer_cast<const PipelineOpenGL>(state.pipeline);
     buffer_gl->ensure_created();
     pipeline_gl->ensure_created();
 
@@ -348,7 +349,7 @@ void CommandBufferExecutorOpenGL::execute_set_vertex_buffer(
 void CommandBufferExecutorOpenGL::execute_set_resource_set(
     ExecutionState& state,
     uint32 slot,
-    std::shared_ptr<ResourceSet> resource_set
+    std::shared_ptr<const ResourceSet> resource_set
 ) {
     if (!state.pipeline) {
         fatal(
@@ -356,10 +357,11 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
         );
     }
 
-    auto gl_pipeline = std::static_pointer_cast<PipelineOpenGL>(state.pipeline);
+    auto gl_pipeline =
+        std::static_pointer_cast<const PipelineOpenGL>(state.pipeline);
     gl_pipeline->ensure_created();
     auto gl_resource_set =
-        std::static_pointer_cast<ResourceSetOpenGL>(resource_set);
+        std::static_pointer_cast<const ResourceSetOpenGL>(resource_set);
     if (slot >= gl_pipeline->resource_layouts().size()) {
         fei::fatal(
             "Resource set slot {} out of range (max {})",
@@ -371,7 +373,7 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
         state.bound_resource_sets.resize(slot + 1);
     }
     state.bound_resource_sets[slot] = gl_resource_set;
-    auto gl_layout = std::static_pointer_cast<ResourceLayoutOpenGL>(
+    auto gl_layout = std::static_pointer_cast<const ResourceLayoutOpenGL>(
         gl_pipeline->resource_layouts()[slot]
     );
     assert(gl_resource_set->resources().size() == gl_layout->elements().size());
@@ -393,7 +395,8 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
         }
         switch (kind) {
             case ResourceKind::UniformBuffer: {
-                auto buffer = std::static_pointer_cast<BufferOpenGL>(resource);
+                auto buffer =
+                    std::static_pointer_cast<const BufferOpenGL>(resource);
                 buffer->ensure_created();
                 auto& info =
                     std::get<PipelineOpenGL::UniformBinding>(binding_info);
@@ -407,7 +410,9 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
             case ResourceKind::TextureReadOnly: {
                 auto texture_view = m_device.get_texture_view(resource);
                 auto texture_view_gl =
-                    std::static_pointer_cast<TextureViewOpenGL>(texture_view);
+                    std::static_pointer_cast<const TextureViewOpenGL>(
+                        texture_view
+                    );
                 texture_view_gl->ensure_created();
                 auto& info =
                     std::get<PipelineOpenGL::TextureBinding>(binding_info);
@@ -419,7 +424,9 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
             case ResourceKind::TextureReadWrite: {
                 auto texture_view = m_device.get_texture_view(resource);
                 auto texture_view_gl =
-                    std::static_pointer_cast<TextureViewOpenGL>(texture_view);
+                    std::static_pointer_cast<const TextureViewOpenGL>(
+                        texture_view
+                    );
                 texture_view_gl->ensure_created();
                 auto& info =
                     std::get<PipelineOpenGL::TextureBinding>(binding_info);
@@ -440,7 +447,8 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
             }
             case ResourceKind::StorageBufferReadOnly:
             case ResourceKind::StorageBufferReadWrite: {
-                auto buffer = std::static_pointer_cast<BufferOpenGL>(resource);
+                auto buffer =
+                    std::static_pointer_cast<const BufferOpenGL>(resource);
                 buffer->ensure_created();
                 auto& info = std::get<PipelineOpenGL::ShaderStorageBinding>(
                     binding_info
@@ -454,7 +462,7 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
             }
             case ResourceKind::Sampler: {
                 auto sampler =
-                    std::static_pointer_cast<SamplerOpenGL>(resource);
+                    std::static_pointer_cast<const SamplerOpenGL>(resource);
                 sampler->ensure_created();
                 auto& info =
                     std::get<PipelineOpenGL::SamplerBinding>(binding_info);
@@ -497,7 +505,8 @@ void CommandBufferExecutorOpenGL::execute_draw(
         fatal("CommandBufferOpenGL::draw executed without pipeline");
     }
 
-    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(state.pipeline);
+    auto pipeline_gl =
+        std::static_pointer_cast<const PipelineOpenGL>(state.pipeline);
     pipeline_gl->ensure_created();
 
     FEI_GL_CALL(glDrawArrays(
@@ -518,7 +527,8 @@ void CommandBufferExecutorOpenGL::execute_draw_indexed(
         fatal("CommandBufferOpenGL::draw_indexed executed without pipeline");
     }
 
-    auto pipeline_gl = std::static_pointer_cast<PipelineOpenGL>(state.pipeline);
+    auto pipeline_gl =
+        std::static_pointer_cast<const PipelineOpenGL>(state.pipeline);
     pipeline_gl->ensure_created();
     auto index_offset = reinterpret_cast<const GLvoid*>(
         static_cast<std::uintptr_t>(state.index_buffer_offset)
@@ -551,7 +561,7 @@ void CommandBufferExecutorOpenGL::execute_dispatch(
 
 void CommandBufferExecutorOpenGL::execute_blit_to(
     ExecutionState& state,
-    std::shared_ptr<Framebuffer> target
+    std::shared_ptr<const Framebuffer> target
 ) {
     if (!state.framebuffer) {
         fatal(
@@ -559,9 +569,9 @@ void CommandBufferExecutorOpenGL::execute_blit_to(
         );
     }
 
-    auto target_gl = std::static_pointer_cast<FramebufferOpenGL>(target);
+    auto target_gl = std::static_pointer_cast<const FramebufferOpenGL>(target);
     auto src_gl =
-        std::static_pointer_cast<FramebufferOpenGL>(state.framebuffer);
+        std::static_pointer_cast<const FramebufferOpenGL>(state.framebuffer);
     target_gl->ensure_created();
     src_gl->ensure_created();
     if (state.framebuffer->color_attachments().empty()) {
@@ -599,9 +609,9 @@ void CommandBufferExecutorOpenGL::execute_blit_to(
 }
 
 void CommandBufferExecutorOpenGL::execute_generate_mipmaps(
-    std::shared_ptr<Texture> texture
+    std::shared_ptr<const Texture> texture
 ) {
-    auto texture_gl = std::static_pointer_cast<TextureOpenGL>(texture);
+    auto texture_gl = std::static_pointer_cast<const TextureOpenGL>(texture);
     texture_gl->ensure_created();
     FEI_GL_CALL(glGenerateTextureMipmap(texture_gl->id()));
 }
@@ -609,8 +619,8 @@ void CommandBufferExecutorOpenGL::execute_generate_mipmaps(
 void CommandBufferExecutorOpenGL::execute_copy_texture(
     const ogl_cmd::CopyTexture& command
 ) {
-    auto src_gl = std::static_pointer_cast<TextureOpenGL>(command.src);
-    auto dst_gl = std::static_pointer_cast<TextureOpenGL>(command.dst);
+    auto src_gl = std::static_pointer_cast<const TextureOpenGL>(command.src);
+    auto dst_gl = std::static_pointer_cast<const TextureOpenGL>(command.dst);
     src_gl->ensure_created();
     dst_gl->ensure_created();
     uint32 src_z_or_layer =

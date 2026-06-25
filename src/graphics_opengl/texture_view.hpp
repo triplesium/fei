@@ -11,7 +11,7 @@ namespace fei {
 class TextureViewOpenGL : public TextureView, public DeferredResourceOpenGL {
   private:
     mutable GLuint m_texture_view {0};
-    std::shared_ptr<TextureOpenGL> m_target_gl;
+    std::shared_ptr<const TextureOpenGL> m_target_gl;
     mutable GLenum m_texture_target {0};
 
   public:
@@ -19,7 +19,9 @@ class TextureViewOpenGL : public TextureView, public DeferredResourceOpenGL {
 
     GLuint id() const { return m_texture_view; }
     GLenum texture_target() const { return m_texture_target; }
-    std::shared_ptr<TextureOpenGL> target_gl() const { return m_target_gl; }
+    std::shared_ptr<const TextureOpenGL> target_gl() const {
+        return m_target_gl;
+    }
 
   private:
     void create_gl_resource() const override;

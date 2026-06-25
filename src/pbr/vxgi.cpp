@@ -10,9 +10,9 @@
 namespace fei {
 
 VxgiVoxelizationSpecializer::VxgiVoxelizationSpecializer(
-    std::vector<std::shared_ptr<ShaderModule>> shader_modules,
-    std::shared_ptr<ResourceLayout> volumes_layout,
-    std::shared_ptr<ResourceLayout> voxelization_layout
+    std::vector<std::shared_ptr<const ShaderModule>> shader_modules,
+    std::shared_ptr<const ResourceLayout> volumes_layout,
+    std::shared_ptr<const ResourceLayout> voxelization_layout
 ) :
     m_shader_modules(std::move(shader_modules)),
     m_volumes_layout(std::move(volumes_layout)),
@@ -118,7 +118,7 @@ void setup_vxgi(
         asset_server->load<Shader>("shader://voxelization.geom"),
         asset_server->load<Shader>("shader://voxelization.frag"),
     };
-    std::vector<std::shared_ptr<ShaderModule>> shader_modules;
+    std::vector<std::shared_ptr<const ShaderModule>> shader_modules;
     for (const auto& handle : shader_handles) {
         auto shader = shader_assets->get(handle).value();
         shader_modules.push_back(

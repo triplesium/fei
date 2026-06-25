@@ -6,7 +6,8 @@
 
 namespace fei {
 
-std::shared_ptr<TextureView> Texture::full_view(const GraphicsDevice& device) {
+std::shared_ptr<const TextureView>
+Texture::full_view(const GraphicsDevice& device) const {
     std::scoped_lock lock(m_full_view_mutex);
     if (!m_full_view) {
         m_full_view = device.create_texture_view(

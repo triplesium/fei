@@ -5,9 +5,18 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <memory>
+#include <type_traits>
+#include <utility>
 
 using namespace fei;
 using namespace fei::rendering_test;
+
+static_assert(std::is_same_v<
+              decltype(std::declval<GpuImage&>().texture()),
+              std::shared_ptr<Texture>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const GpuImage&>().texture()),
+              std::shared_ptr<const Texture>>);
 
 TEST_CASE("GpuImage stores the prepared texture", "[rendering][gpu-image]") {
     auto texture = std::make_shared<FakeTexture>(TextureDescription {

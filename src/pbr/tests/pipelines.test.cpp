@@ -14,10 +14,35 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <type_traits>
 #include <unordered_map>
+#include <utility>
 
 using namespace fei;
 using namespace fei::rendering_test;
+
+static_assert(std::is_same_v<
+              decltype(std::declval<PreparedMaterial&>().resource_layout()),
+              std::shared_ptr<ResourceLayout>>);
+static_assert(
+    std::is_same_v<
+        decltype(std::declval<const PreparedMaterial&>().resource_layout()),
+        std::shared_ptr<const ResourceLayout>>
+);
+static_assert(std::is_same_v<
+              decltype(std::declval<PreparedMaterial&>().resource_set()),
+              std::shared_ptr<ResourceSet>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const PreparedMaterial&>().resource_set()),
+              std::shared_ptr<const ResourceSet>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<PreparedMaterial&>()
+                           .shader(MaterialShaderType::Vertex)),
+              std::shared_ptr<ShaderModule>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const PreparedMaterial&>()
+                           .shader(MaterialShaderType::Vertex)),
+              std::shared_ptr<const ShaderModule>>);
 
 namespace {
 

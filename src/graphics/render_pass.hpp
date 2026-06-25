@@ -13,13 +13,13 @@ namespace fei {
 enum class LoadOp : uint8 { Load, Clear };
 
 struct RenderPassColorAttachment {
-    std::shared_ptr<Texture> texture;
+    std::shared_ptr<const Texture> texture;
     LoadOp load_op {LoadOp::Clear};
     Color4F clear_color {0.0f, 0.0f, 0.0f, 1.0f};
 };
 
 struct RenderPassDepthStencilAttachment {
-    std::shared_ptr<Texture> texture;
+    std::shared_ptr<const Texture> texture;
     LoadOp depth_load_op {LoadOp::Clear};
     LoadOp stencil_load_op {LoadOp::Clear};
     float clear_depth {1.0f};

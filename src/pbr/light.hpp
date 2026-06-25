@@ -55,12 +55,12 @@ struct SpotLight {
 };
 
 class ShadowMapPipelineSpecializer : public PipelineSpecializer {
-    std::vector<std::shared_ptr<ShaderModule>> m_shader_modules;
+    std::vector<std::shared_ptr<const ShaderModule>> m_shader_modules;
     std::size_t m_cache_key {0};
 
   public:
     ShadowMapPipelineSpecializer(
-        std::vector<std::shared_ptr<ShaderModule>> shader_modules
+        std::vector<std::shared_ptr<const ShaderModule>> shader_modules
     ) : m_shader_modules(std::move(shader_modules)) {
         for (const auto& shader_module : m_shader_modules) {
             hash_combine(m_cache_key, shader_module.get());
@@ -140,7 +140,7 @@ inline void setup_shadow_mapping(
     auto shadow_frag_shader =
         shader_assets->get(shadow_frag_shader_handle).value();
 
-    std::vector<std::shared_ptr<ShaderModule>> shadow_shader_modules {
+    std::vector<std::shared_ptr<const ShaderModule>> shadow_shader_modules {
         device->create_shader_module(shadow_vert_shader.description()),
         device->create_shader_module(shadow_frag_shader.description()),
     };
@@ -173,7 +173,7 @@ inline void setup_shadow_mapping(
         asset_server->load<Shader>("shader://blur.frag");
     auto blur_frag_shader = shader_assets->get(blur_frag_shader_handle).value();
 
-    std::vector<std::shared_ptr<ShaderModule>> blur_shader_modules {
+    std::vector<std::shared_ptr<const ShaderModule>> blur_shader_modules {
         device->create_shader_module(blur_vert_shader.description()),
         device->create_shader_module(blur_frag_shader.description()),
     };

@@ -243,7 +243,7 @@ class FakeGraphicsDevice : public GraphicsDevice {
         return nullptr;
     }
 
-    std::shared_ptr<Framebuffer> main_framebuffer() const override {
+    std::shared_ptr<const Framebuffer> main_framebuffer() const override {
         return nullptr;
     }
 };

@@ -73,7 +73,7 @@ class Material {
     virtual std::vector<ResourceLayoutElementDescription>
     resource_layout_elements() const = 0;
 
-    virtual std::vector<std::shared_ptr<BindableResource>> resources(
+    virtual std::vector<std::shared_ptr<const BindableResource>> resources(
         const GraphicsDevice& device,
         const RenderingDefaults& defaults,
         const RenderAssets<GpuImage>& gpu_images
@@ -108,15 +108,28 @@ class PreparedMaterial {
         m_shaders(std::move(shaders)), m_layout(std::move(layout)),
         m_resource_set(std::move(resource_set)), m_hash(hash) {}
 
-    std::shared_ptr<ShaderModule> shader(MaterialShaderType type) const {
+    std::shared_ptr<ShaderModule> shader(MaterialShaderType type) {
         auto it = m_shaders.find(type);
         if (it != m_shaders.end()) {
             return it->second;
         }
         return nullptr;
     }
-    std::shared_ptr<ResourceLayout> resource_layout() const { return m_layout; }
-    std::shared_ptr<ResourceSet> resource_set() const { return m_resource_set; }
+    std::shared_ptr<const ShaderModule> shader(MaterialShaderType type) const {
+        auto it = m_shaders.find(type);
+        if (it != m_shaders.end()) {
+            return it->second;
+        }
+        return nullptr;
+    }
+    std::shared_ptr<ResourceLayout> resource_layout() { return m_layout; }
+    std::shared_ptr<const ResourceLayout> resource_layout() const {
+        return m_layout;
+    }
+    std::shared_ptr<ResourceSet> resource_set() { return m_resource_set; }
+    std::shared_ptr<const ResourceSet> resource_set() const {
+        return m_resource_set;
+    }
     std::size_t hash() const { return m_hash; }
 };
 

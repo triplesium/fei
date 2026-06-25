@@ -46,13 +46,13 @@ class PipelineOpenGL : public Pipeline, public DeferredResourceOpenGL {
 
   private:
     mutable GLuint m_program {0};
-    std::vector<std::shared_ptr<ShaderModule>> m_shaders;
+    std::vector<std::shared_ptr<const ShaderModule>> m_shaders;
     std::vector<VertexLayoutDescription> m_vertex_layouts;
     BlendStateDescription m_blend_state;
     DepthStencilStateDescription m_depth_stencil_state;
     RasterizerStateDescription m_rasterizer_state;
     RenderPrimitive m_render_primitive;
-    std::vector<std::shared_ptr<ResourceLayout>> m_resource_layouts;
+    std::vector<std::shared_ptr<const ResourceLayout>> m_resource_layouts;
 
     mutable std::vector<std::vector<ResourceBindingInfo>> m_resource_bindings;
 

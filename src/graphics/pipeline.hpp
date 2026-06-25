@@ -182,7 +182,7 @@ struct VertexLayoutDescription {
 
 struct ShaderProgramDescription {
     std::vector<VertexLayoutDescription> vertex_layouts;
-    std::vector<std::shared_ptr<ShaderModule>> shaders;
+    std::vector<std::shared_ptr<const ShaderModule>> shaders;
 };
 
 using UniformValue = std::variant<
@@ -193,7 +193,7 @@ using UniformValue = std::variant<
     Vector3,
     Vector4,
     Matrix4x4,
-    std::shared_ptr<Texture>>;
+    std::shared_ptr<const Texture>>;
 
 struct RenderPipelineDescription {
     BlendStateDescription blend_state;
@@ -201,12 +201,12 @@ struct RenderPipelineDescription {
     RasterizerStateDescription rasterizer_state;
     RenderPrimitive render_primitive;
     ShaderProgramDescription shader_program;
-    std::vector<std::shared_ptr<ResourceLayout>> resource_layouts;
+    std::vector<std::shared_ptr<const ResourceLayout>> resource_layouts;
 };
 
 struct ComputePipelineDescription {
-    std::shared_ptr<ShaderModule> shader;
-    std::vector<std::shared_ptr<ResourceLayout>> resource_layouts;
+    std::shared_ptr<const ShaderModule> shader;
+    std::vector<std::shared_ptr<const ResourceLayout>> resource_layouts;
 };
 
 class Pipeline {

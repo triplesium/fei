@@ -22,7 +22,7 @@ struct BeginRenderPass {
 };
 struct EndRenderPass {};
 struct SetFramebuffer {
-    std::shared_ptr<Framebuffer> framebuffer;
+    std::shared_ptr<const Framebuffer> framebuffer;
 };
 struct SetViewport {
     std::int32_t x;
@@ -40,22 +40,22 @@ struct ClearStencil {
     std::uint8_t stencil;
 };
 struct SetRenderPipeline {
-    std::shared_ptr<Pipeline> pipeline;
+    std::shared_ptr<const Pipeline> pipeline;
 };
 struct SetComputePipeline {
-    std::shared_ptr<Pipeline> pipeline;
+    std::shared_ptr<const Pipeline> pipeline;
 };
 struct SetVertexBuffer {
-    std::shared_ptr<Buffer> buffer;
+    std::shared_ptr<const Buffer> buffer;
 };
 struct SetIndexBuffer {
-    std::shared_ptr<Buffer> buffer;
+    std::shared_ptr<const Buffer> buffer;
     IndexFormat format;
     uint32 offset;
 };
 struct SetResourceSet {
     uint32 slot;
-    std::shared_ptr<ResourceSet> resource_set;
+    std::shared_ptr<const ResourceSet> resource_set;
 };
 struct UpdateBuffer {
     std::shared_ptr<Buffer> buffer;
@@ -74,19 +74,19 @@ struct Dispatch {
     std::size_t group_z;
 };
 struct BlitTo {
-    std::shared_ptr<Framebuffer> target;
+    std::shared_ptr<const Framebuffer> target;
 };
 struct GenerateMipmaps {
-    std::shared_ptr<Texture> texture;
+    std::shared_ptr<const Texture> texture;
 };
 struct CopyTexture {
-    std::shared_ptr<Texture> src;
+    std::shared_ptr<const Texture> src;
     uint32 src_x;
     uint32 src_y;
     uint32 src_z;
     uint32 src_mip_level;
     uint32 src_base_array_layer;
-    std::shared_ptr<Texture> dst;
+    std::shared_ptr<const Texture> dst;
     uint32 dst_x;
     uint32 dst_y;
     uint32 dst_z;

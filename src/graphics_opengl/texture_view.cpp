@@ -9,7 +9,8 @@ namespace fei {
 
 TextureViewOpenGL::TextureViewOpenGL(const TextureViewDescription& desc) :
     TextureView(desc) {
-    auto texture_gl = std::static_pointer_cast<TextureOpenGL>(desc.target);
+    auto texture_gl =
+        std::static_pointer_cast<const TextureOpenGL>(desc.target);
     m_target_gl = texture_gl;
 }
 

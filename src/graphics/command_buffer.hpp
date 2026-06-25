@@ -18,8 +18,8 @@ namespace fei {
 
 class CommandBuffer {
   protected:
-    std::shared_ptr<Framebuffer> m_framebuffer;
-    std::shared_ptr<Pipeline> m_pipeline;
+    std::shared_ptr<const Framebuffer> m_framebuffer;
+    std::shared_ptr<const Pipeline> m_pipeline;
 
   public:
     virtual ~CommandBuffer() = default;
@@ -39,27 +39,27 @@ class CommandBuffer {
     virtual void clear_color(const Color4F& color) = 0;
     virtual void clear_depth(float depth) = 0;
     virtual void clear_stencil(std::uint8_t stencil) = 0;
-    void set_framebuffer(std::shared_ptr<Framebuffer> framebuffer) {
+    void set_framebuffer(std::shared_ptr<const Framebuffer> framebuffer) {
         m_framebuffer = framebuffer;
         set_framebuffer_impl(framebuffer);
     }
-    void set_render_pipeline(std::shared_ptr<Pipeline> pipeline) {
+    void set_render_pipeline(std::shared_ptr<const Pipeline> pipeline) {
         m_pipeline = pipeline;
         set_render_pipeline_impl(pipeline);
     }
-    void set_compute_pipeline(std::shared_ptr<Pipeline> pipeline) {
+    void set_compute_pipeline(std::shared_ptr<const Pipeline> pipeline) {
         m_pipeline = pipeline;
         set_compute_pipeline_impl(pipeline);
     }
-    virtual void set_vertex_buffer(std::shared_ptr<Buffer> buffer) = 0;
+    virtual void set_vertex_buffer(std::shared_ptr<const Buffer> buffer) = 0;
 
     virtual void
-    set_index_buffer(std::shared_ptr<Buffer> buffer, IndexFormat format) {
+    set_index_buffer(std::shared_ptr<const Buffer> buffer, IndexFormat format) {
         set_index_buffer_impl(buffer, format, 0);
     }
 
     virtual void set_index_buffer(
-        std::shared_ptr<Buffer> buffer,
+        std::shared_ptr<const Buffer> buffer,
         IndexFormat format,
         uint32 offset
     ) {
@@ -68,7 +68,7 @@ class CommandBuffer {
 
     virtual void set_resource_set(
         uint32 slot,
-        std::shared_ptr<ResourceSet> resource_set
+        std::shared_ptr<const ResourceSet> resource_set
     ) = 0;
     virtual void update_buffer(
         std::shared_ptr<Buffer> buffer,
@@ -80,9 +80,9 @@ class CommandBuffer {
     virtual void
     dispatch(std::size_t group_x, std::size_t group_y, std::size_t group_z) = 0;
 
-    virtual void blit_to(std::shared_ptr<Framebuffer> target) = 0;
+    virtual void blit_to(std::shared_ptr<const Framebuffer> target) = 0;
 
-    void generate_mipmaps(std::shared_ptr<Texture> texture) {
+    void generate_mipmaps(std::shared_ptr<const Texture> texture) {
         if (!texture->usage().is_set(TextureUsage::GenerateMipmaps)) {
             error("Texture does not have GenerateMipmaps usage flag set");
             return;
@@ -90,8 +90,10 @@ class CommandBuffer {
         generate_mipmaps_impl(texture);
     }
 
-    void
-    copy_texture(std::shared_ptr<Texture> src, std::shared_ptr<Texture> dst) {
+    void copy_texture(
+        std::shared_ptr<const Texture> src,
+        std::shared_ptr<const Texture> dst
+    ) {
         uint32 effective_src_array_layers =
             src->usage().is_set(TextureUsage::Cubemap) ? src->layer() * 6 :
                                                          src->layer();
@@ -119,8 +121,8 @@ class CommandBuffer {
     }
 
     void copy_texture(
-        std::shared_ptr<Texture> src,
-        std::shared_ptr<Texture> dst,
+        std::shared_ptr<const Texture> src,
+        std::shared_ptr<const Texture> dst,
         uint32 mip_level,
         uint32 array_layer
     ) {
@@ -146,13 +148,13 @@ class CommandBuffer {
     }
 
     void copy_texture(
-        std::shared_ptr<Texture> src,
+        std::shared_ptr<const Texture> src,
         uint32 src_x,
         uint32 src_y,
         uint32 src_z,
         uint32 src_mip_level,
         uint32 src_base_array_layer,
-        std::shared_ptr<Texture> dst,
+        std::shared_ptr<const Texture> dst,
         uint32 dst_x,
         uint32 dst_y,
         uint32 dst_z,
@@ -185,26 +187,27 @@ class CommandBuffer {
 
   protected:
     virtual void
-    set_framebuffer_impl(std::shared_ptr<Framebuffer> framebuffer) = 0;
+    set_framebuffer_impl(std::shared_ptr<const Framebuffer> framebuffer) = 0;
     virtual void
-    set_render_pipeline_impl(std::shared_ptr<Pipeline> pipeline) = 0;
+    set_render_pipeline_impl(std::shared_ptr<const Pipeline> pipeline) = 0;
     virtual void
-    set_compute_pipeline_impl(std::shared_ptr<Pipeline> pipeline) = 0;
+    set_compute_pipeline_impl(std::shared_ptr<const Pipeline> pipeline) = 0;
     virtual void set_index_buffer_impl(
-        std::shared_ptr<Buffer> buffer,
+        std::shared_ptr<const Buffer> buffer,
         IndexFormat format,
         uint32 offset
     ) = 0;
-    virtual void generate_mipmaps_impl(std::shared_ptr<Texture> texture) = 0;
+    virtual void
+    generate_mipmaps_impl(std::shared_ptr<const Texture> texture) = 0;
 
     virtual void copy_texture_impl(
-        std::shared_ptr<Texture> src,
+        std::shared_ptr<const Texture> src,
         uint32 src_x,
         uint32 src_y,
         uint32 src_z,
         uint32 src_mip_level,
         uint32 src_base_array_layer,
-        std::shared_ptr<Texture> dst,
+        std::shared_ptr<const Texture> dst,
         uint32 dst_x,
         uint32 dst_y,
         uint32 dst_z,

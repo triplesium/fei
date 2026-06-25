@@ -9,7 +9,7 @@
 namespace fei {
 
 struct TextureViewDescription {
-    std::shared_ptr<Texture> target;
+    std::shared_ptr<const Texture> target;
     uint32 base_mip_level {0};
     uint32 mip_levels {1};
     uint32 base_array_layer {0};
@@ -19,7 +19,7 @@ struct TextureViewDescription {
 
 class TextureView : public BindableResource {
   private:
-    std::shared_ptr<Texture> m_target;
+    std::shared_ptr<const Texture> m_target;
     uint32 m_base_mip_level;
     uint32 m_mip_levels;
     uint32 m_base_array_layer;
@@ -34,7 +34,7 @@ class TextureView : public BindableResource {
         m_array_layers(desc.array_layers),
         m_format(desc.format.value_or(desc.target->format())) {}
 
-    std::shared_ptr<Texture> target() const { return m_target; }
+    std::shared_ptr<const Texture> target() const { return m_target; }
     uint32 base_mip_level() const { return m_base_mip_level; }
     uint32 mip_levels() const { return m_mip_levels; }
     uint32 base_array_layer() const { return m_base_array_layer; }

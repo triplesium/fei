@@ -123,7 +123,8 @@ GraphicsDeviceVulkan::create_texture_readback(uint32) const {
     vulkan_not_implemented("create_texture_readback");
 }
 
-std::shared_ptr<Framebuffer> GraphicsDeviceVulkan::main_framebuffer() const {
+std::shared_ptr<const Framebuffer>
+GraphicsDeviceVulkan::main_framebuffer() const {
     vulkan_not_implemented("main_framebuffer");
 }
 

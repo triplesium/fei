@@ -27,7 +27,7 @@ class Texture : public BindableResource,
                 public MappableResource,
                 public std::enable_shared_from_this<Texture> {
   private:
-    std::shared_ptr<TextureView> m_full_view;
+    mutable std::shared_ptr<TextureView> m_full_view;
     mutable std::mutex m_full_view_mutex;
 
   public:
@@ -40,6 +40,7 @@ class Texture : public BindableResource,
     virtual uint32 layer() const = 0;
     virtual BitFlags<TextureUsage> usage() const = 0;
     virtual TextureType type() const = 0;
-    std::shared_ptr<TextureView> full_view(const GraphicsDevice& device);
+    std::shared_ptr<const TextureView>
+    full_view(const GraphicsDevice& device) const;
 };
 } // namespace fei
