@@ -23,7 +23,7 @@ struct FilteringConstants {
 };
 
 void generated_equirect_env_map_to_env_map(
-    Query<Entity, GeneratedEquirectEnvironmentMap>::Filter<
+    Query<Entity, const GeneratedEquirectEnvironmentMap>::Filter<
         Without<EnvironmentMap>> query,
     ResRW<Assets<Image>> images,
     Commands commands
@@ -79,8 +79,8 @@ void generated_equirect_env_map_to_env_map(
 }
 
 void insert_gpu_env_map(
-    Query<Entity, GeneratedEquirectEnvironmentMap, EnvironmentMap>::Filter<
-        Without<GpuEnvironmentMap>> query,
+    Query<Entity, const GeneratedEquirectEnvironmentMap, const EnvironmentMap>::
+        Filter<Without<GpuEnvironmentMap>> query,
     ResRO<RenderAssets<GpuImage>> gpu_images,
     Commands commands
 ) {
@@ -106,7 +106,8 @@ void insert_gpu_env_map(
 }
 
 void convert_equirect_to_cubemap(
-    Query<Entity, GeneratedEquirectEnvironmentMap, GpuEnvironmentMap> query,
+    Query<Entity, const GeneratedEquirectEnvironmentMap, GpuEnvironmentMap>
+        query,
     ResRO<GraphicsDevice> device,
     ResRO<Assets<Image>> images,
     ResRO<RenderAssets<GpuImage>> gpu_images,
@@ -132,7 +133,7 @@ void convert_equirect_to_cubemap(
 
 // TODO: Pipeline caching
 void generate_env_maps(
-    Query<Entity, GpuEnvironmentMap>::Filter<
+    Query<Entity, const GpuEnvironmentMap>::Filter<
         Without<EnvironmentMapGeneratedTag>> query,
     ResRO<GraphicsDevice> device,
     ResRW<AssetServer> asset_server,

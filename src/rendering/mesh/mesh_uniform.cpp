@@ -7,7 +7,7 @@
 namespace fei {
 
 void prepare_mesh_uniforms(
-    Query<Entity, Mesh3d, Transform3d> query,
+    Query<Entity, const Mesh3d, const Transform3d> query,
     ResRO<GraphicsDevice> device,
     ResRW<MeshUniforms> mesh_uniforms
 ) {

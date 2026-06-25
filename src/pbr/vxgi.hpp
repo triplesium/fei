@@ -107,7 +107,7 @@ void setup_vxgi(
 
 void compute_scene_aabb(
     ResRW<VxgiVoxelization> voxelization,
-    Query<Mesh3d, Transform3d, Aabb> query
+    Query<const Mesh3d, const Transform3d, const Aabb> query
 );
 
 void prepare_vxgi_voxelization(
@@ -122,8 +122,11 @@ void mark_vxgi_voxelization_dirty(
 );
 
 void queue_vxgi_voxelization_pipelines(
-    Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
-        query_meshes,
+    Query<
+        Entity,
+        const Mesh3d,
+        const MeshMaterial3d<StandardMaterial>,
+        const Transform3d> query_meshes,
     ResRW<VxgiVoxelization> voxelization,
     ResRW<MeshMaterialPipelines> pipelines,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
@@ -131,8 +134,11 @@ void queue_vxgi_voxelization_pipelines(
 );
 
 void voxelize_scene(
-    Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
-        query_meshes,
+    Query<
+        Entity,
+        const Mesh3d,
+        const MeshMaterial3d<StandardMaterial>,
+        const Transform3d> query_meshes,
     ResRW<VxgiVoxelization> voxelization,
     ResRW<VxgiVolumes> volumes,
     ResRW<MeshMaterialPipelines> pipelines,
@@ -248,9 +254,12 @@ void setup_inject_radiance(
 );
 
 void prepare_inject_radiance(
-    Query<DirectionalLight, Transform3d, ViewUniformBuffer, ShadowMap>
-        query_directional_lights,
-    Query<PointLight, Transform3d> query_point_lights,
+    Query<
+        const DirectionalLight,
+        const Transform3d,
+        const ViewUniformBuffer,
+        const ShadowMap> query_directional_lights,
+    Query<const PointLight, const Transform3d> query_point_lights,
     ResRW<VxgiInjectRadiance> inject_radiance,
     ResRO<GraphicsDevice> device,
     ResRO<RenderingDefaults> rendering_defaults
@@ -344,9 +353,12 @@ struct VxgiLighting {
 void setup_vxgi_lighting(ResRO<GraphicsDevice> device, Commands commands);
 
 void prepare_vxgi_lighting(
-    Query<DirectionalLight, Transform3d, ViewUniformBuffer, ShadowMap>
-        query_directional_lights,
-    Query<PointLight, Transform3d> query_point_lights,
+    Query<
+        const DirectionalLight,
+        const Transform3d,
+        const ViewUniformBuffer,
+        const ShadowMap> query_directional_lights,
+    Query<const PointLight, const Transform3d> query_point_lights,
     ResRW<VxgiLighting> vxgi_lighting,
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiVoxelization> voxelization,

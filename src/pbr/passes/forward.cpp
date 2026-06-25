@@ -17,10 +17,16 @@ namespace fei {
 namespace {
 
 void queue_shadow_meshes(
-    Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
-        query_meshes,
-    Query<Entity, DirectionalLight, Transform3d, MeshViewResourceSet>
-        query_lights,
+    Query<
+        Entity,
+        const Mesh3d,
+        const MeshMaterial3d<StandardMaterial>,
+        const Transform3d> query_meshes,
+    Query<
+        Entity,
+        const DirectionalLight,
+        const Transform3d,
+        const MeshViewResourceSet> query_lights,
     ResRW<ShadowPhase> phase,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<MeshUniforms> mesh_uniforms,
@@ -67,14 +73,19 @@ void queue_shadow_meshes(
 }
 
 void queue_forward_meshes(
-    Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d> query,
+    Query<
+        Entity,
+        const Mesh3d,
+        const MeshMaterial3d<StandardMaterial>,
+        const Transform3d> query,
     ResRW<ForwardOpaquePhase> phase,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<RenderAssets<PreparedMaterial>> materials,
     ResRO<MeshUniforms> mesh_uniforms,
     ResRW<MeshMaterialPipelines> mesh_material_pipelines,
     ResRW<PipelineCache>,
-    Query<Entity, MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    Query<Entity, const MeshViewResourceSet>::Filter<With<Camera3d>>
+        query_cameras,
     ResRO<ViewVisibleEntities> visible_entities
 ) {
     phase->clear();
@@ -189,7 +200,7 @@ void forward_pass(
 } // namespace
 
 void skybox_pass(
-    Query<Skybox> query,
+    Query<const Skybox> query,
     ResRW<RenderTarget> forward_render_resources,
     ResRO<GraphicsDevice> device,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,

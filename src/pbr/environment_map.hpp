@@ -26,7 +26,7 @@ struct GpuEnvironmentMap {
 struct EnvironmentMapGeneratedTag {};
 
 void generate_env_maps(
-    Query<Entity, GpuEnvironmentMap>::Filter<
+    Query<Entity, const GpuEnvironmentMap>::Filter<
         Without<EnvironmentMapGeneratedTag>> query,
     ResRO<GraphicsDevice> device,
     ResRW<AssetServer> asset_server,

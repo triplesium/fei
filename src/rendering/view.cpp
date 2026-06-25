@@ -7,8 +7,8 @@
 namespace fei {
 
 void init_camera_view_uniform(
-    Query<Entity, Camera3d, Transform3d>::Filter<Without<ViewUniformBuffer>>
-        query,
+    Query<Entity, const Camera3d, const Transform3d>::Filter<
+        Without<ViewUniformBuffer>> query,
     ResRO<GraphicsDevice> device,
     Commands commands
 ) {
@@ -24,7 +24,7 @@ void init_camera_view_uniform(
 }
 
 void prepare_camera_view_uniform(
-    Query<Entity, Camera3d, Transform3d, ViewUniformBuffer> query,
+    Query<Entity, const Camera3d, const Transform3d, ViewUniformBuffer> query,
     ResRO<GraphicsDevice> device
 ) {
     for (auto [entity, camera, transform, view_uniform_buffer_component] :

@@ -314,9 +314,13 @@ void setup_gbuffer(
 }
 
 void queue_deferred_prepass_meshes(
-    Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
-        query_meshes,
-    Query<Entity, MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    Query<
+        Entity,
+        const Mesh3d,
+        const MeshMaterial3d<StandardMaterial>,
+        const Transform3d> query_meshes,
+    Query<Entity, const MeshViewResourceSet>::Filter<With<Camera3d>>
+        query_cameras,
     ResRW<DeferredPrepassPhase> phase,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<MeshUniforms> mesh_uniforms,
@@ -417,7 +421,7 @@ void defered_prepass(
 }
 
 [[maybe_unused]] void defered_pass(
-    Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    Query<const MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     ResRW<RenderTarget> target,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<GraphicsDevice> device,
@@ -476,7 +480,7 @@ void defered_prepass(
 }
 
 void direct_lighting_pass(
-    Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    Query<const MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<GraphicsDevice> device,
     ResRO<VxgiLighting> vxgi_lighting,
@@ -526,7 +530,7 @@ void direct_lighting_pass(
 }
 
 void indirect_lighting_pass(
-    Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    Query<const MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<GraphicsDevice> device,
     ResRO<VxgiLighting> vxgi_lighting,
@@ -576,7 +580,7 @@ void indirect_lighting_pass(
 }
 
 void composite_pass(
-    Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    Query<const MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<GraphicsDevice> device,
     ResRW<DeferedRenderResources> resources,

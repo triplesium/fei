@@ -126,14 +126,15 @@ struct alignas(16) LightUniform {
 };
 
 void init_light_view_uniform_buffer(
-    Query<Entity, DirectionalLight, Transform3d>::Filter<
+    Query<Entity, const DirectionalLight, const Transform3d>::Filter<
         Without<ViewUniformBuffer>> query_light,
     ResRO<GraphicsDevice> device,
     Commands commands
 );
 
 void prepare_light_view_uniform_buffer(
-    Query<Entity, DirectionalLight, Transform3d, ViewUniformBuffer> query_light,
+    Query<Entity, const DirectionalLight, const Transform3d, ViewUniformBuffer>
+        query_light,
     ResRO<GraphicsDevice> device
 );
 
@@ -257,8 +258,8 @@ inline void setup_shadow_mapping(
 }
 
 inline void setup_shadow_map(
-    Query<Entity, DirectionalLight, Transform3d>::Filter<Without<ShadowMap>>
-        query_light,
+    Query<Entity, const DirectionalLight, const Transform3d>::Filter<
+        Without<ShadowMap>> query_light,
     ResRO<GraphicsDevice> device,
     ResRO<BlurResources> blur_resources,
     Commands commands
@@ -313,10 +314,17 @@ inline void setup_shadow_map(
 }
 
 inline void queue_shadow_map_meshes(
-    Query<Entity, DirectionalLight, Transform3d, MeshViewResourceSet, ShadowMap>
-        query_light,
-    Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
-        query_meshes,
+    Query<
+        Entity,
+        const DirectionalLight,
+        const Transform3d,
+        const MeshViewResourceSet,
+        const ShadowMap> query_light,
+    Query<
+        Entity,
+        const Mesh3d,
+        const MeshMaterial3d<StandardMaterial>,
+        const Transform3d> query_meshes,
     ResRO<RenderAssets<PreparedMaterial>> materials,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<MeshUniforms> mesh_uniforms,
@@ -422,7 +430,7 @@ inline void render_shadow_map(
 }
 
 inline void blur_shadow_map(
-    Query<ShadowMap> query_shadow_maps,
+    Query<const ShadowMap> query_shadow_maps,
     ResRO<GraphicsDevice> device,
     ResRO<BlurResources> blur_resources,
     ResRO<FullscreenQuad> fullscreen_quad_resource,

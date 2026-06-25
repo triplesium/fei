@@ -6,7 +6,7 @@
 namespace fei {
 
 void compute_mesh_aabb(
-    Query<Entity, Mesh3d>::Filter<Without<Aabb>> query,
+    Query<Entity, const Mesh3d>::Filter<Without<Aabb>> query,
     ResRO<Assets<Mesh>> meshes,
     Commands commands
 ) {

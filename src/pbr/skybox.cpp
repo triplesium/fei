@@ -101,7 +101,7 @@ void setup_skybox_resources(
 }
 
 void prepare_skybox_resources(
-    Query<Skybox> query,
+    Query<const Skybox> query,
     ResRW<SkyboxResource> skybox_resource,
     ResRW<EquirectToCubemap> equirect_to_cubemap,
     ResRO<GraphicsDevice> device,

@@ -28,14 +28,14 @@ struct ViewUniformBuffer {
 };
 
 void init_camera_view_uniform(
-    Query<Entity, Camera3d, Transform3d>::Filter<Without<ViewUniformBuffer>>
-        query,
+    Query<Entity, const Camera3d, const Transform3d>::Filter<
+        Without<ViewUniformBuffer>> query,
     ResRO<GraphicsDevice> device,
     Commands commands
 );
 
 void prepare_camera_view_uniform(
-    Query<Entity, Camera3d, Transform3d, ViewUniformBuffer> query,
+    Query<Entity, const Camera3d, const Transform3d, ViewUniformBuffer> query,
     ResRO<GraphicsDevice> device
 );
 

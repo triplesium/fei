@@ -29,9 +29,9 @@ void prepare_mesh_view_resource_set(
     ResRO<GraphicsDevice> device,
     ResRO<MeshViewLayout> mesh_view_layout,
     ResRO<GpuLUTs> luts,
-    Query<GpuEnvironmentMap> query_env_maps,
-    Query<Entity, ViewUniformBuffer> query_cameras,
-    Query<DirectionalLight, Transform3d> query_directional_lights,
+    Query<const GpuEnvironmentMap> query_env_maps,
+    Query<Entity, const ViewUniformBuffer> query_cameras,
+    Query<const DirectionalLight, const Transform3d> query_directional_lights,
     Commands commands
 );
 

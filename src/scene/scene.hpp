@@ -58,7 +58,7 @@ class SceneLoader : public AssetLoader<Scene> {
 };
 
 void spawn_scene(
-    Query<Entity, SceneSpawner> scene_query,
+    Query<Entity, const SceneSpawner> scene_query,
     ResRO<AssetServer> asset_server,
     ResRW<Assets<Scene>> scenes,
     ResRW<Assets<Mesh>> meshes,
