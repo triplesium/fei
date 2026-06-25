@@ -14,6 +14,7 @@ void register_main_schedule_profile_names() {
     register_profile_schedule_name(PreStartUp, "PreStartUp");
     register_profile_schedule_name(StartUp, "StartUp");
     register_profile_schedule_name(PreUpdate, "PreUpdate");
+    register_profile_schedule_name(StateTransitionSchedule, "StateTransition");
     register_profile_schedule_name(Update, "Update");
     register_profile_schedule_name(PostUpdate, "PostUpdate");
     register_profile_schedule_name(Last, "Last");
@@ -58,6 +59,7 @@ void App::run() {
     while (!should_stop) {
         FEI_RUN_PROFILED_SCHEDULE(First);
         FEI_RUN_PROFILED_SCHEDULE(PreUpdate);
+        FEI_RUN_PROFILED_SCHEDULE(StateTransitionSchedule);
         FEI_RUN_PROFILED_SCHEDULE(Update);
         FEI_RUN_PROFILED_SCHEDULE(PostUpdate);
         FEI_RUN_PROFILED_SCHEDULE(Last);

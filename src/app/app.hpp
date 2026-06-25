@@ -3,6 +3,7 @@
 #include "base/log.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/event.hpp"
+#include "ecs/state.hpp"
 #include "ecs/system_params.hpp"
 #include "ecs/world.hpp"
 #include "refl/reflect.hpp"
@@ -95,7 +96,7 @@ class App {
     }
 
     App& add_systems(
-        uint32_t schedule,
+        ScheduleId schedule,
         std::convertible_to<SystemConfigs> auto&&... systems
     ) {
         m_world.add_systems(
@@ -106,7 +107,7 @@ class App {
     }
 
     App& configure_sets(
-        uint32_t schedule,
+        ScheduleId schedule,
         std::convertible_to<SystemSetConfigs> auto&&... config
     ) {
         m_world.configure_sets(
@@ -126,6 +127,12 @@ class App {
     template<FromWorld R>
     App& init_resource() {
         m_world.init_resource<R>();
+        return *this;
+    }
+
+    template<typename T>
+    App& init_state(T&& state) {
+        m_world.init_state(std::forward<T>(state));
         return *this;
     }
 
@@ -201,7 +208,7 @@ class App {
         return *this;
     }
 
-    void run_schedule(uint32_t schedule) { m_world.run_schedule(schedule); }
+    void run_schedule(ScheduleId schedule) { m_world.run_schedule(schedule); }
 
     void run();
 
