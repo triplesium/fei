@@ -58,8 +58,20 @@ void run_profiled_system(
     config.system->run(world);
 }
 
+bool should_run(SystemConfig& config, World& world) {
+    for (auto& condition : config.conditions) {
+        if (!condition->run(world)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 SystemAccess effective_access(const SystemConfig& config) {
     auto access = config.system->access();
+    for (const auto& condition : config.conditions) {
+        access.merge(condition->access());
+    }
     access.main_thread_only =
         access.main_thread_only || config.main_thread_only;
     return access;
@@ -126,7 +138,7 @@ void Schedule::run_systems(ScheduleId schedule, World& world) {
     for (const auto& batch : m_execution_batches) {
         for (auto system_id : batch) {
             auto it = m_systems.find(system_id);
-            if (it != m_systems.end()) {
+            if (it != m_systems.end() && should_run(it->second, world)) {
                 run_profiled_system(schedule, it->second, world);
             }
         }
@@ -145,7 +157,7 @@ void Schedule::run_systems(
 ) {
     auto run_one = [this, schedule, &world](SystemId system_id) {
         auto it = m_systems.find(system_id);
-        if (it != m_systems.end()) {
+        if (it != m_systems.end() && should_run(it->second, world)) {
             run_profiled_system(schedule, it->second, world);
         }
     };

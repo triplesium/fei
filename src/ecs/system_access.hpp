@@ -47,6 +47,28 @@ struct SystemAccess {
     bool main_thread_only {false};
     bool commands {false};
 
+    void merge(const SystemAccess& other) {
+        read_resources.insert(
+            other.read_resources.begin(),
+            other.read_resources.end()
+        );
+        write_resources.insert(
+            other.write_resources.begin(),
+            other.write_resources.end()
+        );
+        read_components.insert(
+            other.read_components.begin(),
+            other.read_components.end()
+        );
+        write_components.insert(
+            other.write_components.begin(),
+            other.write_components.end()
+        );
+        world_exclusive = world_exclusive || other.world_exclusive;
+        main_thread_only = main_thread_only || other.main_thread_only;
+        commands = commands || other.commands;
+    }
+
     bool conflicts_with(const SystemAccess& other) const {
         if (world_exclusive || other.world_exclusive || main_thread_only ||
             other.main_thread_only || commands || other.commands) {

@@ -14,12 +14,23 @@ namespace {
 struct ScheduleMergeFirstSet : SystemSet<ScheduleMergeFirstSet> {};
 struct ScheduleMergeSecondSet : SystemSet<ScheduleMergeSecondSet> {};
 struct ScheduleMergeThirdSet : SystemSet<ScheduleMergeThirdSet> {};
+struct RunIfCounter {
+    int calls = 0;
+};
 
 void schedule_merge_first() {}
 
 void schedule_merge_second() {}
 
 void schedule_merge_third() {}
+
+void condition_read_position(Query<const Position>) {}
+
+void condition_write_config(ResRW<GameConfig>) {}
+
+void increment_run_if_counter(ResRW<RunIfCounter> counter) {
+    ++counter->calls;
+}
 
 } // namespace
 
@@ -143,10 +154,152 @@ TEST_CASE("ECS schedule ordering respects configured sets", "[ecs][schedule]") {
     REQUIRE(world.resource<ScheduleTrace>().entries == expected);
 }
 
+TEST_CASE("ECS run_if gates scheduled systems", "[ecs][schedule]") {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<ScheduleTrace>();
+    Registry::instance().register_type<GameConfig>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(ScheduleTrace {});
+    world.add_resource(GameConfig {.max_entities = 0});
+
+    world.add_systems(
+        TestSchedule,
+        chain(
+            scheduled_first | run_if([](ResRO<GameConfig> config) {
+                return config->max_entities > 0;
+            }),
+            scheduled_second | run_if([](ResRO<GameConfig> config) {
+                return config->max_entities == 0;
+            })
+        )
+    );
+    world.sort_systems();
+
+    world.run_schedule(TestSchedule);
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"second"}
+    );
+
+    world.resource<ScheduleTrace>().entries.clear();
+    world.resource<GameConfig>().max_entities = 1;
+
+    world.run_schedule(TestSchedule);
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"first"}
+    );
+}
+
 TEST_CASE(
-    "ECS schedule merges repeated set configuration",
+    "ECS run_if combines multiple conditions with AND",
     "[ecs][schedule]"
 ) {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<RunIfCounter>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(RunIfCounter {});
+
+    auto always_true = []() {
+        return true;
+    };
+    auto always_false = []() {
+        return false;
+    };
+
+    world.add_systems(
+        TestSchedule,
+        increment_run_if_counter | run_if(always_true) | run_if(always_false)
+    );
+    world.sort_systems();
+    world.run_schedule(TestSchedule);
+
+    REQUIRE(world.resource<RunIfCounter>().calls == 0);
+}
+
+TEST_CASE("ECS run_if applies to system groups", "[ecs][schedule]") {
+    Registry::instance().register_type<CommandsQueue>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+
+    int calls = 0;
+    world.add_systems(
+        TestSchedule,
+        all(
+            [&calls]() {
+                ++calls;
+            },
+            [&calls]() {
+                ++calls;
+            }
+        ) | run_if([]() {
+            return false;
+        })
+    );
+    world.sort_systems();
+    world.run_schedule(TestSchedule);
+
+    REQUIRE(calls == 0);
+}
+
+TEST_CASE(
+    "ECS run_if access participates in schedule batching",
+    "[ecs][schedule]"
+) {
+    Schedule schedule;
+    schedule.add_systems(
+        condition_read_position | run_if([](ResRO<GameConfig>) {
+            return true;
+        }),
+        condition_write_config
+    );
+    schedule.sort_systems();
+
+    REQUIRE(schedule.execution_batches().size() == 2);
+    REQUIRE(schedule.execution_batches()[0].size() == 1);
+    REQUIRE(schedule.execution_batches()[1].size() == 1);
+}
+
+TEST_CASE("ECS run_if has resource helper conditions", "[ecs][schedule]") {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<ScheduleTrace>();
+    Registry::instance().register_type<GameConfig>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(ScheduleTrace {});
+
+    world.add_systems(
+        TestSchedule,
+        chain(
+            scheduled_first | run_if(resource_missing<GameConfig>()),
+            scheduled_second | run_if(resource_exists<GameConfig>())
+        )
+    );
+    world.sort_systems();
+
+    world.run_schedule(TestSchedule);
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"first"}
+    );
+
+    world.resource<ScheduleTrace>().entries.clear();
+    world.add_resource(GameConfig {});
+
+    world.run_schedule(TestSchedule);
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"second"}
+    );
+}
+
+TEST_CASE("ECS schedule merges repeated set configuration", "[ecs][schedule]") {
     Schedule schedule;
 
     schedule.configure_sets(

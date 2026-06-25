@@ -4,6 +4,7 @@
 #include "ecs/system.hpp"
 #include "ecs/world.hpp"
 
+#include <utility>
 #include <variant>
 
 namespace fei {
@@ -108,5 +109,26 @@ class WorldRef {
 template<>
 struct SystemParamTraits<WorldRef> : StatelessParamTraits<WorldRef> {};
 static_assert(SystemParam<WorldRef>);
+
+template<typename T>
+auto resource_exists() {
+    return [](Optional<ResRO<T>> resource) {
+        return resource.has_value();
+    };
+}
+
+template<typename T>
+auto resource_missing() {
+    return [](Optional<ResRO<T>> resource) {
+        return !resource.has_value();
+    };
+}
+
+template<typename T>
+auto in_state(T expected) {
+    return [expected = std::move(expected)](ResRO<T> state) {
+        return *state == expected;
+    };
+}
 
 } // namespace fei

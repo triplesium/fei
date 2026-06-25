@@ -30,6 +30,7 @@ struct SystemDependencies {
 struct SystemConfig {
     SystemDependencies dependencies;
     std::unique_ptr<System> system;
+    std::vector<std::unique_ptr<Condition>> conditions;
     SystemProfileInfo profile;
     bool main_thread_only {false};
     SystemId id;
@@ -71,6 +72,20 @@ struct SystemConfig {
     }
     SystemConfig&& main_thread() && {
         main_thread_only = true;
+        return std::move(*this);
+    }
+    template<IntoCondition F>
+    void add_condition(F&& condition) {
+        using ConditionType = std::decay_t<F>;
+        conditions.push_back(
+            std::make_unique<FunctionCondition<ConditionType>>(
+                std::forward<F>(condition)
+            )
+        );
+    }
+    template<IntoCondition F>
+    SystemConfig&& run_if(F&& condition) && {
+        add_condition(std::forward<F>(condition));
         return std::move(*this);
     }
 };
@@ -175,6 +190,34 @@ operator|(SystemConfig&& config, SystemMainThreadTag /*tag*/) {
     return std::move(config).main_thread();
 }
 
+template<IntoCondition F>
+struct SystemRunIfTag {
+    F condition;
+};
+
+template<IntoCondition F>
+inline SystemRunIfTag<std::decay_t<F>> run_if(F&& condition) {
+    return {std::forward<F>(condition)};
+}
+
+template<IntoCondition C>
+inline SystemConfig operator|(IntoSystem auto&& system, SystemRunIfTag<C> tag) {
+    return SystemConfig(std::forward<decltype(system)>(system))
+        .run_if(std::move(tag.condition));
+}
+
+template<IntoCondition C>
+inline SystemConfig
+operator|(NamedIntoSystem auto&& system, SystemRunIfTag<C> tag) {
+    return SystemConfig(std::forward<decltype(system)>(system))
+        .run_if(std::move(tag.condition));
+}
+
+template<IntoCondition C>
+inline SystemConfig operator|(SystemConfig&& config, SystemRunIfTag<C> tag) {
+    return std::move(config).run_if(std::move(tag.condition));
+}
+
 inline SystemConfigs all(std::convertible_to<SystemConfigs> auto&&... configs) {
     std::vector<SystemConfig> systems;
     (
@@ -246,6 +289,15 @@ inline SystemConfigs
 operator|(SystemConfigs&& config, SystemMainThreadTag /*tag*/) {
     for (auto& sys_config : config.systems) {
         sys_config.main_thread_only = true;
+    }
+    return std::move(config);
+}
+
+template<IntoCondition C>
+    requires std::copy_constructible<C>
+inline SystemConfigs operator|(SystemConfigs&& config, SystemRunIfTag<C> tag) {
+    for (auto& sys_config : config.systems) {
+        sys_config.add_condition(tag.condition);
     }
     return std::move(config);
 }
