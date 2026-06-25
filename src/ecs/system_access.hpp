@@ -6,6 +6,7 @@
 #include "ecs/resource_traits.hpp"
 #include "refl/type.hpp"
 
+#include <concepts>
 #include <tuple>
 #include <type_traits>
 #include <unordered_set>
@@ -37,6 +38,30 @@ class Query;
 template<typename Q, typename... Filters>
     requires SpecializationOf<Q, Query>
 class FilteredQuery;
+
+template<typename T>
+struct IsReadOnlyConditionParam : std::false_type {};
+
+template<typename T>
+struct IsReadOnlyConditionParam<ResRO<T>> : std::true_type {};
+
+template<typename T>
+struct IsReadOnlyConditionParam<Optional<ResRO<T>>> : std::true_type {};
+
+template<typename T>
+struct IsReadOnlyQueryData : std::bool_constant<
+                                 std::same_as<std::remove_cvref_t<T>, Entity> ||
+                                 std::is_const_v<std::remove_reference_t<T>>> {
+};
+
+template<typename... Datas>
+struct IsReadOnlyConditionParam<Query<Datas...>>
+    : std::bool_constant<(IsReadOnlyQueryData<Datas>::value && ...)> {};
+
+template<typename Q, typename... Filters>
+    requires SpecializationOf<Q, Query>
+struct IsReadOnlyConditionParam<FilteredQuery<Q, Filters...>>
+    : IsReadOnlyConditionParam<Q> {};
 
 struct SystemAccess {
     std::unordered_set<TypeId> read_resources;

@@ -49,6 +49,42 @@ void world_ref_system(WorldRef) {}
 
 void event_access_system(EventReader<GameEvent>, EventWriter<PlayerMoved>) {}
 
+bool read_resource_condition(ResRO<GameConfig>) {
+    return true;
+}
+
+bool optional_read_resource_condition(Optional<ResRO<GameConfig>>) {
+    return true;
+}
+
+bool read_query_condition(Query<Entity, const Position>) {
+    return true;
+}
+
+bool write_resource_condition(ResRW<GameConfig>) {
+    return true;
+}
+
+bool optional_write_resource_condition(Optional<ResRW<GameConfig>>) {
+    return true;
+}
+
+bool write_query_condition(Query<Position>) {
+    return true;
+}
+
+bool commands_condition(Commands) {
+    return true;
+}
+
+bool world_ref_condition(WorldRef) {
+    return true;
+}
+
+bool event_reader_condition(EventReader<GameEvent>) {
+    return true;
+}
+
 struct MainThreadResource {};
 
 void main_thread_resource_system(ResRW<MainThreadResource>) {}
@@ -69,6 +105,29 @@ template<>
 struct fei::ResourceTraits<MainThreadResource> {
     static constexpr bool main_thread_only = true;
 };
+
+static_assert(ConditionParam<ResRO<GameConfig>>);
+static_assert(ConditionParam<Optional<ResRO<GameConfig>>>);
+static_assert(ConditionParam<Query<Entity, const Position>>);
+static_assert(ConditionParam<Query<Entity>>);
+static_assert(ConditionParam<Query<const Position>::Filter<With<Velocity>>>);
+static_assert(!ConditionParam<ResRW<GameConfig>>);
+static_assert(!ConditionParam<Optional<ResRW<GameConfig>>>);
+static_assert(!ConditionParam<Query<Position>>);
+static_assert(!ConditionParam<Query<Entity, const Position, Velocity>>);
+static_assert(!ConditionParam<Commands>);
+static_assert(!ConditionParam<WorldRef>);
+static_assert(!ConditionParam<EventReader<GameEvent>>);
+
+static_assert(IntoCondition<decltype(read_resource_condition)>);
+static_assert(IntoCondition<decltype(optional_read_resource_condition)>);
+static_assert(IntoCondition<decltype(read_query_condition)>);
+static_assert(!IntoCondition<decltype(write_resource_condition)>);
+static_assert(!IntoCondition<decltype(optional_write_resource_condition)>);
+static_assert(!IntoCondition<decltype(write_query_condition)>);
+static_assert(!IntoCondition<decltype(commands_condition)>);
+static_assert(!IntoCondition<decltype(world_ref_condition)>);
+static_assert(!IntoCondition<decltype(event_reader_condition)>);
 
 TEST_CASE("ECS systems expose resource access metadata", "[ecs][system]") {
     FunctionSystem<decltype(resource_access_system)*> system(

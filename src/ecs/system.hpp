@@ -48,6 +48,10 @@ concept SystemParam =
         { SystemParamTraits<T>::get_param(world, state) } -> std::same_as<T>;
     };
 
+template<typename T>
+concept ConditionParam =
+    SystemParam<T> && IsReadOnlyConditionParam<std::remove_cvref_t<T>>::value;
+
 // Concept to check if a type can be used as a system
 template<typename T>
 concept IntoSystem =
@@ -71,9 +75,9 @@ concept IntoCondition =
        requires { &std::remove_cvref_t<T>::operator(); })) &&
      // Condition should return bool
      std::is_same_v<bool, typename fei::FunctionTraits<T>::return_type> &&
-     // All arguments must be a SystemParam
+     // All arguments must be read-only condition params
      []<typename... Ts>(std::type_identity<std::tuple<Ts...>>) {
-         return (SystemParam<Ts> && ...);
+         return (ConditionParam<Ts> && ...);
      }(std::type_identity<typename fei::FunctionTraits<T>::args_tuple>()));
 
 template<typename T>
