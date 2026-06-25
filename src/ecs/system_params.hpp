@@ -4,7 +4,6 @@
 #include "ecs/system.hpp"
 #include "ecs/world.hpp"
 
-#include <utility>
 #include <variant>
 
 namespace fei {
@@ -121,13 +120,6 @@ template<typename T>
 auto resource_missing() {
     return [](Optional<ResRO<T>> resource) {
         return !resource.has_value();
-    };
-}
-
-template<typename T>
-auto in_state(T expected) {
-    return [expected = std::move(expected)](ResRO<T> state) {
-        return *state == expected;
     };
 }
 

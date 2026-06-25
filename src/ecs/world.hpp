@@ -20,6 +20,12 @@ namespace fei {
 class World;
 
 template<typename T>
+class State;
+
+template<typename T>
+class NextState;
+
+template<typename T>
 concept FromWorld = std::constructible_from<T, World&>;
 
 class World {
@@ -137,6 +143,11 @@ class World {
         T resource(*this);
         return add_resource(std::move(resource));
     }
+
+    template<typename T>
+    State<std::remove_cvref_t<T>>& init_state(T&& state);
+
+    void run_state_transitions();
 
     template<typename T>
     bool has_resource() const {
