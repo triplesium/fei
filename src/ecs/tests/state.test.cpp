@@ -25,6 +25,30 @@ void request_paused(ResRW<NextState<GameplayState>> next_state) {
     next_state->set(GameplayState::Paused);
 }
 
+void request_loading(ResRW<NextState<GameplayState>> next_state) {
+    next_state->set(GameplayState::Loading);
+}
+
+void exit_loading(
+    ResRO<State<GameplayState>> state,
+    ResRW<ScheduleTrace> trace
+) {
+    trace->entries.push_back(
+        state->get() == GameplayState::Loading ? "exit:loading:old" :
+                                                 "exit:loading:new"
+    );
+}
+
+void enter_playing(
+    ResRO<State<GameplayState>> state,
+    ResRW<ScheduleTrace> trace
+) {
+    trace->entries.push_back(
+        state->get() == GameplayState::Playing ? "enter:playing:new" :
+                                                 "enter:playing:old"
+    );
+}
+
 } // namespace
 
 TEST_CASE("ECS in_state conditions read the current state", "[ecs][state]") {
@@ -98,6 +122,60 @@ TEST_CASE("ECS world initializes state transition schedules", "[ecs][state]") {
 
     REQUIRE(
         world.resource<State<GameplayState>>().get() == GameplayState::Playing
+    );
+    REQUIRE_FALSE(world.resource<NextState<GameplayState>>().has_value());
+}
+
+TEST_CASE(
+    "ECS state transitions run enter and exit schedules",
+    "[ecs][state]"
+) {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<ScheduleTrace>();
+    Registry::instance().register_type<State<GameplayState>>();
+    Registry::instance().register_type<NextState<GameplayState>>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(ScheduleTrace {});
+    world.add_resource(State<GameplayState> {GameplayState::Loading});
+    world.add_resource(NextState<GameplayState> {});
+    world.add_systems(on_exit(GameplayState::Loading), exit_loading);
+    world.add_systems(on_enter(GameplayState::Playing), enter_playing);
+    world.sort_systems();
+
+    world.run_system_once(request_playing);
+    world.run_system_once(apply_state_transition<GameplayState>);
+
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"exit:loading:old", "enter:playing:new"}
+    );
+    REQUIRE(
+        world.resource<State<GameplayState>>().get() == GameplayState::Playing
+    );
+}
+
+TEST_CASE("ECS state transitions skip unchanged states", "[ecs][state]") {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<ScheduleTrace>();
+    Registry::instance().register_type<State<GameplayState>>();
+    Registry::instance().register_type<NextState<GameplayState>>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(ScheduleTrace {});
+    world.add_resource(State<GameplayState> {GameplayState::Loading});
+    world.add_resource(NextState<GameplayState> {});
+    world.add_systems(on_exit(GameplayState::Loading), exit_loading);
+    world.sort_systems();
+
+    world.run_system_once(request_loading);
+    world.run_system_once(apply_state_transition<GameplayState>);
+
+    REQUIRE(world.resource<ScheduleTrace>().entries.empty());
+    REQUIRE(
+        world.resource<State<GameplayState>>().get() == GameplayState::Loading
     );
     REQUIRE_FALSE(world.resource<NextState<GameplayState>>().has_value());
 }

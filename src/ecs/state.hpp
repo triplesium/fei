@@ -6,6 +6,8 @@
 #include "refl/type.hpp"
 
 #include <concepts>
+#include <cstdint>
+#include <functional>
 #include <type_traits>
 #include <utility>
 
@@ -21,7 +23,57 @@ template<typename T>
 class NextState;
 
 template<typename T>
+concept HashableStateValue = std::is_enum_v<std::remove_cvref_t<T>> ||
+                             requires(const std::remove_cvref_t<T>& value) {
+                                 {
+                                     std::hash<std::remove_cvref_t<T>> {}(value)
+                                 } -> std::convertible_to<std::size_t>;
+                             };
+
+template<typename T>
+concept StateValue =
+    std::equality_comparable<std::remove_cvref_t<T>> && HashableStateValue<T>;
+
+namespace detail {
+
+inline std::size_t hash_combine(std::size_t seed, std::size_t value) {
+    return seed ^ (value + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2));
+}
+
+template<StateValue T>
+std::size_t hash_state_value(const T& state) {
+    using StateType = std::remove_cvref_t<T>;
+    if constexpr (std::is_enum_v<StateType>) {
+        using Underlying = std::underlying_type_t<StateType>;
+        return std::hash<Underlying> {}(static_cast<Underlying>(state));
+    } else {
+        return std::hash<StateType> {}(state);
+    }
+}
+
+template<StateValue T>
+ScheduleId state_schedule_id(std::uint64_t schedule_kind, const T& state) {
+    auto seed = static_cast<std::size_t>(schedule_kind);
+    seed = hash_combine(seed, static_cast<std::size_t>(type_id<T>().id()));
+    seed = hash_combine(seed, hash_state_value(state));
+    return seed;
+}
+
+} // namespace detail
+
+template<StateValue T>
+ScheduleId on_enter(const T& state) {
+    return detail::state_schedule_id(stable_type_hash("fei::OnEnter"), state);
+}
+
+template<StateValue T>
+ScheduleId on_exit(const T& state) {
+    return detail::state_schedule_id(stable_type_hash("fei::OnExit"), state);
+}
+
+template<StateValue T>
 void apply_state_transition(
+    WorldRef world,
     ResRW<State<T>> state,
     ResRW<NextState<T>> next_state
 );
@@ -46,8 +98,9 @@ class State {
 
     void set(T state) { m_state = std::move(state); }
 
-    template<typename U>
+    template<StateValue U>
     friend void apply_state_transition(
+        WorldRef world,
         ResRW<State<U>> state,
         ResRW<NextState<U>> next_state
     );
@@ -80,15 +133,26 @@ class NextState {
     Optional<T> m_state;
 };
 
-template<typename T>
+template<StateValue T>
 void apply_state_transition(
+    WorldRef world,
     ResRW<State<T>> state,
     ResRW<NextState<T>> next_state
 ) {
     auto pending = next_state->take();
-    if (pending) {
-        state->set(std::move(*pending));
+    if (!pending) {
+        return;
     }
+
+    T old_state = state->get();
+    T new_state = std::move(*pending);
+    if (old_state == new_state) {
+        return;
+    }
+
+    world->run_schedule(on_exit(old_state));
+    state->set(std::move(new_state));
+    world->run_schedule(on_enter(state->get()));
 }
 
 template<typename T>
@@ -103,22 +167,23 @@ auto in_state(T&& expected) {
 
 template<typename T>
 State<std::remove_cvref_t<T>>& World::init_state(T&& state) {
-    using StateValue = std::remove_cvref_t<T>;
-    bool already_initialized = has_resource<State<StateValue>>() &&
-                               has_resource<NextState<StateValue>>();
+    using StateType = std::remove_cvref_t<T>;
+    static_assert(
+        fei::StateValue<StateType>,
+        "State values must be equality comparable and hashable"
+    );
+    bool already_initialized = has_resource<State<StateType>>() &&
+                               has_resource<NextState<StateType>>();
 
     auto& current_state =
-        add_resource(State<StateValue> {std::forward<T>(state)});
-    add_resource(NextState<StateValue> {});
+        add_resource(State<StateType> {std::forward<T>(state)});
+    add_resource(NextState<StateType> {});
     if (!has_resource<CommandsQueue>()) {
         add_resource(CommandsQueue {});
     }
 
     if (!already_initialized) {
-        add_systems(
-            StateTransitionSchedule,
-            apply_state_transition<StateValue>
-        );
+        add_systems(StateTransitionSchedule, apply_state_transition<StateType>);
     }
 
     return current_state;
