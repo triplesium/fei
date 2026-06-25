@@ -355,9 +355,10 @@ class Assets {
         return load_error(handle.id());
     }
 
-    AssetLoader<T>* loader() const { return m_loader.get(); }
+    AssetLoader<T>* loader() { return m_loader.get(); }
+    const AssetLoader<T>* loader() const { return m_loader.get(); }
 
-    std::shared_ptr<AssetsState<T>> state() const { return m_state; }
+    std::shared_ptr<AssetsState<T>> state() { return m_state; }
 
     std::size_t unload_unused() {
         std::vector<AssetId> unused;

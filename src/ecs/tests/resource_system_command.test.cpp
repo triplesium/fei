@@ -2,9 +2,18 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <string>
+#include <type_traits>
+#include <utility>
 
 using namespace fei;
 using namespace fei::ecs_test;
+
+static_assert(std::is_same_v<
+              decltype(std::declval<World&>().resource<GameConfig>()),
+              GameConfig&>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const World&>().resource<GameConfig>()),
+              const GameConfig&>);
 
 TEST_CASE("ECS manages world resources", "[ecs][resource]") {
     Registry::instance().register_type<GameConfig>();

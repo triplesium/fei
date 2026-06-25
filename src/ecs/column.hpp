@@ -38,6 +38,7 @@ class Column {
 
     void set(uint32_t row, Ref ref);
     void push_back(Ref ref);
+    Ref get(uint32_t row);
     Ref get(uint32_t row) const;
     void swap_remove(uint32_t row);
     void clear();

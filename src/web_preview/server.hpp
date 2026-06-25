@@ -27,10 +27,14 @@ class WebPreviewServer {
     void stop();
 
     const WebPreviewConfig& config() const { return m_config; }
-    std::shared_ptr<WebPreviewFrameCache> frame_cache() const {
+    std::shared_ptr<WebPreviewFrameCache> frame_cache() {
         return m_frame_cache;
     }
-    std::shared_ptr<WebPreviewInput> input() const { return m_input; }
+    std::shared_ptr<const WebPreviewFrameCache> frame_cache() const {
+        return m_frame_cache;
+    }
+    std::shared_ptr<WebPreviewInput> input() { return m_input; }
+    std::shared_ptr<const WebPreviewInput> input() const { return m_input; }
     bool can_accept_frame() const;
     bool submit_frame(WebPreviewEncodeJob job);
 

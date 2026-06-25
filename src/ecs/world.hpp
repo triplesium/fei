@@ -57,10 +57,15 @@ class World {
     bool has_component(Entity entity) const {
         return has_component(entity, type_id<T>());
     }
+    Ref get_component(Entity entity, TypeId type_id);
     Ref get_component(Entity entity, TypeId type_id) const;
     template<typename T>
-    T& get_component(Entity entity) const {
+    T& get_component(Entity entity) {
         return get_component(entity, type_id<T>()).template get<T>();
+    }
+    template<typename T>
+    const T& get_component(Entity entity) const {
+        return get_component(entity, type_id<T>()).template get_const<T>();
     }
 
     bool has_entity(Entity entity) const { return m_entities.contains(entity); }
@@ -139,16 +144,33 @@ class World {
     }
 
     template<typename T>
-    T& resource() const {
-        auto ret = m_resources.get_mut(type_id<T>());
+    T& resource() {
+        auto ret = m_resources.get(type_id<T>());
         if (!ret) {
             fatal("Resource of type {} not found", type_name<T>());
         }
         return ret.template get<T>();
     }
 
+    template<typename T>
+    const T& resource() const {
+        auto ret = m_resources.get(type_id<T>());
+        if (!ret) {
+            fatal("Resource of type {} not found", type_name<T>());
+        }
+        return ret.template get_const<T>();
+    }
+
+    Ref resource(TypeId type_id) {
+        auto ret = m_resources.get(type_id);
+        if (!ret) {
+            fatal("Resource with type id {} not found", type_id.id());
+        }
+        return ret;
+    }
+
     Ref resource(TypeId type_id) const {
-        auto ret = m_resources.get_mut(type_id);
+        auto ret = m_resources.get(type_id);
         if (!ret) {
             fatal("Resource with type id {} not found", type_id.id());
         }
@@ -160,6 +182,7 @@ class World {
         FunctionSystem(std::forward<F>(func)).run(*this);
     }
 
+    Archetypes& archetypes() { return m_archetypes; }
     const Archetypes& archetypes() const { return m_archetypes; }
 
   private:

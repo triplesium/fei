@@ -66,7 +66,7 @@ AssetLoadRequests::operator=(AssetLoadRequests&& other) noexcept {
     return *this;
 }
 
-std::shared_ptr<AssetLoadRequestSender> AssetLoadRequests::sender() const {
+std::shared_ptr<AssetLoadRequestSender> AssetLoadRequests::sender() {
     return m_sender;
 }
 

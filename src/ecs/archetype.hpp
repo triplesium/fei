@@ -84,6 +84,13 @@ class Archetype {
         return remove_row(row);
     }
 
+    Ref get_component(TypeId type_id, std::size_t row) {
+        if (!m_columns.contains(type_id)) {
+            return nullptr;
+        }
+        return m_columns.at(type_id).get(static_cast<uint32_t>(row));
+    }
+
     Ref get_component(TypeId type_id, std::size_t row) const {
         if (!m_columns.contains(type_id)) {
             return nullptr;

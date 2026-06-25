@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <type_traits>
 
 using namespace fei;
 namespace {
@@ -34,6 +35,42 @@ struct ServerAsset {
     std::string path;
     Handle<DependencyAsset> dependency;
 };
+
+using ServerAssetLoadFn = decltype(&AssetServer::load<ServerAsset>);
+using ServerAssetTryLoadFn = decltype(&AssetServer::try_load<ServerAsset>);
+using ServerAssetLoadAsyncFn = decltype(&AssetServer::load_async<ServerAsset>);
+using ServerAssetTryLoadAsyncFn =
+    decltype(&AssetServer::try_load_async<ServerAsset>);
+
+static_assert(
+    std::is_invocable_v<ServerAssetLoadFn, AssetServer&, const AssetPath&>
+);
+static_assert(
+    !std::
+        is_invocable_v<ServerAssetLoadFn, const AssetServer&, const AssetPath&>
+);
+static_assert(
+    std::is_invocable_v<ServerAssetTryLoadFn, AssetServer&, const AssetPath&>
+);
+static_assert(!std::is_invocable_v<
+              ServerAssetTryLoadFn,
+              const AssetServer&,
+              const AssetPath&>);
+static_assert(
+    std::is_invocable_v<ServerAssetLoadAsyncFn, AssetServer&, const AssetPath&>
+);
+static_assert(!std::is_invocable_v<
+              ServerAssetLoadAsyncFn,
+              const AssetServer&,
+              const AssetPath&>);
+static_assert(std::is_invocable_v<
+              ServerAssetTryLoadAsyncFn,
+              AssetServer&,
+              const AssetPath&>);
+static_assert(!std::is_invocable_v<
+              ServerAssetTryLoadAsyncFn,
+              const AssetServer&,
+              const AssetPath&>);
 
 class MemorySource : public AssetSource {
   private:

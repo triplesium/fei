@@ -61,10 +61,10 @@ class LoadContext {
 
 class SyncLoadContext : public LoadContext {
   private:
-    const AssetServer& m_asset_server;
+    AssetServer& m_asset_server;
 
   public:
-    SyncLoadContext(const AssetServer& asset_server, AssetPath asset_path) :
+    SyncLoadContext(AssetServer& asset_server, AssetPath asset_path) :
         LoadContext(std::move(asset_path)), m_asset_server(asset_server) {}
 
     template<typename T>

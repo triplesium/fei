@@ -59,7 +59,7 @@ class AssetLoadRequests {
     AssetLoadRequests(AssetLoadRequests&& other) noexcept;
     AssetLoadRequests& operator=(AssetLoadRequests&& other) noexcept;
 
-    std::shared_ptr<AssetLoadRequestSender> sender() const;
+    std::shared_ptr<AssetLoadRequestSender> sender();
 
     template<typename T>
     Result<Handle<T>, AssetLoadError> try_load(const AssetPath& path);

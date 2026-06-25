@@ -16,6 +16,11 @@
 
 namespace fei {
 
+// GraphicsDevice is intentionally worker-callable through
+// ResRO<GraphicsDevice>. Implementations must keep const entry points safe for
+// worker use by doing CPU-side recording/queueing there and running backend
+// context work during flush() or another documented context-thread path. See
+// docs/ecs.md.
 class GraphicsDevice {
   public:
     virtual ~GraphicsDevice() = default;

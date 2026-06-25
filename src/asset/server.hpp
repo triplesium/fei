@@ -91,7 +91,7 @@ class AssetServer {
     }
 
     template<typename T>
-    Result<Handle<T>, AssetLoadError> try_load(const AssetPath& path) const {
+    Result<Handle<T>, AssetLoadError> try_load(const AssetPath& path) {
         if (!m_app->has_resource<Assets<T>>()) {
             return failure(AssetLoadError(
                 path,
@@ -127,8 +127,7 @@ class AssetServer {
     }
 
     template<typename T>
-    Result<Handle<T>, AssetLoadError>
-    try_load_async(const AssetPath& path) const {
+    Result<Handle<T>, AssetLoadError> try_load_async(const AssetPath& path) {
         if (!m_app->has_resource<Assets<T>>()) {
             return failure(AssetLoadError(
                 path,
@@ -251,7 +250,7 @@ class AssetServer {
     }
 
     template<typename T>
-    Handle<T> load(const AssetPath& path) const {
+    Handle<T> load(const AssetPath& path) {
         auto result = try_load<T>(path);
         if (!result) {
             fatal(
@@ -264,7 +263,7 @@ class AssetServer {
     }
 
     template<typename T>
-    Handle<T> load_async(const AssetPath& path) const {
+    Handle<T> load_async(const AssetPath& path) {
         auto result = try_load_async<T>(path);
         if (!result) {
             fatal(

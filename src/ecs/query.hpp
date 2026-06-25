@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <tuple>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace fei {
@@ -19,7 +20,7 @@ struct QueryData {
     static bool match(const Archetype& archetype) {
         return archetype.has_component(type_id<T>());
     }
-    static T& get(const Archetype& archetype, std::size_t index) {
+    static decltype(auto) get(Archetype& archetype, std::size_t index) {
         auto ref = archetype.get_component(type_id<T>(), index);
         if constexpr (std::is_const_v<std::remove_reference_t<T>>) {
             return ref.template get_const<T>();
@@ -63,17 +64,17 @@ struct QueryFilter<Without<T>> {
 template<typename... Datas>
 class QueryIter {
   private:
-    const World* m_world;
+    World* m_world;
     const std::vector<ArchetypeId>* m_matching_archetypes;
     std::size_t m_archetype_index {0};
     std::size_t m_entity_index {0};
 
   public:
     using value_type = std::tuple<
-        decltype(QueryData<Datas>::get(std::declval<Archetype>(), 0))...>;
+        decltype(QueryData<Datas>::get(std::declval<Archetype&>(), 0))...>;
 
     QueryIter(
-        const World* world,
+        World* world,
         const std::vector<ArchetypeId>* matching_archetypes,
         bool is_end = false
     ) : m_world(world), m_matching_archetypes(matching_archetypes) {
@@ -86,7 +87,7 @@ class QueryIter {
 
     // Dereference operator returns tuple of component references
     value_type operator*() const {
-        const auto& archetype = m_world->archetypes().get(
+        auto& archetype = m_world->archetypes().get(
             (*m_matching_archetypes)[m_archetype_index]
         );
         return std::tuple_cat(
@@ -112,8 +113,7 @@ class QueryIter {
 
   private:
     template<typename T>
-    auto
-    get_component_tuple(const Archetype& archetype, std::size_t index) const {
+    auto get_component_tuple(Archetype& archetype, std::size_t index) const {
         return std::tuple<decltype(QueryData<T>::get(archetype, index))>(
             QueryData<T>::get(archetype, index)
         );
@@ -143,7 +143,7 @@ class FilteredQuery;
 template<typename... Datas>
 class Query {
   protected:
-    const World* m_world = nullptr;
+    World* m_world = nullptr;
     std::vector<ArchetypeId> m_cached_archetypes;
 
   public:

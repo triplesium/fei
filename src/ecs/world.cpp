@@ -107,13 +107,19 @@ void World::raw_remove_component(Entity entity, TypeId type_id) {
 
 bool World::has_component(Entity entity, TypeId type_id) const {
     auto location = m_entities.get_location(entity);
-    auto archetype = m_archetypes.get(location.archetype_id);
+    const auto& archetype = m_archetypes.get(location.archetype_id);
     return archetype.has_component(type_id);
+}
+
+Ref World::get_component(Entity entity, TypeId type_id) {
+    auto location = m_entities.get_location(entity);
+    auto& archetype = m_archetypes.get(location.archetype_id);
+    return archetype.get_component(type_id, location.row);
 }
 
 Ref World::get_component(Entity entity, TypeId type_id) const {
     auto location = m_entities.get_location(entity);
-    auto& archetype = m_archetypes.get(location.archetype_id);
+    const auto& archetype = m_archetypes.get(location.archetype_id);
     return archetype.get_component(type_id, location.row);
 }
 

@@ -6,6 +6,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <type_traits>
+#include <utility>
 
 using namespace fei;
 
@@ -18,6 +20,15 @@ struct SourceAsset {
 struct PreparedAsset {
     int value {0};
 };
+
+static_assert(std::is_same_v<
+              decltype(std::declval<RenderAssets<PreparedAsset>&>().get(0)),
+              Optional<PreparedAsset&>>);
+static_assert(
+    std::is_same_v<
+        decltype(std::declval<const RenderAssets<PreparedAsset>&>().get(0)),
+        Optional<const PreparedAsset&>>
+);
 
 class DoublingAdapter : public RenderAssetAdapter<SourceAsset, PreparedAsset> {
   public:

@@ -8,6 +8,9 @@
 
 namespace fei {
 
+// Resource params describe scheduler access only. A ResRO<T> system gets a
+// const T&, but T is still responsible for making its const API thread-safe
+// when the resource can be touched by worker threads. See docs/ecs.md.
 template<typename T>
 class ResRO {
   private:
@@ -16,7 +19,7 @@ class ResRO {
   public:
     static ResRO get_param(World& world) {
         ResRO res;
-        res.m_resource = &world.resource<T>();
+        res.m_resource = &static_cast<const World&>(world).resource<T>();
         return res;
     }
 

@@ -76,10 +76,10 @@ class Resources {
         return {};
     }
 
-    Ref get_mut(TypeId type_id) const {
+    Ref get_mut(TypeId type_id) {
         auto it = m_resources.find(type_id);
         if (it != m_resources.end()) {
-            return it->second.ref(const_cast<Val&>(it->second.value));
+            return it->second.ref(it->second.value);
         }
         return {};
     }

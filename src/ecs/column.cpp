@@ -196,9 +196,16 @@ void Column::push_back(Ref ref) {
     }
 }
 
-Ref Column::get(uint32_t row) const {
+Ref Column::get(uint32_t row) {
     FEI_ASSERT(row < m_count);
     void* data_ptr = element_at(m_elements, row);
+    Ref result_ref(data_ptr, m_type_id);
+    return result_ref;
+}
+
+Ref Column::get(uint32_t row) const {
+    FEI_ASSERT(row < m_count);
+    const void* data_ptr = element_at(m_elements, row);
     Ref result_ref(data_ptr, m_type_id);
     return result_ref;
 }

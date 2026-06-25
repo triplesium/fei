@@ -40,7 +40,14 @@ class RenderAssets {
     RenderAssets& operator=(RenderAssets&&) = default;
     ~RenderAssets() = default;
 
-    Optional<T&> get(AssetId id) const {
+    Optional<T&> get(AssetId id) {
+        auto it = m_render_assets.find(id);
+        if (it != m_render_assets.end()) {
+            return *it->second;
+        }
+        return nullopt;
+    }
+    Optional<const T&> get(AssetId id) const {
         auto it = m_render_assets.find(id);
         if (it != m_render_assets.end()) {
             return *it->second;
@@ -48,7 +55,11 @@ class RenderAssets {
         return nullopt;
     }
     template<typename U>
-    Optional<T&> get(Handle<U> handle) const {
+    Optional<T&> get(Handle<U> handle) {
+        return get(handle.id());
+    }
+    template<typename U>
+    Optional<const T&> get(Handle<U> handle) const {
         return get(handle.id());
     }
     void insert(AssetId id, std::unique_ptr<T> asset) {

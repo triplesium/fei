@@ -148,7 +148,8 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
     std::shared_ptr<Framebuffer> main_framebuffer() const override;
     void flush() const override;
 
-    std::shared_ptr<OpenGLDeviceState> state() const { return m_state; }
+    std::shared_ptr<OpenGLDeviceState> state() { return m_state; }
+    std::shared_ptr<const OpenGLDeviceState> state() const { return m_state; }
 
   private:
     void flush_pending_work() const;

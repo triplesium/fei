@@ -2,10 +2,19 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 using namespace fei;
 using namespace fei::ecs_test;
+
+static_assert(std::is_same_v<
+              decltype(std::declval<World&>().get_component<Position>(0)),
+              Position&>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const World&>().get_component<Position>(0)),
+              const Position&>);
 
 TEST_CASE("ECS manages entity lifetime", "[ecs][entity]") {
     register_components();
