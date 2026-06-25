@@ -42,11 +42,21 @@ void prepare_light_view_uniform_buffer(
             0.1f,
             2 * proj_size
         );
-        view_uniform_buffer.uniform = ViewUniform {
+        auto uniform = ViewUniform {
             .clip_from_world = proj * view,
             .view_from_world = view,
             .clip_from_view = proj,
             .world_position = transform.position,
+        };
+        view_uniform_buffer.uniform = uniform;
+        view_uniform_buffer.view = RenderView {
+            .kind = RenderViewKind::DirectionalShadow,
+            .id = ViewId::from_source(entity),
+            .clip_from_world = uniform.clip_from_world,
+            .view_from_world = uniform.view_from_world,
+            .clip_from_view = uniform.clip_from_view,
+            .world_position = uniform.world_position,
+            .frustum = extract_frustum(uniform.clip_from_world),
         };
         device->update_buffer(
             view_uniform_buffer.buffer,

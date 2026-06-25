@@ -17,6 +17,7 @@
 #include "rendering/mesh/mesh_uniform.hpp"
 #include "rendering/plugin.hpp"
 #include "rendering/shader.hpp"
+#include "rendering/visibility.hpp"
 
 #include <memory>
 #include <vector>
@@ -315,17 +316,23 @@ void setup_gbuffer(
 void queue_deferred_prepass_meshes(
     Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
         query_meshes,
-    Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    Query<Entity, MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     ResRW<DeferredPrepassPhase> phase,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<MeshUniforms> mesh_uniforms,
     ResRW<MeshMaterialPipelines> mesh_material_pipelines,
     ResRO<RenderAssets<PreparedMaterial>> materials,
+    ResRO<ViewVisibleEntities> visible_entities,
     ResRW<PipelineCache>
 ) {
     phase->clear();
 
-    auto [mesh_view_resource_set] = query_cameras.first();
+    auto [camera_entity, mesh_view_resource_set] = query_cameras.first();
+    auto visible_meshes =
+        visible_entities->get(ViewId::from_source(camera_entity));
+    if (!visible_meshes) {
+        return;
+    }
 
     queue_mesh_draw_items(
         query_meshes,
@@ -335,7 +342,15 @@ void queue_deferred_prepass_meshes(
         *materials,
         *mesh_uniforms,
         *mesh_material_pipelines,
-        DeferredPipelineSpecializer {}
+        DeferredPipelineSpecializer {},
+        [visible_meshes](
+            Entity entity,
+            const Mesh3d&,
+            const MeshMaterial3d<StandardMaterial>&,
+            const Transform3d&
+        ) {
+            return visible_meshes->contains(entity);
+        }
     );
 }
 

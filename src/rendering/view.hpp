@@ -8,6 +8,7 @@
 #include "graphics/graphics_device.hpp"
 #include "math/matrix.hpp"
 #include "math/vector.hpp"
+#include "rendering/visibility.hpp"
 
 #include <memory>
 
@@ -23,6 +24,7 @@ struct alignas(16) ViewUniform {
 struct ViewUniformBuffer {
     ViewUniform uniform;
     std::shared_ptr<Buffer> buffer;
+    RenderView view;
 };
 
 void init_camera_view_uniform(
@@ -33,7 +35,7 @@ void init_camera_view_uniform(
 );
 
 void prepare_camera_view_uniform(
-    Query<Camera3d, Transform3d, ViewUniformBuffer> query,
+    Query<Entity, Camera3d, Transform3d, ViewUniformBuffer> query,
     ResRO<GraphicsDevice> device
 );
 

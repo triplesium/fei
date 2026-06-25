@@ -111,6 +111,7 @@ struct ShadowMap {
 
 struct ShadowMapPhase {
     struct Pass : RenderPhase<MeshDrawItem> {
+        ViewId view;
         std::shared_ptr<Texture> texture;
     };
 
@@ -321,6 +322,7 @@ inline void queue_shadow_map_meshes(
     ResRO<MeshUniforms> mesh_uniforms,
     ResRW<MeshMaterialPipelines> mesh_material_pipelines,
     ResRO<ShadowMappingResources> shadow_mapping_resources,
+    ResRO<ViewVisibleEntities> visible_entities,
     ResRW<ShadowMapPhase> phase
 ) {
     phase->clear();
@@ -330,13 +332,19 @@ inline void queue_shadow_map_meshes(
         if (!light.shadow_map_enabled) {
             continue;
         }
+        auto light_view_id = ViewId::from_source(light_entity);
+        auto visible_meshes = visible_entities->get(light_view_id);
+        if (!visible_meshes) {
+            continue;
+        }
 
         auto& pass = phase->passes.emplace_back();
+        pass.view = light_view_id;
         pass.texture = shadow_map.texture;
 
         for (auto [entity, mesh, mesh_material, mesh_transform] :
              query_meshes) {
-            if (!mesh.cast_shadow) {
+            if (!mesh.cast_shadow || !visible_meshes->contains(entity)) {
                 continue;
             }
             auto gpu_mesh_opt = gpu_meshes->get(mesh.mesh);

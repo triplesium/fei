@@ -10,6 +10,7 @@
 #include "pbr/skybox.hpp"
 #include "rendering/components.hpp"
 #include "rendering/pipeline_cache.hpp"
+#include "rendering/visibility.hpp"
 
 namespace fei {
 
@@ -18,12 +19,14 @@ namespace {
 void queue_shadow_meshes(
     Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
         query_meshes,
-    Query<DirectionalLight, Transform3d, MeshViewResourceSet> query_lights,
+    Query<Entity, DirectionalLight, Transform3d, MeshViewResourceSet>
+        query_lights,
     ResRW<ShadowPhase> phase,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<MeshUniforms> mesh_uniforms,
     ResRW<MeshMaterialPipelines> mesh_material_pipelines,
     ResRO<RenderAssets<PreparedMaterial>> materials,
+    ResRO<ViewVisibleEntities> visible_entities,
     ResRW<PipelineCache>
 ) {
     phase->clear_shadow_phase();
@@ -34,8 +37,13 @@ void queue_shadow_meshes(
         fei::fatal("Multiple directional lights are not supported yet.");
     }
 
-    auto [light, light_transform, light_view_resource_set] =
+    auto [light_entity, light, light_transform, light_view_resource_set] =
         query_lights.first();
+    auto visible_meshes =
+        visible_entities->get(ViewId::from_source(light_entity));
+    if (!visible_meshes) {
+        return;
+    }
     phase->has_light = true;
 
     queue_mesh_draw_items(
@@ -47,11 +55,13 @@ void queue_shadow_meshes(
         *mesh_uniforms,
         *mesh_material_pipelines,
         PipelineSpecializer {},
-        [](Entity,
-           const Mesh3d& mesh3d,
-           const MeshMaterial3d<StandardMaterial>&,
-           const Transform3d&) {
-            return mesh3d.cast_shadow;
+        [visible_meshes](
+            Entity entity,
+            const Mesh3d& mesh3d,
+            const MeshMaterial3d<StandardMaterial>&,
+            const Transform3d&
+        ) {
+            return mesh3d.cast_shadow && visible_meshes->contains(entity);
         }
     );
 }
@@ -64,12 +74,19 @@ void queue_forward_meshes(
     ResRO<MeshUniforms> mesh_uniforms,
     ResRW<MeshMaterialPipelines> mesh_material_pipelines,
     ResRW<PipelineCache>,
-    Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras
+    Query<Entity, MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    ResRO<ViewVisibleEntities> visible_entities
 ) {
     phase->clear();
 
     // TODO: support multiple cameras
-    auto [mesh_view_resource_set_component] = query_cameras.first();
+    auto [camera_entity, mesh_view_resource_set_component] =
+        query_cameras.first();
+    auto visible_meshes =
+        visible_entities->get(ViewId::from_source(camera_entity));
+    if (!visible_meshes) {
+        return;
+    }
 
     queue_mesh_draw_items(
         query,
@@ -79,7 +96,15 @@ void queue_forward_meshes(
         *materials,
         *mesh_uniforms,
         *mesh_material_pipelines,
-        PipelineSpecializer {}
+        PipelineSpecializer {},
+        [visible_meshes](
+            Entity entity,
+            const Mesh3d&,
+            const MeshMaterial3d<StandardMaterial>&,
+            const Transform3d&
+        ) {
+            return visible_meshes->contains(entity);
+        }
     );
 }
 

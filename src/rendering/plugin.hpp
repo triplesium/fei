@@ -8,6 +8,7 @@ namespace fei {
 struct RenderingSystems {
     struct PrepareAssets : SystemSet<PrepareAssets> {};
     struct PrepareResources : SystemSet<PrepareResources> {};
+    struct CheckVisibility : SystemSet<CheckVisibility> {};
     struct Queue : SystemSet<Queue> {};
     struct PreparePipelines : SystemSet<PreparePipelines> {};
     struct Render : SystemSet<Render> {};

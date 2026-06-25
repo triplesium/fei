@@ -19,6 +19,7 @@
 #include "rendering/shader.hpp"
 #include "rendering/shader_cache.hpp"
 #include "rendering/view.hpp"
+#include "rendering/visibility.hpp"
 #include "window/window.hpp"
 
 #include <GLFW/glfw3.h>
@@ -56,6 +57,7 @@ void RenderingPlugin::setup(App& app) {
            chain(
                RenderingSystems::PrepareAssets(),
                RenderingSystems::PrepareResources(),
+               RenderingSystems::CheckVisibility(),
                RenderingSystems::Queue(),
                RenderingSystems::PreparePipelines(),
                RenderingSystems::Render()
@@ -95,8 +97,13 @@ void RenderingPlugin::setup(App& app) {
         .add_resource<MeshUniforms>()
         .add_systems(
             RenderUpdate,
+            check_mesh_visibility | in_set<RenderingSystems::CheckVisibility>()
+        )
+        .add_systems(
+            RenderUpdate,
             process_pipelines | in_set<RenderingSystems::PreparePipelines>()
         )
+        .add_resource<ViewVisibleEntities>()
         .add_systems(RenderFirst, render_begin)
         .add_systems(RenderLast, chain(flush_graphics_device, render_end));
 }

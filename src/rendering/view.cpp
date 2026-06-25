@@ -24,10 +24,11 @@ void init_camera_view_uniform(
 }
 
 void prepare_camera_view_uniform(
-    Query<Camera3d, Transform3d, ViewUniformBuffer> query,
+    Query<Entity, Camera3d, Transform3d, ViewUniformBuffer> query,
     ResRO<GraphicsDevice> device
 ) {
-    for (auto [camera, transform, view_uniform_buffer_component] : query) {
+    for (auto [entity, camera, transform, view_uniform_buffer_component] :
+         query) {
         auto view = look_at(
             transform.position,
             transform.position + transform.forward(),
@@ -39,11 +40,21 @@ void prepare_camera_view_uniform(
             camera.near_plane,
             camera.far_plane
         );
-        view_uniform_buffer_component.uniform = ViewUniform {
+        auto uniform = ViewUniform {
             .clip_from_world = projection * view,
             .view_from_world = view,
             .clip_from_view = projection,
             .world_position = transform.position,
+        };
+        view_uniform_buffer_component.uniform = uniform;
+        view_uniform_buffer_component.view = RenderView {
+            .kind = RenderViewKind::Camera,
+            .id = ViewId::from_source(entity),
+            .clip_from_world = uniform.clip_from_world,
+            .view_from_world = uniform.view_from_world,
+            .clip_from_view = uniform.clip_from_view,
+            .world_position = uniform.world_position,
+            .frustum = extract_frustum(uniform.clip_from_world),
         };
         device->update_buffer(
             view_uniform_buffer_component.buffer,
