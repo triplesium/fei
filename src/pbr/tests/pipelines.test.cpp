@@ -1,7 +1,6 @@
 #include "pbr/pipelines.hpp"
 
 #include "base/optional.hpp"
-#include "ecs/fwd.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/pipeline.hpp"
 #include "graphics/resource.hpp"
@@ -20,6 +19,8 @@
 
 using namespace fei;
 using namespace fei::rendering_test;
+
+// NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
 
 static_assert(std::is_same_v<
               decltype(std::declval<PreparedMaterial&>().resource_layout()),
@@ -152,10 +153,17 @@ TEST_CASE(
     auto mesh = create_gpu_mesh(RenderPrimitive::Triangles);
     TestPipelineSpecializer specializer {11, CullMode::Back};
 
-    auto first_id = pipelines.get(1, material, mesh, specializer);
-    auto second_id = pipelines.get(2, material, mesh, specializer);
+    auto first_id = pipelines.request(1, material, mesh, specializer);
+    auto second_id = pipelines.request(2, material, mesh, specializer);
 
     REQUIRE(first_id == second_id);
+    auto found_id = pipelines.find(1, material, mesh, specializer);
+    REQUIRE(found_id);
+    REQUIRE(*found_id == first_id);
+    REQUIRE(device.render_pipeline_descriptions.empty());
+
+    pipeline_cache.process_queued_pipelines();
+
     REQUIRE(device.render_pipeline_descriptions.size() == 1);
     CHECK(
         device.render_pipeline_descriptions[0].render_primitive ==
@@ -180,13 +188,13 @@ TEST_CASE(
     auto material = create_material(device, create_layout(device));
     TestPipelineSpecializer specializer {11, CullMode::Back};
 
-    auto triangle_id = pipelines.get(
+    auto triangle_id = pipelines.request(
         1,
         material,
         create_gpu_mesh(RenderPrimitive::Triangles),
         specializer
     );
-    auto line_id = pipelines.get(
+    auto line_id = pipelines.request(
         2,
         material,
         create_gpu_mesh(RenderPrimitive::Lines),
@@ -194,6 +202,10 @@ TEST_CASE(
     );
 
     REQUIRE(triangle_id != line_id);
+    REQUIRE(device.render_pipeline_descriptions.empty());
+
+    pipeline_cache.process_queued_pipelines();
+
     REQUIRE(device.render_pipeline_descriptions.size() == 2);
     CHECK(
         device.render_pipeline_descriptions[0].render_primitive ==
@@ -222,13 +234,13 @@ TEST_CASE(
     auto material = create_material(device, create_layout(device));
     auto mesh = create_gpu_mesh(RenderPrimitive::Triangles);
 
-    auto back_id = pipelines.get(
+    auto back_id = pipelines.request(
         1,
         material,
         mesh,
         TestPipelineSpecializer {11, CullMode::Back}
     );
-    auto front_id = pipelines.get(
+    auto front_id = pipelines.request(
         2,
         material,
         mesh,
@@ -236,6 +248,10 @@ TEST_CASE(
     );
 
     REQUIRE(back_id != front_id);
+    REQUIRE(device.render_pipeline_descriptions.empty());
+
+    pipeline_cache.process_queued_pipelines();
+
     REQUIRE(device.render_pipeline_descriptions.size() == 2);
     CHECK(
         device.render_pipeline_descriptions[0].rasterizer_state.cull_mode ==
@@ -246,3 +262,29 @@ TEST_CASE(
         CullMode::Front
     );
 }
+
+TEST_CASE(
+    "MeshMaterialPipelines find does not request missing pipelines",
+    "[pbr][pipelines]"
+) {
+    FakeGraphicsDevice device;
+    MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
+    MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
+    PipelineCache pipeline_cache(device);
+    auto pipelines = create_mesh_material_pipelines(
+        mesh_view_layout,
+        mesh_uniforms,
+        pipeline_cache
+    );
+
+    auto material = create_material(device, create_layout(device));
+    auto mesh = create_gpu_mesh(RenderPrimitive::Triangles);
+    TestPipelineSpecializer specializer {11, CullMode::Back};
+
+    CHECK(pipelines.find(1, material, mesh, specializer) == nullopt);
+    pipeline_cache.process_queued_pipelines();
+
+    CHECK(device.render_pipeline_descriptions.empty());
+}
+
+// NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)

@@ -24,11 +24,13 @@
 #include "rendering/mesh/mesh_uniform.hpp"
 #include "rendering/pipeline_cache.hpp"
 #include "rendering/render_asset.hpp"
+#include "rendering/render_phase.hpp"
 #include "rendering/view.hpp"
 
 #include <cmath>
 #include <cstddef>
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace fei {
@@ -103,6 +105,18 @@ struct BlurResources {
 
 struct ShadowMap {
     std::shared_ptr<Texture> texture;
+    std::shared_ptr<ResourceSet> horizontal_blur_set;
+    std::shared_ptr<ResourceSet> vertical_blur_set;
+};
+
+struct ShadowMapPhase {
+    struct Pass : RenderPhase<MeshDrawItem> {
+        std::shared_ptr<Texture> texture;
+    };
+
+    std::vector<Pass> passes;
+
+    void clear() { passes.clear(); }
 };
 
 struct alignas(16) LightUniform {
@@ -245,6 +259,7 @@ inline void setup_shadow_map(
     Query<Entity, DirectionalLight, Transform3d>::Filter<Without<ShadowMap>>
         query_light,
     ResRO<GraphicsDevice> device,
+    ResRO<BlurResources> blur_resources,
     Commands commands
 ) {
     for (auto [entity, light, transform] : query_light) {
@@ -270,34 +285,109 @@ inline void setup_shadow_map(
         commands.entity(entity).add(
             ShadowMap {
                 .texture = shadow_map_texture,
+                .horizontal_blur_set = device->create_resource_set(
+                    ResourceSetDescription {
+                        .layout = blur_resources->resource_layout,
+                        .resources =
+                            {
+                                blur_resources->uniform_buffer,
+                                shadow_map_texture,
+                                blur_resources->sampler,
+                            },
+                    }
+                ),
+                .vertical_blur_set = device->create_resource_set(
+                    ResourceSetDescription {
+                        .layout = blur_resources->resource_layout,
+                        .resources = {
+                            blur_resources->uniform_buffer,
+                            blur_resources->intermediate_texture,
+                            blur_resources->sampler,
+                        },
+                    }
+                ),
             }
         );
     }
 }
 
-inline void render_shadow_map(
+inline void queue_shadow_map_meshes(
     Query<Entity, DirectionalLight, Transform3d, MeshViewResourceSet, ShadowMap>
         query_light,
     Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
         query_meshes,
-    ResRO<GraphicsDevice> device,
-    ResRW<PipelineCache> pipeline_cache,
     ResRO<RenderAssets<PreparedMaterial>> materials,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<MeshUniforms> mesh_uniforms,
     ResRW<MeshMaterialPipelines> mesh_material_pipelines,
-    ResRW<ShadowMappingResources> shadow_mapping_resources
+    ResRO<ShadowMappingResources> shadow_mapping_resources,
+    ResRW<ShadowMapPhase> phase
 ) {
-    auto command_buffer = device->create_command_buffer();
-    command_buffer->begin();
+    phase->clear();
+
     for (auto [light_entity, light, transform, view_resource_set, shadow_map] :
          query_light) {
+        if (!light.shadow_map_enabled) {
+            continue;
+        }
+
+        auto& pass = phase->passes.emplace_back();
+        pass.texture = shadow_map.texture;
+
+        for (auto [entity, mesh, mesh_material, mesh_transform] :
+             query_meshes) {
+            if (!mesh.cast_shadow) {
+                continue;
+            }
+            auto gpu_mesh_opt = gpu_meshes->get(mesh.mesh);
+            auto material_opt = materials->get(mesh_material.material);
+            auto mesh_uniform_it = mesh_uniforms->entries.find(entity);
+            if (!gpu_mesh_opt || !material_opt ||
+                mesh_uniform_it == mesh_uniforms->entries.end()) {
+                continue;
+            }
+
+            auto& gpu_mesh = *gpu_mesh_opt;
+            auto& material = *material_opt;
+            auto pipeline_id = mesh_material_pipelines->request(
+                entity,
+                material,
+                gpu_mesh,
+                shadow_mapping_resources->pipeline_specializer
+            );
+            pass.items.push_back(make_mesh_draw_item(
+                entity,
+                pipeline_id,
+                view_resource_set.resource_set,
+                mesh_uniform_it->second.resource_set,
+                material.resource_set(),
+                gpu_mesh
+            ));
+        }
+
+        sort_by_pipeline(pass);
+    }
+}
+
+inline void render_shadow_map(
+    ResRO<ShadowMapPhase> phase,
+    ResRO<GraphicsDevice> device,
+    ResRO<PipelineCache> pipeline_cache,
+    ResRW<ShadowMappingResources> shadow_mapping_resources
+) {
+    if (phase->passes.empty()) {
+        return;
+    }
+
+    auto command_buffer = device->create_command_buffer();
+    command_buffer->begin();
+    for (const auto& pass : phase->passes) {
         command_buffer->begin_render_pass(
             RenderPassDescription {
                 .color_attachments =
                     {
                         RenderPassColorAttachment {
-                            .texture = shadow_map.texture,
+                            .texture = pass.texture,
                             .load_op = LoadOp::Clear,
                             .clear_color = Color4F {0.0f, 0.0f, 0.0f, 0.0f},
                         },
@@ -311,54 +401,11 @@ inline void render_shadow_map(
                 },
             }
         );
-        command_buffer->set_viewport(
-            0,
-            0,
-            shadow_map.texture->width(),
-            shadow_map.texture->height()
-        );
+        command_buffer
+            ->set_viewport(0, 0, pass.texture->width(), pass.texture->height());
 
-        for (auto [entity, mesh, mesh_material, mesh_transform] :
-             query_meshes) {
-            if (!mesh.cast_shadow) {
-                continue;
-            }
-            auto gpu_mesh_opt = gpu_meshes->get(mesh.mesh);
-            auto material_opt = materials->get(mesh_material.material);
-            if (!gpu_mesh_opt || !material_opt) {
-                continue;
-            }
-            auto& gpu_mesh = *gpu_mesh_opt;
-            auto& material = *material_opt;
-            auto pipeline_id = mesh_material_pipelines->get(
-                entity,
-                material,
-                gpu_mesh,
-                shadow_mapping_resources->pipeline_specializer
-            );
-            auto pipeline = pipeline_cache->get_render_pipeline(pipeline_id);
-            if (!pipeline) {
-                continue;
-            }
-            command_buffer->set_render_pipeline(pipeline);
-            command_buffer->set_resource_set(0, view_resource_set.resource_set);
-            command_buffer->set_resource_set(
-                1,
-                mesh_uniforms->entries.at(entity).resource_set
-            );
-            command_buffer->set_resource_set(2, material.resource_set());
-            command_buffer->set_vertex_buffer(gpu_mesh.vertex_buffer());
-            if (auto index_buffer = gpu_mesh.index_buffer()) {
-                command_buffer->set_index_buffer(
-                    *index_buffer,
-                    IndexFormat::Uint32
-                );
-                command_buffer->draw_indexed(
-                    gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
-                );
-            } else {
-                command_buffer->draw(0, gpu_mesh.vertex_count());
-            }
+        for (const auto& item : pass.items) {
+            draw_mesh_item(*command_buffer, *pipeline_cache, item);
         }
         command_buffer->end_render_pass();
     }
@@ -369,7 +416,7 @@ inline void render_shadow_map(
 inline void blur_shadow_map(
     Query<ShadowMap> query_shadow_maps,
     ResRO<GraphicsDevice> device,
-    ResRW<BlurResources> blur_resources,
+    ResRO<BlurResources> blur_resources,
     ResRO<FullscreenQuad> fullscreen_quad_resource,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes
 ) {
@@ -385,6 +432,10 @@ inline void blur_shadow_map(
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
     for (auto [shadow_map] : query_shadow_maps) {
+        if (!shadow_map.horizontal_blur_set || !shadow_map.vertical_blur_set) {
+            continue;
+        }
+
         // Horizontal blur
         command_buffer->begin_render_pass(
             RenderPassDescription {
@@ -417,18 +468,8 @@ inline void blur_shadow_map(
             &horizontal_blur_uniform,
             sizeof(BlurUniform)
         );
-        auto horizontal_blur_resource_set = device->create_resource_set(
-            ResourceSetDescription {
-                .layout = blur_resources->resource_layout,
-                .resources = {
-                    blur_resources->uniform_buffer,
-                    shadow_map.texture,
-                    blur_resources->sampler,
-                },
-            }
-        );
         command_buffer->set_render_pipeline(blur_resources->pipeline);
-        command_buffer->set_resource_set(0, horizontal_blur_resource_set);
+        command_buffer->set_resource_set(0, shadow_map.horizontal_blur_set);
         // Draw fullscreen quad
         command_buffer->set_vertex_buffer(quad_mesh.vertex_buffer());
         command_buffer->set_index_buffer(
@@ -472,18 +513,8 @@ inline void blur_shadow_map(
             &vertical_blur_uniform,
             sizeof(BlurUniform)
         );
-        auto vertical_blur_resource_set = device->create_resource_set(
-            ResourceSetDescription {
-                .layout = blur_resources->resource_layout,
-                .resources = {
-                    blur_resources->uniform_buffer,
-                    blur_resources->intermediate_texture,
-                    blur_resources->sampler,
-                },
-            }
-        );
         command_buffer->set_render_pipeline(blur_resources->pipeline);
-        command_buffer->set_resource_set(0, vertical_blur_resource_set);
+        command_buffer->set_resource_set(0, shadow_map.vertical_blur_set);
         // Draw fullscreen quad
         command_buffer->set_vertex_buffer(quad_mesh.vertex_buffer());
         command_buffer->set_index_buffer(

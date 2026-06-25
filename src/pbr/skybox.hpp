@@ -2,7 +2,10 @@
 #include "asset/handle.hpp"
 #include "core/image.hpp"
 #include "graphics/pipeline.hpp"
+#include "graphics/resource.hpp"
+#include "graphics/sampler.hpp"
 #include "graphics/shader_module.hpp"
+#include "math/matrix.hpp"
 #include "rendering/mesh/mesh.hpp"
 
 #include <memory>
@@ -13,6 +16,10 @@ namespace fei {
 struct SkyboxResource {
     Handle<Mesh> mesh;
     std::vector<std::shared_ptr<const ShaderModule>> shader_modules;
+    std::shared_ptr<ResourceLayout> resource_layout;
+    std::shared_ptr<Sampler> sampler;
+    std::shared_ptr<ResourceSet> resource_set;
+    AssetId resource_set_image {invalid_asset_id};
     std::shared_ptr<Pipeline> pipeline;
 };
 

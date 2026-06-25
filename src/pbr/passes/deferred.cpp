@@ -6,6 +6,7 @@
 #include "ecs/system_params.hpp"
 #include "graphics/texture.hpp"
 #include "pbr/material.hpp"
+#include "pbr/mesh_queue.hpp"
 #include "pbr/passes/target.hpp"
 #include "pbr/pipelines.hpp"
 #include "pbr/postprocess.hpp"
@@ -311,18 +312,39 @@ void setup_gbuffer(
     );
 }
 
-void defered_prepass(
+void queue_deferred_prepass_meshes(
     Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
         query_meshes,
     Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
-    ResRW<RenderTarget> target,
+    ResRW<DeferredPrepassPhase> phase,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
-    ResRO<GraphicsDevice> device,
     ResRO<MeshUniforms> mesh_uniforms,
     ResRW<MeshMaterialPipelines> mesh_material_pipelines,
     ResRO<RenderAssets<PreparedMaterial>> materials,
-    ResRW<PipelineCache> pipeline_cache,
-    ResRW<DeferedRenderResources> resources
+    ResRW<PipelineCache>
+) {
+    phase->clear();
+
+    auto [mesh_view_resource_set] = query_cameras.first();
+
+    queue_mesh_draw_items(
+        query_meshes,
+        *phase,
+        mesh_view_resource_set.resource_set,
+        *gpu_meshes,
+        *materials,
+        *mesh_uniforms,
+        *mesh_material_pipelines,
+        DeferredPipelineSpecializer {}
+    );
+}
+
+void defered_prepass(
+    ResRO<DeferredPrepassPhase> phase,
+    ResRO<RenderTarget> target,
+    ResRO<GraphicsDevice> device,
+    ResRO<PipelineCache> pipeline_cache,
+    ResRO<DeferedRenderResources> resources
 ) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -371,49 +393,8 @@ void defered_prepass(
         target->color_texture->width(),
         target->color_texture->height()
     );
-
-    auto [mesh_view_resource_set] = query_cameras.first();
-
-    for (auto [entity, mesh3d, material3d, transform3d] : query_meshes) {
-        auto gpu_mesh_opt = gpu_meshes->get(mesh3d.mesh.id());
-        auto material_opt = materials->get(material3d.material.id());
-        if (!gpu_mesh_opt || !material_opt) {
-            continue;
-        }
-        auto& gpu_mesh = *gpu_mesh_opt;
-        auto& material = *material_opt;
-        auto pipeline_id = mesh_material_pipelines->get(
-            entity,
-            material,
-            gpu_mesh,
-            DeferredPipelineSpecializer {}
-        );
-        auto pipeline = pipeline_cache->get_render_pipeline(pipeline_id);
-        if (!pipeline) {
-            continue;
-        }
-        command_buffer->set_render_pipeline(pipeline);
-        command_buffer->set_resource_set(
-            0,
-            mesh_view_resource_set.resource_set
-        );
-        command_buffer->set_resource_set(
-            1,
-            mesh_uniforms->entries.at(entity).resource_set
-        );
-        command_buffer->set_resource_set(2, material.resource_set());
-        command_buffer->set_vertex_buffer(gpu_mesh.vertex_buffer());
-        if (auto index_buffer = gpu_mesh.index_buffer()) {
-            command_buffer->set_index_buffer(
-                *index_buffer,
-                IndexFormat::Uint32
-            );
-            command_buffer->draw_indexed(
-                gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
-            );
-        } else {
-            command_buffer->draw(0, gpu_mesh.vertex_count());
-        }
+    for (const auto& item : phase->items) {
+        draw_mesh_item(*command_buffer, *pipeline_cache, item);
     }
     command_buffer->end_render_pass();
     command_buffer->end();
@@ -678,11 +659,16 @@ void DeferredRenderPlugin::setup(App& app) {
     app.add_plugins(CubemapPlugin {}, SkyboxPlugin {}, LUTPlugin {})
         .add_resource(DeferedRenderResources {})
         .add_resource(RenderTarget {})
+        .add_resource<DeferredPrepassPhase>()
         .add_systems(
             StartUp,
             all(setup_gbuffer | after(setup_vxgi_lighting),
                 setup_render_target) |
                 after(init_mesh_view_layout)
+        )
+        .add_systems(
+            RenderUpdate,
+            queue_deferred_prepass_meshes | in_set<RenderingSystems::Queue>()
         )
         .add_systems(
             RenderUpdate,

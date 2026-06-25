@@ -39,6 +39,10 @@ void flush_graphics_device(ResRW<GraphicsDevice> device) {
     device->flush();
 }
 
+void process_pipelines(ResRW<PipelineCache> pipeline_cache) {
+    pipeline_cache->process_queued_pipelines();
+}
+
 void render_end(ResRO<Window> win) {
     FEI_PROFILE_SCOPE("Swap Buffers");
     glfwSwapBuffers(win->glfw_window);
@@ -52,6 +56,8 @@ void RenderingPlugin::setup(App& app) {
            chain(
                RenderingSystems::PrepareAssets(),
                RenderingSystems::PrepareResources(),
+               RenderingSystems::Queue(),
+               RenderingSystems::PreparePipelines(),
                RenderingSystems::Render()
            )
     )
@@ -87,6 +93,10 @@ void RenderingPlugin::setup(App& app) {
             ) | in_set<RenderingSystems::PrepareResources>()
         )
         .add_resource<MeshUniforms>()
+        .add_systems(
+            RenderUpdate,
+            process_pipelines | in_set<RenderingSystems::PreparePipelines>()
+        )
         .add_systems(RenderFirst, render_begin)
         .add_systems(RenderLast, chain(flush_graphics_device, render_end));
 }

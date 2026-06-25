@@ -22,6 +22,7 @@ void PbrPlugin::setup(App& app) {
     )
         .add_resource(MeshViewLayout {})
         .add_resource(MeshViewResourceSet {})
+        .add_resource<ShadowMapPhase>()
         .add_resource(MeshMaterialPipelines(
             app.resource<MeshViewLayout>(),
             app.resource<MeshUniforms>(),
@@ -35,12 +36,19 @@ void PbrPlugin::setup(App& app) {
                 init_light_view_uniform_buffer,
                 prepare_light_view_uniform_buffer,
                 prepare_mesh_view_resource_set,
-                setup_shadow_map,
-                render_shadow_map,
-                blur_shadow_map
+                setup_shadow_map
             ) | after(generate_env_maps) |
                 after(prepare_camera_view_uniform) |
                 in_set<RenderingSystems::PrepareResources>()
+        )
+        .add_systems(
+            RenderUpdate,
+            queue_shadow_map_meshes | in_set<RenderingSystems::Queue>()
+        )
+        .add_systems(
+            RenderUpdate,
+            chain(render_shadow_map, blur_shadow_map) |
+                before(inject_radiance) | in_set<RenderingSystems::Render>()
         );
 }
 

@@ -4,10 +4,13 @@
 #include "graphics/texture.hpp"
 #include "pbr/pipeline_specializer.hpp"
 #include "rendering/material.hpp"
+#include "rendering/render_phase.hpp"
 
 #include <memory>
 
 namespace fei {
+
+struct DeferredPrepassPhase : RenderPhase<MeshDrawItem> {};
 
 struct DeferedRenderResources {
     std::shared_ptr<Texture> g_position_ao;

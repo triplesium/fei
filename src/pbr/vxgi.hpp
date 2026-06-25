@@ -94,6 +94,7 @@ struct VxgiVoxelization {
     std::shared_ptr<ResourceSet> resource_set;
     VxgiVoxelizationSpecializer pipeline_specializer;
     Aabb scene_aabb;
+    bool dirty {false};
 };
 
 void setup_vxgi(
@@ -115,6 +116,20 @@ void prepare_vxgi_voxelization(
     ResRO<GraphicsDevice> device
 );
 
+void mark_vxgi_voxelization_dirty(
+    ResRW<VxgiVoxelization> voxelization,
+    EventReader<SceneSpawnedEvent> spawn_events
+);
+
+void queue_vxgi_voxelization_pipelines(
+    Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
+        query_meshes,
+    ResRW<VxgiVoxelization> voxelization,
+    ResRW<MeshMaterialPipelines> pipelines,
+    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
+    ResRO<RenderAssets<PreparedMaterial>> materials
+);
+
 void voxelize_scene(
     Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
         query_meshes,
@@ -125,7 +140,6 @@ void voxelize_scene(
     ResRO<GraphicsDevice> device,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<RenderAssets<PreparedMaterial>> materials,
-    EventReader<SceneSpawnedEvent> spawn_events,
     ResRO<MeshUniforms> mesh_uniforms
 );
 
@@ -157,9 +171,17 @@ struct VxgiGenerateMipmapVolume {
         Vector3 mip_dimension;
         int mip_level {};
     };
+    struct MipEntry {
+        uint32 mip_dimension {};
+        uint32 mip_level {};
+        std::array<std::shared_ptr<TextureView>, 6> dst_views;
+        std::shared_ptr<ResourceSet> resource_set;
+    };
     std::shared_ptr<Pipeline> pipeline;
     std::shared_ptr<ResourceLayout> resource_layout;
     std::shared_ptr<Buffer> uniform_buffer;
+    std::vector<MipEntry> mip_entries;
+    uint32 prepared_resolution {};
 };
 
 void setup_vxgi_generate_mipmap_volume(
@@ -169,9 +191,14 @@ void setup_vxgi_generate_mipmap_volume(
     Commands commands
 );
 
-void generate_mipmap_volume(
-    ResRW<VxgiVolumes> volumes,
+void prepare_vxgi_generate_mipmap_volume(
+    ResRO<VxgiVolumes> volumes,
     ResRW<VxgiGenerateMipmapVolume> generate_mipmap_volume,
+    ResRO<GraphicsDevice> device
+);
+
+void generate_mipmap_volume(
+    ResRO<VxgiGenerateMipmapVolume> generate_mipmap_volume,
     ResRO<GraphicsDevice> device
 );
 
@@ -207,6 +234,8 @@ struct VxgiInjectRadiance {
     std::shared_ptr<Buffer> uniform_buffer;
     std::shared_ptr<ResourceLayout> resource_layout;
     std::shared_ptr<ResourceSet> resource_set;
+    std::shared_ptr<Sampler> shadow_map_sampler;
+    const Texture* resource_set_shadow_map {};
 };
 
 void setup_inject_radiance(
@@ -232,7 +261,7 @@ void inject_radiance(
     ResRO<VxgiVoxelization> voxelization,
     ResRO<VxgiInjectRadiance> inject_radiance,
     ResRO<VxgiGenerateMipmapBase> mipmap_base,
-    ResRW<VxgiGenerateMipmapVolume> mipmap_volume,
+    ResRO<VxgiGenerateMipmapVolume> mipmap_volume,
     ResRO<GraphicsDevice> device
 );
 
@@ -261,7 +290,7 @@ void inject_propagation(
     ResRW<VxgiVolumes> volumes,
     ResRO<VxgiInjectPropagation> inject_propagation,
     ResRO<VxgiGenerateMipmapBase> mipmap_base,
-    ResRW<VxgiGenerateMipmapVolume> mipmap_volume,
+    ResRO<VxgiGenerateMipmapVolume> mipmap_volume,
     ResRO<GraphicsDevice> device
 );
 
@@ -307,6 +336,9 @@ struct VxgiLighting {
     std::shared_ptr<Buffer> uniform_buffer;
     std::shared_ptr<ResourceLayout> resource_layout;
     std::shared_ptr<ResourceSet> resource_set;
+    std::shared_ptr<Sampler> voxel_sampler;
+    std::shared_ptr<Sampler> shadow_map_sampler;
+    const Texture* resource_set_shadow_map {};
 };
 
 void setup_vxgi_lighting(ResRO<GraphicsDevice> device, Commands commands);

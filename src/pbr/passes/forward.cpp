@@ -3,6 +3,7 @@
 #include "graphics/graphics_device.hpp"
 #include "pbr/light.hpp"
 #include "pbr/material.hpp"
+#include "pbr/mesh_queue.hpp"
 #include "pbr/passes/target.hpp"
 #include "pbr/pipeline_specializer.hpp"
 #include "pbr/pipelines.hpp"
@@ -12,18 +13,20 @@
 
 namespace fei {
 
-void shadow_pass(
+namespace {
+
+void queue_shadow_meshes(
     Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d>
         query_meshes,
     Query<DirectionalLight, Transform3d, MeshViewResourceSet> query_lights,
-    ResRW<RenderTarget> target,
+    ResRW<ShadowPhase> phase,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
-    ResRO<GraphicsDevice> device,
     ResRO<MeshUniforms> mesh_uniforms,
     ResRW<MeshMaterialPipelines> mesh_material_pipelines,
     ResRO<RenderAssets<PreparedMaterial>> materials,
-    ResRW<PipelineCache> pipeline_cache
+    ResRW<PipelineCache>
 ) {
+    phase->clear_shadow_phase();
     if (query_lights.empty()) {
         return;
     }
@@ -33,6 +36,62 @@ void shadow_pass(
 
     auto [light, light_transform, light_view_resource_set] =
         query_lights.first();
+    phase->has_light = true;
+
+    queue_mesh_draw_items(
+        query_meshes,
+        *phase,
+        light_view_resource_set.resource_set,
+        *gpu_meshes,
+        *materials,
+        *mesh_uniforms,
+        *mesh_material_pipelines,
+        PipelineSpecializer {},
+        [](Entity,
+           const Mesh3d& mesh3d,
+           const MeshMaterial3d<StandardMaterial>&,
+           const Transform3d&) {
+            return mesh3d.cast_shadow;
+        }
+    );
+}
+
+void queue_forward_meshes(
+    Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d> query,
+    ResRW<ForwardOpaquePhase> phase,
+    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
+    ResRO<RenderAssets<PreparedMaterial>> materials,
+    ResRO<MeshUniforms> mesh_uniforms,
+    ResRW<MeshMaterialPipelines> mesh_material_pipelines,
+    ResRW<PipelineCache>,
+    Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras
+) {
+    phase->clear();
+
+    // TODO: support multiple cameras
+    auto [mesh_view_resource_set_component] = query_cameras.first();
+
+    queue_mesh_draw_items(
+        query,
+        *phase,
+        mesh_view_resource_set_component.resource_set,
+        *gpu_meshes,
+        *materials,
+        *mesh_uniforms,
+        *mesh_material_pipelines,
+        PipelineSpecializer {}
+    );
+}
+
+void shadow_pass(
+    ResRO<ShadowPhase> phase,
+    ResRO<RenderTarget> target,
+    ResRO<GraphicsDevice> device,
+    ResRO<PipelineCache> pipeline_cache
+) {
+    if (!phase->has_light) {
+        return;
+    }
 
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -53,45 +112,8 @@ void shadow_pass(
         target->shadow_map_texture->width(),
         target->shadow_map_texture->height()
     );
-    for (auto [entity, mesh3d, material3d, transform3d] : query_meshes) {
-        if (!mesh3d.cast_shadow) {
-            continue;
-        }
-        auto gpu_mesh_opt = gpu_meshes->get(mesh3d.mesh.id());
-        auto material_opt = materials->get(material3d.material.id());
-        if (!gpu_mesh_opt || !material_opt) {
-            continue;
-        }
-        auto& gpu_mesh = *gpu_mesh_opt;
-        auto pipeline_id =
-            mesh_material_pipelines
-                ->get(entity, *material_opt, gpu_mesh, PipelineSpecializer {});
-        auto pipeline = pipeline_cache->get_render_pipeline(pipeline_id);
-        if (!pipeline) {
-            continue;
-        }
-        command_buffer->set_render_pipeline(pipeline);
-        command_buffer->set_resource_set(
-            0,
-            light_view_resource_set.resource_set
-        );
-        command_buffer->set_resource_set(
-            1,
-            mesh_uniforms->entries.at(entity).resource_set
-        );
-        command_buffer->set_resource_set(2, material_opt->resource_set());
-        command_buffer->set_vertex_buffer(gpu_mesh.vertex_buffer());
-        if (auto index_buffer = gpu_mesh.index_buffer()) {
-            command_buffer->set_index_buffer(
-                *index_buffer,
-                IndexFormat::Uint32
-            );
-            command_buffer->draw_indexed(
-                gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
-            );
-        } else {
-            command_buffer->draw(0, gpu_mesh.vertex_count());
-        }
+    for (const auto& item : phase->items) {
+        draw_mesh_item(*command_buffer, *pipeline_cache, item);
     }
     command_buffer->end_render_pass();
     command_buffer->end();
@@ -99,15 +121,10 @@ void shadow_pass(
 }
 
 void forward_pass(
-    Query<Entity, Mesh3d, MeshMaterial3d<StandardMaterial>, Transform3d> query,
+    ResRO<ForwardOpaquePhase> phase,
     ResRW<RenderTarget> forward_render_resources,
-    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
-    ResRO<RenderAssets<PreparedMaterial>> materials,
     ResRO<GraphicsDevice> device,
-    ResRO<MeshUniforms> mesh_uniforms,
-    ResRW<MeshMaterialPipelines> mesh_material_pipelines,
-    ResRW<PipelineCache> pipeline_cache,
-    Query<MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras
+    ResRO<PipelineCache> pipeline_cache
 ) {
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -136,62 +153,22 @@ void forward_pass(
         forward_render_resources->color_texture->width(),
         forward_render_resources->color_texture->height()
     );
-
-    // TODO: support multiple cameras
-    auto [mesh_view_resource_set_component] = query_cameras.first();
-
-    for (const auto& [entity, mesh3d, material3d, transform3d] : query) {
-        auto gpu_mesh_opt = gpu_meshes->get(mesh3d.mesh.id());
-        auto material_opt = materials->get(material3d.material.id());
-        if (!gpu_mesh_opt || !material_opt) {
-            continue;
-        }
-        auto& gpu_mesh = *gpu_mesh_opt;
-        auto& material = *material_opt;
-        auto pipeline_id =
-            mesh_material_pipelines
-                ->get(entity, material, gpu_mesh, PipelineSpecializer {});
-        auto pipeline = pipeline_cache->get_render_pipeline(pipeline_id);
-        if (!pipeline) {
-            continue;
-        }
-        command_buffer->set_render_pipeline(pipeline);
-        command_buffer->set_resource_set(
-            0,
-            mesh_view_resource_set_component.resource_set
-        );
-        command_buffer->set_resource_set(
-            1,
-            mesh_uniforms->entries.at(entity).resource_set
-        );
-        command_buffer->set_resource_set(2, material.resource_set());
-        command_buffer->set_vertex_buffer(gpu_mesh.vertex_buffer());
-        if (auto index_buffer = gpu_mesh.index_buffer()) {
-            command_buffer->set_index_buffer(
-                *index_buffer,
-                IndexFormat::Uint32
-            );
-            command_buffer->draw_indexed(
-                gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
-            );
-        } else {
-            command_buffer->draw(0, gpu_mesh.vertex_count());
-        }
+    for (const auto& item : phase->items) {
+        draw_mesh_item(*command_buffer, *pipeline_cache, item);
     }
     command_buffer->end_render_pass();
     command_buffer->end();
     device->submit_commands(command_buffer);
 }
 
+} // namespace
+
 void skybox_pass(
     Query<Skybox> query,
     ResRW<RenderTarget> forward_render_resources,
-    ResRW<EquirectToCubemap> equirect_to_cubemap,
     ResRO<GraphicsDevice> device,
-    ResRO<Assets<Image>> images,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<SkyboxResource> skybox_resource,
-    ResRO<MeshViewLayout> mesh_view_layout,
     ResRO<MeshViewResourceSet> mesh_view_resource_set
 ) {
     if (query.empty()) {
@@ -201,23 +178,12 @@ void skybox_pass(
         fei::fatal("Multiple skyboxes are not supported.");
     }
     auto [skybox] = query.first();
-    auto cubemap_texture = equirect_to_cubemap->get_or_create_cubemap(
-        *device,
-        *images,
-        skybox.equirect_map
-    );
     auto gpu_mesh = gpu_meshes->get(skybox_resource->mesh.id());
-    if (!cubemap_texture || !gpu_mesh) {
+    if (!gpu_mesh || !skybox_resource->pipeline ||
+        !skybox_resource->resource_set ||
+        skybox_resource->resource_set_image != skybox.equirect_map.id()) {
         return;
     }
-
-    auto cubemap_sampler = device->create_sampler(
-        SamplerDescription {
-            .address_mode_u = SamplerAddressMode::ClampToEdge,
-            .address_mode_v = SamplerAddressMode::ClampToEdge,
-            .address_mode_w = SamplerAddressMode::ClampToEdge,
-        }
-    );
 
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -238,52 +204,9 @@ void skybox_pass(
         }
     );
 
-    auto layout = device->create_resource_layout(
-        ResourceLayoutDescription {
-            .elements = {
-                {
-                    .binding = 0,
-                    .name = "skybox",
-                    .kind = ResourceKind::TextureReadOnly,
-                    .stages = ShaderStages::Fragment,
-                },
-                {
-                    .binding = 1,
-                    .name = "skybox_sampler",
-                    .kind = ResourceKind::Sampler,
-                    .stages = ShaderStages::Fragment,
-                }
-            },
-        }
-    );
-    auto resource_set = device->create_resource_set(
-        ResourceSetDescription {
-            .layout = layout,
-            .resources = {*cubemap_texture, cubemap_sampler},
-        }
-    );
-
-    auto pipeline = device->create_render_pipeline(
-        RenderPipelineDescription {
-            .depth_stencil_state =
-                DepthStencilStateDescription::DepthOnlyLessEqual,
-            .rasterizer_state = {},
-            .render_primitive = RenderPrimitive::Triangles,
-            .shader_program =
-                ShaderProgramDescription {
-                    .vertex_layouts = {gpu_mesh->vertex_buffer_layout()
-                                           .to_vertex_layout_description()},
-                    .shaders = skybox_resource->shader_modules,
-                },
-            .resource_layouts = {
-                mesh_view_layout->layout,
-                layout,
-            },
-        }
-    );
-    command_buffer->set_render_pipeline(pipeline);
+    command_buffer->set_render_pipeline(skybox_resource->pipeline);
     command_buffer->set_resource_set(0, mesh_view_resource_set->resource_set);
-    command_buffer->set_resource_set(1, resource_set);
+    command_buffer->set_resource_set(1, skybox_resource->resource_set);
     command_buffer->set_vertex_buffer(gpu_mesh->vertex_buffer());
     command_buffer->draw(0, gpu_mesh->vertex_count());
     command_buffer->end_render_pass();
@@ -315,8 +238,15 @@ void blit_pass(
 
 void ForwardRenderPlugin::setup(App& app) {
     app.add_resource<RenderTarget>()
+        .add_resource<ShadowPhase>()
+        .add_resource<ForwardOpaquePhase>()
         .add_plugins(CubemapPlugin {}, SkyboxPlugin {}, LUTPlugin {})
         .add_systems(StartUp, setup_render_target)
+        .add_systems(
+            RenderUpdate,
+            all(queue_shadow_meshes, queue_forward_meshes) |
+                in_set<RenderingSystems::Queue>()
+        )
         .add_systems(
             RenderUpdate,
             chain(shadow_pass, forward_pass, blit_pass) |

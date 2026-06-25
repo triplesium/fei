@@ -48,14 +48,22 @@ std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
     return cubemap_texture;
 }
 
-Optional<std::shared_ptr<Texture>> EquirectToCubemap::get_or_create_cubemap(
+Optional<std::shared_ptr<Texture>>
+EquirectToCubemap::get_cubemap(Handle<Image> equirect_image_handle) const {
+    auto it = m_cubemaps.find(equirect_image_handle.id());
+    if (it != m_cubemaps.end()) {
+        return it->second;
+    }
+    return nullopt;
+}
+
+Optional<std::shared_ptr<Texture>> EquirectToCubemap::prepare_cubemap(
     const GraphicsDevice& device,
     const Assets<Image>& images,
     Handle<Image> equirect_image_handle
 ) {
-    auto it = m_cubemaps.find(equirect_image_handle.id());
-    if (it != m_cubemaps.end()) {
-        return it->second;
+    if (auto cubemap = get_cubemap(equirect_image_handle)) {
+        return cubemap;
     }
     auto equirect_image = images.get(equirect_image_handle);
     if (!equirect_image) {
@@ -78,6 +86,14 @@ Optional<std::shared_ptr<Texture>> EquirectToCubemap::get_or_create_cubemap(
     auto cubemap = convert_equirect_to_cubemap(device, equirect_texture);
     m_cubemaps[equirect_image_handle.id()] = cubemap;
     return cubemap;
+}
+
+Optional<std::shared_ptr<Texture>> EquirectToCubemap::get_or_create_cubemap(
+    const GraphicsDevice& device,
+    const Assets<Image>& images,
+    Handle<Image> equirect_image_handle
+) {
+    return prepare_cubemap(device, images, equirect_image_handle);
 }
 
 void EquirectToCubemap::setup(

@@ -9,7 +9,8 @@ using namespace fei;
 using namespace fei::rendering_test;
 
 TEST_CASE(
-    "PipelineCache stores pipelines created by the graphics device",
+    "PipelineCache requests and processes pipelines through the graphics "
+    "device",
     "[rendering][pipeline-cache]"
 ) {
     FakeGraphicsDevice device;
@@ -19,11 +20,26 @@ TEST_CASE(
     render_description.render_primitive = RenderPrimitive::Triangles;
     ComputePipelineDescription compute_description {};
 
-    auto render_id = cache.queue_render_pipeline(render_description);
-    auto compute_id = cache.queue_compute_pipeline(compute_description);
+    auto render_id = cache.request_render_pipeline(render_description);
+    auto compute_id = cache.request_compute_pipeline(compute_description);
 
     REQUIRE(static_cast<std::uint32_t>(render_id) == 0);
     REQUIRE(static_cast<std::uint32_t>(compute_id) == 0);
+    REQUIRE(device.render_pipeline_descriptions.empty());
+    REQUIRE(device.compute_pipeline_descriptions.empty());
+    REQUIRE(
+        cache.get_render_pipeline_state(render_id) ==
+        CachedPipelineState::Queued
+    );
+    REQUIRE(
+        cache.get_compute_pipeline_state(compute_id) ==
+        CachedPipelineState::Queued
+    );
+    REQUIRE(cache.get_render_pipeline(render_id) == nullptr);
+    REQUIRE(cache.get_compute_pipeline(compute_id) == nullptr);
+
+    cache.process_queued_pipelines();
+
     REQUIRE(device.render_pipeline_descriptions.size() == 1);
     REQUIRE(device.compute_pipeline_descriptions.size() == 1);
     REQUIRE(
@@ -65,10 +81,15 @@ TEST_CASE(
             static_cast<CachedComputePipelineId>(99)
         ) == "Compute pipeline is missing"
     );
+
+    cache.process_queued_pipelines();
+
+    REQUIRE(device.render_pipeline_descriptions.size() == 1);
+    REQUIRE(device.compute_pipeline_descriptions.size() == 1);
 }
 
 TEST_CASE(
-    "PipelineCache marks null pipelines as failed",
+    "PipelineCache marks null pipelines as failed when processing requests",
     "[rendering][pipeline-cache]"
 ) {
     FakeGraphicsDevice device;
@@ -76,9 +97,23 @@ TEST_CASE(
     device.fail_compute_pipeline_creation = true;
     PipelineCache cache(device);
 
-    auto render_id = cache.queue_render_pipeline(RenderPipelineDescription {});
+    auto render_id =
+        cache.request_render_pipeline(RenderPipelineDescription {});
     auto compute_id =
-        cache.queue_compute_pipeline(ComputePipelineDescription {});
+        cache.request_compute_pipeline(ComputePipelineDescription {});
+
+    REQUIRE(device.render_pipeline_descriptions.empty());
+    REQUIRE(device.compute_pipeline_descriptions.empty());
+    REQUIRE(
+        cache.get_render_pipeline_state(render_id) ==
+        CachedPipelineState::Queued
+    );
+    REQUIRE(
+        cache.get_compute_pipeline_state(compute_id) ==
+        CachedPipelineState::Queued
+    );
+
+    cache.process_queued_pipelines();
 
     REQUIRE(device.render_pipeline_descriptions.size() == 1);
     REQUIRE(device.compute_pipeline_descriptions.size() == 1);

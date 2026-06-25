@@ -1,5 +1,6 @@
 #pragma once
 #include "base/hash.hpp"
+#include "base/optional.hpp"
 #include "graphics/pipeline.hpp"
 #include "pbr/mesh_view.hpp"
 #include "pbr/pipeline_specializer.hpp"
@@ -53,6 +54,21 @@ class MeshMaterialPipelines {
     MeshUniforms& m_mesh_uniforms;
     PipelineCache& m_pipeline_cache;
 
+    template<std::derived_from<PipelineSpecializer> SpecializerType>
+    MeshMaterialPipelineKey make_key(
+        const PreparedMaterial& material,
+        const GpuMesh& gpu_mesh,
+        const SpecializerType& specializer
+    ) const {
+        return MeshMaterialPipelineKey {
+            .material_hash = material.hash(),
+            .vertex_layout_hash = gpu_mesh.vertex_layout_hash(),
+            .primitive = gpu_mesh.primitive(),
+            .specializer_type = type_id<SpecializerType>(),
+            .specializer_key = specializer.cache_key(),
+        };
+    }
+
     CachedRenderPipelineId create_pipeline(
         const PreparedMaterial& material,
         const GpuMesh& gpu_mesh,
@@ -77,7 +93,9 @@ class MeshMaterialPipelines {
             },
         };
         specializer.specialize(pipeline_desc, gpu_mesh, material);
-        return m_pipeline_cache.queue_render_pipeline(std::move(pipeline_desc));
+        return m_pipeline_cache.request_render_pipeline(
+            std::move(pipeline_desc)
+        );
     }
 
   public:
@@ -90,19 +108,13 @@ class MeshMaterialPipelines {
         m_pipeline_cache(pipeline_cache) {}
 
     template<std::derived_from<PipelineSpecializer> SpecializerType>
-    CachedRenderPipelineId
-    get(Entity,
+    CachedRenderPipelineId request(
+        Entity,
         const PreparedMaterial& material,
         const GpuMesh& gpu_mesh,
-        const SpecializerType& specializer) {
-        MeshMaterialPipelineKey key {
-            .material_hash = material.hash(),
-            .vertex_layout_hash = gpu_mesh.vertex_layout_hash(),
-            .primitive = gpu_mesh.primitive(),
-            .specializer_type = type_id<SpecializerType>(),
-            .specializer_key = specializer.cache_key(),
-        };
-
+        const SpecializerType& specializer
+    ) {
+        auto key = make_key(material, gpu_mesh, specializer);
         auto it = m_pipelines.find(key);
         if (it != m_pipelines.end()) {
             return it->second;
@@ -110,6 +122,21 @@ class MeshMaterialPipelines {
         auto id = create_pipeline(material, gpu_mesh, specializer);
         m_pipelines[key] = id;
         return id;
+    }
+
+    template<std::derived_from<PipelineSpecializer> SpecializerType>
+    Optional<CachedRenderPipelineId> find(
+        Entity,
+        const PreparedMaterial& material,
+        const GpuMesh& gpu_mesh,
+        const SpecializerType& specializer
+    ) const {
+        auto key = make_key(material, gpu_mesh, specializer);
+        auto it = m_pipelines.find(key);
+        if (it != m_pipelines.end()) {
+            return it->second;
+        }
+        return nullopt;
     }
 };
 
