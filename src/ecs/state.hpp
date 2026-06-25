@@ -52,10 +52,28 @@ std::size_t hash_state_value(const T& state) {
 }
 
 template<StateValue T>
-ScheduleId state_schedule_id(std::uint64_t schedule_kind, const T& state) {
-    auto seed = static_cast<std::size_t>(schedule_kind);
+std::size_t hash_state_schedule_part(std::size_t seed, const T& state) {
     seed = hash_combine(seed, static_cast<std::size_t>(type_id<T>().id()));
     seed = hash_combine(seed, hash_state_value(state));
+    return seed;
+}
+
+template<StateValue T>
+ScheduleId
+single_state_schedule_id(std::uint64_t schedule_kind, const T& state) {
+    auto seed = static_cast<std::size_t>(schedule_kind);
+    return hash_state_schedule_part(seed, state);
+}
+
+template<StateValue T>
+ScheduleId transition_schedule_id(
+    std::uint64_t schedule_kind,
+    const T& from,
+    const T& to
+) {
+    auto seed = static_cast<std::size_t>(schedule_kind);
+    seed = hash_state_schedule_part(seed, from);
+    seed = hash_state_schedule_part(seed, to);
     return seed;
 }
 
@@ -63,12 +81,27 @@ ScheduleId state_schedule_id(std::uint64_t schedule_kind, const T& state) {
 
 template<StateValue T>
 ScheduleId on_enter(const T& state) {
-    return detail::state_schedule_id(stable_type_hash("fei::OnEnter"), state);
+    return detail::single_state_schedule_id(
+        stable_type_hash("fei::OnEnter"),
+        state
+    );
 }
 
 template<StateValue T>
 ScheduleId on_exit(const T& state) {
-    return detail::state_schedule_id(stable_type_hash("fei::OnExit"), state);
+    return detail::single_state_schedule_id(
+        stable_type_hash("fei::OnExit"),
+        state
+    );
+}
+
+template<StateValue T>
+ScheduleId on_transition(const T& from, const T& to) {
+    return detail::transition_schedule_id(
+        stable_type_hash("fei::OnTransition"),
+        from,
+        to
+    );
 }
 
 template<StateValue T>
@@ -152,6 +185,7 @@ void apply_state_transition(
 
     world->run_schedule(on_exit(old_state));
     state->set(std::move(new_state));
+    world->run_schedule(on_transition(old_state, state->get()));
     world->run_schedule(on_enter(state->get()));
 }
 
