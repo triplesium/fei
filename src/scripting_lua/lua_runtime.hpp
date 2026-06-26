@@ -61,6 +61,8 @@ class LuaRuntime : public ScriptRuntime {
     Result<ScriptModuleId, ScriptError>
     load_module(const ScriptSource& source) override;
     Status<ScriptError> unload_module(ScriptModuleId module) override;
+    Result<ScriptModuleManifest, ScriptError>
+    module_manifest(ScriptModuleId module) override;
     Status<ScriptError> call_module_function(
         ScriptModuleId module,
         const std::string& func_name,

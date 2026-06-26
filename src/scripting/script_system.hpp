@@ -1,0 +1,49 @@
+#pragma once
+
+#include "base/result.hpp"
+#include "ecs/system.hpp"
+#include "scripting/runtime.hpp"
+
+#include <string>
+#include <vector>
+
+namespace fei {
+
+class World;
+
+struct ScriptSystemArg {
+    ScriptSystemParamKind kind {ScriptSystemParamKind::Resource};
+    ScriptSystemAccess access {ScriptSystemAccess::Read};
+    TypeId type;
+    std::string name;
+};
+
+class ScriptSystem : public System {
+  private:
+    ScriptRuntime* m_runtime {nullptr};
+    ScriptModuleId m_module {invalid_script_module_id};
+    std::string m_name;
+    std::vector<ScriptSystemArg> m_args;
+    SystemAccess m_access;
+
+  public:
+    ScriptSystem(
+        ScriptRuntime& runtime,
+        ScriptModuleId module,
+        std::string name,
+        std::vector<ScriptSystemArg> args,
+        SystemAccess access = {}
+    );
+
+    void run(World& world) override;
+    const SystemAccess& access() const override { return m_access; }
+};
+
+Result<std::vector<SystemHandle>, ScriptError> register_script_systems(
+    World& world,
+    ScriptRuntime& runtime,
+    ScriptModuleId module,
+    const ScriptModuleManifest& manifest
+);
+
+} // namespace fei

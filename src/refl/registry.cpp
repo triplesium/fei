@@ -63,6 +63,22 @@ Result<Type&, RegistryError> Registry::try_get_type(TypeId id) {
     return it->second;
 }
 
+Result<Type&, RegistryError> Registry::try_get_type(std::string_view name) {
+    for (auto& [_, type] : m_types) {
+        if (type.name() == name) {
+            return type;
+        }
+    }
+    for (auto& [_, type] : m_types) {
+        if (type.stripped_name() == name) {
+            return type;
+        }
+    }
+    return failure(
+        RegistryError::type_not_found(TypeId(name), std::string(name))
+    );
+}
+
 Cls& Registry::add_cls(TypeId id) {
     auto it = m_classes.find(id);
     if (it != m_classes.end()) {

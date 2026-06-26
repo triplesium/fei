@@ -167,6 +167,10 @@ class World {
         return m_resources.contains(type_id<T>());
     }
 
+    bool has_resource(TypeId type_id) const {
+        return m_resources.contains(type_id);
+    }
+
     template<typename T>
     T& resource() {
         auto ret = m_resources.get(type_id<T>());

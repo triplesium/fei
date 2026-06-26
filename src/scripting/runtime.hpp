@@ -1,5 +1,6 @@
 #pragma once
 #include "base/result.hpp"
+#include "ecs/fwd.hpp"
 #include "refl/type.hpp"
 #include "refl/val.hpp"
 
@@ -25,6 +26,35 @@ struct ScriptSource {
     std::string language;
 };
 
+enum class ScriptSystemParamKind {
+    World,
+    Entity,
+    Resource,
+    Component,
+};
+
+enum class ScriptSystemAccess {
+    Read,
+    Write,
+};
+
+struct ScriptSystemParam {
+    std::string name;
+    std::string type;
+    ScriptSystemParamKind kind {ScriptSystemParamKind::Component};
+    ScriptSystemAccess access {ScriptSystemAccess::Read};
+};
+
+struct ScriptSystemManifest {
+    std::string name;
+    std::vector<ScriptSystemParam> params;
+    ScheduleId schedule {};
+};
+
+struct ScriptModuleManifest {
+    std::vector<ScriptSystemManifest> systems;
+};
+
 class ScriptRuntime {
   public:
     virtual ~ScriptRuntime();
@@ -47,6 +77,8 @@ class ScriptRuntime {
     virtual Result<ScriptModuleId, ScriptError>
     load_module(const ScriptSource& source) = 0;
     virtual Status<ScriptError> unload_module(ScriptModuleId module) = 0;
+    virtual Result<ScriptModuleManifest, ScriptError>
+    module_manifest(ScriptModuleId module) = 0;
     virtual Status<ScriptError> call_module_function(
         ScriptModuleId module,
         const std::string& func_name,

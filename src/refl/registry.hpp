@@ -8,6 +8,7 @@
 #include <concepts>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
@@ -69,6 +70,7 @@ class Registry {
     );
     Type& get_type(TypeId id);
     Result<Type&, RegistryError> try_get_type(TypeId id);
+    Result<Type&, RegistryError> try_get_type(std::string_view name);
     Cls& add_cls(TypeId id);
     Cls& get_cls(TypeId id);
     Result<Cls&, RegistryError> try_get_cls(TypeId id);
