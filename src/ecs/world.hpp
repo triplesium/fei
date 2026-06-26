@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace fei {
 
@@ -82,14 +83,26 @@ class World {
     Optional<Entity> parent(Entity child) const;
     void despawn(Entity entity);
 
-    void add_systems(
+    SystemHandle add_system(ScheduleId schedule, SystemConfig config) {
+        return m_schedules.add_system(schedule, std::move(config));
+    }
+
+    std::vector<SystemHandle> add_systems(
         ScheduleId schedule,
         std::convertible_to<SystemConfigs> auto&&... configs
     ) {
-        m_schedules.add_systems(
+        return m_schedules.add_systems(
             schedule,
             std::forward<decltype(configs)>(configs)...
         );
+    }
+
+    bool remove_system(SystemHandle handle) {
+        return m_schedules.remove_system(handle);
+    }
+
+    bool replace_system(SystemHandle handle, SystemConfig config) {
+        return m_schedules.replace_system(handle, std::move(config));
     }
 
     void run_schedule(ScheduleId schedule) {

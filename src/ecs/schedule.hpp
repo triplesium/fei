@@ -11,11 +11,10 @@
 #include <cstddef>
 #include <memory>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace fei {
-
-using ScheduleId = std::size_t;
 
 class ScheduleGraph {
   private:
@@ -30,6 +29,10 @@ class ScheduleGraph {
         m_edges.try_emplace(node, std::vector<SystemId> {});
     }
     void add_edge(SystemId from, SystemId to) { m_edges[from].push_back(to); }
+    void clear() {
+        m_edges.clear();
+        m_sorted_nodes.clear();
+    }
     void sort();
     const std::vector<SystemId>& sorted_nodes() const { return m_sorted_nodes; }
     const std::unordered_map<SystemId, std::vector<SystemId>>& edges() const {
@@ -45,6 +48,7 @@ class Schedule {
     std::unordered_map<SystemId, SystemConfig> m_systems;
     ScheduleGraph m_graph;
     std::vector<std::vector<SystemId>> m_execution_batches;
+    bool m_dirty {true};
 
   public:
     Schedule() = default;
@@ -55,23 +59,27 @@ class Schedule {
     Schedule(Schedule&&) noexcept = default;
     Schedule& operator=(Schedule&&) noexcept = default;
 
-    void add_system(SystemConfigs configs) {
-        for (auto& config : configs.systems) {
-            m_systems.emplace(config.id, std::move(config));
-        }
+    SystemId add_system(SystemConfig config);
+    std::vector<SystemId> add_systems(SystemConfigs configs);
+
+    std::vector<SystemId>
+    add_systems(std::convertible_to<SystemConfigs> auto&&... configs) {
+        std::vector<SystemId> ids;
+        (
+            [this,
+             config = SystemConfigs(std::forward<decltype(configs)>(configs)),
+             &ids]() mutable {
+                auto added_ids = add_systems(std::move(config));
+                ids.insert(ids.end(), added_ids.begin(), added_ids.end());
+            }(),
+            ...);
+        return ids;
     }
 
-    void add_systems(std::convertible_to<SystemConfigs> auto&&... configs) {
-        (add_system(std::move(configs)), ...);
-    }
+    bool remove_system(SystemId id);
+    bool replace_system(SystemId id, SystemConfig config);
 
-    void sort_systems() {
-        resolve_dependencies();
-        resolve_system_profiles();
-        build_graph();
-        m_graph.sort();
-        build_execution_batches();
-    }
+    void sort_systems() { rebuild_execution_plan(); }
 
     void configure_set(SystemSetConfigs config) {
         for (auto& set_config : config.sets) {
@@ -82,6 +90,7 @@ class Schedule {
                 it->second.merge(set_config);
             }
         }
+        m_dirty = true;
     }
 
     void
@@ -100,6 +109,8 @@ class Schedule {
     }
 
   private:
+    void ensure_execution_plan();
+    void rebuild_execution_plan();
     void resolve_system_profiles();
     void build_execution_batches();
 
@@ -121,36 +132,6 @@ class Schedule {
                 m_system_set_hash_map[set_id] = {};
             }
         }
-        // Resolve in_sets
-        for (auto& [id, config] : m_systems) {
-            auto& deps = config.dependencies;
-            for (auto set_id : deps.in_sets) {
-                if (!m_system_set_configs.contains(set_id)) {
-                    fei::fatal("SystemSet dependency not found");
-                }
-                auto& set_config = m_system_set_configs[set_id];
-                for (auto before_set : set_config.dependencies.before) {
-                    if (!m_system_set_hash_map.contains(before_set)) {
-                        fei::fatal("SystemSet dependency not found");
-                    }
-                    for (auto sys_id : m_system_set_hash_map[before_set]) {
-                        config.dependencies.before.insert(
-                            m_systems.at(sys_id).system->hash()
-                        );
-                    }
-                }
-                for (auto after_set : set_config.dependencies.after) {
-                    if (!m_system_set_hash_map.contains(after_set)) {
-                        fei::fatal("SystemSet dependency not found");
-                    }
-                    for (auto sys_id : m_system_set_hash_map[after_set]) {
-                        config.dependencies.after.insert(
-                            m_systems.at(sys_id).system->hash()
-                        );
-                    }
-                }
-            }
-        }
     }
 
     void build_graph() {
@@ -170,6 +151,28 @@ class Schedule {
                     m_graph.add_edge(it->second, id);
                 }
             }
+            for (auto set_id : config.dependencies.in_sets) {
+                if (!m_system_set_configs.contains(set_id)) {
+                    fei::fatal("SystemSet dependency not found");
+                }
+                auto& set_config = m_system_set_configs[set_id];
+                for (auto before_set : set_config.dependencies.before) {
+                    if (!m_system_set_hash_map.contains(before_set)) {
+                        fei::fatal("SystemSet dependency not found");
+                    }
+                    for (auto sys_id : m_system_set_hash_map[before_set]) {
+                        m_graph.add_edge(id, sys_id);
+                    }
+                }
+                for (auto after_set : set_config.dependencies.after) {
+                    if (!m_system_set_hash_map.contains(after_set)) {
+                        fei::fatal("SystemSet dependency not found");
+                    }
+                    for (auto sys_id : m_system_set_hash_map[after_set]) {
+                        m_graph.add_edge(sys_id, id);
+                    }
+                }
+            }
         }
     }
 };
@@ -187,14 +190,33 @@ class Schedules {
     Schedules(Schedules&&) noexcept = default;
     Schedules& operator=(Schedules&&) noexcept = default;
 
-    void add_systems(
+    SystemHandle add_system(ScheduleId schedule, SystemConfig config);
+
+    std::vector<SystemHandle> add_systems(
         ScheduleId schedule,
         std::convertible_to<SystemConfigs> auto&&... configs
     ) {
-        m_schedules[schedule].add_systems(
-            std::forward<decltype(configs)>(configs)...
-        );
+        auto& target = m_schedules[schedule];
+        std::vector<SystemHandle> handles;
+        (
+            [schedule,
+             &target,
+             config = SystemConfigs(std::forward<decltype(configs)>(configs)),
+             &handles]() mutable {
+                auto ids = target.add_systems(std::move(config));
+                handles.reserve(handles.size() + ids.size());
+                for (auto id : ids) {
+                    handles.push_back(
+                        SystemHandle {.schedule = schedule, .id = id}
+                    );
+                }
+            }(),
+            ...);
+        return handles;
     }
+
+    bool remove_system(SystemHandle handle);
+    bool replace_system(SystemHandle handle, SystemConfig config);
 
     void configure_sets(
         ScheduleId schedule,

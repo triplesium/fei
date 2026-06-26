@@ -83,6 +83,29 @@ SystemId SystemConfig::next_id = 0;
 
 Schedules::Schedules() : m_thread_pool(std::make_unique<ThreadPool>()) {}
 
+SystemHandle Schedules::add_system(ScheduleId schedule, SystemConfig config) {
+    return SystemHandle {
+        .schedule = schedule,
+        .id = m_schedules[schedule].add_system(std::move(config))
+    };
+}
+
+bool Schedules::remove_system(SystemHandle handle) {
+    auto it = m_schedules.find(handle.schedule);
+    if (it == m_schedules.end()) {
+        return false;
+    }
+    return it->second.remove_system(handle.id);
+}
+
+bool Schedules::replace_system(SystemHandle handle, SystemConfig config) {
+    auto it = m_schedules.find(handle.schedule);
+    if (it == m_schedules.end()) {
+        return false;
+    }
+    return it->second.replace_system(handle.id, std::move(config));
+}
+
 void ScheduleGraph::sort() {
     m_sorted_nodes.clear();
     std::unordered_map<SystemId, int> in_degree;
@@ -130,11 +153,71 @@ std::size_t Schedules::worker_threads() const {
     return m_thread_pool->thread_count();
 }
 
+SystemId Schedule::add_system(SystemConfig config) {
+    auto id = config.id;
+    auto [_, inserted] = m_systems.emplace(id, std::move(config));
+    if (!inserted) {
+        fei::fatal("System with id {} has already been added", id);
+    }
+    m_dirty = true;
+    return id;
+}
+
+std::vector<SystemId> Schedule::add_systems(SystemConfigs configs) {
+    std::vector<SystemId> ids;
+    ids.reserve(configs.systems.size());
+    for (auto& config : configs.systems) {
+        ids.push_back(add_system(std::move(config)));
+    }
+    return ids;
+}
+
+bool Schedule::remove_system(SystemId id) {
+    if (m_systems.erase(id) == 0) {
+        return false;
+    }
+    m_dirty = true;
+    return true;
+}
+
+bool Schedule::replace_system(SystemId id, SystemConfig config) {
+    auto it = m_systems.find(id);
+    if (it == m_systems.end()) {
+        return false;
+    }
+    config.id = id;
+    it->second = std::move(config);
+    m_dirty = true;
+    return true;
+}
+
+void Schedule::ensure_execution_plan() {
+    if (m_dirty) {
+        rebuild_execution_plan();
+    }
+}
+
+void Schedule::rebuild_execution_plan() {
+    m_system_hash_map.clear();
+    m_system_set_hash_map.clear();
+    m_graph.clear();
+    m_execution_batches.clear();
+
+    resolve_dependencies();
+    resolve_system_profiles();
+    build_graph();
+    m_graph.sort();
+    build_execution_batches();
+    m_dirty = false;
+}
+
 void Schedule::run_systems(World& world) {
     run_systems(0, world);
 }
 
 void Schedule::run_systems(ScheduleId schedule, World& world) {
+    ensure_execution_plan();
+
     for (const auto& batch : m_execution_batches) {
         for (auto system_id : batch) {
             auto it = m_systems.find(system_id);
@@ -142,8 +225,9 @@ void Schedule::run_systems(ScheduleId schedule, World& world) {
                 run_profiled_system(schedule, it->second, world);
             }
         }
-        world.resource<CommandsQueue>().execute(world);
+        world.resource<CommandsQueue>().execute_after_batch(world);
     }
+    world.resource<CommandsQueue>().execute_after_schedule(world);
 }
 
 void Schedule::run_systems(World& world, ThreadPool& thread_pool) {
@@ -155,6 +239,8 @@ void Schedule::run_systems(
     World& world,
     ThreadPool& thread_pool
 ) {
+    ensure_execution_plan();
+
     auto run_one = [this, schedule, &world](SystemId system_id) {
         auto it = m_systems.find(system_id);
         if (it != m_systems.end() && should_run(it->second, world)) {
@@ -190,8 +276,9 @@ void Schedule::run_systems(
                 std::rethrow_exception(exception);
             }
         }
-        world.resource<CommandsQueue>().execute(world);
+        world.resource<CommandsQueue>().execute_after_batch(world);
     }
+    world.resource<CommandsQueue>().execute_after_schedule(world);
 }
 
 void Schedule::resolve_system_profiles() {

@@ -6,23 +6,103 @@
 
 #include <functional>
 #include <queue>
+#include <utility>
+#include <variant>
+#include <vector>
 
 namespace fei {
 
+struct AddScheduleSystemCommand {
+    ScheduleId schedule;
+    SystemConfig config;
+};
+
+struct RemoveScheduleSystemCommand {
+    SystemHandle handle;
+};
+
+struct ReplaceScheduleSystemCommand {
+    SystemHandle handle;
+    SystemConfig config;
+};
+
+// Schedule commands carry SystemConfig, which owns unique_ptr<System> and
+// unique_ptr<Condition> values. That makes the command move-only, so storing it
+// in std::function<void(World&)> would require a copyable lambda that cannot
+// capture SystemConfig by move. Keep these as explicit variants instead.
+using ScheduleCommand = std::variant<
+    AddScheduleSystemCommand,
+    RemoveScheduleSystemCommand,
+    ReplaceScheduleSystemCommand>;
+
 struct CommandsQueue {
-    std::queue<std::function<void(World&)>> commands;
+    std::queue<std::function<void(World&)>> after_batch_commands;
+    std::vector<ScheduleCommand> after_schedule_commands;
+
+    CommandsQueue() = default;
+    CommandsQueue(const CommandsQueue&) = delete;
+    CommandsQueue& operator=(const CommandsQueue&) = delete;
+    CommandsQueue(CommandsQueue&&) noexcept = default;
+    CommandsQueue& operator=(CommandsQueue&&) noexcept = default;
 
     void add_command(std::function<void(World&)> command) {
-        commands.push(std::move(command));
+        after_batch_commands.push(std::move(command));
     }
-    void execute(World& world) {
-        while (!commands.empty()) {
-            auto command = std::move(commands.front());
-            commands.pop();
+
+    void add_schedule_command(ScheduleCommand command) {
+        after_schedule_commands.push_back(std::move(command));
+    }
+
+    void execute_after_batch(World& world) {
+        while (!after_batch_commands.empty()) {
+            auto command = std::move(after_batch_commands.front());
+            after_batch_commands.pop();
             command(world);
         }
     }
-    void clear() { std::queue<std::function<void(World&)>>().swap(commands); }
+
+    void execute_after_schedule(World& world) {
+        std::vector<ScheduleCommand> commands;
+        commands.swap(after_schedule_commands);
+        for (auto& command : commands) {
+            std::visit(
+                [&world](auto& schedule_command) {
+                    execute_schedule_command(world, schedule_command);
+                },
+                command
+            );
+        }
+    }
+
+    void execute(World& world) {
+        execute_after_batch(world);
+        execute_after_schedule(world);
+    }
+
+    void clear() {
+        std::queue<std::function<void(World&)>>().swap(after_batch_commands);
+        after_schedule_commands.clear();
+    }
+
+  private:
+    static void
+    execute_schedule_command(World& world, AddScheduleSystemCommand& command) {
+        world.add_system(command.schedule, std::move(command.config));
+    }
+
+    static void execute_schedule_command(
+        World& world,
+        RemoveScheduleSystemCommand& command
+    ) {
+        world.remove_system(command.handle);
+    }
+
+    static void execute_schedule_command(
+        World& world,
+        ReplaceScheduleSystemCommand& command
+    ) {
+        world.replace_system(command.handle, std::move(command.config));
+    }
 };
 
 class EntityCommands {
@@ -112,6 +192,32 @@ class Commands {
         m_commands_queue.add_command(
             [res = std::forward<R>(resource)](World& world) {
                 world.add_resource(std::move(res));
+            }
+        );
+    }
+
+    SystemHandle add_system(ScheduleId schedule, SystemConfig config) {
+        SystemHandle handle {.schedule = schedule, .id = config.id};
+        m_commands_queue.add_schedule_command(
+            AddScheduleSystemCommand {
+                .schedule = schedule,
+                .config = std::move(config)
+            }
+        );
+        return handle;
+    }
+
+    void remove_system(SystemHandle handle) {
+        m_commands_queue.add_schedule_command(
+            RemoveScheduleSystemCommand {.handle = handle}
+        );
+    }
+
+    void replace_system(SystemHandle handle, SystemConfig config) {
+        m_commands_queue.add_schedule_command(
+            ReplaceScheduleSystemCommand {
+                .handle = handle,
+                .config = std::move(config)
             }
         );
     }

@@ -24,6 +24,18 @@ void schedule_merge_second() {}
 
 void schedule_merge_third() {}
 
+void scheduled_replacement(ResRW<ScheduleTrace> trace) {
+    trace->entries.emplace_back("replacement");
+}
+
+void scheduled_install_second(Commands commands, ResRW<ScheduleTrace> trace) {
+    trace->entries.emplace_back("install");
+    commands.add_system(
+        TestSchedule,
+        scheduled_second | after(scheduled_install_second)
+    );
+}
+
 void condition_read_position(Query<const Position>) {}
 
 void condition_write_config(ResRW<GameConfig>) {}
@@ -152,6 +164,196 @@ TEST_CASE("ECS schedule ordering respects configured sets", "[ecs][schedule]") {
 
     std::vector<std::string> expected = {"first", "second"};
     REQUIRE(world.resource<ScheduleTrace>().entries == expected);
+}
+
+TEST_CASE("ECS schedules run systems added after sorting", "[ecs][schedule]") {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<ScheduleTrace>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(ScheduleTrace {});
+
+    auto handles = world.add_systems(TestSchedule, scheduled_first);
+    REQUIRE(handles.size() == 1);
+    REQUIRE(handles[0].schedule == TestSchedule);
+
+    world.sort_systems();
+    world.run_schedule(TestSchedule);
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"first"}
+    );
+
+    world.resource<ScheduleTrace>().entries.clear();
+    auto added_handles = world.add_systems(
+        TestSchedule,
+        scheduled_second | after(scheduled_first)
+    );
+    REQUIRE(added_handles.size() == 1);
+    REQUIRE(added_handles[0].schedule == TestSchedule);
+    REQUIRE(added_handles[0].id != handles[0].id);
+
+    world.run_schedule(TestSchedule);
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"first", "second"}
+    );
+}
+
+TEST_CASE("ECS schedules remove systems by handle", "[ecs][schedule]") {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<ScheduleTrace>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(ScheduleTrace {});
+
+    auto handles = world.add_systems(
+        TestSchedule,
+        scheduled_first,
+        scheduled_second | after(scheduled_first)
+    );
+    REQUIRE(handles.size() == 2);
+    REQUIRE(world.remove_system(handles[1]));
+    REQUIRE_FALSE(world.remove_system(handles[1]));
+
+    world.run_schedule(TestSchedule);
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"first"}
+    );
+}
+
+TEST_CASE("ECS schedules replace systems by handle", "[ecs][schedule]") {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<ScheduleTrace>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(ScheduleTrace {});
+
+    auto handle = world.add_system(TestSchedule, SystemConfig(scheduled_first));
+
+    world.run_schedule(TestSchedule);
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"first"}
+    );
+
+    world.resource<ScheduleTrace>().entries.clear();
+    REQUIRE(world.replace_system(handle, SystemConfig(scheduled_replacement)));
+
+    world.run_schedule(TestSchedule);
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"replacement"}
+    );
+
+    world.resource<ScheduleTrace>().entries.clear();
+    REQUIRE(world.remove_system(handle));
+
+    world.run_schedule(TestSchedule);
+    REQUIRE(world.resource<ScheduleTrace>().entries.empty());
+}
+
+TEST_CASE(
+    "ECS commands keep schedule edits out of after-batch flush",
+    "[ecs][commands][schedule]"
+) {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<ScheduleTrace>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(ScheduleTrace {});
+
+    world.run_system_once([](Commands commands) {
+        commands.add_system(TestSchedule, SystemConfig(scheduled_first));
+    });
+
+    world.resource<CommandsQueue>().execute_after_batch(world);
+    world.run_schedule(TestSchedule);
+    REQUIRE(world.resource<ScheduleTrace>().entries.empty());
+
+    world.resource<CommandsQueue>().execute_after_schedule(world);
+    world.run_schedule(TestSchedule);
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"first"}
+    );
+}
+
+TEST_CASE(
+    "ECS commands apply added systems after the current schedule",
+    "[ecs][commands][schedule]"
+) {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<ScheduleTrace>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(ScheduleTrace {});
+
+    world.add_systems(TestSchedule, scheduled_install_second);
+
+    world.run_schedule(TestSchedule);
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"install"}
+    );
+
+    world.resource<ScheduleTrace>().entries.clear();
+    world.run_schedule(TestSchedule);
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"install", "second"}
+    );
+}
+
+TEST_CASE(
+    "ECS commands remove systems at schedule timing",
+    "[ecs][commands][schedule]"
+) {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<ScheduleTrace>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(ScheduleTrace {});
+
+    auto handle = world.add_system(TestSchedule, SystemConfig(scheduled_first));
+    world.run_system_once([handle](Commands commands) {
+        commands.remove_system(handle);
+    });
+    world.resource<CommandsQueue>().execute_after_schedule(world);
+
+    world.run_schedule(TestSchedule);
+    REQUIRE(world.resource<ScheduleTrace>().entries.empty());
+}
+
+TEST_CASE(
+    "ECS commands replace systems at schedule timing",
+    "[ecs][commands][schedule]"
+) {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<ScheduleTrace>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(ScheduleTrace {});
+
+    auto handle = world.add_system(TestSchedule, SystemConfig(scheduled_first));
+    world.run_system_once([handle](Commands commands) {
+        commands.replace_system(handle, SystemConfig(scheduled_replacement));
+    });
+    world.resource<CommandsQueue>().execute_after_schedule(world);
+
+    world.run_schedule(TestSchedule);
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"replacement"}
+    );
 }
 
 TEST_CASE("ECS run_if gates scheduled systems", "[ecs][schedule]") {
