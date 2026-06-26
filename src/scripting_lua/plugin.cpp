@@ -1,4 +1,4 @@
-#include "scripting/plugin.hpp"
+#include "scripting_lua/plugin.hpp"
 
 #include "app/app.hpp"
 #include "asset/plugin.hpp"
@@ -6,23 +6,23 @@
 #include "refl/enum.hpp" // IWYU pragma: keep
 #include "refl/registry.hpp"
 #include "scripting/asset.hpp"
-#include "scripting/scripting_engine.hpp"
-#include "scripting/systems.hpp"
+#include "scripting_lua/lua_runtime.hpp"
+#include "scripting_lua/systems.hpp"
 
 namespace fei {
 
-void ScriptingPlugin::setup(App& app) {
-    app.add_resource(ScriptingEngine {})
+void LuaScriptingPlugin::setup(App& app) {
+    app.add_resource(LuaRuntime {})
         .add_plugins(AssetPlugin<ScriptAsset, ScriptAssetLoader> {})
         .add_systems(Update, run_script_components);
 
-    auto& engine = app.resource<ScriptingEngine>();
+    auto& runtime = app.resource<LuaRuntime>();
     auto& registry = Registry::instance();
     for (const auto& [id, cls] : registry.clses()) {
-        engine.register_type(registry.get_type(id));
+        runtime.register_type(registry.get_type(id));
     }
     for (const auto& [id, enm] : registry.enums()) {
-        engine.register_enum(registry.get_enum(id));
+        runtime.register_enum(registry.get_enum(id));
     }
 }
 

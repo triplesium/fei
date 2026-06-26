@@ -1,4 +1,4 @@
-#include "scripting/scripting_engine.hpp"
+#include "scripting_lua/lua_runtime.hpp"
 
 #include "base/log.hpp"
 #include "refl/callable.hpp"
@@ -8,9 +8,9 @@
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
 #include "refl/val.hpp"
-#include "scripting/object.hpp"
-#include "scripting/operator.hpp"
-#include "scripting/utils.hpp"
+#include "scripting_lua/object.hpp"
+#include "scripting_lua/operator.hpp"
+#include "scripting_lua/utils.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -97,17 +97,17 @@ int lua_push_invoke_result(lua_State* L, const InvokeResult& result) {
 
 } // namespace
 
-ScriptingEngine::ScriptingEngine() : m_state(luaL_newstate()) {
+LuaRuntime::LuaRuntime() : m_state(luaL_newstate()) {
     luaL_openlibs(m_state);
 }
 
-ScriptingEngine::~ScriptingEngine() {
+LuaRuntime::~LuaRuntime() {
     if (m_state) {
         lua_close(m_state);
     }
 }
 
-void ScriptingEngine::register_type(Type& type) {
+void LuaRuntime::register_type(Type& type) {
     auto* L = m_state;
     auto id = type.id();
 
@@ -156,13 +156,13 @@ void ScriptingEngine::register_type(Type& type) {
     }
 }
 
-void ScriptingEngine::unregister_type(Type& type) {
+void LuaRuntime::unregister_type(Type& type) {
     auto* L = m_state;
     lua_pushnil(L);
     lua_setglobal(L, type.stripped_name().c_str());
 }
 
-void ScriptingEngine::register_enum(const Enum& enm) {
+void LuaRuntime::register_enum(const Enum& enm) {
     auto* L = m_state;
     auto type = Registry::instance().try_get_type(enm.type_id());
     if (!type) {
@@ -185,7 +185,7 @@ void ScriptingEngine::register_enum(const Enum& enm) {
     lua_setglobal(L, type->stripped_name().c_str());
 }
 
-void ScriptingEngine::unregister_enum(const Enum& enm) {
+void LuaRuntime::unregister_enum(const Enum& enm) {
     auto* L = m_state;
     auto type = Registry::instance().try_get_type(enm.type_id());
     if (!type) {
@@ -196,25 +196,25 @@ void ScriptingEngine::unregister_enum(const Enum& enm) {
     lua_setglobal(L, type->stripped_name().c_str());
 }
 
-void ScriptingEngine::set_global(const std::string& name, const Val& val) {
+void LuaRuntime::set_global(const std::string& name, const Val& val) {
     auto* L = m_state;
     lua_push_val(L, val);
     lua_setglobal(L, name.c_str());
 }
 
-void ScriptingEngine::set_global(const std::string& name, const Ref& ref) {
+void LuaRuntime::set_global(const std::string& name, const Ref& ref) {
     auto* L = m_state;
     lua_push_ref(L, ref);
     lua_setglobal(L, name.c_str());
 }
 
-void ScriptingEngine::unset_global(const std::string& name) {
+void LuaRuntime::unset_global(const std::string& name) {
     auto* L = m_state;
     lua_pushnil(L);
     lua_setglobal(L, name.c_str());
 }
 
-void ScriptingEngine::run_script(const std::string& script) {
+void LuaRuntime::run_script(const std::string& script) {
     auto* L = m_state;
     if (luaL_dostring(L, script.c_str())) {
         error("Lua error: {}", lua_tostring(L, -1));
@@ -222,7 +222,7 @@ void ScriptingEngine::run_script(const std::string& script) {
     }
 }
 
-bool ScriptingEngine::call_function(
+bool LuaRuntime::call_function(
     const std::string& func_name,
     const std::vector<Ref>& args
 ) {
@@ -243,7 +243,164 @@ bool ScriptingEngine::call_function(
     return true;
 }
 
-int ScriptingEngine::dispatch_new(lua_State* L) {
+Result<ScriptModuleId, ScriptError>
+LuaRuntime::load_module(const ScriptSource& source) {
+    auto* L = m_state;
+    int base_top = lua_gettop(L);
+
+    if (luaL_loadbuffer(
+            L,
+            source.content.data(),
+            source.content.size(),
+            source.name.c_str()
+        ) != LUA_OK) {
+        std::string message = lua_tostring(L, -1);
+        lua_settop(L, base_top);
+        return failure(ScriptError {std::move(message)});
+    }
+
+    int chunk_index = lua_gettop(L);
+    lua_newtable(L);
+    int env_index = lua_gettop(L);
+
+    lua_newtable(L);
+    lua_pushglobaltable(L);
+    lua_setfield(L, -2, "__index");
+    lua_setmetatable(L, env_index);
+
+    lua_pushvalue(L, env_index);
+    const char* upvalue = lua_setupvalue(L, chunk_index, 1);
+    if (!upvalue) {
+        lua_pop(L, 1);
+    }
+
+    lua_pushvalue(L, env_index);
+    int env_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    lua_remove(L, env_index);
+
+    if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+        std::string message = lua_tostring(L, -1);
+        luaL_unref(L, LUA_REGISTRYINDEX, env_ref);
+        lua_settop(L, base_top);
+        return failure(ScriptError {std::move(message)});
+    }
+
+    auto module_id = m_next_module_id++;
+    m_modules.emplace(
+        module_id,
+        Module {
+            .environment_ref = env_ref,
+            .name = source.name,
+        }
+    );
+    lua_settop(L, base_top);
+    return module_id;
+}
+
+Status<ScriptError> LuaRuntime::unload_module(ScriptModuleId module) {
+    auto it = m_modules.find(module);
+    if (it == m_modules.end()) {
+        return failure(ScriptError {"Lua module not found"});
+    }
+
+    luaL_unref(m_state, LUA_REGISTRYINDEX, it->second.environment_ref);
+    m_modules.erase(it);
+    return {};
+}
+
+Status<ScriptError> LuaRuntime::call_module_function(
+    ScriptModuleId module,
+    const std::string& func_name,
+    const std::vector<Ref>& args
+) {
+    auto it = m_modules.find(module);
+    if (it == m_modules.end()) {
+        return failure(ScriptError {"Lua module not found"});
+    }
+
+    auto* L = m_state;
+    int base_top = lua_gettop(L);
+    lua_rawgeti(L, LUA_REGISTRYINDEX, it->second.environment_ref);
+    int env_index = lua_gettop(L);
+
+    lua_getfield(L, env_index, func_name.c_str());
+    if (!lua_isfunction(L, -1)) {
+        lua_settop(L, base_top);
+        return failure(
+            ScriptError {"Lua module function '" + func_name + "' not found"}
+        );
+    }
+
+    for (const auto& arg : args) {
+        lua_push_ref(L, arg);
+    }
+    if (lua_pcall(L, static_cast<int>(args.size()), 0, 0) != LUA_OK) {
+        std::string message = lua_tostring(L, -1);
+        lua_settop(L, base_top);
+        return failure(ScriptError {std::move(message)});
+    }
+
+    lua_settop(L, base_top);
+    return {};
+}
+
+Status<ScriptError> LuaRuntime::set_module_global(
+    ScriptModuleId module,
+    const std::string& name,
+    Ref ref
+) {
+    auto it = m_modules.find(module);
+    if (it == m_modules.end()) {
+        return failure(ScriptError {"Lua module not found"});
+    }
+
+    auto* L = m_state;
+    int base_top = lua_gettop(L);
+    lua_rawgeti(L, LUA_REGISTRYINDEX, it->second.environment_ref);
+    lua_push_ref(L, ref);
+    lua_setfield(L, -2, name.c_str());
+    lua_settop(L, base_top);
+    return {};
+}
+
+Status<ScriptError> LuaRuntime::set_module_global(
+    ScriptModuleId module,
+    const std::string& name,
+    Val val
+) {
+    auto it = m_modules.find(module);
+    if (it == m_modules.end()) {
+        return failure(ScriptError {"Lua module not found"});
+    }
+
+    auto* L = m_state;
+    int base_top = lua_gettop(L);
+    lua_rawgeti(L, LUA_REGISTRYINDEX, it->second.environment_ref);
+    lua_push_val(L, val);
+    lua_setfield(L, -2, name.c_str());
+    lua_settop(L, base_top);
+    return {};
+}
+
+Status<ScriptError> LuaRuntime::unset_module_global(
+    ScriptModuleId module,
+    const std::string& name
+) {
+    auto it = m_modules.find(module);
+    if (it == m_modules.end()) {
+        return failure(ScriptError {"Lua module not found"});
+    }
+
+    auto* L = m_state;
+    int base_top = lua_gettop(L);
+    lua_rawgeti(L, LUA_REGISTRYINDEX, it->second.environment_ref);
+    lua_pushnil(L);
+    lua_setfield(L, -2, name.c_str());
+    lua_settop(L, base_top);
+    return {};
+}
+
+int LuaRuntime::dispatch_new(lua_State* L) {
     TypeId type_id = lua_tointeger(L, lua_upvalueindex(1));
     auto type = Registry::instance().try_get_type(type_id);
     if (!type) {
@@ -298,7 +455,7 @@ int ScriptingEngine::dispatch_new(lua_State* L) {
     return 1;
 }
 
-int ScriptingEngine::dispatch_method(lua_State* L) {
+int LuaRuntime::dispatch_method(lua_State* L) {
     const auto* name = lua_tostring(L, lua_upvalueindex(1));
     TypeId type_id = lua_tointeger(L, lua_upvalueindex(2));
     auto cls = Registry::instance().try_get_cls(type_id);
@@ -348,14 +505,14 @@ int ScriptingEngine::dispatch_method(lua_State* L) {
     return lua_push_invoke_result(L, method.invoke_variadic(refs));
 }
 
-int ScriptingEngine::dispatch_gc(lua_State* L) {
+int LuaRuntime::dispatch_gc(lua_State* L) {
     TypeId type_id = lua_tointeger(L, lua_upvalueindex(1));
     auto* obj = reinterpret_cast<LuaObject*>(lua_touserdata(L, 1));
     obj->~LuaObject();
     return 0;
 }
 
-int ScriptingEngine::dispatch_index(lua_State* L) {
+int LuaRuntime::dispatch_index(lua_State* L) {
     TypeId type_id = lua_tointeger(L, lua_upvalueindex(1));
     auto type = Registry::instance().try_get_type(type_id);
     if (!type) {
@@ -399,7 +556,7 @@ int ScriptingEngine::dispatch_index(lua_State* L) {
     return lua_raise_cls_error(L, prop.error());
 }
 
-int ScriptingEngine::dispatch_newindex(lua_State* L) {
+int LuaRuntime::dispatch_newindex(lua_State* L) {
     // Stack: [instance, key, value]
 
     TypeId type_id = lua_tointeger(L, lua_upvalueindex(1));
@@ -438,7 +595,7 @@ int ScriptingEngine::dispatch_newindex(lua_State* L) {
     return 0;
 }
 
-int ScriptingEngine::dispatch_operator(lua_State* L) {
+int LuaRuntime::dispatch_operator(lua_State* L) {
     auto type_id = lua_tointeger(L, lua_upvalueindex(1));
     auto op = static_cast<LuaOperator>(lua_tointeger(L, lua_upvalueindex(2)));
     auto type = Registry::instance().try_get_type(type_id);

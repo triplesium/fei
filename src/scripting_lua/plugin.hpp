@@ -4,7 +4,7 @@
 
 namespace fei {
 
-class ScriptingPlugin : public Plugin {
+class LuaScriptingPlugin : public Plugin {
   public:
     void setup(App& app) override;
 };

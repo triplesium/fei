@@ -26,7 +26,7 @@
 #include "rendering/shader.hpp"
 #include "scene/plugin.hpp"
 #include "scripting/component.hpp"
-#include "scripting/plugin.hpp"
+#include "scripting_lua/plugin.hpp"
 #include "ui/plugin.hpp"
 #include "web_preview/plugin.hpp"
 #include "window/input.hpp"
@@ -160,7 +160,7 @@ int main() {
         .add_plugin<EnvironmentMapPlugin>()
         .add_plugin<ScenePlugin>()
         .add_plugin<ReflectionPlugin>()
-        .add_plugin<ScriptingPlugin>()
+        .add_plugin<LuaScriptingPlugin>()
         .add_systems(PreStartUp, setup)
         .add_systems(Update, update_directional_light)
         .add_systems(

@@ -7,7 +7,7 @@
 #include "ecs/commands.hpp"
 #include "ecs/system_params.hpp"
 #include "scripting/component.hpp"
-#include "scripting/plugin.hpp"
+#include "scripting_lua/plugin.hpp"
 #include "window/input.hpp"
 #include "window/window.hpp"
 
@@ -32,7 +32,7 @@ int main() {
             TimePlugin {},
             InputPlugin {},
             ReflectionPlugin {},
-            ScriptingPlugin {}
+            LuaScriptingPlugin {}
         )
         .add_systems(StartUp, setup)
         .run();

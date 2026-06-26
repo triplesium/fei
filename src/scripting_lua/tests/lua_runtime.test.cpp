@@ -1,15 +1,21 @@
-#include "scripting/scripting_engine.hpp"
+#include "scripting_lua/lua_runtime.hpp"
 
+#include "asset/assets.hpp"
+#include "asset/event.hpp"
 #include "base/result.hpp"
 #include "core/transform.hpp"
+#include "ecs/event.hpp"
 #include "ecs/world.hpp"
 #include "math/vector.hpp"
 #include "refl/cls.hpp"
 #include "refl/enum.hpp"
 #include "refl/ref_utils.hpp"
 #include "refl/registry.hpp"
-#include "scripting/entity.hpp"
-#include "scripting/world.hpp"
+#include "scripting/asset.hpp"
+#include "scripting/component.hpp"
+#include "scripting_lua/entity.hpp"
+#include "scripting_lua/systems.hpp"
+#include "scripting_lua/world.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -185,28 +191,28 @@ void register_world_script_metadata() {
         .add_constructor<LuaEntity, World*, Entity>();
 }
 
-ScriptingEngine make_test_engine() {
+LuaRuntime make_test_runtime() {
     register_script_test_metadata();
 
-    ScriptingEngine engine;
-    engine.register_type(type<ScriptTestError>());
-    engine.register_type(type<ScriptTestReceiver>());
-    engine.register_enum(Registry::instance().get_enum<ScriptTestEnum>());
-    return engine;
+    LuaRuntime runtime;
+    runtime.register_type(type<ScriptTestError>());
+    runtime.register_type(type<ScriptTestReceiver>());
+    runtime.register_enum(Registry::instance().get_enum<ScriptTestEnum>());
+    return runtime;
 }
 
 } // namespace
 
 TEST_CASE(
-    "ScriptingEngine reads properties, writes properties, and calls methods",
+    "LuaRuntime reads properties, writes properties, and calls methods",
     "[scripting]"
 ) {
-    auto engine = make_test_engine();
+    auto runtime = make_test_runtime();
     ScriptTestReceiver receiver;
     receiver.value = 4;
 
-    engine.set_global("receiver", make_ref(receiver));
-    engine.run_script(R"(
+    runtime.set_global("receiver", make_ref(receiver));
+    runtime.run_script(R"(
         receiver.value = receiver.value + 3
         receiver:set_value(receiver.value + 5)
     )");
@@ -215,15 +221,12 @@ TEST_CASE(
     REQUIRE(receiver.method_calls == 1);
 }
 
-TEST_CASE(
-    "ScriptingEngine constructs reflected objects from Lua",
-    "[scripting]"
-) {
-    auto engine = make_test_engine();
+TEST_CASE("LuaRuntime constructs reflected objects from Lua", "[scripting]") {
+    auto runtime = make_test_runtime();
     ScriptTestReceiver receiver;
 
-    engine.set_global("receiver", make_ref(receiver));
-    engine.run_script(R"(
+    runtime.set_global("receiver", make_ref(receiver));
+    runtime.run_script(R"(
         local created = ScriptTestReceiver.new(21)
         created.mode = ScriptTestEnum.Active
         created:copy_to(receiver)
@@ -233,22 +236,19 @@ TEST_CASE(
     REQUIRE(receiver.mode == ScriptTestEnum::Active);
 }
 
-TEST_CASE(
-    "ScriptingEngine calls Lua functions with reflected refs",
-    "[scripting]"
-) {
-    auto engine = make_test_engine();
+TEST_CASE("LuaRuntime calls Lua functions with reflected refs", "[scripting]") {
+    auto runtime = make_test_runtime();
     ScriptTestReceiver receiver;
     receiver.value = 10;
 
-    engine.run_script(R"(
+    runtime.run_script(R"(
         function update_receiver(target)
             target.value = target.value + 8
             target:set_mode(ScriptTestEnum.Active)
         end
     )");
 
-    REQUIRE(engine.call_function(
+    REQUIRE(runtime.call_function(
         "update_receiver",
         std::vector<Ref> {make_ref(receiver)}
     ));
@@ -257,43 +257,243 @@ TEST_CASE(
     REQUIRE(receiver.method_calls == 1);
 }
 
-TEST_CASE(
-    "ScriptingEngine passes enum constants to reflected methods",
-    "[scripting][enum]"
-) {
-    auto engine = make_test_engine();
+TEST_CASE("LuaRuntime isolates loaded module environments", "[scripting]") {
+    auto runtime = make_test_runtime();
     ScriptTestReceiver receiver;
 
-    engine.set_global("receiver", make_ref(receiver));
-    engine.run_script("receiver:set_mode(ScriptTestEnum.Active)");
+    auto first = runtime.load_module(
+        ScriptSource {
+            .name = "first.lua",
+            .content = R"(
+            local counter = 0
+            function on_update(target)
+                counter = counter + 1
+                target.value = target.value + counter
+            end
+        )",
+            .language = "lua",
+        }
+    );
+    auto second = runtime.load_module(
+        ScriptSource {
+            .name = "second.lua",
+            .content = R"(
+            local counter = 0
+            function on_update(target)
+                counter = counter + 1
+                target.value = target.value + counter
+            end
+        )",
+            .language = "lua",
+        }
+    );
+
+    REQUIRE(first);
+    REQUIRE(second);
+    REQUIRE(runtime.call_module_function(
+        *first,
+        "on_update",
+        std::vector<Ref> {make_ref(receiver)}
+    ));
+    REQUIRE(runtime.call_module_function(
+        *first,
+        "on_update",
+        std::vector<Ref> {make_ref(receiver)}
+    ));
+    REQUIRE(runtime.call_module_function(
+        *second,
+        "on_update",
+        std::vector<Ref> {make_ref(receiver)}
+    ));
+
+    REQUIRE(receiver.value == 4);
+}
+
+TEST_CASE("LuaRuntime sets module environment globals", "[scripting]") {
+    auto runtime = make_test_runtime();
+    ScriptTestReceiver receiver;
+
+    auto module = runtime.load_module(
+        ScriptSource {
+            .name = "globals.lua",
+            .content = R"(
+            function on_update()
+                receiver.value = receiver.value + 6
+            end
+        )",
+            .language = "lua",
+        }
+    );
+
+    REQUIRE(module);
+    REQUIRE(runtime.set_module_global(*module, "receiver", make_ref(receiver)));
+    REQUIRE(runtime.call_module_function(*module, "on_update", {}));
+    REQUIRE(runtime.unset_module_global(*module, "receiver"));
+    REQUIRE(receiver.value == 6);
+}
+
+TEST_CASE("LuaRuntime reloads module code after unload", "[scripting]") {
+    auto runtime = make_test_runtime();
+    ScriptTestReceiver receiver;
+
+    auto first = runtime.load_module(
+        ScriptSource {
+            .name = "reload.lua",
+            .content = R"(
+                function on_update(target)
+                    target.value = target.value + 1
+                end
+            )",
+            .language = "lua",
+        }
+    );
+
+    REQUIRE(first);
+    REQUIRE(runtime.call_module_function(
+        *first,
+        "on_update",
+        std::vector<Ref> {make_ref(receiver)}
+    ));
+    REQUIRE(runtime.unload_module(*first));
+
+    auto second = runtime.load_module(
+        ScriptSource {
+            .name = "reload.lua",
+            .content = R"(
+                function on_update(target)
+                    target.value = target.value + 10
+                end
+            )",
+            .language = "lua",
+        }
+    );
+
+    REQUIRE(second);
+    REQUIRE(runtime.call_module_function(
+        *second,
+        "on_update",
+        std::vector<Ref> {make_ref(receiver)}
+    ));
+    REQUIRE(receiver.value == 11);
+}
+
+TEST_CASE(
+    "run_script_components reloads modified script assets",
+    "[scripting][lua][reload]"
+) {
+    register_script_test_metadata();
+    register_world_script_metadata();
+
+    World world;
+    auto& runtime = world.add_resource(LuaRuntime {});
+    runtime.register_type(type<ScriptTestReceiver>());
+    runtime.register_type(type<LuaWorld>());
+    runtime.register_type(type<LuaEntity>());
+
+    world.add_resource(Events<AssetEvent<ScriptAsset>> {});
+    auto& scripts = world.add_resource(Assets<ScriptAsset>(nullptr));
+    auto& receiver = world.add_resource(ScriptTestReceiver {});
+
+    auto script = scripts.emplace(R"(
+        function on_update(entity, world)
+            local receiver = world:resource(ScriptTestReceiver)
+            receiver.value = receiver.value + 1
+        end
+    )");
+    auto entity = world.entity();
+    world.add_component(entity, ScriptComponent {.script = script});
+
+    world.run_system_once(run_script_components);
+    REQUIRE(receiver.value == 1);
+
+    auto script_asset = scripts.get(script);
+    REQUIRE(script_asset);
+    *script_asset = ScriptAsset(R"(
+        function on_update(entity, world)
+            local receiver = world:resource(ScriptTestReceiver)
+            receiver.value = receiver.value + 10
+        end
+    )");
+    world.run_system_once(Assets<ScriptAsset>::track_assets);
+    world.run_system_once(run_script_components);
+
+    REQUIRE(receiver.value == 11);
+}
+
+TEST_CASE(
+    "run_script_components unloads removed script assets",
+    "[scripting][lua][reload]"
+) {
+    register_script_test_metadata();
+    register_world_script_metadata();
+
+    World world;
+    auto& runtime = world.add_resource(LuaRuntime {});
+    runtime.register_type(type<ScriptTestReceiver>());
+    runtime.register_type(type<LuaWorld>());
+    runtime.register_type(type<LuaEntity>());
+
+    world.add_resource(Events<AssetEvent<ScriptAsset>> {});
+    auto& scripts = world.add_resource(Assets<ScriptAsset>(nullptr));
+    auto& receiver = world.add_resource(ScriptTestReceiver {});
+
+    auto script = scripts.emplace(R"(
+        function on_update(entity, world)
+            local receiver = world:resource(ScriptTestReceiver)
+            receiver.value = receiver.value + 1
+        end
+    )");
+    auto entity = world.entity();
+    world.add_component(entity, ScriptComponent {.script = script});
+
+    world.run_system_once(run_script_components);
+    REQUIRE(receiver.value == 1);
+    REQUIRE(world.get_component<ScriptComponent>(entity).module.has_value());
+
+    scripts.unload(script.id());
+    world.run_system_once(Assets<ScriptAsset>::track_assets);
+    world.run_system_once(run_script_components);
+
+    REQUIRE(receiver.value == 1);
+    const auto& script_comp = world.get_component<ScriptComponent>(entity);
+    REQUIRE_FALSE(script_comp.module.has_value());
+    REQUIRE(script_comp.loaded_script == invalid_asset_id);
+}
+
+TEST_CASE(
+    "LuaRuntime passes enum constants to reflected methods",
+    "[scripting][enum]"
+) {
+    auto runtime = make_test_runtime();
+    ScriptTestReceiver receiver;
+
+    runtime.set_global("receiver", make_ref(receiver));
+    runtime.run_script("receiver:set_mode(ScriptTestEnum.Active)");
 
     REQUIRE(receiver.mode == ScriptTestEnum::Active);
     REQUIRE(receiver.method_calls == 1);
 }
 
 TEST_CASE(
-    "ScriptingEngine assigns enum constants to reflected properties",
+    "LuaRuntime assigns enum constants to reflected properties",
     "[scripting][enum]"
 ) {
-    auto engine = make_test_engine();
+    auto runtime = make_test_runtime();
     ScriptTestReceiver receiver;
 
-    engine.set_global("receiver", make_ref(receiver));
-    engine.run_script("receiver.mode = ScriptTestEnum.Active");
+    runtime.set_global("receiver", make_ref(receiver));
+    runtime.run_script("receiver.mode = ScriptTestEnum.Active");
 
     REQUIRE(receiver.mode == ScriptTestEnum::Active);
     REQUIRE(receiver.method_calls == 0);
 }
 
-TEST_CASE(
-    "ScriptingEngine applies reflected property conversions",
-    "[scripting]"
-) {
-    auto engine = make_test_engine();
+TEST_CASE("LuaRuntime applies reflected property conversions", "[scripting]") {
+    auto runtime = make_test_runtime();
     ScriptTestReceiver receiver;
 
-    engine.set_global("receiver", make_ref(receiver));
-    engine.run_script(R"(
+    runtime.set_global("receiver", make_ref(receiver));
+    runtime.run_script(R"(
         receiver.scale = 4
         receiver.precise = 2.5
 
@@ -316,21 +516,21 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "ScriptingEngine supports nested reflected transform updates",
+    "LuaRuntime supports nested reflected transform updates",
     "[scripting]"
 ) {
     register_transform_script_metadata();
 
-    ScriptingEngine engine;
-    engine.register_type(type<Vector3>());
-    engine.register_type(type<Transform3d>());
+    LuaRuntime runtime;
+    runtime.register_type(type<Vector3>());
+    runtime.register_type(type<Transform3d>());
 
     Transform3d transform;
     transform.position = {1.0f, 2.0f, 3.0f};
     transform.rotation = {0.0f, 90.0f, 0.0f};
 
-    engine.set_global("transform", make_ref(transform));
-    engine.run_script(R"(
+    runtime.set_global("transform", make_ref(transform));
+    runtime.run_script(R"(
         local position = transform.position
         transform.position = position + transform:forward() * 10.0 * 0.5
         transform.rotation.x = transform.rotation.x + 90.0 * 0.5
@@ -344,19 +544,19 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "ScriptingEngine passes Lua type tables as reflected TypeId arguments",
+    "LuaRuntime passes Lua type tables as reflected TypeId arguments",
     "[scripting]"
 ) {
     register_script_test_metadata();
     register_transform_script_metadata();
     register_world_script_metadata();
 
-    ScriptingEngine engine;
-    engine.register_type(type<ScriptTestReceiver>());
-    engine.register_type(type<Vector3>());
-    engine.register_type(type<Transform3d>());
-    engine.register_type(type<LuaWorld>());
-    engine.register_type(type<LuaEntity>());
+    LuaRuntime runtime;
+    runtime.register_type(type<ScriptTestReceiver>());
+    runtime.register_type(type<Vector3>());
+    runtime.register_type(type<Transform3d>());
+    runtime.register_type(type<LuaWorld>());
+    runtime.register_type(type<LuaEntity>());
 
     World world;
     auto& receiver = world.add_resource(ScriptTestReceiver {});
@@ -369,10 +569,10 @@ TEST_CASE(
 
     LuaWorld lua_world(&world);
     LuaEntity lua_entity(&world, entity_id);
-    engine.set_global("world", make_ref(lua_world));
-    engine.set_global("entity", make_ref(lua_entity));
+    runtime.set_global("world", make_ref(lua_world));
+    runtime.set_global("entity", make_ref(lua_entity));
 
-    engine.run_script(R"(
+    runtime.run_script(R"(
         local receiver = world:resource(ScriptTestReceiver)
         receiver.value = receiver.value + 7
 
@@ -388,14 +588,14 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "ScriptingEngine applies reflected weak argument conversions",
+    "LuaRuntime applies reflected weak argument conversions",
     "[scripting]"
 ) {
-    auto engine = make_test_engine();
+    auto runtime = make_test_runtime();
     ScriptTestReceiver receiver;
 
-    engine.set_global("receiver", make_ref(receiver));
-    engine.run_script(R"(
+    runtime.set_global("receiver", make_ref(receiver));
+    runtime.run_script(R"(
         receiver:set_scaled(4)
         receiver:set_text_size("hello")
     )");
@@ -404,15 +604,12 @@ TEST_CASE(
     REQUIRE(receiver.method_calls == 2);
 }
 
-TEST_CASE(
-    "ScriptingEngine rejects ambiguous reflected overloads",
-    "[scripting]"
-) {
-    auto engine = make_test_engine();
+TEST_CASE("LuaRuntime rejects ambiguous reflected overloads", "[scripting]") {
+    auto runtime = make_test_runtime();
     ScriptTestReceiver receiver;
 
-    engine.set_global("receiver", make_ref(receiver));
-    engine.run_script(R"(
+    runtime.set_global("receiver", make_ref(receiver));
+    runtime.run_script(R"(
         receiver:choose_number(2.5)
         local ok = pcall(function()
             receiver:choose_number(4)
@@ -426,12 +623,12 @@ TEST_CASE(
     REQUIRE(receiver.method_calls == 1);
 }
 
-TEST_CASE("ScriptingEngine maps reflected Result returns", "[scripting]") {
-    auto engine = make_test_engine();
+TEST_CASE("LuaRuntime maps reflected Result returns", "[scripting]") {
+    auto runtime = make_test_runtime();
     ScriptTestReceiver receiver;
 
-    engine.set_global("receiver", make_ref(receiver));
-    engine.run_script(R"(
+    runtime.set_global("receiver", make_ref(receiver));
+    runtime.run_script(R"(
         local value, err = receiver:result_value(true)
         if err == nil then
             receiver.value = value
@@ -447,12 +644,12 @@ TEST_CASE("ScriptingEngine maps reflected Result returns", "[scripting]") {
     REQUIRE(receiver.method_calls == 7);
 }
 
-TEST_CASE("ScriptingEngine maps reflected Status returns", "[scripting]") {
-    auto engine = make_test_engine();
+TEST_CASE("LuaRuntime maps reflected Status returns", "[scripting]") {
+    auto runtime = make_test_runtime();
     ScriptTestReceiver receiver;
 
-    engine.set_global("receiver", make_ref(receiver));
-    engine.run_script(R"(
+    runtime.set_global("receiver", make_ref(receiver));
+    runtime.run_script(R"(
         local ok, err = receiver:status_value(true)
         if ok == true and err == nil then
             receiver.value = 31
@@ -469,14 +666,14 @@ TEST_CASE("ScriptingEngine maps reflected Status returns", "[scripting]") {
 }
 
 TEST_CASE(
-    "ScriptingEngine raises Lua errors for invalid reflected calls",
+    "LuaRuntime raises Lua errors for invalid reflected calls",
     "[scripting]"
 ) {
-    auto engine = make_test_engine();
+    auto runtime = make_test_runtime();
     ScriptTestReceiver receiver;
 
-    engine.set_global("receiver", make_ref(receiver));
-    engine.run_script(R"(
+    runtime.set_global("receiver", make_ref(receiver));
+    runtime.run_script(R"(
         local method = receiver.set_value
         local ok = pcall(function()
             method(10, 1)
@@ -490,17 +687,14 @@ TEST_CASE(
     REQUIRE(receiver.method_calls == 0);
 }
 
-TEST_CASE(
-    "ScriptingEngine reports missing class metadata to Lua",
-    "[scripting]"
-) {
-    auto engine = make_test_engine();
+TEST_CASE("LuaRuntime reports missing class metadata to Lua", "[scripting]") {
+    auto runtime = make_test_runtime();
     Registry::instance().register_type<ScriptBareType>();
-    engine.register_type(type<ScriptBareType>());
+    runtime.register_type(type<ScriptBareType>());
 
     ScriptTestReceiver receiver;
-    engine.set_global("receiver", make_ref(receiver));
-    engine.run_script(R"(
+    runtime.set_global("receiver", make_ref(receiver));
+    runtime.run_script(R"(
         local ok, err = pcall(function()
             ScriptBareType.new()
         end)
