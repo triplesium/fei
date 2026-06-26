@@ -30,7 +30,10 @@ enum class ScriptSystemParamKind {
     World,
     Entity,
     Resource,
+    Query,
     Component,
+    With,
+    Without,
 };
 
 enum class ScriptSystemAccess {
@@ -43,6 +46,7 @@ struct ScriptSystemParam {
     std::string type;
     ScriptSystemParamKind kind {ScriptSystemParamKind::Component};
     ScriptSystemAccess access {ScriptSystemAccess::Read};
+    std::vector<ScriptSystemParam> params;
 };
 
 struct ScriptSystemManifest {

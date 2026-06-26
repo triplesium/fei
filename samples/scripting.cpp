@@ -3,7 +3,7 @@
 #include "refl/ref_utils.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
-#include "scripting_lua/lua_runtime.hpp"
+#include "scripting_lua/runtime.hpp"
 #include "window/input.hpp"
 
 #include <print>

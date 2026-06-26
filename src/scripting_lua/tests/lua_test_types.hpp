@@ -1,7 +1,7 @@
 #pragma once
 
 #include "base/result.hpp"
-#include "scripting_lua/lua_runtime.hpp"
+#include "scripting_lua/runtime.hpp"
 
 #include <string_view>
 

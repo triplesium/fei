@@ -7,16 +7,14 @@
 #include "refl/registry.hpp"
 #include "scripting/asset.hpp"
 #include "scripting/script_system_registry.hpp"
-#include "scripting_lua/lua_runtime.hpp"
-#include "scripting_lua/systems.hpp"
+#include "scripting_lua/runtime.hpp"
 
 namespace fei {
 
 void LuaScriptingPlugin::setup(App& app) {
     app.add_resource(LuaRuntime {})
         .add_resource(ScriptSystemRegistry {})
-        .add_plugins(AssetPlugin<ScriptAsset, ScriptAssetLoader> {})
-        .add_systems(Update, run_script_components);
+        .add_plugins(AssetPlugin<ScriptAsset, ScriptAssetLoader> {});
 
     auto& runtime = app.resource<LuaRuntime>();
     auto& registry = Registry::instance();

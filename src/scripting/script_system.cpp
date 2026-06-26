@@ -13,6 +13,17 @@ namespace fei {
 namespace {
 
 void add_script_arg_access(SystemAccess& access, const ScriptSystemArg& arg) {
+    if (arg.kind == ScriptSystemParamKind::Query) {
+        for (const auto& field : arg.query_fields) {
+            if (field.access == ScriptSystemAccess::Write) {
+                access.write_components.insert(field.type);
+            } else {
+                access.read_components.insert(field.type);
+            }
+        }
+        return;
+    }
+
     if (arg.kind != ScriptSystemParamKind::Resource) {
         return;
     }
@@ -26,9 +37,86 @@ void add_script_arg_access(SystemAccess& access, const ScriptSystemArg& arg) {
 
 Result<ScriptSystemArg, ScriptError>
 compile_script_system_arg(const ScriptSystemParam& param) {
+    if (param.kind == ScriptSystemParamKind::Query) {
+        if (param.name.empty()) {
+            return failure(
+                ScriptError {"Query script system param missing name"}
+            );
+        }
+
+        std::vector<ScriptQueryField> fields;
+        std::vector<ScriptQueryFilter> filters;
+        for (const auto& child : param.params) {
+            if (child.kind != ScriptSystemParamKind::Component &&
+                child.kind != ScriptSystemParamKind::With &&
+                child.kind != ScriptSystemParamKind::Without) {
+                return failure(
+                    ScriptError {"Query script system params only support "
+                                 "components and "
+                                 "filters"}
+                );
+            }
+            if (child.type.empty()) {
+                return failure(
+                    ScriptError {"Query script system param missing type"}
+                );
+            }
+
+            auto type = Registry::instance().try_get_type(
+                std::string_view {child.type}
+            );
+            if (!type) {
+                return failure(ScriptError {type.error().message});
+            }
+
+            if (child.kind == ScriptSystemParamKind::Component) {
+                if (child.name.empty()) {
+                    return failure(
+                        ScriptError {
+                            "Query component script system param missing name"
+                        }
+                    );
+                }
+                fields.push_back(
+                    ScriptQueryField {
+                        .name = child.name,
+                        .type = type->id(),
+                        .access = child.access,
+                    }
+                );
+            } else {
+                filters.push_back(
+                    ScriptQueryFilter {
+                        .type = type->id(),
+                        .required = child.kind == ScriptSystemParamKind::With,
+                    }
+                );
+            }
+        }
+
+        if (fields.empty()) {
+            return failure(
+                ScriptError {
+                    "Query script system param must declare components"
+                }
+            );
+        }
+
+        return ScriptSystemArg {
+            .kind = param.kind,
+            .access = param.access,
+            .type = {},
+            .name = param.name,
+            .query_fields = std::move(fields),
+            .query_filters = std::move(filters),
+        };
+    }
+
     if (param.kind != ScriptSystemParamKind::Resource) {
         return failure(
-            ScriptError {"Only resource script system params are supported yet"}
+            ScriptError {
+                "Only resource and query script system params are supported yet"
+            }
         );
     }
     if (param.type.empty()) {
@@ -89,7 +177,15 @@ ScriptSystem::ScriptSystem(
 void ScriptSystem::run(World& world) {
     std::vector<Ref> args;
     args.reserve(m_args.size());
+    std::vector<ScriptQuery> queries;
+    queries.reserve(m_args.size());
     for (const auto& arg : m_args) {
+        if (arg.kind == ScriptSystemParamKind::Query) {
+            queries.emplace_back(world, arg.query_fields, arg.query_filters);
+            args.emplace_back(queries.back());
+            continue;
+        }
+
         if (arg.kind != ScriptSystemParamKind::Resource) {
             error(
                 "Script system '{}' has unsupported param '{}'",

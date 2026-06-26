@@ -2,9 +2,9 @@
 
 #include "app/app.hpp"
 #include "app/reflection_plugin.hpp"
-#include "asset/handle.hpp"
 #include "asset/plugin.hpp"
 #include "asset/server.hpp"
+#include "base/log.hpp"
 #include "core/camera.hpp"
 #include "core/fps_counter.hpp"
 #include "core/image.hpp"
@@ -21,12 +21,13 @@
 #include "pbr/plugin.hpp"
 #include "pbr/skybox.hpp"
 #include "pbr/vxgi.hpp"
-#include "rendering/mesh/mesh.hpp"
 #include "rendering/plugin.hpp"
 #include "rendering/shader.hpp"
 #include "scene/plugin.hpp"
-#include "scripting/component.hpp"
+#include "scripting/asset.hpp"
+#include "scripting/script_system_registry.hpp"
 #include "scripting_lua/plugin.hpp"
+#include "scripting_lua/runtime.hpp"
 #include "ui/plugin.hpp"
 #include "web_preview/plugin.hpp"
 #include "window/input.hpp"
@@ -46,7 +47,14 @@ class ColorOnlyMaterial : public StandardMaterial {
     std::size_t hash() const override { return type_id<ColorOnlyMaterial>(); }
 };
 
-void setup(ResRW<AssetServer> asset_server, Commands commands) {
+void setup(
+    ResRW<AssetServer> asset_server,
+    ResRO<Assets<ScriptAsset>> scripts,
+    ResRW<LuaRuntime> runtime,
+    ResRW<ScriptSystemRegistry> script_systems,
+    Commands commands,
+    WorldRef world
+) {
     commands.spawn().add(
         SceneSpawner {
             .scene = asset_server->load<Scene>("sponza/sponza.obj"),
@@ -54,21 +62,20 @@ void setup(ResRW<AssetServer> asset_server, Commands commands) {
         }
     );
 
+    Transform3d camera_transform {
+        .position = {-4.0f, 1.0f, 0.0f},
+        .rotation = {0.0f, 90.0f, 0.0f},
+    };
+
     commands.spawn().add(
         Camera3d {
             .fov_y = 45.0f,
             .near_plane = 0.1f,
             .far_plane = 10000.0f,
         },
-        Transform3d {
-            .position = {-4.0f, 1.0f, 0.0f},
-            .rotation = {0.0f, 90.0f, 0.0f},
-        },
+        camera_transform,
         GeneratedEquirectEnvironmentMap {
             .equirect_image = asset_server->load<Image>("autumn_field_4k.hdr"),
-        },
-        ScriptComponent {
-            .script = asset_server->load<ScriptAsset>("camera_control.lua"),
         }
     );
 
@@ -88,6 +95,16 @@ void setup(ResRW<AssetServer> asset_server, Commands commands) {
             .equirect_map = asset_server->load<Image>("autumn_field_4k.hdr"),
         }
     );
+
+    auto camera_script = asset_server->load<ScriptAsset>("camera_control.lua");
+    auto loaded_script_system =
+        script_systems->load_asset(*runtime, *world, *scripts, camera_script);
+    if (!loaded_script_system) {
+        error(
+            "Failed to load camera control script system: {}",
+            loaded_script_system.error().message
+        );
+    }
 }
 
 void update_directional_light(

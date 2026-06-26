@@ -1,11 +1,10 @@
-#include "scripting_lua/lua_runtime.hpp"
-
 #include "core/transform.hpp"
 #include "ecs/world.hpp"
 #include "math/vector.hpp"
 #include "refl/ref_utils.hpp"
 #include "refl/registry.hpp"
 #include "scripting_lua/entity.hpp"
+#include "scripting_lua/runtime.hpp"
 #include "scripting_lua/tests/lua_test_types.hpp"
 #include "scripting_lua/world.hpp"
 

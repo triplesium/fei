@@ -1,4 +1,4 @@
-#include "scripting_lua/lua_runtime.hpp"
+#include "scripting_lua/runtime.hpp"
 
 #include "app/app.hpp"
 #include "base/log.hpp"
@@ -11,15 +11,14 @@
 #include "refl/val.hpp"
 #include "scripting_lua/object.hpp"
 #include "scripting_lua/operator.hpp"
+#include "scripting_lua/query_binding.hpp"
+#include "scripting_lua/script_manifest.hpp"
 #include "scripting_lua/utils.hpp"
 
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <lua.hpp>
-#include <optional>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace fei {
@@ -35,113 +34,6 @@ ReturnValue lua_to_argument(lua_State* L, int idx) {
 
 lua_Integer to_lua_integer(std::uint64_t value) {
     return static_cast<lua_Integer>(value);
-}
-
-constexpr std::string_view lua_script_system_helpers = R"(
-local function ensure_manifest()
-    if manifest == nil then
-        manifest = {}
-    elseif type(manifest) ~= "table" then
-        error("manifest must be a table", 2)
-    end
-
-    if manifest.systems == nil then
-        manifest.systems = {}
-    elseif type(manifest.systems) ~= "table" then
-        error("manifest.systems must be a table", 2)
-    end
-
-    return manifest
-end
-
-function system(desc)
-    if type(desc) ~= "table" then
-        error("system expects a table", 2)
-    end
-    if type(desc.name) ~= "string" then
-        error("system.name must be a string", 2)
-    end
-    if type(desc.run) ~= "function" then
-        error("system.run must be a function", 2)
-    end
-
-    local m = ensure_manifest()
-    local run = desc.run
-    local params = desc.params or {}
-    _ENV[desc.name] = function(...)
-        local values = {...}
-        local args = {}
-        for i, param in ipairs(params) do
-            args[param.name] = values[i]
-        end
-        return run(args)
-    end
-    desc.run = nil
-    desc.params = params
-    table.insert(m.systems, desc)
-    return desc
-end
-
-local function resource_type_name(type_ref)
-    if type(type_ref) ~= "table" then
-        error("resource type must be a registered type", 3)
-    end
-    if type(rawget(type_ref, "__type_id")) ~= "number" then
-        error("resource type must be a registered type", 3)
-    end
-
-    local name = rawget(type_ref, "__type_name")
-    if type(name) ~= "string" then
-        error("resource type is missing __type_name", 3)
-    end
-    return name
-end
-
-function resource(name, type_ref, access)
-    return {
-        name = name,
-        kind = "resource",
-        type = resource_type_name(type_ref),
-        access = access or "read",
-    }
-end
-
-function read_resource(name, type_ref)
-    return resource(name, type_ref, "read")
-end
-
-function write_resource(name, type_ref)
-    return resource(name, type_ref, "write")
-end
-)";
-
-Status<ScriptError> install_lua_script_helpers(lua_State* L, int env_index) {
-    int base_top = lua_gettop(L);
-    if (luaL_loadbuffer(
-            L,
-            lua_script_system_helpers.data(),
-            lua_script_system_helpers.size(),
-            "fei_lua_script_helpers"
-        ) != LUA_OK) {
-        std::string message = lua_tostring(L, -1);
-        lua_settop(L, base_top);
-        return failure(ScriptError {std::move(message)});
-    }
-
-    lua_pushvalue(L, env_index);
-    const char* upvalue = lua_setupvalue(L, -2, 1);
-    if (!upvalue) {
-        lua_pop(L, 1);
-    }
-
-    if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
-        std::string message = lua_tostring(L, -1);
-        lua_settop(L, base_top);
-        return failure(ScriptError {std::move(message)});
-    }
-
-    lua_settop(L, base_top);
-    return {};
 }
 
 Enum& register_main_schedules_enum() {
@@ -182,272 +74,6 @@ void register_lua_enum(lua_State* L, const Enum& enm) {
         lua_settable(L, -3);
     }
     lua_setglobal(L, type->stripped_name().c_str());
-}
-
-ScriptError lua_manifest_error(const std::string& message) {
-    return ScriptError {"Invalid Lua script manifest: " + message};
-}
-
-std::string lua_type_name(lua_State* L, int index) {
-    return lua_typename(L, lua_type(L, index));
-}
-
-Result<std::optional<std::string>, ScriptError> lua_read_optional_string_field(
-    lua_State* L,
-    int table_index,
-    const char* field_name
-) {
-    lua_getfield(L, table_index, field_name);
-    if (lua_isnil(L, -1)) {
-        lua_pop(L, 1);
-        return std::optional<std::string> {};
-    }
-    if (!lua_isstring(L, -1)) {
-        std::string type_name = lua_type_name(L, -1);
-        lua_pop(L, 1);
-        return failure(lua_manifest_error(
-            std::string("'") + field_name + "' must be a string, got " +
-            type_name
-        ));
-    }
-
-    std::string value = lua_tostring(L, -1);
-    lua_pop(L, 1);
-    return std::optional<std::string> {std::move(value)};
-}
-
-Result<std::string, ScriptError>
-lua_read_script_system_name(lua_State* L, int table_index) {
-    auto name = lua_read_optional_string_field(L, table_index, "name");
-    if (!name) {
-        return failure(std::move(name.error()));
-    }
-    if (*name && !name->value().empty()) {
-        return **name;
-    }
-
-    return failure(lua_manifest_error("script system must define 'name'"));
-}
-
-Result<ScheduleId, ScriptError>
-lua_read_schedule_field(lua_State* L, int table_index) {
-    lua_getfield(L, table_index, "schedule");
-    if (lua_isnil(L, -1)) {
-        lua_pop(L, 1);
-        return failure(lua_manifest_error("script system missing 'schedule'"));
-    }
-    if (!lua_is_enum_value(L, -1)) {
-        std::string type_name = lua_type_name(L, -1);
-        lua_pop(L, 1);
-        return failure(lua_manifest_error(
-            "'schedule' must be a MainSchedules enum value, got " + type_name
-        ));
-    }
-
-    lua_getfield(L, -1, "__enum_type_id");
-    auto enum_type = static_cast<TypeId>(lua_tointeger(L, -1));
-    lua_pop(L, 1);
-    if (enum_type != type_id<MainSchedules>()) {
-        lua_pop(L, 1);
-        return failure(
-            lua_manifest_error("'schedule' must be a MainSchedules enum value")
-        );
-    }
-
-    lua_getfield(L, -1, "__enum_value");
-    auto schedule = static_cast<ScheduleId>(lua_tointeger(L, -1));
-    lua_pop(L, 1);
-    lua_pop(L, 1);
-    return schedule;
-}
-
-Result<ScriptSystemParamKind, ScriptError>
-script_param_kind_from_string(const std::string& value) {
-    if (value == "world" || value == "World") {
-        return ScriptSystemParamKind::World;
-    }
-    if (value == "entity" || value == "Entity") {
-        return ScriptSystemParamKind::Entity;
-    }
-    if (value == "resource" || value == "Resource") {
-        return ScriptSystemParamKind::Resource;
-    }
-    if (value == "component" || value == "Component") {
-        return ScriptSystemParamKind::Component;
-    }
-    return failure(lua_manifest_error("unknown param kind '" + value + "'"));
-}
-
-Result<ScriptSystemAccess, ScriptError>
-script_access_from_string(const std::string& value) {
-    if (value == "read" || value == "Read") {
-        return ScriptSystemAccess::Read;
-    }
-    if (value == "write" || value == "Write") {
-        return ScriptSystemAccess::Write;
-    }
-    return failure(lua_manifest_error("unknown param access '" + value + "'"));
-}
-
-Result<std::vector<ScriptSystemParam>, ScriptError>
-lua_read_script_system_params(lua_State* L, int system_index) {
-    std::vector<ScriptSystemParam> params;
-
-    lua_getfield(L, system_index, "params");
-    if (lua_isnil(L, -1)) {
-        lua_pop(L, 1);
-        return params;
-    }
-    if (!lua_istable(L, -1)) {
-        std::string type_name = lua_type_name(L, -1);
-        lua_pop(L, 1);
-        return failure(
-            lua_manifest_error("'params' must be a table, got " + type_name)
-        );
-    }
-
-    int params_index = lua_absindex(L, -1);
-    auto count = static_cast<std::size_t>(lua_rawlen(L, params_index));
-    params.reserve(count);
-    for (std::size_t i = 1; i <= count; ++i) {
-        lua_rawgeti(L, params_index, static_cast<lua_Integer>(i));
-        if (!lua_istable(L, -1)) {
-            std::string type_name = lua_type_name(L, -1);
-            lua_pop(L, 2);
-            return failure(lua_manifest_error(
-                "param entry must be a table, got " + type_name
-            ));
-        }
-
-        int param_index = lua_absindex(L, -1);
-        auto name = lua_read_optional_string_field(L, param_index, "name");
-        if (!name) {
-            lua_pop(L, 2);
-            return failure(std::move(name.error()));
-        }
-        auto type = lua_read_optional_string_field(L, param_index, "type");
-        if (!type) {
-            lua_pop(L, 2);
-            return failure(std::move(type.error()));
-        }
-        auto kind_value =
-            lua_read_optional_string_field(L, param_index, "kind");
-        if (!kind_value) {
-            lua_pop(L, 2);
-            return failure(std::move(kind_value.error()));
-        }
-        auto access_value =
-            lua_read_optional_string_field(L, param_index, "access");
-        if (!access_value) {
-            lua_pop(L, 2);
-            return failure(std::move(access_value.error()));
-        }
-
-        ScriptSystemParamKind kind = ScriptSystemParamKind::Component;
-        if (*kind_value) {
-            auto parsed_kind = script_param_kind_from_string(**kind_value);
-            if (!parsed_kind) {
-                lua_pop(L, 2);
-                return failure(std::move(parsed_kind.error()));
-            }
-            kind = *parsed_kind;
-        }
-
-        ScriptSystemAccess access = ScriptSystemAccess::Read;
-        if (*access_value) {
-            auto parsed_access = script_access_from_string(**access_value);
-            if (!parsed_access) {
-                lua_pop(L, 2);
-                return failure(std::move(parsed_access.error()));
-            }
-            access = *parsed_access;
-        }
-
-        params.push_back(
-            ScriptSystemParam {
-                .name = name->value_or(std::string {}),
-                .type = type->value_or(std::string {}),
-                .kind = kind,
-                .access = access,
-            }
-        );
-        lua_pop(L, 1);
-    }
-
-    lua_pop(L, 1);
-    return params;
-}
-
-Result<ScriptSystemManifest, ScriptError>
-lua_read_script_system_manifest(lua_State* L, int system_index) {
-    if (!lua_istable(L, system_index)) {
-        return failure(lua_manifest_error(
-            "system entry must be a table, got " +
-            lua_type_name(L, system_index)
-        ));
-    }
-
-    auto name = lua_read_script_system_name(L, system_index);
-    if (!name) {
-        return failure(std::move(name.error()));
-    }
-
-    auto schedule = lua_read_schedule_field(L, system_index);
-    if (!schedule) {
-        return failure(std::move(schedule.error()));
-    }
-
-    auto params = lua_read_script_system_params(L, system_index);
-    if (!params) {
-        return failure(std::move(params.error()));
-    }
-
-    return ScriptSystemManifest {
-        .name = std::move(*name),
-        .params = std::move(*params),
-        .schedule = *schedule,
-    };
-}
-
-Result<ScriptModuleManifest, ScriptError>
-lua_read_module_manifest(lua_State* L, int manifest_index) {
-    ScriptModuleManifest manifest;
-    if (!lua_istable(L, manifest_index)) {
-        return failure(lua_manifest_error(
-            "manifest must be a table, got " + lua_type_name(L, manifest_index)
-        ));
-    }
-
-    lua_getfield(L, manifest_index, "systems");
-    if (lua_isnil(L, -1)) {
-        lua_pop(L, 1);
-        return manifest;
-    }
-    if (!lua_istable(L, -1)) {
-        std::string type_name = lua_type_name(L, -1);
-        lua_pop(L, 1);
-        return failure(
-            lua_manifest_error("'systems' must be a table, got " + type_name)
-        );
-    }
-
-    int systems_index = lua_absindex(L, -1);
-    auto count = static_cast<std::size_t>(lua_rawlen(L, systems_index));
-    manifest.systems.reserve(count);
-    for (std::size_t i = 1; i <= count; ++i) {
-        lua_rawgeti(L, systems_index, static_cast<lua_Integer>(i));
-        int system_index = lua_absindex(L, -1);
-        auto system = lua_read_script_system_manifest(L, system_index);
-        if (!system) {
-            lua_pop(L, 2);
-            return failure(std::move(system.error()));
-        }
-        manifest.systems.push_back(std::move(*system));
-        lua_pop(L, 1);
-    }
-
-    lua_pop(L, 1);
-    return manifest;
 }
 
 int lua_raise_failure(lua_State* L, const InvokeFailure& failure) {
@@ -516,6 +142,7 @@ int lua_push_invoke_result(lua_State* L, const InvokeResult& result) {
 
 LuaRuntime::LuaRuntime() : m_state(luaL_newstate()) {
     luaL_openlibs(m_state);
+    register_lua_type(register_lua_script_query_type());
     register_lua_enum(m_state, register_main_schedules_enum());
 }
 
@@ -525,7 +152,7 @@ LuaRuntime::~LuaRuntime() {
     }
 }
 
-void LuaRuntime::register_type(Type& type) {
+void LuaRuntime::register_lua_type(Type& type) {
     auto* L = m_state;
     auto id = type.id();
 
@@ -575,6 +202,10 @@ void LuaRuntime::register_type(Type& type) {
         lua_setglobal(L, type.stripped_name().c_str());
         // Stack: []
     }
+}
+
+void LuaRuntime::register_type(Type& type) {
+    register_lua_type(type);
 }
 
 void LuaRuntime::unregister_type(Type& type) {
@@ -961,15 +592,20 @@ int LuaRuntime::dispatch_index(lua_State* L) {
     if (!type) {
         return lua_raise_registry_error(L, type.error());
     }
-    auto cls = Registry::instance().try_get_cls(type_id);
-    if (!cls) {
-        return lua_raise_registry_error(L, cls.error());
-    }
 
     const char* key = lua_tostring(L, 2);
     if (!key) {
         luaL_error(L, "Invalid key type for indexing");
         return 0;
+    }
+
+    if (lua_is_script_query(type_id)) {
+        return lua_dispatch_script_query_index(L, key);
+    }
+
+    auto cls = Registry::instance().try_get_cls(type_id);
+    if (!cls) {
+        return lua_raise_registry_error(L, cls.error());
     }
 
     auto prop = cls->try_get_property(key);

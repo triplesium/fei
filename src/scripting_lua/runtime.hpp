@@ -27,6 +27,8 @@ class LuaRuntime : public ScriptRuntime {
     static int dispatch_newindex(lua_State* L);
     static int dispatch_operator(lua_State* L);
 
+    void register_lua_type(Type& type);
+
   public:
     LuaRuntime();
     ~LuaRuntime() override;

@@ -2,6 +2,7 @@
 
 #include "base/result.hpp"
 #include "ecs/system.hpp"
+#include "scripting/query.hpp"
 #include "scripting/runtime.hpp"
 
 #include <string>
@@ -16,6 +17,8 @@ struct ScriptSystemArg {
     ScriptSystemAccess access {ScriptSystemAccess::Read};
     TypeId type;
     std::string name;
+    std::vector<ScriptQueryField> query_fields;
+    std::vector<ScriptQueryFilter> query_filters;
 };
 
 class ScriptSystem : public System {
