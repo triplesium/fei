@@ -13,6 +13,8 @@ namespace {
 ScriptSource
 script_source_for_asset(Handle<ScriptAsset> asset, const ScriptAsset& script) {
     return ScriptSource {
+        // FIXME: Use the asset's original path once asset metadata is exposed
+        // here, so script profiles show names like "camera_control.lua".
         .name = "script_asset_" + std::to_string(asset.id()) + ".lua",
         .content = script.content(),
         .language = "lua",

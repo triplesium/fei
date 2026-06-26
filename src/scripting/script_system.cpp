@@ -173,6 +173,21 @@ script_system_access_for_manifest(const ScriptSystemManifest& manifest) {
     return script_system_access_for_args(*args);
 }
 
+SystemProfileInfo script_system_profile_for_manifest(
+    const ScriptModuleManifest& module_manifest,
+    const ScriptSystemManifest& system_manifest
+) {
+    const auto file = module_manifest.source_name.empty() ?
+                          std::string {"<script>"} :
+                          module_manifest.source_name;
+    return SystemProfileInfo {
+        .name = file + "::" + system_manifest.name,
+        .file = file,
+        .function = system_manifest.name,
+        .line = 0,
+    };
+}
+
 ScriptSystem::ScriptSystem(
     ScriptRuntime& runtime,
     ScriptModuleId module,
@@ -266,10 +281,12 @@ Result<std::vector<SystemHandle>, ScriptError> register_script_systems(
             std::move(system.args),
             std::move(system.access)
         );
-        handles.push_back(world.add_system(
-            system.manifest->schedule,
-            SystemConfig(std::move(script_system))
-        ));
+        SystemConfig config(std::move(script_system));
+        config.profile =
+            script_system_profile_for_manifest(manifest, *system.manifest);
+        handles.push_back(
+            world.add_system(system.manifest->schedule, std::move(config))
+        );
     }
     return handles;
 }

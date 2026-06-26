@@ -42,10 +42,17 @@ TEST_CASE("LuaRuntime reads module manifests", "[scripting][lua][manifest]") {
     REQUIRE(module);
     auto manifest = runtime.module_manifest(*module);
     REQUIRE(manifest);
+    REQUIRE(manifest->source_name == "manifest.lua");
     REQUIRE(manifest->systems.size() == 1);
     REQUIRE(manifest->systems[0].name == "tick_system");
     REQUIRE(manifest->systems[0].schedule == Update);
     REQUIRE(manifest->systems[0].params.empty());
+
+    auto profile =
+        script_system_profile_for_manifest(*manifest, manifest->systems[0]);
+    REQUIRE(profile.name == "manifest.lua::tick_system");
+    REQUIRE(profile.file == "manifest.lua");
+    REQUIRE(profile.function == "tick_system");
 }
 
 TEST_CASE(

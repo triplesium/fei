@@ -56,6 +56,7 @@ struct ScriptSystemManifest {
 };
 
 struct ScriptModuleManifest {
+    std::string source_name;
     std::vector<ScriptSystemManifest> systems;
 };
 

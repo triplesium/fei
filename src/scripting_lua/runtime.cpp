@@ -374,11 +374,17 @@ LuaRuntime::module_manifest(ScriptModuleId module) {
     lua_getfield(L, env_index, "manifest");
     if (lua_isnil(L, -1)) {
         lua_settop(L, base_top);
-        return ScriptModuleManifest {};
+        return ScriptModuleManifest {
+            .source_name = it->second.name,
+        };
     }
 
     auto manifest = lua_read_module_manifest(L, lua_absindex(L, -1));
     lua_settop(L, base_top);
+    if (!manifest) {
+        return failure(std::move(manifest.error()));
+    }
+    manifest->source_name = it->second.name;
     return manifest;
 }
 

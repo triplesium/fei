@@ -2,6 +2,7 @@
 
 #include "base/result.hpp"
 #include "ecs/system.hpp"
+#include "ecs/system_profile.hpp"
 #include "scripting/query.hpp"
 #include "scripting/runtime.hpp"
 
@@ -51,5 +52,10 @@ Result<std::vector<SystemHandle>, ScriptError> register_script_systems(
 
 Result<SystemAccess, ScriptError>
 script_system_access_for_manifest(const ScriptSystemManifest& manifest);
+
+SystemProfileInfo script_system_profile_for_manifest(
+    const ScriptModuleManifest& module_manifest,
+    const ScriptSystemManifest& system_manifest
+);
 
 } // namespace fei
