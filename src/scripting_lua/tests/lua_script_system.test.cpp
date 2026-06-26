@@ -3,6 +3,7 @@
 #include "core/transform.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/world.hpp"
+#include "math/vector.hpp"
 #include "refl/ref_utils.hpp"
 #include "refl/registry.hpp"
 #include "scripting/asset.hpp"
@@ -147,6 +148,7 @@ TEST_CASE(
 ) {
     register_transform_script_metadata();
     auto runtime = make_test_runtime();
+    runtime.register_type(type<Vector3>());
     runtime.register_type(type<Transform3d>());
 
     auto module = runtime.load_module(
@@ -192,6 +194,11 @@ TEST_CASE(
     REQUIRE(query_param.params[1].kind == ScriptSystemParamKind::With);
     REQUIRE(query_param.params[1].type == "Transform3d");
 
+    auto access = script_system_access_for_manifest(manifest->systems[0]);
+    REQUIRE(access);
+    REQUIRE(access->write_components.contains(type_id<ScriptTestReceiver>()));
+    REQUIRE_FALSE(access->read_components.contains(type_id<Transform3d>()));
+
     World world;
     world.add_resource(CommandsQueue {});
 
@@ -213,6 +220,109 @@ TEST_CASE(
     world.run_schedule(Update);
     REQUIRE(world.get_component<ScriptTestReceiver>(matched).value == 6);
     REQUIRE(world.get_component<ScriptTestReceiver>(filtered_out).value == 10);
+}
+
+TEST_CASE(
+    "Lua script query params support read fields and without filters",
+    "[scripting][lua][system][query]"
+) {
+    register_transform_script_metadata();
+    auto runtime = make_test_runtime();
+    runtime.register_type(type<Vector3>());
+    runtime.register_type(type<Transform3d>());
+
+    auto module = runtime.load_module(
+        ScriptSource {
+            .name = "query_read_without_script_system.lua",
+            .content = R"(
+                function tick(args)
+                    for row in args.receivers:iter() do
+                        if row.blocker ~= nil then
+                            row.receiver.value = 999
+                        elseif row.transform.position.x > 1.0 then
+                            row.receiver.value = row.receiver.value + 7
+                        end
+                    end
+                end
+
+                system {
+                    name = "tick",
+                    run = tick,
+                    schedule = MainSchedules.Update,
+                    params = {
+                        query("receivers", {
+                            query.write("receiver", ScriptTestReceiver),
+                            query.read("transform", Transform3d),
+                            query.without(ScriptTestError),
+                        }),
+                    },
+                }
+            )",
+            .language = "lua",
+        }
+    );
+
+    REQUIRE(module);
+    auto manifest = runtime.module_manifest(*module);
+    REQUIRE(manifest);
+    REQUIRE(manifest->systems.size() == 1);
+
+    const auto& query_param = manifest->systems[0].params[0];
+    REQUIRE(query_param.params.size() == 3);
+    REQUIRE(query_param.params[0].access == ScriptSystemAccess::Write);
+    REQUIRE(query_param.params[1].access == ScriptSystemAccess::Read);
+    REQUIRE(query_param.params[2].kind == ScriptSystemParamKind::Without);
+
+    auto access = script_system_access_for_manifest(manifest->systems[0]);
+    REQUIRE(access);
+    REQUIRE(access->write_components.contains(type_id<ScriptTestReceiver>()));
+    REQUIRE(access->read_components.contains(type_id<Transform3d>()));
+    REQUIRE_FALSE(access->read_components.contains(type_id<ScriptTestError>()));
+    REQUIRE_FALSE(
+        access->write_components.contains(type_id<ScriptTestError>())
+    );
+
+    World world;
+    world.add_resource(CommandsQueue {});
+
+    auto matched = world.entity();
+    ScriptTestReceiver matched_receiver;
+    matched_receiver.value = 1;
+    world.add_component(matched, matched_receiver);
+    world.add_component(
+        matched,
+        Transform3d {
+            .position = {2.0f, 0.0f, 0.0f},
+        }
+    );
+
+    auto filtered_out = world.entity();
+    ScriptTestReceiver filtered_receiver;
+    filtered_receiver.value = 10;
+    world.add_component(filtered_out, filtered_receiver);
+    world.add_component(
+        filtered_out,
+        Transform3d {
+            .position = {2.0f, 0.0f, 0.0f},
+        }
+    );
+    world.add_component(filtered_out, ScriptTestError {});
+
+    auto missing_read_field = world.entity();
+    ScriptTestReceiver missing_receiver;
+    missing_receiver.value = 20;
+    world.add_component(missing_read_field, missing_receiver);
+
+    auto handles = register_script_systems(world, runtime, *module, *manifest);
+    REQUIRE(handles);
+    REQUIRE(handles->size() == 1);
+
+    world.run_schedule(Update);
+    REQUIRE(world.get_component<ScriptTestReceiver>(matched).value == 8);
+    REQUIRE(world.get_component<ScriptTestReceiver>(filtered_out).value == 10);
+    REQUIRE(
+        world.get_component<ScriptTestReceiver>(missing_read_field).value == 20
+    );
 }
 
 TEST_CASE(
@@ -635,6 +745,126 @@ TEST_CASE(
     REQUIRE(
         module.error().message.find(
             "resource type must be a registered type"
+        ) != std::string::npos
+    );
+}
+
+TEST_CASE(
+    "Lua script query component params require registered types",
+    "[scripting][lua][system][query]"
+) {
+    auto runtime = make_test_runtime();
+
+    auto module = runtime.load_module(
+        ScriptSource {
+            .name = "query_string_type.lua",
+            .content = R"(
+                function tick(args)
+                end
+
+                system {
+                    name = "tick",
+                    run = tick,
+                    schedule = MainSchedules.Update,
+                    params = {
+                        query("receivers", {
+                            query.write("receiver", "ScriptTestReceiver"),
+                        }),
+                    },
+                }
+            )",
+            .language = "lua",
+        }
+    );
+
+    REQUIRE_FALSE(module);
+    REQUIRE(
+        module.error().message.find(
+            "component type must be a registered type"
+        ) != std::string::npos
+    );
+}
+
+TEST_CASE(
+    "Lua script query params require component fields",
+    "[scripting][lua][system][query]"
+) {
+    auto runtime = make_test_runtime();
+
+    auto module = runtime.load_module(
+        ScriptSource {
+            .name = "empty_query.lua",
+            .content = R"(
+                function tick(args)
+                end
+
+                system {
+                    name = "tick",
+                    run = tick,
+                    schedule = MainSchedules.Update,
+                    params = {
+                        query("receivers", {}),
+                    },
+                }
+            )",
+            .language = "lua",
+        }
+    );
+
+    REQUIRE(module);
+    auto manifest = runtime.module_manifest(*module);
+    REQUIRE(manifest);
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    auto handles = register_script_systems(world, runtime, *module, *manifest);
+    REQUIRE_FALSE(handles);
+    REQUIRE(
+        handles.error().message.find(
+            "Query script system param must declare components"
+        ) != std::string::npos
+    );
+}
+
+TEST_CASE(
+    "Lua script query params reject resource entries",
+    "[scripting][lua][system][query]"
+) {
+    auto runtime = make_test_runtime();
+
+    auto module = runtime.load_module(
+        ScriptSource {
+            .name = "query_resource_entry.lua",
+            .content = R"(
+                function tick(args)
+                end
+
+                system {
+                    name = "tick",
+                    run = tick,
+                    schedule = MainSchedules.Update,
+                    params = {
+                        query("receivers", {
+                            res.read("receiver", ScriptTestReceiver),
+                        }),
+                    },
+                }
+            )",
+            .language = "lua",
+        }
+    );
+
+    REQUIRE(module);
+    auto manifest = runtime.module_manifest(*module);
+    REQUIRE(manifest);
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    auto handles = register_script_systems(world, runtime, *module, *manifest);
+    REQUIRE_FALSE(handles);
+    REQUIRE(
+        handles.error().message.find(
+            "Query script system params only support components and filters"
         ) != std::string::npos
     );
 }

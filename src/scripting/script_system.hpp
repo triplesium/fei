@@ -49,4 +49,7 @@ Result<std::vector<SystemHandle>, ScriptError> register_script_systems(
     const ScriptModuleManifest& manifest
 );
 
+Result<SystemAccess, ScriptError>
+script_system_access_for_manifest(const ScriptSystemManifest& manifest);
+
 } // namespace fei

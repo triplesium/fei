@@ -164,6 +164,15 @@ script_system_access_for_args(const std::vector<ScriptSystemArg>& args) {
 
 } // namespace
 
+Result<SystemAccess, ScriptError>
+script_system_access_for_manifest(const ScriptSystemManifest& manifest) {
+    auto args = compile_script_system_args(manifest);
+    if (!args) {
+        return failure(std::move(args.error()));
+    }
+    return script_system_access_for_args(*args);
+}
+
 ScriptSystem::ScriptSystem(
     ScriptRuntime& runtime,
     ScriptModuleId module,
