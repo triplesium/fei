@@ -54,9 +54,10 @@ class LoadContext {
     template<typename T>
     Handle<T> load(const AssetPath& path) const;
 
-    // Non-fatal variant of load<T>; see load<T> for readiness semantics.
+    // Registers an asset produced while loading this asset and returns its
+    // handle. The produced asset is recorded as a dependency of this load.
     template<typename T>
-    Result<Handle<T>, AssetLoadError> try_load(const AssetPath& path) const;
+    Handle<T> add_asset(std::unique_ptr<T> asset) const;
 };
 
 class SyncLoadContext : public LoadContext {
@@ -71,7 +72,7 @@ class SyncLoadContext : public LoadContext {
     Handle<T> load(const AssetPath& path) const;
 
     template<typename T>
-    Result<Handle<T>, AssetLoadError> try_load(const AssetPath& path) const;
+    Handle<T> add_asset(std::unique_ptr<T> asset) const;
 };
 
 class AsyncLoadContext : public LoadContext {
@@ -88,7 +89,7 @@ class AsyncLoadContext : public LoadContext {
     Handle<T> load(const AssetPath& path) const;
 
     template<typename T>
-    Result<Handle<T>, AssetLoadError> try_load(const AssetPath& path) const;
+    Handle<T> add_asset(std::unique_ptr<T> asset) const;
 };
 
 template<typename T>

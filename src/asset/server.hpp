@@ -14,6 +14,7 @@
 #include <exception>
 #include <functional>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -91,24 +92,31 @@ class AssetServer {
     }
 
     template<typename T>
-    Result<Handle<T>, AssetLoadError> try_load(const AssetPath& path) {
+    Handle<T> load(const AssetPath& path) {
         if (!m_app->has_resource<Assets<T>>()) {
-            return failure(AssetLoadError(
-                path,
-                "No asset found for type: " + std::string(type_name<T>())
-            ));
+            fatal("No asset found for type: {}", type_name<T>());
         }
         auto& assets = m_app->resource<Assets<T>>();
+        if (auto cached = assets.cached_handle(path)) {
+            return std::move(*cached);
+        }
+        auto* loader = assets.loader();
+        if (!loader) {
+            return assets.add_failed(AssetLoadError(
+                path,
+                "AssetLoader not set for " + path.as_string()
+            ));
+        }
         auto source_name = path.source().value_or("default");
         if (!m_sources.contains(source_name)) {
-            return failure(AssetLoadError(
+            return assets.add_failed(AssetLoadError(
                 path,
                 "No asset source found with name: " + source_name
             ));
         }
         auto& source = m_sources.at(source_name);
         if (!source->exists(path.path())) {
-            return failure(AssetLoadError(
+            return assets.add_failed(AssetLoadError(
                 path,
                 "Asset not found at path: " + path.path().string() +
                     " in source: " + source_name
@@ -117,22 +125,19 @@ class AssetServer {
         SyncLoadContext context(*this, path);
         auto reader = source->try_get_reader(path.path());
         if (!reader) {
-            return failure(AssetLoadError(
+            return assets.add_failed(AssetLoadError(
                 path,
                 "Failed to read asset from source '" + source_name +
                     "': " + reader.error()
             ));
         }
-        return assets.try_load(*reader, context);
+        return assets.load(*reader, context);
     }
 
     template<typename T>
-    Result<Handle<T>, AssetLoadError> try_load_async(const AssetPath& path) {
+    Handle<T> load_async(const AssetPath& path) {
         if (!m_app->has_resource<Assets<T>>()) {
-            return failure(AssetLoadError(
-                path,
-                "No asset found for type: " + std::string(type_name<T>())
-            ));
+            fatal("No asset found for type: {}", type_name<T>());
         }
 
         auto& assets = m_app->resource<Assets<T>>();
@@ -142,14 +147,14 @@ class AssetServer {
 
         auto* loader = assets.loader();
         if (!loader) {
-            return failure(AssetLoadError(
+            return assets.add_failed(AssetLoadError(
                 path,
                 "AssetLoader not set for " + path.as_string()
             ));
         }
 
         if (!m_app->has_resource<Tasks>()) {
-            return failure(AssetLoadError(
+            return assets.add_failed(AssetLoadError(
                 path,
                 "Tasks resource not found for async asset loading"
             ));
@@ -157,14 +162,14 @@ class AssetServer {
 
         auto source_name = path.source().value_or("default");
         if (!m_sources.contains(source_name)) {
-            return failure(AssetLoadError(
+            return assets.add_failed(AssetLoadError(
                 path,
                 "No asset source found with name: " + source_name
             ));
         }
         auto* source = m_sources.at(source_name).get();
         if (!source->exists(path.path())) {
-            return failure(AssetLoadError(
+            return assets.add_failed(AssetLoadError(
                 path,
                 "Asset not found at path: " + path.path().string() +
                     " in source: " + source_name
@@ -250,29 +255,11 @@ class AssetServer {
     }
 
     template<typename T>
-    Handle<T> load(const AssetPath& path) {
-        auto result = try_load<T>(path);
-        if (!result) {
-            fatal(
-                "Failed to load asset '{}': {}",
-                result.error().path.as_string(),
-                result.error().message
-            );
+    Handle<T> add_asset(std::unique_ptr<T> asset) {
+        if (!m_app->has_resource<Assets<T>>()) {
+            fatal("No asset found for type: {}", type_name<T>());
         }
-        return std::move(*result);
-    }
-
-    template<typename T>
-    Handle<T> load_async(const AssetPath& path) {
-        auto result = try_load_async<T>(path);
-        if (!result) {
-            fatal(
-                "Failed to load asset '{}': {}",
-                result.error().path.as_string(),
-                result.error().message
-            );
-        }
-        return std::move(*result);
+        return m_app->resource<Assets<T>>().add(std::move(asset));
     }
 
     template<std::derived_from<AssetSource> Source, typename... Args>
@@ -529,38 +516,32 @@ class AssetServer {
 
 template<typename T>
 Handle<T> LoadContext::load(const AssetPath& path) const {
-    auto result = try_load<T>(path);
-    if (!result) {
-        fatal(
-            "Failed to load asset '{}': {}",
-            result.error().path.as_string(),
-            result.error().message
+    Handle<T> handle;
+    if (auto* context = dynamic_cast<const SyncLoadContext*>(this)) {
+        handle = context->template load<T>(path);
+    } else if (auto* context = dynamic_cast<const AsyncLoadContext*>(this)) {
+        handle = context->template load<T>(path);
+    } else {
+        throw std::runtime_error(
+            "LoadContext does not support asset dependency loading"
         );
     }
-    return std::move(*result);
+    add_dependency(AssetServer::asset_key(handle));
+    return handle;
 }
 
 template<typename T>
-Result<Handle<T>, AssetLoadError>
-LoadContext::try_load(const AssetPath& path) const {
+Handle<T> LoadContext::add_asset(std::unique_ptr<T> asset) const {
+    Handle<T> handle;
     if (auto* context = dynamic_cast<const SyncLoadContext*>(this)) {
-        auto result = context->template try_load<T>(path);
-        if (result) {
-            add_dependency(AssetServer::asset_key(*result));
-        }
-        return result;
+        handle = context->template add_asset<T>(std::move(asset));
+    } else if (auto* context = dynamic_cast<const AsyncLoadContext*>(this)) {
+        handle = context->template add_asset<T>(std::move(asset));
+    } else {
+        throw std::runtime_error("LoadContext does not support asset creation");
     }
-    if (auto* context = dynamic_cast<const AsyncLoadContext*>(this)) {
-        auto result = context->template try_load<T>(path);
-        if (result) {
-            add_dependency(AssetServer::asset_key(*result));
-        }
-        return result;
-    }
-    return failure(AssetLoadError(
-        path,
-        "LoadContext does not support asset dependency loading"
-    ));
+    add_dependency(AssetServer::asset_key(handle));
+    return handle;
 }
 
 template<typename T>
@@ -569,44 +550,38 @@ Handle<T> SyncLoadContext::load(const AssetPath& path) const {
 }
 
 template<typename T>
-Result<Handle<T>, AssetLoadError>
-SyncLoadContext::try_load(const AssetPath& path) const {
-    return m_asset_server.template try_load<T>(path);
+Handle<T> SyncLoadContext::add_asset(std::unique_ptr<T> asset) const {
+    return m_asset_server.template add_asset<T>(std::move(asset));
 }
 
 template<typename T>
 Handle<T> AsyncLoadContext::load(const AssetPath& path) const {
-    auto result = try_load<T>(path);
-    if (!result) {
-        fatal(
-            "Failed to load asset '{}': {}",
-            result.error().path.as_string(),
-            result.error().message
+    if (!m_requests) {
+        throw std::runtime_error(
+            "Asset dependency request sender is not available"
         );
     }
-    return std::move(*result);
+    return m_requests->template load<T>(path);
 }
 
 template<typename T>
-Result<Handle<T>, AssetLoadError>
-AsyncLoadContext::try_load(const AssetPath& path) const {
+Handle<T> AsyncLoadContext::add_asset(std::unique_ptr<T> asset) const {
     if (!m_requests) {
-        return failure(AssetLoadError(
-            path,
+        throw std::runtime_error(
             "Asset dependency request sender is not available"
-        ));
+        );
     }
-    return m_requests->template try_load<T>(path);
+    return m_requests->template add_asset<T>(std::move(asset));
 }
 
 template<typename T>
-Result<Handle<T>, AssetLoadError>
-AssetLoadRequestSender::try_load(const AssetPath& path) {
+Handle<T> AssetLoadRequestSender::load(const AssetPath& path) {
     struct Pending {
         std::mutex mutex;
         std::condition_variable completed;
         bool ready {false};
-        Result<Handle<T>, AssetLoadError> result;
+        Handle<T> result;
+        std::string error;
     };
 
     auto pending = std::make_shared<Pending>();
@@ -614,7 +589,7 @@ AssetLoadRequestSender::try_load(const AssetPath& path) {
         Request {
             .process =
                 [pending, path](AssetServer& server) mutable {
-                    auto result = server.template try_load_async<T>(path);
+                    auto result = server.template load_async<T>(path);
                     {
                         std::scoped_lock state_lock(pending->mutex);
                         pending->result = std::move(result);
@@ -626,10 +601,9 @@ AssetLoadRequestSender::try_load(const AssetPath& path) {
                 [pending, path]() mutable {
                     {
                         std::scoped_lock state_lock(pending->mutex);
-                        pending->result = failure(AssetLoadError(
-                            path,
-                            "Asset dependency request queue is closed"
-                        ));
+                        pending->error =
+                            "Asset dependency request queue is closed for " +
+                            path.as_string();
                         pending->ready = true;
                     }
                     pending->completed.notify_one();
@@ -637,8 +611,8 @@ AssetLoadRequestSender::try_load(const AssetPath& path) {
         }
     );
     if (!enqueued) {
-        return failure(
-            AssetLoadError(path, "Asset dependency request queue is closed")
+        throw std::runtime_error(
+            "Asset dependency request queue is closed for " + path.as_string()
         );
     }
 
@@ -646,19 +620,81 @@ AssetLoadRequestSender::try_load(const AssetPath& path) {
     pending->completed.wait(lock, [&]() {
         return pending->ready;
     });
-    return std::move(pending->result);
+    if (!pending->error.empty()) {
+        throw std::runtime_error(pending->error);
+    }
+    return pending->result;
 }
 
 template<typename T>
-Result<Handle<T>, AssetLoadError>
-AssetLoadRequests::try_load(const AssetPath& path) {
-    if (!m_sender) {
-        return failure(AssetLoadError(
-            path,
-            "Asset dependency request sender is not available"
-        ));
+Handle<T> AssetLoadRequestSender::add_asset(std::unique_ptr<T> asset) {
+    struct Pending {
+        std::mutex mutex;
+        std::condition_variable completed;
+        bool ready {false};
+        Handle<T> result;
+        std::string error;
+    };
+
+    auto pending = std::make_shared<Pending>();
+    auto pending_asset = std::make_shared<std::unique_ptr<T>>(std::move(asset));
+    auto enqueued = enqueue(
+        Request {
+            .process =
+                [pending, pending_asset](AssetServer& server) mutable {
+                    auto result =
+                        server.template add_asset<T>(std::move(*pending_asset));
+                    {
+                        std::scoped_lock state_lock(pending->mutex);
+                        pending->result = std::move(result);
+                        pending->ready = true;
+                    }
+                    pending->completed.notify_one();
+                },
+            .cancel =
+                [pending]() mutable {
+                    {
+                        std::scoped_lock state_lock(pending->mutex);
+                        pending->error =
+                            "Asset dependency request queue is closed";
+                        pending->ready = true;
+                    }
+                    pending->completed.notify_one();
+                },
+        }
+    );
+    if (!enqueued) {
+        throw std::runtime_error("Asset dependency request queue is closed");
     }
-    return m_sender->template try_load<T>(path);
+
+    std::unique_lock lock(pending->mutex);
+    pending->completed.wait(lock, [&]() {
+        return pending->ready;
+    });
+    if (!pending->error.empty()) {
+        throw std::runtime_error(pending->error);
+    }
+    return pending->result;
+}
+
+template<typename T>
+Handle<T> AssetLoadRequests::load(const AssetPath& path) {
+    if (!m_sender) {
+        throw std::runtime_error(
+            "Asset dependency request sender is not available"
+        );
+    }
+    return m_sender->template load<T>(path);
+}
+
+template<typename T>
+Handle<T> AssetLoadRequests::add_asset(std::unique_ptr<T> asset) {
+    if (!m_sender) {
+        throw std::runtime_error(
+            "Asset dependency request sender is not available"
+        );
+    }
+    return m_sender->template add_asset<T>(std::move(asset));
 }
 
 } // namespace fei

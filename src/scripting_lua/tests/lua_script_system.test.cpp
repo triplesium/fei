@@ -537,7 +537,7 @@ TEST_CASE(
     world.run_schedule(Update);
     REQUIRE(world.resource<ScriptTestReceiver>().value == 14);
 
-    auto script_asset = assets.get(script);
+    auto script_asset = assets.modify(script);
     REQUIRE(script_asset);
     script_asset->set_content(R"(
         function tick(args)
@@ -573,7 +573,7 @@ TEST_CASE(
     REQUIRE(unloaded);
     REQUIRE_FALSE(scripts.is_loaded(*module_id));
 
-    auto script_asset_after_unload = assets.get(script);
+    auto script_asset_after_unload = assets.modify(script);
     REQUIRE(script_asset_after_unload);
     script_asset_after_unload->set_content(R"(
         function tick(args)

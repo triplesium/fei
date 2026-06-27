@@ -53,6 +53,7 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
         materials.size()
     );
 
+    std::vector<Handle<StandardMaterial>> material_handles;
     for (const auto& material : materials) {
         auto standard_material = std::make_unique<StandardMaterial>();
         standard_material->albedo =
@@ -60,15 +61,20 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
         standard_material->metallic = 0.0f;
         standard_material->roughness = 1.0f;
         if (!material.diffuse_texname.empty()) {
-            auto image = context.try_load<Image>(
+            auto image = context.load<Image>(
                 obj_path.parent_path() / material.diffuse_texname
             );
-            if (!image) {
-                return failure(std::move(image).error());
-            }
-            standard_material->albedo_map = std::move(*image);
+            standard_material->albedo_map = std::move(image);
         }
-        scene->materials.push_back(std::move(standard_material));
+        material_handles.push_back(
+            context.add_asset<StandardMaterial>(std::move(standard_material))
+        );
+    }
+
+    if (material_handles.empty()) {
+        material_handles.push_back(context.add_asset<StandardMaterial>(
+            std::make_unique<StandardMaterial>()
+        ));
     }
 
     std::size_t total_triangles = 0;
@@ -148,14 +154,22 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
             mesh->insert_attribute(Mesh::ATTRIBUTE_UV_0, std::move(uvs));
         }
         mesh->insert_indices(indices);
-        auto mesh_id = scene->meshes.size();
-        scene->meshes.push_back(std::move(mesh));
-        std::size_t material_id = -1;
-        if (!shape.mesh.material_ids.empty()) {
-            material_id = shape.mesh.material_ids[0];
+        auto mesh_handle = context.add_asset<Mesh>(std::move(mesh));
+        std::size_t material_id = 0;
+        if (!shape.mesh.material_ids.empty() &&
+            shape.mesh.material_ids[0] >= 0) {
+            auto shape_material_id =
+                static_cast<std::size_t>(shape.mesh.material_ids[0]);
+            if (shape_material_id < material_handles.size()) {
+                material_id = shape_material_id;
+            }
         }
         scene->objects.push_back(
-            {.mesh_index = mesh_id, .material_index = material_id}
+            Scene::Object {
+                .mesh = mesh_handle,
+                .material = material_handles[material_id],
+                .transform = {},
+            }
         );
     }
     fei::info(
@@ -171,9 +185,7 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
 void spawn_scene(
     Query<Entity, const SceneSpawner> scene_query,
     ResRO<AssetServer> asset_server,
-    ResRW<Assets<Scene>> scenes,
-    ResRW<Assets<Mesh>> meshes,
-    ResRW<Assets<StandardMaterial>> materials,
+    ResRO<Assets<Scene>> scenes,
     EventWriter<SceneSpawnedEvent> spawned_events,
     EventWriter<SceneSpawnFailedEvent> spawn_failed_events,
     Commands commands
@@ -226,29 +238,16 @@ void spawn_scene(
             continue;
         }
 
-        std::vector<Handle<Mesh>> mesh_handles;
-        for (auto& mesh : scene->meshes) {
-            mesh->scale_by(spawner.options.scale);
-            auto mesh_handle = meshes->add(std::move(mesh));
-            mesh_handles.push_back(mesh_handle);
-        }
-
-        std::vector<Handle<StandardMaterial>> material_handles;
-        for (auto& material : scene->materials) {
-            auto material_handle = materials->add(std::move(material));
-            material_handles.push_back(material_handle);
-        }
-
         std::vector<Entity> spawned_entities;
         for (const auto& object : scene->objects) {
+            auto transform = object.transform;
+            transform.scale *= spawner.options.scale;
             auto spawned_entity = commands.spawn();
             spawned_entities.push_back(spawned_entity.id());
             spawned_entity.add(
-                Mesh3d {.mesh = mesh_handles[object.mesh_index]},
-                MeshMaterial3d<StandardMaterial> {
-                    .material = material_handles[object.material_index]
-                },
-                Transform3d {}
+                Mesh3d {.mesh = object.mesh},
+                MeshMaterial3d<StandardMaterial> {.material = object.material},
+                transform
             );
         }
         commands.entity(entity).remove<SceneSpawner>().add(

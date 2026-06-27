@@ -38,26 +38,6 @@ Plane row_plane(
     );
 }
 
-Vector3 transform_point(const Matrix4x4& matrix, const Vector3& point) {
-    auto transformed = matrix * Vector4(point, 1.0f);
-    return Vector3 {
-        transformed.x / transformed.w,
-        transformed.y / transformed.w,
-        transformed.z / transformed.w,
-    };
-}
-
-Vector3 transform_extent(const Matrix4x4& matrix, const Vector3& extent) {
-    return Vector3 {
-        std::abs(matrix[0][0]) * extent.x + std::abs(matrix[0][1]) * extent.y +
-            std::abs(matrix[0][2]) * extent.z,
-        std::abs(matrix[1][0]) * extent.x + std::abs(matrix[1][1]) * extent.y +
-            std::abs(matrix[1][2]) * extent.z,
-        std::abs(matrix[2][0]) * extent.x + std::abs(matrix[2][1]) * extent.y +
-            std::abs(matrix[2][2]) * extent.z,
-    };
-}
-
 bool intersects_world_aabb(
     const Frustum& frustum,
     const Vector3& center,
@@ -80,10 +60,11 @@ bool Frustum::intersects(
     const Aabb& local_aabb,
     const Matrix4x4& world_from_local
 ) const {
+    auto world_aabb = transform_aabb(local_aabb, world_from_local);
     return intersects_world_aabb(
         *this,
-        transform_point(world_from_local, local_aabb.center()),
-        transform_extent(world_from_local, local_aabb.extent())
+        world_aabb.center(),
+        world_aabb.extent()
     );
 }
 

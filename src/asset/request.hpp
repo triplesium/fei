@@ -35,7 +35,10 @@ class AssetLoadRequestSender {
     AssetLoadRequestSender& operator=(AssetLoadRequestSender&&) = delete;
 
     template<typename T>
-    Result<Handle<T>, AssetLoadError> try_load(const AssetPath& path);
+    Handle<T> load(const AssetPath& path);
+
+    template<typename T>
+    Handle<T> add_asset(std::unique_ptr<T> asset);
 
   private:
     friend class AssetLoadRequests;
@@ -62,7 +65,10 @@ class AssetLoadRequests {
     std::shared_ptr<AssetLoadRequestSender> sender();
 
     template<typename T>
-    Result<Handle<T>, AssetLoadError> try_load(const AssetPath& path);
+    Handle<T> load(const AssetPath& path);
+
+    template<typename T>
+    Handle<T> add_asset(std::unique_ptr<T> asset);
 
     void process(AssetServer& server);
     void close();

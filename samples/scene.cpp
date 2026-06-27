@@ -87,7 +87,7 @@ void setup(
         },
         Transform3d {
             .position = {1.0f, 35.6f, 1.3f},
-            .rotation = {-80.0f, 47.0f, 0.0f},
+            .rotation = {-83.14f, 7.30f, 0.0f},
         }
     );
     commands.spawn().add(

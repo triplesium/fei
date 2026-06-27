@@ -107,7 +107,7 @@ void setup_vxgi(
 
 void compute_scene_aabb(
     ResRW<VxgiVoxelization> voxelization,
-    Query<const Mesh3d, const Transform3d, const Aabb> query
+    Query<const Transform3d, const Aabb>::Filter<With<Mesh3d>> query
 );
 
 void prepare_vxgi_voxelization(

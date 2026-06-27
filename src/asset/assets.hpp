@@ -104,10 +104,9 @@ class Assets {
         return *this;
     }
 
-    Result<Handle<T>, AssetLoadError>
-    try_load(Reader& reader, const LoadContext& context) {
+    Handle<T> load(Reader& reader, const LoadContext& context) {
         if (!m_loader) {
-            return failure(AssetLoadError(
+            return add_failed(AssetLoadError(
                 context.asset_path(),
                 "AssetLoader not set for " + context.asset_path().as_string()
             ));
@@ -125,7 +124,7 @@ class Assets {
 
         auto asset = m_loader->load(reader, context);
         if (!asset) {
-            return failure(std::move(asset.error()));
+            return add_failed(std::move(asset.error()));
         }
 
         auto handle = add_loaded(
@@ -136,20 +135,32 @@ class Assets {
         return std::move(handle);
     }
 
-    Handle<T> load(Reader& reader, const LoadContext& context) {
-        auto result = try_load(reader, context);
-        if (!result) {
-            fei::fatal(
-                "Failed to load asset '{}': {}",
-                result.error().path.as_string(),
-                result.error().message
-            );
-        }
-        return std::move(*result);
-    }
-
     Handle<T> add(std::unique_ptr<T> asset) {
         return add_loaded(std::move(asset), nullopt);
+    }
+
+    Handle<T> add_failed(AssetLoadError error) {
+        AssetId id = m_next_id++;
+        auto path = error.path;
+        auto handle_state = std::make_shared<AssetHandleState>(id);
+        auto handle = Handle<T>(handle_state);
+        m_assets[id] = {
+            .id = id,
+            .handle_state = std::move(handle_state),
+            .path = std::move(path),
+            .type_id = m_type_id,
+            .asset = nullptr,
+            .state = AssetLoadState::Failed,
+            .error = std::move(error),
+            .dependencies = {},
+        };
+        m_event_queue.push_back(
+            AssetEvent<T> {
+                .type = AssetEventType::Failed,
+                .id = id,
+            }
+        );
+        return handle;
     }
 
     Handle<T> reserve_loading(const AssetPath& path) {
@@ -284,29 +295,8 @@ class Assets {
         );
     }
 
-    Optional<T&> get(const Handle<T>& handle);
-
-    Optional<T&> get(AssetId id) {
-        Optional<Entry&> entry = get_entry(id);
-        if (!entry || entry->state != AssetLoadState::Loaded) {
-            return {};
-        }
-        m_event_queue.push_back(
-            AssetEvent<T> {
-                .type = AssetEventType::Modified,
-                .id = id,
-            }
-        );
-        return *entry->asset;
-    }
-
     Optional<const T&> get(const Handle<T>& handle) const {
-        auto it = m_assets.find(handle.id());
-        if (it != m_assets.end() &&
-            it->second.state == AssetLoadState::Loaded) {
-            return *it->second.asset;
-        }
-        return nullopt;
+        return get(handle.id());
     }
 
     Optional<const T&> get(AssetId id) const {
@@ -316,6 +306,35 @@ class Assets {
             return *it->second.asset;
         }
         return nullopt;
+    }
+
+    Optional<T&> modify(const Handle<T>& handle) { return modify(handle.id()); }
+
+    Optional<T&> modify(AssetId id) {
+        auto entry = get_entry(id);
+        if (!entry || entry->state != AssetLoadState::Loaded) {
+            return nullopt;
+        }
+        mark_modified(id);
+        return *entry->asset;
+    }
+
+    bool mark_modified(const Handle<T>& handle) {
+        return mark_modified(handle.id());
+    }
+
+    bool mark_modified(AssetId id) {
+        auto entry = get_entry(id);
+        if (!entry || entry->state != AssetLoadState::Loaded) {
+            return false;
+        }
+        m_event_queue.push_back(
+            AssetEvent<T> {
+                .type = AssetEventType::Modified,
+                .id = id,
+            }
+        );
+        return true;
     }
 
     Optional<AssetLoadState> load_state(AssetId id) const {
@@ -474,10 +493,5 @@ class Assets {
         return it->second;
     }
 };
-
-template<typename T>
-Optional<T&> Assets<T>::get(const Handle<T>& handle) {
-    return get(handle.id());
-}
 
 } // namespace fei

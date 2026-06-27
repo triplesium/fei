@@ -239,7 +239,7 @@ void setup_vxgi(
 
 void compute_scene_aabb(
     ResRW<VxgiVoxelization> voxelization,
-    Query<const Mesh3d, const Transform3d, const Aabb> query
+    Query<const Transform3d, const Aabb>::Filter<With<Mesh3d>> query
 ) {
     if (query.empty()) {
         voxelization->scene_aabb = Aabb {
@@ -258,9 +258,10 @@ void compute_scene_aabb(
         std::numeric_limits<float>::lowest(),
         std::numeric_limits<float>::lowest(),
     };
-    for (const auto& [mesh3d, transform3d, aabb] : query) {
-        auto min = transform3d.position + aabb.min;
-        auto max = transform3d.position + aabb.max;
+    for (const auto& [transform3d, aabb] : query) {
+        auto world_aabb = transform_aabb(aabb, transform3d.to_matrix());
+        auto min = world_aabb.min;
+        auto max = world_aabb.max;
         min_point.x = std::min(min_point.x, min.x);
         min_point.y = std::min(min_point.y, min.y);
         min_point.z = std::min(min_point.z, min.z);

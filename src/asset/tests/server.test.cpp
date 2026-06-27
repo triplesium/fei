@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <future>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <type_traits>
@@ -37,10 +38,7 @@ struct ServerAsset {
 };
 
 using ServerAssetLoadFn = decltype(&AssetServer::load<ServerAsset>);
-using ServerAssetTryLoadFn = decltype(&AssetServer::try_load<ServerAsset>);
 using ServerAssetLoadAsyncFn = decltype(&AssetServer::load_async<ServerAsset>);
-using ServerAssetTryLoadAsyncFn =
-    decltype(&AssetServer::try_load_async<ServerAsset>);
 
 static_assert(
     std::is_invocable_v<ServerAssetLoadFn, AssetServer&, const AssetPath&>
@@ -50,25 +48,10 @@ static_assert(
         is_invocable_v<ServerAssetLoadFn, const AssetServer&, const AssetPath&>
 );
 static_assert(
-    std::is_invocable_v<ServerAssetTryLoadFn, AssetServer&, const AssetPath&>
-);
-static_assert(!std::is_invocable_v<
-              ServerAssetTryLoadFn,
-              const AssetServer&,
-              const AssetPath&>);
-static_assert(
     std::is_invocable_v<ServerAssetLoadAsyncFn, AssetServer&, const AssetPath&>
 );
 static_assert(!std::is_invocable_v<
               ServerAssetLoadAsyncFn,
-              const AssetServer&,
-              const AssetPath&>);
-static_assert(std::is_invocable_v<
-              ServerAssetTryLoadAsyncFn,
-              AssetServer&,
-              const AssetPath&>);
-static_assert(!std::is_invocable_v<
-              ServerAssetTryLoadAsyncFn,
               const AssetServer&,
               const AssetPath&>);
 
@@ -164,17 +147,13 @@ class DependentServerLoader : public AssetLoader<ServerAsset> {
     AssetLoadResult<ServerAsset>
     load(Reader& reader, const LoadContext& context) override {
         ++load_count;
-        auto dependency = context.try_load<DependencyAsset>(
-            AssetPath("memory://dependency.bin")
-        );
-        if (!dependency) {
-            return failure(std::move(dependency).error());
-        }
+        auto dependency =
+            context.load<DependencyAsset>(AssetPath("memory://dependency.bin"));
 
         return std::make_unique<ServerAsset>(ServerAsset {
             .byte_count = static_cast<int>(reader.size()),
             .path = context.asset_path().as_string(),
-            .dependency = std::move(*dependency),
+            .dependency = std::move(dependency),
         });
     }
 };
@@ -229,15 +208,20 @@ TEST_CASE(
 ) {
     AssetLoadRequests requests;
     auto result = std::async(std::launch::async, [&]() {
-        return requests.try_load<ServerAsset>(AssetPath("memory://asset.bin"));
+        return requests.load<ServerAsset>(AssetPath("memory://asset.bin"));
     });
 
     std::this_thread::sleep_for(std::chrono::milliseconds {1});
     requests.close();
 
-    auto dependency = result.get();
-    REQUIRE_FALSE(dependency.has_value());
-    REQUIRE(dependency.error().message.contains("closed"));
+    bool threw = false;
+    try {
+        (void)result.get();
+    } catch (const std::runtime_error& error) {
+        threw = true;
+        REQUIRE(std::string(error.what()).contains("closed"));
+    }
+    REQUIRE(threw);
 }
 
 TEST_CASE(
@@ -298,41 +282,45 @@ TEST_CASE(
     REQUIRE(server_resource.is_loaded_with_dependencies(handle));
 }
 
-TEST_CASE(
-    "AssetServer try_load returns missing source errors",
-    "[asset][server]"
-) {
+TEST_CASE("AssetServer load stores missing source errors", "[asset][server]") {
     App app;
     AssetServer server(&app);
     app.add_resource(std::move(server));
     app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
 
-    auto result = app.resource<AssetServer>().try_load<ServerAsset>(
+    auto handle = app.resource<AssetServer>().load<ServerAsset>(
         AssetPath("missing://asset.bin")
     );
+    auto& assets = app.resource<Assets<ServerAsset>>();
 
-    REQUIRE_FALSE(result.has_value());
-    REQUIRE(result.error().path.as_string() == "missing://asset.bin");
-    REQUIRE(result.error().message.contains("No asset source found"));
+    auto state = assets.load_state(handle);
+    REQUIRE(state.has_value());
+    REQUIRE(*state == AssetLoadState::Failed);
+    auto error = assets.load_error(handle);
+    REQUIRE(error.has_value());
+    REQUIRE(error->path.as_string() == "missing://asset.bin");
+    REQUIRE(error->message.contains("No asset source found"));
 }
 
-TEST_CASE(
-    "AssetServer try_load returns source reader errors",
-    "[asset][server]"
-) {
+TEST_CASE("AssetServer load stores source reader errors", "[asset][server]") {
     App app;
     AssetServer server(&app);
     server.emplace_source<FailingReadSource>();
     app.add_resource(std::move(server));
     app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
 
-    auto result = app.resource<AssetServer>().try_load<ServerAsset>(
+    auto handle = app.resource<AssetServer>().load<ServerAsset>(
         AssetPath("broken://asset.bin")
     );
+    auto& assets = app.resource<Assets<ServerAsset>>();
 
-    REQUIRE_FALSE(result.has_value());
-    REQUIRE(result.error().path.as_string() == "broken://asset.bin");
-    REQUIRE(result.error().message.contains("source read failed"));
+    auto state = assets.load_state(handle);
+    REQUIRE(state.has_value());
+    REQUIRE(*state == AssetLoadState::Failed);
+    auto error = assets.load_error(handle);
+    REQUIRE(error.has_value());
+    REQUIRE(error->path.as_string() == "broken://asset.bin");
+    REQUIRE(error->message.contains("source read failed"));
 }
 
 TEST_CASE(

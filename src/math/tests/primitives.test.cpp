@@ -35,3 +35,21 @@ TEST_CASE("AABB reports center, size, and containment", "[math][primitive]") {
     REQUIRE_THAT(rect.min, VectorWithinAbs(1.0f, 2.0f));
     REQUIRE_THAT(rect.max, VectorWithinAbs(3.0f, 4.0f));
 }
+
+TEST_CASE(
+    "AABB transform accounts for scale and rotation",
+    "[math][primitive]"
+) {
+    Aabb bounds {{-1.0f, -2.0f, -3.0f}, {1.0f, 2.0f, 3.0f}};
+
+    auto scaled = transform_aabb(
+        bounds,
+        translate({10.0f, 20.0f, 30.0f}) * scale(2.0f, 3.0f, 4.0f)
+    );
+    REQUIRE_THAT(scaled.min, VectorWithinAbs(8.0f, 14.0f, 18.0f));
+    REQUIRE_THAT(scaled.max, VectorWithinAbs(12.0f, 26.0f, 42.0f));
+
+    auto rotated = transform_aabb(bounds, rotate_z(HALF_PI));
+    REQUIRE_THAT(rotated.min, VectorWithinAbs(-2.0f, -1.0f, -3.0f));
+    REQUIRE_THAT(rotated.max, VectorWithinAbs(2.0f, 1.0f, 3.0f));
+}

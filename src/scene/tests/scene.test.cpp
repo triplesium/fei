@@ -75,23 +75,22 @@ class FailingImageLoader : public AssetLoader<Image> {
 class DependentSceneLoader : public AssetLoader<Scene> {
   public:
     AssetLoadResult<Scene> load(Reader&, const LoadContext& context) override {
-        auto image = context.try_load<Image>(AssetPath("memory://albedo.png"));
-        if (!image) {
-            return failure(std::move(image).error());
-        }
+        auto image = context.load<Image>(AssetPath("memory://albedo.png"));
 
         auto scene = std::make_unique<Scene>();
-        scene->meshes.push_back(
+        auto mesh = context.add_asset<Mesh>(
             std::make_unique<Mesh>(RenderPrimitive::Triangles)
         );
 
         auto material = std::make_unique<StandardMaterial>();
-        material->albedo_map = std::move(*image);
-        scene->materials.push_back(std::move(material));
+        material->albedo_map = std::move(image);
+        auto material_handle =
+            context.add_asset<StandardMaterial>(std::move(material));
         scene->objects.push_back(
             Scene::Object {
-                .mesh_index = 0,
-                .material_index = 0,
+                .mesh = mesh,
+                .material = material_handle,
+                .transform = {},
             }
         );
         return scene;
@@ -231,9 +230,13 @@ TEST_CASE(
 
     auto scene = app.resource<Assets<Scene>>().get(scene_handle);
     REQUIRE(scene.has_value());
-    REQUIRE(scene->materials.size() == 1);
-    REQUIRE(scene->materials[0]->albedo_map.has_value());
-    auto dependency_id = scene->materials[0]->albedo_map->id();
+    REQUIRE(scene->objects.size() == 1);
+    auto material = app.resource<Assets<StandardMaterial>>().get(
+        scene->objects[0].material
+    );
+    REQUIRE(material.has_value());
+    REQUIRE(material->albedo_map.has_value());
+    auto dependency_id = material->albedo_map->id();
 
     run_post_update_until(app, [&]() {
         return asset_server.recursive_dependency_load_state(scene_handle) ==

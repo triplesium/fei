@@ -12,6 +12,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <memory>
+#include <type_traits>
+#include <utility>
 
 using namespace fei;
 
@@ -44,6 +46,15 @@ class FailingLoader : public AssetLoader<TestAsset> {
     }
 };
 
+static_assert(std::is_same_v<
+              decltype(std::declval<Assets<TestAsset>&>()
+                           .get(std::declval<const Handle<TestAsset>&>())),
+              Optional<const TestAsset&>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<Assets<TestAsset>&>()
+                           .modify(std::declval<const Handle<TestAsset>&>())),
+              Optional<TestAsset&>>);
+
 template<std::size_t Size>
 Reader reader_for(const std::array<std::byte, Size>& bytes) {
     return Reader(bytes.data(), bytes.size());
@@ -51,7 +62,7 @@ Reader reader_for(const std::array<std::byte, Size>& bytes) {
 
 } // namespace
 
-TEST_CASE("Assets emit queued events", "[asset][event]") {
+TEST_CASE("Assets get does not emit modified events", "[asset][event]") {
     using Event = AssetEvent<TestAsset>;
 
     World world;
@@ -63,6 +74,33 @@ TEST_CASE("Assets emit queued events", "[asset][event]") {
 
     REQUIRE(asset.has_value());
     REQUIRE(asset->value == 7);
+
+    world.run_system_once(Assets<TestAsset>::track_assets);
+
+    std::size_t last_event = 0;
+    EventReader<Event> reader(world.resource<Events<Event>>(), last_event);
+
+    auto added = reader.next();
+    REQUIRE(added.has_value());
+    REQUIRE(added->type == AssetEventType::Added);
+    REQUIRE(added->id == handle.id());
+
+    REQUIRE_FALSE(reader.next().has_value());
+}
+
+TEST_CASE("Assets modify emits modified events", "[asset][event]") {
+    using Event = AssetEvent<TestAsset>;
+
+    World world;
+    world.add_resource(Events<Event> {});
+    auto& assets = world.add_resource(Assets<TestAsset>(nullptr));
+
+    auto handle = assets.emplace(TestAsset {.value = 7});
+    auto asset = assets.modify(handle);
+
+    REQUIRE(asset.has_value());
+    asset->value = 8;
+    REQUIRE(asset->value == 8);
 
     world.run_system_once(Assets<TestAsset>::track_assets);
 
@@ -106,7 +144,6 @@ TEST_CASE("Assets collect unused handles", "[asset][handle]") {
     EventReader<Event> reader(world.resource<Events<Event>>(), last_event);
 
     REQUIRE(reader.next()->type == AssetEventType::Added);
-    REQUIRE(reader.next()->type == AssetEventType::Modified);
     auto removed = reader.next();
     REQUIRE(removed.has_value());
     REQUIRE(removed->type == AssetEventType::Removed);
@@ -204,7 +241,7 @@ TEST_CASE(
     REQUIRE(assets.get(second)->value == 2);
 }
 
-TEST_CASE("Assets try_load returns loader errors", "[asset][loader]") {
+TEST_CASE("Assets load stores loader errors", "[asset][loader]") {
     App app;
     AssetServer server(&app);
     Assets<TestAsset> assets(std::make_unique<FailingLoader>());
@@ -212,9 +249,13 @@ TEST_CASE("Assets try_load returns loader errors", "[asset][loader]") {
     SyncLoadContext context(server, AssetPath("memory://asset.bin"));
 
     auto reader = reader_for(bytes);
-    auto result = assets.try_load(reader, context);
+    auto handle = assets.load(reader, context);
 
-    REQUIRE_FALSE(result.has_value());
-    REQUIRE(result.error().path.as_string() == "memory://asset.bin");
-    REQUIRE(result.error().message == "test loader failed");
+    auto state = assets.load_state(handle);
+    REQUIRE(state.has_value());
+    REQUIRE(*state == AssetLoadState::Failed);
+    auto error = assets.load_error(handle);
+    REQUIRE(error.has_value());
+    REQUIRE(error->path.as_string() == "memory://asset.bin");
+    REQUIRE(error->message == "test loader failed");
 }

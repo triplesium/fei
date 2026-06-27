@@ -2,12 +2,12 @@
 #include "asset/assets.hpp"
 #include "asset/handle.hpp"
 #include "asset/loader.hpp"
+#include "core/transform.hpp"
 #include "ecs/query.hpp"
 #include "math/vector.hpp"
 #include "pbr/material.hpp"
 #include "rendering/mesh/mesh.hpp"
 
-#include <memory>
 #include <vector>
 
 namespace fei {
@@ -15,11 +15,10 @@ namespace fei {
 class AssetServer;
 
 struct Scene {
-    std::vector<std::unique_ptr<Mesh>> meshes;
-    std::vector<std::unique_ptr<StandardMaterial>> materials;
     struct Object {
-        std::size_t mesh_index;
-        std::size_t material_index;
+        Handle<Mesh> mesh;
+        Handle<StandardMaterial> material;
+        Transform3d transform;
     };
     std::vector<Object> objects;
 };
@@ -60,9 +59,7 @@ class SceneLoader : public AssetLoader<Scene> {
 void spawn_scene(
     Query<Entity, const SceneSpawner> scene_query,
     ResRO<AssetServer> asset_server,
-    ResRW<Assets<Scene>> scenes,
-    ResRW<Assets<Mesh>> meshes,
-    ResRW<Assets<StandardMaterial>> materials,
+    ResRO<Assets<Scene>> scenes,
     EventWriter<SceneSpawnedEvent> spawned_events,
     EventWriter<SceneSpawnFailedEvent> spawn_failed_events,
     Commands commands
