@@ -1,9 +1,9 @@
 #pragma once
 #include "asset/assets.hpp"
-#include "core/aabb.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/fwd.hpp"
 #include "ecs/query.hpp"
+#include "math/primitives.hpp"
 #include "rendering/components.hpp"
 
 namespace fei {

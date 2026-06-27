@@ -1,12 +1,12 @@
 #pragma once
 #include "base/hash.hpp"
 #include "base/types.hpp"
-#include "core/aabb.hpp"
 #include "core/transform.hpp"
 #include "ecs/fwd.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
 #include "math/matrix.hpp"
+#include "math/primitives.hpp"
 #include "math/vector.hpp"
 #include "rendering/components.hpp"
 

@@ -1,10 +1,10 @@
 #pragma once
 #include "base/optional.hpp"
-#include "core/aabb.hpp"
 #include "ecs/world.hpp"
 #include "graphics/buffer.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/graphics_device.hpp"
+#include "math/primitives.hpp"
 #include "math/vector.hpp"
 #include "rendering/mesh/vertex.hpp"
 #include "rendering/render_asset.hpp"

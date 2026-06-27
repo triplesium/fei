@@ -2,10 +2,10 @@
 
 #include "base/log.hpp"
 #include "base/optional.hpp"
-#include "core/aabb.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/pipeline.hpp"
 #include "math/matrix.hpp"
+#include "math/primitives.hpp"
 #include "math/vector.hpp"
 #include "rendering/mesh/vertex.hpp"
 

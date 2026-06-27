@@ -1,6 +1,6 @@
 #include "rendering/mesh/mesh_aabb.hpp"
 
-#include "core/aabb.hpp"
+#include "math/primitives.hpp"
 #include "rendering/mesh/mesh.hpp"
 
 namespace fei {
