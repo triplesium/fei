@@ -122,7 +122,7 @@ end
 function run(options)
     options = options or {}
     local clang_format = tooling.find_program("clang-format")
-    local files, source_count, header_count, target_count = tooling.collect_files(options.targets)
+    local files, source_count, header_count, target_count = tooling.collect_files(options.targets, options.files)
 
     run_clang_format(
         clang_format,

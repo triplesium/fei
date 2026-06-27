@@ -40,6 +40,10 @@
   reflection metadata.
 - `xmake format --check` or `xmake format fei-math`: check formatting without
   modifying files, or format one target.
+- `xmake format --files="src/math/*.cpp"` or
+  `xmake tidy -f "src/**/vector.cpp"`: restrict format/tidy to matching files.
+  `--files` supports `*` and `**`; separate multiple patterns with the platform
+  path separator, for example `;` on Windows.
 - `xmake tidy`: run clang-tidy for all xmake targets, including target headers.
 - `xmake tidy fei-math` or `xmake tidy sample-scene`: run clang-tidy for one
   target. Use `xmake tidy --jobs=N fei-math` to control parallel clang-tidy
@@ -58,8 +62,8 @@
   restating style rules here.
 - Keep names consistent with existing targets and files, such as `fei-*`,
   `sample-*`, and `*.test.cpp`.
-- After editing C++ files, run `xmake format <target>` or `xmake format --check`
-  for verification.
+- After editing C++ files, run `xmake format --files=<pattern>` or
+  `xmake format --check` for verification.
 - Prefer `xmake tidy <target>` for focused static analysis after C++ changes;
   run `xmake tidy` before broad cleanup changes.
 

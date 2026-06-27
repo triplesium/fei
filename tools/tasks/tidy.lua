@@ -140,7 +140,7 @@ function run(options)
     options = options or {}
     check_compile_commands()
     local clang_tidy = tooling.find_program("clang-tidy")
-    local files, source_count, header_count, target_count = tooling.collect_files(options.targets)
+    local files, source_count, header_count, target_count = tooling.collect_files(options.targets, options.files)
 
     run_clang_tidy(
         clang_tidy,

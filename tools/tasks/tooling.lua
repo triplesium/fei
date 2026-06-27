@@ -14,6 +14,43 @@ local function project_relative_path(filepath)
     return path.unix(path.relative(filepath, os.projectdir()))
 end
 
+local function normalize_file_pattern(pattern)
+    pattern = path.unix(tostring(pattern):trim())
+    if #pattern == 0 then
+        return nil
+    end
+
+    local projectdir = path.unix(os.projectdir()):gsub("/+$", "")
+    local comparable_pattern = pattern
+    local comparable_projectdir = projectdir
+    if os.host() == "windows" then
+        comparable_pattern = comparable_pattern:lower()
+        comparable_projectdir = comparable_projectdir:lower()
+    end
+
+    if comparable_pattern == comparable_projectdir then
+        return "."
+    end
+    if comparable_pattern:startswith(comparable_projectdir .. "/") then
+        pattern = pattern:sub(#projectdir + 2)
+    end
+
+    return pattern:gsub("^%./", "")
+end
+
+local function collect_file_patterns(patterns)
+    local result = {}
+    for _, pattern in ipairs(table.wrap(patterns)) do
+        for _, part in ipairs(path.splitenv(tostring(pattern))) do
+            part = normalize_file_pattern(part)
+            if part then
+                table.insert(result, path.pattern(part))
+            end
+        end
+    end
+    return result
+end
+
 local function should_skip_file(filepath)
     return filepath:startswith("build/.gens/")
 end
@@ -23,9 +60,9 @@ local function insert_unique(files, seen, filepath)
     if not should_skip_file(filepath) and not seen[filepath] then
         seen[filepath] = true
         table.insert(files, filepath)
-        return true
+        return filepath
     end
-    return false
+    return nil
 end
 
 local function source_batch_should_include(sourcebatch)
@@ -50,32 +87,69 @@ local function collect_targets(target_names)
     return targets
 end
 
-function collect_files(target_names)
-    local targets = collect_targets(target_names)
-    local files = {}
-    local seen = {}
+local function count_files(files, file_kinds)
     local source_count = 0
     local header_count = 0
+    for _, file in ipairs(files) do
+        if file_kinds[file] == "header" then
+            header_count = header_count + 1
+        else
+            source_count = source_count + 1
+        end
+    end
+    return source_count, header_count
+end
+
+local function filter_files(files, file_kinds, patterns)
+    patterns = collect_file_patterns(patterns)
+    if #patterns == 0 then
+        local source_count, header_count = count_files(files, file_kinds)
+        return files, source_count, header_count
+    end
+
+    local filtered = {}
+    for _, file in ipairs(files) do
+        for _, pattern in ipairs(patterns) do
+            if file:match(pattern) == file then
+                table.insert(filtered, file)
+                break
+            end
+        end
+    end
+
+    local source_count, header_count = count_files(filtered, file_kinds)
+    return filtered, source_count, header_count
+end
+
+function collect_files(target_names, file_patterns)
+    local targets = collect_targets(target_names)
+    local files = {}
+    local file_kinds = {}
+    local seen = {}
 
     for _, target in ipairs(targets) do
         for _, sourcebatch in pairs(target:sourcebatches()) do
             if source_batch_should_include(sourcebatch) then
                 for _, source in ipairs(sourcebatch.sourcefiles) do
-                    if insert_unique(files, seen, source) then
-                        source_count = source_count + 1
+                    local file = insert_unique(files, seen, source)
+                    if file then
+                        file_kinds[file] = "source"
                     end
                 end
             end
         end
 
         for _, header in ipairs(target:headerfiles()) do
-            if insert_unique(files, seen, header) then
-                header_count = header_count + 1
+            local file = insert_unique(files, seen, header)
+            if file then
+                file_kinds[file] = "header"
             end
         end
     end
 
     table.sort(files)
+    local source_count, header_count
+    files, source_count, header_count = filter_files(files, file_kinds, file_patterns)
     return files, source_count, header_count, #targets
 end
 
