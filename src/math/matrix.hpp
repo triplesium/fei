@@ -1,5 +1,6 @@
 #pragma once
 #include "math/vector.hpp"
+#include "refl/reflect.hpp"
 
 #include <cassert>
 #include <cmath>
@@ -16,7 +17,7 @@ namespace fei {
 // - View space is right-handed: cameras look down -Z.
 // - Projection helpers use OpenGL-style NDC z in [-1, 1].
 // - rotate_x/y/z and perspective fov arguments are radians.
-class Matrix3x3 {
+class FEI_REFLECT Matrix3x3 {
   public:
     float mat[3][3];
 
@@ -253,7 +254,7 @@ class Matrix3x3 {
     }
 };
 
-class Matrix4x4 {
+class FEI_REFLECT Matrix4x4 {
   public:
     float mat[4][4];
 

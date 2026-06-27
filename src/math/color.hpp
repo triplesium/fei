@@ -1,6 +1,7 @@
 #pragma once
 
 #include "math/vector.hpp"
+#include "refl/reflect.hpp"
 
 #include <cstdint>
 #include <tuple>
@@ -11,7 +12,7 @@ struct Color4B;
 struct Color3F;
 struct Color4F;
 
-struct Color3B {
+struct FEI_REFLECT Color3B {
     std::uint8_t r {0}, g {0}, b {0};
 
     Color3B() = default;
@@ -20,7 +21,7 @@ struct Color3B {
     const std::uint8_t* data() const { return &r; }
 };
 
-struct Color4B {
+struct FEI_REFLECT Color4B {
     std::uint8_t r {0}, g {0}, b {0}, a {0};
 
     Color4B() = default;
@@ -29,7 +30,7 @@ struct Color4B {
     const std::uint8_t* data() const { return &r; }
 };
 
-struct Color3F {
+struct FEI_REFLECT Color3F {
     float r {.0f}, g {.0f}, b {.0f};
 
     Color3F() = default;
@@ -40,7 +41,7 @@ struct Color3F {
     const float* data() const { return &r; }
 };
 
-struct Color4F {
+struct FEI_REFLECT Color4F {
     float r {.0f}, g {.0f}, b {.0f}, a {.0f};
 
     Color4F() = default;

@@ -1,15 +1,16 @@
 #pragma once
 
 #include "math/vector.hpp"
+#include "refl/reflect.hpp"
 
 namespace fei {
 
-struct Rect {
+struct FEI_REFLECT Rect {
     Vector2 min;
     Vector2 max;
 };
 
-struct Aabb {
+struct FEI_REFLECT Aabb {
     Vector3 min {0.0f};
     Vector3 max {0.0f};
 
