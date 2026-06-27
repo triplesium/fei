@@ -9,6 +9,7 @@ namespace fei {
 struct Transform2d {
     Vector2 position {0.0f, 0.0f};
     Vector2 scale {1.0f, 1.0f};
+    // Euler angle in degrees.
     float rotation {0.0f};
 
     inline Matrix4x4 model_matrix() const {
@@ -20,6 +21,7 @@ struct Transform2d {
 
 struct FEI_REFLECT Transform3d {
     Vector3 position {0.0f, 0.0f, 0.0f};
+    // Euler angles in degrees: x pitch, y yaw, z roll.
     Vector3 rotation {0.0f, 0.0f, 0.0f};
     Vector3 scale {1.0f, 1.0f, 1.0f};
 

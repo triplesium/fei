@@ -7,6 +7,15 @@
 
 namespace fei {
 
+// Matrix convention:
+// - Storage is row-major: mat[row][column], and data() returns row-major
+// floats.
+// - Algebra uses column vectors: Matrix4x4 * Vector4.
+// - Transform composition applies right-to-left: projection * view * model * p.
+// - Translation lives in column 3: m[0][3], m[1][3], m[2][3].
+// - View space is right-handed: cameras look down -Z.
+// - Projection helpers use OpenGL-style NDC z in [-1, 1].
+// - rotate_x/y/z and perspective fov arguments are radians.
 class Matrix3x3 {
   public:
     float mat[3][3];
@@ -672,6 +681,7 @@ orthographic(float width, float height, float near, float far) {
     return m;
 }
 
+// Builds a row-major matrix for column-vector transforms.
 inline Matrix4x4 translate(float x, float y, float z) {
     Matrix4x4 m {Matrix4x4::Identity};
     m[0][3] = x;
@@ -759,6 +769,8 @@ look_at(const Vector3& from, const Vector3& to, const Vector3& up) {
     return look_at;
 }
 
+// fov_radians is vertical fov; output maps right-handed view z to
+// OpenGL-style NDC z [-1, 1].
 inline Matrix4x4 perspective(
     float fov_radians,
     float aspect_ratio,
