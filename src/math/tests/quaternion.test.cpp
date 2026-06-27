@@ -99,3 +99,100 @@ TEST_CASE(
     auto identity = rotation * rotation.inversed();
     require_quaternion_near(identity.normalized(), Quaternion::Identity);
 }
+
+TEST_CASE(
+    "Quaternion interpolation follows the shortest rotation arc",
+    "[math][quaternion]"
+) {
+    auto z90 = Quaternion::from_axis_angle_radians(Vector3::Forward, HALF_PI);
+    auto z45 =
+        Quaternion::from_axis_angle_radians(Vector3::Forward, HALF_PI * 0.5f);
+
+    REQUIRE_THAT(
+        Quaternion::lerp(Quaternion::Identity, z90, 0.5f)
+            .normalized()
+            .rotate(Vector3::Right),
+        VectorWithinAbs(z45.rotate(Vector3::Right))
+    );
+    REQUIRE_THAT(
+        Quaternion::nlerp(Quaternion::Identity, z90, 0.5f)
+            .rotate(Vector3::Right),
+        VectorWithinAbs(z45.rotate(Vector3::Right))
+    );
+    REQUIRE_THAT(
+        Quaternion::slerp(Quaternion::Identity, z90, 0.5f)
+            .rotate(Vector3::Right),
+        VectorWithinAbs(z45.rotate(Vector3::Right))
+    );
+
+    auto negated_z90 = -z90;
+    REQUIRE_THAT(Quaternion::dot(z90, negated_z90), WithinAbs(-1.0f, EPSILON));
+    REQUIRE_THAT(
+        Quaternion::slerp(Quaternion::Identity, negated_z90, 0.5f)
+            .rotate(Vector3::Right),
+        VectorWithinAbs(z45.rotate(Vector3::Right))
+    );
+}
+
+TEST_CASE(
+    "Quaternion from-to rotations handle aligned and opposite vectors",
+    "[math][quaternion]"
+) {
+    auto identity =
+        Quaternion::from_to_rotation(Vector3::Right, Vector3::Right);
+    require_quaternion_near(identity, Quaternion::Identity);
+
+    auto right_to_up =
+        Quaternion::from_to_rotation(Vector3::Right, Vector3::Up);
+    REQUIRE_THAT(
+        right_to_up.rotate(Vector3::Right),
+        VectorWithinAbs(Vector3::Up)
+    );
+
+    auto right_to_left =
+        Quaternion::from_to_rotation(Vector3::Right, Vector3::Left);
+    REQUIRE_THAT(
+        right_to_left.rotate(Vector3::Right),
+        VectorWithinAbs(Vector3::Left)
+    );
+
+    auto degenerate =
+        Quaternion::from_to_rotation(Vector3::Zero, Vector3::Forward);
+    require_quaternion_near(degenerate, Quaternion::Identity);
+}
+
+TEST_CASE(
+    "Quaternion look rotation maps local back to forward",
+    "[math][quaternion]"
+) {
+    auto identity = Quaternion::look_rotation(Vector3::Back, Vector3::Up);
+    REQUIRE_THAT(identity.to_matrix(), WithinAbs(Matrix4x4::Identity));
+
+    auto look_right = Quaternion::look_rotation(Vector3::Right, Vector3::Up);
+    REQUIRE_THAT(
+        look_right.rotate(Vector3::Back),
+        VectorWithinAbs(Vector3::Right)
+    );
+    REQUIRE_THAT(look_right.rotate(Vector3::Up), VectorWithinAbs(Vector3::Up));
+
+    auto look_up_with_parallel_up =
+        Quaternion::look_rotation(Vector3::Up, Vector3::Up);
+    REQUIRE_THAT(
+        look_up_with_parallel_up.rotate(Vector3::Back),
+        VectorWithinAbs(Vector3::Up)
+    );
+
+    auto degenerate = Quaternion::look_rotation(Vector3::Zero, Vector3::Up);
+    require_quaternion_near(degenerate, Quaternion::Identity);
+}
+
+TEST_CASE(
+    "Quaternion can be reconstructed from rotation matrices",
+    "[math][quaternion]"
+) {
+    auto rotation =
+        rotate_x(0.25f * PI) * rotate_y(0.5f * PI) * rotate_z(0.75f * PI);
+    auto quaternion = Quaternion::from_rotation_matrix(rotation);
+
+    REQUIRE_THAT(quaternion.to_matrix(), WithinAbs(rotation, 1e-5f));
+}

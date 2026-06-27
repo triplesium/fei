@@ -1,6 +1,7 @@
 #pragma once
 
 #include "math/matrix.hpp"
+#include "refl/reflect.hpp"
 
 #include <cassert>
 #include <cstddef>
@@ -10,7 +11,7 @@ namespace fei {
 // Quaternion stores the vector part in x/y/z and the scalar part in w.
 // Multiplication composes column-vector rotations right-to-left, matching
 // Matrix4x4 composition.
-class Quaternion {
+class FEI_REFLECT Quaternion {
   public:
     float x {0.0f};
     float y {0.0f};
@@ -60,6 +61,16 @@ class Quaternion {
     }
 
     bool operator!=(const Quaternion& rhs) const { return !(*this == rhs); }
+
+    Quaternion operator+(const Quaternion& rhs) const {
+        return {x + rhs.x, y + rhs.y, z + rhs.z, w + rhs.w};
+    }
+
+    Quaternion operator-(const Quaternion& rhs) const {
+        return {x - rhs.x, y - rhs.y, z - rhs.z, w - rhs.w};
+    }
+
+    Quaternion operator-() const { return {-x, -y, -z, -w}; }
 
     Quaternion operator*(const Quaternion& rhs) const {
         return {
@@ -175,6 +186,45 @@ class Quaternion {
         return from_axis_angle_radians(axis, degrees * DEG2RAD);
     }
 
+    static Quaternion from_rotation_matrix(const Matrix4x4& matrix) {
+        float trace = matrix[0][0] + matrix[1][1] + matrix[2][2];
+        Quaternion result;
+
+        if (trace > 0.0f) {
+            float s = fei::sqrt(trace + 1.0f) * 2.0f;
+            result.w = 0.25f * s;
+            result.x = (matrix[2][1] - matrix[1][2]) / s;
+            result.y = (matrix[0][2] - matrix[2][0]) / s;
+            result.z = (matrix[1][0] - matrix[0][1]) / s;
+        } else if (matrix[0][0] > matrix[1][1] && matrix[0][0] > matrix[2][2]) {
+            float s =
+                fei::sqrt(1.0f + matrix[0][0] - matrix[1][1] - matrix[2][2]) *
+                2.0f;
+            result.w = (matrix[2][1] - matrix[1][2]) / s;
+            result.x = 0.25f * s;
+            result.y = (matrix[0][1] + matrix[1][0]) / s;
+            result.z = (matrix[0][2] + matrix[2][0]) / s;
+        } else if (matrix[1][1] > matrix[2][2]) {
+            float s =
+                fei::sqrt(1.0f + matrix[1][1] - matrix[0][0] - matrix[2][2]) *
+                2.0f;
+            result.w = (matrix[0][2] - matrix[2][0]) / s;
+            result.x = (matrix[0][1] + matrix[1][0]) / s;
+            result.y = 0.25f * s;
+            result.z = (matrix[1][2] + matrix[2][1]) / s;
+        } else {
+            float s =
+                fei::sqrt(1.0f + matrix[2][2] - matrix[0][0] - matrix[1][1]) *
+                2.0f;
+            result.w = (matrix[1][0] - matrix[0][1]) / s;
+            result.x = (matrix[0][2] + matrix[2][0]) / s;
+            result.y = (matrix[1][2] + matrix[2][1]) / s;
+            result.z = 0.25f * s;
+        }
+
+        return result.normalized();
+    }
+
     // Matches Transform3d::to_matrix(): rotate_x(x) * rotate_y(y) *
     // rotate_z(z).
     static Quaternion from_euler_radians(const Vector3& radians) {
@@ -186,6 +236,127 @@ class Quaternion {
 
     static Quaternion from_euler_degrees(const Vector3& degrees) {
         return from_euler_radians(degrees * DEG2RAD);
+    }
+
+    static Quaternion from_to_rotation(const Vector3& from, const Vector3& to) {
+        float from_length = from.magnitude();
+        float to_length = to.magnitude();
+        if (from_length <= EPSILON || to_length <= EPSILON) {
+            return Identity;
+        }
+
+        Vector3 from_dir = from / from_length;
+        Vector3 to_dir = to / to_length;
+        float cos_theta =
+            fei::clamp(Vector3::dot(from_dir, to_dir), -1.0f, 1.0f);
+
+        if (cos_theta >= 1.0f - EPSILON) {
+            return Identity;
+        }
+
+        if (cos_theta <= -1.0f + EPSILON) {
+            Vector3 axis = Vector3::cross(Vector3::Right, from_dir);
+            if (axis.sqr_magnitude() <= EPSILON) {
+                axis = Vector3::cross(Vector3::Up, from_dir);
+            }
+            return from_axis_angle_radians(axis, PI);
+        }
+
+        Vector3 axis = Vector3::cross(from_dir, to_dir);
+        return Quaternion {axis.x, axis.y, axis.z, 1.0f + cos_theta}
+            .normalized();
+    }
+
+    // Builds a rotation whose local -Z (Vector3::Back) points at forward.
+    static Quaternion
+    look_rotation(const Vector3& forward, const Vector3& up = Vector3::Up) {
+        float forward_length = forward.magnitude();
+        if (forward_length <= EPSILON) {
+            return Identity;
+        }
+
+        Vector3 f = forward / forward_length;
+        Vector3 z = -f;
+        Vector3 up_dir = up.normalized();
+        if (up_dir.sqr_magnitude() <= EPSILON) {
+            up_dir = Vector3::Up;
+        }
+
+        Vector3 right = Vector3::cross(up_dir, z);
+        if (right.sqr_magnitude() <= EPSILON) {
+            Vector3 fallback_up =
+                fei::abs(f.y) < 1.0f - EPSILON ? Vector3::Up : Vector3::Right;
+            right = Vector3::cross(fallback_up, z);
+        }
+        right.normalize();
+
+        Vector3 corrected_up = Vector3::cross(z, right).normalized();
+
+        return from_rotation_matrix(
+            Matrix4x4 {
+                right.x,
+                corrected_up.x,
+                z.x,
+                0.0f,
+                right.y,
+                corrected_up.y,
+                z.y,
+                0.0f,
+                right.z,
+                corrected_up.z,
+                z.z,
+                0.0f,
+                0.0f,
+                0.0f,
+                0.0f,
+                1.0f,
+            }
+        );
+    }
+
+    static float dot(const Quaternion& a, const Quaternion& b) {
+        return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+    }
+
+    static Quaternion
+    lerp(const Quaternion& lhs, const Quaternion& rhs, float alpha) {
+        return lhs + (rhs - lhs) * alpha;
+    }
+
+    static Quaternion
+    nlerp(const Quaternion& lhs, const Quaternion& rhs, float alpha) {
+        Quaternion end = rhs;
+        if (dot(lhs, rhs) < 0.0f) {
+            end = -rhs;
+        }
+        return lerp(lhs, end, alpha).normalized();
+    }
+
+    static Quaternion
+    slerp(const Quaternion& lhs, const Quaternion& rhs, float alpha) {
+        Quaternion start = lhs.normalized();
+        Quaternion end = rhs.normalized();
+        float cos_theta = dot(start, end);
+
+        if (cos_theta < 0.0f) {
+            end = -end;
+            cos_theta = -cos_theta;
+        }
+
+        cos_theta = fei::clamp(cos_theta, -1.0f, 1.0f);
+        if (cos_theta > 1.0f - EPSILON) {
+            return nlerp(start, end, alpha);
+        }
+
+        float theta = fei::acos(cos_theta);
+        float sin_theta = fei::sin(theta);
+        if (fei::abs(sin_theta) <= EPSILON) {
+            return nlerp(start, end, alpha);
+        }
+
+        float start_weight = fei::sin((1.0f - alpha) * theta) / sin_theta;
+        float end_weight = fei::sin(alpha * theta) / sin_theta;
+        return (start * start_weight + end * end_weight).normalized();
     }
 };
 
