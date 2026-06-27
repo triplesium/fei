@@ -124,7 +124,7 @@ class Vector2 {
     }
     void normalize() {
         float length = magnitude();
-        if (length == 0.0f) {
+        if (length <= EPSILON) {
             return;
         }
         float inv_length = 1.0f / length;
@@ -297,7 +297,7 @@ class FEI_REFLECT Vector3 {
     }
     void normalize() {
         float length = magnitude();
-        if (length == 0.0f) {
+        if (length <= EPSILON) {
             return;
         }
         float inv_length = 1.0f / length;
@@ -344,7 +344,14 @@ class FEI_REFLECT Vector3 {
         };
     }
     static Vector3 project(const Vector3& v, const Vector3& normal) {
-        return v - dot(v, normal) * normal;
+        float sqr_length = normal.sqr_magnitude();
+        if (sqr_length <= EPSILON) {
+            return Zero;
+        }
+        return normal * (dot(v, normal) / sqr_length);
+    }
+    static Vector3 project_on_plane(const Vector3& v, const Vector3& normal) {
+        return v - project(v, normal);
     }
 
     float dot(const Vector3& rhs) const { return Vector3::dot(*this, rhs); }

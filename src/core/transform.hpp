@@ -12,7 +12,8 @@ struct Transform2d {
     float rotation {0.0f};
 
     inline Matrix4x4 model_matrix() const {
-        return translate(position.x, position.y, 0.0f) * rotate_z(rotation) *
+        return translate(position.x, position.y, 0.0f) *
+               rotate_z(rotation * DEG2RAD) *
                fei::scale(scale.x, scale.y, 1.0f);
     }
 };

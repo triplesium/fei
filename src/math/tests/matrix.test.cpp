@@ -64,6 +64,10 @@ TEST_CASE(
     matrix.set_column(1, Vector3 {8.0f, 9.0f, 10.0f});
     REQUIRE(matrix.get_column(1) == Vector3 {8.0f, 9.0f, 10.0f});
 
+    const Matrix3x3 const_matrix = matrix;
+    const float* const_row = const_matrix[0];
+    REQUIRE_THAT(const_row[0], WithinAbs(1.0f, EPSILON));
+
     Matrix3x3 singular3 {
         1.0f,
         2.0f,
@@ -101,6 +105,10 @@ TEST_CASE(
         WithinAbs(Matrix4x4::Identity)
     );
 
+    const Matrix4x4 const_transform = transform;
+    const float* const_row = const_transform[0];
+    REQUIRE_THAT(const_row[3], WithinAbs(1.0f, EPSILON));
+
     REQUIRE(Matrix4x4::Identity.is_affine());
     REQUIRE_FALSE(perspective(HALF_PI, 1.0f, 0.1f, 100.0f).is_affine());
     REQUIRE_THAT(
@@ -120,4 +128,5 @@ TEST_CASE(
         singular[1][col] = singular[0][col];
     }
     REQUIRE_THAT(singular.inverse(), WithinAbs(Matrix4x4::Zero));
+    REQUIRE_THAT(singular.inverse_affine(), WithinAbs(Matrix4x4::Zero));
 }

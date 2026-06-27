@@ -71,8 +71,14 @@ class Matrix3x3 {
 
     const float* data() const { return &mat[0][0]; }
 
-    float* operator[](size_t row_index) const {
-        return const_cast<float*>(mat[row_index]);
+    float* operator[](size_t row_index) {
+        assert(row_index < 3);
+        return mat[row_index];
+    }
+
+    const float* operator[](size_t row_index) const {
+        assert(row_index < 3);
+        return mat[row_index];
     }
 
     Vector3 get_column(size_t i_col) const {
@@ -329,8 +335,14 @@ class Matrix4x4 {
 
     const float* data() const { return &mat[0][0]; }
 
-    float* operator[](size_t row_index) const {
-        return const_cast<float*>(mat[row_index]);
+    float* operator[](size_t row_index) {
+        assert(row_index < 4);
+        return mat[row_index];
+    }
+
+    const float* operator[](size_t row_index) const {
+        assert(row_index < 4);
+        return mat[row_index];
     }
 
     Matrix4x4 concatenate(const Matrix4x4& m2) const {
@@ -532,7 +544,7 @@ class Matrix4x4 {
                mat[3][3] == 1;
     }
 
-    Matrix4x4 inverse_affine() const {
+    Matrix4x4 inverse_affine(float tolerance = EPSILON) const {
         float m10 = mat[1][0], m11 = mat[1][1], m12 = mat[1][2];
         float m20 = mat[2][0], m21 = mat[2][1], m22 = mat[2][2];
 
@@ -542,7 +554,12 @@ class Matrix4x4 {
 
         float m00 = mat[0][0], m01 = mat[0][1], m02 = mat[0][2];
 
-        float inv_det = 1 / (m00 * t00 + m01 * t10 + m02 * t20);
+        float det = m00 * t00 + m01 * t10 + m02 * t20;
+        if (fei::abs(det) < tolerance) {
+            return Zero;
+        }
+
+        float inv_det = 1 / det;
 
         t00 *= inv_det;
         t10 *= inv_det;
@@ -590,9 +607,9 @@ class Matrix4x4 {
         );
     }
 
-    Matrix4x4 inverse() const {
+    Matrix4x4 inverse(float tolerance = EPSILON) const {
         float det = determinant();
-        if (fei::abs(det) < std::numeric_limits<float>::epsilon()) {
+        if (fei::abs(det) < tolerance) {
             return Zero;
         }
 

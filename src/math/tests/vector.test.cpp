@@ -50,6 +50,10 @@ TEST_CASE("Vector2 operations preserve geometric behavior", "[math][vector]") {
     Vector2 zero = Vector2::Zero;
     zero.normalize();
     REQUIRE_THAT(zero, VectorWithinAbs(0.0f, 0.0f));
+
+    Vector2 tiny {EPSILON * 0.25f, 0.0f};
+    tiny.normalize();
+    REQUIRE_THAT(tiny, VectorWithinAbs(EPSILON * 0.25f, 0.0f));
 }
 
 TEST_CASE("Vector3 operations preserve geometric behavior", "[math][vector]") {
@@ -83,6 +87,18 @@ TEST_CASE("Vector3 operations preserve geometric behavior", "[math][vector]") {
     REQUIRE_THAT(
         Vector3::reflect({1.0f, -1.0f, 0.0f}, Vector3::Up),
         VectorWithinAbs(1.0f, 1.0f, 0.0f)
+    );
+    REQUIRE_THAT(
+        Vector3::project({2.0f, 3.0f, 4.0f}, {0.0f, 2.0f, 0.0f}),
+        VectorWithinAbs(0.0f, 3.0f, 0.0f)
+    );
+    REQUIRE_THAT(
+        Vector3::project({2.0f, 3.0f, 4.0f}, Vector3::Zero),
+        VectorWithinAbs(0.0f, 0.0f, 0.0f)
+    );
+    REQUIRE_THAT(
+        Vector3::project_on_plane({2.0f, 3.0f, 4.0f}, Vector3::Up),
+        VectorWithinAbs(2.0f, 0.0f, 4.0f)
     );
 
     Vector3 value {1.0f, 2.0f, 3.0f};
