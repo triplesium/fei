@@ -64,8 +64,8 @@ void setup(
 
     Transform3d camera_transform {
         .position = {-4.0f, 1.0f, 0.0f},
-        .rotation = {0.0f, 90.0f, 0.0f},
     };
+    camera_transform.set_euler({0.0f, 90.0f, 0.0f});
 
     commands.spawn().add(
         Camera3d {
@@ -79,16 +79,18 @@ void setup(
         }
     );
 
+    Transform3d directional_light_transform {
+        .position = {1.0f, 35.6f, 1.3f},
+    };
+    directional_light_transform.set_euler({-83.14f, 7.30f, 0.0f});
+
     commands.spawn().add(
         DirectionalLight {
             .color = {1.0f, 1.0f, 1.0f},
             .intensity = 10.0f,
             .shadow_map_enabled = true,
         },
-        Transform3d {
-            .position = {1.0f, 35.6f, 1.3f},
-            .rotation = {-83.14f, 7.30f, 0.0f},
-        }
+        directional_light_transform
     );
     commands.spawn().add(
         Skybox {
@@ -141,11 +143,10 @@ void update_imgui(
             reinterpret_cast<float*>(&transform.position),
             0.1f
         );
-        ImGui::DragFloat3(
-            "Rotation",
-            reinterpret_cast<float*>(&transform.rotation),
-            0.1f
-        );
+        static Vector3 rotation {-83.14f, 7.30f, 0.0f};
+        if (ImGui::DragFloat3("Rotation", rotation.data(), 0.1f)) {
+            transform.set_euler(rotation);
+        }
         ImGui::End();
     }
     for (const auto& [light, transform] : query_point_lights) {

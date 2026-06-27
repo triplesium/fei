@@ -87,13 +87,12 @@ void setup(
         MeshMaterial3d {.material = default_material_handle},
         Transform3d {
             .position = {0.0f, -0.8f, 0.0f},
-            .rotation = {0.0f, 0.0f, 0.0f},
         },
         Floor {}
     );
 
     auto mesh_handle = asset_server->load<Mesh>("suzanne.obj");
-    auto& mesh = mesh_assets->get(mesh_handle).value();
+    auto& mesh = mesh_assets->modify(mesh_handle).value();
     mesh.center_positions();
     if (!mesh.has_attribute(Mesh::ATTRIBUTE_NORMAL.id)) {
         mesh.compute_smooth_normals();
@@ -128,15 +127,17 @@ void setup(
         }
     );
 
+    Transform3d directional_light_transform {
+        .position = {2.0f, 1.0f, 0.0f},
+    };
+    directional_light_transform.set_euler({-45.0f, 60.0f, 0.0f});
+
     commands.spawn().add(
         DirectionalLight {
             .color = {5.0f, 5.0f, 5.0f},
             .shadow_map_enabled = true,
         },
-        Transform3d {
-            .position = {2.0f, 1.0f, 0.0f},
-            .rotation = {-45.0f, 60.0f, 0.0f},
-        }
+        directional_light_transform
     );
     commands.spawn().add(
         Mesh3d {
@@ -165,6 +166,8 @@ void handle_control(
     auto [transform] = query.first();
     float move_speed = 1.0f;
     float rotate_speed = 20.0f;
+    static Vector3 camera_rotation {0.0f, 0.0f, 0.0f};
+    bool rotation_changed = false;
     if (key_input->pressed(KeyCode::W)) {
         transform.position += transform.forward() * move_speed * time->delta();
     }
@@ -178,16 +181,23 @@ void handle_control(
         transform.position += transform.right() * move_speed * time->delta();
     }
     if (key_input->pressed(KeyCode::Up)) {
-        transform.rotation.x += rotate_speed * time->delta();
+        camera_rotation.x += rotate_speed * time->delta();
+        rotation_changed = true;
     }
     if (key_input->pressed(KeyCode::Down)) {
-        transform.rotation.x -= rotate_speed * time->delta();
+        camera_rotation.x -= rotate_speed * time->delta();
+        rotation_changed = true;
     }
     if (key_input->pressed(KeyCode::Left)) {
-        transform.rotation.y += rotate_speed * time->delta();
+        camera_rotation.y += rotate_speed * time->delta();
+        rotation_changed = true;
     }
     if (key_input->pressed(KeyCode::Right)) {
-        transform.rotation.y -= rotate_speed * time->delta();
+        camera_rotation.y -= rotate_speed * time->delta();
+        rotation_changed = true;
+    }
+    if (rotation_changed) {
+        transform.set_euler(camera_rotation);
     }
     if (key_input->pressed(KeyCode::Space)) {
         transform.position.y += move_speed * time->delta();
@@ -220,7 +230,7 @@ void update_imgui(
     auto [floor, floor_transform] = query_floor.first();
     auto [spot_mesh_material] = query_spot.first();
     auto& spot_material =
-        material_assets->get(spot_mesh_material.material).value();
+        material_assets->modify(spot_mesh_material.material).value();
     ImGui::Begin("Settings");
     {
         ImGui::Text("Directional Light");
@@ -230,12 +240,15 @@ void update_imgui(
             -10.0f,
             10.0f
         );
-        ImGui::SliderFloat3(
-            "Rotation##Light",
-            light_transform.rotation.data(),
-            -180.0f,
-            180.0f
-        );
+        static Vector3 light_rotation {-45.0f, 60.0f, 0.0f};
+        if (ImGui::SliderFloat3(
+                "Rotation##Light",
+                light_rotation.data(),
+                -180.0f,
+                180.0f
+            )) {
+            light_transform.set_euler(light_rotation);
+        }
         ImGui::Text("Floor");
         ImGui::SliderFloat(
             "Position.Y##Floor",

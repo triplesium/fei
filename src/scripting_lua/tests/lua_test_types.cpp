@@ -1,6 +1,7 @@
 #include "scripting_lua/tests/lua_test_types.hpp"
 
 #include "core/transform.hpp"
+#include "math/quaternion.hpp"
 #include "math/vector.hpp"
 #include "refl/cls.hpp"
 #include "refl/enum.hpp"
@@ -139,10 +140,24 @@ void register_transform_script_metadata() {
         .add_constructor<Vector3>()
         .add_constructor<Vector3, float, float, float>();
 
+    registry.register_cls<Quaternion>()
+        .add_property("x", &Quaternion::x)
+        .add_property("y", &Quaternion::y)
+        .add_property("z", &Quaternion::z)
+        .add_property("w", &Quaternion::w)
+        .add_constructor<Quaternion>()
+        .add_constructor<Quaternion, float, float, float, float>();
+
     registry.register_cls<Transform3d>()
         .add_property("position", &Transform3d::position)
         .add_property("rotation", &Transform3d::rotation)
         .add_property("scale", &Transform3d::scale)
+        .add_method("set_euler", &Transform3d::set_euler)
+        .add_method("rotate", &Transform3d::rotate)
+        .add_method("rotate_axis", &Transform3d::rotate_axis)
+        .add_method("rotate_x", &Transform3d::rotate_x)
+        .add_method("rotate_y", &Transform3d::rotate_y)
+        .add_method("rotate_z", &Transform3d::rotate_z)
         .add_method("forward", &Transform3d::forward)
         .add_method("right", &Transform3d::right)
         .add_method("up", &Transform3d::up);

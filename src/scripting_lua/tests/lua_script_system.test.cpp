@@ -156,6 +156,7 @@ TEST_CASE(
     register_transform_script_metadata();
     auto runtime = make_test_runtime();
     runtime.register_type(type<Vector3>());
+    runtime.register_type(type<Quaternion>());
     runtime.register_type(type<Transform3d>());
 
     auto module = runtime.load_module(
@@ -236,6 +237,7 @@ TEST_CASE(
     register_transform_script_metadata();
     auto runtime = make_test_runtime();
     runtime.register_type(type<Vector3>());
+    runtime.register_type(type<Quaternion>());
     runtime.register_type(type<Transform3d>());
 
     auto module = runtime.load_module(

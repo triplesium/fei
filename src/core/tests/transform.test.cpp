@@ -49,12 +49,13 @@ TEST_CASE(
     "Transform3d rotation helpers match existing matrix order",
     "[core][transform]"
 ) {
+    Vector3 euler_degrees {30.0f, 45.0f, 60.0f};
     Transform3d transform {
         .position = {1.0f, 2.0f, 3.0f},
-        .rotation = {30.0f, 45.0f, 60.0f},
         .scale = {2.0f, 3.0f, 4.0f},
     };
-    Vector3 rotation_radians = transform.rotation * DEG2RAD;
+    transform.set_euler(euler_degrees);
+    Vector3 rotation_radians = euler_degrees * DEG2RAD;
 
     auto expected_rotation = rotate_x(rotation_radians.x) *
                              rotate_y(rotation_radians.y) *
@@ -62,24 +63,50 @@ TEST_CASE(
     auto expected_transform = translate(transform.position) *
                               expected_rotation * fei::scale(transform.scale);
 
-    require_matrix_near(transform.rotation_matrix(), expected_rotation);
-    require_matrix_near(
-        transform.rotation_quaternion().to_matrix(),
-        expected_rotation
-    );
+    require_matrix_near(transform.rotation.to_matrix(), expected_rotation);
     require_matrix_near(transform.to_matrix(), expected_transform);
+}
+
+TEST_CASE("Transform3d applies Euler rotation deltas", "[core][transform]") {
+    Transform3d transform;
+
+    transform.rotate({0.0f, 90.0f, 0.0f});
+    require_matrix_near(transform.rotation.to_matrix(), rotate_y(HALF_PI));
+
+    transform.rotate_y(90.0f);
+    require_matrix_near(
+        transform.rotation.to_matrix(),
+        rotate_y(HALF_PI) * rotate_y(HALF_PI)
+    );
+
+    transform.rotate_x(90.0f);
+    require_matrix_near(
+        transform.rotation.to_matrix(),
+        rotate_y(HALF_PI) * rotate_y(HALF_PI) * rotate_x(HALF_PI)
+    );
+
+    transform.rotate_z(90.0f);
+    require_matrix_near(
+        transform.rotation.to_matrix(),
+        rotate_y(HALF_PI) * rotate_y(HALF_PI) * rotate_x(HALF_PI) *
+            rotate_z(HALF_PI)
+    );
 }
 
 TEST_CASE(
     "Transform3d direction helpers match quaternion rotation",
     "[core][transform]"
 ) {
-    Transform3d transform {
-        .rotation = {30.0f, 45.0f, 60.0f},
-    };
-    auto rotation = transform.rotation_quaternion();
+    Transform3d transform;
+    transform.set_euler({30.0f, 45.0f, 60.0f});
 
-    require_vector_near(transform.forward(), rotation.rotate(Vector3::Back));
-    require_vector_near(transform.right(), rotation.rotate(Vector3::Right));
-    require_vector_near(transform.up(), rotation.rotate(Vector3::Up));
+    require_vector_near(
+        transform.forward(),
+        transform.rotation.rotate(Vector3::Back)
+    );
+    require_vector_near(
+        transform.right(),
+        transform.rotation.rotate(Vector3::Right)
+    );
+    require_vector_near(transform.up(), transform.rotation.rotate(Vector3::Up));
 }

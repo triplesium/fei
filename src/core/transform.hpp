@@ -22,33 +22,50 @@ struct Transform2d {
 
 struct FEI_REFLECT Transform3d {
     Vector3 position {0.0f, 0.0f, 0.0f};
-    // Euler angles in degrees: x pitch, y yaw, z roll.
-    Vector3 rotation {0.0f, 0.0f, 0.0f};
+    Quaternion rotation {0.0f, 0.0f, 0.0f, 1.0f};
     Vector3 scale {1.0f, 1.0f, 1.0f};
 
     inline Matrix4x4 to_matrix() const {
         return translate(position.x, position.y, position.z) *
-               rotation_matrix() * fei::scale(scale.x, scale.y, scale.z);
+               rotation.to_matrix() * fei::scale(scale.x, scale.y, scale.z);
     }
 
-    inline Quaternion rotation_quaternion() const {
-        return Quaternion::from_euler_degrees(rotation);
+    inline void set_euler(const Vector3& degrees) {
+        rotation = Quaternion::from_euler_degrees(degrees);
     }
 
-    inline Matrix4x4 rotation_matrix() const {
-        return rotation_quaternion().to_matrix();
+    inline void rotate(const Vector3& degrees) {
+        rotation =
+            (rotation.normalized() * Quaternion::from_euler_degrees(degrees))
+                .normalized();
+    }
+
+    inline void rotate_axis(const Vector3& axis, float degrees) {
+        rotation = (rotation.normalized() *
+                    Quaternion::from_axis_angle_degrees(axis, degrees))
+                       .normalized();
+    }
+
+    inline void rotate_x(float degrees) {
+        rotate_axis(Vector3::Right, degrees);
+    }
+
+    inline void rotate_y(float degrees) { rotate_axis(Vector3::Up, degrees); }
+
+    inline void rotate_z(float degrees) {
+        rotate_axis(Vector3::Forward, degrees);
     }
 
     inline Vector3 forward() const {
-        return rotation_quaternion().rotate(Vector3::Back).normalized();
+        return rotation.rotate(Vector3::Back).normalized();
     }
 
     inline Vector3 right() const {
-        return rotation_quaternion().rotate(Vector3::Right).normalized();
+        return rotation.rotate(Vector3::Right).normalized();
     }
 
     inline Vector3 up() const {
-        return rotation_quaternion().rotate(Vector3::Up).normalized();
+        return rotation.rotate(Vector3::Up).normalized();
     }
 };
 

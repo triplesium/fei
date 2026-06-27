@@ -251,24 +251,30 @@ TEST_CASE(
 
     LuaRuntime runtime;
     runtime.register_type(type<Vector3>());
+    runtime.register_type(type<Quaternion>());
     runtime.register_type(type<Transform3d>());
 
     Transform3d transform;
     transform.position = {1.0f, 2.0f, 3.0f};
-    transform.rotation = {0.0f, 90.0f, 0.0f};
+    transform.set_euler({0.0f, 90.0f, 0.0f});
 
     runtime.set_global("transform", make_ref(transform));
     runtime.run_script(R"(
         local position = transform.position
         transform.position = position + transform:forward() * 10.0 * 0.5
-        transform.rotation.x = transform.rotation.x + 90.0 * 0.5
+        transform:set_euler(Vector3.new(45.0, 90.0, 0.0))
     )");
 
     REQUIRE(transform.position.x == Catch::Approx(-4.0f));
     REQUIRE(transform.position.y == Catch::Approx(2.0f));
     REQUIRE(transform.position.z == Catch::Approx(3.0f));
-    REQUIRE(transform.rotation.x == Catch::Approx(45.0f));
-    REQUIRE(transform.rotation.y == Catch::Approx(90.0f));
+
+    auto expected_rotation =
+        Quaternion::from_euler_degrees({45.0f, 90.0f, 0.0f});
+    REQUIRE(transform.rotation.x == Catch::Approx(expected_rotation.x));
+    REQUIRE(transform.rotation.y == Catch::Approx(expected_rotation.y));
+    REQUIRE(transform.rotation.z == Catch::Approx(expected_rotation.z));
+    REQUIRE(transform.rotation.w == Catch::Approx(expected_rotation.w));
 }
 
 TEST_CASE(
@@ -282,6 +288,7 @@ TEST_CASE(
     LuaRuntime runtime;
     runtime.register_type(type<ScriptTestReceiver>());
     runtime.register_type(type<Vector3>());
+    runtime.register_type(type<Quaternion>());
     runtime.register_type(type<Transform3d>());
     runtime.register_type(type<LuaWorld>());
     runtime.register_type(type<LuaEntity>());

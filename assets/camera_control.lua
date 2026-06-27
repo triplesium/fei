@@ -37,16 +37,16 @@ function update_camera(args)
         end
 
         if input:pressed(KeyCode.Up) then
-            transform.rotation.x = transform.rotation.x + rotate_step
+            transform:rotate_x(rotate_step)
         end
         if input:pressed(KeyCode.Down) then
-            transform.rotation.x = transform.rotation.x - rotate_step
+            transform:rotate_x(-rotate_step)
         end
         if input:pressed(KeyCode.Left) then
-            transform.rotation.y = transform.rotation.y + rotate_step
+            transform:rotate_y(rotate_step)
         end
         if input:pressed(KeyCode.Right) then
-            transform.rotation.y = transform.rotation.y - rotate_step
+            transform:rotate_y(-rotate_step)
         end
 
         if input:just_pressed(KeyCode.P) then
