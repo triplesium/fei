@@ -1,7 +1,7 @@
 target("fei-ecs")
     set_kind("static")
     add_headerfiles("**.hpp")
-    add_files("*.cpp")
+    add_files("*.cpp", "dynamic/*.cpp")
     add_deps("fei-base", "fei-refl", "fei-profiling")
     if is_plat("windows") then
         add_syslinks("dbghelp")
