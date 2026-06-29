@@ -95,6 +95,66 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Lua script systems construct script-defined values",
+    "[scripting][lua][system][types]"
+) {
+    auto runtime = make_test_runtime();
+
+    auto module = runtime.load_module(
+        LuaScriptSource {
+            .name = "script_type_constructor_system.lua",
+            .content = R"(
+                plugin "game.construct"
+                types {
+                    Stats = {
+                        value = field(i32, 2),
+                        scale = field(f32, 1.5),
+                    },
+                }
+
+                function tick(args)
+                    local defaults = Stats.new()
+                    local custom = Stats.new {
+                        value = 5,
+                        scale = 2,
+                    }
+                    args.receiver.value = args.receiver.value + defaults.value + custom.value
+                    if defaults.scale ~= 1.5 or custom.scale ~= 2 then
+                        error("unexpected constructed scale")
+                    end
+                end
+
+                system {
+                    name = "tick",
+                    run = tick,
+                    schedule = MainSchedules.Update,
+                    params = {
+                        res.write("receiver", ScriptTestReceiver),
+                    },
+                }
+            )",
+        }
+    );
+
+    REQUIRE(module);
+    auto decl = runtime.module_decl(*module);
+    REQUIRE(decl);
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    ScriptTestReceiver receiver;
+    receiver.value = 3;
+    world.add_resource(receiver);
+
+    auto handles = install_lua_script_systems(world, runtime, *module, *decl);
+    REQUIRE(handles);
+    REQUIRE(handles->size() == 1);
+
+    world.run_schedule(Update);
+    REQUIRE(world.resource<ScriptTestReceiver>().value == 10);
+}
+
+TEST_CASE(
     "Lua module decls register no-param script systems",
     "[scripting][lua][system]"
 ) {

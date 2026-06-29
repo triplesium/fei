@@ -98,6 +98,7 @@ int dispatch_gc(lua_State* L);
 int dispatch_index(lua_State* L);
 int dispatch_newindex(lua_State* L);
 int dispatch_operator(lua_State* L);
+int push_lua_object(lua_State* L, const Type& type, Val value);
 
 } // namespace
 
@@ -157,6 +158,95 @@ void LuaRuntime::register_lua_type(Type& type) {
 
 namespace {
 
+int push_lua_object(lua_State* L, const Type& type, Val value) {
+    auto* ud = lua_newuserdata(L, sizeof(LuaObject));
+    new (ud) LuaObject(std::move(value));
+    luaL_getmetatable(L, type.stripped_name().c_str());
+    lua_setmetatable(L, -2);
+    return 1;
+}
+
+bool lua_is_object_initializer(lua_State* L, int idx) {
+    return lua_istable(L, idx) && !lua_is_fei_type(L, idx) &&
+           !lua_is_enum_value(L, idx);
+}
+
+int assign_lua_property(
+    lua_State* L,
+    Ref instance,
+    Property& property,
+    int idx
+) {
+    Status<InvokeFailure> assigned;
+    if (lua_can_ref(L, idx)) {
+        auto ref = lua_to_ref(L, idx);
+        assigned = property.set(instance, ref);
+    } else {
+        auto value = lua_to_val(L, idx);
+        if (!value) {
+            luaL_error(
+                L,
+                "Invalid value for property '%s'",
+                property.name().c_str()
+            );
+            return 0;
+        }
+        assigned = property.set(instance, value.ref());
+    }
+
+    if (!assigned) {
+        return lua_raise_failure(L, assigned.error());
+    }
+    return 0;
+}
+
+int apply_lua_object_initializer(lua_State* L, Cls& cls, Val& value, int idx) {
+    int table_index = lua_absindex(L, idx);
+    lua_pushnil(L);
+    while (lua_next(L, table_index) != 0) {
+        if (lua_type(L, -2) != LUA_TSTRING) {
+            luaL_error(L, "Object initializer keys must be strings");
+            return 0;
+        }
+
+        std::string name = lua_tostring(L, -2);
+        auto property = cls.try_get_property(name);
+        if (!property) {
+            return lua_raise_cls_error(L, property.error());
+        }
+
+        assign_lua_property(L, value.ref(), *property, -1);
+        lua_pop(L, 1);
+    }
+    return 0;
+}
+
+int dispatch_default_new(lua_State* L, Type& type, Cls& cls, int arg_count) {
+    if (!type.default_constructible()) {
+        luaL_error(
+            L,
+            "Type '%s' does not have a matching constructor",
+            type.name().c_str()
+        );
+        return 0;
+    }
+    if (arg_count > 1 || (arg_count == 1 && !lua_is_object_initializer(L, 1))) {
+        luaL_error(
+            L,
+            "Type '%s' default constructor accepts no arguments or one "
+            "initializer table",
+            type.name().c_str()
+        );
+        return 0;
+    }
+
+    auto value = Val::default_construct(type);
+    if (arg_count == 1) {
+        apply_lua_object_initializer(L, cls, value, 1);
+    }
+    return push_lua_object(L, type, std::move(value));
+}
+
 int dispatch_new(lua_State* L) {
     TypeId type_id = lua_tointeger(L, lua_upvalueindex(1));
     auto type = Registry::instance().try_get_type(type_id);
@@ -168,6 +258,11 @@ int dispatch_new(lua_State* L) {
         return lua_raise_registry_error(L, cls.error());
     }
     auto arg_count = lua_gettop(L);
+
+    if (arg_count == 1 && lua_is_object_initializer(L, 1)) {
+        return dispatch_default_new(L, *type, *cls, arg_count);
+    }
+
     std::vector<ReturnValue> args;
 
     for (int i = 1; i <= arg_count; ++i) {
@@ -191,6 +286,9 @@ int dispatch_new(lua_State* L) {
 
     auto ctor_result = cls->get_constructor_for_args(refs);
     if (!ctor_result) {
+        if (arg_count == 0) {
+            return dispatch_default_new(L, *type, *cls, arg_count);
+        }
         return lua_raise_failure(L, ctor_result.error());
     }
     auto& ctor = *ctor_result;
@@ -204,12 +302,7 @@ int dispatch_new(lua_State* L) {
         return 0;
     }
 
-    auto* ud = lua_newuserdata(L, sizeof(LuaObject));
-    new (ud) LuaObject(std::move(ret->value()));
-    luaL_getmetatable(L, type->stripped_name().c_str());
-    lua_setmetatable(L, -2);
-
-    return 1;
+    return push_lua_object(L, *type, std::move(ret->value()));
 }
 
 int dispatch_method(lua_State* L) {
@@ -343,17 +436,7 @@ int dispatch_newindex(lua_State* L) {
     }
 
     auto instance = lua_to_ref(L, 1);
-    Status<InvokeFailure> assigned;
-    if (lua_can_ref(L, 3)) {
-        auto ref = lua_to_ref(L, 3);
-        assigned = prop->set(instance, ref);
-    } else {
-        auto value = lua_to_val(L, 3);
-        assigned = prop->set(instance, value.ref());
-    }
-    if (!assigned) {
-        return lua_raise_failure(L, assigned.error());
-    }
+    assign_lua_property(L, instance, *prop, 3);
     return 0;
 }
 
