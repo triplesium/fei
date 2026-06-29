@@ -4,7 +4,6 @@
 #include "app/reflection_plugin.hpp"
 #include "asset/plugin.hpp"
 #include "asset/server.hpp"
-#include "base/log.hpp"
 #include "core/camera.hpp"
 #include "core/fps_counter.hpp"
 #include "core/image.hpp"
@@ -24,10 +23,9 @@
 #include "rendering/plugin.hpp"
 #include "rendering/shader.hpp"
 #include "scene/plugin.hpp"
-#include "scripting/asset.hpp"
-#include "scripting/script_system_registry.hpp"
+#include "scripting_lua/asset.hpp"
 #include "scripting_lua/plugin.hpp"
-#include "scripting_lua/runtime.hpp"
+#include "scripting_lua/script_system_registry.hpp"
 #include "ui/plugin.hpp"
 #include "web_preview/plugin.hpp"
 #include "window/input.hpp"
@@ -49,11 +47,8 @@ class ColorOnlyMaterial : public StandardMaterial {
 
 void setup(
     ResRW<AssetServer> asset_server,
-    ResRO<Assets<ScriptAsset>> scripts,
-    ResRW<LuaRuntime> runtime,
-    ResRW<ScriptSystemRegistry> script_systems,
-    Commands commands,
-    WorldRef world
+    ResRW<LuaScriptSystemRegistry> lua_scripts,
+    Commands commands
 ) {
     commands.spawn().add(
         SceneSpawner {
@@ -98,15 +93,9 @@ void setup(
         }
     );
 
-    auto camera_script = asset_server->load<ScriptAsset>("camera_control.lua");
-    auto loaded_script_system =
-        script_systems->load_asset(*runtime, *world, *scripts, camera_script);
-    if (!loaded_script_system) {
-        error(
-            "Failed to load camera control script system: {}",
-            loaded_script_system.error().message
-        );
-    }
+    auto camera_script =
+        asset_server->load<LuaScriptAsset>("camera_control.lua");
+    lua_scripts->queue_asset(camera_script);
 }
 
 void update_directional_light(

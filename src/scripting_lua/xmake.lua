@@ -1,9 +1,9 @@
 target("fei-scripting-lua")
     set_kind("static")
     add_rules("fei.reflect")
-    add_files("*.cpp")
+    add_files("*.cpp", "detail/*.cpp")
     add_headerfiles("**.hpp")
-    add_deps("fei-base", "fei-refl", "fei-ecs", "fei-app", "fei-asset", "fei-scripting")
+    add_deps("fei-base", "fei-refl", "fei-ecs", "fei-app", "fei-asset")
     add_packages("lua")
 
 target("fei-scripting-lua-tests")

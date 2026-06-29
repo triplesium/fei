@@ -1,10 +1,10 @@
-#include "scripting_lua/utils.hpp"
+#include "scripting_lua/detail/utils.hpp"
 
 #include "refl/enum.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
 #include "refl/val.hpp"
-#include "scripting_lua/object.hpp"
+#include "scripting_lua/detail/object.hpp"
 
 #include <cstdint>
 #include <lua.hpp>

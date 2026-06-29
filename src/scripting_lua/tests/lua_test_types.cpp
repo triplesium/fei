@@ -6,8 +6,6 @@
 #include "refl/cls.hpp"
 #include "refl/enum.hpp"
 #include "refl/registry.hpp"
-#include "scripting_lua/entity.hpp"
-#include "scripting_lua/world.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -163,25 +161,13 @@ void register_transform_script_metadata() {
         .add_method("up", &Transform3d::up);
 }
 
-void register_world_script_metadata() {
-    auto& registry = Registry::instance();
-    registry.register_cls<LuaWorld>()
-        .add_method("resource", &LuaWorld::resource)
-        .add_constructor<LuaWorld, World*>();
-
-    registry.register_cls<LuaEntity>()
-        .add_method("id", &LuaEntity::id)
-        .add_method("component", &LuaEntity::component)
-        .add_constructor<LuaEntity, World*, Entity>();
-}
-
 LuaRuntime make_test_runtime() {
     register_script_test_metadata();
 
     LuaRuntime runtime;
-    runtime.register_type(type<ScriptTestError>());
-    runtime.register_type(type<ScriptTestReceiver>());
-    runtime.register_enum(Registry::instance().get_enum<ScriptTestEnum>());
+    runtime.bind_type(type<ScriptTestError>());
+    runtime.bind_type(type<ScriptTestReceiver>());
+    runtime.bind_enum(Registry::instance().get_enum<ScriptTestEnum>());
     return runtime;
 }
 

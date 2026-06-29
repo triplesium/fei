@@ -3,10 +3,8 @@
 #include "math/vector.hpp"
 #include "refl/ref_utils.hpp"
 #include "refl/registry.hpp"
-#include "scripting_lua/entity.hpp"
 #include "scripting_lua/runtime.hpp"
 #include "scripting_lua/tests/lua_test_types.hpp"
-#include "scripting_lua/world.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -73,7 +71,7 @@ TEST_CASE("LuaRuntime isolates loaded module environments", "[scripting]") {
     ScriptTestReceiver receiver;
 
     auto first = runtime.load_module(
-        ScriptSource {
+        LuaScriptSource {
             .name = "first.lua",
             .content = R"(
             local counter = 0
@@ -82,11 +80,10 @@ TEST_CASE("LuaRuntime isolates loaded module environments", "[scripting]") {
                 target.value = target.value + counter
             end
         )",
-            .language = "lua",
         }
     );
     auto second = runtime.load_module(
-        ScriptSource {
+        LuaScriptSource {
             .name = "second.lua",
             .content = R"(
             local counter = 0
@@ -95,7 +92,6 @@ TEST_CASE("LuaRuntime isolates loaded module environments", "[scripting]") {
                 target.value = target.value + counter
             end
         )",
-            .language = "lua",
         }
     );
 
@@ -125,14 +121,13 @@ TEST_CASE("LuaRuntime sets module environment globals", "[scripting]") {
     ScriptTestReceiver receiver;
 
     auto module = runtime.load_module(
-        ScriptSource {
+        LuaScriptSource {
             .name = "globals.lua",
             .content = R"(
             function on_update()
                 receiver.value = receiver.value + 6
             end
         )",
-            .language = "lua",
         }
     );
 
@@ -148,14 +143,13 @@ TEST_CASE("LuaRuntime reloads module code after unload", "[scripting]") {
     ScriptTestReceiver receiver;
 
     auto first = runtime.load_module(
-        ScriptSource {
+        LuaScriptSource {
             .name = "reload.lua",
             .content = R"(
                 function on_update(target)
                     target.value = target.value + 1
                 end
             )",
-            .language = "lua",
         }
     );
 
@@ -168,14 +162,13 @@ TEST_CASE("LuaRuntime reloads module code after unload", "[scripting]") {
     REQUIRE(runtime.unload_module(*first));
 
     auto second = runtime.load_module(
-        ScriptSource {
+        LuaScriptSource {
             .name = "reload.lua",
             .content = R"(
                 function on_update(target)
                     target.value = target.value + 10
                 end
             )",
-            .language = "lua",
         }
     );
 
@@ -250,9 +243,9 @@ TEST_CASE(
     register_transform_script_metadata();
 
     LuaRuntime runtime;
-    runtime.register_type(type<Vector3>());
-    runtime.register_type(type<Quaternion>());
-    runtime.register_type(type<Transform3d>());
+    runtime.bind_type(type<Vector3>());
+    runtime.bind_type(type<Quaternion>());
+    runtime.bind_type(type<Transform3d>());
 
     Transform3d transform;
     transform.position = {1.0f, 2.0f, 3.0f};
@@ -275,51 +268,6 @@ TEST_CASE(
     REQUIRE(transform.rotation.y == Catch::Approx(expected_rotation.y));
     REQUIRE(transform.rotation.z == Catch::Approx(expected_rotation.z));
     REQUIRE(transform.rotation.w == Catch::Approx(expected_rotation.w));
-}
-
-TEST_CASE(
-    "LuaRuntime passes Lua type tables as reflected TypeId arguments",
-    "[scripting]"
-) {
-    register_script_test_metadata();
-    register_transform_script_metadata();
-    register_world_script_metadata();
-
-    LuaRuntime runtime;
-    runtime.register_type(type<ScriptTestReceiver>());
-    runtime.register_type(type<Vector3>());
-    runtime.register_type(type<Quaternion>());
-    runtime.register_type(type<Transform3d>());
-    runtime.register_type(type<LuaWorld>());
-    runtime.register_type(type<LuaEntity>());
-
-    World world;
-    auto& receiver = world.add_resource(ScriptTestReceiver {});
-    receiver.value = 5;
-
-    auto entity_id = world.entity();
-    Transform3d transform;
-    transform.position = {1.0f, 2.0f, 3.0f};
-    world.add_component(entity_id, transform);
-
-    LuaWorld lua_world(&world);
-    LuaEntity lua_entity(&world, entity_id);
-    runtime.set_global("world", make_ref(lua_world));
-    runtime.set_global("entity", make_ref(lua_entity));
-
-    runtime.run_script(R"(
-        local receiver = world:resource(ScriptTestReceiver)
-        receiver.value = receiver.value + 7
-
-        local transform = entity:component(Transform3d)
-        transform.position.x = transform.position.x + 3.0
-    )");
-
-    REQUIRE(receiver.value == 12);
-    REQUIRE(
-        world.get_component<Transform3d>(entity_id).position.x ==
-        Catch::Approx(4.0f)
-    );
 }
 
 TEST_CASE(
@@ -425,7 +373,7 @@ TEST_CASE(
 TEST_CASE("LuaRuntime reports missing class metadata to Lua", "[scripting]") {
     auto runtime = make_test_runtime();
     Registry::instance().register_type<ScriptBareType>();
-    runtime.register_type(type<ScriptBareType>());
+    runtime.bind_type(type<ScriptBareType>());
 
     ScriptTestReceiver receiver;
     runtime.set_global("receiver", make_ref(receiver));

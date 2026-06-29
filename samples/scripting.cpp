@@ -12,9 +12,9 @@ int main() {
     using namespace fei;
     register_generated_reflection();
     LuaRuntime runtime;
-    runtime.register_type(type<Vector2>());
-    runtime.register_type(type<KeyInput>());
-    runtime.register_enum(Registry::instance().get_enum<KeyCode>());
+    runtime.bind_type(type<Vector2>());
+    runtime.bind_type(type<KeyInput>());
+    runtime.bind_enum(Registry::instance().get_enum<KeyCode>());
     std::println(
         "Registered Vector2 with type id {}",
         Registry::instance().get_type<Vector2>().id().id()

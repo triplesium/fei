@@ -1,15 +1,35 @@
 #pragma once
-#include "scripting/runtime.hpp"
+#include "base/result.hpp"
+#include "refl/val.hpp"
+#include "scripting_lua/module_decl.hpp"
+#include "scripting_lua/system_decl.hpp"
 
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 struct lua_State;
 
 namespace fei {
 
-class LuaRuntime : public ScriptRuntime {
+class Enum;
+class Type;
+
+enum class LuaScriptModuleId : std::uint64_t {
+    Invalid = 0,
+};
+
+inline constexpr LuaScriptModuleId invalid_lua_script_module_id =
+    LuaScriptModuleId::Invalid;
+
+struct LuaScriptSource {
+    std::string name;
+    std::string content;
+};
+
+class LuaRuntime {
   private:
     struct Module {
         int environment_ref;
@@ -17,21 +37,14 @@ class LuaRuntime : public ScriptRuntime {
     };
 
     lua_State* m_state {nullptr};
-    std::unordered_map<ScriptModuleId, Module> m_modules;
-    ScriptModuleId m_next_module_id {1};
-
-    static int dispatch_new(lua_State* L);
-    static int dispatch_method(lua_State* L);
-    static int dispatch_gc(lua_State* L);
-    static int dispatch_index(lua_State* L);
-    static int dispatch_newindex(lua_State* L);
-    static int dispatch_operator(lua_State* L);
+    std::unordered_map<LuaScriptModuleId, Module> m_modules;
+    std::uint64_t m_next_module_id {1};
 
     void register_lua_type(Type& type);
 
   public:
     LuaRuntime();
-    ~LuaRuntime() override;
+    ~LuaRuntime();
 
     LuaRuntime(const LuaRuntime&) = delete;
     LuaRuntime& operator=(const LuaRuntime&) = delete;
@@ -47,35 +60,39 @@ class LuaRuntime : public ScriptRuntime {
         return *this;
     }
 
-    void register_type(Type& type) override;
-    void unregister_type(Type& type) override;
-    void register_enum(const Enum& enm) override;
-    void unregister_enum(const Enum& enm) override;
-    void set_global(const std::string& name, const Val& val) override;
-    void set_global(const std::string& name, const Ref& ref) override;
-    void unset_global(const std::string& name) override;
+    void bind_type(Type& type);
+    void unbind_type(Type& type);
+    void bind_enum(const Enum& enm);
+    void unbind_enum(const Enum& enm);
+    void set_global(const std::string& name, const Val& val);
+    void set_global(const std::string& name, const Ref& ref);
+    void unset_global(const std::string& name);
 
-    void run_script(const std::string& script) override;
-    bool call_function(
+    Status<LuaScriptError> run_script(const std::string& script);
+    Status<LuaScriptError>
+    call_function(const std::string& func_name, const std::vector<Ref>& args);
+    Result<LuaScriptModuleId, LuaScriptError>
+    load_module(const LuaScriptSource& source);
+    Status<LuaScriptError> unload_module(LuaScriptModuleId module);
+    Result<LuaScriptModuleDecl, LuaScriptError>
+    module_decl(LuaScriptModuleId module);
+    Status<LuaScriptError> call_module_function(
+        LuaScriptModuleId module,
         const std::string& func_name,
         const std::vector<Ref>& args
-    ) override;
-    Result<ScriptModuleId, ScriptError>
-    load_module(const ScriptSource& source) override;
-    Status<ScriptError> unload_module(ScriptModuleId module) override;
-    Result<ScriptModuleManifest, ScriptError>
-    module_manifest(ScriptModuleId module) override;
-    Status<ScriptError> call_module_function(
-        ScriptModuleId module,
-        const std::string& func_name,
-        const std::vector<Ref>& args
-    ) override;
-    Status<ScriptError>
-    set_module_global(ScriptModuleId module, const std::string& name, Ref ref);
-    Status<ScriptError>
-    set_module_global(ScriptModuleId module, const std::string& name, Val val);
-    Status<ScriptError>
-    unset_module_global(ScriptModuleId module, const std::string& name);
+    );
+    Status<LuaScriptError> set_module_global(
+        LuaScriptModuleId module,
+        const std::string& name,
+        Ref ref
+    );
+    Status<LuaScriptError> set_module_global(
+        LuaScriptModuleId module,
+        const std::string& name,
+        Val val
+    );
+    Status<LuaScriptError>
+    unset_module_global(LuaScriptModuleId module, const std::string& name);
 };
 
 } // namespace fei

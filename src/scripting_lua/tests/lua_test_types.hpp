@@ -41,7 +41,6 @@ struct ScriptTestReceiver {
 
 void register_script_test_metadata();
 void register_transform_script_metadata();
-void register_world_script_metadata();
 
 LuaRuntime make_test_runtime();
 
