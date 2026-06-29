@@ -10,7 +10,7 @@ namespace fei {
 
 struct LuaScriptFieldDecl {
     std::string name;
-    std::string type;
+    LuaScriptTypeRef type;
     Val default_value;
     bool has_default {false};
 };

@@ -6,28 +6,56 @@
 #include "ecs/dynamic/system.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/world.hpp"
+#include "refl/dynamic_type.hpp"
 #include "refl/registry.hpp"
 
 #include <memory>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace fei::detail {
 namespace {
 
-Result<TypeId, LuaScriptError>
-resolve_lua_script_system_type(const LuaScriptTypeRef& type_ref) {
-    if (type_ref.script_type) {
-        return failure(
-            LuaScriptError {
-                "script-defined type storage is not implemented: " +
-                type_ref.name
-            }
-        );
+Optional<TypeId> primitive_lua_type_id(std::string_view name) {
+    auto& registry = Registry::instance();
+    if (name == "bool") {
+        return registry.register_type<bool>().id();
     }
+    if (name == "i32") {
+        return registry.register_type<int>().id();
+    }
+    if (name == "u32") {
+        return registry.register_type<unsigned int>().id();
+    }
+    if (name == "f32") {
+        return registry.register_type<float>().id();
+    }
+    if (name == "f64") {
+        return registry.register_type<double>().id();
+    }
+    if (name == "string") {
+        return registry.register_type<std::string>().id();
+    }
+    if (name == "entity") {
+        return registry.register_type<Entity>().id();
+    }
+    return nullopt;
+}
+
+Result<TypeId, LuaScriptError> resolve_lua_script_type_ref(
+    const LuaScriptTypeRef& type_ref,
+    const std::unordered_map<std::string, TypeId>& script_types
+) {
     if (type_ref.id) {
         return *type_ref.id;
+    }
+    if (auto primitive = primitive_lua_type_id(type_ref.name)) {
+        return *primitive;
+    }
+    if (auto it = script_types.find(type_ref.name); it != script_types.end()) {
+        return it->second;
     }
 
     auto type =
@@ -36,6 +64,148 @@ resolve_lua_script_system_type(const LuaScriptTypeRef& type_ref) {
         return type->id();
     }
     return failure(LuaScriptError {type.error().message});
+}
+
+Result<TypeId, LuaScriptError>
+resolve_lua_script_system_type(const LuaScriptTypeRef& type_ref) {
+    static const std::unordered_map<std::string, TypeId> no_script_types;
+    return resolve_lua_script_type_ref(type_ref, no_script_types);
+}
+
+Status<LuaScriptError> append_lua_script_type_decl(
+    const LuaScriptTypeDecl& type_decl,
+    const std::unordered_map<std::string, const LuaScriptTypeDecl*>& type_decls,
+    std::unordered_map<std::string, int>& visit_state,
+    std::vector<const LuaScriptTypeDecl*>& ordered
+) {
+    auto& state = visit_state[type_decl.qualified_name];
+    if (state == 2) {
+        return {};
+    }
+    if (state == 1) {
+        return failure(
+            LuaScriptError {
+                "Recursive script-defined type layout is not supported: " +
+                type_decl.qualified_name
+            }
+        );
+    }
+
+    state = 1;
+    for (const auto& field : type_decl.fields) {
+        if (!field.type.script_type) {
+            continue;
+        }
+        auto it = type_decls.find(field.type.name);
+        if (it == type_decls.end()) {
+            continue;
+        }
+        auto status = append_lua_script_type_decl(
+            *it->second,
+            type_decls,
+            visit_state,
+            ordered
+        );
+        if (!status) {
+            return failure(std::move(status.error()));
+        }
+    }
+
+    state = 2;
+    ordered.push_back(&type_decl);
+    return {};
+}
+
+Result<std::vector<const LuaScriptTypeDecl*>, LuaScriptError>
+order_lua_script_type_decls(const LuaScriptModuleDecl& decl) {
+    std::unordered_map<std::string, const LuaScriptTypeDecl*> type_decls;
+    type_decls.reserve(decl.types.size());
+    for (const auto& type_decl : decl.types) {
+        if (!type_decls.emplace(type_decl.qualified_name, &type_decl).second) {
+            return failure(
+                LuaScriptError {
+                    "Duplicate script-defined type '" +
+                    type_decl.qualified_name + "'"
+                }
+            );
+        }
+    }
+
+    std::unordered_map<std::string, int> visit_state;
+    std::vector<const LuaScriptTypeDecl*> ordered;
+    ordered.reserve(decl.types.size());
+    for (const auto& type_decl : decl.types) {
+        auto status = append_lua_script_type_decl(
+            type_decl,
+            type_decls,
+            visit_state,
+            ordered
+        );
+        if (!status) {
+            return failure(std::move(status.error()));
+        }
+    }
+    return ordered;
+}
+
+Status<LuaScriptError> register_lua_script_types(
+    LuaRuntime& runtime,
+    LuaScriptModuleId module,
+    const LuaScriptModuleDecl& decl
+) {
+    auto ordered = order_lua_script_type_decls(decl);
+    if (!ordered) {
+        return failure(std::move(ordered.error()));
+    }
+
+    std::unordered_map<std::string, TypeId> script_types;
+    script_types.reserve(ordered->size());
+    auto& registry = Registry::instance();
+    for (const auto* type_decl : *ordered) {
+        std::vector<DynamicFieldDesc> fields;
+        fields.reserve(type_decl->fields.size());
+        for (const auto& field : type_decl->fields) {
+            auto field_type =
+                resolve_lua_script_type_ref(field.type, script_types);
+            if (!field_type) {
+                return failure(std::move(field_type.error()));
+            }
+
+            Optional<Val> default_value;
+            if (field.has_default) {
+                default_value = field.default_value;
+            }
+            fields.push_back(
+                DynamicFieldDesc {
+                    .name = field.name,
+                    .type = *field_type,
+                    .default_value = std::move(default_value),
+                }
+            );
+        }
+
+        auto registered = registry.register_dynamic_struct(
+            DynamicStructDesc {
+                .name = type_decl->qualified_name,
+                .id = TypeId {type_decl->qualified_name},
+                .fields = std::move(fields),
+            }
+        );
+        if (!registered) {
+            return failure(
+                LuaScriptError {std::move(registered.error().message)}
+            );
+        }
+
+        script_types.emplace(type_decl->qualified_name, registered->id());
+        auto bound =
+            runtime.bind_module_type(module, type_decl->name, *registered);
+        if (!bound) {
+            return failure(std::move(bound.error()));
+        }
+    }
+
+    return {};
 }
 
 Result<DynamicSystemParamPtr, LuaScriptError>
@@ -229,6 +399,11 @@ Result<std::vector<SystemHandle>, LuaScriptError> install_lua_script_systems(
     LuaScriptModuleId module,
     const LuaScriptModuleDecl& decl
 ) {
+    auto script_types = register_lua_script_types(runtime, module, decl);
+    if (!script_types) {
+        return failure(std::move(script_types.error()));
+    }
+
     struct CompiledLuaScriptSystem {
         const LuaScriptSystemDecl* decl {nullptr};
         DynamicSystemParams params;

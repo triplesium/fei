@@ -160,9 +160,12 @@ lua_read_script_field_decl(lua_State* L, int field_index) {
     if (!name) {
         return failure(std::move(name.error()));
     }
-    auto type = lua_read_required_string_field(L, field_index, "type");
-    if (!type) {
-        return failure(std::move(type.error()));
+    auto type_ref = lua_read_optional_script_type_ref(L, field_index);
+    if (!type_ref) {
+        return failure(std::move(type_ref.error()));
+    }
+    if (type_ref->name.empty()) {
+        return failure(lua_decl_error("type field entry missing type"));
     }
     auto has_default =
         lua_read_optional_bool_field(L, field_index, "has_default", false);
@@ -179,7 +182,7 @@ lua_read_script_field_decl(lua_State* L, int field_index) {
 
     return LuaScriptFieldDecl {
         .name = std::move(*name),
-        .type = std::move(*type),
+        .type = std::move(*type_ref),
         .default_value = std::move(default_value),
         .has_default = *has_default,
     };

@@ -61,6 +61,11 @@ class LuaRuntime {
     }
 
     void bind_type(Type& type);
+    Status<LuaScriptError> bind_module_type(
+        LuaScriptModuleId module,
+        const std::string& name,
+        Type& type
+    );
     void unbind_type(Type& type);
     void bind_enum(const Enum& enm);
     void unbind_enum(const Enum& enm);

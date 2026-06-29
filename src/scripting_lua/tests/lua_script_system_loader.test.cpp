@@ -4,8 +4,10 @@
 #include "ecs/commands.hpp"
 #include "ecs/world.hpp"
 #include "math/vector.hpp"
+#include "refl/cls.hpp"
 #include "refl/ref_utils.hpp"
 #include "refl/registry.hpp"
+#include "refl/val.hpp"
 #include "scripting_lua/asset.hpp"
 #include "scripting_lua/detail/script_system_loader.hpp"
 #include "scripting_lua/runtime.hpp"
@@ -19,8 +21,7 @@ using namespace fei;
 using namespace fei::detail;
 
 TEST_CASE(
-    "Lua script system params accept script type tokens but storage is not "
-    "implemented",
+    "Lua script systems query script-defined components",
     "[scripting][lua][system][types]"
 ) {
     auto runtime = make_test_runtime();
@@ -32,11 +33,14 @@ TEST_CASE(
                 plugin "game.combat"
                 types {
                     Health = {
-                        current = i32,
+                        current = field(i32, 10),
                     },
                 }
 
                 function tick(args)
+                    for row in args.targets:iter() do
+                        row.health.current = row.health.current + 5
+                    end
                 end
 
                 system {
@@ -65,12 +69,29 @@ TEST_CASE(
     World world;
     world.add_resource(CommandsQueue {});
     auto handles = install_lua_script_systems(world, runtime, *module, *decl);
-    REQUIRE_FALSE(handles);
+    REQUIRE(handles);
+    REQUIRE(handles->size() == 1);
+
+    auto registered_type =
+        Registry::instance().try_get_type("game.combat.Health");
+    REQUIRE(registered_type);
+    auto health = Val::default_construct(*registered_type);
+    auto& cls = Registry::instance().get_cls(registered_type->id());
+    auto initial_current = make_val<int>(20);
     REQUIRE(
-        handles.error().message.find(
-            "script-defined type storage is not implemented: game.combat.Health"
-        ) != std::string::npos
+        cls.get_property("current").set(health.ref(), initial_current.ref())
     );
+
+    auto matched = world.entity();
+    world.add_component(matched, health.ref());
+
+    world.run_schedule(Update);
+
+    auto result = cls.get_property("current").get(
+        world.get_component(matched, registered_type->id())
+    );
+    REQUIRE(result);
+    REQUIRE(result->get<int>() == 25);
 }
 
 TEST_CASE(

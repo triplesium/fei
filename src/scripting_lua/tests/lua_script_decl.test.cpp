@@ -143,12 +143,16 @@ TEST_CASE(
     REQUIRE(decl->types[0].qualified_name == "game.combat.Health");
     REQUIRE(decl->types[0].fields.size() == 2);
     REQUIRE(decl->types[0].fields[0].name == "current");
-    REQUIRE(decl->types[0].fields[0].type == "i32");
+    REQUIRE(decl->types[0].fields[0].type.name == "i32");
+    REQUIRE_FALSE(decl->types[0].fields[0].type.id);
+    REQUIRE_FALSE(decl->types[0].fields[0].type.script_type);
     REQUIRE(decl->types[0].fields[0].has_default);
     const auto& current_default = decl->types[0].fields[0].default_value;
     REQUIRE(current_default.get<int>() == 100);
     REQUIRE(decl->types[0].fields[1].name == "max");
-    REQUIRE(decl->types[0].fields[1].type == "i32");
+    REQUIRE(decl->types[0].fields[1].type.name == "i32");
+    REQUIRE_FALSE(decl->types[0].fields[1].type.id);
+    REQUIRE_FALSE(decl->types[0].fields[1].type.script_type);
 }
 
 TEST_CASE(

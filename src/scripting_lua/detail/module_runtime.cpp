@@ -1,3 +1,4 @@
+#include "refl/type.hpp"
 #include "scripting_lua/detail/script_decl.hpp"
 #include "scripting_lua/detail/utils.hpp"
 #include "scripting_lua/runtime.hpp"
@@ -98,6 +99,36 @@ Status<LuaScriptError> LuaRuntime::unload_module(LuaScriptModuleId module) {
 
     luaL_unref(m_state, LUA_REGISTRYINDEX, it->second.environment_ref);
     m_modules.erase(it);
+    return {};
+}
+
+Status<LuaScriptError> LuaRuntime::bind_module_type(
+    LuaScriptModuleId module,
+    const std::string& name,
+    Type& type
+) {
+    auto it = m_modules.find(module);
+    if (it == m_modules.end()) {
+        return failure(LuaScriptError {"Lua module not found"});
+    }
+
+    register_lua_type(type);
+
+    auto* L = m_state;
+    int base_top = lua_gettop(L);
+    lua_rawgeti(L, LUA_REGISTRYINDEX, it->second.environment_ref);
+    int env_index = lua_gettop(L);
+
+    luaL_getmetatable(L, type.stripped_name().c_str());
+    if (lua_isnil(L, -1)) {
+        std::string message =
+            "Lua type metatable not found for '" + type.name() + "'";
+        lua_settop(L, base_top);
+        return failure(LuaScriptError {std::move(message)});
+    }
+
+    lua_setfield(L, env_index, name.c_str());
+    lua_settop(L, base_top);
     return {};
 }
 

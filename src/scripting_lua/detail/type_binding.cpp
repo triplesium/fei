@@ -150,6 +150,8 @@ void LuaRuntime::register_lua_type(Type& type) {
         // Stack: [mt]
         lua_setglobal(L, type.stripped_name().c_str());
         // Stack: []
+    } else {
+        lua_pop(L, 1);
     }
 }
 

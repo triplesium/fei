@@ -174,6 +174,14 @@ local function field_type_name(type_ref)
     return name
 end
 
+local function field_type_id(type_ref)
+    return registered_type_id(type_ref)
+end
+
+local function is_field_script_type(type_ref)
+    return is_declared_type(type_ref)
+end
+
 local function resource_type_name(type_ref)
     return object_type_name(type_ref, "resource")
 end
@@ -188,6 +196,8 @@ function field(type_ref, ...)
     return {
         __script_field = true,
         type = field_type_name(type_ref),
+        type_id = field_type_id(type_ref),
+        script_type = is_field_script_type(type_ref),
         has_default = has_default,
         default = default_value,
     }
@@ -198,6 +208,8 @@ local function normalize_field(name, desc)
         return {
             name = name,
             type = desc.type,
+            type_id = desc.type_id,
+            script_type = desc.script_type == true,
             has_default = desc.has_default == true,
             default = desc.default,
         }
@@ -205,6 +217,8 @@ local function normalize_field(name, desc)
     return {
         name = name,
         type = field_type_name(desc),
+        type_id = field_type_id(desc),
+        script_type = is_field_script_type(desc),
         has_default = false,
     }
 end
