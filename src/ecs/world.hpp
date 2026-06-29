@@ -134,6 +134,11 @@ class World {
         return m_resources.get_mut(type_id<U>()).template get<U>();
     }
 
+    Ref add_resource(TypeId type_id, Val val) {
+        m_resources.set(type_id, std::move(val));
+        return m_resources.get_mut(type_id);
+    }
+
     template<typename T, typename U>
     T& add_resource_as(U&& val) {
         using Stored = std::remove_cvref_t<U>;

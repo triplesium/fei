@@ -190,6 +190,74 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Lua script systems initialize script-defined resources",
+    "[scripting][lua][system][resource][types]"
+) {
+    auto runtime = make_test_runtime();
+
+    auto module = runtime.load_module(
+        LuaScriptSource {
+            .name = "script_resource_system.lua",
+            .content = R"(
+                plugin "game.resources"
+                types {
+                    Config = {
+                        value = field(i32, 3),
+                        ratio = field(f32, 1.5),
+                    },
+                }
+
+                resource(Config, {
+                    value = 7,
+                    ratio = 2,
+                })
+
+                function tick(args)
+                    args.config.value = args.config.value + 4
+                    args.config.ratio = args.config.ratio + 0.5
+                end
+
+                system {
+                    name = "tick",
+                    run = tick,
+                    schedule = MainSchedules.Update,
+                    params = {
+                        res.write("config", Config),
+                    },
+                }
+            )",
+        }
+    );
+
+    REQUIRE(module);
+    auto decl = runtime.module_decl(*module);
+    REQUIRE(decl);
+    REQUIRE(decl->resources.size() == 1);
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    auto handles = install_lua_script_systems(world, runtime, *module, *decl);
+    REQUIRE(handles);
+    REQUIRE(handles->size() == 1);
+
+    auto config_type =
+        Registry::instance().try_get_type("game.resources.Config");
+    REQUIRE(config_type);
+    REQUIRE(world.has_resource(config_type->id()));
+
+    world.run_schedule(Update);
+
+    auto& cls = Registry::instance().get_cls(config_type->id());
+    auto config = world.resource(config_type->id());
+    auto value = cls.get_property("value").get(config);
+    REQUIRE(value);
+    REQUIRE(value->get<int>() == 11);
+    auto ratio = cls.get_property("ratio").get(config);
+    REQUIRE(ratio);
+    REQUIRE(ratio->get<float>() == 2.5f);
+}
+
+TEST_CASE(
     "Lua script systems receive nil for missing optional resources",
     "[scripting][lua][system][resource]"
 ) {

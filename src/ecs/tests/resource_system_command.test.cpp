@@ -1,7 +1,11 @@
+#include "refl/cls.hpp"
+#include "refl/dynamic_type.hpp"
+#include "refl/val.hpp"
 #include "test_types.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
@@ -44,6 +48,50 @@ TEST_CASE("ECS manages world resources", "[ecs][resource]") {
         REQUIRE(event_queue.events[0] == "test_event");
         REQUIRE(event_queue.events[1] == "another_event");
     }
+}
+
+TEST_CASE(
+    "ECS stores dynamically typed world resources",
+    "[ecs][resource][dynamic]"
+) {
+    auto& registry = Registry::instance();
+    registry.register_type<int>();
+
+    const TypeId id {std::string_view {"ecs.dynamic.ResourceSettings"}};
+    auto type = registry.register_dynamic_struct(
+        DynamicStructDesc {
+            .name = "ecs.dynamic.ResourceSettings",
+            .id = id,
+            .fields = {
+                DynamicFieldDesc {
+                    .name = "value",
+                    .type = type_id<int>(),
+                    .default_value = Optional<Val> {make_val<int>(3)},
+                },
+            },
+        }
+    );
+    REQUIRE(type);
+
+    auto value = Val::default_construct(*type);
+    auto& cls = registry.get_cls(id);
+    auto next_value = make_val<int>(9);
+    REQUIRE(cls.get_property("value").set(value.ref(), next_value.ref()));
+
+    World world;
+    auto ref = world.add_resource(id, std::move(value));
+    REQUIRE(ref);
+    REQUIRE(ref.type_id() == id);
+    REQUIRE(world.has_resource(id));
+
+    auto current = cls.get_property("value").get(world.resource(id));
+    REQUIRE(current);
+    REQUIRE(current->get<int>() == 9);
+
+    const auto& const_world = world;
+    auto const_ref = const_world.resource(id);
+    REQUIRE(const_ref);
+    REQUIRE(const_ref.is_const());
 }
 
 TEST_CASE(

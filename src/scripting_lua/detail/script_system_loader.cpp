@@ -6,6 +6,7 @@
 #include "ecs/dynamic/system.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/world.hpp"
+#include "refl/cls.hpp"
 #include "refl/dynamic_type.hpp"
 #include "refl/registry.hpp"
 
@@ -208,6 +209,79 @@ Status<LuaScriptError> register_lua_script_types(
     return {};
 }
 
+Status<LuaScriptError> apply_lua_script_resource_initial_values(
+    Val& value,
+    const LuaScriptResourceDecl& resource
+) {
+    if (resource.initial_values.empty()) {
+        return {};
+    }
+
+    auto cls = Registry::instance().try_get_cls(value.type_id());
+    if (!cls) {
+        return failure(LuaScriptError {std::move(cls.error().message)});
+    }
+
+    for (const auto& field : resource.initial_values) {
+        auto property = cls->try_get_property(field.name);
+        if (!property) {
+            return failure(
+                LuaScriptError {std::move(property.error().message)}
+            );
+        }
+        if (!field.value) {
+            return failure(
+                LuaScriptError {
+                    "Resource initial value for field '" + field.name +
+                    "' is unsupported"
+                }
+            );
+        }
+
+        auto assigned = property->set(value.ref(), field.value.ref());
+        if (!assigned) {
+            return failure(
+                LuaScriptError {std::move(assigned.error().message)}
+            );
+        }
+    }
+
+    return {};
+}
+
+Status<LuaScriptError>
+install_lua_script_resources(World& world, const LuaScriptModuleDecl& decl) {
+    auto& registry = Registry::instance();
+    for (const auto& resource : decl.resources) {
+        auto type = registry.try_get_type(std::string_view {resource.type});
+        if (!type) {
+            return failure(LuaScriptError {std::move(type.error().message)});
+        }
+        if (resource.init_if_missing && world.has_resource(type->id())) {
+            continue;
+        }
+        if (!type->default_constructible()) {
+            return failure(
+                LuaScriptError {
+                    "Resource type '" + type->name() +
+                    "' is not default constructible"
+                }
+            );
+        }
+
+        auto value = Val::default_construct(*type);
+        auto initialized =
+            apply_lua_script_resource_initial_values(value, resource);
+        if (!initialized) {
+            return failure(std::move(initialized.error()));
+        }
+
+        world.add_resource(type->id(), std::move(value));
+    }
+
+    return {};
+}
+
 Result<DynamicSystemParamPtr, LuaScriptError>
 compile_lua_script_system_param(const LuaScriptSystemParam& param) {
     if (param.kind == LuaScriptSystemParamKind::Commands) {
@@ -402,6 +476,11 @@ Result<std::vector<SystemHandle>, LuaScriptError> install_lua_script_systems(
     auto script_types = register_lua_script_types(runtime, module, decl);
     if (!script_types) {
         return failure(std::move(script_types.error()));
+    }
+
+    auto script_resources = install_lua_script_resources(world, decl);
+    if (!script_resources) {
+        return failure(std::move(script_resources.error()));
     }
 
     struct CompiledLuaScriptSystem {

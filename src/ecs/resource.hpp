@@ -1,5 +1,6 @@
 #pragma once
 
+#include "base/log.hpp"
 #include "refl/type.hpp"
 #include "refl/val.hpp"
 
@@ -35,6 +36,10 @@ class Resources {
         return Ref(static_cast<const Exposed*>(stored), type_id<Exposed>());
     }
 
+    static Ref make_val_ref(Val& value) { return value.ref(); }
+
+    static Ref make_val_const_ref(const Val& value) { return value.ref(); }
+
     std::unordered_map<TypeId, ResourceEntry> m_resources;
 
   public:
@@ -48,6 +53,26 @@ class Resources {
     void set(TypeId type_id, T&& val) {
         using U = std::remove_cvref_t<T>;
         emplace<U, U>(type_id, std::forward<T>(val));
+    }
+
+    void set(TypeId type_id, Val val) {
+        if (!val) {
+            fatal("Cannot store an empty Val as a resource");
+        }
+        if (val.type_id() != type_id) {
+            fatal(
+                "Resource TypeId {} does not match Val TypeId {}",
+                type_id.id(),
+                val.type_id().id()
+            );
+        }
+
+        ResourceEntry entry {
+            .value = std::move(val),
+            .ref = &make_val_ref,
+            .const_ref = &make_val_const_ref,
+        };
+        m_resources.insert_or_assign(type_id, std::move(entry));
     }
 
     template<typename Exposed, typename Stored, typename... Args>
