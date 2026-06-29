@@ -8,6 +8,7 @@
 #include "refl/type.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -59,6 +60,13 @@ class Cls {
     Cls& add_property(std::string name, P member_ptr) {
         m_properties[name] =
             std::make_unique<PropertyImpl<P>>(name, member_ptr);
+        return *this;
+    }
+
+    Cls&
+    add_offset_property(std::string name, TypeId type_id, std::size_t offset) {
+        m_properties[name] =
+            std::make_unique<OffsetProperty>(name, m_type_id, type_id, offset);
         return *this;
     }
 

@@ -3,6 +3,7 @@
 #include "refl/utils.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -44,13 +45,18 @@ inline TypeId type_id() {
 }
 
 struct TypeOps {
-    using DefaultConstructFunc = void (*)(void* dest);
-    using CopyConstructFunc = void (*)(void* dest, const void* src);
-    using MoveConstructFunc = void (*)(void* dest, void* src);
-    using DestroyFunc = void (*)(void* ptr);
-    using CopyAssignFunc = bool (*)(void* dest, const void* src);
-    using MoveAssignFunc = bool (*)(void* dest, void* src);
+    using DefaultConstructFunc = void (*)(const void* context, void* dest);
+    using CopyConstructFunc =
+        void (*)(const void* context, void* dest, const void* src);
+    using MoveConstructFunc =
+        void (*)(const void* context, void* dest, void* src);
+    using DestroyFunc = void (*)(const void* context, void* ptr);
+    using CopyAssignFunc =
+        bool (*)(const void* context, void* dest, const void* src);
+    using MoveAssignFunc = bool (*)(const void* context, void* dest, void* src);
 
+    const void* context {nullptr};
+    std::shared_ptr<const void> context_owner;
     DefaultConstructFunc default_construct {nullptr};
     CopyConstructFunc copy_construct {nullptr};
     MoveConstructFunc move_construct {nullptr};
@@ -110,6 +116,47 @@ class Type {
     DestroyFunc destroy_func() const { return m_ops.destroy; }
     CopyAssignFunc copy_assign_func() const { return m_ops.copy_assign; }
     MoveAssignFunc move_assign_func() const { return m_ops.move_assign; }
+
+    bool default_construct(void* dest) const {
+        if (!m_ops.default_construct) {
+            return false;
+        }
+        m_ops.default_construct(m_ops.context, dest);
+        return true;
+    }
+    bool copy_construct(void* dest, const void* src) const {
+        if (!m_ops.copy_construct) {
+            return false;
+        }
+        m_ops.copy_construct(m_ops.context, dest, src);
+        return true;
+    }
+    bool move_construct(void* dest, void* src) const {
+        if (!m_ops.move_construct) {
+            return false;
+        }
+        m_ops.move_construct(m_ops.context, dest, src);
+        return true;
+    }
+    bool destroy(void* ptr) const {
+        if (!m_ops.destroy) {
+            return false;
+        }
+        m_ops.destroy(m_ops.context, ptr);
+        return true;
+    }
+    bool copy_assign(void* dest, const void* src) const {
+        if (!m_ops.copy_assign) {
+            return false;
+        }
+        return m_ops.copy_assign(m_ops.context, dest, src);
+    }
+    bool move_assign(void* dest, void* src) const {
+        if (!m_ops.move_assign) {
+            return false;
+        }
+        return m_ops.move_assign(m_ops.context, dest, src);
+    }
 
     bool default_constructible() const {
         return m_ops.default_construct != nullptr;

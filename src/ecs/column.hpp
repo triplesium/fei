@@ -16,10 +16,7 @@ class Column {
     std::size_t m_type_size;
     std::size_t m_type_align;
     TypeId m_type_id;
-    Type::DefaultConstructFunc m_default_construct;
-    Type::CopyConstructFunc m_copy_construct;
-    Type::MoveConstructFunc m_move_construct;
-    Type::DeleteFunc m_delete;
+    TypeOps m_type_ops;
 
     void* allocate_elements(uint32_t capacity) const;
     void deallocate_elements() const;

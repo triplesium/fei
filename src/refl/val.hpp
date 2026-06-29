@@ -72,9 +72,7 @@ class Val {
         if (!m_type) {
             return;
         }
-        if (auto destroy = m_type->destroy_func()) {
-            destroy(data_ptr());
-        }
+        m_type->destroy(data_ptr());
         deallocate_storage();
         m_type = nullptr;
     }
@@ -83,8 +81,7 @@ class Val {
         if (!other.m_type) {
             return true;
         }
-        auto copy_construct = other.m_type->copy_construct_func();
-        if (!copy_construct) {
+        if (!other.m_type->copy_constructible()) {
             error(
                 "Attempting to copy non-copyable type {}",
                 other.m_type->name()
@@ -93,7 +90,7 @@ class Val {
         }
         m_type = other.m_type;
         void* dest = allocate_storage(*m_type);
-        copy_construct(dest, other.data_ptr());
+        m_type->copy_construct(dest, other.data_ptr());
         return true;
     }
 
@@ -101,11 +98,10 @@ class Val {
         if (!other.m_type) {
             return true;
         }
-        auto move_construct = other.m_type->move_construct_func();
-        if (move_construct) {
+        if (other.m_type->move_constructible()) {
             m_type = other.m_type;
             void* dest = allocate_storage(*m_type);
-            move_construct(dest, const_cast<void*>(other.data_ptr()));
+            m_type->move_construct(dest, const_cast<void*>(other.data_ptr()));
             other.reset();
             return true;
         }
@@ -136,6 +132,14 @@ class Val {
         }
         val.m_type = &type;
         return val;
+    }
+
+    static Val default_construct(const Type& type) {
+        return Val::construct(type, [&](void* dest) {
+            if (!type.default_construct(dest)) {
+                fatal("Cannot default construct Val for type {}", type.name());
+            }
+        });
     }
 
     Val(const Val& other) { copy_from(other); }
