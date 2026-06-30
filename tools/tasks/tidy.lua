@@ -141,6 +141,10 @@ function run(options)
     check_compile_commands()
     local clang_tidy = tooling.find_program("clang-tidy")
     local files, source_count, header_count, target_count = tooling.collect_files(options.targets, options.files)
+    local extra_args = {"--header-filter=^$"}
+    if options.fix then
+        table.join2(extra_args, {"--fix", "--format-style=file"})
+    end
 
     run_clang_tidy(
         clang_tidy,
@@ -149,7 +153,7 @@ function run(options)
         header_count,
         target_count,
         options.jobs,
-        {"--header-filter=^$"},
+        extra_args,
         options.verbose
     )
 end

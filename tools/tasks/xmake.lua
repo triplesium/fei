@@ -5,6 +5,7 @@ task("tidy")
             rootdir = path.join(os.projectdir(), "tools")
         }).run({
             files = option.get("files"),
+            fix = option.get("fix"),
             jobs = option.get("jobs"),
             targets = option.get("targets"),
             verbose = option.get("verbose")
@@ -16,6 +17,7 @@ task("tidy")
         description = "Run clang-tidy for project sources and headers.",
         options = {
             {"f", "files", "kv", nil, "Run clang-tidy only for matching files/globs, separated by '" .. path.envsep() .. "'."},
+            {nil, "fix", "k", nil, "Apply clang-tidy fixes in place."},
             {"j", "jobs", "kv", tostring(os.default_njob()), "Set the number of parallel clang-tidy jobs."},
             {nil, "targets", "vs", nil, "Run clang-tidy for the given targets."}
         }

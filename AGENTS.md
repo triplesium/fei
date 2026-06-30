@@ -48,6 +48,8 @@
 - `xmake tidy fei-math` or `xmake tidy sample-scene`: run clang-tidy for one
   target. Use `xmake tidy --jobs=N fei-math` to control parallel clang-tidy
   jobs.
+- `xmake tidy --fix fei-math`: apply clang-tidy fix-its in place for one
+  target.
 
 ## Sample Rendering Debugging
 
