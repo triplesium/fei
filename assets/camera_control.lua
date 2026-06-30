@@ -64,12 +64,12 @@ system {
     run = update_camera,
     schedule = MainSchedules.Update,
     params = {
-        res.read("input", KeyInput),
-        res.read("time", Time),
-        res.write("app", AppStates),
-        query("cameras", {
-            query.write("transform", Transform3d),
+        input = res.read(KeyInput),
+        time = res.read(Time),
+        app = res.write(AppStates),
+        cameras = query {
+            transform = query.write(Transform3d),
             query.with(Camera3d),
-        }),
+        },
     },
 }
