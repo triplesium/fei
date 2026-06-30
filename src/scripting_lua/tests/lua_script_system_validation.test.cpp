@@ -153,7 +153,7 @@ TEST_CASE(
     REQUIRE_FALSE(handles);
     REQUIRE(
         handles.error().message.find(
-            "Query script system param must declare fields"
+            "Query dynamic system param must declare fields"
         ) != std::string::npos
     );
 }

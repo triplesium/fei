@@ -2,7 +2,6 @@
 #include "base/result.hpp"
 #include "refl/val.hpp"
 #include "scripting_lua/module_decl.hpp"
-#include "scripting_lua/system_decl.hpp"
 
 #include <cstdint>
 #include <string>

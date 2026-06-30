@@ -1,9 +1,7 @@
 #include "scripting_lua/detail/script_system_loader.hpp"
 
-#include "ecs/dynamic/commands.hpp"
-#include "ecs/dynamic/query.hpp"
-#include "ecs/dynamic/resource.hpp"
 #include "ecs/dynamic/system.hpp"
+#include "ecs/dynamic/system_decl.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/world.hpp"
 #include "refl/cls.hpp"
@@ -19,58 +17,27 @@
 namespace fei::detail {
 namespace {
 
-Optional<TypeId> primitive_lua_type_id(std::string_view name) {
-    auto& registry = Registry::instance();
-    if (name == "bool") {
-        return registry.register_type<bool>().id();
-    }
-    if (name == "i32") {
-        return registry.register_type<int>().id();
-    }
-    if (name == "u32") {
-        return registry.register_type<unsigned int>().id();
-    }
-    if (name == "f32") {
-        return registry.register_type<float>().id();
-    }
-    if (name == "f64") {
-        return registry.register_type<double>().id();
-    }
-    if (name == "string") {
-        return registry.register_type<std::string>().id();
-    }
-    if (name == "entity") {
-        return registry.register_type<Entity>().id();
-    }
-    return nullopt;
-}
-
 Result<TypeId, LuaScriptError> resolve_lua_script_type_ref(
     const LuaScriptTypeRef& type_ref,
     const std::unordered_map<std::string, TypeId>& script_types
 ) {
-    if (type_ref.id) {
-        return *type_ref.id;
+    if (type_ref.type_id) {
+        return *type_ref.type_id;
     }
-    if (auto primitive = primitive_lua_type_id(type_ref.name)) {
-        return *primitive;
-    }
-    if (auto it = script_types.find(type_ref.name); it != script_types.end()) {
+    if (auto it = script_types.find(type_ref.type_name);
+        it != script_types.end()) {
         return it->second;
     }
 
-    auto type =
-        Registry::instance().try_get_type(std::string_view {type_ref.name});
+    auto type = resolve_dynamic_type_ref(
+        DynamicTypeRef {
+            .type_name = type_ref.type_name,
+        }
+    );
     if (type) {
-        return type->id();
+        return *type;
     }
-    return failure(LuaScriptError {type.error().message});
-}
-
-Result<TypeId, LuaScriptError>
-resolve_lua_script_system_type(const LuaScriptTypeRef& type_ref) {
-    static const std::unordered_map<std::string, TypeId> no_script_types;
-    return resolve_lua_script_type_ref(type_ref, no_script_types);
+    return failure(LuaScriptError {std::move(type.error().message)});
 }
 
 Status<LuaScriptError> append_lua_script_type_decl(
@@ -97,7 +64,7 @@ Status<LuaScriptError> append_lua_script_type_decl(
         if (!field.type.script_type) {
             continue;
         }
-        auto it = type_decls.find(field.type.name);
+        auto it = type_decls.find(field.type.type_name);
         if (it == type_decls.end()) {
             continue;
         }
@@ -282,141 +249,6 @@ install_lua_script_resources(World& world, const LuaScriptModuleDecl& decl) {
     return {};
 }
 
-Result<DynamicSystemParamPtr, LuaScriptError>
-compile_lua_script_system_param(const LuaScriptSystemParam& param) {
-    if (param.kind == LuaScriptSystemParamKind::Commands) {
-        if (param.name.empty()) {
-            return failure(
-                LuaScriptError {"Commands script system param missing name"}
-            );
-        }
-
-        DynamicSystemParamPtr result =
-            std::make_unique<DynamicCommandsParam>(param.name);
-        return std::move(result);
-    }
-
-    if (param.kind == LuaScriptSystemParamKind::Query) {
-        if (param.name.empty()) {
-            return failure(
-                LuaScriptError {"Query script system param missing name"}
-            );
-        }
-
-        std::vector<DynamicQueryField> fields;
-        std::vector<DynamicQueryFilter> filters;
-        for (const auto& child : param.query_params) {
-            if (child.kind == LuaScriptQueryParamKind::Entity) {
-                if (child.name.empty()) {
-                    return failure(
-                        LuaScriptError {
-                            "Query entity script system param missing name"
-                        }
-                    );
-                }
-                fields.push_back(
-                    DynamicQueryField {
-                        .name = child.name,
-                        .type = type_id<Entity>(),
-                        .access = DynamicParamAccess::Read,
-                        .kind = DynamicQueryFieldKind::Entity,
-                    }
-                );
-                continue;
-            }
-
-            if (child.type.name.empty()) {
-                return failure(
-                    LuaScriptError {"Query script system param missing type"}
-                );
-            }
-
-            auto type = resolve_lua_script_system_type(child.type);
-            if (!type) {
-                return failure(std::move(type.error()));
-            }
-
-            if (child.kind == LuaScriptQueryParamKind::Component) {
-                if (child.name.empty()) {
-                    return failure(
-                        LuaScriptError {
-                            "Query component script system param missing name"
-                        }
-                    );
-                }
-                fields.push_back(
-                    DynamicQueryField {
-                        .name = child.name,
-                        .type = *type,
-                        .access = child.access,
-                    }
-                );
-            } else {
-                filters.push_back(
-                    DynamicQueryFilter {
-                        .type = *type,
-                        .required = child.kind == LuaScriptQueryParamKind::With,
-                    }
-                );
-            }
-        }
-
-        if (fields.empty()) {
-            return failure(
-                LuaScriptError {"Query script system param must declare fields"}
-            );
-        }
-
-        DynamicSystemParamPtr result = std::make_unique<DynamicQuery>(
-            param.name,
-            std::move(fields),
-            std::move(filters)
-        );
-        return std::move(result);
-    }
-
-    if (param.kind != LuaScriptSystemParamKind::Resource) {
-        return failure(
-            LuaScriptError {
-                "Only resource, query, and commands script system params are "
-                "supported yet"
-            }
-        );
-    }
-    if (param.type.name.empty()) {
-        return failure(
-            LuaScriptError {"Resource script system param missing type"}
-        );
-    }
-
-    auto type = resolve_lua_script_system_type(param.type);
-    if (!type) {
-        return failure(std::move(type.error()));
-    }
-
-    DynamicSystemParamPtr result = std::make_unique<DynamicResourceParam>(
-        param.name,
-        *type,
-        param.access,
-        param.optional
-    );
-    return std::move(result);
-}
-
-Result<DynamicSystemParams, LuaScriptError>
-compile_lua_script_system_params(const LuaScriptSystemDecl& decl) {
-    DynamicSystemParams params;
-    params.reserve(decl.params.size());
-    for (const auto& param : decl.params) {
-        auto compiled = compile_lua_script_system_param(param);
-        if (!compiled) {
-            return failure(std::move(compiled.error()));
-        }
-        params.push_back(std::move(*compiled));
-    }
-    return params;
-}
-
 class LuaScriptSystemExecutor final : public DynamicSystemExecutor {
   private:
     LuaRuntime* m_runtime {nullptr};
@@ -444,17 +276,17 @@ class LuaScriptSystemExecutor final : public DynamicSystemExecutor {
 } // namespace
 
 Result<SystemAccess, LuaScriptError>
-lua_script_system_access_for_decl(const LuaScriptSystemDecl& decl) {
-    auto params = compile_lua_script_system_params(decl);
+lua_script_system_access_for_decl(const DynamicSystemDecl& decl) {
+    auto params = compile_dynamic_system_params(decl);
     if (!params) {
-        return failure(std::move(params.error()));
+        return failure(LuaScriptError {std::move(params.error().message)});
     }
     return dynamic_system_access_for_params(*params);
 }
 
 SystemProfileInfo lua_script_system_profile_for_decl(
     const LuaScriptModuleDecl& module_decl,
-    const LuaScriptSystemDecl& system_decl
+    const DynamicSystemDecl& system_decl
 ) {
     const auto file = module_decl.source_name.empty() ?
                           std::string {"<script>"} :
@@ -484,7 +316,7 @@ Result<std::vector<SystemHandle>, LuaScriptError> install_lua_script_systems(
     }
 
     struct CompiledLuaScriptSystem {
-        const LuaScriptSystemDecl* decl {nullptr};
+        const DynamicSystemDecl* decl {nullptr};
         DynamicSystemParams params;
         std::unique_ptr<DynamicSystemExecutor> executor;
     };
@@ -495,9 +327,9 @@ Result<std::vector<SystemHandle>, LuaScriptError> install_lua_script_systems(
         if (system.name.empty()) {
             return failure(LuaScriptError {"Script system missing name"});
         }
-        auto params = compile_lua_script_system_params(system);
+        auto params = compile_dynamic_system_params(system);
         if (!params) {
-            return failure(std::move(params.error()));
+            return failure(LuaScriptError {std::move(params.error().message)});
         }
         compiled_systems.push_back(
             CompiledLuaScriptSystem {

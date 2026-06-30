@@ -1,12 +1,24 @@
 #pragma once
 
+#include "base/optional.hpp"
+#include "ecs/dynamic/system_decl.hpp"
+#include "refl/type.hpp"
 #include "refl/val.hpp"
-#include "scripting_lua/system_decl.hpp"
 
 #include <string>
 #include <vector>
 
 namespace fei {
+
+struct LuaScriptError {
+    std::string message;
+};
+
+struct LuaScriptTypeRef {
+    std::string type_name;
+    Optional<TypeId> type_id;
+    bool script_type {false};
+};
 
 struct LuaScriptFieldDecl {
     std::string name;
@@ -37,7 +49,7 @@ struct LuaScriptModuleDecl {
     std::string source_name;
     std::vector<LuaScriptTypeDecl> types;
     std::vector<LuaScriptResourceDecl> resources;
-    std::vector<LuaScriptSystemDecl> systems;
+    std::vector<DynamicSystemDecl> systems;
 };
 
 } // namespace fei

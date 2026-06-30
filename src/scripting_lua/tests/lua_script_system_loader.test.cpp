@@ -18,6 +18,17 @@
 using namespace fei;
 using namespace fei::detail;
 
+namespace {
+
+template<typename T>
+const T& require_param_decl(const DynamicSystemParamDeclPtr& param) {
+    REQUIRE(param != nullptr);
+    REQUIRE(param->decl_type_id() == type_id<T>());
+    return static_cast<const T&>(*param);
+}
+
+} // namespace
+
 TEST_CASE(
     "Lua script systems query script-defined components",
     "[scripting][lua][system][types]"
@@ -59,10 +70,12 @@ TEST_CASE(
     auto decl = runtime.module_decl(*module);
     REQUIRE(decl);
     REQUIRE(decl->systems.size() == 1);
-    const auto& health_type = decl->systems[0].params[0].query_params[0].type;
-    REQUIRE(health_type.name == "game.combat.Health");
-    REQUIRE(health_type.script_type);
-    REQUIRE_FALSE(health_type.id);
+    const auto& query_param =
+        require_param_decl<DynamicQueryParamDecl>(decl->systems[0].params[0]);
+    REQUIRE(query_param.fields.size() == 1);
+    const auto& health_type = query_param.fields[0].type;
+    REQUIRE(health_type.type_name == "game.combat.Health");
+    REQUIRE_FALSE(health_type.type_id);
 
     World world;
     world.add_resource(CommandsQueue {});
@@ -223,15 +236,15 @@ TEST_CASE(
     REQUIRE(decl);
     REQUIRE(decl->systems.size() == 1);
     REQUIRE(decl->systems[0].params.size() == 1);
-    REQUIRE(decl->systems[0].params[0].name == "receiver");
-    REQUIRE(
-        decl->systems[0].params[0].kind == LuaScriptSystemParamKind::Resource
+    const auto& resource_param = require_param_decl<DynamicResourceParamDecl>(
+        decl->systems[0].params[0]
     );
-    const auto& receiver_type = decl->systems[0].params[0].type;
-    REQUIRE(receiver_type.name == "ScriptTestReceiver");
-    REQUIRE(receiver_type.id);
-    REQUIRE(*receiver_type.id == type_id<ScriptTestReceiver>());
-    REQUIRE(decl->systems[0].params[0].access == DynamicParamAccess::Write);
+    REQUIRE(resource_param.name == "receiver");
+    const auto& receiver_type = resource_param.type;
+    REQUIRE(receiver_type.type_name == "ScriptTestReceiver");
+    REQUIRE(receiver_type.type_id);
+    REQUIRE(*receiver_type.type_id == type_id<ScriptTestReceiver>());
+    REQUIRE(resource_param.access == DynamicParamAccess::Write);
 
     World world;
     world.add_resource(CommandsQueue {});
@@ -349,10 +362,10 @@ TEST_CASE(
     REQUIRE(decl);
     REQUIRE(decl->systems.size() == 1);
     REQUIRE(decl->systems[0].params.size() == 2);
-    REQUIRE(
-        decl->systems[0].params[0].kind == LuaScriptSystemParamKind::Resource
+    const auto& missing_param = require_param_decl<DynamicResourceParamDecl>(
+        decl->systems[0].params[0]
     );
-    REQUIRE(decl->systems[0].params[0].optional);
+    REQUIRE(missing_param.optional);
 
     auto access = lua_script_system_access_for_decl(decl->systems[0]);
     REQUIRE(access);
@@ -414,24 +427,23 @@ TEST_CASE(
     REQUIRE(decl->systems.size() == 1);
     REQUIRE(decl->systems[0].params.size() == 1);
 
-    const auto& query_param = decl->systems[0].params[0];
+    const auto& query_param =
+        require_param_decl<DynamicQueryParamDecl>(decl->systems[0].params[0]);
     REQUIRE(query_param.name == "receivers");
-    REQUIRE(query_param.kind == LuaScriptSystemParamKind::Query);
-    REQUIRE(query_param.query_params.size() == 2);
-    REQUIRE(query_param.query_params[0].name == "receiver");
-    REQUIRE(
-        query_param.query_params[0].kind == LuaScriptQueryParamKind::Component
-    );
-    const auto& receiver_type = query_param.query_params[0].type;
-    REQUIRE(receiver_type.name == "ScriptTestReceiver");
-    REQUIRE(receiver_type.id);
-    REQUIRE(*receiver_type.id == type_id<ScriptTestReceiver>());
-    REQUIRE(query_param.query_params[0].access == DynamicParamAccess::Write);
-    REQUIRE(query_param.query_params[1].kind == LuaScriptQueryParamKind::With);
-    const auto& transform_type = query_param.query_params[1].type;
-    REQUIRE(transform_type.name == "Transform3d");
-    REQUIRE(transform_type.id);
-    REQUIRE(*transform_type.id == type_id<Transform3d>());
+    REQUIRE(query_param.fields.size() == 1);
+    REQUIRE(query_param.filters.size() == 1);
+    REQUIRE(query_param.fields[0].name == "receiver");
+    REQUIRE(query_param.fields[0].kind == DynamicQueryFieldDeclKind::Component);
+    const auto& receiver_type = query_param.fields[0].type;
+    REQUIRE(receiver_type.type_name == "ScriptTestReceiver");
+    REQUIRE(receiver_type.type_id);
+    REQUIRE(*receiver_type.type_id == type_id<ScriptTestReceiver>());
+    REQUIRE(query_param.fields[0].access == DynamicParamAccess::Write);
+    REQUIRE(query_param.filters[0].required);
+    const auto& transform_type = query_param.filters[0].type;
+    REQUIRE(transform_type.type_name == "Transform3d");
+    REQUIRE(transform_type.type_id);
+    REQUIRE(*transform_type.type_id == type_id<Transform3d>());
 
     auto access = lua_script_system_access_for_decl(decl->systems[0]);
     REQUIRE(access);
@@ -497,17 +509,15 @@ TEST_CASE(
     REQUIRE(decl);
     REQUIRE(decl->systems.size() == 1);
 
-    const auto& query_param = decl->systems[0].params[0];
-    REQUIRE(query_param.query_params.size() == 2);
-    REQUIRE(query_param.query_params[0].name == "entity");
-    REQUIRE(
-        query_param.query_params[0].kind == LuaScriptQueryParamKind::Entity
-    );
-    REQUIRE(query_param.query_params[0].type.name.empty());
-    REQUIRE_FALSE(query_param.query_params[0].type.id);
-    REQUIRE(
-        query_param.query_params[1].kind == LuaScriptQueryParamKind::Component
-    );
+    const auto& query_param =
+        require_param_decl<DynamicQueryParamDecl>(decl->systems[0].params[0]);
+    REQUIRE(query_param.fields.size() == 2);
+    REQUIRE(query_param.filters.empty());
+    REQUIRE(query_param.fields[0].name == "entity");
+    REQUIRE(query_param.fields[0].kind == DynamicQueryFieldDeclKind::Entity);
+    REQUIRE(query_param.fields[0].type.type_name.empty());
+    REQUIRE_FALSE(query_param.fields[0].type.type_id);
+    REQUIRE(query_param.fields[1].kind == DynamicQueryFieldDeclKind::Component);
 
     auto access = lua_script_system_access_for_decl(decl->systems[0]);
     REQUIRE(access);
@@ -578,13 +588,13 @@ TEST_CASE(
     REQUIRE(decl);
     REQUIRE(decl->systems.size() == 1);
 
-    const auto& query_param = decl->systems[0].params[0];
-    REQUIRE(query_param.query_params.size() == 3);
-    REQUIRE(query_param.query_params[0].access == DynamicParamAccess::Write);
-    REQUIRE(query_param.query_params[1].access == DynamicParamAccess::Read);
-    REQUIRE(
-        query_param.query_params[2].kind == LuaScriptQueryParamKind::Without
-    );
+    const auto& query_param =
+        require_param_decl<DynamicQueryParamDecl>(decl->systems[0].params[0]);
+    REQUIRE(query_param.fields.size() == 2);
+    REQUIRE(query_param.filters.size() == 1);
+    REQUIRE(query_param.fields[0].access == DynamicParamAccess::Write);
+    REQUIRE(query_param.fields[1].access == DynamicParamAccess::Read);
+    REQUIRE_FALSE(query_param.filters[0].required);
 
     auto access = lua_script_system_access_for_decl(decl->systems[0]);
     REQUIRE(access);

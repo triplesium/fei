@@ -11,6 +11,17 @@
 using namespace fei;
 using namespace fei::detail;
 
+namespace {
+
+template<typename T>
+const T& require_param_decl(const DynamicSystemParamDeclPtr& param) {
+    REQUIRE(param != nullptr);
+    REQUIRE(param->decl_type_id() == type_id<T>());
+    return static_cast<const T&>(*param);
+}
+
+} // namespace
+
 TEST_CASE(
     "Lua script systems receive commands params",
     "[scripting][lua][system][commands]"
@@ -46,10 +57,10 @@ TEST_CASE(
     REQUIRE(decl);
     REQUIRE(decl->systems.size() == 1);
     REQUIRE(decl->systems[0].params.size() == 2);
-    REQUIRE(decl->systems[0].params[0].name == "commands");
-    REQUIRE(
-        decl->systems[0].params[0].kind == LuaScriptSystemParamKind::Commands
+    const auto& commands_param = require_param_decl<DynamicCommandsParamDecl>(
+        decl->systems[0].params[0]
     );
+    REQUIRE(commands_param.name == "commands");
 
     auto access = lua_script_system_access_for_decl(decl->systems[0]);
     REQUIRE(access);

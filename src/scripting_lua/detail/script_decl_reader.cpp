@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -18,6 +19,26 @@ namespace {
 LuaScriptError lua_decl_error(const std::string& message) {
     return LuaScriptError {"Invalid Lua script declaration: " + message};
 }
+
+enum class LuaScriptSystemParamKind {
+    Resource,
+    Query,
+    Commands,
+};
+
+enum class LuaScriptQueryParamKind {
+    Component,
+    Entity,
+    With,
+    Without,
+};
+
+struct LuaScriptQueryParamDecl {
+    std::string name;
+    DynamicTypeRef type;
+    LuaScriptQueryParamKind kind {LuaScriptQueryParamKind::Component};
+    DynamicParamAccess access {DynamicParamAccess::Read};
+};
 
 std::string lua_type_name(lua_State* L, int index) {
     return lua_typename(L, lua_type(L, index));
@@ -141,9 +162,22 @@ lua_read_optional_script_type_ref(lua_State* L, int param_index) {
     }
 
     return LuaScriptTypeRef {
-        .name = std::move(name),
-        .id = std::move(id),
+        .type_name = std::move(name),
+        .type_id = std::move(id),
         .script_type = *script_type,
+    };
+}
+
+Result<DynamicTypeRef, LuaScriptError>
+lua_read_optional_dynamic_type_ref(lua_State* L, int param_index) {
+    auto type_ref = lua_read_optional_script_type_ref(L, param_index);
+    if (!type_ref) {
+        return failure(std::move(type_ref.error()));
+    }
+
+    return DynamicTypeRef {
+        .type_name = std::move(type_ref->type_name),
+        .type_id = std::move(type_ref->type_id),
     };
 }
 
@@ -164,7 +198,7 @@ lua_read_script_field_decl(lua_State* L, int field_index) {
     if (!type_ref) {
         return failure(std::move(type_ref.error()));
     }
-    if (type_ref->name.empty()) {
+    if (type_ref->type_name.empty()) {
         return failure(lua_decl_error("type field entry missing type"));
     }
     auto has_default =
@@ -494,15 +528,15 @@ script_access_from_string(const std::string& value) {
     return failure(lua_decl_error("unknown param access '" + value + "'"));
 }
 
-Result<LuaScriptSystemParam, LuaScriptError>
+Result<DynamicSystemParamDeclPtr, LuaScriptError>
 lua_read_script_system_param(lua_State* L, int param_index);
 
-Result<LuaScriptQueryParam, LuaScriptError>
+Result<LuaScriptQueryParamDecl, LuaScriptError>
 lua_read_script_query_param(lua_State* L, int param_index);
 
-Result<std::vector<LuaScriptSystemParam>, LuaScriptError>
+Result<std::vector<DynamicSystemParamDeclPtr>, LuaScriptError>
 lua_read_script_system_param_list(lua_State* L, int params_index) {
-    std::vector<LuaScriptSystemParam> params;
+    std::vector<DynamicSystemParamDeclPtr> params;
     auto count = static_cast<std::size_t>(lua_rawlen(L, params_index));
     params.reserve(count);
     for (std::size_t i = 1; i <= count; ++i) {
@@ -524,12 +558,12 @@ lua_read_script_system_param_list(lua_State* L, int params_index) {
         params.push_back(std::move(*param));
     }
 
-    return params;
+    return std::move(params);
 }
 
-Result<std::vector<LuaScriptQueryParam>, LuaScriptError>
+Result<std::vector<LuaScriptQueryParamDecl>, LuaScriptError>
 lua_read_script_query_param_list(lua_State* L, int params_index) {
-    std::vector<LuaScriptQueryParam> params;
+    std::vector<LuaScriptQueryParamDecl> params;
     auto count = static_cast<std::size_t>(lua_rawlen(L, params_index));
     params.reserve(count);
     for (std::size_t i = 1; i <= count; ++i) {
@@ -554,12 +588,12 @@ lua_read_script_query_param_list(lua_State* L, int params_index) {
     return params;
 }
 
-Result<std::vector<LuaScriptQueryParam>, LuaScriptError>
+Result<std::vector<LuaScriptQueryParamDecl>, LuaScriptError>
 lua_read_nested_script_query_params(lua_State* L, int param_index) {
     lua_getfield(L, param_index, "params");
     if (lua_isnil(L, -1)) {
         lua_pop(L, 1);
-        return std::vector<LuaScriptQueryParam> {};
+        return std::vector<LuaScriptQueryParamDecl> {};
     }
     if (!lua_istable(L, -1)) {
         std::string type_name = lua_type_name(L, -1);
@@ -574,13 +608,13 @@ lua_read_nested_script_query_params(lua_State* L, int param_index) {
     return params;
 }
 
-Result<LuaScriptQueryParam, LuaScriptError>
+Result<LuaScriptQueryParamDecl, LuaScriptError>
 lua_read_script_query_param(lua_State* L, int param_index) {
     auto name = lua_read_optional_string_field(L, param_index, "name");
     if (!name) {
         return failure(std::move(name.error()));
     }
-    auto type_ref = lua_read_optional_script_type_ref(L, param_index);
+    auto type_ref = lua_read_optional_dynamic_type_ref(L, param_index);
     if (!type_ref) {
         return failure(std::move(type_ref.error()));
     }
@@ -608,7 +642,7 @@ lua_read_script_query_param(lua_State* L, int param_index) {
         access = *parsed_access;
     }
 
-    return LuaScriptQueryParam {
+    return LuaScriptQueryParamDecl {
         .name = name->value_or(std::string {}),
         .type = std::move(*type_ref),
         .kind = *kind,
@@ -616,13 +650,13 @@ lua_read_script_query_param(lua_State* L, int param_index) {
     };
 }
 
-Result<LuaScriptSystemParam, LuaScriptError>
+Result<DynamicSystemParamDeclPtr, LuaScriptError>
 lua_read_script_system_param(lua_State* L, int param_index) {
     auto name = lua_read_optional_string_field(L, param_index, "name");
     if (!name) {
         return failure(std::move(name.error()));
     }
-    auto type_ref = lua_read_optional_script_type_ref(L, param_index);
+    auto type_ref = lua_read_optional_dynamic_type_ref(L, param_index);
     if (!type_ref) {
         return failure(std::move(type_ref.error()));
     }
@@ -659,7 +693,7 @@ lua_read_script_system_param(lua_State* L, int param_index) {
         access = *parsed_access;
     }
 
-    std::vector<LuaScriptQueryParam> query_params;
+    std::vector<LuaScriptQueryParamDecl> query_params;
     if (kind == LuaScriptSystemParamKind::Query) {
         auto nested_params =
             lua_read_nested_script_query_params(L, param_index);
@@ -669,24 +703,58 @@ lua_read_script_system_param(lua_State* L, int param_index) {
         query_params = std::move(*nested_params);
     }
 
-    return LuaScriptSystemParam {
-        .name = name->value_or(std::string {}),
-        .type = std::move(*type_ref),
-        .kind = kind,
-        .access = access,
-        .optional = *optional,
-        .query_params = std::move(query_params),
-    };
+    auto param_name = name->value_or(std::string {});
+    if (kind == LuaScriptSystemParamKind::Commands) {
+        auto decl = std::make_unique<DynamicCommandsParamDecl>();
+        decl->name = std::move(param_name);
+        return DynamicSystemParamDeclPtr {std::move(decl)};
+    }
+
+    if (kind == LuaScriptSystemParamKind::Query) {
+        auto decl = std::make_unique<DynamicQueryParamDecl>();
+        decl->name = std::move(param_name);
+        for (auto& child : query_params) {
+            if (child.kind == LuaScriptQueryParamKind::With ||
+                child.kind == LuaScriptQueryParamKind::Without) {
+                decl->filters.push_back(
+                    DynamicQueryFilterDecl {
+                        .type = std::move(child.type),
+                        .required = child.kind == LuaScriptQueryParamKind::With,
+                    }
+                );
+                continue;
+            }
+
+            decl->fields.push_back(
+                DynamicQueryFieldDecl {
+                    .name = std::move(child.name),
+                    .type = std::move(child.type),
+                    .kind = child.kind == LuaScriptQueryParamKind::Entity ?
+                                DynamicQueryFieldDeclKind::Entity :
+                                DynamicQueryFieldDeclKind::Component,
+                    .access = child.access,
+                }
+            );
+        }
+        return DynamicSystemParamDeclPtr {std::move(decl)};
+    }
+
+    auto decl = std::make_unique<DynamicResourceParamDecl>();
+    decl->name = std::move(param_name);
+    decl->type = std::move(*type_ref);
+    decl->access = access;
+    decl->optional = *optional;
+    return DynamicSystemParamDeclPtr {std::move(decl)};
 }
 
-Result<std::vector<LuaScriptSystemParam>, LuaScriptError>
+Result<std::vector<DynamicSystemParamDeclPtr>, LuaScriptError>
 lua_read_script_system_params(lua_State* L, int system_index) {
-    std::vector<LuaScriptSystemParam> params;
+    std::vector<DynamicSystemParamDeclPtr> params;
 
     lua_getfield(L, system_index, "params");
     if (lua_isnil(L, -1)) {
         lua_pop(L, 1);
-        return params;
+        return std::move(params);
     }
     if (!lua_istable(L, -1)) {
         std::string type_name = lua_type_name(L, -1);
@@ -702,7 +770,7 @@ lua_read_script_system_params(lua_State* L, int system_index) {
     return parsed_params;
 }
 
-Result<LuaScriptSystemDecl, LuaScriptError>
+Result<DynamicSystemDecl, LuaScriptError>
 lua_read_script_system_decl(lua_State* L, int system_index) {
     if (!lua_istable(L, system_index)) {
         return failure(lua_decl_error(
@@ -726,7 +794,7 @@ lua_read_script_system_decl(lua_State* L, int system_index) {
         return failure(std::move(params.error()));
     }
 
-    return LuaScriptSystemDecl {
+    return DynamicSystemDecl {
         .name = std::move(*name),
         .params = std::move(*params),
         .schedule = *schedule,
@@ -765,7 +833,7 @@ lua_read_module_decl(lua_State* L, int decl_index) {
     lua_getfield(L, decl_index, "systems");
     if (lua_isnil(L, -1)) {
         lua_pop(L, 1);
-        return decl;
+        return std::move(decl);
     }
     if (!lua_istable(L, -1)) {
         std::string type_name = lua_type_name(L, -1);
@@ -791,7 +859,7 @@ lua_read_module_decl(lua_State* L, int decl_index) {
     }
 
     lua_pop(L, 1);
-    return decl;
+    return std::move(decl);
 }
 
 } // namespace fei

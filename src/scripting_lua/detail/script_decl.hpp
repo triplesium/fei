@@ -2,7 +2,6 @@
 
 #include "base/result.hpp"
 #include "scripting_lua/module_decl.hpp"
-#include "scripting_lua/system_decl.hpp"
 
 #include <lua.hpp>
 

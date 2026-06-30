@@ -7,7 +7,6 @@
 #include "ecs/fwd.hpp"
 #include "scripting_lua/asset.hpp"
 #include "scripting_lua/runtime.hpp"
-#include "scripting_lua/system_decl.hpp"
 
 #include <cstddef>
 #include <cstdint>

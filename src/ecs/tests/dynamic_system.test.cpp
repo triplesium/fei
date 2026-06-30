@@ -2,18 +2,28 @@
 #include "ecs/dynamic/query.hpp"
 #include "ecs/dynamic/resource.hpp"
 #include "ecs/dynamic/system.hpp"
+#include "ecs/dynamic/system_decl.hpp"
 #include "ecs/world.hpp"
 #include "refl/registry.hpp"
 #include "test_types.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 using namespace fei;
 using namespace fei::ecs_test;
 
 namespace {
+
+template<typename T>
+std::unique_ptr<T> make_named_decl(std::string name) {
+    auto decl = std::make_unique<T>();
+    decl->name = std::move(name);
+    return decl;
+}
 
 class MutatingDynamicExecutor final : public DynamicSystemExecutor {
   public:
@@ -40,7 +50,147 @@ class MutatingDynamicExecutor final : public DynamicSystemExecutor {
     }
 };
 
+struct CustomResourceAliasParamDecl final
+    : DynamicSystemParamDeclBase<CustomResourceAliasParamDecl> {
+    DynamicTypeRef type;
+};
+
 } // namespace
+
+TEST_CASE(
+    "ECS dynamic system decls compile params and access",
+    "[ecs][dynamic]"
+) {
+    Registry::instance().register_type<GameConfig>();
+    register_components();
+
+    DynamicSystemDecl decl {
+        .name = "decl_system",
+        .schedule = TestSchedule,
+    };
+    auto resource = make_named_decl<DynamicResourceParamDecl>("config");
+    resource->type = DynamicTypeRef {.type_name = "GameConfig"};
+    resource->access = DynamicParamAccess::Write;
+    decl.params.push_back(std::move(resource));
+
+    auto query = make_named_decl<DynamicQueryParamDecl>("targets");
+    query->fields.push_back(
+        DynamicQueryFieldDecl {
+            .name = "entity",
+            .type = {},
+            .kind = DynamicQueryFieldDeclKind::Entity,
+        }
+    );
+    query->fields.push_back(
+        DynamicQueryFieldDecl {
+            .name = "position",
+            .type = DynamicTypeRef {.type_id = type_id<Position>()},
+            .kind = DynamicQueryFieldDeclKind::Component,
+            .access = DynamicParamAccess::Write,
+        }
+    );
+    query->filters.push_back(
+        DynamicQueryFilterDecl {
+            .type = DynamicTypeRef {.type_name = "Health"},
+            .required = false,
+        }
+    );
+    decl.params.push_back(std::move(query));
+
+    decl.params.push_back(
+        make_named_decl<DynamicCommandsParamDecl>("commands")
+    );
+
+    auto params = compile_dynamic_system_params(decl);
+    REQUIRE(params);
+    REQUIRE(params->size() == 3);
+
+    auto access = dynamic_system_access_for_params(*params);
+    REQUIRE(access.write_resources.contains(type_id<GameConfig>()));
+    REQUIRE(access.write_components.contains(type_id<Position>()));
+    REQUIRE_FALSE(access.write_components.contains(type_id<Health>()));
+    REQUIRE_FALSE(access.read_components.contains(type_id<Entity>()));
+    REQUIRE(access.commands);
+    REQUIRE(access.write_resources.contains(type_id<CommandsQueue>()));
+}
+
+TEST_CASE(
+    "ECS dynamic system param compilers can be externally registered",
+    "[ecs][dynamic]"
+) {
+    Registry::instance().register_type<GameConfig>();
+
+    DynamicSystemParamCompilerRegistry::instance()
+        .add<CustomResourceAliasParamDecl>(
+            [](const CustomResourceAliasParamDecl& decl) {
+                auto type = resolve_dynamic_type_ref(decl.type);
+                if (!type) {
+                    return Result<DynamicSystemParamPtr, DynamicSystemError> {
+                        failure(std::move(type.error()))
+                    };
+                }
+
+                DynamicSystemParamPtr result =
+                    std::make_unique<DynamicResourceParam>(
+                        decl.name,
+                        *type,
+                        DynamicParamAccess::Read
+                    );
+                return Result<DynamicSystemParamPtr, DynamicSystemError> {
+                    std::move(result)
+                };
+            }
+        );
+
+    DynamicSystemDecl decl {.name = "custom_decl_system"};
+    auto custom = make_named_decl<CustomResourceAliasParamDecl>("config");
+    custom->type = DynamicTypeRef {.type_id = type_id<GameConfig>()};
+    decl.params.push_back(std::move(custom));
+
+    auto params = compile_dynamic_system_params(decl);
+    REQUIRE(params);
+
+    auto access = dynamic_system_access_for_params(*params);
+    REQUIRE(access.read_resources.contains(type_id<GameConfig>()));
+    REQUIRE_FALSE(access.write_resources.contains(type_id<GameConfig>()));
+}
+
+TEST_CASE("ECS dynamic system decls reject invalid params", "[ecs][dynamic]") {
+    DynamicSystemDecl missing_query_field {.name = "invalid_query"};
+    missing_query_field.params.push_back(
+        make_named_decl<DynamicQueryParamDecl>("targets")
+    );
+
+    auto query_result = compile_dynamic_system_params(missing_query_field);
+    REQUIRE_FALSE(query_result);
+    REQUIRE(
+        query_result.error().message.find("must declare fields") !=
+        std::string::npos
+    );
+
+    DynamicSystemDecl missing_resource_type {.name = "invalid_resource"};
+    missing_resource_type.params.push_back(
+        make_named_decl<DynamicResourceParamDecl>("config")
+    );
+
+    auto resource_result = compile_dynamic_system_params(missing_resource_type);
+    REQUIRE_FALSE(resource_result);
+    REQUIRE(
+        resource_result.error().message.find("missing type") !=
+        std::string::npos
+    );
+
+    struct UnregisteredParamDecl final
+        : DynamicSystemParamDeclBase<UnregisteredParamDecl> {};
+
+    UnregisteredParamDecl unregistered;
+    auto compiler_result = compile_dynamic_system_param(unregistered);
+    REQUIRE_FALSE(compiler_result);
+    REQUIRE(
+        compiler_result.error().message.find("not registered") !=
+        std::string::npos
+    );
+}
 
 TEST_CASE(
     "ECS dynamic resource params expose access and prepare refs",
