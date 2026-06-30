@@ -5,6 +5,7 @@
 #include "asset/server.hpp"
 #include "ecs/system_params.hpp"
 #include "graphics/texture.hpp"
+#include "pbr/cubemap.hpp"
 #include "pbr/material.hpp"
 #include "pbr/mesh_queue.hpp"
 #include "pbr/passes/target.hpp"

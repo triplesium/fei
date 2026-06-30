@@ -1,15 +1,6 @@
 #include "app/app.hpp"
-#include "asset/assets.hpp"
-#include "core/transform.hpp"
-#include "ecs/commands.hpp"
-#include "ecs/world.hpp"
-#include "math/vector.hpp"
-#include "refl/ref_utils.hpp"
-#include "refl/registry.hpp"
-#include "scripting_lua/asset.hpp"
 #include "scripting_lua/detail/script_system_loader.hpp"
 #include "scripting_lua/runtime.hpp"
-#include "scripting_lua/script_system_registry.hpp"
 #include "scripting_lua/tests/lua_test_types.hpp"
 
 #include <catch2/catch_test_macros.hpp>

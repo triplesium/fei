@@ -2,7 +2,6 @@
 
 #include "base/log.hpp"
 #include "graphics/enums.hpp"
-#include "graphics/utils.hpp"
 #include "graphics_opengl/buffer.hpp"
 #include "graphics_opengl/command_buffer.hpp"
 #include "graphics_opengl/command_buffer_executor.hpp"

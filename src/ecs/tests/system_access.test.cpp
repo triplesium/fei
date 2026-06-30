@@ -49,41 +49,15 @@ void world_ref_system(WorldRef) {}
 
 void event_access_system(EventReader<GameEvent>, EventWriter<PlayerMoved>) {}
 
-bool read_resource_condition(ResRO<GameConfig>) {
-    return true;
-}
-
-bool optional_read_resource_condition(Optional<ResRO<GameConfig>>) {
-    return true;
-}
-
-bool read_query_condition(Query<Entity, const Position>) {
-    return true;
-}
-
-bool write_resource_condition(ResRW<GameConfig>) {
-    return true;
-}
-
-bool optional_write_resource_condition(Optional<ResRW<GameConfig>>) {
-    return true;
-}
-
-bool write_query_condition(Query<Position>) {
-    return true;
-}
-
-bool commands_condition(Commands) {
-    return true;
-}
-
-bool world_ref_condition(WorldRef) {
-    return true;
-}
-
-bool event_reader_condition(EventReader<GameEvent>) {
-    return true;
-}
+using ReadResourceCondition = bool(ResRO<GameConfig>);
+using OptionalReadResourceCondition = bool(Optional<ResRO<GameConfig>>);
+using ReadQueryCondition = bool(Query<Entity, const Position>);
+using WriteResourceCondition = bool(ResRW<GameConfig>);
+using OptionalWriteResourceCondition = bool(Optional<ResRW<GameConfig>>);
+using WriteQueryCondition = bool(Query<Position>);
+using CommandsCondition = bool(Commands);
+using WorldRefCondition = bool(WorldRef);
+using EventReaderCondition = bool(EventReader<GameEvent>);
 
 struct MainThreadResource {};
 
@@ -119,15 +93,15 @@ static_assert(!ConditionParam<Commands>);
 static_assert(!ConditionParam<WorldRef>);
 static_assert(!ConditionParam<EventReader<GameEvent>>);
 
-static_assert(IntoCondition<decltype(read_resource_condition)>);
-static_assert(IntoCondition<decltype(optional_read_resource_condition)>);
-static_assert(IntoCondition<decltype(read_query_condition)>);
-static_assert(!IntoCondition<decltype(write_resource_condition)>);
-static_assert(!IntoCondition<decltype(optional_write_resource_condition)>);
-static_assert(!IntoCondition<decltype(write_query_condition)>);
-static_assert(!IntoCondition<decltype(commands_condition)>);
-static_assert(!IntoCondition<decltype(world_ref_condition)>);
-static_assert(!IntoCondition<decltype(event_reader_condition)>);
+static_assert(IntoCondition<ReadResourceCondition>);
+static_assert(IntoCondition<OptionalReadResourceCondition>);
+static_assert(IntoCondition<ReadQueryCondition>);
+static_assert(!IntoCondition<WriteResourceCondition>);
+static_assert(!IntoCondition<OptionalWriteResourceCondition>);
+static_assert(!IntoCondition<WriteQueryCondition>);
+static_assert(!IntoCondition<CommandsCondition>);
+static_assert(!IntoCondition<WorldRefCondition>);
+static_assert(!IntoCondition<EventReaderCondition>);
 
 TEST_CASE("ECS systems expose resource access metadata", "[ecs][system]") {
     FunctionSystem<decltype(resource_access_system)*> system(
@@ -197,41 +171,54 @@ TEST_CASE(
         hash_system(named_profile_system)
     );
 
-    REQUIRE(profile.has_value());
-    INFO("symbol function: " << profile->function);
-    INFO("symbol name: " << profile->name);
-    INFO("symbol file: " << profile->file);
+    if (!profile) {
+        FAIL("named_profile_system was not symbolized");
+        return;
+    }
+    const auto& profile_value = *profile;
+    INFO("symbol function: " << profile_value.function);
+    INFO("symbol name: " << profile_value.name);
+    INFO("symbol file: " << profile_value.file);
     REQUIRE(
-        profile->function.find("named_profile_system") != std::string::npos
+        profile_value.function.find("named_profile_system") != std::string::npos
     );
-    REQUIRE(profile->function.find("ILT+") == std::string::npos);
-    REQUIRE(profile->name == "named_profile_system");
+    REQUIRE(profile_value.function.find("ILT+") == std::string::npos);
+    REQUIRE(profile_value.name == "named_profile_system");
 
     auto template_profile = SystemProfileRegistry::instance().symbolize(
         hash_system(template_profile_system<Position>)
     );
-    REQUIRE(template_profile.has_value());
-    INFO("template symbol function: " << template_profile->function);
-    INFO("template symbol name: " << template_profile->name);
+    if (!template_profile) {
+        FAIL("template_profile_system was not symbolized");
+        return;
+    }
+    const auto& template_profile_value = *template_profile;
+    INFO("template symbol function: " << template_profile_value.function);
+    INFO("template symbol name: " << template_profile_value.name);
     REQUIRE(
-        template_profile->function.find("template_profile_system") !=
+        template_profile_value.function.find("template_profile_system") !=
         std::string::npos
     );
-    REQUIRE(template_profile->name == "template_profile_system");
+    REQUIRE(template_profile_value.name == "template_profile_system");
 
     auto template_static_profile = SystemProfileRegistry::instance().symbolize(
         hash_system(TemplateProfileSystems<Position>::static_profile_system)
     );
-    REQUIRE(template_static_profile.has_value());
+    if (!template_static_profile) {
+        FAIL("static_profile_system was not symbolized");
+        return;
+    }
+    const auto& template_static_profile_value = *template_static_profile;
     INFO(
-        "template static symbol function: " << template_static_profile->function
+        "template static symbol function: "
+        << template_static_profile_value.function
     );
-    INFO("template static symbol name: " << template_static_profile->name);
+    INFO("template static symbol name: " << template_static_profile_value.name);
     REQUIRE(
-        template_static_profile->function.find("static_profile_system") !=
+        template_static_profile_value.function.find("static_profile_system") !=
         std::string::npos
     );
-    REQUIRE(template_static_profile->name == "static_profile_system");
+    REQUIRE(template_static_profile_value.name == "static_profile_system");
 #else
     SUCCEED("Function pointer symbolization is only implemented on Windows");
 #endif

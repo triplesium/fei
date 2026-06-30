@@ -34,7 +34,7 @@ struct OpenGLTextureReadbackState {
     std::size_t next_slot {0};
 };
 
-class TextureReadbackOpenGL : public TextureReadback {
+class TextureReadbackOpenGL final : public TextureReadback {
   public:
     TextureReadbackOpenGL(
         std::shared_ptr<OpenGLDeviceState> device_state,
@@ -51,6 +51,8 @@ class TextureReadbackOpenGL : public TextureReadback {
     void reset() override;
 
   private:
+    void release_resources();
+
     std::shared_ptr<OpenGLDeviceState> m_device_state;
     std::shared_ptr<OpenGLTextureReadbackState> m_state;
 };

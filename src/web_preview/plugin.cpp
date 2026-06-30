@@ -29,7 +29,7 @@ struct SelectedWebPreviewTarget {
 struct WebPreviewReadbackState {
     std::shared_ptr<TextureReadback> readback;
     std::unordered_map<uint64, std::string> target_names;
-    std::chrono::steady_clock::time_point next_capture_at {};
+    std::chrono::steady_clock::time_point next_capture_at;
     uint64 next_user_data {1};
 
     uint64 remember_target(std::string name) {

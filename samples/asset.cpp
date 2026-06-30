@@ -32,12 +32,12 @@ void startup(
 
 void update(Query<Foo> query, ResRW<Assets<TextAsset>> assets) {
     for (auto [foo] : query) {
-        if (auto text = assets->get(foo.handle)) {
+        if (auto text = assets->modify(foo.handle)) {
             auto now = std::chrono::system_clock::now();
             std::println(
                 "{:%F %T} - {}",
                 std::chrono::floor<std::chrono::seconds>(now),
-                text.value().text()
+                text->text()
             );
             text->set_text(text->text() + "!");
         }

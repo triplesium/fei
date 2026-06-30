@@ -33,7 +33,7 @@ void exit_loading(
     ResRO<State<GameplayState>> state,
     ResRW<ScheduleTrace> trace
 ) {
-    trace->entries.push_back(
+    trace->entries.emplace_back(
         state->get() == GameplayState::Loading ? "exit:loading:old" :
                                                  "exit:loading:new"
     );
@@ -43,7 +43,7 @@ void enter_playing(
     ResRO<State<GameplayState>> state,
     ResRW<ScheduleTrace> trace
 ) {
-    trace->entries.push_back(
+    trace->entries.emplace_back(
         state->get() == GameplayState::Playing ? "enter:playing:new" :
                                                  "enter:playing:old"
     );
@@ -53,7 +53,7 @@ void loading_to_playing(
     ResRO<State<GameplayState>> state,
     ResRW<ScheduleTrace> trace
 ) {
-    trace->entries.push_back(
+    trace->entries.emplace_back(
         state->get() == GameplayState::Playing ?
             "transition:loading-playing:new" :
             "transition:loading-playing:old"
@@ -61,7 +61,7 @@ void loading_to_playing(
 }
 
 void playing_to_paused(ResRW<ScheduleTrace> trace) {
-    trace->entries.push_back("transition:playing-paused");
+    trace->entries.emplace_back("transition:playing-paused");
 }
 
 } // namespace

@@ -1,5 +1,4 @@
 #include "core/transform.hpp"
-#include "ecs/world.hpp"
 #include "math/vector.hpp"
 #include "refl/ref_utils.hpp"
 #include "refl/registry.hpp"

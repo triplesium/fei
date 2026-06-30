@@ -1,18 +1,20 @@
 #include "web_preview/frame_cache.hpp"
+
 #include "web_preview/frame_encoder.hpp"
 #include "web_preview/web_input.hpp"
 
 #include <catch2/catch_test_macros.hpp>
-
 #include <chrono>
-#include <cstddef>
 #include <memory>
 #include <thread>
 #include <vector>
 
 using namespace fei;
 
-TEST_CASE("WebPreviewFrameCache stores and replaces JPEG frames", "[web_preview]") {
+TEST_CASE(
+    "WebPreviewFrameCache stores and replaces JPEG frames",
+    "[web_preview]"
+) {
     WebPreviewFrameCache cache;
 
     REQUIRE(cache.snapshot().empty());
@@ -89,30 +91,33 @@ TEST_CASE(
     encoder.start();
 
     REQUIRE(encoder.can_accept_frame());
-    REQUIRE(encoder.submit(WebPreviewEncodeJob {
-        .rgba = {
-            byte {255},
-            byte {0},
-            byte {0},
-            byte {255},
-            byte {0},
-            byte {255},
-            byte {0},
-            byte {255},
-            byte {0},
-            byte {0},
-            byte {255},
-            byte {255},
-            byte {255},
-            byte {255},
-            byte {255},
-            byte {255},
-        },
-        .width = 2,
-        .height = 2,
-        .jpeg_quality = 80,
-        .target = "encoder.test",
-    }));
+    REQUIRE(encoder.submit(
+        WebPreviewEncodeJob {
+            .rgba =
+                {
+                    byte {255},
+                    byte {0},
+                    byte {0},
+                    byte {255},
+                    byte {0},
+                    byte {255},
+                    byte {0},
+                    byte {255},
+                    byte {0},
+                    byte {0},
+                    byte {255},
+                    byte {255},
+                    byte {255},
+                    byte {255},
+                    byte {255},
+                    byte {255},
+                },
+            .width = 2,
+            .height = 2,
+            .jpeg_quality = 80,
+            .target = "encoder.test",
+        }
+    ));
 
     for (auto attempt = 0; attempt < 100 && cache->snapshot().empty();
          ++attempt) {
@@ -127,7 +132,7 @@ TEST_CASE(
     REQUIRE(frame.height == 2);
     REQUIRE(frame.index == 1);
     REQUIRE(frame.target == "encoder.test");
-    REQUIRE(frame.jpeg.size() > 0);
+    REQUIRE(!frame.jpeg.empty());
     REQUIRE(cache->status().last_error.empty());
 }
 

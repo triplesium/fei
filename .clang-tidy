@@ -55,6 +55,8 @@ WarningsAsErrors: ''
 ExtraArgsBefore: ['--driver-mode=cl', '-Qunused-arguments']
 FormatStyle: file
 CheckOptions:
+  - key: bugprone-reserved-identifier.AllowedIdentifiers
+    value: '___tracy_scoped_zone'
   - key: misc-include-cleaner.MissingIncludes
     value: false
   - key: misc-include-cleaner.UnusedIncludes

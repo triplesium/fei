@@ -1,7 +1,6 @@
 #include "base/env.hpp"
 
 #include <catch2/catch_test_macros.hpp>
-#include <cstdlib>
 #include <optional>
 #include <string>
 
@@ -31,7 +30,9 @@ TEST_CASE("Environment variables can be read and parsed", "[base][env]") {
     constexpr char name[] = "FEI_TEST_ENV_VALUE";
 
     set_test_env(name, "42");
-    REQUIRE(read_environment_variable(name) == std::optional<std::string>("42"));
+    REQUIRE(
+        read_environment_variable(name) == std::optional<std::string>("42")
+    );
     REQUIRE(read_environment_variable<int>(name) == std::optional<int>(42));
 
     set_test_env(name, "bad");

@@ -37,7 +37,7 @@ struct ObjVertexKeyHash {
 };
 
 bool valid_vector_index(int index, std::size_t element_count) {
-    return index >= 0 && static_cast<std::size_t>(index) < element_count;
+    return index >= 0 && std::cmp_less(index, element_count);
 }
 
 AssetLoadError

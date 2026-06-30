@@ -2,8 +2,8 @@
 #include "asset/handle.hpp"
 #include "core/image.hpp"
 #include "ecs/query.hpp"
-#include "pbr/cubemap.hpp"
 #include "rendering/gpu_image.hpp"
+#include "rendering/shader.hpp"
 
 namespace fei {
 

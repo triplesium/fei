@@ -1,6 +1,5 @@
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
-#include "ecs/schedule.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/world.hpp"
 

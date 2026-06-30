@@ -1,6 +1,7 @@
 #include "pbr/passes/forward.hpp"
 
 #include "graphics/graphics_device.hpp"
+#include "pbr/cubemap.hpp"
 #include "pbr/light.hpp"
 #include "pbr/material.hpp"
 #include "pbr/mesh_queue.hpp"

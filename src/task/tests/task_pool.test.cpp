@@ -1,10 +1,9 @@
-#include "task/plugin.hpp"
 #include "task/task_pool.hpp"
 
 #include "app/app.hpp"
+#include "task/plugin.hpp"
 
 #include <catch2/catch_test_macros.hpp>
-#include <chrono>
 #include <memory>
 #include <stdexcept>
 #include <string>

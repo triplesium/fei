@@ -77,7 +77,7 @@ TextureReadbackOpenGL::TextureReadbackOpenGL(
 }
 
 TextureReadbackOpenGL::~TextureReadbackOpenGL() {
-    reset();
+    release_resources();
 }
 
 bool TextureReadbackOpenGL::can_enqueue() const {
@@ -154,6 +154,10 @@ Optional<TextureReadbackFrame> TextureReadbackOpenGL::poll() {
 }
 
 void TextureReadbackOpenGL::reset() {
+    release_resources();
+}
+
+void TextureReadbackOpenGL::release_resources() {
     std::vector<GLuint> pbos;
     std::vector<GLsync> fences;
     std::scoped_lock lock(m_state->mutex);

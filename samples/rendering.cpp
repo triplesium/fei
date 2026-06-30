@@ -92,10 +92,11 @@ void setup(
     );
 
     auto mesh_handle = asset_server->load<Mesh>("suzanne.obj");
-    auto& mesh = mesh_assets->modify(mesh_handle).value();
-    mesh.center_positions();
-    if (!mesh.has_attribute(Mesh::ATTRIBUTE_NORMAL.id)) {
-        mesh.compute_smooth_normals();
+    if (auto mesh = mesh_assets->modify(mesh_handle)) {
+        mesh->center_positions();
+        if (!mesh->has_attribute(Mesh::ATTRIBUTE_NORMAL.id)) {
+            mesh->compute_smooth_normals();
+        }
     }
 
     commands.spawn().add(
@@ -229,8 +230,10 @@ void update_imgui(
     auto [light, light_transform] = query_light.first();
     auto [floor, floor_transform] = query_floor.first();
     auto [spot_mesh_material] = query_spot.first();
-    auto& spot_material =
-        material_assets->modify(spot_mesh_material.material).value();
+    auto spot_material = material_assets->modify(spot_mesh_material.material);
+    if (!spot_material) {
+        return;
+    }
     ImGui::Begin("Settings");
     {
         ImGui::Text("Directional Light");
@@ -257,9 +260,14 @@ void update_imgui(
             1.0f
         );
         ImGui::Text("Roughness");
-        ImGui::SliderFloat("##Roughness", &spot_material.roughness, 0.0f, 1.0f);
+        ImGui::SliderFloat(
+            "##Roughness",
+            &spot_material->roughness,
+            0.0f,
+            1.0f
+        );
         ImGui::Text("Metallic");
-        ImGui::SliderFloat("##Metallic", &spot_material.metallic, 0.0f, 1.0f);
+        ImGui::SliderFloat("##Metallic", &spot_material->metallic, 0.0f, 1.0f);
     }
     ImGui::End();
 }

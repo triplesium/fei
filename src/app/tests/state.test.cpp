@@ -25,7 +25,7 @@ void request_playing(ResRW<NextState<AppLifecycleState>> next_state) {
 }
 
 void update_when_playing(ResRW<AppStateTrace> trace) {
-    trace->entries.push_back("update:playing");
+    trace->entries.emplace_back("update:playing");
 }
 
 } // namespace

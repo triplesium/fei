@@ -98,7 +98,7 @@ class SummaryProfileScope {
 #    define FEI_PROFILE_TRACY_FUNCTION() ZoneScoped;
 #    define FEI_PROFILE_TRACY_DYNAMIC_SCOPE(name, file, function, line) \
         ::fei::DynamicProfileScope FEI_PROFILE_UNIQUE_NAME(             \
-            __fei_tracy_profile_scope_                                  \
+            fei_tracy_profile_scope_                                    \
         ) {name, file, function, line};
 #else
 #    define FEI_PROFILE_TRACY_FRAME()
@@ -118,7 +118,7 @@ class SummaryProfileScope {
         line                                                \
     )                                                       \
         ::fei::SummaryProfileScope FEI_PROFILE_UNIQUE_NAME( \
-            __fei_summary_profile_scope_                    \
+            fei_summary_profile_scope_                      \
         ) {kind, schedule_id, name, file, function, line};
 #else
 #    define FEI_PROFILE_SUMMARY_FRAME()
