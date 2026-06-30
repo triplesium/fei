@@ -3,6 +3,7 @@
 #include "refl/method.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
+#include "scripting_lua/detail/commands_binding.hpp"
 #include "scripting_lua/detail/object.hpp"
 #include "scripting_lua/detail/operator.hpp"
 #include "scripting_lua/detail/query_binding.hpp"
@@ -377,6 +378,9 @@ int dispatch_index(lua_State* L) {
 
     if (lua_is_dynamic_query(type_id)) {
         return lua_dispatch_dynamic_query_index(L, key);
+    }
+    if (lua_is_commands(type_id)) {
+        return lua_dispatch_commands_index(L, key);
     }
 
     auto cls = Registry::instance().try_get_cls(type_id);

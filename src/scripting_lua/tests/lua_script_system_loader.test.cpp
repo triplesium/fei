@@ -1,5 +1,4 @@
 #include "app/app.hpp"
-#include "asset/assets.hpp"
 #include "core/transform.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/world.hpp"
@@ -8,7 +7,6 @@
 #include "refl/ref_utils.hpp"
 #include "refl/registry.hpp"
 #include "refl/val.hpp"
-#include "scripting_lua/asset.hpp"
 #include "scripting_lua/detail/script_system_loader.hpp"
 #include "scripting_lua/runtime.hpp"
 #include "scripting_lua/script_system_registry.hpp"
@@ -48,9 +46,9 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        query("targets", {
-                            query.write("health", Health),
-                        }),
+                        targets = query {
+                            health = query.write(Health),
+                        },
                     },
                 }
             )",
@@ -129,7 +127,7 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        res.write("receiver", ScriptTestReceiver),
+                        receiver = res.write(ScriptTestReceiver),
                     },
                 }
             )",
@@ -213,7 +211,7 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        res.write("receiver", ScriptTestReceiver),
+                        receiver = res.write(ScriptTestReceiver),
                     },
                 }
             )",
@@ -282,7 +280,7 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        res.write("config", Config),
+                        config = res.write(Config),
                     },
                 }
             )",
@@ -338,8 +336,8 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        res.optional_read("missing", ScriptTestError),
-                        res.write("receiver", ScriptTestReceiver),
+                        missing = res.optional_read(ScriptTestError),
+                        receiver = res.write(ScriptTestReceiver),
                     },
                 }
             )",
@@ -376,66 +374,6 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Lua script systems receive commands params",
-    "[scripting][lua][system][commands]"
-) {
-    auto runtime = make_test_runtime();
-
-    auto module = runtime.load_module(
-        LuaScriptSource {
-            .name = "commands_script_system.lua",
-            .content = R"(
-                function tick(args)
-                    if args.commands == nil then
-                        error("missing commands")
-                    end
-                    args.receiver.value = args.receiver.value + 4
-                end
-
-                system {
-                    name = "tick",
-                    run = tick,
-                    schedule = MainSchedules.Update,
-                    params = {
-                        commands("commands"),
-                        res.write("receiver", ScriptTestReceiver),
-                    },
-                }
-            )",
-        }
-    );
-
-    REQUIRE(module);
-    auto decl = runtime.module_decl(*module);
-    REQUIRE(decl);
-    REQUIRE(decl->systems.size() == 1);
-    REQUIRE(decl->systems[0].params.size() == 2);
-    REQUIRE(decl->systems[0].params[0].name == "commands");
-    REQUIRE(
-        decl->systems[0].params[0].kind == LuaScriptSystemParamKind::Commands
-    );
-
-    auto access = lua_script_system_access_for_decl(decl->systems[0]);
-    REQUIRE(access);
-    REQUIRE(access->commands);
-    REQUIRE(access->write_resources.contains(type_id<CommandsQueue>()));
-    REQUIRE(access->write_resources.contains(type_id<ScriptTestReceiver>()));
-
-    World world;
-    world.add_resource(CommandsQueue {});
-    ScriptTestReceiver receiver;
-    receiver.value = 2;
-    world.add_resource(receiver);
-
-    auto handles = install_lua_script_systems(world, runtime, *module, *decl);
-    REQUIRE(handles);
-    REQUIRE(handles->size() == 1);
-
-    world.run_schedule(Update);
-    REQUIRE(world.resource<ScriptTestReceiver>().value == 6);
-}
-
-TEST_CASE(
     "Lua script systems iterate declared query params",
     "[scripting][lua][system][query]"
 ) {
@@ -460,10 +398,10 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        query("receivers", {
-                            query.write("receiver", ScriptTestReceiver),
+                        receivers = query {
+                            receiver = query.write(ScriptTestReceiver),
                             query.with(Transform3d),
-                        }),
+                        },
                     },
                 }
             )",
@@ -544,10 +482,10 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        query("receivers", {
-                            query.entity("entity"),
-                            query.write("receiver", ScriptTestReceiver),
-                        }),
+                        receivers = query {
+                            entity = query.entity(),
+                            receiver = query.write(ScriptTestReceiver),
+                        },
                     },
                 }
             )",
@@ -624,11 +562,11 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        query("receivers", {
-                            query.write("receiver", ScriptTestReceiver),
-                            query.read("transform", Transform3d),
+                        receivers = query {
+                            receiver = query.write(ScriptTestReceiver),
+                            transform = query.read(Transform3d),
                             query.without(ScriptTestError),
-                        }),
+                        },
                     },
                 }
             )",

@@ -69,7 +69,7 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        res.write("receiver", ScriptTestReceiver),
+                        receiver = res.write(ScriptTestReceiver),
                     },
                 }
             )",
@@ -119,7 +119,7 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        res.write("receiver", ScriptTestReceiver),
+                        receiver = res.write(ScriptTestReceiver),
                     },
                 }
             )",
@@ -175,7 +175,7 @@ TEST_CASE(
             run = tick,
             schedule = MainSchedules.Update,
             params = {
-                res.write("receiver", ScriptTestReceiver),
+                receiver = res.write(ScriptTestReceiver),
             },
         }
     )");
@@ -249,7 +249,7 @@ TEST_CASE(
                 run = tick,
                 schedule = MainSchedules.Update,
                 params = {
-                    res.write("receiver", ScriptTestReceiver),
+                    receiver = res.write(ScriptTestReceiver),
                 },
             }
         )")
@@ -284,7 +284,7 @@ TEST_CASE(
             run = tick,
             schedule = MainSchedules.Update,
             params = {
-                res.write("receiver", ScriptTestReceiver),
+                receiver = res.write(ScriptTestReceiver),
             },
         }
     )");
@@ -317,7 +317,7 @@ TEST_CASE(
             run = tick,
             schedule = MainSchedules.Update,
             params = {
-                res.write("receiver", ScriptTestReceiver),
+                receiver = res.write(ScriptTestReceiver),
             },
         }
     )");
@@ -357,7 +357,7 @@ TEST_CASE(
             run = tick,
             schedule = MainSchedules.Update,
             params = {
-                res.write("receiver", ScriptTestReceiver),
+                receiver = res.write(ScriptTestReceiver),
             },
         }
     )");
@@ -388,7 +388,7 @@ TEST_CASE(
             run = tick,
             schedule = MainSchedules.Update,
             params = {
-                res.write("receiver", ScriptTestReceiver),
+                receiver = res.write(ScriptTestReceiver),
             },
         }
     )");
@@ -422,7 +422,7 @@ TEST_CASE(
             run = tick,
             schedule = 4321,
             params = {
-                res.write("receiver", ScriptTestReceiver),
+                receiver = res.write(ScriptTestReceiver),
             },
         }
     )");
@@ -468,7 +468,7 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        res.write("receiver", ScriptTestReceiver),
+                        receiver = res.write(ScriptTestReceiver),
                     },
                 }
             )",

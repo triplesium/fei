@@ -1,11 +1,11 @@
 #include "scripting_lua/runtime.hpp"
 
 #include "base/log.hpp"
-#include "ecs/commands.hpp"
 #include "ecs/fwd.hpp"
 #include "refl/enum.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
+#include "scripting_lua/detail/commands_binding.hpp"
 #include "scripting_lua/detail/enum_binding.hpp"
 #include "scripting_lua/detail/query_binding.hpp"
 #include "scripting_lua/detail/utils.hpp"
@@ -19,7 +19,7 @@ namespace fei {
 LuaRuntime::LuaRuntime() : m_state(luaL_newstate()) {
     luaL_openlibs(m_state);
     Registry::instance().register_type<Entity>();
-    bind_type(Registry::instance().register_type<Commands>());
+    bind_type(register_lua_commands_type());
     bind_type(register_lua_dynamic_query_type());
     detail::register_lua_enum(m_state, detail::register_main_schedules_enum());
 }

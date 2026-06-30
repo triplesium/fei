@@ -46,6 +46,19 @@ local function sorted_keys(tbl)
     return keys
 end
 
+local function sorted_string_keys(tbl)
+    local keys = {}
+    for key, _ in pairs(tbl) do
+        if type(key) == "string" then
+            table.insert(keys, key)
+        elseif type(key) ~= "number" then
+            error("declaration names must be strings", 3)
+        end
+    end
+    table.sort(keys)
+    return keys
+end
+
 function plugin(name)
     if type(name) ~= "string" or name == "" then
         error("plugin expects a non-empty string name", 2)
@@ -73,6 +86,9 @@ f64 = primitive_type("f64")
 str = primitive_type("string")
 entity = primitive_type("entity")
 
+local normalize_system_params
+local normalize_query_params
+
 function system(desc)
     if type(desc) ~= "table" then
         error("system expects a table", 2)
@@ -86,7 +102,7 @@ function system(desc)
 
     local m = ensure_decl()
     local run = desc.run
-    local params = desc.params or {}
+    local params = normalize_system_params(desc.params or {})
     _ENV[desc.name] = function(...)
         local values = {...}
         local args = {}
@@ -299,9 +315,75 @@ function resource(type_ref, values)
     return desc
 end
 
-local function resource_param(name, type_ref, access, optional)
+local function clone_table(tbl)
+    local result = {}
+    for key, value in pairs(tbl) do
+        result[key] = value
+    end
+    return result
+end
+
+local function named_param(scope, name, param)
+    if type(param) ~= "table" then
+        error(scope .. " param '" .. name .. "' must be a table", 3)
+    end
+    if param.name ~= nil then
+        error(scope .. " param '" .. name .. "' must be named by table key", 3)
+    end
+
+    local result = clone_table(param)
+    result.name = name
+    return result
+end
+
+local function is_query_filter_param(param)
+    return param.kind == "with" or param.kind == "without"
+end
+
+normalize_query_params = function(params)
+    if type(params) ~= "table" then
+        error("query params must be a table", 3)
+    end
+
+    local result = {}
+    for _, name in ipairs(sorted_string_keys(params)) do
+        local param = named_param("query", name, params[name])
+        if is_query_filter_param(param) then
+            error("query filter param '" .. name .. "' cannot be named", 3)
+        end
+        table.insert(result, param)
+    end
+
+    for _, param in ipairs(params) do
+        if type(param) ~= "table" then
+            error("query filter params must be tables", 3)
+        end
+        if not is_query_filter_param(param) then
+            error("query component and entity params must be named by table key", 3)
+        end
+        table.insert(result, clone_table(param))
+    end
+
+    return result
+end
+
+normalize_system_params = function(params)
+    if type(params) ~= "table" then
+        error("system.params must be a table", 3)
+    end
+    if #params > 0 then
+        error("system params must be named by table key", 3)
+    end
+
+    local result = {}
+    for _, name in ipairs(sorted_keys(params)) do
+        table.insert(result, named_param("system", name, params[name]))
+    end
+    return result
+end
+
+local function resource_param(type_ref, access, optional)
     return {
-        name = name,
         kind = "resource",
         type = resource_type_name(type_ref),
         type_id = registered_type_id(type_ref),
@@ -312,32 +394,45 @@ local function resource_param(name, type_ref, access, optional)
 end
 
 res = {
-    read = function(name, type_ref)
-        return resource_param(name, type_ref, "read")
+    read = function(type_ref, ...)
+        if select("#", ...) ~= 0 then
+            error("res.read expects only a type; name it with params key", 2)
+        end
+        return resource_param(type_ref, "read")
     end,
-    write = function(name, type_ref)
-        return resource_param(name, type_ref, "write")
+    write = function(type_ref, ...)
+        if select("#", ...) ~= 0 then
+            error("res.write expects only a type; name it with params key", 2)
+        end
+        return resource_param(type_ref, "write")
     end,
-    optional_read = function(name, type_ref)
-        return resource_param(name, type_ref, "read", true)
+    optional_read = function(type_ref, ...)
+        if select("#", ...) ~= 0 then
+            error("res.optional_read expects only a type; name it with params key", 2)
+        end
+        return resource_param(type_ref, "read", true)
     end,
-    optional_write = function(name, type_ref)
-        return resource_param(name, type_ref, "write", true)
+    optional_write = function(type_ref, ...)
+        if select("#", ...) ~= 0 then
+            error("res.optional_write expects only a type; name it with params key", 2)
+        end
+        return resource_param(type_ref, "write", true)
     end,
 }
 res.read_optional = res.optional_read
 res.write_optional = res.optional_write
 
-function commands(name)
+function commands(...)
+    if select("#", ...) ~= 0 then
+        error("commands expects no arguments; name it with params key", 2)
+    end
     return {
-        name = name,
         kind = "commands",
     }
 end
 
-local function component(name, type_ref, access)
+local function component(type_ref, access)
     return {
-        name = name,
         kind = "component",
         type = component_type_name(type_ref),
         type_id = registered_type_id(type_ref),
@@ -348,26 +443,36 @@ end
 
 query = {}
 setmetatable(query, {
-    __call = function(_, name, params)
+    __call = function(_, params, ...)
+        if select("#", ...) ~= 0 then
+            error("query expects only a params table; name it with params key", 2)
+        end
         return {
-            name = name,
             kind = "query",
-            params = params or {},
+            params = normalize_query_params(params or {}),
         }
     end,
 })
 
-query.read = function(name, type_ref)
-    return component(name, type_ref, "read")
+query.read = function(type_ref, ...)
+    if select("#", ...) ~= 0 then
+        error("query.read expects only a type; name it with query params key", 2)
+    end
+    return component(type_ref, "read")
 end
 
-query.write = function(name, type_ref)
-    return component(name, type_ref, "write")
+query.write = function(type_ref, ...)
+    if select("#", ...) ~= 0 then
+        error("query.write expects only a type; name it with query params key", 2)
+    end
+    return component(type_ref, "write")
 end
 
-query.entity = function(name)
+query.entity = function(...)
+    if select("#", ...) ~= 0 then
+        error("query.entity expects no arguments; name it with query params key", 2)
+    end
     return {
-        name = name,
         kind = "entity",
     }
 end

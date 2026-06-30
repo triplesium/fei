@@ -3,6 +3,7 @@
 #include "refl/val.hpp"
 
 #include <lua.hpp>
+#include <string_view>
 
 namespace fei {
 
@@ -13,6 +14,8 @@ bool lua_can_ref(lua_State* L, int idx);
 Val lua_to_val(lua_State* L, int idx);
 Ref lua_to_ref(lua_State* L, int idx);
 TypeId lua_type_of(lua_State* L, int idx);
+TypeId lua_check_type_id(lua_State* L, int idx, std::string_view context);
+Val lua_copy_reflected_value(lua_State* L, int idx, std::string_view context);
 void lua_push_val(lua_State* L, const Val& val);
 void lua_push_ref(lua_State* L, Ref ref);
 

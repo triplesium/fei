@@ -68,7 +68,7 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        res.write("receiver", "ScriptTestReceiver"),
+                        receiver = res.write("ScriptTestReceiver"),
                     },
                 }
             )",
@@ -101,9 +101,9 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        query("receivers", {
-                            query.write("receiver", "ScriptTestReceiver"),
-                        }),
+                        receivers = query {
+                            receiver = query.write("ScriptTestReceiver"),
+                        },
                     },
                 }
             )",
@@ -136,7 +136,7 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        query("receivers", {}),
+                        receivers = query {},
                     },
                 }
             )",
@@ -176,9 +176,9 @@ TEST_CASE(
                     run = tick,
                     schedule = MainSchedules.Update,
                     params = {
-                        query("receivers", {
-                            res.read("receiver", ScriptTestReceiver),
-                        }),
+                        receivers = query {
+                            receiver = res.read(ScriptTestReceiver),
+                        },
                     },
                 }
             )",

@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <lua.hpp>
 #include <string>
+#include <string_view>
 
 namespace fei {
 
@@ -158,6 +159,74 @@ TypeId lua_type_of(lua_State* L, int idx) {
         default:
             return {};
     }
+}
+
+TypeId lua_check_type_id(lua_State* L, int idx, std::string_view context) {
+    if (!lua_is_fei_type(L, idx)) {
+        luaL_error(
+            L,
+            "%.*s expects a reflected type",
+            static_cast<int>(context.size()),
+            context.data()
+        );
+        return {};
+    }
+
+    lua_getfield(L, idx, "__type_id");
+    auto type_id = static_cast<TypeId>(lua_tointeger(L, -1));
+    lua_pop(L, 1);
+
+    auto type = Registry::instance().try_get_type(type_id);
+    if (!type) {
+        lua_raise_registry_error(L, type.error());
+        return {};
+    }
+    return type_id;
+}
+
+Val lua_copy_reflected_value(lua_State* L, int idx, std::string_view context) {
+    if (!lua_can_ref(L, idx)) {
+        auto value = lua_to_val(L, idx);
+        if (!value) {
+            luaL_error(
+                L,
+                "%.*s expects reflected values",
+                static_cast<int>(context.size()),
+                context.data()
+            );
+            return {};
+        }
+        return value;
+    }
+
+    auto ref = lua_to_ref(L, idx);
+    if (!ref) {
+        luaL_error(
+            L,
+            "%.*s expects reflected values",
+            static_cast<int>(context.size()),
+            context.data()
+        );
+        return {};
+    }
+
+    auto type = Registry::instance().try_get_type(ref.type_id());
+    if (!type) {
+        lua_raise_registry_error(L, type.error());
+        return {};
+    }
+    if (!type->copy_constructible()) {
+        luaL_error(
+            L,
+            "Type '%s' is not copy constructible",
+            type->name().c_str()
+        );
+        return {};
+    }
+
+    return Val::construct(*type, [&](void* dest) {
+        type->copy_construct(dest, ref.const_ptr());
+    });
 }
 
 void lua_push_val(lua_State* L, const Val& val) {
