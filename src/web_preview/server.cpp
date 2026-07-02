@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstddef>
 #include <httplib.h>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -19,6 +20,7 @@ namespace fei {
 namespace {
 
 constexpr std::string_view c_mjpeg_boundary {"fei-frame"};
+using Json = nlohmann::json;
 
 std::string_view index_html() {
     auto reader = EmbededAssets::get("index.html").reader();
@@ -29,66 +31,170 @@ std::string_view index_html() {
     return html;
 }
 
-std::string json_escape(const std::string& value) {
-    std::string result;
-    result.reserve(value.size() + 2);
-    for (auto ch : value) {
-        switch (ch) {
-            case '"':
-                result += "\\\"";
-                break;
-            case '\\':
-                result += "\\\\";
-                break;
-            case '\b':
-                result += "\\b";
-                break;
-            case '\f':
-                result += "\\f";
-                break;
-            case '\n':
-                result += "\\n";
-                break;
-            case '\r':
-                result += "\\r";
-                break;
-            case '\t':
-                result += "\\t";
-                break;
-            default:
-                result += ch;
-                break;
-        }
+Json texture_use_to_json(const WebPreviewRenderGraphTextureUse& use) {
+    return Json {
+        {"index", use.index},
+        {"generation", use.generation},
+        {"name", use.name},
+        {"access", use.access},
+    };
+}
+
+Json pass_to_json(const WebPreviewRenderGraphPass& pass) {
+    Json reads = Json::array();
+    for (const auto& read : pass.reads) {
+        reads.push_back(texture_use_to_json(read));
+    }
+
+    Json writes = Json::array();
+    for (const auto& write : pass.writes) {
+        writes.push_back(texture_use_to_json(write));
+    }
+
+    return Json {
+        {"index", pass.index},
+        {"name", pass.name},
+        {"active", pass.active},
+        {"side_effect", pass.side_effect},
+        {"dependencies", pass.dependencies},
+        {"reads", std::move(reads)},
+        {"writes", std::move(writes)},
+    };
+}
+
+Json texture_to_json(const WebPreviewRenderGraphTexture& texture) {
+    return Json {
+        {"index", texture.index},
+        {"name", texture.name},
+        {"active", texture.active},
+        {"imported", texture.imported},
+        {"width", texture.width},
+        {"height", texture.height},
+        {"depth", texture.depth},
+        {"mip_level", texture.mip_level},
+        {"layer", texture.layer},
+        {"format", texture.format},
+        {"usage", texture.usage},
+        {"type", texture.type},
+        {"version_count", texture.version_count},
+        {"first_active_use", texture.first_active_use},
+        {"last_active_use", texture.last_active_use},
+    };
+}
+
+Json resource_set_binding_to_json(
+    const WebPreviewRenderGraphResourceSetBinding& binding
+) {
+    Json result {
+        {"index", binding.index},
+        {"kind", binding.kind},
+        {"resource_name", binding.resource_name},
+        {"valid", binding.valid},
+    };
+    if (binding.kind == "texture") {
+        result["texture_index"] = binding.texture_index;
+        result["texture_generation"] = binding.texture_generation;
     }
     return result;
 }
 
+Json resource_set_to_json(
+    const WebPreviewRenderGraphResourceSet& resource_set
+) {
+    Json bindings = Json::array();
+    for (const auto& binding : resource_set.bindings) {
+        bindings.push_back(resource_set_binding_to_json(binding));
+    }
+
+    return Json {
+        {"index", resource_set.index},
+        {"generation", resource_set.generation},
+        {"pass_index", resource_set.pass_index},
+        {"name", resource_set.name},
+        {"active", resource_set.active},
+        {"resolved", resource_set.resolved},
+        {"has_layout", resource_set.has_layout},
+        {"bindings", std::move(bindings)},
+    };
+}
+
+Json render_graph_to_json(const WebPreviewDebugStats& debug) {
+    const auto& graph = debug.render_graph;
+    Json passes = Json::array();
+    for (const auto& pass : debug.render_graph_passes) {
+        passes.push_back(pass_to_json(pass));
+    }
+
+    Json textures = Json::array();
+    for (const auto& texture : debug.render_graph_textures) {
+        textures.push_back(texture_to_json(texture));
+    }
+
+    Json resource_sets = Json::array();
+    for (const auto& resource_set : debug.render_graph_resource_sets) {
+        resource_sets.push_back(resource_set_to_json(resource_set));
+    }
+
+    return Json {
+        {"compiled", graph.compiled},
+        {"compile_error", graph.compile_error},
+        {"total_passes", graph.total_passes},
+        {"active_passes", graph.active_passes},
+        {"culled_passes", graph.culled_passes},
+        {"transient_texture_requests", graph.transient_texture_requests},
+        {"transient_texture_hits", graph.transient_texture_hits},
+        {"transient_texture_creates", graph.transient_texture_creates},
+        {"texture_pool_size", graph.texture_pool_size},
+        {"active_order", graph.active_order},
+        {"passes", std::move(passes)},
+        {"textures", std::move(textures)},
+        {"resource_sets", std::move(resource_sets)},
+    };
+}
+
+Json graphics_cache_to_json(const WebPreviewGraphicsCacheStats& cache) {
+    Json sources = Json::array();
+    for (const auto& source : cache.resource_set_sources) {
+        sources.push_back(
+            Json {
+                {"name", source.name},
+                {"requests", source.requests},
+                {"hits", source.hits},
+                {"creates", source.creates},
+                {"cache_size", source.cache_size},
+            }
+        );
+    }
+
+    return Json {
+        {"framebuffer_requests", cache.framebuffer_requests},
+        {"framebuffer_hits", cache.framebuffer_hits},
+        {"framebuffer_creates", cache.framebuffer_creates},
+        {"framebuffer_cache_size", cache.framebuffer_cache_size},
+        {"resource_set_requests", cache.resource_set_requests},
+        {"resource_set_hits", cache.resource_set_hits},
+        {"resource_set_creates", cache.resource_set_creates},
+        {"resource_set_cache_size", cache.resource_set_cache_size},
+        {"resource_set_sources", std::move(sources)},
+    };
+}
+
 std::string status_to_json(const WebPreviewStatus& status) {
-    std::string json;
-    json.reserve(192 + status.target.size() + status.last_error.size());
-    json += "{";
-    json += "\"has_frame\":";
-    json += status.has_frame ? "true" : "false";
-    json += ",\"width\":";
-    json += std::to_string(status.width);
-    json += ",\"height\":";
-    json += std::to_string(status.height);
-    json += ",\"frame_index\":";
-    json += std::to_string(status.frame_index);
-    json += ",\"frame_age_ms\":";
-    json += std::to_string(status.frame_age_ms);
-    json += ",\"capture_fps\":";
-    json += std::to_string(status.capture_fps);
-    json += ",\"engine_fps\":";
-    json += std::to_string(status.engine_fps);
-    json += ",\"jpeg_bytes\":";
-    json += std::to_string(status.jpeg_bytes);
-    json += R"(,"target":")";
-    json += json_escape(status.target);
-    json += R"(","last_error":")";
-    json += json_escape(status.last_error);
-    json += "\"}";
-    return json;
+    return Json {
+        {"has_frame", status.has_frame},
+        {"width", status.width},
+        {"height", status.height},
+        {"frame_index", status.frame_index},
+        {"frame_age_ms", status.frame_age_ms},
+        {"capture_fps", status.capture_fps},
+        {"engine_fps", status.engine_fps},
+        {"jpeg_bytes", status.jpeg_bytes},
+        {"target", status.target},
+        {"last_error", status.last_error},
+        {"render_graph", render_graph_to_json(status.debug)},
+        {"graphics_cache", graphics_cache_to_json(status.debug.graphics_cache)},
+    }
+        .dump();
 }
 
 std::optional<int> parse_int(const std::string& value) {

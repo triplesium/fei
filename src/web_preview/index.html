@@ -201,6 +201,14 @@
     async function refreshStatus() {
       try {
         const status = await fetch("/status.json?t=" + Date.now(), { cache: "no-store" }).then(r => r.json());
+        const rate = (hits, requests) => requests > 0 ? (hits * 100 / requests).toFixed(1) : "0.0";
+        const graph = status.render_graph || {};
+        const cache = status.graphics_cache || {};
+        const sources = cache.resource_set_sources || [];
+        const topSources = sources
+          .slice(0, 3)
+          .map(source => `${source.name}:${source.creates || 0}`)
+          .join(", ");
         const lines = [
           "fei web preview",
           "frame: " + (status.has_frame ? status.frame_index : "none"),
@@ -211,7 +219,36 @@
     status.height}` : "none"),
           "jpeg: " + status.jpeg_bytes + " bytes",
           "age: " + status.frame_age_ms + " ms",
+          "rg passes: " + (graph.active_passes || 0) + "/" +
+            (graph.total_passes || 0) + " active, " +
+            (graph.culled_passes || 0) + " culled",
+          "rg textures: " + (graph.transient_texture_requests || 0) +
+            " req, " + (graph.transient_texture_hits || 0) + " hit, " +
+            (graph.transient_texture_creates || 0) + " create (" +
+            rate(graph.transient_texture_hits || 0,
+                 graph.transient_texture_requests || 0) + "%), pool " +
+            (graph.texture_pool_size || 0),
+          "fb cache: " + (cache.framebuffer_requests || 0) + " req, " +
+            (cache.framebuffer_hits || 0) + " hit, " +
+            (cache.framebuffer_creates || 0) + " create (" +
+            rate(cache.framebuffer_hits || 0,
+                 cache.framebuffer_requests || 0) + "%), size " +
+            (cache.framebuffer_cache_size || 0),
+          "set cache: " + (cache.resource_set_requests || 0) + " req, " +
+            (cache.resource_set_hits || 0) + " hit, " +
+            (cache.resource_set_creates || 0) + " create (" +
+            rate(cache.resource_set_hits || 0,
+                 cache.resource_set_requests || 0) + "%), size " +
+            (cache.resource_set_cache_size || 0),
+          "set sources: " + sources.length +
+            (topSources ? " (" + topSources + ")" : ""),
         ];
+        if (graph.compile_error) {
+          lines.push("rg error: " + graph.compile_error);
+        }
+        if ((graph.active_order || []).length > 0) {
+          lines.push("rg order: " + graph.active_order.join(" -> "));
+        }
 if (status.last_error) {
     lines.push("error: " + status.last_error);
     hud.innerHTML = lines.slice(0, -1).join("\n") + "\n<span class=\"error\">" +

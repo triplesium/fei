@@ -60,6 +60,11 @@ void WebPreviewFrameCache::report_failure(std::string error) {
     m_last_error = std::move(error);
 }
 
+void WebPreviewFrameCache::update_debug_stats(WebPreviewDebugStats stats) {
+    std::scoped_lock lock(m_mutex);
+    m_debug_stats = stats;
+}
+
 WebPreviewFrame WebPreviewFrameCache::snapshot() const {
     std::scoped_lock lock(m_mutex);
     return m_frame;
@@ -91,6 +96,7 @@ WebPreviewStatus WebPreviewFrameCache::status() const {
         .jpeg_bytes = m_frame.jpeg.size(),
         .target = m_frame.target,
         .last_error = m_last_error,
+        .debug = m_debug_stats,
     };
     if (!m_frame.empty()) {
         auto age = std::chrono::steady_clock::now() - m_frame.captured_at;
@@ -109,6 +115,7 @@ void WebPreviewFrameCache::clear() {
     m_capture_fps = 0.0f;
     m_engine_fps = 0.0f;
     m_last_error.clear();
+    m_debug_stats = {};
 }
 
 } // namespace fei

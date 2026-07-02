@@ -12,6 +12,7 @@
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
+#include "graphics/graphics_device.hpp"
 #include "graphics_opengl/plugin.hpp"
 #include "math/vector.hpp"
 #include "pbr/environment_map.hpp"
@@ -21,6 +22,7 @@
 #include "pbr/skybox.hpp"
 #include "pbr/vxgi.hpp"
 #include "rendering/plugin.hpp"
+#include "rendering/render_graph.hpp"
 #include "rendering/shader.hpp"
 #include "scene/plugin.hpp"
 #include "scripting_lua/asset.hpp"
@@ -34,6 +36,55 @@
 #include <imgui.h>
 
 using namespace fei;
+
+namespace {
+
+float percent(uint64 value, uint64 total) {
+    if (total == 0) {
+        return 0.0f;
+    }
+    return static_cast<float>(value) * 100.0f / static_cast<float>(total);
+}
+
+void draw_render_graph_stats(const RenderGraphStats& stats) {
+    ImGui::Separator();
+    ImGui::Text(
+        "RenderGraph passes: %llu active / %llu total (%llu culled)",
+        static_cast<unsigned long long>(stats.active_passes),
+        static_cast<unsigned long long>(stats.total_passes),
+        static_cast<unsigned long long>(stats.culled_passes)
+    );
+    ImGui::Text(
+        "Transient textures: %llu req, %llu hit, %llu create (%.1f%%)",
+        static_cast<unsigned long long>(stats.transient_texture_requests),
+        static_cast<unsigned long long>(stats.transient_texture_hits),
+        static_cast<unsigned long long>(stats.transient_texture_creates),
+        percent(stats.transient_texture_hits, stats.transient_texture_requests)
+    );
+    ImGui::Text("Texture pool: %zu", stats.texture_pool_size);
+}
+
+void draw_graphics_cache_stats(const GraphicsDevice& device) {
+    const auto stats = device.resource_cache_stats();
+    ImGui::Text(
+        "Framebuffers: %llu req, %llu hit, %llu create (%.1f%%), cache %zu",
+        static_cast<unsigned long long>(stats.framebuffer_requests),
+        static_cast<unsigned long long>(stats.framebuffer_hits),
+        static_cast<unsigned long long>(stats.framebuffer_creates),
+        percent(stats.framebuffer_hits, stats.framebuffer_requests),
+        stats.framebuffer_cache_size
+    );
+    ImGui::Text(
+        "Resource sets: %llu req, %llu hit, %llu create (%.1f%%), cache %zu",
+        static_cast<unsigned long long>(stats.resource_set_requests),
+        static_cast<unsigned long long>(stats.resource_set_hits),
+        static_cast<unsigned long long>(stats.resource_set_creates),
+        percent(stats.resource_set_hits, stats.resource_set_requests),
+        stats.resource_set_cache_size
+    );
+}
+
+} // namespace
 
 class ColorOnlyMaterial : public StandardMaterial {
   public:
@@ -113,7 +164,9 @@ void update_directional_light(
 void update_imgui(
     Query<DirectionalLight, Transform3d> query_directional_lights,
     Query<PointLight, Transform3d> query_point_lights,
-    ResRO<FpsCounter> fps_counter
+    ResRO<FpsCounter> fps_counter,
+    ResRO<RenderGraph> render_graph,
+    ResRO<GraphicsDevice> graphics_device
 ) {
     ImGui::Begin("FPS");
     ImGui::Text("FPS: %.2f", fps_counter->fps);
@@ -121,6 +174,8 @@ void update_imgui(
         "Frame Time: %.2f ms",
         fps_counter->frame_time_seconds * 1000.0f
     );
+    draw_render_graph_stats(render_graph->stats());
+    draw_graphics_cache_stats(*graphics_device);
     ImGui::End();
 
     for (const auto& [light, transform] : query_directional_lights) {

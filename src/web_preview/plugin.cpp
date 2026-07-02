@@ -7,8 +7,8 @@
 #include "graphics/graphics_device.hpp"
 #include "graphics/texture.hpp"
 #include "graphics/texture_readback.hpp"
-#include "pbr/passes/deferred.hpp"
 #include "pbr/passes/target.hpp"
+#include "rendering/render_graph.hpp"
 #include "web_preview/server.hpp"
 #include "window/input.hpp"
 
@@ -76,19 +76,8 @@ void mark_capture_enqueued(
     readback_state.next_capture_at = now + interval;
 }
 
-SelectedWebPreviewTarget select_web_preview_target(
-    const Optional<ResRO<DeferedRenderResources>>& deferred_resources,
-    const Optional<ResRO<RenderTarget>>& render_target
-) {
-    if (deferred_resources) {
-        if ((*deferred_resources)->composite_lighting) {
-            return {
-                .texture = (*deferred_resources)->composite_lighting,
-                .name = "deferred.composite_lighting",
-            };
-        }
-    }
-
+SelectedWebPreviewTarget
+select_web_preview_target(const Optional<ResRO<RenderTarget>>& render_target) {
     if (render_target) {
         if ((*render_target)->color_texture) {
             return {
@@ -101,14 +90,158 @@ SelectedWebPreviewTarget select_web_preview_target(
     return {};
 }
 
+WebPreviewDebugStats collect_debug_stats(
+    const Optional<ResRO<RenderGraph>>& render_graph,
+    const GraphicsDevice& graphics_device
+) {
+    WebPreviewDebugStats debug_stats;
+    if (render_graph) {
+        const auto& graph_debug = (*render_graph)->debug_info();
+        const auto& graph_stats = graph_debug.stats;
+        debug_stats.render_graph = WebPreviewRenderGraphStats {
+            .compiled = graph_debug.compiled,
+            .compile_error = graph_debug.compile_error,
+            .total_passes = graph_stats.total_passes,
+            .active_passes = graph_stats.active_passes,
+            .culled_passes = graph_stats.culled_passes,
+            .transient_texture_requests =
+                graph_stats.transient_texture_requests,
+            .transient_texture_hits = graph_stats.transient_texture_hits,
+            .transient_texture_creates = graph_stats.transient_texture_creates,
+            .texture_pool_size = graph_stats.texture_pool_size,
+            .active_order = graph_debug.active_pass_names,
+        };
+
+        debug_stats.render_graph_passes.reserve(graph_debug.passes.size());
+        for (const auto& pass : graph_debug.passes) {
+            WebPreviewRenderGraphPass pass_stats {
+                .index = pass.index,
+                .name = pass.name,
+                .active = pass.active,
+                .side_effect = pass.side_effect,
+                .dependencies = pass.dependencies,
+            };
+            pass_stats.reads.reserve(pass.reads.size());
+            for (const auto& read : pass.reads) {
+                pass_stats.reads.push_back(
+                    WebPreviewRenderGraphTextureUse {
+                        .index = read.handle.index,
+                        .generation = read.handle.generation,
+                        .name = read.texture_name,
+                        .access = read.access_name,
+                    }
+                );
+            }
+            pass_stats.writes.reserve(pass.writes.size());
+            for (const auto& write : pass.writes) {
+                pass_stats.writes.push_back(
+                    WebPreviewRenderGraphTextureUse {
+                        .index = write.handle.index,
+                        .generation = write.handle.generation,
+                        .name = write.texture_name,
+                        .access = write.access_name,
+                    }
+                );
+            }
+            debug_stats.render_graph_passes.push_back(std::move(pass_stats));
+        }
+
+        debug_stats.render_graph_textures.reserve(graph_debug.textures.size());
+        for (const auto& texture : graph_debug.textures) {
+            debug_stats.render_graph_textures.push_back(
+                WebPreviewRenderGraphTexture {
+                    .index = texture.index,
+                    .name = texture.name,
+                    .active = texture.active,
+                    .imported = texture.imported,
+                    .width = texture.width,
+                    .height = texture.height,
+                    .depth = texture.depth,
+                    .mip_level = texture.mip_level,
+                    .layer = texture.layer,
+                    .format = texture.format,
+                    .usage = texture.usage,
+                    .type = texture.type,
+                    .version_count = texture.version_count,
+                    .first_active_use = texture.first_active_use,
+                    .last_active_use = texture.last_active_use,
+                }
+            );
+        }
+
+        debug_stats.render_graph_resource_sets.reserve(
+            graph_debug.resource_sets.size()
+        );
+        for (const auto& resource_set : graph_debug.resource_sets) {
+            WebPreviewRenderGraphResourceSet resource_set_stats {
+                .index = resource_set.index,
+                .generation = resource_set.generation,
+                .pass_index = resource_set.pass_index,
+                .name = resource_set.name,
+                .active = resource_set.active,
+                .resolved = resource_set.resolved,
+                .has_layout = resource_set.has_layout,
+            };
+            resource_set_stats.bindings.reserve(resource_set.bindings.size());
+            for (const auto& binding : resource_set.bindings) {
+                resource_set_stats.bindings.push_back(
+                    WebPreviewRenderGraphResourceSetBinding {
+                        .index = binding.index,
+                        .kind = binding.kind,
+                        .resource_name = binding.resource_name,
+                        .valid = binding.valid,
+                        .texture_index = binding.texture.index,
+                        .texture_generation = binding.texture.generation,
+                    }
+                );
+            }
+            debug_stats.render_graph_resource_sets.push_back(
+                std::move(resource_set_stats)
+            );
+        }
+    }
+
+    const auto cache_stats = graphics_device.resource_cache_stats();
+    debug_stats.graphics_cache = WebPreviewGraphicsCacheStats {
+        .framebuffer_requests = cache_stats.framebuffer_requests,
+        .framebuffer_hits = cache_stats.framebuffer_hits,
+        .framebuffer_creates = cache_stats.framebuffer_creates,
+        .resource_set_requests = cache_stats.resource_set_requests,
+        .resource_set_hits = cache_stats.resource_set_hits,
+        .resource_set_creates = cache_stats.resource_set_creates,
+        .framebuffer_cache_size = cache_stats.framebuffer_cache_size,
+        .resource_set_cache_size = cache_stats.resource_set_cache_size,
+    };
+    debug_stats.graphics_cache.resource_set_sources.reserve(
+        cache_stats.resource_set_sources.size()
+    );
+    for (const auto& source : cache_stats.resource_set_sources) {
+        debug_stats.graphics_cache.resource_set_sources.push_back(
+            WebPreviewResourceSetSourceStats {
+                .name = source.name,
+                .requests = source.requests,
+                .hits = source.hits,
+                .creates = source.creates,
+                .cache_size = source.cache_size,
+            }
+        );
+    }
+
+    return debug_stats;
+}
+
 void capture_web_preview_frame(
-    Optional<ResRO<DeferedRenderResources>> deferred_resources,
+    Optional<ResRO<RenderGraph>> render_graph,
+    ResRO<GraphicsDevice> graphics_device,
     Optional<ResRO<RenderTarget>> render_target,
     ResRW<WebPreviewServer> server,
     ResRW<WebPreviewReadbackState> readback_state
 ) {
     auto cache = server->frame_cache();
     cache->mark_frame_tick();
+    cache->update_debug_stats(
+        collect_debug_stats(render_graph, *graphics_device)
+    );
 
     if (server->can_accept_frame()) {
         auto completed = readback_state->readback->poll();
@@ -134,7 +267,7 @@ void capture_web_preview_frame(
         return;
     }
 
-    auto target = select_web_preview_target(deferred_resources, render_target);
+    auto target = select_web_preview_target(render_target);
     if (!target.texture) {
         cache->report_failure("No render target texture is available");
         return;

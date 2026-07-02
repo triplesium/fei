@@ -51,6 +51,90 @@ TEST_CASE(
     REQUIRE(first_status.target == "test.target");
     REQUIRE(first_status.last_error.empty());
 
+    cache.update_debug_stats(
+        WebPreviewDebugStats {
+            .render_graph =
+                WebPreviewRenderGraphStats {
+                    .compiled = true,
+                    .total_passes = 7,
+                    .active_passes = 5,
+                    .culled_passes = 2,
+                    .transient_texture_requests = 4,
+                    .transient_texture_hits = 3,
+                    .transient_texture_creates = 1,
+                    .texture_pool_size = 6,
+                    .active_order = {"prepass", "present"},
+                },
+            .render_graph_passes =
+                {
+                    WebPreviewRenderGraphPass {
+                        .index = 0,
+                        .name = "prepass",
+                        .active = true,
+                    },
+                },
+            .render_graph_textures =
+                {
+                    WebPreviewRenderGraphTexture {
+                        .index = 0,
+                        .name = "color",
+                        .active = true,
+                        .width = 320,
+                        .height = 180,
+                        .format = "Rgba8Unorm",
+                    },
+                },
+            .render_graph_resource_sets =
+                {
+                    WebPreviewRenderGraphResourceSet {
+                        .index = 0,
+                        .name = "gbuffer",
+                        .active = true,
+                        .resolved = true,
+                    },
+                },
+            .graphics_cache = WebPreviewGraphicsCacheStats {
+                .framebuffer_requests = 10,
+                .framebuffer_hits = 8,
+                .framebuffer_creates = 2,
+                .resource_set_requests = 12,
+                .resource_set_hits = 9,
+                .resource_set_creates = 3,
+                .framebuffer_cache_size = 4,
+                .resource_set_cache_size = 5,
+                .resource_set_sources = {
+                    WebPreviewResourceSetSourceStats {
+                        .name = "deferred.gbuffer",
+                        .requests = 6,
+                        .hits = 4,
+                        .creates = 2,
+                        .cache_size = 1,
+                    },
+                },
+            },
+        }
+    );
+    auto debug_status = cache.status();
+    REQUIRE(debug_status.debug.render_graph.total_passes == 7);
+    REQUIRE(debug_status.debug.render_graph.active_passes == 5);
+    REQUIRE(debug_status.debug.render_graph.texture_pool_size == 6);
+    REQUIRE(debug_status.debug.render_graph.compiled);
+    REQUIRE(debug_status.debug.render_graph.active_order.size() == 2);
+    REQUIRE(debug_status.debug.render_graph_passes.size() == 1);
+    REQUIRE(debug_status.debug.render_graph_passes[0].name == "prepass");
+    REQUIRE(debug_status.debug.render_graph_textures.size() == 1);
+    REQUIRE(debug_status.debug.render_graph_textures[0].name == "color");
+    REQUIRE(debug_status.debug.render_graph_resource_sets.size() == 1);
+    REQUIRE(debug_status.debug.render_graph_resource_sets[0].resolved);
+    REQUIRE(debug_status.debug.graphics_cache.framebuffer_requests == 10);
+    REQUIRE(debug_status.debug.graphics_cache.framebuffer_hits == 8);
+    REQUIRE(debug_status.debug.graphics_cache.resource_set_cache_size == 5);
+    REQUIRE(debug_status.debug.graphics_cache.resource_set_sources.size() == 1);
+    REQUIRE(
+        debug_status.debug.graphics_cache.resource_set_sources[0].name ==
+        "deferred.gbuffer"
+    );
+
     cache.mark_frame_tick();
     REQUIRE(cache.status().engine_fps == 0.0f);
 
@@ -80,6 +164,8 @@ TEST_CASE(
     REQUIRE_FALSE(cache.status().has_frame);
     REQUIRE(cache.status().capture_fps == 0.0f);
     REQUIRE(cache.status().engine_fps == 0.0f);
+    REQUIRE(cache.status().debug.render_graph.total_passes == 0);
+    REQUIRE(cache.status().debug.render_graph_passes.empty());
 }
 
 TEST_CASE(
