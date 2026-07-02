@@ -1,7 +1,6 @@
 #include "pbr/light.hpp"
 
 #include "math/matrix.hpp"
-#include "pbr/mesh_view.hpp"
 #include "rendering/view.hpp"
 
 namespace fei {
