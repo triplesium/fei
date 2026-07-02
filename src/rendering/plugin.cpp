@@ -2,6 +2,7 @@
 
 #include "app/app.hpp"
 #include "asset/plugin.hpp"
+#include "base/log.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
@@ -16,6 +17,7 @@
 #include "rendering/mesh/mesh_uniform.hpp"
 #include "rendering/pipeline_cache.hpp"
 #include "rendering/render_asset.hpp"
+#include "rendering/render_graph.hpp"
 #include "rendering/shader.hpp"
 #include "rendering/shader_cache.hpp"
 #include "rendering/view.hpp"
@@ -26,14 +28,8 @@
 
 namespace fei {
 
-void render_begin(ResRO<GraphicsDevice> device) {
-    auto command_buffer = device->create_command_buffer();
-    command_buffer->begin();
-    command_buffer->set_framebuffer(device->main_framebuffer());
-    command_buffer->clear_color(Color4F {0.0f, 0.0f, 0.0f, 1.0f});
-    command_buffer->clear_depth(1.0f);
-    command_buffer->end();
-    device->submit_commands(command_buffer);
+void begin_render_graph(ResRW<RenderGraph> render_graph) {
+    render_graph->clear();
 }
 
 void flush_graphics_device(ResRW<GraphicsDevice> device) {
@@ -42,6 +38,26 @@ void flush_graphics_device(ResRW<GraphicsDevice> device) {
 
 void process_pipelines(ResRW<PipelineCache> pipeline_cache) {
     pipeline_cache->process_queued_pipelines();
+}
+
+void execute_render_graph(
+    ResRW<RenderGraph> render_graph,
+    ResRO<GraphicsDevice> device
+) {
+    auto command_buffer = device->create_command_buffer();
+    if (!command_buffer) {
+        error("GraphicsDevice returned null command buffer for RenderGraph");
+        return;
+    }
+
+    command_buffer->begin();
+    if (render_graph->compile()) {
+        render_graph->execute(*device, *command_buffer);
+    } else {
+        error("RenderGraph compile failed: {}", render_graph->compile_error());
+    }
+    command_buffer->end();
+    device->submit_commands(command_buffer);
 }
 
 void render_end(ResRO<Window> win) {
@@ -60,7 +76,9 @@ void RenderingPlugin::setup(App& app) {
                RenderingSystems::CheckVisibility(),
                RenderingSystems::Queue(),
                RenderingSystems::PreparePipelines(),
-               RenderingSystems::Render()
+               RenderingSystems::BuildRenderGraph(),
+               RenderingSystems::Render(),
+               RenderingSystems::ExecuteRenderGraph()
            )
     )
         .add_plugins(
@@ -71,6 +89,7 @@ void RenderingPlugin::setup(App& app) {
             RenderingDefaultsPlugin {}
         )
         .add_resource(PipelineCache(app.resource<GraphicsDevice>()))
+        .add_resource<RenderGraph>()
         .add_systems(
             First,
             FEI_SYSTEM_NAME(
@@ -104,7 +123,12 @@ void RenderingPlugin::setup(App& app) {
             process_pipelines | in_set<RenderingSystems::PreparePipelines>()
         )
         .add_resource<ViewVisibleEntities>()
-        .add_systems(RenderFirst, render_begin)
+        .add_systems(RenderFirst, begin_render_graph)
+        .add_systems(
+            RenderUpdate,
+            execute_render_graph |
+                in_set<RenderingSystems::ExecuteRenderGraph>()
+        )
         .add_systems(RenderLast, chain(flush_graphics_device, render_end));
 }
 

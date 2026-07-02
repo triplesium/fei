@@ -11,7 +11,9 @@ struct RenderingSystems {
     struct CheckVisibility : SystemSet<CheckVisibility> {};
     struct Queue : SystemSet<Queue> {};
     struct PreparePipelines : SystemSet<PreparePipelines> {};
+    struct BuildRenderGraph : SystemSet<BuildRenderGraph> {};
     struct Render : SystemSet<Render> {};
+    struct ExecuteRenderGraph : SystemSet<ExecuteRenderGraph> {};
 };
 
 class RenderingPlugin : public Plugin {
