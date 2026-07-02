@@ -1,9 +1,10 @@
 #pragma once
 #include "app/plugin.hpp"
 #include "graphics/resource.hpp"
-#include "graphics/texture.hpp"
+#include "graphics/sampler.hpp"
 #include "pbr/pipeline_specializer.hpp"
 #include "rendering/material.hpp"
+#include "rendering/pipeline_cache.hpp"
 #include "rendering/render_phase.hpp"
 
 #include <memory>
@@ -12,24 +13,14 @@ namespace fei {
 
 struct DeferredPrepassPhase : RenderPhase<MeshDrawItem> {};
 
-struct DeferedRenderResources {
-    std::shared_ptr<Texture> g_position_ao;
-    std::shared_ptr<Texture> g_normal_roughness;
-    std::shared_ptr<Texture> g_albedo_metallic;
-    std::shared_ptr<Texture> g_specular;
-    std::shared_ptr<Texture> g_emissive_depth;
-    std::shared_ptr<ResourceLayout> defered_resource_layout;
-    std::shared_ptr<ResourceSet> defered_resource_set;
-    std::shared_ptr<Pipeline> defered_pipeline;
-
-    std::shared_ptr<Texture> direct_lighting;
-    std::shared_ptr<Pipeline> direct_lighting_pipeline;
-    std::shared_ptr<Texture> indirect_lighting;
-    std::shared_ptr<Pipeline> indirect_lighting_pipeline;
-    std::shared_ptr<Texture> composite_lighting;
-    std::shared_ptr<Pipeline> composite_lighting_pipeline;
+struct DeferredRenderPipelines {
+    std::shared_ptr<ResourceLayout> gbuffer_resource_layout;
     std::shared_ptr<ResourceLayout> composite_resource_layout;
-    std::shared_ptr<ResourceSet> composite_resource_set;
+    std::shared_ptr<Sampler> point_sampler;
+
+    CachedRenderPipelineId direct_lighting_pipeline {};
+    CachedRenderPipelineId indirect_lighting_pipeline {};
+    CachedRenderPipelineId composite_lighting_pipeline {};
 };
 
 class DeferredPipelineSpecializer : public PipelineSpecializer {
