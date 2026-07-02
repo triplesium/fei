@@ -1,6 +1,9 @@
-#include "graphics_opengl/buffer.hpp"
 #include "graphics_opengl/deferred_resource.hpp"
+
+#include "graphics_opengl/buffer.hpp"
+#include "graphics_opengl/framebuffer.hpp"
 #include "graphics_opengl/graphics_device.hpp"
+#include "graphics_opengl/resource.hpp"
 #include "graphics_opengl/sampler.hpp"
 #include "graphics_opengl/texture.hpp"
 
@@ -170,4 +173,156 @@ TEST_CASE(
     }
 
     REQUIRE(destroyed == std::vector<int> {11, 12});
+}
+
+TEST_CASE(
+    "OpenGL device state reuses cached framebuffer descriptions",
+    "[graphics][opengl]"
+) {
+    OpenGLDeviceState state;
+    auto color = std::make_shared<TextureOpenGL>(make_texture_description());
+    auto depth_desc = make_texture_description();
+    depth_desc.texture_format = PixelFormat::Depth32Float;
+    depth_desc.texture_usage = {TextureUsage::DepthStencil};
+    auto depth = std::make_shared<TextureOpenGL>(depth_desc);
+
+    FramebufferDescription desc {
+        .color_targets =
+            {
+                FramebufferAttachment {
+                    .texture = color,
+                    .mip_level = 0,
+                    .layer = 0,
+                },
+            },
+        .depth_target = FramebufferAttachment {
+            .texture = depth,
+            .mip_level = 0,
+            .layer = 0,
+        },
+    };
+
+    int create_count = 0;
+    auto create = [&]() -> std::shared_ptr<Framebuffer> {
+        ++create_count;
+        return std::make_shared<Framebuffer>(desc);
+    };
+
+    auto first = state.get_or_create_framebuffer(desc, create);
+    auto second = state.get_or_create_framebuffer(desc, create);
+
+    REQUIRE(first == second);
+    REQUIRE(create_count == 1);
+
+    auto stats = state.resource_cache_stats();
+    REQUIRE(stats.framebuffer_requests == 2);
+    REQUIRE(stats.framebuffer_hits == 1);
+    REQUIRE(stats.framebuffer_creates == 1);
+    REQUIRE(stats.framebuffer_cache_size == 1);
+}
+
+TEST_CASE(
+    "OpenGL framebuffer cache keys include attachment identity",
+    "[graphics][opengl]"
+) {
+    OpenGLDeviceState state;
+    auto first_color =
+        std::make_shared<TextureOpenGL>(make_texture_description());
+    auto second_color =
+        std::make_shared<TextureOpenGL>(make_texture_description());
+
+    auto first_desc = FramebufferDescription {
+        .color_targets = {
+            FramebufferAttachment {
+                .texture = first_color,
+                .mip_level = 0,
+                .layer = 0,
+            },
+        },
+    };
+    auto second_desc = FramebufferDescription {
+        .color_targets = {
+            FramebufferAttachment {
+                .texture = second_color,
+                .mip_level = 0,
+                .layer = 0,
+            },
+        },
+    };
+
+    int create_count = 0;
+    auto create_first = [&]() -> std::shared_ptr<Framebuffer> {
+        ++create_count;
+        return std::make_shared<Framebuffer>(first_desc);
+    };
+    auto create_second = [&]() -> std::shared_ptr<Framebuffer> {
+        ++create_count;
+        return std::make_shared<Framebuffer>(second_desc);
+    };
+
+    auto first = state.get_or_create_framebuffer(first_desc, create_first);
+    auto second = state.get_or_create_framebuffer(second_desc, create_second);
+
+    REQUIRE(first != second);
+    REQUIRE(create_count == 2);
+
+    auto stats = state.resource_cache_stats();
+    REQUIRE(stats.framebuffer_hits == 0);
+    REQUIRE(stats.framebuffer_creates == 2);
+    REQUIRE(stats.framebuffer_cache_size == 2);
+}
+
+TEST_CASE(
+    "OpenGL device state reuses cached resource set descriptions",
+    "[graphics][opengl]"
+) {
+    OpenGLDeviceState state;
+    auto layout =
+        std::make_shared<ResourceLayout>(ResourceLayoutDescription::sequencial(
+            {ShaderStages::Fragment},
+            {
+                texture_read_only("albedo"),
+                sampler("point_sampler"),
+            }
+        ));
+    auto texture = std::make_shared<TextureOpenGL>(make_texture_description());
+    auto sampler_resource =
+        std::make_shared<SamplerOpenGL>(SamplerDescription::Point);
+
+    ResourceSetDescription desc {
+        .layout = layout,
+        .resources = {texture, sampler_resource},
+        .name = "test.resource_set",
+    };
+
+    int create_count = 0;
+    auto create = [&]() -> std::shared_ptr<ResourceSet> {
+        ++create_count;
+        return std::make_shared<ResourceSet>(desc);
+    };
+
+    auto first = state.get_or_create_resource_set(desc, create);
+    auto second = state.get_or_create_resource_set(desc, create);
+
+    REQUIRE(first == second);
+    REQUIRE(create_count == 1);
+
+    auto stats = state.resource_cache_stats();
+    REQUIRE(stats.resource_set_requests == 2);
+    REQUIRE(stats.resource_set_hits == 1);
+    REQUIRE(stats.resource_set_creates == 1);
+    REQUIRE(stats.resource_set_cache_size == 1);
+    REQUIRE(stats.resource_set_sources.size() == 1);
+    REQUIRE(stats.resource_set_sources[0].name == "test.resource_set");
+    REQUIRE(stats.resource_set_sources[0].requests == 2);
+    REQUIRE(stats.resource_set_sources[0].hits == 1);
+    REQUIRE(stats.resource_set_sources[0].creates == 1);
+    REQUIRE(stats.resource_set_sources[0].cache_size == 1);
+
+    state.clear_resource_cache();
+    REQUIRE(state.resource_cache_stats().resource_set_cache_size == 0);
+
+    auto third = state.get_or_create_resource_set(desc, create);
+    REQUIRE(third != first);
+    REQUIRE(create_count == 2);
 }

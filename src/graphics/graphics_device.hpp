@@ -11,10 +11,33 @@
 #include "graphics/texture_readback.hpp"
 #include "graphics/texture_view.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace fei {
+
+struct GraphicsResourceSetSourceStats {
+    std::string name;
+    std::uint64_t requests {0};
+    std::uint64_t hits {0};
+    std::uint64_t creates {0};
+    std::size_t cache_size {0};
+};
+
+struct GraphicsResourceCacheStats {
+    std::uint64_t framebuffer_requests {0};
+    std::uint64_t framebuffer_hits {0};
+    std::uint64_t framebuffer_creates {0};
+    std::uint64_t resource_set_requests {0};
+    std::uint64_t resource_set_hits {0};
+    std::uint64_t resource_set_creates {0};
+    std::size_t framebuffer_cache_size {0};
+    std::size_t resource_set_cache_size {0};
+    std::vector<GraphicsResourceSetSourceStats> resource_set_sources;
+};
 
 // GraphicsDevice is intentionally worker-callable through
 // ResRO<GraphicsDevice>. Implementations must keep const entry points safe for
@@ -79,6 +102,10 @@ class GraphicsDevice {
     virtual std::shared_ptr<const Framebuffer> main_framebuffer() const = 0;
 
     virtual void flush() const {}
+
+    virtual GraphicsResourceCacheStats resource_cache_stats() const {
+        return {};
+    }
 
     virtual std::shared_ptr<const TextureView>
     get_texture_view(std::shared_ptr<const BindableResource> texture) const {

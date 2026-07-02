@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -47,6 +48,55 @@ struct OpenGLPendingTextureReadback {
     std::uint32_t mip_level {0};
 };
 
+struct OpenGLFramebufferAttachmentCacheKey {
+    const Texture* texture {nullptr};
+    std::uint32_t mip_level {0};
+    std::uint32_t layer {0};
+
+    bool operator==(const OpenGLFramebufferAttachmentCacheKey&) const = default;
+};
+
+struct OpenGLFramebufferAttachmentCacheKeyHash {
+    std::size_t
+    operator()(const OpenGLFramebufferAttachmentCacheKey& key) const;
+};
+
+struct OpenGLFramebufferCacheKey {
+    std::vector<OpenGLFramebufferAttachmentCacheKey> color_targets;
+    bool has_depth_target {false};
+    OpenGLFramebufferAttachmentCacheKey depth_target;
+
+    bool operator==(const OpenGLFramebufferCacheKey&) const = default;
+};
+
+struct OpenGLFramebufferCacheKeyHash {
+    std::size_t operator()(const OpenGLFramebufferCacheKey& key) const;
+};
+
+struct OpenGLResourceSetCacheKey {
+    const ResourceLayout* layout {nullptr};
+    std::vector<const BindableResource*> resources;
+
+    bool operator==(const OpenGLResourceSetCacheKey&) const = default;
+};
+
+struct OpenGLResourceSetCacheKeyHash {
+    std::size_t operator()(const OpenGLResourceSetCacheKey& key) const;
+};
+
+using OpenGLResourceCacheStats = GraphicsResourceCacheStats;
+
+struct OpenGLFramebufferCacheEntry {
+    std::shared_ptr<Framebuffer> framebuffer;
+    std::uint64_t last_used_tick {0};
+};
+
+struct OpenGLResourceSetCacheEntry {
+    std::shared_ptr<ResourceSet> resource_set;
+    std::string name;
+    std::uint64_t last_used_tick {0};
+};
+
 using OpenGLPendingOperation = std::variant<
     OpenGLPendingCommandSubmit,
     OpenGLPendingBufferUpdate,
@@ -65,15 +115,42 @@ class OpenGLDeviceState {
     take_pending_disposals();
     std::vector<std::shared_ptr<OpenGLTextureReadbackState>>
     live_texture_readbacks();
+    std::shared_ptr<Framebuffer> get_or_create_framebuffer(
+        const FramebufferDescription& desc,
+        const std::function<std::shared_ptr<Framebuffer>()>& create
+    );
+    std::shared_ptr<ResourceSet> get_or_create_resource_set(
+        const ResourceSetDescription& desc,
+        const std::function<std::shared_ptr<ResourceSet>()>& create
+    );
+    OpenGLResourceCacheStats resource_cache_stats() const;
+    void collect_resource_cache();
+    void clear_resource_cache();
 
   private:
     friend class GraphicsDeviceOpenGL;
+
+    static constexpr std::uint64_t ResourceCacheMaxIdleTicks = 120;
 
     mutable std::mutex m_mutex;
     std::deque<OpenGLPendingOperation> m_pending_operations;
     std::vector<std::unique_ptr<DeferredResourceOpenGL>> m_pending_disposals;
     std::vector<std::weak_ptr<OpenGLTextureReadbackState>> m_texture_readbacks;
     std::unordered_map<MappableResource*, std::byte*> m_mapped_resources;
+    std::unordered_map<
+        OpenGLFramebufferCacheKey,
+        OpenGLFramebufferCacheEntry,
+        OpenGLFramebufferCacheKeyHash>
+        m_framebuffer_cache;
+    std::unordered_map<
+        OpenGLResourceSetCacheKey,
+        OpenGLResourceSetCacheEntry,
+        OpenGLResourceSetCacheKeyHash>
+        m_resource_set_cache;
+    OpenGLResourceCacheStats m_resource_cache_stats;
+    std::unordered_map<std::string, GraphicsResourceSetSourceStats>
+        m_resource_set_source_stats;
+    std::uint64_t m_resource_cache_tick {0};
 };
 
 class GraphicsDeviceOpenGL : public GraphicsDevice {
@@ -147,6 +224,7 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
 
     std::shared_ptr<const Framebuffer> main_framebuffer() const override;
     void flush() const override;
+    OpenGLResourceCacheStats resource_cache_stats() const override;
 
     std::shared_ptr<OpenGLDeviceState> state() { return m_state; }
     std::shared_ptr<const OpenGLDeviceState> state() const { return m_state; }

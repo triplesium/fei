@@ -296,16 +296,19 @@ inline void setup_shadow_map(
                                 shadow_map_texture,
                                 blur_resources->sampler,
                             },
+                        .name = "shadow.blur.horizontal",
                     }
                 ),
                 .vertical_blur_set = device->create_resource_set(
                     ResourceSetDescription {
                         .layout = blur_resources->resource_layout,
-                        .resources = {
-                            blur_resources->uniform_buffer,
-                            blur_resources->intermediate_texture,
-                            blur_resources->sampler,
-                        },
+                        .resources =
+                            {
+                                blur_resources->uniform_buffer,
+                                blur_resources->intermediate_texture,
+                                blur_resources->sampler,
+                            },
+                        .name = "shadow.blur.vertical",
                     }
                 ),
             }

@@ -184,11 +184,11 @@ void generate_env_maps(
             auto resource_set = device->create_resource_set(
                 ResourceSetDescription {
                     .layout = layout,
-                    .resources = {
-                        gpu_env_map.environment_cubemap.texture(),
-                        cubemap_sampler,
-                        gpu_env_map.irradiance_cubemap.texture()
-                    },
+                    .resources =
+                        {gpu_env_map.environment_cubemap.texture(),
+                         cubemap_sampler,
+                         gpu_env_map.irradiance_cubemap.texture()},
+                    .name = "environment.irradiance",
                 }
             );
             auto command_buffer = device->create_command_buffer();
@@ -283,12 +283,12 @@ void generate_env_maps(
                 auto resource_set = device->create_resource_set(
                     ResourceSetDescription {
                         .layout = layout,
-                        .resources = {
-                            gpu_env_map.environment_cubemap.texture(),
-                            cubemap_sampler,
-                            texture_view,
-                            uniform_buffer
-                        },
+                        .resources =
+                            {gpu_env_map.environment_cubemap.texture(),
+                             cubemap_sampler,
+                             texture_view,
+                             uniform_buffer},
+                        .name = "environment.radiance",
                     }
                 );
                 command_buffer->set_resource_set(0, resource_set);

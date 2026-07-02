@@ -126,6 +126,7 @@ void prepare_skybox_resources(
             ResourceSetDescription {
                 .layout = skybox_resource->resource_layout,
                 .resources = {*cubemap, skybox_resource->sampler},
+                .name = "skybox",
             }
         );
         skybox_resource->resource_set_image = skybox.equirect_map.id();

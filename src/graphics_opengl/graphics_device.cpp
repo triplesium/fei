@@ -16,8 +16,10 @@
 #include "graphics_opengl/utils.hpp"
 #include "profiling/profiling.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <span>
 #include <thread>
@@ -31,6 +33,10 @@ namespace {
 
 template<class>
 inline constexpr bool always_false_v = false;
+
+void hash_combine(std::size_t& seed, std::size_t value) {
+    seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
 
 std::vector<std::byte> copy_bytes(const void* data, std::size_t size) {
     std::vector<std::byte> bytes(size);
@@ -60,7 +66,84 @@ std::shared_ptr<ResourceT> make_deferred_resource(
     );
 }
 
+OpenGLFramebufferAttachmentCacheKey
+framebuffer_attachment_cache_key(const FramebufferAttachment& attachment) {
+    return OpenGLFramebufferAttachmentCacheKey {
+        .texture = attachment.texture.get(),
+        .mip_level = attachment.mip_level,
+        .layer = attachment.layer,
+    };
+}
+
+OpenGLFramebufferCacheKey
+framebuffer_cache_key(const FramebufferDescription& desc) {
+    OpenGLFramebufferCacheKey key;
+    key.color_targets.reserve(desc.color_targets.size());
+    for (const auto& attachment : desc.color_targets) {
+        key.color_targets.push_back(
+            framebuffer_attachment_cache_key(attachment)
+        );
+    }
+
+    if (desc.depth_target) {
+        key.has_depth_target = true;
+        key.depth_target = framebuffer_attachment_cache_key(*desc.depth_target);
+    }
+    return key;
+}
+
+OpenGLResourceSetCacheKey
+resource_set_cache_key(const ResourceSetDescription& desc) {
+    OpenGLResourceSetCacheKey key;
+    key.layout = desc.layout.get();
+    key.resources.reserve(desc.resources.size());
+    for (const auto& resource : desc.resources) {
+        key.resources.push_back(resource.get());
+    }
+    return key;
+}
+
+std::string resource_set_name(const ResourceSetDescription& desc) {
+    return desc.name.empty() ? "unknown" : desc.name;
+}
+
 } // namespace
+
+std::size_t OpenGLFramebufferAttachmentCacheKeyHash::operator()(
+    const OpenGLFramebufferAttachmentCacheKey& key
+) const {
+    std::size_t seed = std::hash<const Texture*> {}(key.texture);
+    hash_combine(seed, key.mip_level);
+    hash_combine(seed, key.layer);
+    return seed;
+}
+
+std::size_t OpenGLFramebufferCacheKeyHash::operator()(
+    const OpenGLFramebufferCacheKey& key
+) const {
+    std::size_t seed = 0;
+    OpenGLFramebufferAttachmentCacheKeyHash attachment_hash;
+    for (const auto& attachment : key.color_targets) {
+        hash_combine(seed, attachment_hash(attachment));
+    }
+    hash_combine(seed, key.color_targets.size());
+    hash_combine(seed, key.has_depth_target ? 1 : 0);
+    if (key.has_depth_target) {
+        hash_combine(seed, attachment_hash(key.depth_target));
+    }
+    return seed;
+}
+
+std::size_t OpenGLResourceSetCacheKeyHash::operator()(
+    const OpenGLResourceSetCacheKey& key
+) const {
+    std::size_t seed = std::hash<const ResourceLayout*> {}(key.layout);
+    for (const auto* resource : key.resources) {
+        hash_combine(seed, std::hash<const BindableResource*> {}(resource));
+    }
+    hash_combine(seed, key.resources.size());
+    return seed;
+}
 
 void OpenGLDeviceState::enqueue_operation(OpenGLPendingOperation operation) {
     std::scoped_lock lock(m_mutex);
@@ -119,6 +202,181 @@ OpenGLDeviceState::live_texture_readbacks() {
     return readbacks;
 }
 
+std::shared_ptr<Framebuffer> OpenGLDeviceState::get_or_create_framebuffer(
+    const FramebufferDescription& desc,
+    const std::function<std::shared_ptr<Framebuffer>()>& create
+) {
+    const auto key = framebuffer_cache_key(desc);
+    {
+        std::scoped_lock lock(m_mutex);
+        ++m_resource_cache_stats.framebuffer_requests;
+        if (auto cached = m_framebuffer_cache.find(key);
+            cached != m_framebuffer_cache.end()) {
+            ++m_resource_cache_stats.framebuffer_hits;
+            cached->second.last_used_tick = m_resource_cache_tick;
+            return cached->second.framebuffer;
+        }
+    }
+
+    auto framebuffer = create();
+    {
+        std::scoped_lock lock(m_mutex);
+        auto [cached, inserted] = m_framebuffer_cache.emplace(
+            key,
+            OpenGLFramebufferCacheEntry {
+                .framebuffer = framebuffer,
+                .last_used_tick = m_resource_cache_tick,
+            }
+        );
+        if (!inserted) {
+            ++m_resource_cache_stats.framebuffer_hits;
+            cached->second.last_used_tick = m_resource_cache_tick;
+            return cached->second.framebuffer;
+        }
+        ++m_resource_cache_stats.framebuffer_creates;
+    }
+    return framebuffer;
+}
+
+std::shared_ptr<ResourceSet> OpenGLDeviceState::get_or_create_resource_set(
+    const ResourceSetDescription& desc,
+    const std::function<std::shared_ptr<ResourceSet>()>& create
+) {
+    const auto key = resource_set_cache_key(desc);
+    const auto name = resource_set_name(desc);
+    {
+        std::scoped_lock lock(m_mutex);
+        ++m_resource_cache_stats.resource_set_requests;
+        ++m_resource_set_source_stats[name].requests;
+        m_resource_set_source_stats[name].name = name;
+        if (auto cached = m_resource_set_cache.find(key);
+            cached != m_resource_set_cache.end()) {
+            ++m_resource_cache_stats.resource_set_hits;
+            ++m_resource_set_source_stats[name].hits;
+            cached->second.last_used_tick = m_resource_cache_tick;
+            return cached->second.resource_set;
+        }
+    }
+
+    auto resource_set = create();
+    {
+        std::scoped_lock lock(m_mutex);
+        auto [cached, inserted] = m_resource_set_cache.emplace(
+            key,
+            OpenGLResourceSetCacheEntry {
+                .resource_set = resource_set,
+                .name = name,
+                .last_used_tick = m_resource_cache_tick,
+            }
+        );
+        if (!inserted) {
+            ++m_resource_cache_stats.resource_set_hits;
+            ++m_resource_set_source_stats[name].hits;
+            cached->second.last_used_tick = m_resource_cache_tick;
+            return cached->second.resource_set;
+        }
+        ++m_resource_cache_stats.resource_set_creates;
+        ++m_resource_set_source_stats[name].creates;
+    }
+    return resource_set;
+}
+
+OpenGLResourceCacheStats OpenGLDeviceState::resource_cache_stats() const {
+    std::scoped_lock lock(m_mutex);
+    auto stats = m_resource_cache_stats;
+    stats.framebuffer_cache_size = m_framebuffer_cache.size();
+    stats.resource_set_cache_size = m_resource_set_cache.size();
+    stats.resource_set_sources.clear();
+    stats.resource_set_sources.reserve(m_resource_set_source_stats.size());
+
+    std::unordered_map<std::string, std::size_t> source_cache_sizes;
+    for (const auto& [_, cached] : m_resource_set_cache) {
+        ++source_cache_sizes[cached.name];
+    }
+
+    for (const auto& [source, source_stats] : m_resource_set_source_stats) {
+        auto entry = source_stats;
+        entry.name = source;
+        entry.cache_size = source_cache_sizes[source];
+        stats.resource_set_sources.push_back(std::move(entry));
+    }
+    std::ranges::sort(
+        stats.resource_set_sources,
+        [](const auto& lhs, const auto& rhs) {
+            if (lhs.creates != rhs.creates) {
+                return lhs.creates > rhs.creates;
+            }
+            if (lhs.requests != rhs.requests) {
+                return lhs.requests > rhs.requests;
+            }
+            return lhs.name < rhs.name;
+        }
+    );
+    return stats;
+}
+
+void OpenGLDeviceState::collect_resource_cache() {
+    std::vector<std::shared_ptr<Framebuffer>> retired_framebuffers;
+    std::vector<std::shared_ptr<ResourceSet>> retired_resource_sets;
+
+    {
+        std::scoped_lock lock(m_mutex);
+        ++m_resource_cache_tick;
+
+        for (auto cached = m_framebuffer_cache.begin();
+             cached != m_framebuffer_cache.end();) {
+            const auto age =
+                m_resource_cache_tick >= cached->second.last_used_tick ?
+                    m_resource_cache_tick - cached->second.last_used_tick :
+                    0;
+            if (age > ResourceCacheMaxIdleTicks) {
+                retired_framebuffers.push_back(
+                    std::move(cached->second.framebuffer)
+                );
+                cached = m_framebuffer_cache.erase(cached);
+            } else {
+                ++cached;
+            }
+        }
+
+        for (auto cached = m_resource_set_cache.begin();
+             cached != m_resource_set_cache.end();) {
+            const auto age =
+                m_resource_cache_tick >= cached->second.last_used_tick ?
+                    m_resource_cache_tick - cached->second.last_used_tick :
+                    0;
+            if (age > ResourceCacheMaxIdleTicks) {
+                retired_resource_sets.push_back(
+                    std::move(cached->second.resource_set)
+                );
+                cached = m_resource_set_cache.erase(cached);
+            } else {
+                ++cached;
+            }
+        }
+    }
+}
+
+void OpenGLDeviceState::clear_resource_cache() {
+    std::vector<std::shared_ptr<Framebuffer>> retired_framebuffers;
+    std::vector<std::shared_ptr<ResourceSet>> retired_resource_sets;
+
+    {
+        std::scoped_lock lock(m_mutex);
+        retired_framebuffers.reserve(m_framebuffer_cache.size());
+        for (auto& [_, cached] : m_framebuffer_cache) {
+            retired_framebuffers.push_back(std::move(cached.framebuffer));
+        }
+        m_framebuffer_cache.clear();
+
+        retired_resource_sets.reserve(m_resource_set_cache.size());
+        for (auto& [_, cached] : m_resource_set_cache) {
+            retired_resource_sets.push_back(std::move(cached.resource_set));
+        }
+        m_resource_set_cache.clear();
+    }
+}
+
 GraphicsDeviceOpenGL::GraphicsDeviceOpenGL() :
     m_state(std::make_shared<OpenGLDeviceState>()),
     m_context_thread(std::this_thread::get_id()) {
@@ -137,6 +395,8 @@ GraphicsDeviceOpenGL::~GraphicsDeviceOpenGL() {
     if (!m_state) {
         return;
     }
+    flush_pending_work();
+    m_state->clear_resource_cache();
     flush_pending_work();
 }
 
@@ -182,7 +442,9 @@ std::shared_ptr<Pipeline> GraphicsDeviceOpenGL::create_compute_pipeline(
 std::shared_ptr<Framebuffer> GraphicsDeviceOpenGL::create_framebuffer(
     const FramebufferDescription& desc
 ) const {
-    return make_deferred_resource<FramebufferOpenGL>(m_state, desc);
+    return m_state->get_or_create_framebuffer(desc, [&]() {
+        return make_deferred_resource<FramebufferOpenGL>(m_state, desc);
+    });
 }
 
 std::shared_ptr<ResourceLayout> GraphicsDeviceOpenGL::create_resource_layout(
@@ -194,7 +456,9 @@ std::shared_ptr<ResourceLayout> GraphicsDeviceOpenGL::create_resource_layout(
 std::shared_ptr<ResourceSet> GraphicsDeviceOpenGL::create_resource_set(
     const ResourceSetDescription& desc
 ) const {
-    return std::make_shared<ResourceSetOpenGL>(desc);
+    return m_state->get_or_create_resource_set(desc, [&]() {
+        return std::make_shared<ResourceSetOpenGL>(desc);
+    });
 }
 
 std::shared_ptr<Sampler>
@@ -391,6 +655,10 @@ void GraphicsDeviceOpenGL::flush() const {
     flush_pending_work();
 }
 
+OpenGLResourceCacheStats GraphicsDeviceOpenGL::resource_cache_stats() const {
+    return m_state->resource_cache_stats();
+}
+
 void GraphicsDeviceOpenGL::flush_pending_work() const {
     FEI_PROFILE_SCOPE("OpenGL Flush Pending Work");
     assert_context_thread("GraphicsDeviceOpenGL::flush_pending_work");
@@ -399,8 +667,10 @@ void GraphicsDeviceOpenGL::flush_pending_work() const {
     for (const auto& operation : operations) {
         execute_operation(operation);
     }
+    operations.clear();
 
     collect_texture_readbacks();
+    m_state->collect_resource_cache();
     flush_disposals();
 }
 

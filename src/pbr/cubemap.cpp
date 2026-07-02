@@ -29,6 +29,7 @@ std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
         ResourceSetDescription {
             .layout = m_equirect_to_cubemap_resource_layout,
             .resources = {equirect_texture, cubemap_texture},
+            .name = "cubemap.equirect_to_cubemap",
         }
     );
 

@@ -66,6 +66,7 @@ class Material {
             ResourceSetDescription {
                 .layout = layout,
                 .resources = resources,
+                .name = "material",
             }
         );
     }
@@ -163,6 +164,7 @@ class MaterialAdapter
                 .resources =
                     source_asset
                         .resources(device, rendering_defaults, gpu_images),
+                .name = "material",
             }
         );
         if (!resource_set) {

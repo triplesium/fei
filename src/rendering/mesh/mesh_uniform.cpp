@@ -39,6 +39,7 @@ void prepare_mesh_uniforms(
                 ResourceSetDescription {
                     .layout = mesh_uniforms->resource_layout,
                     .resources = {entry.uniform_buffer},
+                    .name = "mesh_uniform",
                 }
             );
             mesh_uniforms->entries[entity] = std::move(entry);

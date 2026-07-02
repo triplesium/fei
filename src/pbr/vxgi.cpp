@@ -166,13 +166,15 @@ void setup_vxgi(
     volumes->resource_set = device->create_resource_set(
         ResourceSetDescription {
             .layout = volumes->resource_layout,
-            .resources = {
-                volumes->albedo,
-                volumes->normal,
-                volumes->emissive,
-                volumes->radiance,
-                volumes->static_flag,
-            },
+            .resources =
+                {
+                    volumes->albedo,
+                    volumes->normal,
+                    volumes->emissive,
+                    volumes->radiance,
+                    volumes->static_flag,
+                },
+            .name = "vxgi.volumes",
         }
     );
 
@@ -226,6 +228,7 @@ void setup_vxgi(
                 ResourceSetDescription {
                     .layout = voxelization_resource_layout,
                     .resources = {voxelization_uniform_buffer},
+                    .name = "vxgi.voxelization",
                 }
             ),
             .pipeline_specializer = VxgiVoxelizationSpecializer(
@@ -499,16 +502,18 @@ void setup_vxgi_generate_mipmap_base(
     auto resource_set = device->create_resource_set(
         ResourceSetDescription {
             .layout = resource_layout,
-            .resources = {
-                uniform_buffer,
-                volumes->radiance,
-                volumes->mipmap[0],
-                volumes->mipmap[1],
-                volumes->mipmap[2],
-                volumes->mipmap[3],
-                volumes->mipmap[4],
-                volumes->mipmap[5],
-            },
+            .resources =
+                {
+                    uniform_buffer,
+                    volumes->radiance,
+                    volumes->mipmap[0],
+                    volumes->mipmap[1],
+                    volumes->mipmap[2],
+                    volumes->mipmap[3],
+                    volumes->mipmap[4],
+                    volumes->mipmap[5],
+                },
+            .name = "vxgi.mipmap_base",
         }
     );
 
@@ -616,21 +621,23 @@ void prepare_vxgi_generate_mipmap_volume(
         auto resource_set = device->create_resource_set(
             ResourceSetDescription {
                 .layout = generate_mipmap_volume->resource_layout,
-                .resources = {
-                    generate_mipmap_volume->uniform_buffer,
-                    dst_views[0],
-                    dst_views[1],
-                    dst_views[2],
-                    dst_views[3],
-                    dst_views[4],
-                    dst_views[5],
-                    volumes->mipmap[0],
-                    volumes->mipmap[1],
-                    volumes->mipmap[2],
-                    volumes->mipmap[3],
-                    volumes->mipmap[4],
-                    volumes->mipmap[5],
-                },
+                .resources =
+                    {
+                        generate_mipmap_volume->uniform_buffer,
+                        dst_views[0],
+                        dst_views[1],
+                        dst_views[2],
+                        dst_views[3],
+                        dst_views[4],
+                        dst_views[5],
+                        volumes->mipmap[0],
+                        volumes->mipmap[1],
+                        volumes->mipmap[2],
+                        volumes->mipmap[3],
+                        volumes->mipmap[4],
+                        volumes->mipmap[5],
+                    },
+                .name = "vxgi.mipmap_volume",
             }
         );
         generate_mipmap_volume->mip_entries.push_back(
@@ -796,11 +803,13 @@ void prepare_inject_radiance(
         inject_radiance->resource_set = device->create_resource_set(
             ResourceSetDescription {
                 .layout = inject_radiance->resource_layout,
-                .resources = {
-                    inject_radiance->uniform_buffer,
-                    selected_shadow_map,
-                    inject_radiance->shadow_map_sampler,
-                },
+                .resources =
+                    {
+                        inject_radiance->uniform_buffer,
+                        selected_shadow_map,
+                        inject_radiance->shadow_map_sampler,
+                    },
+                .name = "vxgi.inject_radiance",
             }
         );
         inject_radiance->resource_set_shadow_map = selected_shadow_map.get();
@@ -883,25 +892,27 @@ void setup_inject_propagation(
     auto resource_set = device->create_resource_set(
         ResourceSetDescription {
             .layout = resource_layout,
-            .resources = {
-                uniform_buffer,
-                volumes->radiance,
-                volumes->albedo,
-                volumes->normal,
-                volumes->mipmap[0],
-                volumes->mipmap[1],
-                volumes->mipmap[2],
-                volumes->mipmap[3],
-                volumes->mipmap[4],
-                volumes->mipmap[5],
-                device->create_sampler(
-                    SamplerDescription {
-                        .address_mode_u = SamplerAddressMode::ClampToEdge,
-                        .address_mode_v = SamplerAddressMode::ClampToEdge,
-                        .address_mode_w = SamplerAddressMode::ClampToEdge,
-                    }
-                ),
-            },
+            .resources =
+                {
+                    uniform_buffer,
+                    volumes->radiance,
+                    volumes->albedo,
+                    volumes->normal,
+                    volumes->mipmap[0],
+                    volumes->mipmap[1],
+                    volumes->mipmap[2],
+                    volumes->mipmap[3],
+                    volumes->mipmap[4],
+                    volumes->mipmap[5],
+                    device->create_sampler(
+                        SamplerDescription {
+                            .address_mode_u = SamplerAddressMode::ClampToEdge,
+                            .address_mode_v = SamplerAddressMode::ClampToEdge,
+                            .address_mode_w = SamplerAddressMode::ClampToEdge,
+                        }
+                    ),
+                },
+            .name = "vxgi.inject_propagation",
         }
     );
 
@@ -1061,20 +1072,22 @@ void prepare_vxgi_lighting(
         vxgi_lighting->resource_set = device->create_resource_set(
             ResourceSetDescription {
                 .layout = vxgi_lighting->resource_layout,
-                .resources = {
-                    vxgi_lighting->uniform_buffer,
-                    volumes->normal,
-                    volumes->radiance,
-                    volumes->mipmap[0],
-                    volumes->mipmap[1],
-                    volumes->mipmap[2],
-                    volumes->mipmap[3],
-                    volumes->mipmap[4],
-                    volumes->mipmap[5],
-                    vxgi_lighting->voxel_sampler,
-                    selected_shadow_map,
-                    vxgi_lighting->shadow_map_sampler,
-                },
+                .resources =
+                    {
+                        vxgi_lighting->uniform_buffer,
+                        volumes->normal,
+                        volumes->radiance,
+                        volumes->mipmap[0],
+                        volumes->mipmap[1],
+                        volumes->mipmap[2],
+                        volumes->mipmap[3],
+                        volumes->mipmap[4],
+                        volumes->mipmap[5],
+                        vxgi_lighting->voxel_sampler,
+                        selected_shadow_map,
+                        vxgi_lighting->shadow_map_sampler,
+                    },
+                .name = "vxgi.lighting",
             }
         );
         vxgi_lighting->resource_set_shadow_map = selected_shadow_map.get();
