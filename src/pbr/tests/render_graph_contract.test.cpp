@@ -1,5 +1,7 @@
+#include "ecs/world.hpp"
 #include "pbr/graph_resources.hpp"
 #include "pbr/light.hpp"
+#include "pbr/passes/deferred_internal.hpp"
 #include "pbr/vxgi.hpp"
 #include "rendering/render_graph.hpp"
 
@@ -74,6 +76,12 @@ bool pass_writes(const RgPassDebugInfo& pass, std::string_view texture_name) {
     return std::ranges::find_if(pass.writes, [&](const auto& write) {
                return write.texture_name == texture_name;
            }) != pass.writes.end();
+}
+
+bool has_pass_named(const RgDebugInfo& debug, std::string_view name) {
+    return std::ranges::find_if(debug.passes, [&](const auto& pass) {
+               return pass.name == name;
+           }) != debug.passes.end();
 }
 
 const RgResourceSetDebugInfo& resource_set_named(
@@ -876,4 +884,37 @@ TEST_CASE(
     );
     CHECK(pass_depends_on(composite, direct_lighting));
     CHECK(pass_depends_on(composite, indirect_lighting));
+}
+
+TEST_CASE(
+    "PBR blit composite pass builder skips absent MainSwapchain",
+    "[pbr][render-graph]"
+) {
+    World world;
+    world.add_resource(RenderGraph {});
+    auto& graph = world.resource<RenderGraph>();
+    auto& deferred_lighting =
+        graph.blackboard().emplace<DeferredLightingGraphHandles>();
+
+    graph.add_pass<RenderGraph::Empty>(
+        "composite_source",
+        [&](RenderGraphBuilder& builder, RenderGraph::Empty&) {
+            deferred_lighting.composite = builder.create_texture(
+                "composite_lighting",
+                make_texture_desc(TextureType::Texture2D)
+            );
+            deferred_lighting.composite = builder.write_texture(
+                deferred_lighting.composite,
+                RenderGraphAccess::ColorAttachmentWrite
+            );
+            builder.side_effect();
+        },
+        [](RenderGraphContext&) {
+        }
+    );
+
+    world.run_system_once(build_blit_composite_pass);
+
+    REQUIRE(graph.compile());
+    CHECK_FALSE(has_pass_named(graph.debug_info(), "blit_composite"));
 }

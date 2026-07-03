@@ -222,7 +222,7 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
     std::shared_ptr<TextureReadback>
     create_texture_readback(uint32 max_in_flight = 3) const override;
 
-    std::shared_ptr<const Framebuffer> main_framebuffer() const override;
+    void present(const Swapchain& swapchain) const override;
     void flush() const override;
     OpenGLResourceCacheStats resource_cache_stats() const override;
 

@@ -10,7 +10,7 @@
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
-#include "graphics_opengl/plugin.hpp"
+#include "graphics_opengl_glfw/plugin.hpp"
 #include "math/vector.hpp"
 #include "pbr/environment_map.hpp"
 #include "pbr/light.hpp"
@@ -24,7 +24,6 @@
 #include "rendering/shader.hpp"
 #include "ui/plugin.hpp"
 #include "window/input.hpp"
-#include "window/window.hpp"
 
 #include <glad/glad.h>
 #include <imgui.h>
@@ -271,10 +270,9 @@ void update_imgui(
 
 int main() {
     App()
-        .add_plugin<WindowPlugin>()
         .add_plugin<AssetsPlugin>()
         .add_plugin<ImagePlugin>()
-        .add_plugin<OpenGLPlugin>()
+        .add_plugin<OpenGLGlfwPlugin>()
         .add_plugin<RenderingPlugin>()
         .add_plugin<PbrPlugin>()
         .add_plugin<InputPlugin>()

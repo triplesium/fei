@@ -6,11 +6,10 @@
 #include "ecs/system_params.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/graphics_device.hpp"
-#include "graphics_opengl/plugin.hpp"
+#include "graphics_opengl_glfw/plugin.hpp"
 #include "pbr/plugin.hpp"
 #include "rendering/plugin.hpp"
 #include "rendering/shader.hpp"
-#include "window/window.hpp"
 
 #include <cstddef>
 #include <format>
@@ -277,8 +276,7 @@ int main() {
         .add_plugins(
             AssetsPlugin {},
             ImagePlugin {},
-            WindowPlugin {},
-            OpenGLPlugin {},
+            OpenGLGlfwPlugin {},
             RenderingPlugin {},
             PbrPlugin {}
         )

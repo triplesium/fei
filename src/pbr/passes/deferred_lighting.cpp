@@ -37,6 +37,7 @@ struct DeferredCompositePassData {
 
 struct BlitCompositePassData {
     RgTextureHandle composite;
+    std::shared_ptr<const Framebuffer> target_framebuffer;
 };
 
 TextureDescription
@@ -381,8 +382,15 @@ void build_composite_pass(
     );
 }
 
-void build_blit_composite_pass(ResRW<RenderGraph> render_graph) {
+void build_blit_composite_pass(
+    ResRW<RenderGraph> render_graph,
+    Optional<ResRO<MainSwapchain>> main_swapchain
+) {
     if (!render_graph->blackboard().contains<DeferredLightingGraphHandles>()) {
+        return;
+    }
+
+    if (!main_swapchain || !(*main_swapchain)->swapchain) {
         return;
     }
 
@@ -397,6 +405,8 @@ void build_blit_composite_pass(ResRW<RenderGraph> render_graph) {
         "blit_composite",
         [&](RenderGraphBuilder& builder, BlitCompositePassData& data) {
             data.composite = composite;
+            data.target_framebuffer =
+                (*main_swapchain)->swapchain->framebuffer();
             builder.read_texture(data.composite, RenderGraphAccess::BlitSource);
             builder.side_effect();
         },
@@ -414,7 +424,7 @@ void build_blit_composite_pass(ResRW<RenderGraph> render_graph) {
                 }
             );
             command_buffer.end_render_pass();
-            command_buffer.blit_to(context.device().main_framebuffer());
+            command_buffer.blit_to(data.target_framebuffer);
         }
     );
 }

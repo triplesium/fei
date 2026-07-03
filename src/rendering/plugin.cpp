@@ -8,7 +8,7 @@
 #include "ecs/system_params.hpp"
 #include "ecs/system_profile.hpp"
 #include "graphics/graphics_device.hpp"
-#include "profiling/profiling.hpp"
+#include "graphics/swapchain.hpp"
 #include "rendering/defaults.hpp"
 #include "rendering/gpu_image.hpp"
 #include "rendering/mesh/mesh.hpp"
@@ -22,9 +22,6 @@
 #include "rendering/shader_cache.hpp"
 #include "rendering/view.hpp"
 #include "rendering/visibility.hpp"
-#include "window/window.hpp"
-
-#include <GLFW/glfw3.h>
 
 namespace fei {
 
@@ -60,9 +57,19 @@ void execute_render_graph(
     device->submit_commands(command_buffer);
 }
 
-void render_end(ResRO<Window> win) {
-    FEI_PROFILE_SCOPE("Swap Buffers");
-    glfwSwapBuffers(win->glfw_window);
+void present_main_swapchain(
+    ResRO<GraphicsDevice> device,
+    Optional<ResRO<MainSwapchain>> main_swapchain
+) {
+    if (!main_swapchain) {
+        return;
+    }
+    if (!(*main_swapchain)->swapchain) {
+        error("MainSwapchain resource has no swapchain");
+        return;
+    }
+
+    device->present(*(*main_swapchain)->swapchain);
 }
 
 void RenderingPlugin::setup(App& app) {
@@ -129,7 +136,7 @@ void RenderingPlugin::setup(App& app) {
             execute_render_graph |
                 in_set<RenderingSystems::ExecuteRenderGraph>()
         )
-        .add_systems(RenderLast, chain(flush_graphics_device, render_end));
+        .add_systems(RenderLast, present_main_swapchain | main_thread());
 }
 
 } // namespace fei

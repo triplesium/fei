@@ -7,6 +7,7 @@
 #include "graphics/resource.hpp"
 #include "graphics/sampler.hpp"
 #include "graphics/shader_module.hpp"
+#include "graphics/swapchain.hpp"
 #include "graphics/texture.hpp"
 #include "graphics/texture_readback.hpp"
 #include "graphics/texture_view.hpp"
@@ -99,7 +100,7 @@ class GraphicsDevice {
     virtual std::shared_ptr<TextureReadback>
     create_texture_readback(uint32 max_in_flight = 3) const = 0;
 
-    virtual std::shared_ptr<const Framebuffer> main_framebuffer() const = 0;
+    virtual void present(const Swapchain& swapchain) const = 0;
 
     virtual void flush() const {}
 

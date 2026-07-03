@@ -5,6 +5,7 @@
 #include "ecs/system_params.hpp"
 
 #include <string>
+#include <vector>
 
 struct GLFWwindow;
 
@@ -15,30 +16,44 @@ struct Window {
     int width, height;
 };
 
+struct GlfwWindowHint {
+    int hint {0};
+    int value {0};
+};
+
+struct WindowConfig {
+    int width {1920};
+    int height {1080};
+    std::string title {"Fei Engine"};
+    std::vector<GlfwWindowHint> hints;
+};
+
 template<>
 struct ResourceTraits<Window> {
     static constexpr bool main_thread_only = true;
 };
 
-GLFWwindow* setup_glfw(int width, int height, const std::string& title);
+GLFWwindow* setup_glfw_window(const WindowConfig& config);
 
 void window_prepare(ResRW<Window> win_res);
-void swap_buffers(ResRO<Window> win_res);
 void update_should_close(ResRO<Window> win_res, ResRW<AppStates> app_states);
 
 class WindowPlugin : public Plugin {
   public:
     void setup(App& app) override {
-        int width = 1920, height = 1080;
+        if (!app.has_resource<WindowConfig>()) {
+            app.add_resource(WindowConfig {});
+        }
+
+        auto& config = app.resource<WindowConfig>();
         app.add_resource(
             Window {
-                .glfw_window = setup_glfw(width, height, "Fei Engine"),
-                .width = width,
-                .height = height,
+                .glfw_window = setup_glfw_window(config),
+                .width = config.width,
+                .height = config.height,
             }
         );
         app.add_systems(First, window_prepare);
-        // app.add_system(RenderEnd, swap_buffers);
         app.add_systems(Last, update_should_close);
     }
 };

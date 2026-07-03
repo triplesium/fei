@@ -4,6 +4,7 @@
 #include "asset/server.hpp"
 #include "ecs/system_params.hpp"
 #include "graphics/graphics_device.hpp"
+#include "graphics/swapchain.hpp"
 #include "pbr/light.hpp"
 #include "pbr/material.hpp"
 #include "pbr/mesh_view.hpp"
@@ -95,6 +96,9 @@ void build_composite_pass(
     ResRO<FullscreenQuad> fullscreen_quad
 );
 
-void build_blit_composite_pass(ResRW<RenderGraph> render_graph);
+void build_blit_composite_pass(
+    ResRW<RenderGraph> render_graph,
+    Optional<ResRO<MainSwapchain>> main_swapchain
+);
 
 } // namespace fei

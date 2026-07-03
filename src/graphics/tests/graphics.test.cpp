@@ -5,6 +5,7 @@
 #include "graphics/mapped_resource.hpp"
 #include "graphics/resource.hpp"
 #include "graphics/shader_module.hpp"
+#include "graphics/swapchain.hpp"
 #include "graphics/texture.hpp"
 #include "graphics/texture_readback.hpp"
 #include "graphics/texture_view.hpp"
@@ -42,11 +43,16 @@ static_assert(std::is_same_v<
               decltype(std::declval<const Texture&>()
                            .full_view(std::declval<const GraphicsDevice&>())),
               std::shared_ptr<const TextureView>>);
-static_assert(
-    std::is_same_v<
-        decltype(std::declval<const GraphicsDevice&>().main_framebuffer()),
-        std::shared_ptr<const Framebuffer>>
-);
+static_assert(std::is_same_v<
+              decltype(std::declval<const Swapchain&>().framebuffer()),
+              std::shared_ptr<const Framebuffer>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const GraphicsDevice&>()
+                           .present(std::declval<const Swapchain&>())),
+              void>);
+static_assert(std::is_same_v<
+              decltype(std::declval<MainSwapchain&>().swapchain),
+              std::shared_ptr<Swapchain>>);
 
 TextureDescription make_texture_description(
     std::uint32_t width = 64,
@@ -180,9 +186,7 @@ class FakeGraphicsDevice : public GraphicsDevice {
         return nullptr;
     }
 
-    std::shared_ptr<const Framebuffer> main_framebuffer() const override {
-        return nullptr;
-    }
+    void present(const Swapchain&) const override {}
 };
 
 } // namespace

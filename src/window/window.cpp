@@ -1,30 +1,38 @@
 #include "window/window.hpp"
 
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 
 namespace fei {
 
-GLFWwindow* setup_glfw(int width, int height, const std::string& title) {
+namespace {
+
+void apply_glfw_hints(const std::vector<GlfwWindowHint>& hints) {
+    glfwDefaultWindowHints();
+
+    for (const auto& hint : hints) {
+        glfwWindowHint(hint.hint, hint.value);
+    }
+}
+
+} // namespace
+
+GLFWwindow* setup_glfw_window(const WindowConfig& config) {
     if (!glfwInit()) {
         throw std::runtime_error("Failed to initialize GLFW");
     }
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    apply_glfw_hints(config.hints);
 
-    GLFWwindow* win =
-        glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
+    GLFWwindow* win = glfwCreateWindow(
+        config.width,
+        config.height,
+        config.title.c_str(),
+        nullptr,
+        nullptr
+    );
     if (!win) {
         throw std::runtime_error("Failed to create window");
-    }
-
-    glfwMakeContextCurrent(win);
-
-    if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
-        throw std::runtime_error("Failed to initialize GLAD");
     }
 
     return win;
@@ -34,10 +42,6 @@ void window_prepare(ResRW<Window> win_res) {
     glfwPollEvents();
     Window& win = *win_res;
     glfwGetFramebufferSize(win.glfw_window, &win.width, &win.height);
-}
-
-void swap_buffers(ResRO<Window> win_res) {
-    glfwSwapBuffers(win_res->glfw_window);
 }
 
 void update_should_close(ResRO<Window> win_res, ResRW<AppStates> app_states) {

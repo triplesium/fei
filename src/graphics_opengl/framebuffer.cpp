@@ -12,6 +12,11 @@ namespace fei {
 FramebufferOpenGL::FramebufferOpenGL(const FramebufferDescription& desc) :
     Framebuffer(desc) {}
 
+std::shared_ptr<const FramebufferOpenGL>
+FramebufferOpenGL::default_framebuffer() {
+    return std::shared_ptr<FramebufferOpenGL>(new FramebufferOpenGL(0));
+}
+
 void FramebufferOpenGL::create_gl_resource() const {
     FEI_PROFILE_SCOPE("OpenGL Framebuffer Create");
     FEI_GL_CALL(glCreateFramebuffers(1, &m_fbo));

@@ -88,6 +88,7 @@ class FakeGraphicsDevice : public GraphicsDevice {
     mutable std::vector<SamplerDescription> sampler_descriptions;
     mutable std::vector<TextureUpdateCall> texture_update_calls;
     mutable std::vector<BufferUpdateCall> buffer_update_calls;
+    mutable uint32 present_calls {0};
 
     mutable std::vector<std::shared_ptr<FakeBuffer>> buffers;
     mutable std::vector<std::shared_ptr<FakeTexture>> textures;
@@ -243,9 +244,7 @@ class FakeGraphicsDevice : public GraphicsDevice {
         return nullptr;
     }
 
-    std::shared_ptr<const Framebuffer> main_framebuffer() const override {
-        return nullptr;
-    }
+    void present(const Swapchain&) const override { ++present_calls; }
 };
 
 } // namespace fei::rendering_test

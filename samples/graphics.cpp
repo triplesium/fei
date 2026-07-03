@@ -8,6 +8,7 @@
 #include "core/text.hpp"
 #include "core/time.hpp"
 #include "ecs/commands.hpp"
+#include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
 #include "graphics/buffer.hpp"
 #include "graphics/command_buffer.hpp"
@@ -16,15 +17,15 @@
 #include "graphics/pipeline.hpp"
 #include "graphics/resource.hpp"
 #include "graphics/sampler.hpp"
+#include "graphics/swapchain.hpp"
 #include "graphics/texture.hpp"
-#include "graphics_opengl/plugin.hpp"
+#include "graphics_opengl_glfw/plugin.hpp"
 #include "math/common.hpp"
 #include "math/matrix.hpp"
 #include "window/window.hpp"
 
 #include <array>
 #include <cstdint>
-#include <GLFW/glfw3.h>
 #include <memory>
 
 using namespace fei;
@@ -204,6 +205,7 @@ void render_update(
     ResRO<GraphicsDevice> device,
     ResRO<Renderer> renderer,
     ResRO<Time> time,
+    ResRO<MainSwapchain> main_swapchain,
     ResRO<Window> win
 ) {
     // Update uniform buffer
@@ -232,7 +234,7 @@ void render_update(
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
     command_buffer->set_viewport(0, 0, win->width, win->height);
-    command_buffer->set_framebuffer(device->main_framebuffer());
+    command_buffer->set_framebuffer(main_swapchain->swapchain->framebuffer());
     command_buffer->clear_color(Color4F {0.2f, 0.3f, 0.3f, 1.0f});
     // command_buffer->clear_depth(1.f);
     command_buffer->set_render_pipeline(renderer->pipeline);
@@ -247,22 +249,23 @@ void render_update(
     device->submit_commands(command_buffer);
 }
 
-void render_end(ResRO<GraphicsDevice> device, ResRO<Window> win) {
-    device->flush();
-    glfwSwapBuffers(win->glfw_window);
+void render_end(
+    ResRO<GraphicsDevice> device,
+    ResRO<MainSwapchain> main_swapchain
+) {
+    device->present(*main_swapchain->swapchain);
 }
 
 int main() {
     App()
-        .add_plugin<WindowPlugin>()
         .add_plugin<AssetsPlugin>()
-        .add_plugin<OpenGLPlugin>()
+        .add_plugin<OpenGLGlfwPlugin>()
         .add_plugin<CorePlugin>()
         .add_resource<Renderer>()
         .add_systems(PreStartUp, start_up)
         .add_systems(RenderStart, render_start)
         .add_systems(RenderUpdate, render_update)
-        .add_systems(RenderEnd, render_end)
+        .add_systems(RenderEnd, render_end | main_thread())
         .run();
 
     return 0;
