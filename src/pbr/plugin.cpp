@@ -29,14 +29,20 @@ void PbrPlugin::setup(App& app) {
             app.resource<PipelineCache>()
         ))
         .add_systems(PreStartUp, setup_fullscreen_quad)
-        .add_systems(StartUp, init_mesh_view_layout, setup_shadow_mapping)
+        .add_systems(
+            StartUp,
+            init_mesh_view_layout,
+            setup_lighting,
+            setup_shadow_mapping
+        )
         .add_systems(
             RenderUpdate,
             chain(
                 init_light_view_uniform_buffer,
                 prepare_light_view_uniform_buffer,
                 prepare_mesh_view_resource_set,
-                setup_shadow_map
+                setup_shadow_map,
+                prepare_lighting
             ) | after(generate_env_maps) |
                 after(prepare_camera_view_uniform) |
                 in_set<RenderingSystems::PrepareResources>()
@@ -47,8 +53,9 @@ void PbrPlugin::setup(App& app) {
         )
         .add_systems(
             RenderUpdate,
-            chain(render_shadow_map, blur_shadow_map) |
-                before(inject_radiance) | in_set<RenderingSystems::Render>()
+            chain(build_shadow_map_passes, build_shadow_blur_passes) |
+                before(build_vxgi_inject_radiance_pass) |
+                in_set<RenderingSystems::BuildRenderGraph>()
         );
 }
 

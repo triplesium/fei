@@ -1,6 +1,7 @@
 #include "rendering/render_graph.hpp"
 
 #include <algorithm>
+#include <vector>
 
 namespace fei {
 
@@ -250,11 +251,20 @@ RgResourceSetHandle RenderGraph::create_resource_set(
 
     for (const auto& binding : bindings) {
         if (binding.is_texture()) {
-            read_texture(
-                pass_index,
-                binding.texture(),
-                RenderGraphAccess::TextureRead
-            );
+            const auto texture = binding.texture();
+            const auto& pass_reads = m_passes.at(pass_index)->reads;
+            const auto already_read =
+                std::ranges::find_if(pass_reads, [&](const auto& read) {
+                    return read.handle == texture &&
+                           read.access == RenderGraphAccess::TextureRead;
+                }) != pass_reads.end();
+            if (!already_read) {
+                read_texture(
+                    pass_index,
+                    texture,
+                    RenderGraphAccess::TextureRead
+                );
+            }
         }
     }
 

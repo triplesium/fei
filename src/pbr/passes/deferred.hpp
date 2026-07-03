@@ -2,8 +2,6 @@
 #include "app/plugin.hpp"
 #include "graphics/resource.hpp"
 #include "graphics/sampler.hpp"
-#include "pbr/pipeline_specializer.hpp"
-#include "rendering/material.hpp"
 #include "rendering/pipeline_cache.hpp"
 #include "rendering/render_phase.hpp"
 
@@ -21,20 +19,6 @@ struct DeferredRenderPipelines {
     CachedRenderPipelineId direct_lighting_pipeline {};
     CachedRenderPipelineId indirect_lighting_pipeline {};
     CachedRenderPipelineId composite_lighting_pipeline {};
-};
-
-class DeferredPipelineSpecializer : public PipelineSpecializer {
-  public:
-    void specialize(
-        RenderPipelineDescription& desc,
-        const GpuMesh& mesh,
-        const PreparedMaterial& material
-    ) const override {
-        desc.shader_program.shaders = {
-            material.shader(MaterialShaderType::PrepassVertex),
-            material.shader(MaterialShaderType::PrepassFragment),
-        };
-    }
 };
 
 class DeferredRenderPlugin : public Plugin {

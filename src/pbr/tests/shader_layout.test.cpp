@@ -88,7 +88,21 @@ TEST_CASE(
     "[pbr][shader]"
 ) {
     require_shader_resources(
-        "deferred_gi.frag",
+        "deferred_gi_direct.frag",
+        {
+            {"View", ResourceKind::UniformBuffer, 0, 0},
+            {"g_position_ao", ResourceKind::TextureReadOnly, 1, 0},
+            {"g_normal_roughness", ResourceKind::TextureReadOnly, 1, 1},
+            {"g_albedo_metallic", ResourceKind::TextureReadOnly, 1, 2},
+            {"g_specular", ResourceKind::TextureReadOnly, 1, 3},
+            {"g_emissive_depth", ResourceKind::TextureReadOnly, 1, 4},
+            {"Lighting", ResourceKind::UniformBuffer, 2, 0},
+            {"shadow_map", ResourceKind::TextureReadOnly, 2, 1},
+        }
+    );
+
+    require_shader_resources(
+        "deferred_gi_indirect.frag",
         {
             {"View", ResourceKind::UniformBuffer, 0, 0},
             {"g_position_ao", ResourceKind::TextureReadOnly, 1, 0},
@@ -100,7 +114,6 @@ TEST_CASE(
             {"voxel_visibility", ResourceKind::TextureReadOnly, 2, 1},
             {"voxel_tex", ResourceKind::TextureReadOnly, 2, 2},
             {"voxel_tex_mipmap", ResourceKind::TextureReadOnly, 2, 3, 6},
-            {"shadow_map", ResourceKind::TextureReadOnly, 2, 10},
         }
     );
 
@@ -163,8 +176,9 @@ TEST_CASE(
             {"voxel_emissive", ResourceKind::TextureReadWrite, 0, 2},
             {"voxel_radiance", ResourceKind::TextureReadWrite, 0, 3},
             {"VxgiVoxelization", ResourceKind::UniformBuffer, 1, 0},
-            {"VxgiInjectRadiance", ResourceKind::UniformBuffer, 2, 0},
+            {"Lighting", ResourceKind::UniformBuffer, 2, 0},
             {"shadow_map", ResourceKind::TextureReadOnly, 2, 1},
+            {"VxgiInjectRadiance", ResourceKind::UniformBuffer, 3, 0},
         }
     );
 

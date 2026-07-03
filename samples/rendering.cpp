@@ -43,9 +43,6 @@ struct Floor {};
 class ColorOnlyMaterial : public StandardMaterial {
   public:
     ShaderRef fragment_shader() const override { return "shader://color.frag"; }
-    ShaderRef deferred_fragment_shader() const override {
-        return "shader://color.frag";
-    }
 
     std::size_t hash() const override { return type_id<ColorOnlyMaterial>(); }
 };

@@ -22,8 +22,6 @@ enum class MaterialShaderType : uint8 {
     Fragment,
     PrepassVertex,
     PrepassFragment,
-    DeferredVertex,
-    DeferredFragment,
 };
 
 class Material {
@@ -33,8 +31,6 @@ class Material {
     virtual ShaderRef fragment_shader() const = 0;
     virtual ShaderRef prepass_vertex_shader() const = 0;
     virtual ShaderRef prepass_fragment_shader() const = 0;
-    virtual ShaderRef deferred_vertex_shader() const = 0;
-    virtual ShaderRef deferred_fragment_shader() const = 0;
 
     virtual std::shared_ptr<ResourceLayout> create_resource_layout(
         const GraphicsDevice& device,
@@ -187,14 +183,6 @@ class MaterialAdapter
         load_shader(
             MaterialShaderType::PrepassFragment,
             source_asset.prepass_fragment_shader()
-        );
-        load_shader(
-            MaterialShaderType::DeferredVertex,
-            source_asset.deferred_vertex_shader()
-        );
-        load_shader(
-            MaterialShaderType::DeferredFragment,
-            source_asset.deferred_fragment_shader()
         );
         return PreparedMaterial {
             std::move(shader_modules),

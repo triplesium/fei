@@ -23,7 +23,9 @@ struct Attenuation {
 struct Light {
     float angle_inner_cone;
     float angle_outer_cone;
+    vec3 ambient;
     vec3 diffuse;
+    vec3 specular;
     vec3 position;
     vec3 direction;
     uint shadowing_method;
@@ -51,16 +53,19 @@ layout(set = 2, binding = 1) uniform sampler2D shadow_map;
 const vec2 exponents = vec2(40.0f, 5.0f);
 const float lightBleedingReduction = 0.0f;
 
-layout(set = 2, binding = 0, row_major, std140) uniform VxgiInjectRadiance {
+layout(set = 2, binding = 0, row_major, std140) uniform Lighting {
     Light directional_lights[MAX_DIRECTIONAL_LIGHTS];
     Light point_lights[MAX_POINT_LIGHTS];
     Light spot_lights[MAX_SPOT_LIGHTS];
     uint num_directional_lights;
     uint num_point_lights;
     uint num_spot_lights;
+    mat4 light_view_projection;
+};
+
+layout(set = 3, binding = 0, row_major, std140) uniform VxgiInjectRadiance {
     uint normal_weighted_lambert;
     float trace_shadow_hit;
-    mat4 light_view_projection;
 };
 
 vec3 VoxelToWorld(ivec3 pos)

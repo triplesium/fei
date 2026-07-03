@@ -50,12 +50,6 @@ class StandardMaterial : public Material {
     ShaderRef prepass_fragment_shader() const override {
         return "shader://deferred_prepass.frag";
     }
-    ShaderRef deferred_vertex_shader() const override {
-        return "shader://quad.vert";
-    }
-    ShaderRef deferred_fragment_shader() const override {
-        return "shader://deferred_gi.frag";
-    }
 
     Color3F albedo {1.0f, 1.0f, 1.0f};
     Optional<Handle<Image>> albedo_map;

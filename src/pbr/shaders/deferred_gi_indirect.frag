@@ -10,7 +10,6 @@ layout(set = 1, binding = 2) uniform sampler2D g_albedo_metallic;
 layout(set = 1, binding = 3) uniform sampler2D g_specular;
 layout(set = 1, binding = 4) uniform sampler2D g_emissive_depth;
 
-layout(set = 2, binding = 10) uniform sampler2D shadow_map;
 layout(set = 2, binding = 1) uniform sampler3D voxel_visibility;
 
 layout(set = 2, binding = 2) uniform sampler3D voxel_tex;
@@ -20,9 +19,6 @@ const float PI = 3.14159265f;
 const float HALF_PI = 1.57079f;
 const float EPSILON = 1e-30;
 const float SQRT_3 = 1.73205080f;
-const uint MAX_DIRECTIONAL_LIGHTS = 3;
-const uint MAX_POINT_LIGHTS = 6;
-const uint MAX_SPOT_LIGHTS = 6;
 
 layout(set = 0, binding = 0, row_major, std140) uniform View {
     mat4 clip_from_world;
@@ -31,35 +27,7 @@ layout(set = 0, binding = 0, row_major, std140) uniform View {
     vec3 world_position;
 } view;
 
-struct Attenuation {
-    float constant;
-    float linear;
-    float quadratic;
-};
-
-struct Light {
-    float angleInnerCone;
-    float angleOuterCone;
-
-    vec3 ambient;
-    vec3 diffuse;
-    vec3 specular;
-
-    vec3 position;
-    vec3 direction;
-
-    uint shadowingMethod;
-    Attenuation attenuation;
-};
-
 layout(set = 2, binding = 0, row_major, std140) uniform Vxgi {
-    Light directional_lights[MAX_DIRECTIONAL_LIGHTS];
-    Light point_lights[MAX_POINT_LIGHTS];
-    Light spot_lights[MAX_SPOT_LIGHTS];
-    uint num_directional_lights;
-    uint num_point_lights;
-    uint num_spot_lights;
-
     float voxel_scale;
     vec3 world_min_point;
     vec3 world_max_point;
@@ -70,19 +38,8 @@ layout(set = 2, binding = 0, row_major, std140) uniform Vxgi {
     float ao_falloff;
     float ao_alpha;
     float sampling_factor;
-    float cone_shadow_tolerance;
-    float cone_shadow_aperture;
     uint mode;
-    mat4 light_view_projection;
 };
-
-const vec2 exponents = vec2(40.0f, 5.0f);
-const float lightBleedingReduction = 0.0f;
-
-// uniform Light directionalLight[MAX_DIRECTIONAL_LIGHTS];
-// uniform Light pointLight[MAX_POINT_LIGHTS];
-// uniform Light spotLight[MAX_SPOT_LIGHTS];
-// uniform uint lightTypeCount[3];
 
 // uniform float voxelScale;
 // uniform vec3 worldMinPoint;

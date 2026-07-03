@@ -734,6 +734,69 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "RenderGraph de-duplicates texture reads declared by resource sets",
+    "[rendering][render-graph]"
+) {
+    RenderGraph graph;
+    RgTextureHandle color;
+
+    graph.add_pass<RenderGraph::Empty>(
+        "write",
+        [&](RenderGraphBuilder& builder, RenderGraph::Empty&) {
+            color = builder.create_texture("color", make_texture_desc());
+            color = builder.write_texture(
+                color,
+                RenderGraphAccess::ColorAttachmentWrite
+            );
+        },
+        [](RenderGraphContext&) {
+        }
+    );
+
+    graph.add_pass<ResourceSetPassData>(
+        "bind",
+        [&](RenderGraphBuilder& builder, ResourceSetPassData& data) {
+            data.resource_set = builder.create_resource_set(
+                "graph.duplicate_resource_set",
+                std::shared_ptr<const ResourceLayout> {},
+                {
+                    color,
+                    color,
+                    color,
+                }
+            );
+            (void)builder.create_resource_set(
+                "graph.second_duplicate_resource_set",
+                std::shared_ptr<const ResourceLayout> {},
+                {
+                    color,
+                    color,
+                }
+            );
+            builder.side_effect();
+        },
+        [](RenderGraphContext&, const ResourceSetPassData&) {
+        }
+    );
+
+    REQUIRE(graph.compile());
+
+    const auto& debug = graph.debug_info();
+    REQUIRE(debug.compiled);
+    REQUIRE(debug.active_order == std::vector<uint32> {0, 1});
+    REQUIRE(debug.passes[1].reads.size() == 1);
+    CHECK(debug.passes[1].reads[0].texture_name == "color");
+    REQUIRE(debug.resource_sets.size() == 2);
+    REQUIRE(debug.resource_sets[0].bindings.size() == 3);
+    CHECK(debug.resource_sets[0].bindings[0].resource_name == "color");
+    CHECK(debug.resource_sets[0].bindings[1].resource_name == "color");
+    CHECK(debug.resource_sets[0].bindings[2].resource_name == "color");
+    REQUIRE(debug.resource_sets[1].bindings.size() == 2);
+    CHECK(debug.resource_sets[1].bindings[0].resource_name == "color");
+    CHECK(debug.resource_sets[1].bindings[1].resource_name == "color");
+}
+
+TEST_CASE(
     "RenderGraph pooled transient textures require matching descriptions",
     "[rendering][render-graph]"
 ) {

@@ -15,10 +15,10 @@
 #include "graphics/resource.hpp"
 #include "graphics/shader_module.hpp"
 #include "graphics/texture.hpp"
-#include "math/common.hpp"
 #include "math/matrix.hpp"
 #include "math/primitives.hpp"
 #include "math/vector.hpp"
+#include "pbr/graph_resources.hpp"
 #include "pbr/light.hpp"
 #include "pbr/material.hpp"
 #include "pbr/pipelines.hpp"
@@ -26,8 +26,8 @@
 #include "rendering/defaults.hpp"
 #include "rendering/mesh/mesh_uniform.hpp"
 #include "rendering/pipeline_cache.hpp"
+#include "rendering/render_graph.hpp"
 #include "rendering/shader.hpp"
-#include "rendering/view.hpp"
 #include "scene/scene.hpp"
 
 #include <array>
@@ -51,7 +51,6 @@ struct VxgiVolumes {
     std::array<std::shared_ptr<Texture>, 6> mipmap;
 
     std::shared_ptr<ResourceLayout> resource_layout;
-    std::shared_ptr<ResourceSet> resource_set;
 };
 
 struct alignas(16) VxgiVoxelizationUniform {
@@ -91,7 +90,6 @@ struct VxgiVoxelization {
     std::shared_ptr<Buffer> voxelization_uniform_buffer;
     std::shared_ptr<Texture> temp_texture;
     std::shared_ptr<ResourceLayout> resource_layout;
-    std::shared_ptr<ResourceSet> resource_set;
     VxgiVoxelizationSpecializer pipeline_specializer;
     Aabb scene_aabb;
     bool dirty {false};
@@ -133,7 +131,7 @@ void queue_vxgi_voxelization_pipelines(
     ResRO<RenderAssets<PreparedMaterial>> materials
 );
 
-void voxelize_scene(
+void build_vxgi_voxelization_pass(
     Query<
         Entity,
         const Mesh3d,
@@ -142,11 +140,11 @@ void voxelize_scene(
     ResRW<VxgiVoxelization> voxelization,
     ResRW<VxgiVolumes> volumes,
     ResRW<MeshMaterialPipelines> pipelines,
-    ResRW<PipelineCache> pipeline_cache,
-    ResRO<GraphicsDevice> device,
+    ResRO<PipelineCache> pipeline_cache,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<RenderAssets<PreparedMaterial>> materials,
-    ResRO<MeshUniforms> mesh_uniforms
+    ResRO<MeshUniforms> mesh_uniforms,
+    ResRW<RenderGraph> render_graph
 );
 
 struct VxgiGenerateMipmapBase {
@@ -155,7 +153,7 @@ struct VxgiGenerateMipmapBase {
     };
     std::shared_ptr<Pipeline> pipeline;
     std::shared_ptr<ResourceLayout> resource_layout;
-    std::shared_ptr<ResourceSet> resource_set;
+    std::shared_ptr<Buffer> uniform_buffer;
 };
 
 void setup_vxgi_generate_mipmap_base(
@@ -166,10 +164,16 @@ void setup_vxgi_generate_mipmap_base(
     Commands commands
 );
 
-void generate_mipmap_base(
-    ResRW<VxgiVolumes> volumes,
+void build_vxgi_mipmap_base_pass(
+    ResRO<VxgiVolumes> volumes,
     ResRO<VxgiGenerateMipmapBase> generate_mipmap_base,
-    ResRO<GraphicsDevice> device
+    ResRW<RenderGraph> render_graph
+);
+
+void build_vxgi_mipmap_base_after_propagation_pass(
+    ResRO<VxgiVolumes> volumes,
+    ResRO<VxgiGenerateMipmapBase> generate_mipmap_base,
+    ResRW<RenderGraph> render_graph
 );
 
 struct VxgiGenerateMipmapVolume {
@@ -181,7 +185,6 @@ struct VxgiGenerateMipmapVolume {
         uint32 mip_dimension {};
         uint32 mip_level {};
         std::array<std::shared_ptr<TextureView>, 6> dst_views;
-        std::shared_ptr<ResourceSet> resource_set;
     };
     std::shared_ptr<Pipeline> pipeline;
     std::shared_ptr<ResourceLayout> resource_layout;
@@ -203,50 +206,33 @@ void prepare_vxgi_generate_mipmap_volume(
     ResRO<GraphicsDevice> device
 );
 
-void generate_mipmap_volume(
+void build_vxgi_mipmap_volume_pass(
+    ResRO<VxgiVolumes> volumes,
     ResRO<VxgiGenerateMipmapVolume> generate_mipmap_volume,
-    ResRO<GraphicsDevice> device
+    ResRW<RenderGraph> render_graph
 );
 
-struct alignas(16) VxgiLight {
-    struct alignas(16) Attenuation {
-        float constant {1.0f};
-        float linear {0.2f};
-        float quadratic {0.08f};
-    };
-    float angle_inner_cone {25.0f * DEG2RAD};
-    float angle_outer_cone {30.0f * DEG2RAD};
-    alignas(16) Vector3 diffuse;
-    alignas(16) Vector3 position;
-    alignas(16) Vector3 direction;
-    uint32 shadowing_method {2};
-    Attenuation attenuation;
-};
+void build_vxgi_mipmap_volume_after_propagation_pass(
+    ResRO<VxgiVolumes> volumes,
+    ResRO<VxgiGenerateMipmapVolume> generate_mipmap_volume,
+    ResRW<RenderGraph> render_graph
+);
 
 struct alignas(16) VxgiInjectRadianceUniform {
-    std::array<VxgiLight, 3> directional_lights;
-    std::array<VxgiLight, 6> point_lights;
-    std::array<VxgiLight, 6> spot_lights;
-    uint32 num_directional_lights {0};
-    uint32 num_point_lights {0};
-    uint32 num_spot_lights {0};
     uint32 normal_weighted_lambert {1};
     float trace_shadow_hit {0.5f};
-    alignas(16) Matrix4x4 light_view_projection;
 };
 
 struct VxgiInjectRadiance {
     std::shared_ptr<Pipeline> pipeline;
     std::shared_ptr<Buffer> uniform_buffer;
     std::shared_ptr<ResourceLayout> resource_layout;
-    std::shared_ptr<ResourceSet> resource_set;
-    std::shared_ptr<Sampler> shadow_map_sampler;
-    const Texture* resource_set_shadow_map {};
 };
 
 void setup_inject_radiance(
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiVoxelization> voxelization,
+    ResRO<LightingResources> lighting,
     ResRO<GraphicsDevice> device,
     ResRW<AssetServer> asset_server,
     ResRW<Assets<Shader>> shader_assets,
@@ -254,24 +240,17 @@ void setup_inject_radiance(
 );
 
 void prepare_inject_radiance(
-    Query<
-        const DirectionalLight,
-        const Transform3d,
-        const ViewUniformBuffer,
-        const ShadowMap> query_directional_lights,
-    Query<const PointLight, const Transform3d> query_point_lights,
     ResRW<VxgiInjectRadiance> inject_radiance,
-    ResRO<GraphicsDevice> device,
-    ResRO<RenderingDefaults> rendering_defaults
+    ResRO<GraphicsDevice> device
 );
 
-void inject_radiance(
-    ResRW<VxgiVolumes> volumes,
+void build_vxgi_inject_radiance_pass(
+    ResRO<VxgiVolumes> volumes,
     ResRO<VxgiVoxelization> voxelization,
     ResRO<VxgiInjectRadiance> inject_radiance,
-    ResRO<VxgiGenerateMipmapBase> mipmap_base,
-    ResRO<VxgiGenerateMipmapVolume> mipmap_volume,
-    ResRO<GraphicsDevice> device
+    ResRO<LightingResources> lighting,
+    ResRO<RenderingDefaults> rendering_defaults,
+    ResRW<RenderGraph> render_graph
 );
 
 struct alignas(16) VxgiInjectPropagationUniform {
@@ -283,8 +262,8 @@ struct alignas(16) VxgiInjectPropagationUniform {
 struct VxgiInjectPropagation {
     std::shared_ptr<Pipeline> pipeline;
     std::shared_ptr<ResourceLayout> resource_layout;
-    std::shared_ptr<ResourceSet> resource_set;
     std::shared_ptr<Buffer> uniform_buffer;
+    std::shared_ptr<Sampler> voxel_sampler;
 };
 
 void setup_inject_propagation(
@@ -295,37 +274,33 @@ void setup_inject_propagation(
     Commands commands
 );
 
-void inject_propagation(
-    ResRW<VxgiVolumes> volumes,
+void build_vxgi_inject_propagation_pass(
+    ResRO<VxgiVolumes> volumes,
     ResRO<VxgiInjectPropagation> inject_propagation,
-    ResRO<VxgiGenerateMipmapBase> mipmap_base,
-    ResRO<VxgiGenerateMipmapVolume> mipmap_volume,
-    ResRO<GraphicsDevice> device
+    ResRW<RenderGraph> render_graph
 );
 
-struct alignas(16) VxgiLightingUniform {
-    struct alignas(16) Light {
-        struct alignas(16) Attenuation {
-            float constant {1.0f};
-            float linear {0.1f};
-            float quadratic {0.08f};
-        };
-        float angle_inner_cone {25.0f * DEG2RAD};
-        float angle_outer_cone {30.0f * DEG2RAD};
-        alignas(16) Vector3 ambient;
-        alignas(16) Vector3 diffuse;
-        alignas(16) Vector3 specular;
-        alignas(16) Vector3 position;
-        alignas(16) Vector3 direction;
-        uint32 shadowing_method {2};
-        Attenuation attenuation;
+inline std::vector<RenderGraphResourceBinding>
+vxgi_inject_propagation_resource_bindings(
+    const VxgiInjectPropagation& inject_propagation,
+    const VxgiGraphHandles& vxgi
+) {
+    return {
+        inject_propagation.uniform_buffer,
+        vxgi.radiance,
+        vxgi.albedo,
+        vxgi.normal,
+        vxgi.mipmap[0],
+        vxgi.mipmap[1],
+        vxgi.mipmap[2],
+        vxgi.mipmap[3],
+        vxgi.mipmap[4],
+        vxgi.mipmap[5],
+        inject_propagation.voxel_sampler,
     };
-    std::array<Light, 3> directional_lights;
-    std::array<Light, 6> point_lights;
-    std::array<Light, 6> spot_lights;
-    uint32 num_directional_lights {0};
-    uint32 num_point_lights {0};
-    uint32 num_spot_lights {0};
+}
+
+struct alignas(16) VxgiUniform {
     float voxel_scale {};
     alignas(16) Vector3 world_min_point;
     alignas(16) Vector3 world_max_point;
@@ -335,35 +310,40 @@ struct alignas(16) VxgiLightingUniform {
     float ao_falloff {725.0f};
     float ao_alpha {0.01f};
     float sampling_factor {0.7f};
-    float cone_shadow_tolerance {0.1f};
-    float cone_shadow_aperture {0.03f};
     uint32 mode {1};
-    alignas(16) Matrix4x4 light_view_projection;
 };
 
-struct VxgiLighting {
+struct VxgiResources {
     std::shared_ptr<Buffer> uniform_buffer;
     std::shared_ptr<ResourceLayout> resource_layout;
-    std::shared_ptr<ResourceSet> resource_set;
     std::shared_ptr<Sampler> voxel_sampler;
-    std::shared_ptr<Sampler> shadow_map_sampler;
-    const Texture* resource_set_shadow_map {};
 };
 
-void setup_vxgi_lighting(ResRO<GraphicsDevice> device, Commands commands);
+inline std::vector<RenderGraphResourceBinding> vxgi_deferred_resource_bindings(
+    const VxgiResources& vxgi_resources,
+    const VxgiGraphHandles& vxgi
+) {
+    return {
+        vxgi_resources.uniform_buffer,
+        vxgi.normal,
+        vxgi.radiance,
+        vxgi.mipmap[0],
+        vxgi.mipmap[1],
+        vxgi.mipmap[2],
+        vxgi.mipmap[3],
+        vxgi.mipmap[4],
+        vxgi.mipmap[5],
+        vxgi_resources.voxel_sampler,
+    };
+}
 
-void prepare_vxgi_lighting(
-    Query<
-        const DirectionalLight,
-        const Transform3d,
-        const ViewUniformBuffer,
-        const ShadowMap> query_directional_lights,
-    Query<const PointLight, const Transform3d> query_point_lights,
-    ResRW<VxgiLighting> vxgi_lighting,
+void setup_vxgi_resources(ResRO<GraphicsDevice> device, Commands commands);
+
+void prepare_vxgi_resources(
+    ResRW<VxgiResources> vxgi,
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiVoxelization> voxelization,
-    ResRO<GraphicsDevice> device,
-    ResRO<RenderingDefaults> rendering_defaults
+    ResRO<GraphicsDevice> device
 );
 
 class VxgiPlugin : public Plugin {
