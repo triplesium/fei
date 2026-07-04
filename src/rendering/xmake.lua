@@ -1,7 +1,8 @@
 target("fei-rendering")
     set_kind("static")
-    add_headerfiles("**.hpp")
-    add_files("*.cpp", "mesh/*.cpp")
+    add_headerfiles("include/**.hpp")
+    add_files("src/*.cpp", "src/mesh/*.cpp")
+    add_includedirs("include", {public = true})
     add_deps("fei-base", "fei-refl", "fei-ecs", "fei-app", "fei-math", "fei-asset", "fei-core", "fei-graphics", "fei-profiling")
     add_packages("tinyobjloader", "mikktspace", "nlohmann_json")
 

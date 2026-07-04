@@ -1,6 +1,0 @@
-target("fei-graphics-opengl-glfw")
-    set_kind("static")
-    add_headerfiles("**.hpp")
-    add_files("*.cpp")
-    add_deps("fei-graphics", "fei-graphics-opengl", "fei-window", "fei-profiling")
-    add_packages("glfw", "glad")

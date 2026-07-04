@@ -1,9 +1,9 @@
 #include "pbr/mesh_view.hpp"
 
+#include "../../rendering/tests/test_graphics_device.hpp"
 #include "ecs/commands.hpp"
 #include "pbr/environment_map.hpp"
 #include "pbr/lut.hpp"
-#include "rendering/tests/test_graphics_device.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

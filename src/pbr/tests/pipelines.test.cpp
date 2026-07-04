@@ -1,5 +1,6 @@
 #include "pbr/pipelines.hpp"
 
+#include "../../rendering/tests/test_graphics_device.hpp"
 #include "base/optional.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/pipeline.hpp"
@@ -9,7 +10,6 @@
 #include "pbr/pipeline_specializer.hpp"
 #include "rendering/material.hpp"
 #include "rendering/mesh/mesh.hpp"
-#include "rendering/tests/test_graphics_device.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <memory>

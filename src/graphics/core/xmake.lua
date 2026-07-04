@@ -1,0 +1,13 @@
+target("fei-graphics")
+    set_kind("static")
+    add_headerfiles("include/**.hpp")
+    add_files("src/*.cpp")
+    add_includedirs("include", {public = true})
+    add_deps("fei-base", "fei-refl", "fei-ecs", "fei-app", "fei-math", "fei-asset")
+
+target("fei-graphics-tests")
+    set_kind("binary")
+    set_default(false)
+    add_rules("fei.test")
+    add_files("tests/*.cpp")
+    add_deps("fei-graphics")

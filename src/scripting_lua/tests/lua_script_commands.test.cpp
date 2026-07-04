@@ -1,10 +1,10 @@
 #include "app/app.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/world.hpp"
+#include "lua_test_types.hpp"
 #include "refl/cls.hpp"
 #include "refl/registry.hpp"
 #include "scripting_lua/detail/script_system_loader.hpp"
-#include "scripting_lua/tests/lua_test_types.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

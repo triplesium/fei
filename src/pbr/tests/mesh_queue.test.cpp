@@ -1,9 +1,9 @@
 #include "pbr/mesh_queue.hpp"
 
+#include "../../rendering/tests/test_graphics_device.hpp"
 #include "asset/assets.hpp"
 #include "pbr/material.hpp"
 #include "pbr/mesh_view.hpp"
-#include "rendering/tests/test_graphics_device.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
@@ -185,9 +185,10 @@ TEST_CASE(
         QueueEntry {
             .entity = 3,
             .mesh = Mesh3d {.mesh = missing_mesh},
-            .material = MeshMaterial3d<StandardMaterial> {
-                .material = queued_material,
-            },
+            .material =
+                MeshMaterial3d<StandardMaterial> {
+                    .material = queued_material,
+                },
         },
         QueueEntry {
             .entity = 4,

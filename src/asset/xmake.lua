@@ -1,7 +1,8 @@
 target("fei-asset")
     set_kind("static")
-    add_headerfiles("**.hpp")
-    add_files("*.cpp")
+    add_headerfiles("include/**.hpp")
+    add_files("src/*.cpp")
+    add_includedirs("include", {public = true})
     add_deps("fei-base", "fei-refl", "fei-ecs", "fei-app", "fei-task")
 
 target("fei-asset-tests")

@@ -1,7 +1,8 @@
 target("fei-base")
     set_kind("static")
-    add_headerfiles("**.hpp")
-    add_files("*.cpp")
+    add_headerfiles("include/**.hpp")
+    add_files("src/*.cpp")
+    add_includedirs("include", {public = true})
 
 target("fei-base-tests")
     set_kind("binary")

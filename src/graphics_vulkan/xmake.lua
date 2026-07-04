@@ -1,6 +1,0 @@
-target("fei-graphics-vulkan")
-    set_kind("static")
-    set_default(false)
-    add_headerfiles("**.hpp")
-    add_files("**.cpp")
-    add_deps("fei-graphics")

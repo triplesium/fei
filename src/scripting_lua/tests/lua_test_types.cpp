@@ -1,4 +1,4 @@
-#include "scripting_lua/tests/lua_test_types.hpp"
+#include "lua_test_types.hpp"
 
 #include "core/transform.hpp"
 #include "math/quaternion.hpp"

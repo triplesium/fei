@@ -1,0 +1,7 @@
+target("fei-graphics-vulkan")
+    set_kind("static")
+    set_default(false)
+    add_headerfiles("include/**.hpp")
+    add_files("src/*.cpp")
+    add_includedirs("include", {public = true})
+    add_deps("fei-graphics")

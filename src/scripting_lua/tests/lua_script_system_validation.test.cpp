@@ -1,9 +1,9 @@
 #include "ecs/commands.hpp"
 #include "ecs/world.hpp"
+#include "lua_test_types.hpp"
 #include "scripting_lua/detail/script_system_loader.hpp"
 #include "scripting_lua/runtime.hpp"
 #include "scripting_lua/script_system_registry.hpp"
-#include "scripting_lua/tests/lua_test_types.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <string>

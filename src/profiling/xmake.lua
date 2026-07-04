@@ -1,7 +1,8 @@
 target("fei-profiling")
     set_kind("static")
-    add_headerfiles("**.hpp")
-    add_files("*.cpp")
+    add_headerfiles("include/**.hpp")
+    add_files("src/*.cpp")
+    add_includedirs("include", {public = true})
     if has_config("profile_summary") then
         add_defines("FEI_ENABLE_PROFILE_SUMMARY", {public = true})
     end

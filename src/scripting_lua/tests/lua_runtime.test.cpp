@@ -1,9 +1,9 @@
 #include "core/transform.hpp"
+#include "lua_test_types.hpp"
 #include "math/vector.hpp"
 #include "refl/ref_utils.hpp"
 #include "refl/registry.hpp"
 #include "scripting_lua/runtime.hpp"
-#include "scripting_lua/tests/lua_test_types.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>

@@ -5,10 +5,10 @@
 ```text
 .
 |-- src/                 # engine modules and xmake targets
-|   |-- app/, ecs/, refl/, math/, core/, asset/
-|   |-- graphics/, rendering/, pbr/, scripting/, scene/
-|   |-- <module>/tests/  # module-local Catch2 tests
-|   `-- generated/       # reflection metadata from reflgen
+|   |-- <module>/include/<module>/  # public headers
+|   |-- <module>/src/               # module implementation
+|   |-- <module>/tests/             # module-local Catch2 tests
+|   `-- graphics/                   # graphics core/backends/platform groups
 |-- tests/               # top-level integration tests and support/
 |-- samples/             # runnable sample-* targets
 |-- assets/              # runtime assets via FEI_ASSETS_PATH
@@ -18,6 +18,9 @@
 
 - Module targets follow `fei-<module>`, for example `fei-ecs`, `fei-refl`,
   `fei-rendering`, and `fei-scripting`.
+- Public includes use module prefixes, for example `#include "math/vector.hpp"`.
+  Do not add `src/` as a global include root; expose headers through each
+  target's `include/` directory.
 - Keep shaders, fonts, and other module-owned assets beside the module that
   consumes them.
 
@@ -40,7 +43,7 @@
   reflection metadata.
 - `xmake format --check` or `xmake format fei-math`: check formatting without
   modifying files, or format one target.
-- `xmake format --files="src/math/*.cpp"` or
+- `xmake format --files="src/math/src/*.cpp"` or
   `xmake tidy -f "src/**/vector.cpp"`: restrict format/tidy to matching files.
   `--files` supports `*` and `**`; separate multiple patterns with the platform
   path separator, for example `;` on Windows.
