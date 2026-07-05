@@ -4,6 +4,7 @@
 #include "app/reflection_plugin.hpp"
 #include "asset/plugin.hpp"
 #include "asset/server.hpp"
+#include "base/log.hpp"
 #include "core/camera.hpp"
 #include "core/fps_counter.hpp"
 #include "core/image.hpp"
@@ -14,6 +15,7 @@
 #include "ecs/system_params.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics_opengl_glfw/plugin.hpp"
+#include "graphics_vulkan_glfw/plugin.hpp"
 #include "math/vector.hpp"
 #include "pbr/environment_map.hpp"
 #include "pbr/light.hpp"
@@ -32,11 +34,93 @@
 #include "web_preview/plugin.hpp"
 #include "window/input.hpp"
 
+#include <cstdio>
 #include <imgui.h>
+#include <string_view>
 
 using namespace fei;
 
 namespace {
+
+enum class SceneGraphicsBackend {
+    OpenGL,
+    Vulkan,
+};
+
+struct SceneArguments {
+    SceneGraphicsBackend backend {SceneGraphicsBackend::OpenGL};
+    bool show_help {false};
+};
+
+SceneGraphicsBackend default_scene_backend() {
+    return SceneGraphicsBackend::OpenGL;
+}
+
+std::string_view backend_name(SceneGraphicsBackend backend) {
+    switch (backend) {
+        case SceneGraphicsBackend::OpenGL:
+            return "opengl";
+        case SceneGraphicsBackend::Vulkan:
+            return "vulkan";
+    }
+    return "unknown";
+}
+
+SceneGraphicsBackend parse_backend(std::string_view value) {
+    if (value == "opengl" || value == "gl") {
+        return SceneGraphicsBackend::OpenGL;
+    }
+    if (value == "vulkan" || value == "vk") {
+        return SceneGraphicsBackend::Vulkan;
+    }
+    fatal("sample-scene --backend expects opengl or vulkan, got {}", value);
+}
+
+SceneArguments parse_scene_arguments(int argc, char** argv) {
+    SceneArguments result {
+        .backend = default_scene_backend(),
+    };
+    for (int index = 1; index < argc; ++index) {
+        const std::string_view arg {argv[index]};
+        if (arg == "--help" || arg == "-h") {
+            result.show_help = true;
+            continue;
+        }
+        if (arg == "--backend" || arg == "-b") {
+            if (index + 1 >= argc) {
+                fatal("sample-scene {} requires a value", arg);
+            }
+            result.backend = parse_backend(argv[++index]);
+            continue;
+        }
+
+        constexpr std::string_view backend_prefix {"--backend="};
+        if (arg.starts_with(backend_prefix)) {
+            result.backend = parse_backend(arg.substr(backend_prefix.size()));
+            continue;
+        }
+
+        fatal("Unknown sample-scene argument {}", arg);
+    }
+    return result;
+}
+
+void print_help() {
+    std::puts("usage: sample-scene [--backend=opengl|vulkan]");
+    std::puts("       sample-scene -b opengl");
+    std::puts("       sample-scene -b vulkan");
+}
+
+void add_graphics_backend(App& app, SceneGraphicsBackend backend) {
+    switch (backend) {
+        case SceneGraphicsBackend::OpenGL:
+            app.add_plugin<OpenGLGlfwPlugin>();
+            break;
+        case SceneGraphicsBackend::Vulkan:
+            app.add_plugin<VulkanGlfwPlugin>();
+            break;
+    }
+}
 
 float percent(uint64 value, uint64 total) {
     if (total == 0) {
@@ -145,6 +229,10 @@ void setup(
     lua_scripts->queue_asset(camera_script);
 }
 
+void configure_vxgi(ResRW<VxgiVolumes> volumes) {
+    volumes->config.voxel_resolution = 64;
+}
+
 void update_directional_light(
     Query<DirectionalLight, Transform3d> query_directional_lights,
     ResRO<VxgiVoxelization> voxelization
@@ -203,35 +291,47 @@ void update_imgui(
     }
 }
 
-int main() {
-    App()
-        .add_plugin<AssetsPlugin>()
-        .add_plugin<ImagePlugin>()
-        .add_plugin<OpenGLGlfwPlugin>()
-        .add_plugin<RenderingPlugin>()
+int main(int argc, char** argv) {
+    const auto args = parse_scene_arguments(argc, argv);
+    if (args.show_help) {
+        print_help();
+        return 0;
+    }
+
+    info("sample-scene using {} graphics backend", backend_name(args.backend));
+
+    App app;
+    app.add_plugin<AssetsPlugin>().add_plugin<ImagePlugin>();
+    add_graphics_backend(app, args.backend);
+    app.add_plugin<RenderingPlugin>()
         .add_plugin<PbrPlugin>()
         .add_plugin<InputPlugin>()
         .add_plugin<TimePlugin>()
         .add_plugin<FpsCounterPlugin>()
-        .add_plugin<UIPlugin>()
         .add_plugin<EnvironmentMapPlugin>()
         .add_plugin<ScenePlugin>()
         .add_plugin<ReflectionPlugin>()
         .add_plugin<LuaScriptingPlugin>()
+        .add_systems(PreStartUp, configure_vxgi)
         .add_systems(PreStartUp, setup)
-        .add_systems(Update, update_directional_light)
-        .add_systems(
+        .add_systems(Update, update_directional_light);
+
+    if (args.backend == SceneGraphicsBackend::OpenGL) {
+        app.add_plugin<UIPlugin>().add_systems(
             RenderUpdate,
             update_imgui | in_set<RenderingSystems::Render>() | main_thread()
-        )
-        .add_plugin(
-            WebPreviewPlugin {WebPreviewConfig {
-                .host = "127.0.0.1",
-                .port = 8080,
-                .jpeg_quality = 80,
-            }}
-        )
-        .run();
+        );
+    }
+
+    app.add_plugin(
+        WebPreviewPlugin {WebPreviewConfig {
+            .host = "127.0.0.1",
+            .port = 8080,
+            .jpeg_quality = 80,
+        }}
+    );
+
+    app.run();
 
     return 0;
 }

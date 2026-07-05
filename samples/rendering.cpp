@@ -269,23 +269,24 @@ void update_imgui(
 }
 
 int main() {
-    App()
-        .add_plugin<AssetsPlugin>()
+    App app;
+    app.add_plugin<AssetsPlugin>()
         .add_plugin<ImagePlugin>()
         .add_plugin<OpenGLGlfwPlugin>()
         .add_plugin<RenderingPlugin>()
         .add_plugin<PbrPlugin>()
         .add_plugin<InputPlugin>()
         .add_plugin<TimePlugin>()
-        .add_plugin<UIPlugin>()
         .add_plugin<EnvironmentMapPlugin>()
         .add_systems(PreStartUp, setup)
-        .add_systems(Update, handle_control, update_light_cube)
-        .add_systems(
-            RenderUpdate,
-            update_imgui | in_set<RenderingSystems::Render>() | main_thread()
-        )
-        .run();
+        .add_systems(Update, handle_control, update_light_cube);
+
+    app.add_plugin<UIPlugin>().add_systems(
+        RenderUpdate,
+        update_imgui | in_set<RenderingSystems::Render>() | main_thread()
+    );
+
+    app.run();
 
     return 0;
 }

@@ -12,7 +12,13 @@ add_sample("refl")
 add_sample("scripting")
 add_sample("scene")
 target("sample-scene")
-    add_deps("fei-web-preview")
+    add_deps(
+        "fei-web-preview",
+        "fei-graphics-opengl",
+        "fei-graphics-opengl-glfw",
+        "fei-graphics-vulkan",
+        "fei-graphics-vulkan-glfw"
+    )
 add_sample("compute_shader")
 add_sample("schedule")
 add_sample("multithreading")
