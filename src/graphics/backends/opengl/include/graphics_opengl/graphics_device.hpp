@@ -73,9 +73,21 @@ struct OpenGLFramebufferCacheKeyHash {
     std::size_t operator()(const OpenGLFramebufferCacheKey& key) const;
 };
 
+struct OpenGLBindableResourceCacheKey {
+    const BindableResource* resource {nullptr};
+    std::size_t offset {0};
+    std::size_t size {BufferRange::WholeSize};
+
+    bool operator==(const OpenGLBindableResourceCacheKey&) const = default;
+};
+
+struct OpenGLBindableResourceCacheKeyHash {
+    std::size_t operator()(const OpenGLBindableResourceCacheKey& key) const;
+};
+
 struct OpenGLResourceSetCacheKey {
     const ResourceLayout* layout {nullptr};
-    std::vector<const BindableResource*> resources;
+    std::vector<OpenGLBindableResourceCacheKey> resources;
 
     bool operator==(const OpenGLResourceSetCacheKey&) const = default;
 };

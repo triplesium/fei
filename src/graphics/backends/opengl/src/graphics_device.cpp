@@ -98,7 +98,24 @@ resource_set_cache_key(const ResourceSetDescription& desc) {
     key.layout = desc.layout.get();
     key.resources.reserve(desc.resources.size());
     for (const auto& resource : desc.resources) {
-        key.resources.push_back(resource.get());
+        if (auto range =
+                std::dynamic_pointer_cast<const BufferRange>(resource)) {
+            key.resources.push_back(
+                OpenGLBindableResourceCacheKey {
+                    .resource = range->buffer().get(),
+                    .offset = range->offset(),
+                    .size = range->size(),
+                }
+            );
+        } else {
+            key.resources.push_back(
+                OpenGLBindableResourceCacheKey {
+                    .resource = resource.get(),
+                    .offset = 0,
+                    .size = BufferRange::WholeSize,
+                }
+            );
+        }
     }
     return key;
 }
@@ -134,12 +151,22 @@ std::size_t OpenGLFramebufferCacheKeyHash::operator()(
     return seed;
 }
 
+std::size_t OpenGLBindableResourceCacheKeyHash::operator()(
+    const OpenGLBindableResourceCacheKey& key
+) const {
+    std::size_t seed = std::hash<const BindableResource*> {}(key.resource);
+    hash_combine(seed, key.offset);
+    hash_combine(seed, key.size);
+    return seed;
+}
+
 std::size_t OpenGLResourceSetCacheKeyHash::operator()(
     const OpenGLResourceSetCacheKey& key
 ) const {
     std::size_t seed = std::hash<const ResourceLayout*> {}(key.layout);
-    for (const auto* resource : key.resources) {
-        hash_combine(seed, std::hash<const BindableResource*> {}(resource));
+    OpenGLBindableResourceCacheKeyHash resource_hash;
+    for (const auto& resource : key.resources) {
+        hash_combine(seed, resource_hash(resource));
     }
     hash_combine(seed, key.resources.size());
     return seed;

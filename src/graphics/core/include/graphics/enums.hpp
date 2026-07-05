@@ -13,6 +13,7 @@ enum class BufferUsages : uint8 {
     Storage = 1 << 3,
     Indirect = 1 << 4,
     Dynamic = 1 << 5,
+    Staging = 1 << 6,
 };
 
 enum class VertexFormat : uint8 {
@@ -283,6 +284,15 @@ enum class TextureUsage : uint8 {
     Cubemap = 1 << 4,
     Staging = 1 << 5,
     GenerateMipmaps = 1 << 6,
+};
+
+enum class TextureSampleCount : uint8 {
+    Count1 = 1,
+    Count2 = 2,
+    Count4 = 4,
+    Count8 = 8,
+    Count16 = 16,
+    Count32 = 32,
 };
 
 enum class SamplerFilter : uint8 {

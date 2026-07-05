@@ -51,6 +51,7 @@ void start_up(
     ResRW<AssetServer> asset_server,
     Commands commands,
     ResRO<GraphicsDevice> device,
+    ResRO<MainSwapchain> main_swapchain,
     ResRW<Renderer> renderer,
     ResRW<Assets<TextAsset>> text_assets,
     ResRW<Assets<Image>> image_assets
@@ -189,6 +190,8 @@ void start_up(
                     .shaders = {vert_shader, frag_shader},
                 },
             .resource_layouts = {resource_layout},
+            .output_description =
+                main_swapchain->swapchain->framebuffer()->output_description(),
         }
     );
     renderer->resource_set = device->create_resource_set(
@@ -234,9 +237,19 @@ void render_update(
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
     command_buffer->set_viewport(0, 0, win->width, win->height);
-    command_buffer->set_framebuffer(main_swapchain->swapchain->framebuffer());
-    command_buffer->clear_color(Color4F {0.2f, 0.3f, 0.3f, 1.0f});
-    // command_buffer->clear_depth(1.f);
+    auto framebuffer = main_swapchain->swapchain->framebuffer();
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments =
+                {
+                    RenderPassColorAttachment {
+                        .load_op = LoadOp::Clear,
+                        .clear_color = Color4F {0.2f, 0.3f, 0.3f, 1.0f},
+                    },
+                },
+            .framebuffer = framebuffer,
+        }
+    );
     command_buffer->set_render_pipeline(renderer->pipeline);
     command_buffer->set_vertex_buffer(renderer->vertex_buffer);
     command_buffer->set_index_buffer(
@@ -245,6 +258,7 @@ void render_update(
     );
     command_buffer->set_resource_set(0, renderer->resource_set);
     command_buffer->draw_indexed(6);
+    command_buffer->end_render_pass();
     command_buffer->end();
     device->submit_commands(command_buffer);
 }

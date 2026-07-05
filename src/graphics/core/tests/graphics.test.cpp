@@ -91,6 +91,20 @@ class FakeTexture : public Texture {
         return m_desc.texture_usage;
     }
     TextureType type() const override { return m_desc.texture_type; }
+    TextureSampleCount sample_count() const override {
+        return m_desc.sample_count;
+    }
+};
+
+class FakeBuffer : public Buffer {
+  private:
+    BufferDescription m_desc;
+
+  public:
+    explicit FakeBuffer(BufferDescription desc) : m_desc(desc) {}
+
+    std::size_t size() const override { return m_desc.size; }
+    BitFlags<BufferUsages> usages() const override { return m_desc.usages; }
 };
 
 class FakeGraphicsDevice : public GraphicsDevice {
@@ -268,6 +282,8 @@ TEST_CASE(
 
         REQUIRE(uniform.name == "camera");
         REQUIRE(uniform.kind == ResourceKind::UniformBuffer);
+        REQUIRE(uniform.array_count == 1);
+        REQUIRE_FALSE(uniform.options);
         REQUIRE(sampled.name == "albedo");
         REQUIRE(sampled.kind == ResourceKind::TextureReadOnly);
         REQUIRE(storage_texture.name == "output");
@@ -306,6 +322,37 @@ TEST_CASE(
         REQUIRE(desc.elements[1].name == "albedo");
         REQUIRE(desc.elements[2].name == "linear_sampler");
         REQUIRE_NOTHROW(ResourceLayout(desc));
+    }
+
+    SECTION("layout elements expose Vulkan descriptor metadata") {
+        auto dynamic_uniform = uniform_buffer("camera");
+        dynamic_uniform.array_count = 2;
+        dynamic_uniform.options.set(
+            ResourceLayoutElementOptions::DynamicBinding
+        );
+
+        auto desc = ResourceLayoutDescription {
+            .elements = {std::move(dynamic_uniform)},
+        };
+
+        REQUIRE(desc.elements[0].array_count == 2);
+        REQUIRE(desc.elements[0].options.is_set(
+            ResourceLayoutElementOptions::DynamicBinding
+        ));
+        REQUIRE_NOTHROW(ResourceLayout(desc));
+    }
+
+    SECTION("buffer ranges bind a sub-range of a buffer") {
+        auto buffer = std::make_shared<FakeBuffer>(BufferDescription {
+            .size = 256,
+            .usages = BufferUsages::Uniform,
+        });
+
+        auto range = BufferRange(buffer, 64, 128);
+
+        REQUIRE(range.buffer() == buffer);
+        REQUIRE(range.offset() == 64);
+        REQUIRE(range.size() == 128);
     }
 
     SECTION("explicit bindings may be sparse and out of declaration order") {
@@ -400,6 +447,21 @@ TEST_CASE(
         REQUIRE(framebuffer.depth_attachment().has_value());
         REQUIRE(framebuffer.depth_attachment()->texture == depth_texture);
         REQUIRE(framebuffer.depth_attachment()->layer == 3);
+        REQUIRE(framebuffer.output_description().color_attachments.size() == 1);
+        REQUIRE(
+            framebuffer.output_description().color_attachments[0].format ==
+            PixelFormat::Rgba8Unorm
+        );
+        REQUIRE(
+            framebuffer.output_description().sample_count ==
+            TextureSampleCount::Count1
+        );
+        REQUIRE(framebuffer.output_description()
+                    .depth_stencil_attachment.has_value());
+        REQUIRE(
+            framebuffer.output_description().depth_stencil_attachment->format ==
+            PixelFormat::Depth32Float
+        );
     }
 
     SECTION("MappedResource exposes its resource, mode, and bytes") {

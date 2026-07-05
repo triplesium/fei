@@ -3,22 +3,21 @@
 #include "base/types.hpp"
 #include "graphics/buffer.hpp"
 #include "graphics/enums.hpp"
-#include "graphics/framebuffer.hpp"
 #include "graphics/pipeline.hpp"
 #include "graphics/render_pass.hpp"
 #include "graphics/resource.hpp"
 #include "graphics/texture.hpp"
 #include "graphics/utils.hpp"
-#include "math/color.hpp"
 
 #include <cstdint>
 #include <memory>
+#include <span>
+#include <utility>
 
 namespace fei {
 
 class CommandBuffer {
   protected:
-    std::shared_ptr<const Framebuffer> m_framebuffer;
     std::shared_ptr<const Pipeline> m_pipeline;
 
   public:
@@ -36,13 +35,6 @@ class CommandBuffer {
         std::uint32_t w,
         std::uint32_t h
     ) = 0;
-    virtual void clear_color(const Color4F& color) = 0;
-    virtual void clear_depth(float depth) = 0;
-    virtual void clear_stencil(std::uint8_t stencil) = 0;
-    void set_framebuffer(std::shared_ptr<const Framebuffer> framebuffer) {
-        m_framebuffer = framebuffer;
-        set_framebuffer_impl(framebuffer);
-    }
     void set_render_pipeline(std::shared_ptr<const Pipeline> pipeline) {
         m_pipeline = pipeline;
         set_render_pipeline_impl(pipeline);
@@ -66,9 +58,17 @@ class CommandBuffer {
         set_index_buffer_impl(buffer, format, offset);
     }
 
-    virtual void set_resource_set(
+    void set_resource_set(
         uint32 slot,
         std::shared_ptr<const ResourceSet> resource_set
+    ) {
+        set_resource_set(slot, std::move(resource_set), {});
+    }
+
+    virtual void set_resource_set(
+        uint32 slot,
+        std::shared_ptr<const ResourceSet> resource_set,
+        std::span<const uint32> dynamic_offsets
     ) = 0;
     virtual void update_buffer(
         std::shared_ptr<Buffer> buffer,
@@ -79,8 +79,6 @@ class CommandBuffer {
     virtual void draw_indexed(std::size_t count) = 0;
     virtual void
     dispatch(std::size_t group_x, std::size_t group_y, std::size_t group_z) = 0;
-
-    virtual void blit_to(std::shared_ptr<const Framebuffer> target) = 0;
 
     void generate_mipmaps(std::shared_ptr<const Texture> texture) {
         if (!texture->usage().is_set(TextureUsage::GenerateMipmaps)) {
@@ -186,8 +184,6 @@ class CommandBuffer {
     }
 
   protected:
-    virtual void
-    set_framebuffer_impl(std::shared_ptr<const Framebuffer> framebuffer) = 0;
     virtual void
     set_render_pipeline_impl(std::shared_ptr<const Pipeline> pipeline) = 0;
     virtual void

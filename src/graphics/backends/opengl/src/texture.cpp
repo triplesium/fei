@@ -10,7 +10,7 @@ TextureOpenGL::TextureOpenGL(const TextureDescription& desc) :
     m_width(desc.width), m_height(desc.height), m_depth(desc.depth),
     m_mip_level(desc.mip_level), m_layer(desc.layer),
     m_texture_format(desc.texture_format), m_texture_usage(desc.texture_usage),
-    m_texture_type(desc.texture_type) {
+    m_texture_type(desc.texture_type), m_sample_count(desc.sample_count) {
 
     m_gl_sized_internal_format = to_gl_sized_internal_format(m_texture_format);
     m_gl_format = to_gl_pixel_format(m_texture_format);
@@ -19,6 +19,10 @@ TextureOpenGL::TextureOpenGL(const TextureDescription& desc) :
 
 void TextureOpenGL::create_gl_resource() const {
     FEI_PROFILE_SCOPE("OpenGL Texture Create");
+    if (m_sample_count != TextureSampleCount::Count1) {
+        fei::fatal("OpenGL texture MSAA storage is not implemented yet");
+    }
+
     auto gl_target = to_gl_texture_target(m_texture_usage, m_texture_type);
 
     FEI_GL_CALL(glCreateTextures(gl_target, 1, &m_texture));

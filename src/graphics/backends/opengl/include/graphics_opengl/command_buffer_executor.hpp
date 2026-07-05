@@ -59,7 +59,8 @@ class CommandBufferExecutorOpenGL {
     void execute_set_resource_set(
         ExecutionState& state,
         uint32 slot,
-        std::shared_ptr<const ResourceSet> resource_set
+        std::shared_ptr<const ResourceSet> resource_set,
+        const std::vector<uint32>& dynamic_offsets
     );
     void execute_update_buffer(
         std::shared_ptr<Buffer> buffer,
@@ -72,10 +73,6 @@ class CommandBufferExecutorOpenGL {
         std::size_t group_x,
         std::size_t group_y,
         std::size_t group_z
-    );
-    void execute_blit_to(
-        ExecutionState& state,
-        std::shared_ptr<const Framebuffer> target
     );
     void execute_generate_mipmaps(std::shared_ptr<const Texture> texture);
     void execute_copy_texture(const opengl_commands::CopyTexture& command);

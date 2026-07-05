@@ -13,13 +13,24 @@ class FramebufferOpenGL : public Framebuffer, public DeferredResourceOpenGL {
     mutable GLuint m_fbo {0};
     bool m_owns_fbo {true};
 
-    FramebufferOpenGL(GLuint fbo) :
-        Framebuffer({}), DeferredResourceOpenGL(true), m_fbo(fbo),
-        m_owns_fbo(false) {}
+    FramebufferOpenGL(GLuint fbo, PixelFormat color_format) :
+        Framebuffer(
+            OutputDescription {
+                .color_attachments =
+                    {
+                        OutputAttachmentDescription {
+                            .format = color_format,
+                        },
+                    },
+                .sample_count = TextureSampleCount::Count1,
+            }
+        ),
+        DeferredResourceOpenGL(true), m_fbo(fbo), m_owns_fbo(false) {}
 
   public:
     explicit FramebufferOpenGL(const FramebufferDescription& desc);
-    static std::shared_ptr<const FramebufferOpenGL> default_framebuffer();
+    static std::shared_ptr<const FramebufferOpenGL>
+    default_framebuffer(PixelFormat color_format);
 
     GLuint id() const { return m_fbo; }
 

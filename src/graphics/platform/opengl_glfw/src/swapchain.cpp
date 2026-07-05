@@ -13,7 +13,10 @@ SwapchainOpenGLGlfw::SwapchainOpenGLGlfw(
     uint32 width,
     uint32 height
 ) :
-    m_window(window), m_framebuffer(FramebufferOpenGL::default_framebuffer()),
+    m_window(window),
+    m_framebuffer(
+        FramebufferOpenGL::default_framebuffer(PixelFormat::Bgra8Unorm)
+    ),
     m_width(width), m_height(height) {
     if (m_window == nullptr) {
         fatal("SwapchainOpenGLGlfw requires a valid GLFW window");

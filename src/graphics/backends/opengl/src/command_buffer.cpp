@@ -21,7 +21,6 @@ void CommandBufferOpenGL::begin() {
     }
 
     m_commands.clear();
-    m_framebuffer.reset();
     m_pipeline.reset();
     m_state = State::Recording;
 }
@@ -56,21 +55,6 @@ void CommandBufferOpenGL::set_viewport(
     );
 }
 
-void CommandBufferOpenGL::clear_color(const Color4F& color) {
-    ensure_recording("clear_color");
-    m_commands.emplace_back(ogl_cmd::ClearColor {.color = color});
-}
-
-void CommandBufferOpenGL::clear_depth(float depth) {
-    ensure_recording("clear_depth");
-    m_commands.emplace_back(ogl_cmd::ClearDepth {.depth = depth});
-}
-
-void CommandBufferOpenGL::clear_stencil(std::uint8_t stencil) {
-    ensure_recording("clear_stencil");
-    m_commands.emplace_back(ogl_cmd::ClearStencil {.stencil = stencil});
-}
-
 void CommandBufferOpenGL::set_vertex_buffer(
     std::shared_ptr<const Buffer> buffer
 ) {
@@ -82,13 +66,18 @@ void CommandBufferOpenGL::set_vertex_buffer(
 
 void CommandBufferOpenGL::set_resource_set(
     uint32 slot,
-    std::shared_ptr<const ResourceSet> resource_set
+    std::shared_ptr<const ResourceSet> resource_set,
+    std::span<const uint32> dynamic_offsets
 ) {
     ensure_recording("set_resource_set");
     m_commands.emplace_back(
         ogl_cmd::SetResourceSet {
             .slot = slot,
             .resource_set = std::move(resource_set),
+            .dynamic_offsets = std::vector<uint32>(
+                dynamic_offsets.begin(),
+                dynamic_offsets.end()
+            ),
         }
     );
 }
@@ -141,15 +130,6 @@ void CommandBufferOpenGL::dispatch(
     );
 }
 
-void CommandBufferOpenGL::set_framebuffer_impl(
-    std::shared_ptr<const Framebuffer> framebuffer
-) {
-    ensure_recording("set_framebuffer");
-    m_commands.emplace_back(
-        ogl_cmd::SetFramebuffer {.framebuffer = std::move(framebuffer)}
-    );
-}
-
 void CommandBufferOpenGL::set_render_pipeline_impl(
     std::shared_ptr<const Pipeline> pipeline
 ) {
@@ -181,11 +161,6 @@ void CommandBufferOpenGL::set_index_buffer_impl(
             .offset = offset,
         }
     );
-}
-
-void CommandBufferOpenGL::blit_to(std::shared_ptr<const Framebuffer> target) {
-    ensure_recording("blit_to");
-    m_commands.emplace_back(ogl_cmd::BlitTo {.target = std::move(target)});
 }
 
 void CommandBufferOpenGL::generate_mipmaps_impl(

@@ -43,6 +43,7 @@ std::shared_ptr<Texture> copy_to_staging_texture(
             .texture_format = texture->format(),
             .texture_usage = usage,
             .texture_type = texture->type(),
+            .sample_count = texture->sample_count(),
         }
     );
 

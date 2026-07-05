@@ -18,6 +18,7 @@ struct TextureDescription {
     PixelFormat texture_format;
     BitFlags<TextureUsage> texture_usage;
     TextureType texture_type;
+    TextureSampleCount sample_count {TextureSampleCount::Count1};
 };
 
 class TextureView;
@@ -40,6 +41,7 @@ class Texture : public BindableResource,
     virtual uint32 layer() const = 0;
     virtual BitFlags<TextureUsage> usage() const = 0;
     virtual TextureType type() const = 0;
+    virtual TextureSampleCount sample_count() const = 0;
     std::shared_ptr<const TextureView>
     full_view(const GraphicsDevice& device) const;
 };

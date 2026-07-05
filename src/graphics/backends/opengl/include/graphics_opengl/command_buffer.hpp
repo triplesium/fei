@@ -43,13 +43,11 @@ class CommandBufferOpenGL : public CommandBuffer {
         std::uint32_t w,
         std::uint32_t h
     ) override;
-    void clear_color(const Color4F& color) override;
-    void clear_depth(float depth) override;
-    void clear_stencil(std::uint8_t stencil) override;
     void set_vertex_buffer(std::shared_ptr<const Buffer> buffer) override;
     void set_resource_set(
         uint32 slot,
-        std::shared_ptr<const ResourceSet> resource_set
+        std::shared_ptr<const ResourceSet> resource_set,
+        std::span<const uint32> dynamic_offsets
     ) override;
     void update_buffer(
         std::shared_ptr<Buffer> buffer,
@@ -64,12 +62,7 @@ class CommandBufferOpenGL : public CommandBuffer {
         std::size_t group_z
     ) override;
 
-    void blit_to(std::shared_ptr<const Framebuffer> target) override;
-
   protected:
-    void set_framebuffer_impl(
-        std::shared_ptr<const Framebuffer> framebuffer
-    ) override;
     void
     set_render_pipeline_impl(std::shared_ptr<const Pipeline> pipeline) override;
     void set_compute_pipeline_impl(

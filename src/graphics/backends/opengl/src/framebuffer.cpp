@@ -13,8 +13,10 @@ FramebufferOpenGL::FramebufferOpenGL(const FramebufferDescription& desc) :
     Framebuffer(desc) {}
 
 std::shared_ptr<const FramebufferOpenGL>
-FramebufferOpenGL::default_framebuffer() {
-    return std::shared_ptr<FramebufferOpenGL>(new FramebufferOpenGL(0));
+FramebufferOpenGL::default_framebuffer(PixelFormat color_format) {
+    return std::shared_ptr<FramebufferOpenGL>(
+        new FramebufferOpenGL(0, color_format)
+    );
 }
 
 void FramebufferOpenGL::create_gl_resource() const {

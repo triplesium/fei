@@ -2,12 +2,10 @@
 
 #include "base/types.hpp"
 #include "graphics/buffer.hpp"
-#include "graphics/framebuffer.hpp"
 #include "graphics/pipeline.hpp"
 #include "graphics/render_pass.hpp"
 #include "graphics/resource.hpp"
 #include "graphics/texture.hpp"
-#include "math/color.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -21,23 +19,11 @@ struct BeginRenderPass {
     RenderPassDescription desc;
 };
 struct EndRenderPass {};
-struct SetFramebuffer {
-    std::shared_ptr<const Framebuffer> framebuffer;
-};
 struct SetViewport {
     std::int32_t x;
     std::int32_t y;
     std::uint32_t w;
     std::uint32_t h;
-};
-struct ClearColor {
-    Color4F color;
-};
-struct ClearDepth {
-    float depth;
-};
-struct ClearStencil {
-    std::uint8_t stencil;
 };
 struct SetRenderPipeline {
     std::shared_ptr<const Pipeline> pipeline;
@@ -56,6 +42,7 @@ struct SetIndexBuffer {
 struct SetResourceSet {
     uint32 slot;
     std::shared_ptr<const ResourceSet> resource_set;
+    std::vector<uint32> dynamic_offsets;
 };
 struct UpdateBuffer {
     std::shared_ptr<Buffer> buffer;
@@ -72,9 +59,6 @@ struct Dispatch {
     std::size_t group_x;
     std::size_t group_y;
     std::size_t group_z;
-};
-struct BlitTo {
-    std::shared_ptr<const Framebuffer> target;
 };
 struct GenerateMipmaps {
     std::shared_ptr<const Texture> texture;
@@ -101,11 +85,7 @@ struct CopyTexture {
 using Command = std::variant<
     BeginRenderPass,
     EndRenderPass,
-    SetFramebuffer,
     SetViewport,
-    ClearColor,
-    ClearDepth,
-    ClearStencil,
     SetRenderPipeline,
     SetComputePipeline,
     SetVertexBuffer,
@@ -115,7 +95,6 @@ using Command = std::variant<
     Draw,
     DrawIndexed,
     Dispatch,
-    BlitTo,
     GenerateMipmaps,
     CopyTexture>;
 

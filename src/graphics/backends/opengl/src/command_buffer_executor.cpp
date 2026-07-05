@@ -33,6 +33,136 @@ void set_default_framebuffer_draw_buffer() {
     FEI_GL_CALL(glDrawBuffer(GL_BACK));
 }
 
+void clear_color_attachment(
+    GLuint framebuffer,
+    GLint index,
+    const Color4F& color
+) {
+    if (framebuffer == 0) {
+        FEI_GL_CALL(glClearBufferfv(GL_COLOR, index, color.data()));
+        return;
+    }
+    FEI_GL_CALL(
+        glClearNamedFramebufferfv(framebuffer, GL_COLOR, index, color.data())
+    );
+}
+
+void clear_depth_stencil_attachment(
+    GLuint framebuffer,
+    float depth,
+    std::uint8_t stencil
+) {
+    if (framebuffer == 0) {
+        FEI_GL_CALL(glClearBufferfi(GL_DEPTH_STENCIL, 0, depth, stencil));
+        return;
+    }
+    FEI_GL_CALL(glClearNamedFramebufferfi(
+        framebuffer,
+        GL_DEPTH_STENCIL,
+        0,
+        depth,
+        stencil
+    ));
+}
+
+void clear_depth_attachment(GLuint framebuffer, float depth) {
+    if (framebuffer == 0) {
+        FEI_GL_CALL(glClearBufferfv(GL_DEPTH, 0, &depth));
+        return;
+    }
+    FEI_GL_CALL(glClearNamedFramebufferfv(framebuffer, GL_DEPTH, 0, &depth));
+}
+
+void clear_stencil_attachment(GLuint framebuffer, GLint stencil) {
+    if (framebuffer == 0) {
+        FEI_GL_CALL(glClearBufferiv(GL_STENCIL, 0, &stencil));
+        return;
+    }
+    FEI_GL_CALL(
+        glClearNamedFramebufferiv(framebuffer, GL_STENCIL, 0, &stencil)
+    );
+}
+
+struct BufferBindingResource {
+    std::shared_ptr<const BufferOpenGL> buffer;
+    std::size_t offset {0};
+    std::size_t size {BufferRange::WholeSize};
+};
+
+BufferBindingResource resolve_buffer_binding_resource(
+    const std::shared_ptr<const BindableResource>& resource
+) {
+    if (auto range = std::dynamic_pointer_cast<const BufferRange>(resource)) {
+        return BufferBindingResource {
+            .buffer =
+                std::static_pointer_cast<const BufferOpenGL>(range->buffer()),
+            .offset = range->offset(),
+            .size = range->size(),
+        };
+    }
+
+    return BufferBindingResource {
+        .buffer = std::static_pointer_cast<const BufferOpenGL>(resource),
+    };
+}
+
+std::size_t resolve_buffer_binding_size(
+    const BufferBindingResource& binding,
+    std::size_t dynamic_offset
+) {
+    const auto base_offset = binding.offset + dynamic_offset;
+    if (base_offset > binding.buffer->size()) {
+        fei::fatal(
+            "Buffer binding offset {} exceeds buffer size {}",
+            base_offset,
+            binding.buffer->size()
+        );
+    }
+    if (binding.size == BufferRange::WholeSize) {
+        return binding.buffer->size() - base_offset;
+    }
+    if (base_offset + binding.size > binding.buffer->size()) {
+        fei::fatal(
+            "Buffer binding range [{}, {}) exceeds buffer size {}",
+            base_offset,
+            base_offset + binding.size,
+            binding.buffer->size()
+        );
+    }
+    return binding.size;
+}
+
+bool is_buffer_resource_kind(ResourceKind kind) {
+    return kind == ResourceKind::UniformBuffer ||
+           kind == ResourceKind::StorageBufferReadOnly ||
+           kind == ResourceKind::StorageBufferReadWrite;
+}
+
+void bind_buffer_resource(
+    GLenum target,
+    GLuint binding_index,
+    const std::shared_ptr<const BindableResource>& resource,
+    std::size_t dynamic_offset
+) {
+    auto binding = resolve_buffer_binding_resource(resource);
+    binding.buffer->ensure_created();
+    const auto offset = binding.offset + dynamic_offset;
+    const auto size = resolve_buffer_binding_size(binding, dynamic_offset);
+    if (offset == 0 && binding.size == BufferRange::WholeSize) {
+        FEI_GL_CALL(
+            glBindBufferBase(target, binding_index, binding.buffer->id())
+        );
+        return;
+    }
+    FEI_GL_CALL(glBindBufferRange(
+        target,
+        binding_index,
+        binding.buffer->id(),
+        static_cast<GLintptr>(offset),
+        to_gl_sizeiptr(size)
+    ));
+}
+
 } // namespace
 
 struct CommandBufferExecutorOpenGL::ExecutionState {
@@ -74,10 +204,6 @@ void CommandBufferExecutorOpenGL::execute_command(
             ) {
                 FEI_GL_CALL(glBindFramebuffer(GL_FRAMEBUFFER, 0));
             } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::SetFramebuffer>
-            ) {
-                execute_set_framebuffer(state, cmd.framebuffer);
-            } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::SetViewport>
             ) {
                 FEI_GL_CALL(glViewport(
@@ -86,26 +212,6 @@ void CommandBufferExecutorOpenGL::execute_command(
                     to_gl_sizei(cmd.w),
                     to_gl_sizei(cmd.h)
                 ));
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::ClearColor>
-            ) {
-                FEI_GL_CALL(glClearColor(
-                    cmd.color.r,
-                    cmd.color.g,
-                    cmd.color.b,
-                    cmd.color.a
-                ));
-                FEI_GL_CALL(glClear(GL_COLOR_BUFFER_BIT));
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::ClearDepth>
-            ) {
-                FEI_GL_CALL(glClearDepth(cmd.depth));
-                FEI_GL_CALL(glClear(GL_DEPTH_BUFFER_BIT));
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::ClearStencil>
-            ) {
-                FEI_GL_CALL(glClearStencil(cmd.stencil));
-                FEI_GL_CALL(glClear(GL_STENCIL_BUFFER_BIT));
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::SetRenderPipeline>
             ) {
@@ -133,7 +239,12 @@ void CommandBufferExecutorOpenGL::execute_command(
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::SetResourceSet>
             ) {
-                execute_set_resource_set(state, cmd.slot, cmd.resource_set);
+                execute_set_resource_set(
+                    state,
+                    cmd.slot,
+                    cmd.resource_set,
+                    cmd.dynamic_offsets
+                );
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::UpdateBuffer>
             ) {
@@ -146,8 +257,6 @@ void CommandBufferExecutorOpenGL::execute_command(
                 execute_draw_indexed(state, cmd.count);
             } else if constexpr (std::is_same_v<CommandT, ogl_cmd::Dispatch>) {
                 execute_dispatch(cmd.group_x, cmd.group_y, cmd.group_z);
-            } else if constexpr (std::is_same_v<CommandT, ogl_cmd::BlitTo>) {
-                execute_blit_to(state, cmd.target);
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::GenerateMipmaps>
             ) {
@@ -168,37 +277,40 @@ void CommandBufferExecutorOpenGL::execute_begin_render_pass(
     ExecutionState& state,
     const RenderPassDescription& desc
 ) {
-    FramebufferDescription fb_desc;
-    for (const auto& attachment : desc.color_attachments) {
-        fb_desc.color_targets.push_back(
-            FramebufferAttachment {
-                .texture = attachment.texture,
+    auto framebuffer = desc.framebuffer;
+    if (!framebuffer) {
+        FramebufferDescription fb_desc;
+        for (const auto& attachment : desc.color_attachments) {
+            fb_desc.color_targets.push_back(
+                FramebufferAttachment {
+                    .texture = attachment.texture,
+                    .mip_level = 0,
+                    .layer = 0
+                }
+            );
+        }
+        if (desc.depth_stencil_attachment) {
+            fb_desc.depth_target = FramebufferAttachment {
+                .texture = desc.depth_stencil_attachment->texture,
                 .mip_level = 0,
                 .layer = 0
-            }
-        );
-    }
-    if (desc.depth_stencil_attachment) {
-        fb_desc.depth_target = FramebufferAttachment {
-            .texture = desc.depth_stencil_attachment->texture,
-            .mip_level = 0,
-            .layer = 0
-        };
+            };
+        }
+
+        framebuffer = m_device.create_framebuffer(fb_desc);
     }
 
-    auto framebuffer = m_device.create_framebuffer(fb_desc);
     execute_set_framebuffer(state, framebuffer);
-    auto fb_gl = std::static_pointer_cast<FramebufferOpenGL>(framebuffer);
+    auto fb_gl = std::static_pointer_cast<const FramebufferOpenGL>(framebuffer);
 
     for (size_t i = 0; i < desc.color_attachments.size(); ++i) {
         const auto& att = desc.color_attachments[i];
         if (att.load_op == LoadOp::Clear) {
-            FEI_GL_CALL(glClearNamedFramebufferfv(
+            clear_color_attachment(
                 fb_gl->id(),
-                GL_COLOR,
                 static_cast<GLint>(i),
-                att.clear_color.data()
-            ));
+                att.clear_color
+            );
         }
     }
 
@@ -206,25 +318,16 @@ void CommandBufferExecutorOpenGL::execute_begin_render_pass(
         const auto& att = *desc.depth_stencil_attachment;
         if (att.depth_load_op == LoadOp::Clear &&
             att.stencil_load_op == LoadOp::Clear) {
-            FEI_GL_CALL(glClearNamedFramebufferfi(
+            clear_depth_stencil_attachment(
                 fb_gl->id(),
-                GL_DEPTH_STENCIL,
-                0,
                 att.clear_depth,
                 att.clear_stencil
-            ));
+            );
         } else if (att.depth_load_op == LoadOp::Clear) {
-            FEI_GL_CALL(glClearNamedFramebufferfv(
-                fb_gl->id(),
-                GL_DEPTH,
-                0,
-                &att.clear_depth
-            ));
+            clear_depth_attachment(fb_gl->id(), att.clear_depth);
         } else if (att.stencil_load_op == LoadOp::Clear) {
             GLint s = att.clear_stencil;
-            FEI_GL_CALL(
-                glClearNamedFramebufferiv(fb_gl->id(), GL_STENCIL, 0, &s)
-            );
+            clear_stencil_attachment(fb_gl->id(), s);
         }
     }
 }
@@ -349,7 +452,8 @@ void CommandBufferExecutorOpenGL::execute_set_vertex_buffer(
 void CommandBufferExecutorOpenGL::execute_set_resource_set(
     ExecutionState& state,
     uint32 slot,
-    std::shared_ptr<const ResourceSet> resource_set
+    std::shared_ptr<const ResourceSet> resource_set,
+    const std::vector<uint32>& dynamic_offsets
 ) {
     if (!state.pipeline) {
         fatal(
@@ -379,10 +483,31 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
     assert(gl_resource_set->resources().size() == gl_layout->elements().size());
 
     auto size = static_cast<uint32>(gl_layout->elements().size());
+    std::size_t dynamic_offset_index = 0;
     for (uint32 i = 0; i < size; ++i) {
         auto& element = gl_layout->elements()[i];
         auto kind = element.kind;
         auto resource = gl_resource_set->resources()[i];
+        std::size_t dynamic_offset = 0;
+        if (element.options.is_set(
+                ResourceLayoutElementOptions::DynamicBinding
+            )) {
+            if (!is_buffer_resource_kind(kind)) {
+                fatal(
+                    "Resource '{}' uses DynamicBinding but is {}",
+                    element.name,
+                    resource_kind_name(kind)
+                );
+            }
+            if (dynamic_offset_index >= dynamic_offsets.size()) {
+                fatal(
+                    "Resource set slot {} expected dynamic offset for '{}'",
+                    slot,
+                    element.name
+                );
+            }
+            dynamic_offset = dynamic_offsets[dynamic_offset_index++];
+        }
         auto binding_info_opt = gl_pipeline->get_resource_binding(slot, i);
         if (!binding_info_opt) {
             fatal("Missing resource binding for slot {} index {}", slot, i);
@@ -395,16 +520,14 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
         }
         switch (kind) {
             case ResourceKind::UniformBuffer: {
-                auto buffer =
-                    std::static_pointer_cast<const BufferOpenGL>(resource);
-                buffer->ensure_created();
                 auto& info =
                     std::get<PipelineOpenGL::UniformBinding>(binding_info);
-                FEI_GL_CALL(glBindBufferBase(
+                bind_buffer_resource(
                     GL_UNIFORM_BUFFER,
                     info.binding,
-                    buffer->id()
-                ));
+                    resource,
+                    dynamic_offset
+                );
                 break;
             }
             case ResourceKind::TextureReadOnly: {
@@ -447,17 +570,15 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
             }
             case ResourceKind::StorageBufferReadOnly:
             case ResourceKind::StorageBufferReadWrite: {
-                auto buffer =
-                    std::static_pointer_cast<const BufferOpenGL>(resource);
-                buffer->ensure_created();
                 auto& info = std::get<PipelineOpenGL::ShaderStorageBinding>(
                     binding_info
                 );
-                FEI_GL_CALL(glBindBufferBase(
+                bind_buffer_resource(
                     GL_SHADER_STORAGE_BUFFER,
                     info.binding,
-                    buffer->id()
-                ));
+                    resource,
+                    dynamic_offset
+                );
                 break;
             }
             case ResourceKind::Sampler: {
@@ -478,6 +599,14 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                     static_cast<uint32>(kind)
                 );
         }
+    }
+    if (dynamic_offset_index != dynamic_offsets.size()) {
+        fatal(
+            "Resource set slot {} received {} dynamic offset(s), consumed {}",
+            slot,
+            dynamic_offsets.size(),
+            dynamic_offset_index
+        );
     }
 }
 
@@ -557,55 +686,6 @@ void CommandBufferExecutorOpenGL::execute_dispatch(
     ));
 
     FEI_GL_CALL(glMemoryBarrier(GL_ALL_BARRIER_BITS));
-}
-
-void CommandBufferExecutorOpenGL::execute_blit_to(
-    ExecutionState& state,
-    std::shared_ptr<const Framebuffer> target
-) {
-    if (!state.framebuffer) {
-        fatal(
-            "CommandBufferOpenGL::blit_to executed without source framebuffer"
-        );
-    }
-
-    auto target_gl = std::static_pointer_cast<const FramebufferOpenGL>(target);
-    auto src_gl =
-        std::static_pointer_cast<const FramebufferOpenGL>(state.framebuffer);
-    target_gl->ensure_created();
-    src_gl->ensure_created();
-    if (state.framebuffer->color_attachments().empty()) {
-        fatal("CommandBufferOpenGL::blit_to source has no color attachment");
-    }
-
-    auto src_texture = state.framebuffer->color_attachments()[0].texture;
-    auto src_width = to_gl_int(src_texture->width());
-    auto src_height = to_gl_int(src_texture->height());
-
-    if (target_gl->id() == 0) {
-        GLint draw_framebuffer;
-        FEI_GL_CALL(
-            glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_framebuffer)
-        );
-        FEI_GL_CALL(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0));
-        FEI_GL_CALL(glDrawBuffer(GL_BACK));
-        FEI_GL_CALL(glBindFramebuffer(GL_DRAW_FRAMEBUFFER, draw_framebuffer));
-    }
-
-    FEI_GL_CALL(glBlitNamedFramebuffer(
-        src_gl->id(),
-        target_gl->id(),
-        0,
-        0,
-        src_width,
-        src_height,
-        0,
-        0,
-        src_width,
-        src_height,
-        GL_COLOR_BUFFER_BIT,
-        GL_LINEAR
-    ));
 }
 
 void CommandBufferExecutorOpenGL::execute_generate_mipmaps(

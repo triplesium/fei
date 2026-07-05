@@ -15,6 +15,7 @@ class TextureOpenGL : public Texture, public DeferredResourceOpenGL {
     PixelFormat m_texture_format;
     BitFlags<TextureUsage> m_texture_usage;
     TextureType m_texture_type;
+    TextureSampleCount m_sample_count {TextureSampleCount::Count1};
     GLenum m_gl_format;
     GLenum m_gl_type;
     GLenum m_gl_sized_internal_format;
@@ -32,6 +33,7 @@ class TextureOpenGL : public Texture, public DeferredResourceOpenGL {
     PixelFormat format() const override { return m_texture_format; }
     BitFlags<TextureUsage> usage() const override { return m_texture_usage; }
     TextureType type() const override { return m_texture_type; }
+    TextureSampleCount sample_count() const override { return m_sample_count; }
     GLenum gl_format() const { return m_gl_format; }
     GLenum gl_type() const { return m_gl_type; }
     GLenum gl_sized_internal_format() const {

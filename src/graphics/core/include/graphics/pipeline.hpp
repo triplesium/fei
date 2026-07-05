@@ -1,6 +1,7 @@
 #pragma once
 #include "base/hash.hpp"
 #include "graphics/enums.hpp"
+#include "graphics/framebuffer.hpp"
 #include "graphics/resource.hpp"
 #include "graphics/shader_module.hpp"
 #include "graphics/texture.hpp"
@@ -202,6 +203,7 @@ struct RenderPipelineDescription {
     RenderPrimitive render_primitive;
     ShaderProgramDescription shader_program;
     std::vector<std::shared_ptr<const ResourceLayout>> resource_layouts;
+    OutputDescription output_description;
 };
 
 struct ComputePipelineDescription {

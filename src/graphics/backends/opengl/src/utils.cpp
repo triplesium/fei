@@ -108,6 +108,9 @@ GLenum convert_buffer_type(BitFlags<BufferUsages> usages) {
 }
 
 GLenum to_gl_buffer_usage(BitFlags<BufferUsages> usages) {
+    if (usages.is_set(BufferUsages::Staging)) {
+        return GL_STREAM_DRAW;
+    }
     if (usages.is_set(BufferUsages::Dynamic)) {
         return GL_DYNAMIC_DRAW;
     }

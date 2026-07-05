@@ -11,6 +11,7 @@
 #include "graphics/texture.hpp"
 #include "graphics/texture_readback.hpp"
 #include "graphics/texture_view.hpp"
+#include "math/matrix.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -101,6 +102,12 @@ class GraphicsDevice {
     create_texture_readback(uint32 max_in_flight = 3) const = 0;
 
     virtual void present(const Swapchain& swapchain) const = 0;
+
+    // Transforms the engine's OpenGL-style clip depth to the backend's GPU
+    // clip depth. Y orientation is handled by viewport/present policy.
+    [[nodiscard]] virtual Matrix4x4 clip_space_transform() const {
+        return Matrix4x4::Identity;
+    }
 
     virtual void flush() const {}
 
