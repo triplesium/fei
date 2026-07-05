@@ -20,6 +20,11 @@ const uint MAX_DIRECTIONAL_LIGHTS = 3;
 const uint MAX_POINT_LIGHTS = 6;
 const uint MAX_SPOT_LIGHTS = 6;
 
+vec3 SrgbToLinear(vec3 value)
+{
+    return pow(max(value, vec3(0.0f)), vec3(2.2f));
+}
+
 layout(set = 0, binding = 0, row_major, std140) uniform View {
     mat4 clip_from_world;
     mat4 view_from_world;
@@ -314,7 +319,7 @@ void main()
     float roughness = clamp(texture(g_normal_roughness, Frag_TexCoords).a, 0.045f, 1.0f);
     vec3 baseColor = texture(g_albedo_metallic, Frag_TexCoords).rgb;
     float metallic = clamp(texture(g_albedo_metallic, Frag_TexCoords).a, 0.0f, 1.0f);
-    vec3 albedo = pow(baseColor, vec3(2.2f));
+    vec3 albedo = SrgbToLinear(baseColor);
     vec3 specularColor = texture(g_specular, Frag_TexCoords).rgb;
     vec3 directLighting = vec3(1.0f);
     vec3 F0 = mix(vec3(0.04f), albedo, metallic);

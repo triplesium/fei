@@ -20,6 +20,11 @@ const float HALF_PI = 1.57079f;
 const float EPSILON = 1e-30;
 const float SQRT_3 = 1.73205080f;
 
+vec3 SrgbToLinear(vec3 value)
+{
+    return pow(max(value, vec3(0.0f)), vec3(2.2f));
+}
+
 layout(set = 0, binding = 0, row_major, std140) uniform View {
     mat4 clip_from_world;
     mat4 view_from_world;
@@ -220,12 +225,9 @@ void main()
     vec3 position = texture(g_position_ao, Frag_TexCoords).rgb;
     vec3 normal = normalize(texture(g_normal_roughness, Frag_TexCoords).xyz);
     vec4 specular = texture(g_specular, Frag_TexCoords);
-    vec3 albedo = texture(g_albedo_metallic, Frag_TexCoords).rgb;
-    vec3 emissive = texture(g_emissive_depth, Frag_TexCoords).rgb;
+    vec3 albedo = SrgbToLinear(texture(g_albedo_metallic, Frag_TexCoords).rgb);
 
     vec4 indirectLighting = CalculateIndirectLighting(position, normal, albedo, specular, true);
 
-    // convert indirect to linear space
-    indirectLighting.rgb = pow(indirectLighting.rgb, vec3(2.2f));
     fragColor = indirectLighting;
 }

@@ -21,6 +21,11 @@ layout(set = 2, binding = 1) uniform sampler2D albedo_map;
 // uniform sampler2D opacityMap;
 layout(set = 2, binding = 5) uniform sampler2D emissive_map;
 
+vec3 SrgbToLinear(vec3 value)
+{
+    return pow(max(value, vec3(0.0f)), vec3(2.2f));
+}
+
 layout(set = 2, binding = 0, row_major, std140) uniform Material {
     vec3 albedo;
     float metallic;
@@ -77,14 +82,16 @@ void main()
     // alpha cutoff
     if(opacity > 0.0f)
     {
-        // albedo is in srgb space, bring back to linear
-        albedo.rgb = material.albedo * albedo.rgb;
+        // Albedo inputs are sampled as sRGB values but storage images are UNORM.
+        // Store linear radiance inputs so cone tracing can accumulate linearly.
+        albedo.rgb = SrgbToLinear(material.albedo) * SrgbToLinear(albedo.rgb);
         // premultiplied alpha
         albedo.rgb *= opacity;
         albedo.a = 1.0f;
         // emission value
         vec4 emissive = texture(emissive_map, In.texCoord.xy);
-        emissive.rgb = emissive.rgb * material.emissive;
+        emissive.rgb =
+            SrgbToLinear(emissive.rgb) * SrgbToLinear(material.emissive);
         emissive.a = 1.0f;
         // bring normal to 0-1 range
         vec4 normal = vec4(EncodeNormal(normalize(In.normal)), 1.0f);

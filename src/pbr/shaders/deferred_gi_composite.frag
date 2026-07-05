@@ -18,6 +18,11 @@ const uint MAX_DIRECTIONAL_LIGHTS = 3;
 const uint MAX_POINT_LIGHTS = 6;
 const uint MAX_SPOT_LIGHTS = 6;
 
+vec3 SrgbToLinear(vec3 value)
+{
+    return pow(max(value, vec3(0.0f)), vec3(2.2f));
+}
+
 layout(set = 0, binding = 0, row_major, std140) uniform View {
     mat4 clip_from_world;
     mat4 view_from_world;
@@ -80,18 +85,7 @@ vec4 UpsampleIndirectBilateral(vec2 uv)
 
 void main()
 {
-    // world-space position
-    vec3 position = texture(g_position_ao, Frag_TexCoords).rgb;
-    // world-space normal
-    vec3 normal = normalize(texture(g_normal_roughness, Frag_TexCoords).xyz);
-    // xyz = fragment specular, w = shininess
-    vec4 specular = texture(g_specular, Frag_TexCoords);
-    // fragment albedo
-    vec3 baseColor = texture(g_albedo_metallic, Frag_TexCoords).rgb;
-    // convert to linear space
-    vec3 albedo = pow(baseColor, vec3(2.2f));
-    // fragment emissiviness
-    vec3 emissive = texture(g_emissive_depth, Frag_TexCoords).rgb;
+    vec3 emissive = SrgbToLinear(texture(g_emissive_depth, Frag_TexCoords).rgb);
     // lighting cumulatives
     vec3 directLighting = texture(direct_lighting, Frag_TexCoords).rgb;
     vec4 indirectLighting = UpsampleIndirectBilateral(Frag_TexCoords);
