@@ -1,3 +1,5 @@
+add_requires("vulkansdk", "vulkan-validationlayers")
+
 target("fei-graphics-vulkan")
     set_kind("static")
     set_default(false)
@@ -5,3 +7,5 @@ target("fei-graphics-vulkan")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
     add_deps("fei-graphics")
+    add_packages("vulkansdk", {public = true})
+    add_packages("vulkan-validationlayers", {public = true})

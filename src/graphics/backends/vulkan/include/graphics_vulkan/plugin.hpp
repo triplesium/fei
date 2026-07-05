@@ -1,7 +1,7 @@
 #pragma once
 #include "app/app.hpp"
 #include "app/plugin.hpp"
-#include "graphics_vulkan/graphics_device.hpp"
+#include "graphics_device.hpp"
 
 namespace fei {
 

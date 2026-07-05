@@ -1,12 +1,44 @@
 #pragma once
 #include "graphics/graphics_device.hpp"
 
+#include <cstddef>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
+
 namespace fei {
 
+class VulkanDeviceState;
+struct VulkanDeviceStateDescription;
+
 class GraphicsDeviceVulkan : public GraphicsDevice {
+  private:
+    struct MappedTextureState {
+        std::mutex mutex;
+        std::unordered_map<const MappableResource*, std::vector<std::byte>>
+            textures;
+    };
+
+    std::shared_ptr<VulkanDeviceState> m_state;
+    std::shared_ptr<MappedTextureState> m_mapped_textures {
+        std::make_shared<MappedTextureState>()
+    };
+
   public:
-    GraphicsDeviceVulkan() = default;
+    GraphicsDeviceVulkan();
+    explicit GraphicsDeviceVulkan(VulkanDeviceStateDescription desc);
     ~GraphicsDeviceVulkan() override = default;
+
+    GraphicsDeviceVulkan(const GraphicsDeviceVulkan&) = delete;
+    GraphicsDeviceVulkan& operator=(const GraphicsDeviceVulkan&) = delete;
+    GraphicsDeviceVulkan(GraphicsDeviceVulkan&&) noexcept = default;
+    GraphicsDeviceVulkan& operator=(GraphicsDeviceVulkan&&) noexcept = default;
+
+    [[nodiscard]] const std::shared_ptr<VulkanDeviceState>& state() const {
+        return m_state;
+    }
+
+    [[nodiscard]] Matrix4x4 clip_space_transform() const override;
 
     std::shared_ptr<ShaderModule>
     create_shader_module(const ShaderDescription& desc) const override;
