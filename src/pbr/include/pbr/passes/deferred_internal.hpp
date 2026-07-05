@@ -35,7 +35,8 @@ void setup_deferred_pipelines(
     ResRO<LightingResources> lighting_resources,
     ResRO<VxgiResources> vxgi_resources,
     ResRW<DeferredRenderPipelines> pipelines,
-    ResRW<PipelineCache> pipeline_cache
+    ResRW<PipelineCache> pipeline_cache,
+    Optional<ResRO<MainSwapchain>> main_swapchain
 );
 
 void queue_deferred_prepass_meshes(
@@ -96,8 +97,12 @@ void build_composite_pass(
     ResRO<FullscreenQuad> fullscreen_quad
 );
 
-void build_blit_composite_pass(
+void build_present_composite_pass(
+    Optional<ResRO<RenderAssets<GpuMesh>>> gpu_meshes,
     ResRW<RenderGraph> render_graph,
+    Optional<ResRO<DeferredRenderPipelines>> pipelines,
+    Optional<ResRO<PipelineCache>> pipeline_cache,
+    Optional<ResRO<FullscreenQuad>> fullscreen_quad,
     Optional<ResRO<MainSwapchain>> main_swapchain
 );
 

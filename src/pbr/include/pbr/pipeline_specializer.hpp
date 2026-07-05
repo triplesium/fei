@@ -4,6 +4,7 @@
 #include "rendering/material.hpp"
 #include "rendering/mesh/mesh.hpp"
 
+#include <algorithm>
 #include <cstddef>
 
 namespace fei {
@@ -24,5 +25,24 @@ class PipelineSpecializer {
     PipelineSpecializer& operator=(const PipelineSpecializer&) = default;
     PipelineSpecializer& operator=(PipelineSpecializer&&) = default;
 };
+
+inline void remove_vertex_input_attribute(
+    RenderPipelineDescription& desc,
+    MeshVertexAttributeId location
+) {
+    for (auto& layout : desc.shader_program.vertex_layouts) {
+        auto& attributes = layout.attributes;
+        attributes.erase(
+            std::remove_if(
+                attributes.begin(),
+                attributes.end(),
+                [location](const VertexAttributeDescription& attribute) {
+                    return attribute.location == location;
+                }
+            ),
+            attributes.end()
+        );
+    }
+}
 
 } // namespace fei

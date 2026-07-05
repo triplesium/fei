@@ -165,12 +165,12 @@ vxgi_mipmap_volume_bindings_for_test(const VxgiGraphHandles& vxgi) {
         std::shared_ptr<TextureView> {},
         std::shared_ptr<TextureView> {},
         std::shared_ptr<TextureView> {},
-        vxgi.mipmap[0],
-        vxgi.mipmap[1],
-        vxgi.mipmap[2],
-        vxgi.mipmap[3],
-        vxgi.mipmap[4],
-        vxgi.mipmap[5],
+        std::shared_ptr<TextureView> {},
+        std::shared_ptr<TextureView> {},
+        std::shared_ptr<TextureView> {},
+        std::shared_ptr<TextureView> {},
+        std::shared_ptr<TextureView> {},
+        std::shared_ptr<TextureView> {},
     };
 }
 
@@ -470,6 +470,9 @@ void add_vxgi_mipmap_volume_pass(
     graph.add_pass<RenderGraph::Empty>(
         std::move(name),
         [&vxgi](RenderGraphBuilder& builder, RenderGraph::Empty&) {
+            for (const auto& mipmap : vxgi.mipmap) {
+                builder.read_texture(mipmap, RenderGraphAccess::TextureRead);
+            }
             (void)builder.create_resource_set(
                 "vxgi.mipmap_volume",
                 std::shared_ptr<const ResourceLayout> {},
@@ -636,16 +639,16 @@ void add_composite_pass(
     );
 }
 
-void add_blit_composite_pass(
+void add_present_composite_pass(
     RenderGraph& graph,
     DeferredLightingGraphHandles& deferred_lighting
 ) {
     graph.add_pass<RenderGraph::Empty>(
-        "blit_composite",
+        "present_composite",
         [&deferred_lighting](RenderGraphBuilder& builder, RenderGraph::Empty&) {
             builder.read_texture(
                 deferred_lighting.composite,
-                RenderGraphAccess::BlitSource
+                RenderGraphAccess::TextureRead
             );
             builder.side_effect();
         },
@@ -701,7 +704,7 @@ TEST_CASE(
         vxgi_resources
     );
     add_composite_pass(graph, gbuffer, deferred_lighting);
-    add_blit_composite_pass(graph, deferred_lighting);
+    add_present_composite_pass(graph, deferred_lighting);
 
     REQUIRE(graph.compile());
 
@@ -710,9 +713,12 @@ TEST_CASE(
     const auto shadow_blur_vertical = pass_index(debug, "shadow_blur_vertical");
     const auto vxgi_voxelize = pass_index(debug, "vxgi_voxelize");
     const auto vxgi_inject_radiance = pass_index(debug, "vxgi_inject_radiance");
+    const auto vxgi_mipmap_base = pass_index(debug, "vxgi_mipmap_base");
     const auto vxgi_mipmap_volume = pass_index(debug, "vxgi_mipmap_volume");
     const auto vxgi_inject_propagation =
         pass_index(debug, "vxgi_inject_propagation");
+    const auto vxgi_mipmap_base_after_propagation =
+        pass_index(debug, "vxgi_mipmap_base_after_propagation");
     const auto vxgi_mipmap_volume_after_propagation =
         pass_index(debug, "vxgi_mipmap_volume_after_propagation");
     const auto direct_lighting = pass_index(debug, "direct_lighting");
@@ -771,11 +777,13 @@ TEST_CASE(
     CHECK(voxelization_set.active);
     CHECK(voxelization_set.bindings.size() == 1);
 
-    const auto& mipmap_volume_set =
-        resource_set_named(debug, "vxgi.mipmap_volume", vxgi_mipmap_volume);
-    CHECK(mipmap_volume_set.active);
-    require_resource_set_binds_all(
-        mipmap_volume_set,
+    const auto& mipmap_base = pass_named(debug, "vxgi_mipmap_base");
+    CHECK(mipmap_base.active);
+    CHECK(pass_depends_on(mipmap_base, vxgi_inject_radiance));
+
+    const auto& mipmap_volume = pass_named(debug, "vxgi_mipmap_volume");
+    require_reads_all(
+        mipmap_volume,
         {
             "vxgi.mipmap.0",
             "vxgi.mipmap.1",
@@ -785,6 +793,12 @@ TEST_CASE(
             "vxgi.mipmap.5",
         }
     );
+    CHECK(pass_depends_on(mipmap_volume, vxgi_mipmap_base));
+
+    const auto& mipmap_volume_set =
+        resource_set_named(debug, "vxgi.mipmap_volume", vxgi_mipmap_volume);
+    CHECK(mipmap_volume_set.active);
+    CHECK(mipmap_volume_set.bindings.size() == 13);
 
     const auto& direct = pass_named(debug, "direct_lighting");
     require_reads_all(
@@ -807,14 +821,15 @@ TEST_CASE(
     CHECK_FALSE(pass_reads(direct, "vxgi.radiance"));
     CHECK_FALSE(pass_reads(direct, "vxgi.mipmap.0"));
 
-    const auto& mipmap_volume_after_set = resource_set_named(
-        debug,
-        "vxgi.mipmap_volume",
-        vxgi_mipmap_volume_after_propagation
-    );
-    CHECK(mipmap_volume_after_set.active);
-    require_resource_set_binds_all(
-        mipmap_volume_after_set,
+    const auto& mipmap_base_after =
+        pass_named(debug, "vxgi_mipmap_base_after_propagation");
+    CHECK(mipmap_base_after.active);
+    CHECK(pass_depends_on(mipmap_base_after, vxgi_inject_propagation));
+
+    const auto& mipmap_volume_after =
+        pass_named(debug, "vxgi_mipmap_volume_after_propagation");
+    require_reads_all(
+        mipmap_volume_after,
         {
             "vxgi.mipmap.0",
             "vxgi.mipmap.1",
@@ -824,6 +839,17 @@ TEST_CASE(
             "vxgi.mipmap.5",
         }
     );
+    CHECK(
+        pass_depends_on(mipmap_volume_after, vxgi_mipmap_base_after_propagation)
+    );
+
+    const auto& mipmap_volume_after_set = resource_set_named(
+        debug,
+        "vxgi.mipmap_volume",
+        vxgi_mipmap_volume_after_propagation
+    );
+    CHECK(mipmap_volume_after_set.active);
+    CHECK(mipmap_volume_after_set.bindings.size() == 13);
 
     const auto& indirect = pass_named(debug, "indirect_lighting");
     require_reads_all(
@@ -887,7 +913,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "PBR blit composite pass builder skips absent MainSwapchain",
+    "PBR present composite pass builder skips absent MainSwapchain",
     "[pbr][render-graph]"
 ) {
     World world;
@@ -913,8 +939,8 @@ TEST_CASE(
         }
     );
 
-    world.run_system_once(build_blit_composite_pass);
+    world.run_system_once(build_present_composite_pass);
 
     REQUIRE(graph.compile());
-    CHECK_FALSE(has_pass_named(graph.debug_info(), "blit_composite"));
+    CHECK_FALSE(has_pass_named(graph.debug_info(), "present_composite"));
 }

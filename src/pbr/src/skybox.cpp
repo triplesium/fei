@@ -16,6 +16,26 @@
 
 namespace fei {
 
+namespace {
+
+OutputDescription render_target_output_description() {
+    return OutputDescription {
+        .color_attachments =
+            {
+                OutputAttachmentDescription {
+                    .format = PixelFormat::Rgba8Unorm,
+                },
+            },
+        .depth_stencil_attachment =
+            OutputAttachmentDescription {
+                .format = PixelFormat::Depth32Float,
+            },
+        .sample_count = TextureSampleCount::Count1,
+    };
+}
+
+} // namespace
+
 void setup_skybox_resources(
     ResRO<GraphicsDevice> device,
     ResRW<Assets<Mesh>> meshes,
@@ -92,10 +112,12 @@ void setup_skybox_resources(
                     .vertex_layouts = {std::move(vertex_layout)},
                     .shaders = skybox_resource->shader_modules,
                 },
-            .resource_layouts = {
-                mesh_view_layout->layout,
-                skybox_resource->resource_layout,
-            },
+            .resource_layouts =
+                {
+                    mesh_view_layout->layout,
+                    skybox_resource->resource_layout,
+                },
+            .output_description = render_target_output_description(),
         }
     );
 }

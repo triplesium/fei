@@ -14,11 +14,14 @@ struct DeferredPrepassPhase : RenderPhase<MeshDrawItem> {};
 struct DeferredRenderPipelines {
     std::shared_ptr<ResourceLayout> gbuffer_resource_layout;
     std::shared_ptr<ResourceLayout> composite_resource_layout;
+    std::shared_ptr<ResourceLayout> present_resource_layout;
     std::shared_ptr<Sampler> point_sampler;
 
     CachedRenderPipelineId direct_lighting_pipeline {};
     CachedRenderPipelineId indirect_lighting_pipeline {};
     CachedRenderPipelineId composite_lighting_pipeline {};
+    CachedRenderPipelineId present_composite_pipeline {};
+    bool present_composite_pipeline_requested {false};
 };
 
 class DeferredRenderPlugin : public Plugin {

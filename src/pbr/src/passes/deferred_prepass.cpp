@@ -10,6 +10,34 @@ namespace fei {
 
 namespace {
 
+OutputDescription deferred_gbuffer_output_description() {
+    return OutputDescription {
+        .color_attachments =
+            {
+                OutputAttachmentDescription {
+                    .format = PixelFormat::Rgba16Float,
+                },
+                OutputAttachmentDescription {
+                    .format = PixelFormat::Rgba16Float,
+                },
+                OutputAttachmentDescription {
+                    .format = PixelFormat::Rgba8Unorm,
+                },
+                OutputAttachmentDescription {
+                    .format = PixelFormat::Rgba8Unorm,
+                },
+                OutputAttachmentDescription {
+                    .format = PixelFormat::Rgba16Float,
+                },
+            },
+        .depth_stencil_attachment =
+            OutputAttachmentDescription {
+                .format = PixelFormat::Depth32Float,
+            },
+        .sample_count = TextureSampleCount::Count1,
+    };
+}
+
 class DeferredPipelineSpecializer : public PipelineSpecializer {
   public:
     void specialize(
@@ -21,6 +49,7 @@ class DeferredPipelineSpecializer : public PipelineSpecializer {
             material.shader(MaterialShaderType::PrepassVertex),
             material.shader(MaterialShaderType::PrepassFragment),
         };
+        desc.output_description = deferred_gbuffer_output_description();
     }
 };
 

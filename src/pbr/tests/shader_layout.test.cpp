@@ -2,10 +2,13 @@
 #include "rendering/shader.hpp"
 
 #include <algorithm>
+#include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <cstring>
 #include <initializer_list>
 #include <string>
 #include <string_view>
+#include <vector>
 
 using namespace fei;
 
@@ -18,6 +21,77 @@ struct ExpectedBinding {
     uint32 binding;
     uint32 array_size {1};
 };
+
+constexpr uint32 SpirvOpExecutionMode = 16;
+constexpr uint32 SpirvExecutionModePixelCenterInteger = 6;
+
+constexpr std::array<std::string_view, 25> PbrShaderNames {
+    "aniso_mipmapbase.comp",
+    "aniso_mipmapvolume.comp",
+    "blur.frag",
+    "color.frag",
+    "cubemap2irradiance.comp",
+    "cubemap2radiance.comp",
+    "deferred_gi_composite.frag",
+    "deferred_gi_direct.frag",
+    "deferred_gi_indirect.frag",
+    "deferred_prepass.frag",
+    "deferred_prepass.vert",
+    "deferred_present.frag",
+    "equirect2cube.comp",
+    "forward.frag",
+    "forward.vert",
+    "inject_propagation.comp",
+    "inject_radiance.comp",
+    "quad.vert",
+    "shadow.frag",
+    "shadow.vert",
+    "skybox.frag",
+    "skybox.vert",
+    "voxelization.frag",
+    "voxelization.geom",
+    "voxelization.vert",
+};
+
+std::vector<uint32> read_vulkan_shader_words(std::string_view shader_name) {
+    AssetPath shader_path("shader://" + std::string(shader_name));
+    auto path = compiled_vulkan_shader_path(shader_path);
+    CAPTURE(shader_name);
+    REQUIRE(path.has_value());
+
+    auto binary = read_shader_binary(*path);
+    REQUIRE(binary);
+    REQUIRE(binary->size() % sizeof(uint32) == 0);
+
+    std::vector<uint32> words(binary->size() / sizeof(uint32));
+    std::memcpy(words.data(), binary->data(), binary->size());
+    REQUIRE(words.size() >= 5);
+    REQUIRE(words.front() == 0x07230203);
+    return words;
+}
+
+bool has_spirv_execution_mode(
+    const std::vector<uint32>& words,
+    uint32 execution_mode
+) {
+    constexpr std::size_t HeaderWordCount = 5;
+    for (std::size_t index = HeaderWordCount; index < words.size();) {
+        const uint32 instruction = words[index];
+        const uint32 word_count = instruction >> 16;
+        const uint32 opcode = instruction & 0xffff;
+        if (word_count == 0 || index + word_count > words.size()) {
+            FAIL("Malformed SPIR-V instruction stream");
+        }
+
+        if (opcode == SpirvOpExecutionMode && word_count >= 3 &&
+            words[index + 2] == execution_mode) {
+            return true;
+        }
+
+        index += word_count;
+    }
+    return false;
+}
 
 void require_shader_resources(
     std::string_view shader_name,
@@ -55,11 +129,27 @@ TEST_CASE(
     "PBR shaders have generated outputs for all backend paths",
     "[pbr][shader]"
 ) {
-    AssetPath shader_path("shader://forward.frag");
+    for (auto shader_name : PbrShaderNames) {
+        AssetPath shader_path("shader://" + std::string(shader_name));
+        CAPTURE(shader_name);
 
-    REQUIRE(compiled_opengl_shader_path(shader_path).has_value());
-    REQUIRE(compiled_vulkan_shader_path(shader_path).has_value());
-    REQUIRE(shader_reflection_path(shader_path).has_value());
+        REQUIRE(compiled_opengl_shader_path(shader_path).has_value());
+        REQUIRE(compiled_vulkan_shader_path(shader_path).has_value());
+        REQUIRE(shader_reflection_path(shader_path).has_value());
+    }
+}
+
+TEST_CASE(
+    "PBR Vulkan shader outputs avoid unsupported pixel-center execution mode",
+    "[pbr][shader]"
+) {
+    for (auto shader_name : PbrShaderNames) {
+        CAPTURE(shader_name);
+        CHECK_FALSE(has_spirv_execution_mode(
+            read_vulkan_shader_words(shader_name),
+            SpirvExecutionModePixelCenterInteger
+        ));
+    }
 }
 
 TEST_CASE(
@@ -128,6 +218,13 @@ TEST_CASE(
             {"g_emissive_depth", ResourceKind::TextureReadOnly, 1, 4},
             {"direct_lighting", ResourceKind::TextureReadOnly, 2, 0},
             {"indirect_lighting", ResourceKind::TextureReadOnly, 2, 1},
+        }
+    );
+
+    require_shader_resources(
+        "deferred_present.frag",
+        {
+            {"composite", ResourceKind::TextureReadOnly, 0, 0},
         }
     );
 }

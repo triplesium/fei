@@ -35,9 +35,13 @@ struct DeferredCompositePassData {
     std::shared_ptr<Pipeline> pipeline;
 };
 
-struct BlitCompositePassData {
-    RgTextureHandle composite;
+struct PresentCompositePassData {
+    RgResourceSetHandle present_set;
     std::shared_ptr<const Framebuffer> target_framebuffer;
+    FullscreenQuadPassData fullscreen_quad;
+    std::shared_ptr<Pipeline> pipeline;
+    uint32 target_width {};
+    uint32 target_height {};
 };
 
 TextureDescription
@@ -382,8 +386,12 @@ void build_composite_pass(
     );
 }
 
-void build_blit_composite_pass(
+void build_present_composite_pass(
+    Optional<ResRO<RenderAssets<GpuMesh>>> gpu_meshes,
     ResRW<RenderGraph> render_graph,
+    Optional<ResRO<DeferredRenderPipelines>> pipelines,
+    Optional<ResRO<PipelineCache>> pipeline_cache,
+    Optional<ResRO<FullscreenQuad>> fullscreen_quad,
     Optional<ResRO<MainSwapchain>> main_swapchain
 ) {
     if (!render_graph->blackboard().contains<DeferredLightingGraphHandles>()) {
@@ -391,6 +399,15 @@ void build_blit_composite_pass(
     }
 
     if (!main_swapchain || !(*main_swapchain)->swapchain) {
+        return;
+    }
+    if (!gpu_meshes || !pipelines || !pipeline_cache || !fullscreen_quad) {
+        return;
+    }
+
+    auto gpu_mesh =
+        (*gpu_meshes)->get((*fullscreen_quad)->fullscreen_quad_mesh.id());
+    if (!gpu_mesh) {
         return;
     }
 
@@ -401,30 +418,58 @@ void build_blit_composite_pass(
         return;
     }
 
-    render_graph->add_pass<BlitCompositePassData>(
-        "blit_composite",
-        [&](RenderGraphBuilder& builder, BlitCompositePassData& data) {
-            data.composite = composite;
-            data.target_framebuffer =
-                (*main_swapchain)->swapchain->framebuffer();
-            builder.read_texture(data.composite, RenderGraphAccess::BlitSource);
+    auto pipeline = (*pipelines)->present_composite_pipeline_requested ?
+                        (*pipeline_cache)
+                            ->get_render_pipeline(
+                                (*pipelines)->present_composite_pipeline
+                            ) :
+                        nullptr;
+    auto fullscreen_quad_data =
+        make_fullscreen_quad_pass_data(nullptr, gpu_mesh.value());
+    auto target_framebuffer = (*main_swapchain)->swapchain->framebuffer();
+    const auto target_width = (*main_swapchain)->swapchain->width();
+    const auto target_height = (*main_swapchain)->swapchain->height();
+
+    render_graph->add_pass<PresentCompositePassData>(
+        "present_composite",
+        [&](RenderGraphBuilder& builder, PresentCompositePassData& data) {
+            data.fullscreen_quad = fullscreen_quad_data;
+            data.pipeline = pipeline;
+            data.target_framebuffer = target_framebuffer;
+            data.target_width = target_width;
+            data.target_height = target_height;
+            data.present_set = builder.create_resource_set(
+                "deferred.present",
+                (*pipelines)->present_resource_layout,
+                {
+                    composite,
+                }
+            );
             builder.side_effect();
         },
-        [](RenderGraphContext& context, const BlitCompositePassData& data) {
-            auto composite = context.texture(data.composite);
+        [](RenderGraphContext& context, const PresentCompositePassData& data) {
+            auto present_set = context.resource_set(data.present_set);
             auto& command_buffer = context.command_buffer();
             command_buffer.begin_render_pass(
                 RenderPassDescription {
-                    .color_attachments = {
-                        RenderPassColorAttachment {
-                            .texture = composite,
-                            .load_op = LoadOp::Load,
+                    .color_attachments =
+                        {
+                            RenderPassColorAttachment {
+                                .load_op = LoadOp::Clear,
+                                .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
+                            },
                         },
-                    },
+                    .framebuffer = data.target_framebuffer,
                 }
             );
+            command_buffer
+                .set_viewport(0, 0, data.target_width, data.target_height);
+            if (data.pipeline && present_set) {
+                command_buffer.set_render_pipeline(data.pipeline);
+                command_buffer.set_resource_set(0, present_set);
+                draw_fullscreen_quad(command_buffer, data.fullscreen_quad);
+            }
             command_buffer.end_render_pass();
-            command_buffer.blit_to(data.target_framebuffer);
         }
     );
 }

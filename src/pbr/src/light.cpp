@@ -104,6 +104,34 @@ TextureDescription shadow_blur_texture_desc(const Texture& shadow_texture) {
     };
 }
 
+OutputDescription single_color_output_description(PixelFormat format) {
+    return OutputDescription {
+        .color_attachments =
+            {
+                OutputAttachmentDescription {
+                    .format = format,
+                },
+            },
+        .sample_count = TextureSampleCount::Count1,
+    };
+}
+
+OutputDescription shadow_map_output_description() {
+    return OutputDescription {
+        .color_attachments =
+            {
+                OutputAttachmentDescription {
+                    .format = PixelFormat::Rgba32Float,
+                },
+            },
+        .depth_stencil_attachment =
+            OutputAttachmentDescription {
+                .format = PixelFormat::Depth32Float,
+            },
+        .sample_count = TextureSampleCount::Count1,
+    };
+}
+
 void draw_shadow_blur_quad(
     CommandBuffer& command_buffer,
     const ShadowBlurPassData& data
@@ -148,19 +176,6 @@ void execute_shadow_blur_pass(
 ) {
     auto target = context.texture(data.target);
     auto& command_buffer = context.command_buffer();
-    command_buffer.begin_render_pass(
-        RenderPassDescription {
-            .color_attachments = {
-                RenderPassColorAttachment {
-                    .texture = target,
-                    .load_op = LoadOp::Clear,
-                    .clear_color = Color4F {0.0f, 0.0f, 0.0f, 0.0f},
-                },
-            },
-        }
-    );
-    command_buffer.set_viewport(0, 0, data.output_width, data.output_height);
-
     constexpr float blur_scale = 1.0f;
     BlurUniform blur_uniform {
         .direction =
@@ -177,6 +192,19 @@ void execute_shadow_blur_pass(
     };
     command_buffer
         .update_buffer(data.uniform_buffer, &blur_uniform, sizeof(BlurUniform));
+    command_buffer.begin_render_pass(
+        RenderPassDescription {
+            .color_attachments = {
+                RenderPassColorAttachment {
+                    .texture = target,
+                    .load_op = LoadOp::Clear,
+                    .clear_color = Color4F {0.0f, 0.0f, 0.0f, 0.0f},
+                },
+            },
+        }
+    );
+    command_buffer.set_viewport(0, 0, data.output_width, data.output_height);
+
     command_buffer.set_render_pipeline(data.pipeline);
     command_buffer.set_resource_set(0, context.resource_set(data.resource_set));
     draw_shadow_blur_quad(command_buffer, data);
@@ -207,10 +235,12 @@ void ShadowMapPipelineSpecializer::specialize(
     const PreparedMaterial&
 ) const {
     desc.shader_program.shaders = m_shader_modules;
+    remove_vertex_input_attribute(desc, Mesh::ATTRIBUTE_TANGENT.id);
     desc.depth_stencil_state = DepthStencilStateDescription::DepthOnlyLessEqual;
     desc.rasterizer_state =
         RasterizerStateDescription {.cull_mode = CullMode::Back};
     desc.blend_state = BlendStateDescription::SingleDisabled;
+    desc.output_description = shadow_map_output_description();
 }
 
 void init_light_view_uniform_buffer(
@@ -250,21 +280,23 @@ void prepare_light_view_uniform_buffer(
             0.1f,
             2 * proj_size
         );
+        auto logical_clip_from_world = proj * view;
+        auto clip_space_transform = device->clip_space_transform();
         auto uniform = ViewUniform {
-            .clip_from_world = proj * view,
+            .clip_from_world = clip_space_transform * logical_clip_from_world,
             .view_from_world = view,
-            .clip_from_view = proj,
+            .clip_from_view = clip_space_transform * proj,
             .world_position = transform.position,
         };
         view_uniform_buffer.uniform = uniform;
         view_uniform_buffer.view = RenderView {
             .kind = RenderViewKind::DirectionalShadow,
             .id = ViewId::from_source(entity),
-            .clip_from_world = uniform.clip_from_world,
+            .clip_from_world = logical_clip_from_world,
             .view_from_world = uniform.view_from_world,
-            .clip_from_view = uniform.clip_from_view,
+            .clip_from_view = proj,
             .world_position = uniform.world_position,
-            .frustum = extract_frustum(uniform.clip_from_world),
+            .frustum = extract_frustum(logical_clip_from_world),
         };
         device->update_buffer(
             view_uniform_buffer.buffer,
@@ -360,7 +392,7 @@ void prepare_lighting(
         dir_light.direction = -transform.forward();
         dir_light.shadowing_method = 1;
         uniform.light_view_projection =
-            view_uniform_buffer.uniform.clip_from_world;
+            view_uniform_buffer.view.clip_from_world;
         ++dir_light_count;
     }
     uniform.num_directional_lights = static_cast<uint32>(dir_light_count);
@@ -478,6 +510,8 @@ void setup_shadow_mapping(
                     .shaders = blur_shader_modules,
                 },
             .resource_layouts = {blur_resource_layout},
+            .output_description =
+                single_color_output_description(PixelFormat::Rgba32Float),
         }
     );
 

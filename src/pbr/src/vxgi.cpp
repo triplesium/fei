@@ -76,6 +76,19 @@ TextureDescription texture_desc_from(const Texture& texture) {
         .texture_format = texture.format(),
         .texture_usage = texture.usage(),
         .texture_type = texture.type(),
+        .sample_count = texture.sample_count(),
+    };
+}
+
+OutputDescription single_color_output_description(PixelFormat format) {
+    return OutputDescription {
+        .color_attachments =
+            {
+                OutputAttachmentDescription {
+                    .format = format,
+                },
+            },
+        .sample_count = TextureSampleCount::Count1,
     };
 }
 
@@ -175,12 +188,12 @@ std::vector<RenderGraphResourceBinding> vxgi_mipmap_volume_bindings(
         entry.dst_views[3],
         entry.dst_views[4],
         entry.dst_views[5],
-        handles.mipmap[0],
-        handles.mipmap[1],
-        handles.mipmap[2],
-        handles.mipmap[3],
-        handles.mipmap[4],
-        handles.mipmap[5],
+        entry.src_views[0],
+        entry.src_views[1],
+        entry.src_views[2],
+        entry.src_views[3],
+        entry.src_views[4],
+        entry.src_views[5],
     };
 }
 
@@ -269,10 +282,13 @@ void VxgiVoxelizationSpecializer::specialize(
     const PreparedMaterial& /*material*/
 ) const {
     desc.shader_program.shaders = m_shader_modules;
+    remove_vertex_input_attribute(desc, Mesh::ATTRIBUTE_TANGENT.id);
     desc.depth_stencil_state = DepthStencilStateDescription::Disabled;
     desc.rasterizer_state.cull_mode = CullMode::None;
     desc.resource_layouts.push_back(m_volumes_layout);
     desc.resource_layouts.push_back(m_voxelization_layout);
+    desc.output_description =
+        single_color_output_description(PixelFormat::Rgba8Unorm);
 }
 
 void setup_vxgi(
@@ -297,7 +313,9 @@ void setup_vxgi(
     volumes->normal = device->create_texture(desc);
     volumes->emissive = device->create_texture(desc);
     volumes->radiance = device->create_texture(desc);
-    volumes->static_flag = device->create_texture(desc);
+    auto static_flag_desc = desc;
+    static_flag_desc.texture_format = PixelFormat::R8Unorm;
+    volumes->static_flag = device->create_texture(static_flag_desc);
 
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
@@ -328,7 +346,8 @@ void setup_vxgi(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Vertex,
              ShaderStages::Geometry,
-             ShaderStages::Fragment},
+             ShaderStages::Fragment,
+             ShaderStages::Compute},
             {
                 texture_read_write("voxel_albedo"),
                 texture_read_write("voxel_normal"),
@@ -833,8 +852,15 @@ void prepare_vxgi_generate_mipmap_volume(
     uint32 mip_level = 0;
 
     while (mip_dimension > 0) {
+        std::array<std::shared_ptr<TextureView>, 6> src_views;
         std::array<std::shared_ptr<TextureView>, 6> dst_views;
         for (int i = 0; i < 6; ++i) {
+            src_views[i] = device->create_texture_view(
+                TextureViewDescription {
+                    .target = volumes->mipmap[i],
+                    .base_mip_level = mip_level,
+                }
+            );
             dst_views[i] = device->create_texture_view(
                 TextureViewDescription {
                     .target = volumes->mipmap[i],
@@ -847,6 +873,7 @@ void prepare_vxgi_generate_mipmap_volume(
             VxgiGenerateMipmapVolume::MipEntry {
                 .mip_dimension = mip_dimension,
                 .mip_level = mip_level,
+                .src_views = std::move(src_views),
                 .dst_views = std::move(dst_views),
             }
         );
@@ -881,6 +908,9 @@ void add_vxgi_mipmap_volume_pass(
             data.uniform_buffer = generate_mipmap_volume.uniform_buffer;
             data.entries.clear();
             data.entries.reserve(generate_mipmap_volume.mip_entries.size());
+            for (const auto& mipmap : handles.mipmap) {
+                builder.read_texture(mipmap, RenderGraphAccess::TextureRead);
+            }
             for (const auto& entry : generate_mipmap_volume.mip_entries) {
                 auto resource_set = builder.create_resource_set(
                     "vxgi.mipmap_volume",

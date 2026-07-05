@@ -145,6 +145,7 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
         }
 
         mesh->insert_attribute(Mesh::ATTRIBUTE_POSITION, std::move(positions));
+        mesh->insert_indices(std::move(indices));
         if (has_normals) {
             mesh->insert_attribute(Mesh::ATTRIBUTE_NORMAL, std::move(normals));
         } else {
@@ -153,7 +154,10 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
         if (has_uvs) {
             mesh->insert_attribute(Mesh::ATTRIBUTE_UV_0, std::move(uvs));
         }
-        mesh->insert_indices(indices);
+        if (mesh->has_attribute(Mesh::ATTRIBUTE_NORMAL.id) &&
+            mesh->has_attribute(Mesh::ATTRIBUTE_UV_0.id)) {
+            mesh->generate_tangents();
+        }
         auto mesh_handle = context.add_asset<Mesh>(std::move(mesh));
         std::size_t material_id = 0;
         if (!shape.mesh.material_ids.empty() &&

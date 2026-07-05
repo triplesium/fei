@@ -36,7 +36,7 @@ void DeferredRenderPlugin::setup(App& app) {
                 build_direct_lighting_pass,
                 build_indirect_lighting_pass,
                 build_composite_pass,
-                build_blit_composite_pass
+                build_present_composite_pass
             ) | after(build_vxgi_mipmap_volume_after_propagation_pass) |
                 in_set<RenderingSystems::BuildRenderGraph>()
         );

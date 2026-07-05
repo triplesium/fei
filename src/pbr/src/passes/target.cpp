@@ -17,7 +17,8 @@ void setup_render_target(
             .mip_level = 1,
             .layer = 1,
             .texture_format = PixelFormat::Rgba8Unorm,
-            .texture_usage = TextureUsage::RenderTarget,
+            .texture_usage =
+                {TextureUsage::RenderTarget, TextureUsage::Sampled},
             .texture_type = TextureType::Texture2D,
         }
     );

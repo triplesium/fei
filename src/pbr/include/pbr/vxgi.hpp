@@ -185,6 +185,7 @@ struct VxgiGenerateMipmapVolume {
     struct MipEntry {
         uint32 mip_dimension {};
         uint32 mip_level {};
+        std::array<std::shared_ptr<TextureView>, 6> src_views;
         std::array<std::shared_ptr<TextureView>, 6> dst_views;
     };
     std::shared_ptr<Pipeline> pipeline;

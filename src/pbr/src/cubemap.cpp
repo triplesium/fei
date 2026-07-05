@@ -16,12 +16,12 @@ std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
             .mip_level = 11,
             .layer = 1,
             .texture_format = PixelFormat::Rgba32Float,
-            .texture_usage = {
-                TextureUsage::Sampled,
-                TextureUsage::Storage,
-                TextureUsage::Cubemap,
-                TextureUsage::GenerateMipmaps
-            },
+            .texture_usage =
+                {TextureUsage::Sampled,
+                 TextureUsage::Storage,
+                 TextureUsage::Cubemap,
+                 TextureUsage::GenerateMipmaps},
+            .texture_type = TextureType::Texture2D,
         }
     );
 
