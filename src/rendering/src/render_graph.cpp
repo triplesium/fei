@@ -17,8 +17,13 @@ std::size_t RenderGraph::ResourceSetCacheKeyHash::operator()(
     const RenderGraph::ResourceSetCacheKey& key
 ) const {
     std::size_t seed = std::hash<const ResourceLayout*> {}(key.layout);
-    for (auto* resource : key.resources) {
-        hash_combine(seed, std::hash<const BindableResource*> {}(resource));
+    for (const auto& resource : key.resources) {
+        hash_combine(
+            seed,
+            std::hash<const BindableResource*> {}(resource.resource)
+        );
+        hash_combine(seed, resource.offset);
+        hash_combine(seed, resource.size);
     }
     hash_combine(seed, key.resources.size());
     return seed;
@@ -114,6 +119,7 @@ RenderGraph::texture_pool_key(const TextureDescription& desc) {
         .texture_format = desc.texture_format,
         .texture_usage = desc.texture_usage.to_raw(),
         .texture_type = desc.texture_type,
+        .sample_count = desc.sample_count,
     };
 }
 
@@ -181,6 +187,7 @@ RgTextureHandle RenderGraph::import_texture(
             .texture_format = texture->format(),
             .texture_usage = texture->usage(),
             .texture_type = texture->type(),
+            .sample_count = texture->sample_count(),
         };
     }
 
@@ -420,7 +427,24 @@ std::shared_ptr<ResourceSet> RenderGraph::resolve_resource_set(
             resource = binding.resource();
         }
         resources.push_back(resource);
-        key.resources.push_back(resource.get());
+        if (auto range =
+                std::dynamic_pointer_cast<const BufferRange>(resource)) {
+            key.resources.push_back(
+                BindableResourceCacheKey {
+                    .resource = range->buffer().get(),
+                    .offset = range->offset(),
+                    .size = range->size(),
+                }
+            );
+        } else {
+            key.resources.push_back(
+                BindableResourceCacheKey {
+                    .resource = resource.get(),
+                    .offset = 0,
+                    .size = BufferRange::WholeSize,
+                }
+            );
+        }
     }
 
     if (auto cached = m_resource_set_cache.find(key);

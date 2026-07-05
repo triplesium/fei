@@ -49,6 +49,9 @@ class FakeTexture : public Texture {
         return m_desc.texture_usage;
     }
     TextureType type() const override { return m_desc.texture_type; }
+    TextureSampleCount sample_count() const override {
+        return m_desc.sample_count;
+    }
 
   private:
     TextureDescription m_desc;

@@ -40,21 +40,23 @@ void prepare_camera_view_uniform(
             camera.near_plane,
             camera.far_plane
         );
+        auto logical_clip_from_world = projection * view;
+        auto clip_space_transform = device->clip_space_transform();
         auto uniform = ViewUniform {
-            .clip_from_world = projection * view,
+            .clip_from_world = clip_space_transform * logical_clip_from_world,
             .view_from_world = view,
-            .clip_from_view = projection,
+            .clip_from_view = clip_space_transform * projection,
             .world_position = transform.position,
         };
         view_uniform_buffer_component.uniform = uniform;
         view_uniform_buffer_component.view = RenderView {
             .kind = RenderViewKind::Camera,
             .id = ViewId::from_source(entity),
-            .clip_from_world = uniform.clip_from_world,
+            .clip_from_world = logical_clip_from_world,
             .view_from_world = uniform.view_from_world,
-            .clip_from_view = uniform.clip_from_view,
+            .clip_from_view = projection,
             .world_position = uniform.world_position,
-            .frustum = extract_frustum(uniform.clip_from_world),
+            .frustum = extract_frustum(logical_clip_from_world),
         };
         device->update_buffer(
             view_uniform_buffer_component.buffer,

@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -23,13 +24,11 @@ class RecordingCommandBuffer : public CommandBuffer {
     void end_render_pass() override {}
 
     void set_viewport(int32, int32, uint32, uint32) override {}
-    void clear_color(const Color4F&) override {}
-    void clear_depth(float) override {}
-    void clear_stencil(std::uint8_t) override {}
     void set_vertex_buffer(std::shared_ptr<const Buffer>) override {}
     void set_resource_set(
         uint32 index,
-        std::shared_ptr<const ResourceSet> resource_set
+        std::shared_ptr<const ResourceSet> resource_set,
+        std::span<const uint32>
     ) override {
         if (resource_sets.size() <= index) {
             resource_sets.resize(index + 1);
@@ -41,10 +40,8 @@ class RecordingCommandBuffer : public CommandBuffer {
     void draw(std::size_t, std::size_t) override {}
     void draw_indexed(std::size_t) override {}
     void dispatch(std::size_t, std::size_t, std::size_t) override {}
-    void blit_to(std::shared_ptr<const Framebuffer>) override {}
 
   protected:
-    void set_framebuffer_impl(std::shared_ptr<const Framebuffer>) override {}
     void set_render_pipeline_impl(std::shared_ptr<const Pipeline>) override {}
     void set_compute_pipeline_impl(std::shared_ptr<const Pipeline>) override {}
     void set_index_buffer_impl(
@@ -326,7 +323,7 @@ TEST_CASE(
     graph.add_pass<RenderGraph::Empty>(
         "present",
         [&](RenderGraphBuilder& builder, RenderGraph::Empty&) {
-            builder.read_texture(color, RenderGraphAccess::BlitSource);
+            builder.read_texture(color, RenderGraphAccess::TextureRead);
             builder.side_effect();
         },
         [](RenderGraphContext&) {

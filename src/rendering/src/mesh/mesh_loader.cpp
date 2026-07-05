@@ -189,6 +189,10 @@ MeshLoader::load(Reader& reader, const LoadContext& context) {
     if (!attrib.texcoords.empty()) {
         mesh->insert_attribute(Mesh::ATTRIBUTE_UV_0, std::move(uvs));
     }
+    if (mesh->has_attribute(Mesh::ATTRIBUTE_NORMAL.id) &&
+        mesh->has_attribute(Mesh::ATTRIBUTE_UV_0.id)) {
+        mesh->generate_tangents();
+    }
     return mesh;
 }
 

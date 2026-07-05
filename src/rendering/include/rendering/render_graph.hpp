@@ -6,6 +6,7 @@
 #include "refl/type.hpp"
 
 #include <concepts>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -78,7 +79,6 @@ enum class RenderGraphAccess : uint8 {
     ColorAttachmentWrite,
     DepthStencilWrite,
     TextureReadWrite,
-    BlitSource,
 };
 
 struct RenderGraphStats {
@@ -121,6 +121,7 @@ struct RgTextureDebugInfo {
     std::string format;
     std::string usage;
     std::string type;
+    uint32 sample_count {1};
     uint32 version_count {0};
     uint32 first_active_use {RgTextureHandle::InvalidIndex};
     uint32 last_active_use {RgTextureHandle::InvalidIndex};
@@ -296,6 +297,7 @@ class RenderGraph {
         PixelFormat texture_format {};
         std::underlying_type_t<TextureUsage> texture_usage {0};
         TextureType texture_type {};
+        TextureSampleCount sample_count {TextureSampleCount::Count1};
 
         bool operator==(const TexturePoolKey&) const = default;
     };
@@ -315,6 +317,7 @@ class RenderGraph {
             combine(static_cast<std::size_t>(key.texture_format));
             combine(static_cast<std::size_t>(key.texture_usage));
             combine(static_cast<std::size_t>(key.texture_type));
+            combine(static_cast<std::size_t>(key.sample_count));
             return seed;
         }
     };
@@ -338,9 +341,17 @@ class RenderGraph {
         uint32 generation {0};
     };
 
+    struct BindableResourceCacheKey {
+        const BindableResource* resource {nullptr};
+        std::size_t offset {0};
+        std::size_t size {BufferRange::WholeSize};
+
+        bool operator==(const BindableResourceCacheKey&) const = default;
+    };
+
     struct ResourceSetCacheKey {
         const ResourceLayout* layout {nullptr};
-        std::vector<const BindableResource*> resources;
+        std::vector<BindableResourceCacheKey> resources;
 
         bool operator==(const ResourceSetCacheKey&) const = default;
     };

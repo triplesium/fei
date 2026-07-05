@@ -5,6 +5,7 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
+#include <span>
 
 using namespace fei;
 using namespace fei::rendering_test;
@@ -32,9 +33,6 @@ class RecordingCommandBuffer : public CommandBuffer {
     void end_render_pass() override {}
 
     void set_viewport(int32, int32, uint32, uint32) override {}
-    void clear_color(const Color4F&) override {}
-    void clear_depth(float) override {}
-    void clear_stencil(std::uint8_t) override {}
 
     void set_vertex_buffer(std::shared_ptr<const Buffer> buffer) override {
         vertex_buffer = std::move(buffer);
@@ -42,7 +40,8 @@ class RecordingCommandBuffer : public CommandBuffer {
 
     void set_resource_set(
         uint32 slot,
-        std::shared_ptr<const ResourceSet> resource_set
+        std::shared_ptr<const ResourceSet> resource_set,
+        std::span<const uint32>
     ) override {
         resource_sets.at(slot) = std::move(resource_set);
     }
@@ -60,11 +59,8 @@ class RecordingCommandBuffer : public CommandBuffer {
     }
 
     void dispatch(std::size_t, std::size_t, std::size_t) override {}
-    void blit_to(std::shared_ptr<const Framebuffer>) override {}
 
   protected:
-    void set_framebuffer_impl(std::shared_ptr<const Framebuffer>) override {}
-
     void set_render_pipeline_impl(
         std::shared_ptr<const Pipeline> pipeline
     ) override {

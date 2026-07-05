@@ -21,8 +21,6 @@ std::string_view access_name(RenderGraphAccess access) {
             return "depth_stencil_write";
         case RenderGraphAccess::TextureReadWrite:
             return "texture_read_write";
-        case RenderGraphAccess::BlitSource:
-            return "blit_source";
     }
     return "unknown";
 }
@@ -223,6 +221,8 @@ void RenderGraph::update_debug_info(
                 .type = std::string(
                     texture_type_name(texture.description.texture_type)
                 ),
+                .sample_count =
+                    static_cast<uint32>(texture.description.sample_count),
                 .version_count = static_cast<uint32>(texture.versions.size()),
                 .first_active_use = texture.first_active_use,
                 .last_active_use = texture.last_active_use,

@@ -211,7 +211,7 @@ TEST_CASE(
     REQUIRE(layout.layout.attributes[0].location == 0);
     REQUIRE(layout.layout.attributes[0].offset == 0);
     REQUIRE(layout.layout.attributes[0].format == VertexFormat::Float3);
-    REQUIRE(layout.layout.attributes[1].location == 1);
+    REQUIRE(layout.layout.attributes[1].location == Mesh::ATTRIBUTE_COLOR.id);
     REQUIRE(layout.layout.attributes[1].offset == 12);
     REQUIRE(layout.layout.attributes[1].format == VertexFormat::Float4);
 

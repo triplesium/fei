@@ -445,11 +445,11 @@ std::unique_ptr<std::byte[]> Mesh::vertex_buffer_data() const {
 MeshVertexBufferLayout Mesh::vertex_buffer_layout() const {
     std::vector<MeshVertexAttributeId> attribute_ids;
     std::vector<VertexAttributeDescription> attributes;
-    std::uint64_t offset = 0, index = 0;
+    std::uint64_t offset = 0;
     for (const auto& [id, data] : m_attributes) {
         attribute_ids.push_back(id);
         attributes.push_back({
-            .location = index++,
+            .location = id,
             .offset = offset,
             .format = data.attribute.format,
         });

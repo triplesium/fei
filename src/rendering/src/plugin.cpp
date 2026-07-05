@@ -84,9 +84,12 @@ void RenderingPlugin::setup(App& app) {
                RenderingSystems::Queue(),
                RenderingSystems::PreparePipelines(),
                RenderingSystems::BuildRenderGraph(),
-               RenderingSystems::Render(),
                RenderingSystems::ExecuteRenderGraph()
-           )
+           ),
+           RenderingSystems::Render()
+               .after<RenderingSystems::BuildRenderGraph>(),
+           RenderingSystems::Render()
+               .before<RenderingSystems::ExecuteRenderGraph>()
     )
         .add_plugins(
             AssetPlugin<Shader, ShaderLoader> {},
