@@ -71,6 +71,23 @@ std::shared_ptr<ResourceLayout> create_layout(FakeGraphicsDevice& device) {
     return device.create_resource_layout(ResourceLayoutDescription {});
 }
 
+PbrMeshShaderDefaults create_shader_defaults(FakeGraphicsDevice& device) {
+    return PbrMeshShaderDefaults {
+        .forward_vertex = device.create_shader_module(
+            ShaderDescription {.stage = ShaderStages::Vertex}
+        ),
+        .forward_fragment = device.create_shader_module(
+            ShaderDescription {.stage = ShaderStages::Fragment}
+        ),
+        .prepass_vertex = device.create_shader_module(
+            ShaderDescription {.stage = ShaderStages::Vertex}
+        ),
+        .prepass_fragment = device.create_shader_module(
+            ShaderDescription {.stage = ShaderStages::Fragment}
+        ),
+    };
+}
+
 PreparedMaterial create_material(
     FakeGraphicsDevice& device,
     std::shared_ptr<ResourceLayout> layout,
@@ -102,6 +119,25 @@ PreparedMaterial create_material(
     };
 }
 
+PreparedMaterial create_default_shader_material(
+    FakeGraphicsDevice& device,
+    std::shared_ptr<ResourceLayout> layout,
+    std::size_t material_hash = 1
+) {
+    auto resource_set = device.create_resource_set(
+        ResourceSetDescription {
+            .layout = layout,
+            .resources = {},
+        }
+    );
+    return PreparedMaterial {
+        {},
+        std::move(layout),
+        std::move(resource_set),
+        material_hash
+    };
+}
+
 GpuMesh create_gpu_mesh(RenderPrimitive primitive) {
     MeshVertexBufferLayout vertex_layout {
         .attribute_ids = {Mesh::ATTRIBUTE_POSITION.id},
@@ -124,12 +160,14 @@ GpuMesh create_gpu_mesh(RenderPrimitive primitive) {
 MeshMaterialPipelines create_mesh_material_pipelines(
     MeshViewLayout& mesh_view_layout,
     MeshUniforms& mesh_uniforms,
-    PipelineCache& pipeline_cache
+    PipelineCache& pipeline_cache,
+    const PbrMeshShaderDefaults& shader_defaults
 ) {
     return MeshMaterialPipelines {
         mesh_view_layout,
         mesh_uniforms,
         pipeline_cache,
+        shader_defaults,
     };
 }
 
@@ -143,10 +181,12 @@ TEST_CASE(
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     PipelineCache pipeline_cache(device);
+    auto shader_defaults = create_shader_defaults(device);
     auto pipelines = create_mesh_material_pipelines(
         mesh_view_layout,
         mesh_uniforms,
-        pipeline_cache
+        pipeline_cache,
+        shader_defaults
     );
 
     auto material = create_material(device, create_layout(device));
@@ -179,10 +219,12 @@ TEST_CASE(
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     PipelineCache pipeline_cache(device);
+    auto shader_defaults = create_shader_defaults(device);
     auto pipelines = create_mesh_material_pipelines(
         mesh_view_layout,
         mesh_uniforms,
-        pipeline_cache
+        pipeline_cache,
+        shader_defaults
     );
 
     auto material = create_material(device, create_layout(device));
@@ -225,10 +267,12 @@ TEST_CASE(
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     PipelineCache pipeline_cache(device);
+    auto shader_defaults = create_shader_defaults(device);
     auto pipelines = create_mesh_material_pipelines(
         mesh_view_layout,
         mesh_uniforms,
-        pipeline_cache
+        pipeline_cache,
+        shader_defaults
     );
 
     auto material = create_material(device, create_layout(device));
@@ -271,10 +315,12 @@ TEST_CASE(
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     PipelineCache pipeline_cache(device);
+    auto shader_defaults = create_shader_defaults(device);
     auto pipelines = create_mesh_material_pipelines(
         mesh_view_layout,
         mesh_uniforms,
-        pipeline_cache
+        pipeline_cache,
+        shader_defaults
     );
 
     auto material = create_material(device, create_layout(device));
@@ -285,6 +331,44 @@ TEST_CASE(
     pipeline_cache.process_queued_pipelines();
 
     CHECK(device.render_pipeline_descriptions.empty());
+}
+
+TEST_CASE(
+    "MeshMaterialPipelines uses PBR defaults for default material shaders",
+    "[pbr][pipelines]"
+) {
+    FakeGraphicsDevice device;
+    MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
+    MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
+    PipelineCache pipeline_cache(device);
+    auto shader_defaults = create_shader_defaults(device);
+    auto pipelines = create_mesh_material_pipelines(
+        mesh_view_layout,
+        mesh_uniforms,
+        pipeline_cache,
+        shader_defaults
+    );
+
+    auto material =
+        create_default_shader_material(device, create_layout(device));
+    auto mesh = create_gpu_mesh(RenderPrimitive::Triangles);
+
+    pipelines.request(1, material, mesh, PipelineSpecializer {});
+    pipeline_cache.process_queued_pipelines();
+
+    REQUIRE(device.render_pipeline_descriptions.size() == 1);
+    REQUIRE(
+        device.render_pipeline_descriptions[0].shader_program.shaders.size() ==
+        2
+    );
+    CHECK(
+        device.render_pipeline_descriptions[0].shader_program.shaders[0] ==
+        shader_defaults.forward_vertex
+    );
+    CHECK(
+        device.render_pipeline_descriptions[0].shader_program.shaders[1] ==
+        shader_defaults.forward_fragment
+    );
 }
 
 // NOLINTEND(clang-analyzer-cplusplus.NewDeleteLeaks)

@@ -38,6 +38,23 @@ std::shared_ptr<ResourceSet> create_resource_set(FakeGraphicsDevice& device) {
     );
 }
 
+PbrMeshShaderDefaults create_shader_defaults(FakeGraphicsDevice& device) {
+    return PbrMeshShaderDefaults {
+        .forward_vertex = device.create_shader_module(
+            ShaderDescription {.stage = ShaderStages::Vertex}
+        ),
+        .forward_fragment = device.create_shader_module(
+            ShaderDescription {.stage = ShaderStages::Fragment}
+        ),
+        .prepass_vertex = device.create_shader_module(
+            ShaderDescription {.stage = ShaderStages::Vertex}
+        ),
+        .prepass_fragment = device.create_shader_module(
+            ShaderDescription {.stage = ShaderStages::Fragment}
+        ),
+    };
+}
+
 PreparedMaterial create_prepared_material(
     FakeGraphicsDevice& device,
     std::size_t material_hash
@@ -113,10 +130,12 @@ TEST_CASE(
     PipelineCache pipeline_cache(device);
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
+    auto shader_defaults = create_shader_defaults(device);
     MeshMaterialPipelines mesh_material_pipelines(
         mesh_view_layout,
         mesh_uniforms,
-        pipeline_cache
+        pipeline_cache,
+        shader_defaults
     );
     RenderAssets<GpuMesh> gpu_meshes;
     RenderAssets<PreparedMaterial> prepared_materials;

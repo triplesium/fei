@@ -6,6 +6,7 @@
 #include "graphics/graphics_device.hpp"
 #include "graphics/pipeline.hpp"
 #include "graphics/resource.hpp"
+#include "graphics/sampler.hpp"
 #include "graphics/texture.hpp"
 #include "rendering/shader.hpp"
 
@@ -19,6 +20,7 @@ class EquirectToCubemap {
     std::unordered_map<AssetId, std::shared_ptr<Texture>> m_cubemaps;
     std::shared_ptr<Pipeline> m_equirect_to_cubemap_pipeline;
     std::shared_ptr<ResourceLayout> m_equirect_to_cubemap_resource_layout;
+    std::shared_ptr<Sampler> m_equirect_sampler;
 
   public:
     void setup(

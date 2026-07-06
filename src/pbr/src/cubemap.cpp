@@ -28,7 +28,8 @@ std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
     auto resource_set = device.create_resource_set(
         ResourceSetDescription {
             .layout = m_equirect_to_cubemap_resource_layout,
-            .resources = {equirect_texture, cubemap_texture},
+            .resources =
+                {equirect_texture, m_equirect_sampler, cubemap_texture},
             .name = "cubemap.equirect_to_cubemap",
         }
     );
@@ -117,6 +118,12 @@ void EquirectToCubemap::setup(
                 },
                 {
                     .binding = 1,
+                    .name = "input_sampler",
+                    .kind = ResourceKind::Sampler,
+                    .stages = {ShaderStages::Compute},
+                },
+                {
+                    .binding = 2,
                     .name = "output_texture",
                     .kind = ResourceKind::TextureReadWrite,
                     .stages = {ShaderStages::Compute},
@@ -130,6 +137,7 @@ void EquirectToCubemap::setup(
             .resource_layouts = {m_equirect_to_cubemap_resource_layout},
         }
     );
+    m_equirect_sampler = device.create_sampler(SamplerDescription::Linear);
 }
 
 void setup_equi2cubemap(

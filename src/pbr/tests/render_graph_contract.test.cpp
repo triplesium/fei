@@ -623,7 +623,10 @@ void add_composite_pass(
             (void)builder.create_resource_set(
                 "deferred.composite",
                 std::shared_ptr<const ResourceLayout> {},
-                deferred_composite_resource_bindings(deferred_lighting)
+                deferred_composite_resource_bindings(
+                    deferred_lighting,
+                    std::shared_ptr<Sampler> {}
+                )
             );
             deferred_lighting.composite = builder.create_texture(
                 "composite_lighting",

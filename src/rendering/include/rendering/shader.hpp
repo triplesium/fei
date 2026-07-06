@@ -5,6 +5,7 @@
 #include "asset/path.hpp"
 #include "asset/server.hpp"
 #include "asset/source.hpp"
+#include "base/log.hpp"
 #include "base/optional.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/shader_module.hpp"
@@ -78,14 +79,24 @@ class ShaderAssetSource : public AssetSource {
 
 class ShaderRef {
   private:
-    std::variant<Handle<Shader>, AssetPath> m_source;
+    std::variant<std::monostate, Handle<Shader>, AssetPath> m_source;
 
   public:
+    ShaderRef() = default;
     ShaderRef(Handle<Shader> handle) : m_source(handle) {}
     ShaderRef(const AssetPath& path) : m_source(path) {}
     ShaderRef(const char* path) : m_source(AssetPath(path)) {}
 
+    static ShaderRef default_shader() { return ShaderRef(); }
+
+    bool is_default() const {
+        return std::holds_alternative<std::monostate>(m_source);
+    }
+
     Handle<Shader> resolve(AssetServer& asset_server) const {
+        if (is_default()) {
+            fatal("Cannot resolve default ShaderRef without pipeline context");
+        }
         if (std::holds_alternative<Handle<Shader>>(m_source)) {
             return std::get<Handle<Shader>>(m_source);
         } else {

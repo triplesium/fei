@@ -162,13 +162,14 @@ TEST_CASE(
             {"View", ResourceKind::UniformBuffer, 0, 0},
             {"irradiance_map", ResourceKind::TextureReadOnly, 0, 1},
             {"radiance_map", ResourceKind::TextureReadOnly, 0, 2},
+            {"cubemap_sampler", ResourceKind::Sampler, 0, 3},
             {"brdf_lut", ResourceKind::TextureReadOnly, 0, 4},
-            {"Mesh", ResourceKind::UniformBuffer, 1, 0},
             {"Material", ResourceKind::UniformBuffer, 2, 0},
             {"albedo_map", ResourceKind::TextureReadOnly, 2, 1},
             {"normal_map", ResourceKind::TextureReadOnly, 2, 2},
             {"metallic_map", ResourceKind::TextureReadOnly, 2, 3},
             {"roughness_map", ResourceKind::TextureReadOnly, 2, 4},
+            {"sampler", ResourceKind::Sampler, 2, 7},
         }
     );
 }
@@ -185,9 +186,10 @@ TEST_CASE(
             {"g_normal_roughness", ResourceKind::TextureReadOnly, 1, 1},
             {"g_albedo_metallic", ResourceKind::TextureReadOnly, 1, 2},
             {"g_specular", ResourceKind::TextureReadOnly, 1, 3},
-            {"g_emissive_depth", ResourceKind::TextureReadOnly, 1, 4},
+            {"g_buffer_sampler", ResourceKind::Sampler, 1, 5},
             {"Lighting", ResourceKind::UniformBuffer, 2, 0},
             {"shadow_map", ResourceKind::TextureReadOnly, 2, 1},
+            {"shadow_map_sampler", ResourceKind::Sampler, 2, 2},
         }
     );
 
@@ -199,25 +201,24 @@ TEST_CASE(
             {"g_normal_roughness", ResourceKind::TextureReadOnly, 1, 1},
             {"g_albedo_metallic", ResourceKind::TextureReadOnly, 1, 2},
             {"g_specular", ResourceKind::TextureReadOnly, 1, 3},
-            {"g_emissive_depth", ResourceKind::TextureReadOnly, 1, 4},
+            {"g_buffer_sampler", ResourceKind::Sampler, 1, 5},
             {"Vxgi", ResourceKind::UniformBuffer, 2, 0},
-            {"voxel_visibility", ResourceKind::TextureReadOnly, 2, 1},
             {"voxel_tex", ResourceKind::TextureReadOnly, 2, 2},
             {"voxel_tex_mipmap", ResourceKind::TextureReadOnly, 2, 3, 6},
+            {"voxel_sampler", ResourceKind::Sampler, 2, 9},
         }
     );
 
     require_shader_resources(
         "deferred_gi_composite.frag",
         {
-            {"View", ResourceKind::UniformBuffer, 0, 0},
             {"g_position_ao", ResourceKind::TextureReadOnly, 1, 0},
             {"g_normal_roughness", ResourceKind::TextureReadOnly, 1, 1},
-            {"g_albedo_metallic", ResourceKind::TextureReadOnly, 1, 2},
-            {"g_specular", ResourceKind::TextureReadOnly, 1, 3},
             {"g_emissive_depth", ResourceKind::TextureReadOnly, 1, 4},
+            {"g_buffer_sampler", ResourceKind::Sampler, 1, 5},
             {"direct_lighting", ResourceKind::TextureReadOnly, 2, 0},
             {"indirect_lighting", ResourceKind::TextureReadOnly, 2, 1},
+            {"composite_sampler", ResourceKind::Sampler, 2, 2},
         }
     );
 
@@ -225,6 +226,7 @@ TEST_CASE(
         "deferred_present.frag",
         {
             {"composite", ResourceKind::TextureReadOnly, 0, 0},
+            {"composite_sampler", ResourceKind::Sampler, 0, 1},
         }
     );
 }
@@ -239,6 +241,7 @@ TEST_CASE(
             {"Material", ResourceKind::UniformBuffer, 2, 0},
             {"albedo_map", ResourceKind::TextureReadOnly, 2, 1},
             {"emissive_map", ResourceKind::TextureReadOnly, 2, 5},
+            {"sampler", ResourceKind::Sampler, 2, 7},
             {"voxel_albedo", ResourceKind::TextureReadWrite, 3, 0},
             {"voxel_normal", ResourceKind::TextureReadWrite, 3, 1},
             {"voxel_emissive", ResourceKind::TextureReadWrite, 3, 2},
@@ -275,6 +278,7 @@ TEST_CASE(
             {"VxgiVoxelization", ResourceKind::UniformBuffer, 1, 0},
             {"Lighting", ResourceKind::UniformBuffer, 2, 0},
             {"shadow_map", ResourceKind::TextureReadOnly, 2, 1},
+            {"shadow_map_sampler", ResourceKind::Sampler, 2, 2},
             {"VxgiInjectRadiance", ResourceKind::UniformBuffer, 3, 0},
         }
     );
@@ -287,6 +291,7 @@ TEST_CASE(
             {"voxel_albedo", ResourceKind::TextureReadOnly, 0, 2},
             {"voxel_normal", ResourceKind::TextureReadOnly, 0, 3},
             {"voxel_tex_mipmap", ResourceKind::TextureReadOnly, 0, 4, 6},
+            {"voxel_sampler", ResourceKind::Sampler, 0, 10},
         }
     );
 }

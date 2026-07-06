@@ -68,11 +68,13 @@ deferred_gbuffer_resource_bindings(
 
 inline std::vector<RenderGraphResourceBinding>
 deferred_composite_resource_bindings(
-    const DeferredLightingGraphHandles& lighting
+    const DeferredLightingGraphHandles& lighting,
+    std::shared_ptr<Sampler> point_sampler
 ) {
     return {
         lighting.direct,
         lighting.indirect,
+        std::move(point_sampler),
     };
 }
 

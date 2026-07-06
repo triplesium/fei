@@ -1,14 +1,18 @@
+#include <algorithm>
 #include <CLI/CLI.hpp>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <nlohmann/json.hpp>
 #include <spirv_cross/spirv_cross.hpp>
 #include <spirv_cross/spirv_glsl.hpp>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -17,14 +21,27 @@ struct Options {
     std::filesystem::path input;
     std::filesystem::path glsl;
     std::filesystem::path reflect;
+    std::filesystem::path slang_reflect;
 };
 
 struct ReflectedResource {
     std::string name;
+    std::string backend_name;
+    std::vector<std::string> backend_names;
     std::string type;
     uint32_t set;
     uint32_t binding;
     std::vector<uint32_t> array;
+};
+
+using LogicalResourceNames = std::unordered_map<std::string, std::string>;
+using BackendResourceNames =
+    std::unordered_map<std::string, std::vector<std::string>>;
+using SkippedResourceIds = std::unordered_set<uint32_t>;
+
+struct OpenGLResourceNames {
+    BackendResourceNames backend_names;
+    SkippedResourceIds skipped_resource_ids;
 };
 
 void configure_options(CLI::App& app, Options& options) {
@@ -35,6 +52,11 @@ void configure_options(CLI::App& app, Options& options) {
         ->required();
     app.add_option("--reflect", options.reflect, "Output reflection JSON file")
         ->required();
+    app.add_option(
+        "--slang-reflect",
+        options.slang_reflect,
+        "Optional Slang reflection JSON file for logical resource names"
+    );
 }
 
 std::vector<uint32_t> read_spirv(const std::filesystem::path& path) {
@@ -62,6 +84,20 @@ std::vector<uint32_t> read_spirv(const std::filesystem::path& path) {
         );
     }
     return words;
+}
+
+std::string read_text(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        throw std::runtime_error("failed to open input: " + path.string());
+    }
+
+    std::ostringstream content;
+    content << input.rdbuf();
+    if (!input && !input.eof()) {
+        throw std::runtime_error("failed to read input: " + path.string());
+    }
+    return content.str();
 }
 
 void write_text(const std::filesystem::path& path, const std::string& content) {
@@ -104,6 +140,55 @@ std::string escape_json(std::string_view value) {
         }
     }
     return result;
+}
+
+std::string resource_key(uint32_t set, uint32_t binding) {
+    return std::to_string(set) + ":" + std::to_string(binding);
+}
+
+void insert_unique(std::vector<std::string>& values, std::string value) {
+    if (std::find(values.begin(), values.end(), value) == values.end()) {
+        values.push_back(std::move(value));
+    }
+}
+
+LogicalResourceNames
+load_slang_logical_resource_names(const std::filesystem::path& path) {
+    LogicalResourceNames names;
+    if (path.empty()) {
+        return names;
+    }
+
+    const auto document = nlohmann::json::parse(read_text(path));
+    const auto parameters = document.find("parameters");
+    if (parameters == document.end() || !parameters->is_array()) {
+        return names;
+    }
+
+    for (const auto& parameter : *parameters) {
+        if (!parameter.is_object()) {
+            continue;
+        }
+        const auto name = parameter.find("name");
+        const auto binding = parameter.find("binding");
+        if (name == parameter.end() || !name->is_string() ||
+            binding == parameter.end() || !binding->is_object()) {
+            continue;
+        }
+
+        const auto kind = binding->find("kind");
+        const auto index = binding->find("index");
+        if (kind == binding->end() || !kind->is_string() ||
+            kind->get<std::string>() != "descriptorTableSlot" ||
+            index == binding->end() || !index->is_number_unsigned()) {
+            continue;
+        }
+
+        const uint32_t set = binding->value("space", static_cast<uint32_t>(0));
+        const auto slot = index->get<uint32_t>();
+        names[resource_key(set, slot)] = name->get<std::string>();
+    }
+    return names;
 }
 
 std::string execution_model_name(spv::ExecutionModel model) {
@@ -186,33 +271,54 @@ uint32_t decoration_or_zero(
 
 ReflectedResource reflect_resource(
     const spirv_cross::Compiler& compiler,
-    const spirv_cross::Resource& resource
+    const spirv_cross::Resource& resource,
+    const LogicalResourceNames& logical_names,
+    const BackendResourceNames& backend_names
 ) {
     const auto& type = compiler.get_type(resource.type_id);
+    const auto spirv_name = resource.name.empty() ?
+                                compiler.get_fallback_name(resource.id) :
+                                resource.name;
+    const auto set =
+        decoration_or_zero(compiler, resource.id, spv::DecorationDescriptorSet);
+    const auto binding =
+        decoration_or_zero(compiler, resource.id, spv::DecorationBinding);
+    const auto key = resource_key(set, binding);
+    const auto logical_name = logical_names.find(key);
+    const auto backend_names_for_resource = backend_names.find(key);
+    auto reflected_backend_names =
+        backend_names_for_resource == backend_names.end() ?
+            std::vector<std::string> {spirv_name} :
+            backend_names_for_resource->second;
     return ReflectedResource {
-        .name = resource.name.empty() ?
-                    compiler.get_fallback_name(resource.id) :
-                    resource.name,
+        .name = logical_name == logical_names.end() ? spirv_name :
+                                                      logical_name->second,
+        .backend_name = reflected_backend_names.front(),
+        .backend_names = std::move(reflected_backend_names),
         .type = resource_type_name(compiler, resource),
-        .set = decoration_or_zero(
-            compiler,
-            resource.id,
-            spv::DecorationDescriptorSet
-        ),
-        .binding =
-            decoration_or_zero(compiler, resource.id, spv::DecorationBinding),
+        .set = set,
+        .binding = binding,
         .array = std::vector<uint32_t>(type.array.begin(), type.array.end()),
     };
 }
 
 std::vector<ReflectedResource> reflect_resources(
     const spirv_cross::Compiler& compiler,
-    const spirv_cross::SmallVector<spirv_cross::Resource>& resources
+    const spirv_cross::SmallVector<spirv_cross::Resource>& resources,
+    const LogicalResourceNames& logical_names,
+    const BackendResourceNames& backend_names,
+    const SkippedResourceIds& skipped_resource_ids = {}
 ) {
     std::vector<ReflectedResource> reflected;
     reflected.reserve(resources.size());
     for (const auto& resource : resources) {
-        reflected.push_back(reflect_resource(compiler, resource));
+        if (skipped_resource_ids.contains(resource.id) ||
+            resource.name == "fei_dummy_sampler") {
+            continue;
+        }
+        reflected.push_back(
+            reflect_resource(compiler, resource, logical_names, backend_names)
+        );
     }
     return reflected;
 }
@@ -250,6 +356,20 @@ void write_resource_array(
              << R"(",)" << '\n';
         json << R"(            "name" : ")" << escape_json(resource.name)
              << R"(",)" << '\n';
+        if (resource.backend_names.size() > 1) {
+            json << R"(            "backend_names" : [)";
+            for (std::size_t j = 0; j < resource.backend_names.size(); ++j) {
+                if (j > 0) {
+                    json << ", ";
+                }
+                json << R"(")" << escape_json(resource.backend_names[j])
+                     << R"(")";
+            }
+            json << R"(],)" << '\n';
+        } else if (resource.backend_name != resource.name) {
+            json << R"(            "backend_name" : ")"
+                 << escape_json(resource.backend_name) << R"(",)" << '\n';
+        }
         json << "            \"set\" : " << resource.set << ",\n";
         json << "            \"binding\" : " << resource.binding;
         if (!resource.array.empty()) {
@@ -273,22 +393,51 @@ void write_resource_array(
     json << "    ]";
 }
 
-std::string make_reflection_json(spirv_cross::CompilerGLSL& compiler) {
+std::string make_reflection_json(
+    spirv_cross::CompilerGLSL& compiler,
+    const LogicalResourceNames& logical_names,
+    const OpenGLResourceNames& opengl_names
+) {
     const auto shader_resources = compiler.get_shader_resources();
     const auto entry_points = compiler.get_entry_points_and_stages();
 
-    const auto ubos =
-        reflect_resources(compiler, shader_resources.uniform_buffers);
-    const auto ssbos =
-        reflect_resources(compiler, shader_resources.storage_buffers);
-    const auto textures =
-        reflect_resources(compiler, shader_resources.sampled_images);
-    const auto separate_images =
-        reflect_resources(compiler, shader_resources.separate_images);
-    const auto images =
-        reflect_resources(compiler, shader_resources.storage_images);
-    const auto separate_samplers =
-        reflect_resources(compiler, shader_resources.separate_samplers);
+    const auto ubos = reflect_resources(
+        compiler,
+        shader_resources.uniform_buffers,
+        logical_names,
+        opengl_names.backend_names
+    );
+    const auto ssbos = reflect_resources(
+        compiler,
+        shader_resources.storage_buffers,
+        logical_names,
+        opengl_names.backend_names
+    );
+    const auto textures = reflect_resources(
+        compiler,
+        shader_resources.sampled_images,
+        logical_names,
+        opengl_names.backend_names,
+        opengl_names.skipped_resource_ids
+    );
+    const auto separate_images = reflect_resources(
+        compiler,
+        shader_resources.separate_images,
+        logical_names,
+        opengl_names.backend_names
+    );
+    const auto images = reflect_resources(
+        compiler,
+        shader_resources.storage_images,
+        logical_names,
+        opengl_names.backend_names
+    );
+    const auto separate_samplers = reflect_resources(
+        compiler,
+        shader_resources.separate_samplers,
+        logical_names,
+        opengl_names.backend_names
+    );
 
     std::ostringstream json;
     json << "{\n";
@@ -344,6 +493,41 @@ void unset_descriptor_layouts_for_all_resources(
     unset_descriptor_layouts(compiler, resources.separate_samplers);
 }
 
+OpenGLResourceNames
+prepare_opengl_resource_names(spirv_cross::CompilerGLSL& compiler) {
+    OpenGLResourceNames names;
+    const auto dummy_sampler =
+        compiler.build_dummy_sampler_for_combined_images();
+    if (dummy_sampler != 0) {
+        compiler.set_name(dummy_sampler, "fei_dummy_sampler");
+        names.skipped_resource_ids.insert(dummy_sampler);
+    }
+
+    compiler.build_combined_image_samplers();
+    for (const auto& combined : compiler.get_combined_image_samplers()) {
+        const auto set = decoration_or_zero(
+            compiler,
+            combined.image_id,
+            spv::DecorationDescriptorSet
+        );
+        const auto binding = decoration_or_zero(
+            compiler,
+            combined.image_id,
+            spv::DecorationBinding
+        );
+        auto backend_name = compiler.get_name(combined.combined_id);
+        if (backend_name.empty()) {
+            backend_name = compiler.get_fallback_name(combined.combined_id);
+        }
+        insert_unique(
+            names.backend_names[resource_key(set, binding)],
+            backend_name
+        );
+        names.skipped_resource_ids.insert(combined.combined_id);
+    }
+    return names;
+}
+
 std::string compile_opengl_glsl(spirv_cross::CompilerGLSL& compiler) {
     unset_descriptor_layouts_for_all_resources(compiler);
 
@@ -365,9 +549,13 @@ int main(int argc, char** argv) {
 
     try {
         auto spirv = read_spirv(options.input);
+        auto logical_names =
+            load_slang_logical_resource_names(options.slang_reflect);
         spirv_cross::CompilerGLSL compiler(std::move(spirv));
+        auto opengl_names = prepare_opengl_resource_names(compiler);
 
-        auto reflection = make_reflection_json(compiler);
+        auto reflection =
+            make_reflection_json(compiler, logical_names, opengl_names);
         auto glsl = compile_opengl_glsl(compiler);
 
         write_text(options.glsl, glsl);

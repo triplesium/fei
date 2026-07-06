@@ -10,6 +10,8 @@ namespace fei {
 
 struct ShaderResourceBinding {
     std::string name;
+    std::string backend_name;
+    std::vector<std::string> backend_names;
     ResourceKind kind;
     uint32 set;
     uint32 binding;

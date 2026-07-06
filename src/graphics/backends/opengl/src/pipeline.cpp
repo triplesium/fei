@@ -85,6 +85,49 @@ bool resource_name_matches(
     return layout_name == shader_name + "[" + std::to_string(array_index) + "]";
 }
 
+std::vector<std::string> indexed_backend_resource_names(
+    const ShaderResourceBinding& resource,
+    uint32 array_index
+) {
+    auto backend_names = resource.backend_names;
+    if (backend_names.empty()) {
+        backend_names.push_back(
+            resource.backend_name.empty() ? resource.name :
+                                            resource.backend_name
+        );
+    }
+    if (resource.array_size <= 1) {
+        return backend_names;
+    }
+    for (auto& backend_name : backend_names) {
+        backend_name += "[" + std::to_string(array_index) + "]";
+    }
+    return backend_names;
+}
+
+Optional<std::vector<std::string>> shader_backend_resource_names(
+    const std::vector<std::shared_ptr<const ShaderModule>>& shaders,
+    uint32 set,
+    const ResourceLayoutElementDescription& element
+) {
+    for (const auto& shader : shaders) {
+        for (const auto& resource : shader->resources()) {
+            if (resource.set != set ||
+                !resource_kind_matches(resource.kind, element.kind) ||
+                element.binding < resource.binding ||
+                element.binding >= resource.binding + resource.array_size) {
+                continue;
+            }
+
+            return indexed_backend_resource_names(
+                resource,
+                element.binding - resource.binding
+            );
+        }
+    }
+    return nullopt;
+}
+
 } // namespace
 
 PipelineOpenGL::PipelineOpenGL(const RenderPipelineDescription& desc) :
@@ -246,10 +289,19 @@ void PipelineOpenGL::process_resource_layouts() const {
 
         for (auto i : element_indices) {
             const auto& element = elements[i];
+            std::vector<std::string> backend_names {element.name};
+            if (auto shader_names = shader_backend_resource_names(
+                    m_shaders,
+                    static_cast<uint32>(slot),
+                    element
+                )) {
+                backend_names = *shader_names;
+            }
+            const auto& backend_name = backend_names.front();
             switch (element.kind) {
                 case ResourceKind::UniformBuffer: {
                     auto index = FEI_GL_CALL(
-                        glGetUniformBlockIndex(m_program, element.name.c_str())
+                        glGetUniformBlockIndex(m_program, backend_name.c_str())
                     );
                     if (index == GL_INVALID_INDEX) {
                         continue;
@@ -271,10 +323,16 @@ void PipelineOpenGL::process_resource_layouts() const {
                     break;
                 }
                 case ResourceKind::TextureReadOnly: {
-                    auto location = FEI_GL_CALL(
-                        glGetUniformLocation(m_program, element.name.c_str())
-                    );
-                    if (location == -1) {
+                    std::vector<GLint> locations;
+                    for (const auto& name : backend_names) {
+                        auto location = FEI_GL_CALL(
+                            glGetUniformLocation(m_program, name.c_str())
+                        );
+                        if (location != -1) {
+                            locations.push_back(location);
+                        }
+                    }
+                    if (locations.empty()) {
                         continue;
                     }
                     validate_resource_binding(
@@ -284,21 +342,31 @@ void PipelineOpenGL::process_resource_layouts() const {
                         element.name
                     );
                     auto unit = next_texture_unit++;
-                    FEI_GL_CALL(
-                        glProgramUniform1i(m_program, location, to_gl_int(unit))
-                    );
+                    for (auto location : locations) {
+                        FEI_GL_CALL(glProgramUniform1i(
+                            m_program,
+                            location,
+                            to_gl_int(unit)
+                        ));
+                    }
                     m_resource_bindings[slot][i] = TextureBinding {
                         .unit = unit,
-                        .location = location,
+                        .location = locations.front(),
                     };
                     sampler_tracked_texture_units.push_back(unit);
                     break;
                 }
                 case ResourceKind::TextureReadWrite: {
-                    auto location = FEI_GL_CALL(
-                        glGetUniformLocation(m_program, element.name.c_str())
-                    );
-                    if (location == -1) {
+                    std::vector<GLint> locations;
+                    for (const auto& name : backend_names) {
+                        auto location = FEI_GL_CALL(
+                            glGetUniformLocation(m_program, name.c_str())
+                        );
+                        if (location != -1) {
+                            locations.push_back(location);
+                        }
+                    }
+                    if (locations.empty()) {
                         continue;
                     }
                     validate_resource_binding(
@@ -308,12 +376,16 @@ void PipelineOpenGL::process_resource_layouts() const {
                         element.name
                     );
                     auto unit = next_image_unit++;
-                    FEI_GL_CALL(
-                        glProgramUniform1i(m_program, location, to_gl_int(unit))
-                    );
+                    for (auto location : locations) {
+                        FEI_GL_CALL(glProgramUniform1i(
+                            m_program,
+                            location,
+                            to_gl_int(unit)
+                        ));
+                    }
                     m_resource_bindings[slot][i] = TextureBinding {
                         .unit = unit,
-                        .location = location,
+                        .location = locations.front(),
                     };
                     m_memory_barriers |= GL_SHADER_IMAGE_ACCESS_BARRIER_BIT;
                     m_memory_barriers |= GL_TEXTURE_FETCH_BARRIER_BIT;
@@ -324,7 +396,7 @@ void PipelineOpenGL::process_resource_layouts() const {
                     auto index = FEI_GL_CALL(glGetProgramResourceIndex(
                         m_program,
                         GL_SHADER_STORAGE_BLOCK,
-                        element.name.c_str()
+                        backend_name.c_str()
                     ));
                     if (index == GL_INVALID_INDEX) {
                         continue;

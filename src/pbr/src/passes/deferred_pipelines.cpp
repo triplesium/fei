@@ -135,6 +135,7 @@ void setup_deferred_pipelines(
             {
                 texture_read_only("direct_lighting"),
                 texture_read_only("indirect_lighting"),
+                sampler("composite_sampler"),
             }
         )
     );
@@ -143,6 +144,7 @@ void setup_deferred_pipelines(
             {ShaderStages::Fragment},
             {
                 texture_read_only("composite"),
+                sampler("composite_sampler"),
             }
         )
     );

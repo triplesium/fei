@@ -356,7 +356,10 @@ void build_composite_pass(
             data.composite_set = builder.create_resource_set(
                 "deferred.composite",
                 pipelines->composite_resource_layout,
-                deferred_composite_resource_bindings(lighting)
+                deferred_composite_resource_bindings(
+                    lighting,
+                    pipelines->point_sampler
+                )
             );
             data.target = builder.import_texture(
                 "composite_lighting",
@@ -443,6 +446,7 @@ void build_present_composite_pass(
                 (*pipelines)->present_resource_layout,
                 {
                     composite,
+                    (*pipelines)->point_sampler,
                 }
             );
             builder.side_effect();

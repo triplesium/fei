@@ -16,6 +16,7 @@ TEST_CASE(
             {
                 "type": "_12",
                 "name": "Material",
+                "backend_name": "MaterialData_std140",
                 "block_size": 24,
                 "set": 2,
                 "binding": 0
@@ -46,10 +47,12 @@ TEST_CASE(
     REQUIRE(bindings);
     REQUIRE(bindings->size() == 3);
     REQUIRE((*bindings)[0].name == "Material");
+    REQUIRE((*bindings)[0].backend_name == "MaterialData_std140");
     REQUIRE((*bindings)[0].kind == ResourceKind::UniformBuffer);
     REQUIRE((*bindings)[0].set == 2);
     REQUIRE((*bindings)[0].binding == 0);
     REQUIRE((*bindings)[1].name == "albedo_map");
+    REQUIRE((*bindings)[1].backend_name == "albedo_map");
     REQUIRE((*bindings)[1].kind == ResourceKind::TextureReadOnly);
     REQUIRE((*bindings)[1].set == 2);
     REQUIRE((*bindings)[1].binding == 1);

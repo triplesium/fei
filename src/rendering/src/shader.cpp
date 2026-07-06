@@ -234,6 +234,37 @@ uint32 shader_resource_array_size(const ReflectionJson& object) {
     return value == 0 ? 1 : value;
 }
 
+std::string shader_resource_backend_name(const ReflectionJson& object) {
+    auto backend_name = object.find("backend_name");
+    if (backend_name != object.end() && backend_name->is_string()) {
+        return backend_name->get<std::string>();
+    }
+    auto backend_names = object.find("backend_names");
+    if (backend_names != object.end() && backend_names->is_array() &&
+        !backend_names->empty() && (*backend_names)[0].is_string()) {
+        return (*backend_names)[0].get<std::string>();
+    }
+    return object.at("name").get<std::string>();
+}
+
+std::vector<std::string>
+shader_resource_backend_names(const ReflectionJson& object) {
+    std::vector<std::string> names;
+    auto backend_names = object.find("backend_names");
+    if (backend_names != object.end() && backend_names->is_array()) {
+        for (const auto& name : *backend_names) {
+            if (name.is_string()) {
+                names.push_back(name.get<std::string>());
+            }
+        }
+    }
+    if (!names.empty()) {
+        return names;
+    }
+    names.push_back(shader_resource_backend_name(object));
+    return names;
+}
+
 Status<std::string> append_shader_reflection_bindings(
     std::vector<ShaderResourceBinding>& bindings,
     const ReflectionJson& document,
@@ -270,6 +301,8 @@ Status<std::string> append_shader_reflection_bindings(
         bindings.push_back(
             ShaderResourceBinding {
                 .name = name->get<std::string>(),
+                .backend_name = shader_resource_backend_name(object),
+                .backend_names = shader_resource_backend_names(object),
                 .kind = kind,
                 .set = set->get<uint32>(),
                 .binding = binding->get<uint32>(),

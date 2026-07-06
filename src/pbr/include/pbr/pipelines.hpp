@@ -1,7 +1,9 @@
 #pragma once
 #include "base/hash.hpp"
+#include "base/log.hpp"
 #include "base/optional.hpp"
 #include "graphics/pipeline.hpp"
+#include "graphics/shader_module.hpp"
 #include "pbr/mesh_view.hpp"
 #include "pbr/pipeline_specializer.hpp"
 #include "refl/type.hpp"
@@ -17,6 +19,30 @@
 #include <utility>
 
 namespace fei {
+struct PbrMeshShaderDefaults {
+    std::shared_ptr<const ShaderModule> forward_vertex;
+    std::shared_ptr<const ShaderModule> forward_fragment;
+    std::shared_ptr<const ShaderModule> prepass_vertex;
+    std::shared_ptr<const ShaderModule> prepass_fragment;
+};
+
+inline std::shared_ptr<const ShaderModule> resolve_material_shader(
+    const PreparedMaterial& material,
+    MaterialShaderType shader_type,
+    const std::shared_ptr<const ShaderModule>& fallback
+) {
+    if (auto shader = material.shader(shader_type)) {
+        return shader;
+    }
+    if (!fallback) {
+        fatal(
+            "PBR mesh shader default for type {} has not been initialized",
+            static_cast<int>(shader_type)
+        );
+    }
+    return fallback;
+}
+
 struct MeshMaterialPipelineKey {
     std::size_t material_hash;
     std::size_t vertex_layout_hash;
@@ -53,6 +79,7 @@ class MeshMaterialPipelines {
     const MeshViewLayout& m_mesh_view_layout;
     MeshUniforms& m_mesh_uniforms;
     PipelineCache& m_pipeline_cache;
+    const PbrMeshShaderDefaults& m_shader_defaults;
 
     template<std::derived_from<PipelineSpecializer> SpecializerType>
     MeshMaterialPipelineKey make_key(
@@ -83,8 +110,16 @@ class MeshMaterialPipelines {
                     .vertex_layouts = {gpu_mesh.vertex_buffer_layout()
                                            .to_vertex_layout_description()},
                     .shaders =
-                        {material.shader(MaterialShaderType::Vertex),
-                         material.shader(MaterialShaderType::Fragment)},
+                        {resolve_material_shader(
+                             material,
+                             MaterialShaderType::Vertex,
+                             m_shader_defaults.forward_vertex
+                         ),
+                         resolve_material_shader(
+                             material,
+                             MaterialShaderType::Fragment,
+                             m_shader_defaults.forward_fragment
+                         )},
                 },
             .resource_layouts = {
                 m_mesh_view_layout.layout,
@@ -102,10 +137,11 @@ class MeshMaterialPipelines {
     MeshMaterialPipelines(
         const MeshViewLayout& mesh_view_layout,
         MeshUniforms& mesh_uniforms,
-        PipelineCache& pipeline_cache
+        PipelineCache& pipeline_cache,
+        const PbrMeshShaderDefaults& shader_defaults
     ) :
         m_mesh_view_layout(mesh_view_layout), m_mesh_uniforms(mesh_uniforms),
-        m_pipeline_cache(pipeline_cache) {}
+        m_pipeline_cache(pipeline_cache), m_shader_defaults(shader_defaults) {}
 
     template<std::derived_from<PipelineSpecializer> SpecializerType>
     CachedRenderPipelineId request(

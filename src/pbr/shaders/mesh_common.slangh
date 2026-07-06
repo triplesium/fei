@@ -1,0 +1,29 @@
+#include "common.slangh"
+
+float4 mesh_position_ws4(float4x4 world_from_local, float3 position_local) {
+    return mul(world_from_local, float4(position_local, 1.0));
+}
+
+float3 mesh_position_ws(float4x4 world_from_local, float3 position_local) {
+    return mesh_position_ws4(world_from_local, position_local).xyz;
+}
+
+float4 mesh_position_cs(float4x4 clip_from_world, float3 position_ws) {
+    return mul(clip_from_world, float4(position_ws, 1.0));
+}
+
+float4 mesh_position_cs(float4x4 clip_from_world, float4 position_ws) {
+    return mul(clip_from_world, position_ws);
+}
+
+float3x3 mesh_normal_matrix(float4x4 world_from_local) {
+    return inverse_transpose((float3x3)world_from_local);
+}
+
+float3 mesh_normal_ws(float4x4 world_from_local, float3 normal_local) {
+    return mul(mesh_normal_matrix(world_from_local), normal_local);
+}
+
+float3 mesh_tangent_ws(float4x4 world_from_local, float3 tangent_local) {
+    return mul(mesh_normal_matrix(world_from_local), tangent_local);
+}

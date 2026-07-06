@@ -53,6 +53,7 @@ void queue_deferred_prepass_meshes(
     ResRW<MeshMaterialPipelines> mesh_material_pipelines,
     ResRO<RenderAssets<PreparedMaterial>> materials,
     ResRO<ViewVisibleEntities> visible_entities,
+    ResRO<PbrMeshShaderDefaults> shader_defaults,
     ResRW<PipelineCache>
 );
 

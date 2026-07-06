@@ -27,10 +27,18 @@ enum class MaterialShaderType : uint8 {
 class Material {
   public:
     virtual ~Material() = default;
-    virtual ShaderRef vertex_shader() const = 0;
-    virtual ShaderRef fragment_shader() const = 0;
-    virtual ShaderRef prepass_vertex_shader() const = 0;
-    virtual ShaderRef prepass_fragment_shader() const = 0;
+    virtual ShaderRef vertex_shader() const {
+        return ShaderRef::default_shader();
+    }
+    virtual ShaderRef fragment_shader() const {
+        return ShaderRef::default_shader();
+    }
+    virtual ShaderRef prepass_vertex_shader() const {
+        return ShaderRef::default_shader();
+    }
+    virtual ShaderRef prepass_fragment_shader() const {
+        return ShaderRef::default_shader();
+    }
 
     virtual std::shared_ptr<ResourceLayout> create_resource_layout(
         const GraphicsDevice& device,
@@ -169,6 +177,9 @@ class MaterialAdapter
         std::unordered_map<MaterialShaderType, std::shared_ptr<ShaderModule>>
             shader_modules;
         auto load_shader = [&](MaterialShaderType type, const ShaderRef& ref) {
+            if (ref.is_default()) {
+                return;
+            }
             shader_modules[type] = shader_cache.get(ref);
         };
         load_shader(MaterialShaderType::Vertex, source_asset.vertex_shader());

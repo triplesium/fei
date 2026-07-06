@@ -39,15 +39,30 @@ OutputDescription deferred_gbuffer_output_description() {
 }
 
 class DeferredPipelineSpecializer : public PipelineSpecializer {
+  private:
+    const PbrMeshShaderDefaults& m_shader_defaults;
+
   public:
+    explicit DeferredPipelineSpecializer(
+        const PbrMeshShaderDefaults& shader_defaults
+    ) : m_shader_defaults(shader_defaults) {}
+
     void specialize(
         RenderPipelineDescription& desc,
         const GpuMesh&,
         const PreparedMaterial& material
     ) const override {
         desc.shader_program.shaders = {
-            material.shader(MaterialShaderType::PrepassVertex),
-            material.shader(MaterialShaderType::PrepassFragment),
+            resolve_material_shader(
+                material,
+                MaterialShaderType::PrepassVertex,
+                m_shader_defaults.prepass_vertex
+            ),
+            resolve_material_shader(
+                material,
+                MaterialShaderType::PrepassFragment,
+                m_shader_defaults.prepass_fragment
+            ),
         };
         desc.output_description = deferred_gbuffer_output_description();
     }
@@ -121,6 +136,7 @@ void queue_deferred_prepass_meshes(
     ResRW<MeshMaterialPipelines> mesh_material_pipelines,
     ResRO<RenderAssets<PreparedMaterial>> materials,
     ResRO<ViewVisibleEntities> visible_entities,
+    ResRO<PbrMeshShaderDefaults> shader_defaults,
     ResRW<PipelineCache>
 ) {
     phase->clear();
@@ -140,7 +156,7 @@ void queue_deferred_prepass_meshes(
         *materials,
         *mesh_uniforms,
         *mesh_material_pipelines,
-        DeferredPipelineSpecializer {},
+        DeferredPipelineSpecializer {*shader_defaults},
         [visible_meshes](
             Entity entity,
             const Mesh3d&,
