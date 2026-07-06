@@ -1,4 +1,5 @@
 #include "pbr/passes/deferred_internal.hpp"
+#include "pbr/pipeline_specializer.hpp"
 #include "rendering/shader.hpp"
 
 #include <string>
@@ -76,6 +77,14 @@ void setup_deferred_pipelines(
 
     auto fullscreen_vertex_layout =
         mesh->vertex_buffer_layout().to_vertex_layout_description();
+    remove_vertex_input_attribute(
+        fullscreen_vertex_layout,
+        Mesh::ATTRIBUTE_NORMAL.id
+    );
+    remove_vertex_input_attribute(
+        fullscreen_vertex_layout,
+        Mesh::ATTRIBUTE_TANGENT.id
+    );
 
     pipelines->direct_lighting_pipeline =
         pipeline_cache->request_render_pipeline(

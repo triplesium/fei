@@ -68,7 +68,8 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
                 tangent_sample.x * right +
                 tangent_sample.y * up +
                 tangent_sample.z * normal;
-            float3 sampled = cubemap.Sample(cubemap_sampler, sample_vector).rgb;
+            float3 sampled =
+                cubemap.SampleLevel(cubemap_sampler, sample_vector, 0.0).rgb;
             float luminance = dot(sampled, float3(0.2126, 0.7152, 0.0722));
             if (luminance > 50.0) {
                 sampled *= 50.0 / luminance;

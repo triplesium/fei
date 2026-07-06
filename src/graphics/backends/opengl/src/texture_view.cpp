@@ -7,6 +7,31 @@
 
 namespace fei {
 
+namespace {
+
+GLenum to_gl_texture_view_target(TextureViewType type) {
+    switch (type) {
+        case TextureViewType::Texture1D:
+            return GL_TEXTURE_1D;
+        case TextureViewType::Texture1DArray:
+            return GL_TEXTURE_1D_ARRAY;
+        case TextureViewType::Texture2D:
+            return GL_TEXTURE_2D;
+        case TextureViewType::Texture2DArray:
+            return GL_TEXTURE_2D_ARRAY;
+        case TextureViewType::Texture3D:
+            return GL_TEXTURE_3D;
+        case TextureViewType::Cubemap:
+            return GL_TEXTURE_CUBE_MAP;
+        case TextureViewType::CubemapArray:
+            return GL_TEXTURE_CUBE_MAP_ARRAY;
+    }
+
+    fatal("Unsupported OpenGL TextureViewType");
+}
+
+} // namespace
+
 TextureViewOpenGL::TextureViewOpenGL(const TextureViewDescription& desc) :
     TextureView(desc) {
     auto texture_gl =
@@ -21,8 +46,15 @@ void TextureViewOpenGL::create_gl_resource() const {
 
     GLenum original_target =
         to_gl_texture_target(m_target_gl->usage(), m_target_gl->type());
+    auto effective_base_array_layer = base_array_layer();
     auto effective_array_layers = array_layers();
-    if (original_target == GL_TEXTURE_1D) {
+    if (m_target_gl->usage().is_set(TextureUsage::Cubemap)) {
+        effective_base_array_layer *= 6;
+        effective_array_layers *= 6;
+    }
+    if (view_type()) {
+        m_texture_target = to_gl_texture_view_target(*view_type());
+    } else if (original_target == GL_TEXTURE_1D) {
         m_texture_target = GL_TEXTURE_1D;
     } else if (original_target == GL_TEXTURE_1D_ARRAY) {
         m_texture_target =
@@ -33,7 +65,6 @@ void TextureViewOpenGL::create_gl_resource() const {
         m_texture_target =
             array_layers() > 1 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D;
     } else if (original_target == GL_TEXTURE_CUBE_MAP) {
-        effective_array_layers *= 6;
         m_texture_target = array_layers() > 1 ? GL_TEXTURE_CUBE_MAP_ARRAY :
                                                 GL_TEXTURE_CUBE_MAP;
     } else if (original_target == GL_TEXTURE_3D) {
@@ -50,7 +81,7 @@ void TextureViewOpenGL::create_gl_resource() const {
         internal_format,
         base_mip_level(),
         mip_levels(),
-        base_array_layer(),
+        effective_base_array_layer,
         effective_array_layers
     ));
 }

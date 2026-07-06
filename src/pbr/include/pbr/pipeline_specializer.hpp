@@ -27,21 +27,28 @@ class PipelineSpecializer {
 };
 
 inline void remove_vertex_input_attribute(
+    VertexLayoutDescription& layout,
+    MeshVertexAttributeId location
+) {
+    auto& attributes = layout.attributes;
+    attributes.erase(
+        std::remove_if(
+            attributes.begin(),
+            attributes.end(),
+            [location](const VertexAttributeDescription& attribute) {
+                return attribute.location == location;
+            }
+        ),
+        attributes.end()
+    );
+}
+
+inline void remove_vertex_input_attribute(
     RenderPipelineDescription& desc,
     MeshVertexAttributeId location
 ) {
     for (auto& layout : desc.shader_program.vertex_layouts) {
-        auto& attributes = layout.attributes;
-        attributes.erase(
-            std::remove_if(
-                attributes.begin(),
-                attributes.end(),
-                [location](const VertexAttributeDescription& attribute) {
-                    return attribute.location == location;
-                }
-            ),
-            attributes.end()
-        );
+        remove_vertex_input_attribute(layout, location);
     }
 }
 

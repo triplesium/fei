@@ -48,6 +48,27 @@ VkImageViewType to_vk_image_view_type(
     fatal("Unsupported Vulkan TextureType for image view");
 }
 
+VkImageViewType to_vk_image_view_type(TextureViewType type) {
+    switch (type) {
+        case TextureViewType::Texture1D:
+            return VK_IMAGE_VIEW_TYPE_1D;
+        case TextureViewType::Texture1DArray:
+            return VK_IMAGE_VIEW_TYPE_1D_ARRAY;
+        case TextureViewType::Texture2D:
+            return VK_IMAGE_VIEW_TYPE_2D;
+        case TextureViewType::Texture2DArray:
+            return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+        case TextureViewType::Texture3D:
+            return VK_IMAGE_VIEW_TYPE_3D;
+        case TextureViewType::Cubemap:
+            return VK_IMAGE_VIEW_TYPE_CUBE;
+        case TextureViewType::CubemapArray:
+            return VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
+    }
+
+    fatal("Unsupported Vulkan TextureViewType");
+}
+
 VkExtent3D to_vk_extent(const TextureDescription& desc) {
     return VkExtent3D {
         .width = std::max(desc.width, uint32 {1}),
@@ -323,11 +344,12 @@ TextureViewVulkan::TextureViewVulkan(
         .pNext = nullptr,
         .flags = 0,
         .image = m_target_vulkan->handle(),
-        .viewType = to_vk_image_view_type(
-            m_target_vulkan->type(),
-            m_target_vulkan->usage(),
-            array_layers()
-        ),
+        .viewType = view_type() ? to_vk_image_view_type(*view_type()) :
+                                  to_vk_image_view_type(
+                                      m_target_vulkan->type(),
+                                      m_target_vulkan->usage(),
+                                      array_layers()
+                                  ),
         .format = to_vk_format(format()),
         .components =
             VkComponentMapping {

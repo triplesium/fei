@@ -164,10 +164,37 @@ VkImageLayout descriptor_image_layout(ResourceKind kind) {
 std::shared_ptr<const TextureViewVulkan> resolve_texture_view(
     std::shared_ptr<VulkanDeviceState> state,
     const std::shared_ptr<const BindableResource>& resource,
+    ResourceKind kind,
     std::vector<std::shared_ptr<const TextureViewVulkan>>& owned_views
 ) {
+    auto view_type =
+        [kind](const TextureVulkan& texture) -> Optional<TextureViewType> {
+        if (kind == ResourceKind::TextureReadWrite &&
+            texture.usage().is_set(TextureUsage::Cubemap)) {
+            return TextureViewType::Texture2DArray;
+        }
+        return nullopt;
+    };
+
     if (auto view_vk =
             std::dynamic_pointer_cast<const TextureViewVulkan>(resource)) {
+        auto storage_view_type = view_type(*view_vk->target_vulkan());
+        if (storage_view_type && view_vk->view_type() != storage_view_type) {
+            auto view = std::make_shared<TextureViewVulkan>(
+                std::move(state),
+                TextureViewDescription {
+                    .target = view_vk->target_vulkan(),
+                    .base_mip_level = view_vk->base_mip_level(),
+                    .mip_levels = view_vk->mip_levels(),
+                    .base_array_layer = view_vk->base_array_layer(),
+                    .array_layers = view_vk->array_layers(),
+                    .format = view_vk->format(),
+                    .view_type = storage_view_type,
+                }
+            );
+            owned_views.push_back(view);
+            return view;
+        }
         return view_vk;
     }
 
@@ -184,6 +211,7 @@ std::shared_ptr<const TextureViewVulkan> resolve_texture_view(
             .base_array_layer = 0,
             .array_layers = texture_vk->layer(),
             .format = texture_vk->format(),
+            .view_type = view_type(*texture_vk),
         }
     );
     owned_views.push_back(view);
@@ -393,8 +421,12 @@ ResourceSetVulkan::ResourceSetVulkan(
             );
             write.pBufferInfo = &buffer_infos.back();
         } else if (is_texture_resource_kind(element.kind)) {
-            auto view =
-                resolve_texture_view(m_state, resource, m_owned_texture_views);
+            auto view = resolve_texture_view(
+                m_state,
+                resource,
+                element.kind,
+                m_owned_texture_views
+            );
             const auto image_layout = descriptor_image_layout(element.kind);
             m_image_bindings.push_back(
                 ResourceSetImageBinding {

@@ -409,6 +409,7 @@ TEST_CASE(
         REQUIRE(view.base_array_layer() == 3);
         REQUIRE(view.array_layers() == 4);
         REQUIRE(view.format() == PixelFormat::Rgba8Unorm);
+        REQUIRE(!view.view_type());
     }
 
     SECTION("TextureView accepts an override format") {
@@ -418,6 +419,17 @@ TEST_CASE(
         });
 
         REQUIRE(view.format() == PixelFormat::R8Unorm);
+    }
+
+    SECTION("TextureView accepts an override view type") {
+        TextureView view({
+            .target = texture,
+            .view_type = TextureViewType::Texture2DArray,
+        });
+
+        auto view_type = view.view_type();
+        REQUIRE(view_type);
+        REQUIRE(*view_type == TextureViewType::Texture2DArray);
     }
 
     SECTION("Framebuffer stores color and depth attachments") {

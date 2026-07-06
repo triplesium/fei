@@ -108,7 +108,7 @@ float visibility(float3 position) {
         return 1.0;
     }
 
-    float4 moments = shadow_map.Sample(shadow_map_sampler, uv);
+    float4 moments = shadow_map.SampleLevel(shadow_map_sampler, uv, 0.0);
     if (dot(abs(moments), float4(1.0)) <= EPSILON) {
         return 1.0;
     }

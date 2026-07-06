@@ -53,7 +53,7 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
     float3 vector = get_sampling_vector(dispatch_thread_id);
     float phi = atan2(vector.z, vector.x);
     float theta = acos(vector.y);
-    float4 color =
-        input_texture.Sample(input_sampler, float2(phi / TWO_PI, theta / PI));
+    float4 color = input_texture.SampleLevel(
+        input_sampler, float2(phi / TWO_PI, theta / PI), 0.0);
     output_texture[dispatch_thread_id] = color;
 }

@@ -113,7 +113,8 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
     float3 view = reflection;
 
     if (Constants.roughness < 0.01) {
-        float3 radiance = cubemap.Sample(cubemap_sampler, reflection).rgb;
+        float3 radiance =
+            cubemap.SampleLevel(cubemap_sampler, reflection, 0.0).rgb;
         output_texture[dispatch_thread_id] = float4(radiance, 1.0);
         return;
     }

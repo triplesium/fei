@@ -235,6 +235,7 @@ void ShadowMapPipelineSpecializer::specialize(
     const PreparedMaterial&
 ) const {
     desc.shader_program.shaders = m_shader_modules;
+    remove_vertex_input_attribute(desc, Mesh::ATTRIBUTE_NORMAL.id);
     remove_vertex_input_attribute(desc, Mesh::ATTRIBUTE_TANGENT.id);
     desc.depth_stencil_state = DepthStencilStateDescription::DepthOnlyLessEqual;
     desc.rasterizer_state =
@@ -496,6 +497,16 @@ void setup_shadow_mapping(
     );
 
     auto& quad_mesh = mesh_assets->get(fs_quad->fullscreen_quad_mesh).value();
+    auto blur_vertex_layout =
+        quad_mesh.vertex_buffer_layout().to_vertex_layout_description();
+    remove_vertex_input_attribute(
+        blur_vertex_layout,
+        Mesh::ATTRIBUTE_NORMAL.id
+    );
+    remove_vertex_input_attribute(
+        blur_vertex_layout,
+        Mesh::ATTRIBUTE_TANGENT.id
+    );
 
     auto blur_pipeline = device->create_render_pipeline(
         RenderPipelineDescription {
@@ -505,8 +516,7 @@ void setup_shadow_mapping(
             .render_primitive = RenderPrimitive::Triangles,
             .shader_program =
                 {
-                    .vertex_layouts = {quad_mesh.vertex_buffer_layout()
-                                           .to_vertex_layout_description()},
+                    .vertex_layouts = {blur_vertex_layout},
                     .shaders = blur_shader_modules,
                 },
             .resource_layouts = {blur_resource_layout},
