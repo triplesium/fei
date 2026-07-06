@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <deque>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -25,6 +26,8 @@
 namespace fei {
 
 namespace {
+
+constexpr std::size_t max_frames_in_flight = 3;
 
 VkAccessFlags buffer_access_flags(BitFlags<BufferUsages> usages) {
     VkAccessFlags flags = 0;
@@ -648,11 +651,40 @@ pack_staging_texture(const VulkanDeviceState& state, TextureVulkan& texture) {
 
 } // namespace
 
+struct GraphicsDeviceVulkan::SubmissionState {
+    struct SubmittedCommandBuffer {
+        VkFence fence {VK_NULL_HANDLE};
+        std::shared_ptr<CommandBufferVulkan> command_buffer;
+    };
+
+    std::mutex mutex;
+    std::vector<VkFence> available_fences;
+    std::deque<SubmittedCommandBuffer> submitted_command_buffers;
+};
+
 GraphicsDeviceVulkan::GraphicsDeviceVulkan() :
     GraphicsDeviceVulkan(VulkanDeviceStateDescription {}) {}
 
 GraphicsDeviceVulkan::GraphicsDeviceVulkan(VulkanDeviceStateDescription desc) :
-    m_state(std::make_shared<VulkanDeviceState>(std::move(desc))) {}
+    m_state(std::make_shared<VulkanDeviceState>(std::move(desc))),
+    m_submissions(std::make_shared<SubmissionState>()) {
+    m_state->add_idle_callback(
+        [state = m_state.get(),
+         submissions = std::weak_ptr<SubmissionState>(m_submissions)] {
+            if (const auto locked_submissions = submissions.lock()) {
+                check_submitted_command_buffers(*state, *locked_submissions);
+            }
+        }
+    );
+}
+
+GraphicsDeviceVulkan::~GraphicsDeviceVulkan() {
+    if (!m_state || !m_submissions) {
+        return;
+    }
+    wait_for_submitted_command_buffers();
+    destroy_submission_fences();
+}
 
 Matrix4x4 GraphicsDeviceVulkan::clip_space_transform() const {
     auto transform = Matrix4x4::Identity;
@@ -736,16 +768,8 @@ void GraphicsDeviceVulkan::submit_commands(
     }
     command_buffer_vk->ensure_executable("submit_commands");
 
-    VkFenceCreateInfo fence_info {
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-    };
-    VkFence fence = VK_NULL_HANDLE;
-    check_vk(
-        vkCreateFence(m_state->device(), &fence_info, nullptr, &fence),
-        "vkCreateFence"
-    );
+    check_submitted_command_buffers();
+    wait_for_submission_capacity();
 
     const auto raw_command_buffer = command_buffer_vk->handle();
     VkSubmitInfo submit_info {
@@ -760,6 +784,26 @@ void GraphicsDeviceVulkan::submit_commands(
         .pSignalSemaphores = nullptr,
     };
 
+    VkFence fence = VK_NULL_HANDLE;
+    {
+        std::scoped_lock lock(m_submissions->mutex);
+        if (!m_submissions->available_fences.empty()) {
+            fence = m_submissions->available_fences.back();
+            m_submissions->available_fences.pop_back();
+        }
+    }
+    if (fence == VK_NULL_HANDLE) {
+        VkFenceCreateInfo fence_info {
+            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+        };
+        check_vk(
+            vkCreateFence(m_state->device(), &fence_info, nullptr, &fence),
+            "vkCreateFence"
+        );
+    }
+
     {
         std::scoped_lock lock(m_state->immediate_mutex());
         check_vk(
@@ -767,12 +811,102 @@ void GraphicsDeviceVulkan::submit_commands(
             "vkQueueSubmit"
         );
     }
-    check_vk(
-        vkWaitForFences(m_state->device(), 1, &fence, VK_TRUE, UINT64_MAX),
-        "vkWaitForFences"
-    );
-    vkDestroyFence(m_state->device(), fence, nullptr);
     command_buffer_vk->mark_submitted();
+
+    std::scoped_lock lock(m_submissions->mutex);
+    m_submissions->submitted_command_buffers.push_back(
+        SubmissionState::SubmittedCommandBuffer {
+            .fence = fence,
+            .command_buffer = std::move(command_buffer_vk),
+        }
+    );
+}
+
+void GraphicsDeviceVulkan::flush() const {
+    check_submitted_command_buffers();
+}
+
+void GraphicsDeviceVulkan::check_submitted_command_buffers(
+    const VulkanDeviceState& state,
+    SubmissionState& submissions
+) {
+    std::scoped_lock lock(submissions.mutex);
+    while (!submissions.submitted_command_buffers.empty()) {
+        auto& submission = submissions.submitted_command_buffers.front();
+        const auto result = vkGetFenceStatus(state.device(), submission.fence);
+        if (result == VK_NOT_READY) {
+            break;
+        }
+        check_vk(result, "vkGetFenceStatus");
+
+        auto completed = std::move(submission);
+        submissions.submitted_command_buffers.pop_front();
+        if (completed.command_buffer) {
+            completed.command_buffer->mark_completed();
+        }
+        check_vk(
+            vkResetFences(state.device(), 1, &completed.fence),
+            "vkResetFences"
+        );
+        submissions.available_fences.push_back(completed.fence);
+        completed.command_buffer.reset();
+    }
+}
+
+void GraphicsDeviceVulkan::check_submitted_command_buffers() const {
+    check_submitted_command_buffers(*m_state, *m_submissions);
+}
+
+void GraphicsDeviceVulkan::wait_for_submission_capacity() const {
+    while (true) {
+        VkFence fence = VK_NULL_HANDLE;
+        {
+            std::scoped_lock lock(m_submissions->mutex);
+            if (m_submissions->submitted_command_buffers.size() <
+                max_frames_in_flight) {
+                return;
+            }
+            fence = m_submissions->submitted_command_buffers.front().fence;
+        }
+
+        check_vk(
+            vkWaitForFences(m_state->device(), 1, &fence, VK_TRUE, UINT64_MAX),
+            "vkWaitForFences"
+        );
+        check_submitted_command_buffers();
+    }
+}
+
+void GraphicsDeviceVulkan::wait_for_submitted_command_buffers() const {
+    while (true) {
+        VkFence fence = VK_NULL_HANDLE;
+        {
+            std::scoped_lock lock(m_submissions->mutex);
+            if (m_submissions->submitted_command_buffers.empty()) {
+                return;
+            }
+            fence = m_submissions->submitted_command_buffers.front().fence;
+        }
+
+        check_vk(
+            vkWaitForFences(m_state->device(), 1, &fence, VK_TRUE, UINT64_MAX),
+            "vkWaitForFences"
+        );
+        check_submitted_command_buffers();
+    }
+}
+
+void GraphicsDeviceVulkan::destroy_submission_fences() const {
+    std::vector<VkFence> fences;
+    {
+        std::scoped_lock lock(m_submissions->mutex);
+        fences = std::move(m_submissions->available_fences);
+        m_submissions->available_fences.clear();
+    }
+
+    for (auto fence : fences) {
+        vkDestroyFence(m_state->device(), fence, nullptr);
+    }
 }
 
 void GraphicsDeviceVulkan::update_texture(
@@ -952,6 +1086,7 @@ GraphicsDeviceVulkan::create_texture_readback(uint32 max_in_flight) const {
 
 void GraphicsDeviceVulkan::present(const Swapchain& swapchain) const {
     swapchain.present();
+    check_submitted_command_buffers();
 }
 
 } // namespace fei

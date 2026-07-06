@@ -2,6 +2,7 @@
 
 #include "base/types.hpp"
 
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -28,6 +29,8 @@ struct VulkanDeviceStateDescription {
 
 class VulkanDeviceState {
   public:
+    using IdleCallback = std::function<void()>;
+
     explicit VulkanDeviceState(VulkanDeviceStateDescription desc = {});
     ~VulkanDeviceState();
 
@@ -70,6 +73,8 @@ class VulkanDeviceState {
     [[nodiscard]] std::mutex& immediate_mutex() const {
         return m_immediate_mutex;
     }
+    void add_idle_callback(IdleCallback callback) const;
+    void wait_idle() const;
 
   private:
     VkInstance m_instance {VK_NULL_HANDLE};
@@ -85,6 +90,8 @@ class VulkanDeviceState {
     std::unique_ptr<VulkanMemoryAllocator> m_memory_allocator;
     mutable std::mutex m_descriptor_pool_mutex;
     mutable std::mutex m_immediate_mutex;
+    mutable std::mutex m_idle_callbacks_mutex;
+    mutable std::vector<IdleCallback> m_idle_callbacks;
     VulkanQueueFamilyIndices m_queue_families;
     uint32 m_graphics_queue_family {0};
     std::vector<std::string> m_required_instance_extensions;

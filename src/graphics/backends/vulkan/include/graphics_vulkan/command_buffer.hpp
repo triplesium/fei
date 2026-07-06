@@ -130,6 +130,7 @@ class CommandBufferVulkan : public CommandBuffer {
     void prepare_graphics_resource_sets();
     void prepare_compute_resource_sets();
     void mark_submitted();
+    void mark_completed();
 };
 
 } // namespace fei

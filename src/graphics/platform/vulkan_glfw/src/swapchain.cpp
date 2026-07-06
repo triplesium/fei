@@ -262,43 +262,6 @@ void ensure_graphics_queue_supports_present(
     }
 }
 
-VkAccessFlags access_flags_for_layout(VkImageLayout layout) {
-    switch (layout) {
-        case VK_IMAGE_LAYOUT_UNDEFINED:
-        case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
-            return 0;
-        case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-            return VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                   VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-            return VK_ACCESS_TRANSFER_WRITE_BIT;
-        case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-            return VK_ACCESS_TRANSFER_READ_BIT;
-        case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-            return VK_ACCESS_SHADER_READ_BIT;
-        case VK_IMAGE_LAYOUT_GENERAL:
-            return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-        default:
-            return VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-    }
-}
-
-VkPipelineStageFlags pipeline_stage_for_layout(VkImageLayout layout) {
-    switch (layout) {
-        case VK_IMAGE_LAYOUT_UNDEFINED:
-            return VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
-            return VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-        case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-            return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-        case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-            return VK_PIPELINE_STAGE_TRANSFER_BIT;
-        default:
-            return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-    }
-}
-
 TextureDescription
 swapchain_texture_description(VkExtent2D extent, PixelFormat format) {
     return TextureDescription {
@@ -348,6 +311,20 @@ SwapchainVulkanGlfw::SwapchainVulkanGlfw(
 
     create_surface();
     ensure_graphics_queue_supports_present(*m_state, m_surface);
+    VkFenceCreateInfo fence_info {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+    };
+    check_vk(
+        vkCreateFence(
+            m_state->device(),
+            &fence_info,
+            nullptr,
+            &m_image_available_fence
+        ),
+        "vkCreateFence"
+    );
     recreate_swapchain();
 }
 
@@ -357,8 +334,12 @@ SwapchainVulkanGlfw::~SwapchainVulkanGlfw() {
     }
 
     std::scoped_lock lock(m_mutex);
-    static_cast<void>(vkDeviceWaitIdle(m_state->device()));
+    m_state->wait_idle();
     destroy_swapchain_resources();
+    if (m_image_available_fence != VK_NULL_HANDLE) {
+        vkDestroyFence(m_state->device(), m_image_available_fence, nullptr);
+        m_image_available_fence = VK_NULL_HANDLE;
+    }
     if (m_surface != VK_NULL_HANDLE) {
         vkDestroySurfaceKHR(m_state->instance(), m_surface, nullptr);
         m_surface = VK_NULL_HANDLE;
@@ -395,7 +376,7 @@ void SwapchainVulkanGlfw::recreate_swapchain() const {
     FEI_PROFILE_SCOPE("Vulkan GLFW Recreate Swapchain");
 
     if (m_swapchain != VK_NULL_HANDLE) {
-        check_vk(vkDeviceWaitIdle(m_state->device()), "vkDeviceWaitIdle");
+        m_state->wait_idle();
     }
 
     m_acquired = false;
@@ -509,34 +490,20 @@ void SwapchainVulkanGlfw::acquire_current_image() const {
         recreate_swapchain();
     }
 
-    VkFenceCreateInfo fence_info {
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-    };
-
     while (true) {
-        VkFence fence = VK_NULL_HANDLE;
-        check_vk(
-            vkCreateFence(m_state->device(), &fence_info, nullptr, &fence),
-            "vkCreateFence"
-        );
-
         const auto result = vkAcquireNextImageKHR(
             m_state->device(),
             m_swapchain,
             std::numeric_limits<uint64>::max(),
             VK_NULL_HANDLE,
-            fence,
+            m_image_available_fence,
             &m_current_image_index
         );
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-            vkDestroyFence(m_state->device(), fence, nullptr);
             recreate_swapchain();
             continue;
         }
         if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-            vkDestroyFence(m_state->device(), fence, nullptr);
             check_vk(result, "vkAcquireNextImageKHR");
         }
 
@@ -544,13 +511,16 @@ void SwapchainVulkanGlfw::acquire_current_image() const {
             vkWaitForFences(
                 m_state->device(),
                 1,
-                &fence,
+                &m_image_available_fence,
                 VK_TRUE,
                 std::numeric_limits<uint64>::max()
             ),
             "vkWaitForFences"
         );
-        vkDestroyFence(m_state->device(), fence, nullptr);
+        check_vk(
+            vkResetFences(m_state->device(), 1, &m_image_available_fence),
+            "vkResetFences"
+        );
         break;
     }
 
@@ -562,109 +532,6 @@ void SwapchainVulkanGlfw::acquire_current_image() const {
         );
     }
     m_acquired = true;
-}
-
-void SwapchainVulkanGlfw::transition_current_image_to_present() const {
-    auto& texture = *m_images.at(m_current_image_index);
-    const auto old_layout = texture.layout();
-    if (old_layout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
-        return;
-    }
-
-    std::scoped_lock lock(m_state->immediate_mutex());
-
-    VkCommandBufferAllocateInfo allocate_info {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .pNext = nullptr,
-        .commandPool = m_state->command_pool(),
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-
-    VkCommandBuffer command_buffer = VK_NULL_HANDLE;
-    check_vk(
-        vkAllocateCommandBuffers(
-            m_state->device(),
-            &allocate_info,
-            &command_buffer
-        ),
-        "vkAllocateCommandBuffers"
-    );
-
-    VkCommandBufferBeginInfo begin_info {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .pNext = nullptr,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-        .pInheritanceInfo = nullptr,
-    };
-    check_vk(
-        vkBeginCommandBuffer(command_buffer, &begin_info),
-        "vkBeginCommandBuffer"
-    );
-
-    VkImageMemoryBarrier barrier {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .pNext = nullptr,
-        .srcAccessMask = access_flags_for_layout(old_layout),
-        .dstAccessMask =
-            access_flags_for_layout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR),
-        .oldLayout = old_layout,
-        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = texture.handle(),
-        .subresourceRange = VkImageSubresourceRange {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        },
-    };
-
-    vkCmdPipelineBarrier(
-        command_buffer,
-        pipeline_stage_for_layout(old_layout),
-        pipeline_stage_for_layout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR),
-        0,
-        0,
-        nullptr,
-        0,
-        nullptr,
-        1,
-        &barrier
-    );
-    texture.set_layout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-
-    check_vk(vkEndCommandBuffer(command_buffer), "vkEndCommandBuffer");
-
-    VkSubmitInfo submit_info {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .pNext = nullptr,
-        .waitSemaphoreCount = 0,
-        .pWaitSemaphores = nullptr,
-        .pWaitDstStageMask = nullptr,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &command_buffer,
-        .signalSemaphoreCount = 0,
-        .pSignalSemaphores = nullptr,
-    };
-    check_vk(
-        vkQueueSubmit(
-            m_state->graphics_queue(),
-            1,
-            &submit_info,
-            VK_NULL_HANDLE
-        ),
-        "vkQueueSubmit"
-    );
-    check_vk(vkQueueWaitIdle(m_state->graphics_queue()), "vkQueueWaitIdle");
-    vkFreeCommandBuffers(
-        m_state->device(),
-        m_state->command_pool(),
-        1,
-        &command_buffer
-    );
 }
 
 std::shared_ptr<const Framebuffer> SwapchainVulkanGlfw::framebuffer() const {
@@ -708,8 +575,6 @@ void SwapchainVulkanGlfw::present() const {
     if (!m_acquired || m_swapchain == VK_NULL_HANDLE) {
         return;
     }
-
-    transition_current_image_to_present();
 
     const auto swapchain = m_swapchain;
     const auto image_index = m_current_image_index;

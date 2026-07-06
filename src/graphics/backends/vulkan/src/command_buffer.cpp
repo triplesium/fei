@@ -96,6 +96,11 @@ VkImageLayout default_texture_layout(const Texture& texture) {
 }
 
 VkImageLayout attachment_final_layout(const Texture& texture) {
+    if (auto texture_vk = dynamic_cast<const TextureVulkan*>(&texture);
+        texture_vk != nullptr && !texture_vk->owns_image() &&
+        !texture.usage().is_set(TextureUsage::DepthStencil)) {
+        return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    }
     if (texture.usage().is_set(TextureUsage::Storage)) {
         return VK_IMAGE_LAYOUT_GENERAL;
     }
@@ -985,6 +990,12 @@ void CommandBufferVulkan::begin() {
             "recording"
         );
     }
+    if (m_state_value == State::Submitted) {
+        fatal(
+            "CommandBufferVulkan::begin called while the previous submission "
+            "is still in flight"
+        );
+    }
 
     m_pipeline.reset();
     m_graphics_pipeline.reset();
@@ -1700,12 +1711,18 @@ void CommandBufferVulkan::ensure_executable(const char* operation_name) const {
 }
 
 void CommandBufferVulkan::mark_submitted() {
+    m_state_value = State::Submitted;
+}
+
+void CommandBufferVulkan::mark_completed() {
     m_referenced_framebuffers.clear();
     m_bound_graphics_resource_sets.clear();
     m_bound_compute_resource_sets.clear();
     m_referenced_resource_sets.clear();
     m_transient_buffers.clear();
-    m_state_value = State::Submitted;
+    if (m_state_value == State::Submitted) {
+        m_state_value = State::Initial;
+    }
 }
 
 } // namespace fei

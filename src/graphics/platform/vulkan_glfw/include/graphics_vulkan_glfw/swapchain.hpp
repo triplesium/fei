@@ -20,6 +20,7 @@ class SwapchainVulkanGlfw final : public Swapchain {
     GLFWwindow* m_window {nullptr};
     mutable VkSurfaceKHR m_surface {VK_NULL_HANDLE};
     mutable VkSwapchainKHR m_swapchain {VK_NULL_HANDLE};
+    mutable VkFence m_image_available_fence {VK_NULL_HANDLE};
     mutable VkFormat m_vk_color_format {VK_FORMAT_B8G8R8A8_UNORM};
     mutable VkColorSpaceKHR m_color_space {VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
     mutable PixelFormat m_color_format {PixelFormat::Bgra8Unorm};
@@ -35,7 +36,6 @@ class SwapchainVulkanGlfw final : public Swapchain {
     void create_surface();
     void recreate_swapchain() const;
     void acquire_current_image() const;
-    void transition_current_image_to_present() const;
     void destroy_swapchain_resources() const;
 
   public:

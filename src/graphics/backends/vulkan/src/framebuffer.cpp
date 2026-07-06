@@ -39,6 +39,9 @@ VkImageLayout attachment_layout(const AttachmentInfo& attachment) {
 }
 
 VkImageLayout final_layout(const AttachmentInfo& attachment) {
+    if (!attachment.depth_stencil && !attachment.texture->owns_image()) {
+        return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    }
     if (attachment.texture->usage().is_set(TextureUsage::Storage)) {
         return VK_IMAGE_LAYOUT_GENERAL;
     }

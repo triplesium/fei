@@ -8,6 +8,7 @@
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace fei {
@@ -265,6 +266,35 @@ VulkanDeviceState::~VulkanDeviceState() {
     if (m_instance != VK_NULL_HANDLE) {
         vkDestroyInstance(m_instance, nullptr);
         m_instance = VK_NULL_HANDLE;
+    }
+}
+
+void VulkanDeviceState::add_idle_callback(IdleCallback callback) const {
+    if (!callback) {
+        return;
+    }
+
+    std::scoped_lock lock(m_idle_callbacks_mutex);
+    m_idle_callbacks.push_back(std::move(callback));
+}
+
+void VulkanDeviceState::wait_idle() const {
+    if (m_device == VK_NULL_HANDLE) {
+        return;
+    }
+
+    {
+        std::scoped_lock lock(m_immediate_mutex);
+        check_vk(vkDeviceWaitIdle(m_device), "vkDeviceWaitIdle");
+    }
+
+    std::vector<IdleCallback> callbacks;
+    {
+        std::scoped_lock lock(m_idle_callbacks_mutex);
+        callbacks = m_idle_callbacks;
+    }
+    for (const auto& callback : callbacks) {
+        callback();
     }
 }
 

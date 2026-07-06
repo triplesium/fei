@@ -18,16 +18,18 @@ class GraphicsDeviceVulkan : public GraphicsDevice {
         std::unordered_map<const MappableResource*, std::vector<std::byte>>
             textures;
     };
+    struct SubmissionState;
 
     std::shared_ptr<VulkanDeviceState> m_state;
     std::shared_ptr<MappedTextureState> m_mapped_textures {
         std::make_shared<MappedTextureState>()
     };
+    std::shared_ptr<SubmissionState> m_submissions;
 
   public:
     GraphicsDeviceVulkan();
     explicit GraphicsDeviceVulkan(VulkanDeviceStateDescription desc);
-    ~GraphicsDeviceVulkan() override = default;
+    ~GraphicsDeviceVulkan() override;
 
     GraphicsDeviceVulkan(const GraphicsDeviceVulkan&) = delete;
     GraphicsDeviceVulkan& operator=(const GraphicsDeviceVulkan&) = delete;
@@ -67,6 +69,7 @@ class GraphicsDeviceVulkan : public GraphicsDevice {
     void submit_commands(
         std::shared_ptr<CommandBuffer> command_buffer
     ) const override;
+    void flush() const override;
 
     void update_texture(
         std::shared_ptr<Texture> texture,
@@ -96,6 +99,16 @@ class GraphicsDeviceVulkan : public GraphicsDevice {
     create_texture_readback(uint32 max_in_flight = 3) const override;
 
     void present(const Swapchain& swapchain) const override;
+
+  private:
+    static void check_submitted_command_buffers(
+        const VulkanDeviceState& state,
+        SubmissionState& submissions
+    );
+    void check_submitted_command_buffers() const;
+    void wait_for_submission_capacity() const;
+    void wait_for_submitted_command_buffers() const;
+    void destroy_submission_fences() const;
 };
 
 } // namespace fei
