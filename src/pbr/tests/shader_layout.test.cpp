@@ -165,10 +165,6 @@ TEST_CASE(
             {"cubemap_sampler", ResourceKind::Sampler, 0, 3},
             {"brdf_lut", ResourceKind::TextureReadOnly, 0, 4},
             {"Material", ResourceKind::UniformBuffer, 2, 0},
-            {"albedo_map", ResourceKind::TextureReadOnly, 2, 1},
-            {"normal_map", ResourceKind::TextureReadOnly, 2, 2},
-            {"metallic_map", ResourceKind::TextureReadOnly, 2, 3},
-            {"roughness_map", ResourceKind::TextureReadOnly, 2, 4},
             {"sampler", ResourceKind::Sampler, 2, 7},
         }
     );

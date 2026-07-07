@@ -40,6 +40,19 @@ struct alignas(16) StandardMaterialUniform {
 
 class StandardMaterial : public Material {
   public:
+    static constexpr const char* HAS_ALBEDO_MAP_SHADER_DEF =
+        "STANDARD_MATERIAL_HAS_ALBEDO_MAP";
+    static constexpr const char* HAS_NORMAL_MAP_SHADER_DEF =
+        "STANDARD_MATERIAL_HAS_NORMAL_MAP";
+    static constexpr const char* HAS_METALLIC_MAP_SHADER_DEF =
+        "STANDARD_MATERIAL_HAS_METALLIC_MAP";
+    static constexpr const char* HAS_ROUGHNESS_MAP_SHADER_DEF =
+        "STANDARD_MATERIAL_HAS_ROUGHNESS_MAP";
+    static constexpr const char* HAS_EMISSIVE_MAP_SHADER_DEF =
+        "STANDARD_MATERIAL_HAS_EMISSIVE_MAP";
+    static constexpr const char* HAS_SPECULAR_MAP_SHADER_DEF =
+        "STANDARD_MATERIAL_HAS_SPECULAR_MAP";
+
     Color3F albedo {1.0f, 1.0f, 1.0f};
     Optional<Handle<Image>> albedo_map;
     Optional<Handle<Image>> normal_map;
@@ -51,6 +64,59 @@ class StandardMaterial : public Material {
     Optional<Handle<Image>> emissive_map;
     Color3F specular {0.0f, 0.0f, 0.0f};
     Optional<Handle<Image>> specular_map;
+    MaterialAlphaMode alpha_mode {MaterialAlphaMode::Opaque};
+    CullMode cull_mode {CullMode::Back};
+    bool depth_write {true};
+
+    ShaderRef vertex_shader() const override {
+        return ShaderRef("shader://forward.vert");
+    }
+
+    ShaderRef fragment_shader() const override {
+        return ShaderRef("shader://forward.frag");
+    }
+
+    ShaderRef prepass_vertex_shader() const override {
+        return ShaderRef("shader://deferred_prepass.vert");
+    }
+
+    ShaderRef prepass_fragment_shader() const override {
+        return ShaderRef("shader://deferred_prepass.frag");
+    }
+
+    ShaderDefs shader_defs(MaterialShaderType type) const override {
+        if (type != MaterialShaderType::Fragment &&
+            type != MaterialShaderType::PrepassFragment) {
+            return {};
+        }
+
+        ShaderDefs defs;
+        auto add_map_def = [&](const Optional<Handle<Image>>& image,
+                               const char* name) {
+            if (image) {
+                defs.push_back(ShaderDefVal::bool_def(name));
+            }
+        };
+
+        add_map_def(albedo_map, HAS_ALBEDO_MAP_SHADER_DEF);
+        add_map_def(normal_map, HAS_NORMAL_MAP_SHADER_DEF);
+        add_map_def(metallic_map, HAS_METALLIC_MAP_SHADER_DEF);
+        add_map_def(roughness_map, HAS_ROUGHNESS_MAP_SHADER_DEF);
+        if (type == MaterialShaderType::Fragment) {
+            return defs;
+        }
+        add_map_def(emissive_map, HAS_EMISSIVE_MAP_SHADER_DEF);
+        add_map_def(specular_map, HAS_SPECULAR_MAP_SHADER_DEF);
+        return defs;
+    }
+
+    MaterialPipelineState pipeline_state() const override {
+        return MaterialPipelineState {
+            .alpha_mode = alpha_mode,
+            .cull_mode = cull_mode,
+            .depth_write = depth_write,
+        };
+    }
 
     std::vector<ResourceLayoutElementDescription>
     resource_layout_elements() const override {

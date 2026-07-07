@@ -1,0 +1,12 @@
+struct MeshVertexInput {
+    [vk::location(0)] float3 position : POSITION;
+#ifdef VERTEX_NORMALS
+    [vk::location(1)] float3 normal : NORMAL;
+#endif
+#ifdef VERTEX_UVS
+    [vk::location(2)] float2 uv : TEXCOORD0;
+#endif
+#ifdef VERTEX_TANGENTS
+    [vk::location(4)] float3 tangent : TANGENT;
+#endif
+};

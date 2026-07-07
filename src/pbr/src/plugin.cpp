@@ -52,6 +52,7 @@ void PbrPlugin::setup(App& app) {
             app.resource<MeshViewLayout>(),
             app.resource<MeshUniforms>(),
             app.resource<PipelineCache>(),
+            app.resource<ShaderCache>(),
             app.resource<PbrMeshShaderDefaults>()
         ))
         .add_systems(PreStartUp, setup_fullscreen_quad)

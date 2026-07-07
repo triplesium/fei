@@ -80,6 +80,12 @@ class VxgiVoxelizationSpecializer : public PipelineSpecializer {
 
     std::size_t cache_key() const override { return m_cache_key; }
 
+    BitFlags<PbrMeshPipelineKeyFlags> mesh_pipeline_flags() const override {
+        return PbrMeshPipelineKeyFlags::VxgiVoxelization;
+    }
+
+    bool overrides_shaders() const override { return true; }
+
     void specialize(
         RenderPipelineDescription& desc,
         const GpuMesh& mesh,

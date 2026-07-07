@@ -67,6 +67,15 @@ class ShadowMapPipelineSpecializer : public PipelineSpecializer {
 
     std::size_t cache_key() const override;
 
+    BitFlags<PbrMeshPipelineKeyFlags> mesh_pipeline_flags() const override {
+        return {
+            PbrMeshPipelineKeyFlags::DepthPrepass,
+            PbrMeshPipelineKeyFlags::ShadowPass,
+        };
+    }
+
+    bool overrides_shaders() const override { return true; }
+
     void specialize(
         RenderPipelineDescription& desc,
         const GpuMesh& mesh,

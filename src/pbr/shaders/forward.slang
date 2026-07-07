@@ -1,17 +1,8 @@
 #include "mesh_common.slangh"
+#include "mesh_vertex_input.slangh"
+#include "forward_io.slangh"
 
-struct VertexInput {
-    [vk::location(0)] float3 position : POSITION;
-    [vk::location(1)] float3 normal : NORMAL;
-    [vk::location(2)] float2 uv : TEXCOORD0;
-};
-
-struct VertexOutput {
-    float4 position : SV_Position;
-    [vk::location(0)] float3 position_ws : POSITION_WS;
-    [vk::location(1)] float3 normal_ws : NORMAL_WS;
-    [vk::location(2)] float2 tex_coords : TEXCOORD0;
-};
+using namespace fei.pbr.forward_io;
 
 layout(set = 0, binding = 0) ConstantBuffer<ViewData> View;
 layout(set = 0, binding = 1) TextureCube<float4> irradiance_map;
@@ -26,12 +17,9 @@ layout(set = 2, binding = 3) Texture2D<float4> metallic_map;
 layout(set = 2, binding = 4) Texture2D<float4> roughness_map;
 layout(set = 2, binding = 7) SamplerState sampler;
 
-static const int STANDARD_MATERIAL_FLAGS_ALBEDO_MAP_BIT = 1 << 0;
-static const int STANDARD_MATERIAL_FLAGS_NORMAL_MAP_BIT = 1 << 1;
-static const int STANDARD_MATERIAL_FLAGS_METALLIC_MAP_BIT = 1 << 2;
-static const int STANDARD_MATERIAL_FLAGS_ROUGHNESS_MAP_BIT = 1 << 3;
 static const float PI = 3.141592653589793;
 
+#ifdef VERTEX_UVS
 float3 get_normal_from_map(VertexOutput input) {
     float3 tangent_normal =
         normal_map.Sample(sampler, input.tex_coords).xyz * 2.0 - 1.0;
@@ -47,6 +35,7 @@ float3 get_normal_from_map(VertexOutput input) {
     float3x3 tbn = float3x3(tangent, bitangent, normal);
     return normalize(mul(tangent_normal, tbn));
 }
+#endif
 
 float distribution_ggx(float3 normal, float3 half_vector, float roughness) {
     float a = roughness * roughness;
@@ -81,36 +70,51 @@ float3 fresnel_schlick_roughness(float cos_theta, float3 f0, float roughness) {
 }
 
 [shader("vertex")]
-VertexOutput vertex_main(VertexInput input) {
+VertexOutput vertex_main(MeshVertexInput input) {
     VertexOutput output;
     output.position_ws = mesh_position_ws(Mesh.world_from_local, input.position);
+#ifdef VERTEX_NORMALS
     output.normal_ws = mesh_normal_ws(Mesh.world_from_local, input.normal);
+#else
+    output.normal_ws = float3(0.0, 1.0, 0.0);
+#endif
+#ifdef VERTEX_UVS
     output.tex_coords = input.uv;
+#endif
+#ifdef VERTEX_TANGENTS
+    output.tangent_ws = mesh_tangent_ws(Mesh.world_from_local, input.tangent);
+#endif
     output.position = mesh_position_cs(View.clip_from_world, output.position_ws);
     return output;
 }
 
 [shader("fragment")]
-float4 fragment_main(VertexOutput input) : SV_Target0 {
+FragmentOutput fragment_main(VertexOutput input) {
+    FragmentOutput output;
+#if defined(STANDARD_MATERIAL_HAS_ALBEDO_MAP) && defined(VERTEX_UVS)
+    float3 albedo = albedo_map.Sample(sampler, input.tex_coords).rgb;
+#else
     float3 albedo = Material.albedo;
-    if ((Material.flags & STANDARD_MATERIAL_FLAGS_ALBEDO_MAP_BIT) != 0) {
-        albedo = albedo_map.Sample(sampler, input.tex_coords).rgb;
-    }
+#endif
 
+#if defined(STANDARD_MATERIAL_HAS_METALLIC_MAP) && defined(VERTEX_UVS)
+    float metallic = metallic_map.Sample(sampler, input.tex_coords).r;
+#else
     float metallic = Material.metallic;
-    if ((Material.flags & STANDARD_MATERIAL_FLAGS_METALLIC_MAP_BIT) != 0) {
-        metallic = metallic_map.Sample(sampler, input.tex_coords).r;
-    }
+#endif
 
+#if defined(STANDARD_MATERIAL_HAS_ROUGHNESS_MAP) && defined(VERTEX_UVS)
+    float roughness = roughness_map.Sample(sampler, input.tex_coords).r;
+#else
     float roughness = Material.roughness;
-    if ((Material.flags & STANDARD_MATERIAL_FLAGS_ROUGHNESS_MAP_BIT) != 0) {
-        roughness = roughness_map.Sample(sampler, input.tex_coords).r;
-    }
+#endif
     roughness = clamp(roughness, 0.01, 1.0);
 
-    float3 normal = (Material.flags & STANDARD_MATERIAL_FLAGS_NORMAL_MAP_BIT) != 0 ?
-        get_normal_from_map(input) :
-        normalize(input.normal_ws);
+#if defined(STANDARD_MATERIAL_HAS_NORMAL_MAP) && defined(VERTEX_UVS)
+    float3 normal = get_normal_from_map(input);
+#else
+    float3 normal = normalize(input.normal_ws);
+#endif
 
     float3 view = normalize(View.world_position - input.position_ws);
     float3 reflection = reflect(-view, normal);
@@ -137,5 +141,6 @@ float4 fragment_main(VertexOutput input) : SV_Target0 {
 
     float3 color = ambient / (ambient + float3(1.0));
     color = pow(color, float3(1.0 / 2.2));
-    return float4(color, 1.0);
+    output.color = float4(color, 1.0);
+    return output;
 }

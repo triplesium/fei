@@ -2,12 +2,13 @@
 
 #include "../../rendering/tests/test_graphics_device.hpp"
 #include "asset/assets.hpp"
+#include "asset/server.hpp"
 #include "pbr/material.hpp"
 #include "pbr/mesh_view.hpp"
+#include "rendering/shader_cache.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
-#include <unordered_map>
 #include <vector>
 
 using namespace fei;
@@ -66,20 +67,8 @@ PreparedMaterial create_prepared_material(
             .resources = {},
         }
     );
-    std::unordered_map<MaterialShaderType, std::shared_ptr<ShaderModule>>
-        shaders {
-            {MaterialShaderType::Vertex,
-             device.create_shader_module(
-                 ShaderDescription {.stage = ShaderStages::Vertex}
-             )},
-            {MaterialShaderType::Fragment,
-             device.create_shader_module(
-                 ShaderDescription {.stage = ShaderStages::Fragment}
-             )},
-        };
-
     return PreparedMaterial {
-        std::move(shaders),
+        {},
         std::move(layout),
         std::move(resource_set),
         material_hash,
@@ -128,6 +117,9 @@ TEST_CASE(
 ) {
     FakeGraphicsDevice device;
     PipelineCache pipeline_cache(device);
+    AssetServer asset_server(nullptr);
+    Assets<Shader> shaders(nullptr);
+    ShaderCache shader_cache(asset_server, shaders, device);
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     auto shader_defaults = create_shader_defaults(device);
@@ -135,6 +127,7 @@ TEST_CASE(
         mesh_view_layout,
         mesh_uniforms,
         pipeline_cache,
+        shader_cache,
         shader_defaults
     );
     RenderAssets<GpuMesh> gpu_meshes;

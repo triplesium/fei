@@ -39,31 +39,32 @@ OutputDescription deferred_gbuffer_output_description() {
 }
 
 class DeferredPipelineSpecializer : public PipelineSpecializer {
-  private:
-    const PbrMeshShaderDefaults& m_shader_defaults;
-
   public:
     explicit DeferredPipelineSpecializer(
-        const PbrMeshShaderDefaults& shader_defaults
-    ) : m_shader_defaults(shader_defaults) {}
+        const PbrMeshShaderDefaults& /*shader_defaults*/
+    ) {}
+
+    MaterialShaderType vertex_shader_type() const override {
+        return MaterialShaderType::PrepassVertex;
+    }
+
+    MaterialShaderType fragment_shader_type() const override {
+        return MaterialShaderType::PrepassFragment;
+    }
+
+    BitFlags<PbrMeshPipelineKeyFlags> mesh_pipeline_flags() const override {
+        return {
+            PbrMeshPipelineKeyFlags::DepthPrepass,
+            PbrMeshPipelineKeyFlags::DeferredPrepass,
+            PbrMeshPipelineKeyFlags::PrepassReadsMaterial,
+        };
+    }
 
     void specialize(
         RenderPipelineDescription& desc,
         const GpuMesh&,
-        const PreparedMaterial& material
+        const PreparedMaterial&
     ) const override {
-        desc.shader_program.shaders = {
-            resolve_material_shader(
-                material,
-                MaterialShaderType::PrepassVertex,
-                m_shader_defaults.prepass_vertex
-            ),
-            resolve_material_shader(
-                material,
-                MaterialShaderType::PrepassFragment,
-                m_shader_defaults.prepass_fragment
-            ),
-        };
         desc.output_description = deferred_gbuffer_output_description();
     }
 };
