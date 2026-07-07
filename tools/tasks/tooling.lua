@@ -51,8 +51,26 @@ local function collect_file_patterns(patterns)
     return result
 end
 
+local checkable_file_extensions = {
+    [".c"] = true,
+    [".cc"] = true,
+    [".cpp"] = true,
+    [".cxx"] = true,
+    [".cu"] = true,
+    [".cuh"] = true,
+    [".h"] = true,
+    [".hh"] = true,
+    [".hpp"] = true,
+    [".hxx"] = true,
+    [".inl"] = true,
+    [".ipp"] = true,
+    [".m"] = true,
+    [".mm"] = true,
+}
+
 local function should_skip_file(filepath)
-    return filepath:startswith("build/.gens/")
+    return filepath:startswith("build/.gens/") or
+        not checkable_file_extensions[path.extension(filepath)]
 end
 
 local function insert_unique(files, seen, filepath)

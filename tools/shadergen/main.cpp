@@ -1,9 +1,9 @@
 #include "shadergen/shadergen.hpp"
 
 #include <CLI/CLI.hpp>
+#include <exception>
 #include <filesystem>
 #include <iostream>
-#include <stdexcept>
 
 namespace {
 

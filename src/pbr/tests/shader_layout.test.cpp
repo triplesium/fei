@@ -74,8 +74,8 @@ bool has_spirv_execution_mode(
     const std::vector<uint32>& words,
     uint32 execution_mode
 ) {
-    constexpr std::size_t HeaderWordCount = 5;
-    for (std::size_t index = HeaderWordCount; index < words.size();) {
+    constexpr std::size_t header_word_count = 5;
+    for (std::size_t index = header_word_count; index < words.size();) {
         const uint32 instruction = words[index];
         const uint32 word_count = instruction >> 16;
         const uint32 opcode = instruction & 0xffff;

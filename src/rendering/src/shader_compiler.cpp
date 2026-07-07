@@ -5,11 +5,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <exception>
 #include <fstream>
 #include <iomanip>
 #include <iterator>
 #include <sstream>
-#include <stdexcept>
 #include <string_view>
 #include <type_traits>
 #include <unordered_set>
@@ -324,8 +324,8 @@ Result<ShaderCompilerInvocation, ShaderCompileError> make_shadergen_invocation(
         artifacts.reflection_path.string(),
     };
     if (request.language == ShaderSourceLanguage::Slang) {
-        args.push_back("--slang-reflect");
-        args.push_back(artifacts.slang_reflection_path.string());
+        args.emplace_back("--slang-reflect");
+        args.emplace_back(artifacts.slang_reflection_path.string());
     }
 
     return ShaderCompilerInvocation {
@@ -368,11 +368,11 @@ Optional<std::filesystem::path> parse_include_path(std::string_view line) {
     line.remove_prefix(hash + 1);
     auto trimmed = trim_ascii(line);
     line = std::string_view(trimmed);
-    constexpr std::string_view Include = "include";
-    if (!line.starts_with(Include)) {
+    constexpr std::string_view include_keyword = "include";
+    if (!line.starts_with(include_keyword)) {
         return nullopt;
     }
-    line.remove_prefix(Include.size());
+    line.remove_prefix(include_keyword.size());
     trimmed = trim_ascii(line);
     line = std::string_view(trimmed);
     if (line.empty() || (line.front() != '"' && line.front() != '<')) {
@@ -832,16 +832,15 @@ Status<ShaderCompileError> compile_slang_to_spirv(
 Status<ShaderCompileError>
 generate_backend_artifacts(const ShaderCompileArtifacts& artifacts) {
     try {
-        auto slang_reflection_path =
-            std::filesystem::exists(artifacts.slang_reflection_path) ?
-                artifacts.slang_reflection_path :
-                std::filesystem::path {};
         shadergen::generate_shader_artifacts(
             shadergen::ShaderArtifactGenerationRequest {
                 .spirv_path = artifacts.spirv_path,
                 .opengl_path = artifacts.opengl_path,
                 .reflection_path = artifacts.reflection_path,
-                .slang_reflection_path = std::move(slang_reflection_path),
+                .slang_reflection_path =
+                    std::filesystem::exists(artifacts.slang_reflection_path) ?
+                        artifacts.slang_reflection_path :
+                        std::filesystem::path {},
             }
         );
         return {};
@@ -969,8 +968,7 @@ ExternalShaderCompiler::compile(ShaderCompileRequest request) {
         ));
     }
 
-    auto dependency_request = request;
-    auto plan = make_shader_compile_plan(std::move(request), m_tools);
+    auto plan = make_shader_compile_plan(request, m_tools);
     if (!plan) {
         return failure(std::move(plan).error());
     }
@@ -982,8 +980,7 @@ ExternalShaderCompiler::compile(ShaderCompileRequest request) {
         }
     }
 
-    auto dependencies =
-        shader_compile_dependencies(dependency_request, plan->artifacts);
+    auto dependencies = shader_compile_dependencies(request, plan->artifacts);
     return ShaderCompileOutput {
         .artifacts = std::move(plan->artifacts),
         .dependencies = std::move(dependencies),
@@ -1018,28 +1015,25 @@ ShaderVariantCompiler::compile_with_dependencies(
     }
 
     auto compile_request = std::move(request).value();
-    auto dependency_request = compile_request;
-    auto compiled_logical_path = compile_request.logical_path;
-    auto normalized_defs = compile_request.defs;
-    auto output = m_compiler->compile(std::move(compile_request));
+    auto output = m_compiler->compile(compile_request);
     if (!output) {
         return failure(std::move(output).error());
     }
 
     auto dependencies = std::move(output->dependencies);
     for (const auto& dependency :
-         shader_compile_dependencies(dependency_request, output->artifacts)) {
+         shader_compile_dependencies(compile_request, output->artifacts)) {
         insert_unique_dependency(dependencies, dependency);
     }
 
     auto description = load_compiled_shader_description(
-        std::move(compiled_logical_path),
+        std::move(compile_request.logical_path),
         CompiledShaderArtifactPaths {
             .opengl_path = output->artifacts.opengl_path,
             .spirv_path = output->artifacts.spirv_path,
             .reflection_path = output->artifacts.reflection_path,
         },
-        std::move(normalized_defs)
+        std::move(compile_request.defs)
     );
     if (!description) {
         return failure(shader_compile_error(

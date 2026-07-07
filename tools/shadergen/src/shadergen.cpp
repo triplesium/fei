@@ -53,14 +53,14 @@ std::string spvc_error_message(spvc_context context, std::string_view action) {
 class SpirvCrossCompiler {
   public:
     explicit SpirvCrossCompiler(const std::vector<uint32_t>& spirv) {
-        if (spvc_context_create(&context_) != SPVC_SUCCESS) {
+        if (spvc_context_create(&m_context) != SPVC_SUCCESS) {
             throw std::runtime_error("SPIRV-Cross failed to create context");
         }
 
         spvc_parsed_ir ir = nullptr;
         check(
             spvc_context_parse_spirv(
-                context_,
+                m_context,
                 reinterpret_cast<const SpvId*>(spirv.data()),
                 spirv.size(),
                 &ir
@@ -69,11 +69,11 @@ class SpirvCrossCompiler {
         );
         check(
             spvc_context_create_compiler(
-                context_,
+                m_context,
                 SPVC_BACKEND_GLSL,
                 ir,
                 SPVC_CAPTURE_MODE_TAKE_OWNERSHIP,
-                &compiler_
+                &m_compiler
             ),
             "SPIRV-Cross failed to create GLSL compiler"
         );
@@ -83,22 +83,22 @@ class SpirvCrossCompiler {
     SpirvCrossCompiler& operator=(const SpirvCrossCompiler&) = delete;
 
     ~SpirvCrossCompiler() {
-        if (context_ != nullptr) {
-            spvc_context_destroy(context_);
+        if (m_context != nullptr) {
+            spvc_context_destroy(m_context);
         }
     }
 
-    [[nodiscard]] spvc_compiler compiler() const { return compiler_; }
+    [[nodiscard]] spvc_compiler compiler() const { return m_compiler; }
 
     void check(spvc_result result, std::string_view action) const {
         if (result != SPVC_SUCCESS) {
-            throw std::runtime_error(spvc_error_message(context_, action));
+            throw std::runtime_error(spvc_error_message(m_context, action));
         }
     }
 
   private:
-    spvc_context context_ = nullptr;
-    spvc_compiler compiler_ = nullptr;
+    spvc_context m_context = nullptr;
+    spvc_compiler m_compiler = nullptr;
 };
 
 std::vector<uint32_t> read_spirv(const std::filesystem::path& path) {

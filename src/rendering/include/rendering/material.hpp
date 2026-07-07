@@ -5,7 +5,6 @@
 #include "graphics/enums.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics/resource.hpp"
-#include "graphics/shader_module.hpp"
 #include "rendering/defaults.hpp"
 #include "rendering/gpu_image.hpp"
 #include "rendering/render_asset.hpp"

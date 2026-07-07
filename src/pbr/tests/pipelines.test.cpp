@@ -174,7 +174,7 @@ Handle<Shader>
 add_shader(Assets<Shader>& shaders, ShaderStages stage, std::string path) {
     return shaders.add(
         std::make_unique<Shader>(Shader {
-            .path = std::move(path),
+            .path = path,
             .source = {},
             .spirv = {},
             .stage = stage,
