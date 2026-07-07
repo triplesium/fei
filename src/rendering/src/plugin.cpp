@@ -20,6 +20,7 @@
 #include "rendering/render_graph.hpp"
 #include "rendering/shader.hpp"
 #include "rendering/shader_cache.hpp"
+#include "rendering/shader_compiler.hpp"
 #include "rendering/view.hpp"
 #include "rendering/visibility.hpp"
 
@@ -74,6 +75,12 @@ void present_main_swapchain(
 
 void RenderingPlugin::setup(App& app) {
     app.resource<AssetServer>().emplace_source<ShaderAssetSource>();
+#ifdef FEI_HAS_SLANG_SDK
+    app.add_resource(SlangLibraryShaderCompiler {});
+    app.add_resource(
+        ShaderVariantCompiler(app.resource<SlangLibraryShaderCompiler>())
+    );
+#endif
 
     app.configure_sets(
            RenderUpdate,
@@ -99,22 +106,24 @@ void RenderingPlugin::setup(App& app) {
             RenderingDefaultsPlugin {}
         )
         .add_resource(PipelineCache(app.resource<GraphicsDevice>()))
-        .add_resource<RenderGraph>()
-        .add_systems(
-            First,
-            FEI_SYSTEM_NAME(
-                "init_shader_cache",
-                [](Commands commands,
-                   ResRW<AssetServer> asset_server,
-                   ResRW<Assets<Shader>> shaders,
-                   ResRO<GraphicsDevice> device) {
-                    commands.add_resource(
-                        ShaderCache(*asset_server, *shaders, *device)
-                    );
-                }
-            )
-        )
-        .add_systems(PostUpdate, compute_mesh_aabb)
+        .add_resource<RenderGraph>();
+
+#ifdef FEI_HAS_SLANG_SDK
+    app.add_resource(ShaderCache(
+        app.resource<AssetServer>(),
+        app.resource<Assets<Shader>>(),
+        app.resource<GraphicsDevice>(),
+        &app.resource<ShaderVariantCompiler>()
+    ));
+#else
+    app.add_resource(ShaderCache(
+        app.resource<AssetServer>(),
+        app.resource<Assets<Shader>>(),
+        app.resource<GraphicsDevice>()
+    ));
+#endif
+
+    app.add_systems(PostUpdate, compute_mesh_aabb)
         .add_systems(
             RenderUpdate,
             chain(

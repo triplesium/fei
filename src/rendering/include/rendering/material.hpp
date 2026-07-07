@@ -1,6 +1,8 @@
 #pragma once
 #include "asset/plugin.hpp"
+#include "base/hash.hpp"
 #include "ecs/world.hpp"
+#include "graphics/enums.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics/resource.hpp"
 #include "graphics/shader_module.hpp"
@@ -8,7 +10,6 @@
 #include "rendering/gpu_image.hpp"
 #include "rendering/render_asset.hpp"
 #include "rendering/shader.hpp"
-#include "rendering/shader_cache.hpp"
 
 #include <concepts>
 #include <memory>
@@ -23,6 +24,32 @@ enum class MaterialShaderType : uint8 {
     PrepassVertex,
     PrepassFragment,
 };
+
+enum class MaterialAlphaMode : uint8 {
+    Opaque,
+    Mask,
+    Blend,
+    Additive,
+};
+
+struct MaterialPipelineState {
+    MaterialAlphaMode alpha_mode {MaterialAlphaMode::Opaque};
+    CullMode cull_mode {CullMode::Back};
+    bool depth_write {true};
+
+    bool operator==(const MaterialPipelineState&) const = default;
+};
+
+} // namespace fei
+
+MAKE_STD_HASHABLE(
+    fei::MaterialPipelineState,
+    alpha_mode,
+    cull_mode,
+    depth_write
+)
+
+namespace fei {
 
 class Material {
   public:
@@ -39,6 +66,10 @@ class Material {
     virtual ShaderRef prepass_fragment_shader() const {
         return ShaderRef::default_shader();
     }
+    virtual ShaderDefs shader_defs(MaterialShaderType /*type*/) const {
+        return {};
+    }
+    virtual MaterialPipelineState pipeline_state() const { return {}; }
 
     virtual std::shared_ptr<ResourceLayout> create_resource_layout(
         const GraphicsDevice& device,
@@ -94,38 +125,45 @@ class Material {
     virtual std::size_t hash() const = 0;
 };
 
+struct PreparedMaterialShader {
+    ShaderRef ref;
+    ShaderDefs defs;
+};
+
 class PreparedMaterial {
   private:
-    std::unordered_map<MaterialShaderType, std::shared_ptr<ShaderModule>>
-        m_shaders;
+    std::unordered_map<MaterialShaderType, PreparedMaterialShader> m_shaders;
     std::shared_ptr<ResourceLayout> m_layout;
     std::shared_ptr<ResourceSet> m_resource_set;
+    MaterialPipelineState m_pipeline_state;
     std::size_t m_hash;
 
   public:
     PreparedMaterial(
-        std::unordered_map<MaterialShaderType, std::shared_ptr<ShaderModule>>
-            shaders,
+        std::unordered_map<MaterialShaderType, PreparedMaterialShader> shaders,
         std::shared_ptr<ResourceLayout> layout,
         std::shared_ptr<ResourceSet> resource_set,
-        std::size_t hash
+        std::size_t hash,
+        MaterialPipelineState pipeline_state = {}
     ) :
         m_shaders(std::move(shaders)), m_layout(std::move(layout)),
-        m_resource_set(std::move(resource_set)), m_hash(hash) {}
+        m_resource_set(std::move(resource_set)),
+        m_pipeline_state(pipeline_state), m_hash(hash) {}
 
-    std::shared_ptr<ShaderModule> shader(MaterialShaderType type) {
+    Optional<PreparedMaterialShader&> shader_request(MaterialShaderType type) {
         auto it = m_shaders.find(type);
         if (it != m_shaders.end()) {
             return it->second;
         }
-        return nullptr;
+        return nullopt;
     }
-    std::shared_ptr<const ShaderModule> shader(MaterialShaderType type) const {
+    Optional<const PreparedMaterialShader&>
+    shader_request(MaterialShaderType type) const {
         auto it = m_shaders.find(type);
         if (it != m_shaders.end()) {
             return it->second;
         }
-        return nullptr;
+        return nullopt;
     }
     std::shared_ptr<ResourceLayout> resource_layout() { return m_layout; }
     std::shared_ptr<const ResourceLayout> resource_layout() const {
@@ -134,6 +172,9 @@ class PreparedMaterial {
     std::shared_ptr<ResourceSet> resource_set() { return m_resource_set; }
     std::shared_ptr<const ResourceSet> resource_set() const {
         return m_resource_set;
+    }
+    const MaterialPipelineState& pipeline_state() const {
+        return m_pipeline_state;
     }
     std::size_t hash() const { return m_hash; }
 };
@@ -147,7 +188,6 @@ class MaterialAdapter
         auto& device = world.resource<GraphicsDevice>();
         auto& rendering_defaults = world.resource<RenderingDefaults>();
         auto& gpu_images = world.resource<RenderAssets<GpuImage>>();
-        auto& shader_cache = world.resource<ShaderCache>();
 
         if (!source_asset.resources_ready(gpu_images)) {
             return nullopt;
@@ -174,13 +214,23 @@ class MaterialAdapter
         if (!resource_set) {
             return nullopt;
         }
-        std::unordered_map<MaterialShaderType, std::shared_ptr<ShaderModule>>
-            shader_modules;
+        auto prepared_hash = source_asset.hash();
+        auto pipeline_state = source_asset.pipeline_state();
+        hash_combine(prepared_hash, pipeline_state);
+        std::unordered_map<MaterialShaderType, PreparedMaterialShader> shaders;
         auto load_shader = [&](MaterialShaderType type, const ShaderRef& ref) {
             if (ref.is_default()) {
                 return;
             }
-            shader_modules[type] = shader_cache.get(ref);
+            auto defs = source_asset.shader_defs(type);
+            defs = normalized_shader_defs(std::move(defs));
+            hash_combine(prepared_hash, static_cast<int>(type));
+            hash_combine(prepared_hash, ref.hash());
+            hash_combine(prepared_hash, defs);
+            shaders[type] = PreparedMaterialShader {
+                .ref = ref,
+                .defs = std::move(defs),
+            };
         };
         load_shader(MaterialShaderType::Vertex, source_asset.vertex_shader());
         load_shader(
@@ -196,10 +246,11 @@ class MaterialAdapter
             source_asset.prepass_fragment_shader()
         );
         return PreparedMaterial {
-            std::move(shader_modules),
+            std::move(shaders),
             std::move(layout),
             std::move(resource_set),
-            source_asset.hash()
+            prepared_hash,
+            pipeline_state
         };
     }
 };

@@ -48,23 +48,6 @@ Optional<std::filesystem::path> existing_shader_output_path(
     return output_path;
 }
 
-Optional<ShaderStages>
-shader_stage_from_path(const std::filesystem::path& path) {
-    if (path.extension() == ".vert") {
-        return ShaderStages::Vertex;
-    }
-    if (path.extension() == ".geom") {
-        return ShaderStages::Geometry;
-    }
-    if (path.extension() == ".frag") {
-        return ShaderStages::Fragment;
-    }
-    if (path.extension() == ".comp") {
-        return ShaderStages::Compute;
-    }
-    return nullopt;
-}
-
 struct ShaderArtifactManifest {
     std::filesystem::path logical_path;
     std::filesystem::path opengl_path;
@@ -350,6 +333,23 @@ shader_reflection_path(const AssetPath& asset_path) {
     );
 }
 
+Optional<ShaderStages>
+shader_stage_from_path(const std::filesystem::path& path) {
+    if (path.extension() == ".vert") {
+        return ShaderStages::Vertex;
+    }
+    if (path.extension() == ".geom") {
+        return ShaderStages::Geometry;
+    }
+    if (path.extension() == ".frag") {
+        return ShaderStages::Fragment;
+    }
+    if (path.extension() == ".comp") {
+        return ShaderStages::Compute;
+    }
+    return nullopt;
+}
+
 Result<std::vector<std::byte>, ReaderError>
 read_shader_binary(const std::filesystem::path& path) {
     auto reader = Reader::from_file(path);
@@ -411,6 +411,53 @@ load_shader_reflection_bindings(const AssetPath& asset_path) {
         return failure(shader_load_error(asset_path, bindings.error()));
     }
     return std::move(bindings).value();
+}
+
+Result<ShaderDescription, std::string> load_compiled_shader_description(
+    std::filesystem::path logical_path,
+    const CompiledShaderArtifactPaths& artifacts,
+    ShaderDefs defs
+) {
+    auto stage = shader_stage_from_path(logical_path);
+    if (!stage) {
+        return failure("Unknown shader extension: " + logical_path.string());
+    }
+
+    auto source_reader = Reader::from_file(artifacts.opengl_path);
+    if (!source_reader) {
+        return failure(
+            "Failed to read OpenGL shader: " + source_reader.error().message
+        );
+    }
+
+    auto spirv = read_shader_binary(artifacts.spirv_path);
+    if (!spirv) {
+        return failure(
+            "Failed to read SPIR-V shader: " + spirv.error().message
+        );
+    }
+
+    auto reflection_reader = Reader::from_file(artifacts.reflection_path);
+    if (!reflection_reader) {
+        return failure(
+            "Failed to read shader reflection: " +
+            reflection_reader.error().message
+        );
+    }
+    auto resources =
+        parse_shader_reflection_bindings(reflection_reader->as_string());
+    if (!resources) {
+        return failure(std::move(resources).error());
+    }
+
+    return ShaderDescription {
+        .stage = stage.value(),
+        .source = source_reader->as_string(),
+        .spirv = std::move(*spirv),
+        .path = logical_path.string(),
+        .resources = std::move(resources).value(),
+        .defs = normalized_shader_defs(std::move(defs)),
+    };
 }
 
 AssetLoadResult<Shader>

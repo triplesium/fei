@@ -14,6 +14,18 @@ option("profile_summary")
     set_description("Enable engine-side profiling summary output")
 option_end()
 
+option("shader_slang_sdk")
+    set_default(os.getenv("VULKAN_SDK") or "")
+    set_showmenu(true)
+    set_description("Path to a Slang SDK used by runtime shader compilation")
+option_end()
+
+option("shader_spirv_cross_sdk")
+    set_default(os.getenv("VULKAN_SDK") or "")
+    set_showmenu(true)
+    set_description("Path to a Vulkan/SPIRV-Cross SDK used by shader artifact generation")
+option_end()
+
 add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json")
 add_requires("glfw", {configs = {shared = false}})
 add_requires("imgui", {configs = {glfw = true, opengl3 = true}})
@@ -50,6 +62,7 @@ end
 
 local project_dir = os.scriptdir():gsub("\\", "/")
 add_defines("FEI_ASSETS_PATH=\"" .. project_dir .. "/assets\"")
+add_defines("FEI_SHADER_SOURCE_PATH=\"" .. project_dir .. "/src/pbr/shaders\"")
 add_defines("FEI_SHADER_ASSETS_PATH=\"" .. project_dir .. "/build/generated/shaders\"")
 add_defines("FEI_PROFILE_OUTPUT_PATH=\"" .. project_dir .. "/build/profile/latest\"")
 

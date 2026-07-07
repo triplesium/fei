@@ -5,8 +5,10 @@
 #include "asset/path.hpp"
 #include "asset/server.hpp"
 #include "asset/source.hpp"
+#include "base/hash.hpp"
 #include "base/log.hpp"
 #include "base/optional.hpp"
+#include "base/result.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/shader_module.hpp"
 
@@ -46,6 +48,9 @@ compiled_vulkan_shader_path(const AssetPath& asset_path);
 Optional<std::filesystem::path>
 shader_reflection_path(const AssetPath& asset_path);
 
+Optional<ShaderStages>
+shader_stage_from_path(const std::filesystem::path& path);
+
 Result<std::vector<std::byte>, ReaderError>
 read_shader_binary(const std::filesystem::path& path);
 
@@ -56,6 +61,18 @@ ShaderReflectionResult parse_shader_reflection_bindings(std::string_view json);
 
 Result<std::vector<ShaderResourceBinding>, AssetLoadError>
 load_shader_reflection_bindings(const AssetPath& asset_path);
+
+struct CompiledShaderArtifactPaths {
+    std::filesystem::path opengl_path;
+    std::filesystem::path spirv_path;
+    std::filesystem::path reflection_path;
+};
+
+Result<ShaderDescription, std::string> load_compiled_shader_description(
+    std::filesystem::path logical_path,
+    const CompiledShaderArtifactPaths& artifacts,
+    ShaderDefs defs = {}
+);
 
 class ShaderLoader : public AssetLoader<Shader> {
   public:
@@ -91,6 +108,24 @@ class ShaderRef {
 
     bool is_default() const {
         return std::holds_alternative<std::monostate>(m_source);
+    }
+
+    Optional<const AssetPath&> asset_path() const {
+        if (!std::holds_alternative<AssetPath>(m_source)) {
+            return nullopt;
+        }
+        return std::get<AssetPath>(m_source);
+    }
+
+    std::size_t hash() const {
+        std::size_t seed = 0;
+        hash_combine(seed, m_source.index());
+        if (std::holds_alternative<Handle<Shader>>(m_source)) {
+            hash_combine(seed, std::get<Handle<Shader>>(m_source).id());
+        } else if (std::holds_alternative<AssetPath>(m_source)) {
+            hash_combine(seed, std::get<AssetPath>(m_source));
+        }
+        return seed;
     }
 
     Handle<Shader> resolve(AssetServer& asset_server) const {

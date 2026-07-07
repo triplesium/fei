@@ -1,6 +1,7 @@
 #pragma once
 #include "graphics/enums.hpp"
 #include "graphics/resource.hpp"
+#include "graphics/shader_defs.hpp"
 
 #include <cstddef>
 #include <string>
@@ -24,6 +25,7 @@ struct ShaderDescription {
     std::vector<std::byte> spirv;
     std::string path;
     std::vector<ShaderResourceBinding> resources;
+    ShaderDefs defs;
 };
 
 class ShaderModule {
@@ -31,10 +33,12 @@ class ShaderModule {
     ShaderStages m_stage;
     std::string m_path;
     std::vector<ShaderResourceBinding> m_resources;
+    ShaderDefs m_defs;
 
   public:
     ShaderModule(const ShaderDescription& desc) :
-        m_stage(desc.stage), m_path(desc.path), m_resources(desc.resources) {}
+        m_stage(desc.stage), m_path(desc.path), m_resources(desc.resources),
+        m_defs(desc.defs) {}
     virtual ~ShaderModule() = default;
 
     ShaderStages stage() const { return m_stage; }
@@ -42,6 +46,7 @@ class ShaderModule {
     const std::vector<ShaderResourceBinding>& resources() const {
         return m_resources;
     }
+    const ShaderDefs& defs() const { return m_defs; }
 };
 
 } // namespace fei
