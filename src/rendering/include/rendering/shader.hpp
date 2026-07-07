@@ -10,69 +10,20 @@
 #include "base/optional.hpp"
 #include "base/result.hpp"
 #include "graphics/enums.hpp"
-#include "graphics/shader_module.hpp"
 
-#include <cstddef>
 #include <filesystem>
 #include <string>
-#include <string_view>
 #include <variant>
-#include <vector>
 
 namespace fei {
 
 struct Shader {
     std::filesystem::path path;
     std::string source;
-    std::vector<std::byte> spirv;
-    ShaderStages stage;
-    std::vector<ShaderResourceBinding> resources;
-
-    ShaderDescription description() const {
-        return ShaderDescription {
-            .stage = stage,
-            .source = source,
-            .spirv = spirv,
-            .path = path.string(),
-            .resources = resources,
-        };
-    }
 };
-
-Optional<std::filesystem::path>
-compiled_opengl_shader_path(const AssetPath& asset_path);
-
-Optional<std::filesystem::path>
-compiled_vulkan_shader_path(const AssetPath& asset_path);
-
-Optional<std::filesystem::path>
-shader_reflection_path(const AssetPath& asset_path);
 
 Optional<ShaderStages>
 shader_stage_from_path(const std::filesystem::path& path);
-
-Result<std::vector<std::byte>, ReaderError>
-read_shader_binary(const std::filesystem::path& path);
-
-using ShaderReflectionResult =
-    Result<std::vector<ShaderResourceBinding>, std::string>;
-
-ShaderReflectionResult parse_shader_reflection_bindings(std::string_view json);
-
-Result<std::vector<ShaderResourceBinding>, AssetLoadError>
-load_shader_reflection_bindings(const AssetPath& asset_path);
-
-struct CompiledShaderArtifactPaths {
-    std::filesystem::path opengl_path;
-    std::filesystem::path spirv_path;
-    std::filesystem::path reflection_path;
-};
-
-Result<ShaderDescription, std::string> load_compiled_shader_description(
-    std::filesystem::path logical_path,
-    const CompiledShaderArtifactPaths& artifacts,
-    ShaderDefs defs = {}
-);
 
 class ShaderLoader : public AssetLoader<Shader> {
   public:

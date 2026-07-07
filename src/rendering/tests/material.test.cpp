@@ -86,14 +86,11 @@ class VariantMaterial : public Material {
 };
 
 Handle<Shader>
-add_shader(Assets<Shader>& shaders, ShaderStages stage, std::string path) {
+add_shader(Assets<Shader>& shaders, ShaderStages /*stage*/, std::string path) {
     return shaders.add(
         std::make_unique<Shader>(Shader {
             .path = path,
-            .source = {},
-            .spirv = {},
-            .stage = stage,
-            .resources = {},
+            .source = "test shader source",
         })
     );
 }

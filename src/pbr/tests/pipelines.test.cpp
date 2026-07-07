@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -171,17 +172,33 @@ PreparedMaterial create_default_shader_material(
 }
 
 Handle<Shader>
-add_shader(Assets<Shader>& shaders, ShaderStages stage, std::string path) {
+add_shader(Assets<Shader>& shaders, ShaderStages /*stage*/, std::string path) {
     return shaders.add(
         std::make_unique<Shader>(Shader {
             .path = path,
-            .source = {},
-            .spirv = {},
-            .stage = stage,
-            .resources = {},
+            .source = "test shader source",
         })
     );
 }
+
+class TestShaderCompiler final : public ShaderCompiler {
+  public:
+    Result<ShaderCompileOutput, ShaderCompileError>
+    compile(ShaderCompileRequest request) override {
+        return ShaderCompileOutput {
+            .description =
+                ShaderDescription {
+                    .stage = request.stage,
+                    .source = request.source,
+                    .spirv = {std::byte {0x03}, std::byte {0x02}},
+                    .path = request.logical_path.string(),
+                    .resources = {},
+                    .defs = normalized_shader_defs(std::move(request.defs)),
+                },
+            .dependencies = {},
+        };
+    }
+};
 
 PreparedMaterial create_shader_request_material(
     FakeGraphicsDevice& device,
@@ -616,7 +633,9 @@ TEST_CASE(
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
-    ShaderCache shader_cache(asset_server, shaders, device);
+    TestShaderCompiler compiler;
+    ShaderVariantCompiler variant_compiler(compiler);
+    ShaderCache shader_cache(asset_server, shaders, device, &variant_compiler);
     auto shader_defaults = create_shader_defaults(device);
     device.shader_descriptions.clear();
     PbrMaterialPipelineSpecializer material_pipeline_specializer {
@@ -745,7 +764,9 @@ TEST_CASE(
     PipelineCache pipeline_cache(device);
     AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
-    ShaderCache shader_cache(asset_server, shaders, device);
+    TestShaderCompiler compiler;
+    ShaderVariantCompiler variant_compiler(compiler);
+    ShaderCache shader_cache(asset_server, shaders, device, &variant_compiler);
     auto shader_defaults = create_shader_defaults(device);
     device.shader_descriptions.clear();
     auto pipelines = create_mesh_material_pipelines(
@@ -803,7 +824,9 @@ TEST_CASE(
     PipelineCache pipeline_cache(device);
     AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
-    ShaderCache shader_cache(asset_server, shaders, device);
+    TestShaderCompiler compiler;
+    ShaderVariantCompiler variant_compiler(compiler);
+    ShaderCache shader_cache(asset_server, shaders, device, &variant_compiler);
     auto shader_defaults = create_shader_defaults(device);
     device.shader_descriptions.clear();
     auto pipelines = create_mesh_material_pipelines(
@@ -875,7 +898,9 @@ TEST_CASE(
     PipelineCache pipeline_cache(device);
     AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
-    ShaderCache shader_cache(asset_server, shaders, device);
+    TestShaderCompiler compiler;
+    ShaderVariantCompiler variant_compiler(compiler);
+    ShaderCache shader_cache(asset_server, shaders, device, &variant_compiler);
     auto shader_defaults = create_shader_defaults(device);
     device.shader_descriptions.clear();
     auto pipelines = create_mesh_material_pipelines(

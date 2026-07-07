@@ -1,9 +1,6 @@
 #pragma once
 #include "app/app.hpp"
 #include "app/plugin.hpp"
-#include "asset/assets.hpp"
-#include "asset/handle.hpp"
-#include "asset/server.hpp"
 #include "base/types.hpp"
 #include "core/transform.hpp"
 #include "ecs/event.hpp"
@@ -27,7 +24,7 @@
 #include "rendering/mesh/mesh_uniform.hpp"
 #include "rendering/pipeline_cache.hpp"
 #include "rendering/render_graph.hpp"
-#include "rendering/shader.hpp"
+#include "rendering/shader_cache.hpp"
 
 #include <array>
 #include <cstddef>
@@ -105,8 +102,7 @@ struct VxgiVoxelization {
 void setup_vxgi(
     ResRW<VxgiVolumes> volumes,
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shader_assets,
+    ResRW<ShaderCache> shader_cache,
     Commands commands
 );
 
@@ -166,8 +162,7 @@ struct VxgiGenerateMipmapBase {
 void setup_vxgi_generate_mipmap_base(
     ResRO<VxgiVolumes> volumes,
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shader_assets,
+    ResRW<ShaderCache> shader_cache,
     Commands commands
 );
 
@@ -203,8 +198,7 @@ struct VxgiGenerateMipmapVolume {
 
 void setup_vxgi_generate_mipmap_volume(
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shader_assets,
+    ResRW<ShaderCache> shader_cache,
     Commands commands
 );
 
@@ -242,8 +236,7 @@ void setup_inject_radiance(
     ResRO<VxgiVoxelization> voxelization,
     ResRO<LightingResources> lighting,
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shader_assets,
+    ResRW<ShaderCache> shader_cache,
     Commands commands
 );
 
@@ -277,8 +270,7 @@ struct VxgiInjectPropagation {
 void setup_inject_propagation(
     ResRO<VxgiVolumes> volumes,
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shader_assets,
+    ResRW<ShaderCache> shader_cache,
     Commands commands
 );
 

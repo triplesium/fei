@@ -9,7 +9,7 @@
 #include "graphics_opengl_glfw/plugin.hpp"
 #include "pbr/plugin.hpp"
 #include "rendering/plugin.hpp"
-#include "rendering/shader.hpp"
+#include "rendering/shader_cache.hpp"
 
 #include <cstddef>
 #include <format>
@@ -59,7 +59,7 @@ std::shared_ptr<Texture> copy_to_staging_texture(
 void equirect_to_cubemap(
     ResRO<GraphicsDevice> device,
     ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shaders,
+    ResRW<ShaderCache> shader_cache,
     ResRW<Assets<Image>> images,
     ResRW<Global> global
 ) {
@@ -102,10 +102,11 @@ void equirect_to_cubemap(
             .texture_type = TextureType::Texture2D,
         }
     );
-    auto shader_handle =
-        asset_server->load<Shader>("shader://equirect2cube.comp");
-    auto& shader = shaders->get(shader_handle).value();
-    auto compute_shader = device->create_shader_module(shader.description());
+    auto compute_shader = shader_cache->get_or_compile(
+        AssetPath("shader://equirect2cube.slang"),
+        ShaderStages::Compute,
+        {}
+    );
     auto resource_layout = device->create_resource_layout(
         ResourceLayoutDescription {
             .elements = {
@@ -178,8 +179,7 @@ void equirect_to_cubemap(
 
 void cubemap_to_irradiance_map(
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shaders,
+    ResRW<ShaderCache> shader_cache,
     ResRO<Global> global
 ) {
     auto irradiance_texture = device->create_texture(
@@ -199,10 +199,11 @@ void cubemap_to_irradiance_map(
             .texture_type = TextureType::Texture2D,
         }
     );
-    auto shader_handle =
-        asset_server->load<Shader>("shader://cubemap2irradiance.comp");
-    auto& shader = shaders->get(shader_handle).value();
-    auto compute_shader = device->create_shader_module(shader.description());
+    auto compute_shader = shader_cache->get_or_compile(
+        AssetPath("shader://cubemap2irradiance.slang"),
+        ShaderStages::Compute,
+        {}
+    );
     auto resource_layout = device->create_resource_layout(
         ResourceLayoutDescription {
             .elements = {

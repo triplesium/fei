@@ -100,13 +100,13 @@ Optional<std::shared_ptr<Texture>> EquirectToCubemap::get_or_create_cubemap(
 
 void EquirectToCubemap::setup(
     const GraphicsDevice& device,
-    AssetServer& asset_server,
-    Assets<Shader>& shaders
+    ShaderCache& shader_cache
 ) {
-    auto shader_handle =
-        asset_server.load<Shader>("shader://equirect2cube.comp");
-    auto& shader = shaders.get(shader_handle).value();
-    auto compute_shader = device.create_shader_module(shader.description());
+    auto compute_shader = shader_cache.get_or_compile(
+        AssetPath("shader://equirect2cube.slang"),
+        ShaderStages::Compute,
+        {}
+    );
     m_equirect_to_cubemap_resource_layout = device.create_resource_layout(
         ResourceLayoutDescription {
             .elements = {
@@ -143,10 +143,9 @@ void EquirectToCubemap::setup(
 void setup_equi2cubemap(
     ResRW<EquirectToCubemap> ibl,
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shaders
+    ResRW<ShaderCache> shader_cache
 ) {
-    ibl->setup(*device, *asset_server, *shaders);
+    ibl->setup(*device, *shader_cache);
 }
 
 void CubemapPlugin::setup(App& app) {

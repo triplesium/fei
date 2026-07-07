@@ -28,18 +28,6 @@ void write_text_file(
     output << content;
 }
 
-void write_binary_file(
-    const std::filesystem::path& path,
-    const std::vector<std::byte>& bytes
-) {
-    std::filesystem::create_directories(path.parent_path());
-    std::ofstream output(path, std::ios::binary);
-    output.write(
-        reinterpret_cast<const char*>(bytes.data()),
-        static_cast<std::streamsize>(bytes.size())
-    );
-}
-
 class RecordingShaderCompiler final : public ShaderCompiler {
   public:
     std::vector<ShaderCompileRequest> requests;
@@ -48,39 +36,43 @@ class RecordingShaderCompiler final : public ShaderCompiler {
     compile(ShaderCompileRequest request) override {
         requests.push_back(request);
 
-        auto artifacts = shader_compile_artifact_paths(request);
-        write_text_file(
-            artifacts.opengl_path,
-            "#version 450\nvoid main() {}\n"
-        );
-        write_binary_file(
-            artifacts.spirv_path,
-            {
-                std::byte {0x03},
-                std::byte {0x02},
-                std::byte {0x23},
-                std::byte {0x07},
-            }
-        );
-        write_text_file(
-            artifacts.reflection_path,
-            R"({"entryPoints":[{"name":"fragment_main","mode":"frag"}]})"
-        );
-
-        return ShaderCompileOutput {.artifacts = std::move(artifacts)};
+        return ShaderCompileOutput {
+            .description =
+                ShaderDescription {
+                    .stage = request.stage,
+                    .source = "#version 450\nvoid main() {}\n",
+                    .spirv =
+                        {
+                            std::byte {0x03},
+                            std::byte {0x02},
+                            std::byte {0x23},
+                            std::byte {0x07},
+                        },
+                    .path = request.logical_path.string(),
+                    .resources = {},
+                    .defs = normalized_shader_defs(std::move(request.defs)),
+                },
+            .dependencies = {},
+        };
     }
 };
 
 Handle<Shader> add_test_shader(Assets<Shader>& shaders) {
     return shaders.add(
         std::make_unique<Shader>(Shader {
-            .path = "test.frag",
-            .source = {},
-            .spirv = {},
-            .stage = ShaderStages::Fragment,
-            .resources = {},
+            .path = "test.slang",
+            .source = "test shader source",
         })
     );
+}
+
+void add_shader_asset_loading(
+    App& app,
+    const std::filesystem::path& source_root
+) {
+    app.add_resource(AssetServer(&app));
+    app.resource<AssetServer>().emplace_source<ShaderAssetSource>(source_root);
+    app.resource<AssetServer>().add_loader<Shader, ShaderLoader>();
 }
 
 } // namespace
@@ -92,11 +84,15 @@ TEST_CASE(
     AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
     FakeGraphicsDevice device;
-    ShaderCache cache(asset_server, shaders, device);
+    RecordingShaderCompiler compiler;
+    ShaderVariantCompiler variant_compiler(compiler);
+    ShaderCache cache(asset_server, shaders, device, &variant_compiler);
     auto shader = add_test_shader(shaders);
 
     auto first = cache.get(
         shader.id(),
+        ShaderStages::Fragment,
+        {},
         {
             ShaderDefVal::bool_def("ALPHA_TEST"),
             ShaderDefVal::uint_def("LIGHT_COUNT", 4),
@@ -104,6 +100,8 @@ TEST_CASE(
     );
     auto second = cache.get(
         shader.id(),
+        ShaderStages::Fragment,
+        {},
         {
             ShaderDefVal::uint_def("LIGHT_COUNT", 4),
             ShaderDefVal::bool_def("ALPHA_TEST"),
@@ -111,6 +109,8 @@ TEST_CASE(
     );
 
     REQUIRE(first == second);
+    REQUIRE(compiler.requests.size() == 1);
+    REQUIRE(compiler.requests[0].source == "test shader source");
     REQUIRE(device.shader_descriptions.size() == 1);
     REQUIRE(
         device.shader_descriptions[0].defs ==
@@ -128,20 +128,35 @@ TEST_CASE(
     AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
     FakeGraphicsDevice device;
-    ShaderCache cache(asset_server, shaders, device);
+    RecordingShaderCompiler compiler;
+    ShaderVariantCompiler variant_compiler(compiler);
+    ShaderCache cache(asset_server, shaders, device, &variant_compiler);
     auto shader = add_test_shader(shaders);
 
-    auto without_defs = cache.get(shader.id());
-    auto alpha_test =
-        cache.get(shader.id(), {ShaderDefVal::bool_def("ALPHA_TEST")});
-    auto alpha_test_again =
-        cache.get(shader.id(), {ShaderDefVal::bool_def("ALPHA_TEST")});
-    auto alpha_test_false =
-        cache.get(shader.id(), {ShaderDefVal::bool_def("ALPHA_TEST", false)});
+    auto without_defs = cache.get(shader.id(), ShaderStages::Fragment, {});
+    auto alpha_test = cache.get(
+        shader.id(),
+        ShaderStages::Fragment,
+        {},
+        {ShaderDefVal::bool_def("ALPHA_TEST")}
+    );
+    auto alpha_test_again = cache.get(
+        shader.id(),
+        ShaderStages::Fragment,
+        {},
+        {ShaderDefVal::bool_def("ALPHA_TEST")}
+    );
+    auto alpha_test_false = cache.get(
+        shader.id(),
+        ShaderStages::Fragment,
+        {},
+        {ShaderDefVal::bool_def("ALPHA_TEST", false)}
+    );
 
     REQUIRE(without_defs != alpha_test);
     REQUIRE(alpha_test == alpha_test_again);
     REQUIRE(alpha_test != alpha_test_false);
+    REQUIRE(compiler.requests.size() == 3);
     REQUIRE(device.shader_descriptions.size() == 3);
     REQUIRE(device.shader_descriptions[0].defs.empty());
     REQUIRE(
@@ -177,7 +192,6 @@ float4 fragment_main() : SV_Target0
         compiler,
         RuntimeShaderCompilerConfig {
             .source_root = root / "shaders",
-            .output_root = root / "out",
         }
     );
 
@@ -189,6 +203,8 @@ float4 fragment_main() : SV_Target0
 
     auto first = cache.get(
         shader.id(),
+        ShaderStages::Fragment,
+        {},
         {
             ShaderDefVal::uint_def("LIGHT_COUNT", 4),
             ShaderDefVal::bool_def("ALPHA_TEST"),
@@ -196,6 +212,8 @@ float4 fragment_main() : SV_Target0
     );
     auto second = cache.get(
         shader.id(),
+        ShaderStages::Fragment,
+        {},
         {
             ShaderDefVal::bool_def("ALPHA_TEST"),
             ShaderDefVal::uint_def("LIGHT_COUNT", 4),
@@ -205,11 +223,12 @@ float4 fragment_main() : SV_Target0
     REQUIRE(first == second);
     REQUIRE(compiler.requests.size() == 1);
     REQUIRE(
-        compiler.requests[0].logical_path == std::filesystem::path("test.frag")
+        compiler.requests[0].logical_path == std::filesystem::path("test.slang")
     );
     REQUIRE(
         compiler.requests[0].source_path == root / "shaders" / "test.slang"
     );
+    REQUIRE(compiler.requests[0].source == "test shader source");
     REQUIRE(compiler.requests[0].stage == ShaderStages::Fragment);
     REQUIRE(compiler.requests[0].entry == "fragment_main");
     REQUIRE(
@@ -219,9 +238,8 @@ float4 fragment_main() : SV_Target0
             ShaderDefVal::uint_def("LIGHT_COUNT", 4),
         })
     );
-    REQUIRE(compiler.requests[0].output_root.parent_path() == root / "out");
     REQUIRE(device.shader_descriptions.size() == 1);
-    REQUIRE(device.shader_descriptions[0].path == "test.frag");
+    REQUIRE(device.shader_descriptions[0].path == "test.slang");
     REQUIRE(
         device.shader_descriptions[0].defs ==
         normalized_shader_defs({
@@ -232,7 +250,7 @@ float4 fragment_main() : SV_Target0
 }
 
 TEST_CASE(
-    "ShaderCache can compile source-only Slang shader paths",
+    "ShaderCache compiles runtime Slang shader assets",
     "[rendering][shader-cache][shader-compiler]"
 ) {
     auto root = std::filesystem::current_path() / "build" / "test" /
@@ -254,39 +272,56 @@ float4 fragment_main() : SV_Target0
         compiler,
         RuntimeShaderCompilerConfig {
             .source_root = root / "shaders",
-            .output_root = root / "out",
         }
     );
 
-    AssetServer asset_server(nullptr);
-    Assets<Shader> shaders(nullptr);
+    App app;
+    add_shader_asset_loading(app, root / "shaders");
+    auto& asset_server = app.resource<AssetServer>();
+    auto& shaders = app.resource<Assets<Shader>>();
     FakeGraphicsDevice device;
     ShaderCache cache(asset_server, shaders, device, &variant_compiler);
 
-    auto default_shader = cache.get_or_compile(AssetPath("shader://test.frag"));
-    auto default_shader_again =
-        cache.get_or_compile(AssetPath("shader://test.frag"));
+    auto default_shader = cache.get_or_compile(
+        AssetPath("shader://test.slang"),
+        ShaderStages::Fragment,
+        {}
+    );
+    auto default_shader_again = cache.get_or_compile(
+        AssetPath("shader://test.slang"),
+        ShaderStages::Fragment,
+        {}
+    );
     auto alpha_test = cache.get_or_compile(
-        AssetPath("shader://test.frag"),
+        AssetPath("shader://test.slang"),
+        ShaderStages::Fragment,
+        {},
         {ShaderDefVal::bool_def("ALPHA_TEST")}
     );
     auto alpha_test_again = cache.get_or_compile(
-        AssetPath("shader://test.frag"),
+        AssetPath("shader://test.slang"),
+        ShaderStages::Fragment,
+        {},
         {ShaderDefVal::bool_def("ALPHA_TEST")}
     );
     auto alpha_test_from_shader_ref = cache.get(
-        ShaderRef("shader://test.frag"),
+        ShaderRef("shader://test.slang"),
+        ShaderStages::Fragment,
+        {},
         {ShaderDefVal::bool_def("ALPHA_TEST")}
     );
+    auto default_shader_from_shader_ref =
+        cache.get(ShaderRef("shader://test.slang"), ShaderStages::Fragment, {});
 
     REQUIRE(default_shader == default_shader_again);
+    REQUIRE(default_shader == default_shader_from_shader_ref);
     REQUIRE(alpha_test == alpha_test_again);
     REQUIRE(alpha_test == alpha_test_from_shader_ref);
     REQUIRE(default_shader != alpha_test);
     REQUIRE(compiler.requests.size() == 2);
     REQUIRE(compiler.requests[0].defs.empty());
     REQUIRE(
-        compiler.requests[0].logical_path == std::filesystem::path("test.frag")
+        compiler.requests[0].logical_path == std::filesystem::path("test.slang")
     );
     REQUIRE(
         compiler.requests[0].source_path == root / "shaders" / "test.slang"
@@ -304,7 +339,7 @@ float4 fragment_main() : SV_Target0
 }
 
 TEST_CASE(
-    "ShaderCache recompiles source-only Slang shader paths when includes "
+    "ShaderCache recompiles runtime Slang shader assets when includes "
     "change",
     "[rendering][shader-cache][shader-compiler]"
 ) {
@@ -339,17 +374,26 @@ float4 fragment_main() : SV_Target0
         compiler,
         RuntimeShaderCompilerConfig {
             .source_root = root / "shaders",
-            .output_root = root / "out",
         }
     );
 
-    AssetServer asset_server(nullptr);
-    Assets<Shader> shaders(nullptr);
+    App app;
+    add_shader_asset_loading(app, root / "shaders");
+    auto& asset_server = app.resource<AssetServer>();
+    auto& shaders = app.resource<Assets<Shader>>();
     FakeGraphicsDevice device;
     ShaderCache cache(asset_server, shaders, device, &variant_compiler);
 
-    auto first = cache.get_or_compile(AssetPath("shader://test.frag"));
-    auto first_again = cache.get_or_compile(AssetPath("shader://test.frag"));
+    auto first = cache.get_or_compile(
+        AssetPath("shader://test.slang"),
+        ShaderStages::Fragment,
+        {}
+    );
+    auto first_again = cache.get_or_compile(
+        AssetPath("shader://test.slang"),
+        ShaderStages::Fragment,
+        {}
+    );
 
     REQUIRE(first == first_again);
     REQUIRE(compiler.requests.size() == 1);
@@ -369,7 +413,11 @@ float4 test_color()
         std::filesystem::file_time_type::clock::now() + std::chrono::seconds(2)
     );
 
-    auto recompiled = cache.get_or_compile(AssetPath("shader://test.frag"));
+    auto recompiled = cache.get_or_compile(
+        AssetPath("shader://test.slang"),
+        ShaderStages::Fragment,
+        {}
+    );
 
     REQUIRE(recompiled != first);
     REQUIRE(compiler.requests.size() == 2);
@@ -393,12 +441,13 @@ TEST_CASE(
         compiler,
         RuntimeShaderCompilerConfig {
             .source_root = root / "shaders",
-            .output_root = root / "out",
         }
     );
 
     auto output = variant_compiler.compile(
         "test.frag",
+        ShaderStages::Fragment,
+        {},
         {ShaderDefVal::bool_def("ALPHA_TEST")}
     );
 

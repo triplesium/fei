@@ -9,6 +9,7 @@
 #include "pbr/pipelines.hpp"
 #include "pbr/vxgi.hpp"
 #include "rendering/material.hpp"
+#include "rendering/shader_cache.hpp"
 
 EMBED(ibl_brdf_lut_png, "ibl_brdf_lut.png");
 
@@ -18,22 +19,33 @@ namespace {
 
 void init_pbr_mesh_shader_defaults(
     ResRW<PbrMeshShaderDefaults> defaults,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shader_assets,
-    ResRO<GraphicsDevice> device
+    ResRW<ShaderCache> shader_cache
 ) {
-    auto create_shader_module = [&](const char* path) {
-        auto handle = asset_server->load<Shader>(path);
-        auto shader = shader_assets->get(handle).value();
-        return device->create_shader_module(shader.description());
-    };
+    auto create_shader_module =
+        [&](const char* path, ShaderStages stage, const char* entry) {
+            return shader_cache->get_or_compile(AssetPath(path), stage, entry);
+        };
 
-    defaults->forward_vertex = create_shader_module("shader://forward.vert");
-    defaults->forward_fragment = create_shader_module("shader://forward.frag");
-    defaults->prepass_vertex =
-        create_shader_module("shader://deferred_prepass.vert");
-    defaults->prepass_fragment =
-        create_shader_module("shader://deferred_prepass.frag");
+    defaults->forward_vertex = create_shader_module(
+        "shader://forward.slang",
+        ShaderStages::Vertex,
+        "vertex_main"
+    );
+    defaults->forward_fragment = create_shader_module(
+        "shader://forward.slang",
+        ShaderStages::Fragment,
+        "fragment_main"
+    );
+    defaults->prepass_vertex = create_shader_module(
+        "shader://deferred_prepass.slang",
+        ShaderStages::Vertex,
+        "vertex_main"
+    );
+    defaults->prepass_fragment = create_shader_module(
+        "shader://deferred_prepass.slang",
+        ShaderStages::Fragment,
+        "fragment_main"
+    );
 }
 
 } // namespace

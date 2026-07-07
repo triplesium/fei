@@ -1,13 +1,15 @@
 #include "rendering/shader_compiler.hpp"
 
 #include "rendering/shader.hpp"
-#include "shadergen/shadergen.hpp"
+#include "shader_artifact.hpp"
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <exception>
 #include <fstream>
-#include <iomanip>
 #include <iterator>
 #include <sstream>
 #include <string_view>
@@ -36,15 +38,6 @@ std::filesystem::path default_runtime_shader_source_root() {
 #endif
 }
 
-std::filesystem::path default_runtime_shader_output_root() {
-#ifdef FEI_SHADER_ASSETS_PATH
-    return std::filesystem::path(FEI_SHADER_ASSETS_PATH) / "runtime";
-#else
-    return std::filesystem::current_path() / "build" / "generated" / "shaders" /
-           "runtime";
-#endif
-}
-
 std::filesystem::path
 with_suffix(std::filesystem::path path, std::string_view suffix) {
     path += suffix;
@@ -58,21 +51,6 @@ std::filesystem::path normalized_absolute_path(std::filesystem::path path) {
         path = std::move(absolute);
     }
     return path.lexically_normal();
-}
-
-std::filesystem::path
-depfile_logical_path(const ShaderCompileRequest& request) {
-    if (!request.dependency_path.empty()) {
-        return request.dependency_path;
-    }
-    if (request.source_path.empty()) {
-        return request.logical_path;
-    }
-    auto relative = request.source_path.lexically_relative(request.source_root);
-    if (!relative.empty()) {
-        return relative;
-    }
-    return request.logical_path;
 }
 
 std::string shader_stage_entry_name(ShaderStages stage) {
@@ -108,41 +86,24 @@ std::filesystem::path relative_source_path(
     return source_path.filename();
 }
 
-std::string shader_defs_fingerprint(ShaderDefs defs) {
-    defs = normalized_shader_defs(std::move(defs));
-    if (defs.empty()) {
-        return "default";
-    }
-
-    std::uint64_t hash = 1469598103934665603ull;
-    auto feed = [&](std::string_view text) {
-        for (char c : text) {
-            hash ^= static_cast<unsigned char>(c);
-            hash *= 1099511628211ull;
-        }
-    };
-
-    for (const auto& def : defs) {
-        feed(def.name);
-        feed(std::string_view("\0", 1));
-        feed(std::to_string(def.value.index()));
-        feed(std::string_view("\0", 1));
-        feed(shader_def_define_value(def.value));
-        feed(std::string_view("\0", 1));
-    }
-
-    std::ostringstream output;
-    output << "defs-" << std::hex << std::setw(16) << std::setfill('0') << hash;
-    return output.str();
+std::string shader_def_define_value(const ShaderDefValue& value) {
+    return std::visit(
+        [](const auto& typed_value) -> std::string {
+            using Value = std::decay_t<decltype(typed_value)>;
+            if constexpr (std::is_same_v<Value, bool>) {
+                return typed_value ? "1" : "0";
+            } else {
+                return std::to_string(typed_value);
+            }
+        },
+        value
+    );
 }
 
 RuntimeShaderCompilerConfig
 normalize_runtime_shader_compiler_config(RuntimeShaderCompilerConfig config) {
     if (config.source_root.empty()) {
         config.source_root = default_runtime_shader_source_root();
-    }
-    if (config.output_root.empty()) {
-        config.output_root = default_runtime_shader_output_root();
     }
     return config;
 }
@@ -182,155 +143,49 @@ Result<ShaderCompileRequest, ShaderCompileError>
 make_runtime_shader_compile_request(
     const RuntimeShaderCompilerConfig& config,
     std::filesystem::path logical_path,
+    std::string source,
+    ShaderStages stage,
+    std::string entry,
     ShaderDefs defs
 ) {
     logical_path = logical_path.lexically_normal();
-    auto stage = shader_stage_from_path(logical_path);
-    if (!stage) {
+    if (stage == ShaderStages::None) {
         return failure(shader_compile_error(
-            "Unsupported shader logical path: " + logical_path.string()
+            "Unsupported shader stage for: " + logical_path.string()
         ));
     }
 
     auto source_path = resolve_shader_source_path(config, logical_path);
+    std::filesystem::path resolved_source_path;
     if (!source_path) {
-        return failure(std::move(source_path).error());
+        if (source.empty()) {
+            return failure(std::move(source_path).error());
+        }
+        resolved_source_path =
+            (config.source_root / logical_path).lexically_normal();
+    } else {
+        resolved_source_path = std::move(source_path).value();
     }
 
     auto normalized_defs = normalized_shader_defs(std::move(defs));
     auto relative_source =
-        relative_source_path(config.source_root, source_path.value());
-    auto stage_name = shader_stage_name(stage.value());
-    auto entry = std::string {"main"};
-    auto dependency_path = relative_source;
-    if (strip_slang_suffix(relative_source).generic_string() !=
-        logical_path.generic_string()) {
-        entry = shader_stage_entry_name(stage.value());
-        dependency_path += "." + stage_name;
+        relative_source_path(config.source_root, resolved_source_path);
+    if (entry.empty()) {
+        entry = "main";
+        if (strip_slang_suffix(relative_source).generic_string() !=
+            logical_path.generic_string()) {
+            entry = shader_stage_entry_name(stage);
+        }
     }
 
     return ShaderCompileRequest {
-        .language = ShaderSourceLanguage::Slang,
-        .source_path = std::move(source_path).value(),
+        .source_path = std::move(resolved_source_path),
         .source_root = config.source_root,
         .logical_path = std::move(logical_path),
-        .output_root =
-            config.output_root / shader_defs_fingerprint(normalized_defs),
-        .dependency_path = std::move(dependency_path),
-        .stage = stage.value(),
+        .source = std::move(source),
+        .stage = stage,
         .entry = std::move(entry),
         .defs = std::move(normalized_defs),
-    };
-}
-
-void append_define_args(std::vector<std::string>& args, ShaderDefs defs) {
-    for (const auto& def : normalized_shader_defs(std::move(defs))) {
-        args.push_back(shader_def_define_argument(def));
-    }
-}
-
-Result<ShaderCompilerInvocation, ShaderCompileError> make_source_invocation(
-    const ShaderCompileRequest& request,
-    const ShaderCompileArtifacts& artifacts,
-    const ShaderCompileTools& tools
-) {
-    auto stage = shader_stage_name(request.stage);
-    if (stage.empty()) {
-        return failure(shader_compile_error("Unsupported shader stage"));
-    }
-
-    std::vector<std::string> args;
-    auto program = request.language == ShaderSourceLanguage::Slang ?
-                       tools.slangc :
-                       tools.glslc;
-    if (program.empty()) {
-        return failure(shader_compile_error(
-            request.language == ShaderSourceLanguage::Slang ?
-                "Missing slangc path" :
-                "Missing glslc path"
-        ));
-    }
-
-    if (request.language == ShaderSourceLanguage::Slang) {
-        args = {
-            "-target",
-            "spirv",
-            "-profile",
-            "glsl_450",
-            "-matrix-layout-row-major",
-            "-entry",
-            request.entry,
-            "-stage",
-            stage,
-            "-I",
-            request.source_root.string(),
-        };
-        append_define_args(args, request.defs);
-        args.insert(
-            args.end(),
-            {
-                "-depfile",
-                artifacts.depfile_path.string(),
-                "-reflection-json",
-                artifacts.slang_reflection_path.string(),
-                "-o",
-                artifacts.spirv_path.string(),
-                request.source_path.string(),
-            }
-        );
-    } else {
-        args = {
-            "--target-env=vulkan1.1",
-            "-I",
-            request.source_root.string(),
-        };
-        append_define_args(args, request.defs);
-        args.insert(
-            args.end(),
-            {
-                "-MD",
-                "-MF",
-                artifacts.depfile_path.string(),
-                "-MT",
-                request.logical_path.generic_string() + ".spv",
-                "-o",
-                artifacts.spirv_path.string(),
-                request.source_path.string(),
-            }
-        );
-    }
-
-    return ShaderCompilerInvocation {
-        .program = std::move(program),
-        .args = std::move(args),
-    };
-}
-
-Result<ShaderCompilerInvocation, ShaderCompileError> make_shadergen_invocation(
-    const ShaderCompileRequest& request,
-    const ShaderCompileArtifacts& artifacts,
-    const ShaderCompileTools& tools
-) {
-    if (tools.shadergen.empty()) {
-        return failure(shader_compile_error("Missing shadergen path"));
-    }
-
-    std::vector<std::string> args {
-        "--input",
-        artifacts.spirv_path.string(),
-        "--glsl",
-        artifacts.opengl_path.string(),
-        "--reflect",
-        artifacts.reflection_path.string(),
-    };
-    if (request.language == ShaderSourceLanguage::Slang) {
-        args.emplace_back("--slang-reflect");
-        args.emplace_back(artifacts.slang_reflection_path.string());
-    }
-
-    return ShaderCompilerInvocation {
-        .program = tools.shadergen,
-        .args = std::move(args),
     };
 }
 
@@ -482,79 +337,51 @@ std::vector<std::filesystem::path> collect_source_dependencies(
     return dependencies;
 }
 
-std::vector<std::filesystem::path>
-parse_make_depfile(const std::filesystem::path& depfile_path) {
+std::vector<std::filesystem::path> collect_source_dependencies(
+    std::string_view source,
+    const std::filesystem::path& source_path,
+    const std::filesystem::path& source_root
+) {
+    std::unordered_set<std::string> visited;
     std::vector<std::filesystem::path> dependencies;
-    auto content = read_text_file(depfile_path);
-    if (!content) {
-        return dependencies;
-    }
-
-    std::string normalized;
-    normalized.reserve(content->size());
-    for (std::size_t index = 0; index < content->size(); ++index) {
-        if ((*content)[index] == '\\' && index + 1 < content->size() &&
-            ((*content)[index + 1] == '\n' || (*content)[index + 1] == '\r')) {
-            ++index;
-            if ((*content)[index] == '\r' && index + 1 < content->size() &&
-                (*content)[index + 1] == '\n') {
-                ++index;
-            }
-            normalized.push_back(' ');
-        } else {
-            normalized.push_back((*content)[index]);
-        }
-    }
-
-    auto colon = normalized.find(':');
-    if (colon == std::string::npos) {
-        return dependencies;
-    }
-    auto body = normalized.substr(colon + 1);
-    std::string token;
-    bool escaping = false;
-    auto flush_token = [&] {
-        if (token.empty()) {
-            return;
-        }
-        std::error_code error;
-        if (std::filesystem::is_regular_file(token, error)) {
-            insert_unique_dependency(dependencies, token);
-        }
-        token.clear();
-    };
-
-    for (char c : body) {
-        if (escaping) {
-            token.push_back(c);
-            escaping = false;
+    std::istringstream input {std::string(source)};
+    std::string line;
+    while (std::getline(input, line)) {
+        auto include_path = parse_include_path(line);
+        if (!include_path) {
             continue;
         }
-        if (c == '\\') {
-            escaping = true;
+        auto resolved = resolve_include_path(
+            include_path.value(),
+            normalized_absolute_path(source_path),
+            normalized_absolute_path(source_root)
+        );
+        if (!resolved) {
             continue;
         }
-        if (std::isspace(static_cast<unsigned char>(c)) != 0) {
-            flush_token();
-        } else {
-            token.push_back(c);
-        }
+        collect_source_dependencies_recursive(
+            resolved.value(),
+            source_root,
+            visited,
+            dependencies
+        );
     }
-    flush_token();
     return dependencies;
 }
 
-std::vector<std::filesystem::path> shader_compile_dependencies(
-    const ShaderCompileRequest& request,
-    const ShaderCompileArtifacts& artifacts
-) {
-    auto dependencies =
-        collect_source_dependencies(request.source_path, request.source_root);
-    for (const auto& depfile_dependency :
-         parse_make_depfile(artifacts.depfile_path)) {
-        insert_unique_dependency(dependencies, depfile_dependency);
+std::vector<std::filesystem::path>
+shader_compile_dependencies(const ShaderCompileRequest& request) {
+    if (!request.source.empty()) {
+        return collect_source_dependencies(
+            request.source,
+            request.source_path,
+            request.source_root
+        );
     }
-    return dependencies;
+    return collect_source_dependencies(
+        request.source_path,
+        request.source_root
+    );
 }
 
 #ifdef FEI_HAS_SLANG_SDK
@@ -589,41 +416,55 @@ SlangStage slang_stage_from_shader_stage(ShaderStages stage) {
     }
 }
 
-Status<ShaderCompileError>
-write_blob_file(const std::filesystem::path& path, slang::IBlob* blob) {
-    if (!blob) {
+Result<std::vector<std::byte>, ShaderCompileError>
+blob_bytes(slang::IBlob* blob) {
+    if (!blob || !blob->getBufferPointer() || blob->getBufferSize() == 0) {
         return failure(
             shader_compile_error("Slang returned an empty code blob")
         );
     }
 
-    if (!path.parent_path().empty()) {
-        std::filesystem::create_directories(path.parent_path());
-    }
-
-    std::ofstream output(path, std::ios::binary);
-    if (!output) {
-        return failure(shader_compile_error(
-            "Failed to open shader output: " + path.string()
-        ));
-    }
-
-    output.write(
-        static_cast<const char*>(blob->getBufferPointer()),
-        static_cast<std::streamsize>(blob->getBufferSize())
-    );
-    if (!output) {
-        return failure(shader_compile_error(
-            "Failed to write shader output: " + path.string()
-        ));
-    }
-    return {};
+    std::vector<std::byte> bytes(blob->getBufferSize());
+    std::memcpy(bytes.data(), blob->getBufferPointer(), bytes.size());
+    return bytes;
 }
 
-Status<ShaderCompileError> write_slang_reflection_json(
-    slang::IComponentType& linked_program,
-    const std::filesystem::path& path
-) {
+bool is_slang_descriptor_resource_category(slang::ParameterCategory category) {
+    switch (category) {
+        case slang::ParameterCategory::ConstantBuffer:
+        case slang::ParameterCategory::ShaderResource:
+        case slang::ParameterCategory::UnorderedAccess:
+        case slang::ParameterCategory::SamplerState:
+        case slang::ParameterCategory::DescriptorTableSlot:
+        case slang::ParameterCategory::GenericResource:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool is_slang_descriptor_resource(slang::VariableLayoutReflection& parameter) {
+    if (is_slang_descriptor_resource_category(parameter.getCategory())) {
+        return true;
+    }
+
+    const auto category_count = parameter.getCategoryCount();
+    for (unsigned i = 0; i < category_count; ++i) {
+        if (is_slang_descriptor_resource_category(
+                parameter.getCategoryByIndex(i)
+            )) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool is_slang_unknown_binding(unsigned value) {
+    return value == static_cast<unsigned>(SLANG_UNKNOWN_SIZE);
+}
+
+Result<std::vector<ShaderArtifactLogicalResourceName>, ShaderCompileError>
+slang_logical_resource_names(slang::IComponentType& linked_program) {
     Slang::ComPtr<slang::IBlob> layout_diagnostics;
     auto* layout = linked_program.getLayout(0, layout_diagnostics.writeRef());
     if (layout == nullptr) {
@@ -633,15 +474,34 @@ Status<ShaderCompileError> write_slang_reflection_json(
         ));
     }
 
-    Slang::ComPtr<slang::IBlob> reflection;
-    auto result = layout->toJson(reflection.writeRef());
-    if (SLANG_FAILED(result) || !reflection) {
-        return failure(
-            shader_compile_error("Slang failed to generate reflection JSON")
+    std::vector<ShaderArtifactLogicalResourceName> names;
+    const auto parameter_count = layout->getParameterCount();
+    names.reserve(parameter_count);
+    for (unsigned i = 0; i < parameter_count; ++i) {
+        auto* parameter = layout->getParameterByIndex(i);
+        if (parameter == nullptr || !is_slang_descriptor_resource(*parameter)) {
+            continue;
+        }
+
+        const char* name = parameter->getName();
+        const auto binding = parameter->getBindingIndex();
+        const auto space = parameter->getBindingSpace();
+        if (name == nullptr || name[0] == '\0' ||
+            is_slang_unknown_binding(binding) ||
+            is_slang_unknown_binding(space)) {
+            continue;
+        }
+
+        names.push_back(
+            ShaderArtifactLogicalResourceName {
+                .name = name,
+                .set = static_cast<uint32_t>(space),
+                .binding = static_cast<uint32_t>(binding),
+            }
         );
     }
 
-    return write_blob_file(path, reflection);
+    return names;
 }
 
 struct SlangMacroStorage {
@@ -705,19 +565,20 @@ find_slang_entry_point(
     return entry_point;
 }
 
-Status<ShaderCompileError> compile_slang_to_spirv(
-    const ShaderCompileRequest& request,
-    const ShaderCompileArtifacts& artifacts
-) {
-    if (request.language != ShaderSourceLanguage::Slang) {
-        return failure(shader_compile_error(
-            "SlangLibraryShaderCompiler only supports Slang"
-        ));
-    }
+struct SlangCompileOutput {
+    std::vector<std::byte> spirv;
+    std::vector<ShaderArtifactLogicalResourceName> logical_resource_names;
+};
 
-    auto source = read_text_file(request.source_path);
-    if (!source) {
-        return failure(std::move(source).error());
+Result<SlangCompileOutput, ShaderCompileError>
+compile_slang_to_spirv(const ShaderCompileRequest& request) {
+    std::string source = request.source;
+    if (source.empty()) {
+        auto file_source = read_text_file(request.source_path);
+        if (!file_source) {
+            return failure(std::move(file_source).error());
+        }
+        source = std::move(file_source).value();
     }
 
     Slang::ComPtr<slang::IGlobalSession> global_session;
@@ -761,7 +622,7 @@ Status<ShaderCompileError> compile_slang_to_spirv(
     slang::IModule* module = session->loadModuleFromSourceString(
         module_name.c_str(),
         source_path.c_str(),
-        source->c_str(),
+        source.c_str(),
         load_diagnostics.writeRef()
     );
     if (!module) {
@@ -818,174 +679,36 @@ Status<ShaderCompileError> compile_slang_to_spirv(
         ));
     }
 
-    auto spirv_status = write_blob_file(artifacts.spirv_path, code);
-    if (!spirv_status) {
-        return failure(std::move(spirv_status).error());
+    auto spirv = blob_bytes(code);
+    if (!spirv) {
+        return failure(std::move(spirv).error());
     }
 
-    return write_slang_reflection_json(
-        *linked_program,
-        artifacts.slang_reflection_path
-    );
+    auto logical_resource_names = slang_logical_resource_names(*linked_program);
+    if (!logical_resource_names) {
+        return failure(std::move(logical_resource_names).error());
+    }
+
+    return SlangCompileOutput {
+        .spirv = std::move(spirv).value(),
+        .logical_resource_names = std::move(logical_resource_names).value(),
+    };
 }
 
-Status<ShaderCompileError>
-generate_backend_artifacts(const ShaderCompileArtifacts& artifacts) {
-    try {
-        shadergen::generate_shader_artifacts(
-            shadergen::ShaderArtifactGenerationRequest {
-                .spirv_path = artifacts.spirv_path,
-                .opengl_path = artifacts.opengl_path,
-                .reflection_path = artifacts.reflection_path,
-                .slang_reflection_path =
-                    std::filesystem::exists(artifacts.slang_reflection_path) ?
-                        artifacts.slang_reflection_path :
-                        std::filesystem::path {},
-            }
-        );
-        return {};
-    } catch (const std::exception& e) {
-        return failure(
-            shader_compile_error(std::string("Shadergen failed: ") + e.what())
-        );
-    }
-}
 #endif
 
-} // namespace
-
-std::string shader_stage_name(ShaderStages stage) {
-    switch (stage) {
-        case ShaderStages::Vertex:
-            return "vertex";
-        case ShaderStages::Geometry:
-            return "geometry";
-        case ShaderStages::Fragment:
-            return "fragment";
-        case ShaderStages::Compute:
-            return "compute";
-        default:
-            return {};
-    }
-}
-
-std::string shader_def_define_value(const ShaderDefValue& value) {
-    return std::visit(
-        [](const auto& typed_value) -> std::string {
-            using Value = std::decay_t<decltype(typed_value)>;
-            if constexpr (std::is_same_v<Value, bool>) {
-                return typed_value ? "1" : "0";
-            } else {
-                return std::to_string(typed_value);
-            }
-        },
-        value
-    );
-}
-
-std::string shader_def_define_argument(const ShaderDefVal& def) {
-    return "-D" + def.name + "=" + shader_def_define_value(def.value);
-}
-
-ShaderCompileArtifacts
-shader_compile_artifact_paths(const ShaderCompileRequest& request) {
-    auto dep_path = depfile_logical_path(request);
-    return ShaderCompileArtifacts {
-        .spirv_path = with_suffix(
-            request.output_root / "vulkan" / request.logical_path,
-            ".spv"
-        ),
-        .opengl_path = request.output_root / "opengl" / request.logical_path,
-        .reflection_path = with_suffix(
-            request.output_root / "reflection" / request.logical_path,
-            ".json"
-        ),
-        .slang_reflection_path =
-            with_suffix(request.output_root / "reflection" / dep_path, ".json"),
-        .depfile_path =
-            with_suffix(request.output_root / "deps" / dep_path, ".mk.d"),
-    };
-}
-
-Result<ShaderCompilePlan, ShaderCompileError> make_shader_compile_plan(
-    ShaderCompileRequest request,
-    const ShaderCompileTools& tools
-) {
-    request.defs = normalized_shader_defs(std::move(request.defs));
-    auto artifacts = shader_compile_artifact_paths(request);
-
-    auto source_invocation = make_source_invocation(request, artifacts, tools);
-    if (!source_invocation) {
-        return failure(std::move(source_invocation).error());
-    }
-
-    auto shadergen_invocation =
-        make_shadergen_invocation(request, artifacts, tools);
-    if (!shadergen_invocation) {
-        return failure(std::move(shadergen_invocation).error());
-    }
-
-    std::vector<ShaderCompilerInvocation> invocations;
-    invocations.push_back(std::move(source_invocation).value());
-    invocations.push_back(std::move(shadergen_invocation).value());
-    return ShaderCompilePlan {
-        .artifacts = std::move(artifacts),
-        .invocations = std::move(invocations),
-    };
-}
-
-Result<ShaderCompilePlan, ShaderCompileError> make_shadergen_compile_plan(
-    ShaderCompileRequest request,
-    const ShaderCompileTools& tools
-) {
-    request.defs = normalized_shader_defs(std::move(request.defs));
-    auto artifacts = shader_compile_artifact_paths(request);
-
-    auto shadergen_invocation =
-        make_shadergen_invocation(request, artifacts, tools);
-    if (!shadergen_invocation) {
-        return failure(std::move(shadergen_invocation).error());
-    }
-
-    std::vector<ShaderCompilerInvocation> invocations;
-    invocations.push_back(std::move(shadergen_invocation).value());
-    return ShaderCompilePlan {
-        .artifacts = std::move(artifacts),
-        .invocations = std::move(invocations),
-    };
-}
-
-ExternalShaderCompiler::ExternalShaderCompiler(
-    ShaderCompileTools tools,
-    ShaderCompilerCommandRunner runner
-) : m_tools(std::move(tools)), m_runner(std::move(runner)) {}
-
-Result<ShaderCompileOutput, ShaderCompileError>
-ExternalShaderCompiler::compile(ShaderCompileRequest request) {
-    if (!m_runner) {
+Result<ShaderArtifactGenerationOutput, ShaderCompileError>
+generate_backend_artifacts(ShaderArtifactGenerationInput input) {
+    try {
+        return generate_shader_artifacts(input);
+    } catch (const std::exception& e) {
         return failure(shader_compile_error(
-            "ExternalShaderCompiler requires a command runner"
+            std::string("Shader artifact generation failed: ") + e.what()
         ));
     }
-
-    auto plan = make_shader_compile_plan(request, m_tools);
-    if (!plan) {
-        return failure(std::move(plan).error());
-    }
-
-    for (const auto& invocation : plan->invocations) {
-        auto status = m_runner(invocation);
-        if (!status) {
-            return failure(std::move(status).error());
-        }
-    }
-
-    auto dependencies = shader_compile_dependencies(request, plan->artifacts);
-    return ShaderCompileOutput {
-        .artifacts = std::move(plan->artifacts),
-        .dependencies = std::move(dependencies),
-    };
 }
+
+} // namespace
 
 ShaderVariantCompiler::ShaderVariantCompiler(
     ShaderCompiler& compiler,
@@ -999,6 +722,44 @@ ShaderVariantCompiler::compile_with_dependencies(
     std::filesystem::path logical_path,
     ShaderDefs defs
 ) {
+    auto stage = shader_stage_from_path(logical_path);
+    if (!stage) {
+        return failure(shader_compile_error(
+            "Unsupported shader logical path: " + logical_path.string()
+        ));
+    }
+    return compile_with_dependencies(
+        std::move(logical_path),
+        stage.value(),
+        {},
+        std::move(defs)
+    );
+}
+
+Result<ShaderVariantCompileOutput, ShaderCompileError>
+ShaderVariantCompiler::compile_with_dependencies(
+    std::filesystem::path logical_path,
+    ShaderStages stage,
+    std::string entry,
+    ShaderDefs defs
+) {
+    return compile_with_dependencies(
+        std::move(logical_path),
+        {},
+        stage,
+        std::move(entry),
+        std::move(defs)
+    );
+}
+
+Result<ShaderVariantCompileOutput, ShaderCompileError>
+ShaderVariantCompiler::compile_with_dependencies(
+    std::filesystem::path logical_path,
+    std::string source,
+    ShaderStages stage,
+    std::string entry,
+    ShaderDefs defs
+) {
     if (m_compiler == nullptr) {
         return failure(shader_compile_error(
             "ShaderVariantCompiler requires a ShaderCompiler"
@@ -1008,6 +769,9 @@ ShaderVariantCompiler::compile_with_dependencies(
     auto request = make_runtime_shader_compile_request(
         m_config,
         std::move(logical_path),
+        std::move(source),
+        stage,
+        std::move(entry),
         std::move(defs)
     );
     if (!request) {
@@ -1022,27 +786,12 @@ ShaderVariantCompiler::compile_with_dependencies(
 
     auto dependencies = std::move(output->dependencies);
     for (const auto& dependency :
-         shader_compile_dependencies(compile_request, output->artifacts)) {
+         shader_compile_dependencies(compile_request)) {
         insert_unique_dependency(dependencies, dependency);
     }
 
-    auto description = load_compiled_shader_description(
-        std::move(compile_request.logical_path),
-        CompiledShaderArtifactPaths {
-            .opengl_path = output->artifacts.opengl_path,
-            .spirv_path = output->artifacts.spirv_path,
-            .reflection_path = output->artifacts.reflection_path,
-        },
-        std::move(compile_request.defs)
-    );
-    if (!description) {
-        return failure(shader_compile_error(
-            "Failed to load runtime shader artifacts: " + description.error()
-        ));
-    }
-
     return ShaderVariantCompileOutput {
-        .description = std::move(description).value(),
+        .description = std::move(output->description),
         .dependencies = std::move(dependencies),
     };
 }
@@ -1060,25 +809,56 @@ Result<ShaderDescription, ShaderCompileError> ShaderVariantCompiler::compile(
     return std::move(value.description);
 }
 
+Result<ShaderDescription, ShaderCompileError> ShaderVariantCompiler::compile(
+    std::filesystem::path logical_path,
+    ShaderStages stage,
+    std::string entry,
+    ShaderDefs defs
+) {
+    auto output = compile_with_dependencies(
+        std::move(logical_path),
+        stage,
+        std::move(entry),
+        std::move(defs)
+    );
+    if (!output) {
+        return failure(std::move(output).error());
+    }
+    auto value = std::move(output).value();
+    return std::move(value.description);
+}
+
 #ifdef FEI_HAS_SLANG_SDK
 Result<ShaderCompileOutput, ShaderCompileError>
 SlangLibraryShaderCompiler::compile(ShaderCompileRequest request) {
     request.defs = normalized_shader_defs(std::move(request.defs));
-    auto artifacts = shader_compile_artifact_paths(request);
 
-    auto spirv_status = compile_slang_to_spirv(request, artifacts);
-    if (!spirv_status) {
-        return failure(std::move(spirv_status).error());
+    auto slang = compile_slang_to_spirv(request);
+    if (!slang) {
+        return failure(std::move(slang).error());
     }
 
-    auto backend_status = generate_backend_artifacts(artifacts);
-    if (!backend_status) {
-        return failure(std::move(backend_status).error());
+    auto artifacts = generate_backend_artifacts(
+        ShaderArtifactGenerationInput {
+            .spirv = slang->spirv,
+            .logical_resource_names = slang->logical_resource_names,
+        }
+    );
+    if (!artifacts) {
+        return failure(std::move(artifacts).error());
     }
 
-    auto dependencies = shader_compile_dependencies(request, artifacts);
+    auto dependencies = shader_compile_dependencies(request);
     return ShaderCompileOutput {
-        .artifacts = std::move(artifacts),
+        .description =
+            ShaderDescription {
+                .stage = request.stage,
+                .source = std::move(artifacts->opengl_source),
+                .spirv = std::move(slang->spirv),
+                .path = request.logical_path.string(),
+                .resources = std::move(artifacts->resources),
+                .defs = std::move(request.defs),
+            },
         .dependencies = std::move(dependencies),
     };
 }

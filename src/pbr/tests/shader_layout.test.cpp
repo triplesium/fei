@@ -1,13 +1,16 @@
 #include "graphics/resource.hpp"
 #include "rendering/shader.hpp"
+#include "rendering/shader_compiler.hpp"
 
 #include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstring>
+#include <filesystem>
 #include <initializer_list>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 using namespace fei;
@@ -25,46 +28,152 @@ struct ExpectedBinding {
 constexpr uint32 SpirvOpExecutionMode = 16;
 constexpr uint32 SpirvExecutionModePixelCenterInteger = 6;
 
-constexpr std::array<std::string_view, 25> PbrShaderNames {
-    "aniso_mipmapbase.comp",
-    "aniso_mipmapvolume.comp",
-    "blur.frag",
-    "color.frag",
-    "cubemap2irradiance.comp",
-    "cubemap2radiance.comp",
-    "deferred_gi_composite.frag",
-    "deferred_gi_direct.frag",
-    "deferred_gi_indirect.frag",
-    "deferred_prepass.frag",
-    "deferred_prepass.vert",
-    "deferred_present.frag",
-    "equirect2cube.comp",
-    "forward.frag",
-    "forward.vert",
-    "inject_propagation.comp",
-    "inject_radiance.comp",
-    "quad.vert",
-    "shadow.frag",
-    "shadow.vert",
-    "skybox.frag",
-    "skybox.vert",
-    "voxelization.frag",
-    "voxelization.geom",
-    "voxelization.vert",
+struct PbrShaderCase {
+    std::string_view label;
+    std::string_view source;
+    ShaderStages stage;
 };
 
-std::vector<uint32> read_vulkan_shader_words(std::string_view shader_name) {
-    AssetPath shader_path("shader://" + std::string(shader_name));
-    auto path = compiled_vulkan_shader_path(shader_path);
+constexpr std::array<PbrShaderCase, 25> PbrShaders {
+    PbrShaderCase {
+        "aniso_mipmapbase.comp",
+        "aniso_mipmapbase.slang",
+        ShaderStages::Compute
+    },
+    PbrShaderCase {
+        "aniso_mipmapvolume.comp",
+        "aniso_mipmapvolume.slang",
+        ShaderStages::Compute
+    },
+    PbrShaderCase {"blur.frag", "blur.slang", ShaderStages::Fragment},
+    PbrShaderCase {"color.frag", "color.slang", ShaderStages::Fragment},
+    PbrShaderCase {
+        "cubemap2irradiance.comp",
+        "cubemap2irradiance.slang",
+        ShaderStages::Compute
+    },
+    PbrShaderCase {
+        "cubemap2radiance.comp",
+        "cubemap2radiance.slang",
+        ShaderStages::Compute
+    },
+    PbrShaderCase {
+        "deferred_gi_composite.frag",
+        "deferred_gi_composite.slang",
+        ShaderStages::Fragment
+    },
+    PbrShaderCase {
+        "deferred_gi_direct.frag",
+        "deferred_gi_direct.slang",
+        ShaderStages::Fragment
+    },
+    PbrShaderCase {
+        "deferred_gi_indirect.frag",
+        "deferred_gi_indirect.slang",
+        ShaderStages::Fragment
+    },
+    PbrShaderCase {
+        "deferred_prepass.frag",
+        "deferred_prepass.slang",
+        ShaderStages::Fragment
+    },
+    PbrShaderCase {
+        "deferred_prepass.vert",
+        "deferred_prepass.slang",
+        ShaderStages::Vertex
+    },
+    PbrShaderCase {
+        "deferred_present.frag",
+        "deferred_present.slang",
+        ShaderStages::Fragment
+    },
+    PbrShaderCase {
+        "equirect2cube.comp",
+        "equirect2cube.slang",
+        ShaderStages::Compute
+    },
+    PbrShaderCase {"forward.frag", "forward.slang", ShaderStages::Fragment},
+    PbrShaderCase {"forward.vert", "forward.slang", ShaderStages::Vertex},
+    PbrShaderCase {
+        "inject_propagation.comp",
+        "inject_propagation.slang",
+        ShaderStages::Compute
+    },
+    PbrShaderCase {
+        "inject_radiance.comp",
+        "inject_radiance.slang",
+        ShaderStages::Compute
+    },
+    PbrShaderCase {"quad.vert", "quad.slang", ShaderStages::Vertex},
+    PbrShaderCase {"shadow.frag", "shadow.slang", ShaderStages::Fragment},
+    PbrShaderCase {"shadow.vert", "shadow.slang", ShaderStages::Vertex},
+    PbrShaderCase {"skybox.frag", "skybox.slang", ShaderStages::Fragment},
+    PbrShaderCase {"skybox.vert", "skybox.slang", ShaderStages::Vertex},
+    PbrShaderCase {
+        "voxelization.frag",
+        "voxelization.slang",
+        ShaderStages::Fragment
+    },
+    PbrShaderCase {
+        "voxelization.geom",
+        "voxelization.slang",
+        ShaderStages::Geometry
+    },
+    PbrShaderCase {
+        "voxelization.vert",
+        "voxelization.slang",
+        ShaderStages::Vertex
+    },
+};
+
+#ifdef FEI_HAS_SLANG_SDK
+PbrShaderCase pbr_shader_case(std::string_view shader_name) {
+    auto it = std::find_if(
+        PbrShaders.begin(),
+        PbrShaders.end(),
+        [&](const PbrShaderCase& shader) {
+            return shader.label == shader_name;
+        }
+    );
+    REQUIRE(it != PbrShaders.end());
+    return *it;
+}
+
+const ShaderDescription& compile_pbr_shader(std::string_view shader_name) {
+    static SlangLibraryShaderCompiler compiler;
+    static ShaderVariantCompiler variant_compiler(compiler);
+    static std::unordered_map<std::string, ShaderDescription> cache;
+
+    auto key = std::string(shader_name);
+    auto it = cache.find(key);
+    if (it != cache.end()) {
+        return it->second;
+    }
+
+    auto shader = pbr_shader_case(shader_name);
+    auto compiled = variant_compiler.compile(
+        std::filesystem::path(shader.source),
+        shader.stage,
+        {},
+        {}
+    );
     CAPTURE(shader_name);
-    REQUIRE(path.has_value());
+    if (!compiled) {
+        INFO(compiled.error().message);
+        INFO(compiled.error().diagnostics);
+    }
+    REQUIRE(compiled.has_value());
 
-    auto binary = read_shader_binary(*path);
-    REQUIRE(binary);
-    REQUIRE(binary->size() % sizeof(uint32) == 0);
+    auto [inserted, _] =
+        cache.emplace(std::move(key), std::move(compiled).value());
+    return inserted->second;
+}
 
-    std::vector<uint32> words(binary->size() / sizeof(uint32));
-    std::memcpy(words.data(), binary->data(), binary->size());
+std::vector<uint32> spirv_words(const ShaderDescription& shader) {
+    REQUIRE(shader.spirv.size() % sizeof(uint32) == 0);
+
+    std::vector<uint32> words(shader.spirv.size() / sizeof(uint32));
+    std::memcpy(words.data(), shader.spirv.data(), shader.spirv.size());
     REQUIRE(words.size() >= 5);
     REQUIRE(words.front() == 0x07230203);
     return words;
@@ -97,12 +206,9 @@ void require_shader_resources(
     std::string_view shader_name,
     std::initializer_list<ExpectedBinding> expected
 ) {
-    AssetPath shader_path("shader://" + std::string(shader_name));
-    auto bindings_result = load_shader_reflection_bindings(shader_path);
+    const auto& bindings = compile_pbr_shader(shader_name).resources;
 
     CAPTURE(shader_name);
-    REQUIRE(bindings_result);
-    const auto& bindings = *bindings_result;
     REQUIRE(bindings.size() == expected.size());
 
     for (const auto& resource : expected) {
@@ -122,20 +228,20 @@ void require_shader_resources(
         CHECK(it->array_size == resource.array_size);
     }
 }
+#endif
 
 } // namespace
 
-TEST_CASE(
-    "PBR shaders have generated outputs for all backend paths",
-    "[pbr][shader]"
-) {
-    for (auto shader_name : PbrShaderNames) {
-        AssetPath shader_path("shader://" + std::string(shader_name));
-        CAPTURE(shader_name);
+#ifdef FEI_HAS_SLANG_SDK
+TEST_CASE("PBR shaders compile through runtime compiler", "[pbr][shader]") {
+    for (auto shader_case : PbrShaders) {
+        CAPTURE(shader_case.label);
 
-        REQUIRE(compiled_opengl_shader_path(shader_path).has_value());
-        REQUIRE(compiled_vulkan_shader_path(shader_path).has_value());
-        REQUIRE(shader_reflection_path(shader_path).has_value());
+        const auto& shader = compile_pbr_shader(shader_case.label);
+        CHECK(shader.stage == shader_case.stage);
+        CHECK(shader.path == shader_case.source);
+        CHECK_FALSE(shader.source.empty());
+        CHECK_FALSE(shader.spirv.empty());
     }
 }
 
@@ -143,10 +249,10 @@ TEST_CASE(
     "PBR Vulkan shader outputs avoid unsupported pixel-center execution mode",
     "[pbr][shader]"
 ) {
-    for (auto shader_name : PbrShaderNames) {
-        CAPTURE(shader_name);
+    for (auto shader_case : PbrShaders) {
+        CAPTURE(shader_case.label);
         CHECK_FALSE(has_spirv_execution_mode(
-            read_vulkan_shader_words(shader_name),
+            spirv_words(compile_pbr_shader(shader_case.label)),
             SpirvExecutionModePixelCenterInteger
         ));
     }
@@ -291,3 +397,8 @@ TEST_CASE(
         }
     );
 }
+#else
+TEST_CASE("PBR shader layout tests require Slang SDK", "[pbr][shader]") {
+    SUCCEED("Slang SDK is not available in this build");
+}
+#endif

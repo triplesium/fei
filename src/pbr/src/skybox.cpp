@@ -1,14 +1,13 @@
 #include "pbr/skybox.hpp"
 
 #include "asset/assets.hpp"
-#include "asset/server.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
 #include "pbr/cubemap.hpp"
 #include "pbr/mesh_view.hpp"
 #include "rendering/mesh/mesh.hpp"
 #include "rendering/plugin.hpp"
-#include "rendering/shader.hpp"
+#include "rendering/shader_cache.hpp"
 
 #include <memory>
 #include <utility>
@@ -39,9 +38,8 @@ OutputDescription render_target_output_description() {
 void setup_skybox_resources(
     ResRO<GraphicsDevice> device,
     ResRW<Assets<Mesh>> meshes,
-    ResRW<Assets<Shader>> shaders,
     ResRW<SkyboxResource> skybox_resource,
-    ResRW<AssetServer> asset_server,
+    ResRW<ShaderCache> shader_cache,
     ResRO<MeshViewLayout> mesh_view_layout
 ) {
     auto mesh = std::make_unique<Mesh>(RenderPrimitive::Triangles);
@@ -63,17 +61,17 @@ void setup_skybox_resources(
     auto vertex_layout =
         mesh->vertex_buffer_layout().to_vertex_layout_description();
     skybox_resource->mesh = meshes->add(std::move(mesh));
-    auto vertex_shader_handle =
-        asset_server->load<Shader>("shader://skybox.vert");
-    auto fragment_shader_handle =
-        asset_server->load<Shader>("shader://skybox.frag");
     skybox_resource->shader_modules = {
-        device->create_shader_module(
-            shaders->get(vertex_shader_handle)->description()
+        shader_cache->get_or_compile(
+            AssetPath("shader://skybox.slang"),
+            ShaderStages::Vertex,
+            {}
         ),
-        device->create_shader_module(
-            shaders->get(fragment_shader_handle)->description()
-        )
+        shader_cache->get_or_compile(
+            AssetPath("shader://skybox.slang"),
+            ShaderStages::Fragment,
+            {}
+        ),
     };
 
     skybox_resource->resource_layout = device->create_resource_layout(

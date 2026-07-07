@@ -8,7 +8,7 @@
 #include "graphics/resource.hpp"
 #include "graphics/sampler.hpp"
 #include "graphics/texture.hpp"
-#include "rendering/shader.hpp"
+#include "rendering/shader_cache.hpp"
 
 #include <memory>
 #include <unordered_map>
@@ -23,11 +23,7 @@ class EquirectToCubemap {
     std::shared_ptr<Sampler> m_equirect_sampler;
 
   public:
-    void setup(
-        const GraphicsDevice& device,
-        AssetServer& asset_server,
-        Assets<Shader>& shaders
-    );
+    void setup(const GraphicsDevice& device, ShaderCache& shader_cache);
 
     std::shared_ptr<Texture> convert_equirect_to_cubemap(
         const GraphicsDevice& device,

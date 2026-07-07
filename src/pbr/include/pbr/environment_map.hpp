@@ -3,7 +3,7 @@
 #include "core/image.hpp"
 #include "ecs/query.hpp"
 #include "rendering/gpu_image.hpp"
-#include "rendering/shader.hpp"
+#include "rendering/shader_cache.hpp"
 
 namespace fei {
 
@@ -29,8 +29,7 @@ void generate_env_maps(
     Query<Entity, const GpuEnvironmentMap>::Filter<
         Without<EnvironmentMapGeneratedTag>> query,
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shaders,
+    ResRW<ShaderCache> shader_cache,
     Commands commands
 );
 

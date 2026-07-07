@@ -422,25 +422,22 @@ void prepare_lighting(
 
 void setup_shadow_mapping(
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shader_assets,
+    ResRW<ShaderCache> shader_cache,
     ResRO<Assets<Mesh>> mesh_assets,
     ResRO<FullscreenQuad> fs_quad,
     Commands commands
 ) {
-    auto shadow_vert_shader_handle =
-        asset_server->load<Shader>("shader://shadow.vert");
-    auto shadow_vert_shader =
-        shader_assets->get(shadow_vert_shader_handle).value();
-
-    auto shadow_frag_shader_handle =
-        asset_server->load<Shader>("shader://shadow.frag");
-    auto shadow_frag_shader =
-        shader_assets->get(shadow_frag_shader_handle).value();
-
     std::vector<std::shared_ptr<const ShaderModule>> shadow_shader_modules {
-        device->create_shader_module(shadow_vert_shader.description()),
-        device->create_shader_module(shadow_frag_shader.description()),
+        shader_cache->get_or_compile(
+            AssetPath("shader://shadow.slang"),
+            ShaderStages::Vertex,
+            {}
+        ),
+        shader_cache->get_or_compile(
+            AssetPath("shader://shadow.slang"),
+            ShaderStages::Fragment,
+            {}
+        ),
     };
 
     commands.add_resource(
@@ -463,17 +460,17 @@ void setup_shadow_mapping(
         }
     );
 
-    auto blur_vert_shader_handle =
-        asset_server->load<Shader>("shader://quad.vert");
-    auto blur_vert_shader = shader_assets->get(blur_vert_shader_handle).value();
-
-    auto blur_frag_shader_handle =
-        asset_server->load<Shader>("shader://blur.frag");
-    auto blur_frag_shader = shader_assets->get(blur_frag_shader_handle).value();
-
     std::vector<std::shared_ptr<const ShaderModule>> blur_shader_modules {
-        device->create_shader_module(blur_vert_shader.description()),
-        device->create_shader_module(blur_frag_shader.description()),
+        shader_cache->get_or_compile(
+            AssetPath("shader://quad.slang"),
+            ShaderStages::Vertex,
+            {}
+        ),
+        shader_cache->get_or_compile(
+            AssetPath("shader://blur.slang"),
+            ShaderStages::Fragment,
+            {}
+        ),
     };
 
     auto blur_resource_layout = device->create_resource_layout(

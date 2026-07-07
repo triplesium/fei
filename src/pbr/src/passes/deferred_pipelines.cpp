@@ -1,6 +1,6 @@
 #include "pbr/passes/deferred_internal.hpp"
 #include "pbr/pipeline_specializer.hpp"
-#include "rendering/shader.hpp"
+#include "rendering/shader_cache.hpp"
 
 #include <string>
 
@@ -26,8 +26,7 @@ void setup_deferred_pipelines(
     ResRO<GraphicsDevice> device,
     ResRO<FullscreenQuad> fullscreen_quad,
     ResRO<Assets<Mesh>> meshes,
-    ResRW<Assets<Shader>> shader_assets,
-    ResRW<AssetServer> asset_server,
+    ResRW<ShaderCache> shader_cache,
     ResRO<MeshViewLayout> mesh_view_layout,
     ResRO<LightingResources> lighting_resources,
     ResRO<VxgiResources> vxgi_resources,
@@ -59,21 +58,28 @@ void setup_deferred_pipelines(
     pipelines->point_sampler =
         device->create_sampler(SamplerDescription::Point);
 
-    auto create_shader_module = [&](const std::string& path) {
-        auto shader_handle = asset_server->load<Shader>(path);
-        auto shader = shader_assets->get(shader_handle).value();
-        return device->create_shader_module(shader.description());
+    auto create_shader_module = [&](const char* path, ShaderStages stage) {
+        return shader_cache->get_or_compile(AssetPath(path), stage, {});
     };
 
-    auto quad_vert_shader = create_shader_module("shader://quad.vert");
-    auto direct_lighting_shader =
-        create_shader_module("shader://deferred_gi_direct.frag");
-    auto indirect_lighting_shader =
-        create_shader_module("shader://deferred_gi_indirect.frag");
-    auto composite_shader =
-        create_shader_module("shader://deferred_gi_composite.frag");
-    auto present_shader =
-        create_shader_module("shader://deferred_present.frag");
+    auto quad_vert_shader =
+        create_shader_module("shader://quad.slang", ShaderStages::Vertex);
+    auto direct_lighting_shader = create_shader_module(
+        "shader://deferred_gi_direct.slang",
+        ShaderStages::Fragment
+    );
+    auto indirect_lighting_shader = create_shader_module(
+        "shader://deferred_gi_indirect.slang",
+        ShaderStages::Fragment
+    );
+    auto composite_shader = create_shader_module(
+        "shader://deferred_gi_composite.slang",
+        ShaderStages::Fragment
+    );
+    auto present_shader = create_shader_module(
+        "shader://deferred_present.slang",
+        ShaderStages::Fragment
+    );
 
     auto fullscreen_vertex_layout =
         mesh->vertex_buffer_layout().to_vertex_layout_description();

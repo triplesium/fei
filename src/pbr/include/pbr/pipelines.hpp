@@ -188,6 +188,30 @@ inline std::shared_ptr<const ShaderModule> pbr_default_shader(
     return nullptr;
 }
 
+inline ShaderStages pbr_material_shader_stage(MaterialShaderType shader_type) {
+    switch (shader_type) {
+        case MaterialShaderType::Vertex:
+        case MaterialShaderType::PrepassVertex:
+            return ShaderStages::Vertex;
+        case MaterialShaderType::Fragment:
+        case MaterialShaderType::PrepassFragment:
+            return ShaderStages::Fragment;
+    }
+    return ShaderStages::None;
+}
+
+inline const char* pbr_material_shader_entry(MaterialShaderType shader_type) {
+    switch (shader_type) {
+        case MaterialShaderType::Vertex:
+        case MaterialShaderType::PrepassVertex:
+            return "vertex_main";
+        case MaterialShaderType::Fragment:
+        case MaterialShaderType::PrepassFragment:
+            return "fragment_main";
+    }
+    return "main";
+}
+
 inline std::shared_ptr<const ShaderModule> resolve_material_shader(
     const PreparedMaterial& material,
     MaterialShaderType shader_type,
@@ -198,6 +222,8 @@ inline std::shared_ptr<const ShaderModule> resolve_material_shader(
     if (auto shader = material.shader_request(shader_type)) {
         return shader_cache.get(
             shader->ref,
+            pbr_material_shader_stage(shader_type),
+            pbr_material_shader_entry(shader_type),
             merge_shader_defs(shader->defs, shader_defs)
         );
     }

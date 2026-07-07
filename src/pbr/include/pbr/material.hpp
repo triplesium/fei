@@ -69,19 +69,19 @@ class StandardMaterial : public Material {
     bool depth_write {true};
 
     ShaderRef vertex_shader() const override {
-        return ShaderRef("shader://forward.vert");
+        return ShaderRef("shader://forward.slang");
     }
 
     ShaderRef fragment_shader() const override {
-        return ShaderRef("shader://forward.frag");
+        return ShaderRef("shader://forward.slang");
     }
 
     ShaderRef prepass_vertex_shader() const override {
-        return ShaderRef("shader://deferred_prepass.vert");
+        return ShaderRef("shader://deferred_prepass.slang");
     }
 
     ShaderRef prepass_fragment_shader() const override {
-        return ShaderRef("shader://deferred_prepass.frag");
+        return ShaderRef("shader://deferred_prepass.slang");
     }
 
     ShaderDefs shader_defs(MaterialShaderType type) const override {

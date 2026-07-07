@@ -1,6 +1,4 @@
 #pragma once
-#include "asset/assets.hpp"
-#include "asset/server.hpp"
 #include "core/transform.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
@@ -25,7 +23,7 @@
 #include "rendering/render_asset.hpp"
 #include "rendering/render_graph.hpp"
 #include "rendering/render_phase.hpp"
-#include "rendering/shader.hpp"
+#include "rendering/shader_cache.hpp"
 #include "rendering/view.hpp"
 #include "rendering/visibility.hpp"
 
@@ -153,8 +151,7 @@ void prepare_lighting(
 
 void setup_shadow_mapping(
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shader_assets,
+    ResRW<ShaderCache> shader_cache,
     ResRO<Assets<Mesh>> mesh_assets,
     ResRO<FullscreenQuad> fs_quad,
     Commands commands

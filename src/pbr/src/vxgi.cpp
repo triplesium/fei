@@ -294,8 +294,7 @@ void VxgiVoxelizationSpecializer::specialize(
 void setup_vxgi(
     ResRW<VxgiVolumes> volumes,
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shader_assets,
+    ResRW<ShaderCache> shader_cache,
     Commands commands
 ) {
     const auto& config = volumes->config;
@@ -358,18 +357,23 @@ void setup_vxgi(
         )
     );
 
-    std::vector<Handle<Shader>> shader_handles {
-        asset_server->load<Shader>("shader://voxelization.vert"),
-        asset_server->load<Shader>("shader://voxelization.geom"),
-        asset_server->load<Shader>("shader://voxelization.frag"),
+    std::vector<std::shared_ptr<const ShaderModule>> shader_modules {
+        shader_cache->get_or_compile(
+            AssetPath("shader://voxelization.slang"),
+            ShaderStages::Vertex,
+            {}
+        ),
+        shader_cache->get_or_compile(
+            AssetPath("shader://voxelization.slang"),
+            ShaderStages::Geometry,
+            {}
+        ),
+        shader_cache->get_or_compile(
+            AssetPath("shader://voxelization.slang"),
+            ShaderStages::Fragment,
+            {}
+        ),
     };
-    std::vector<std::shared_ptr<const ShaderModule>> shader_modules;
-    for (const auto& handle : shader_handles) {
-        auto shader = shader_assets->get(handle).value();
-        shader_modules.push_back(
-            device->create_shader_module(shader.description())
-        );
-    }
 
     auto voxelization_resource_layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
@@ -665,14 +669,14 @@ void build_vxgi_voxelization_pass(
 void setup_vxgi_generate_mipmap_base(
     ResRO<VxgiVolumes> volumes,
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shader_assets,
+    ResRW<ShaderCache> shader_cache,
     Commands commands
 ) {
-    auto shader_handle =
-        asset_server->load<Shader>("shader://aniso_mipmapbase.comp");
-    auto shader = shader_assets->get(shader_handle).value();
-    auto shader_module = device->create_shader_module(shader.description());
+    auto shader_module = shader_cache->get_or_compile(
+        AssetPath("shader://aniso_mipmapbase.slang"),
+        ShaderStages::Compute,
+        {}
+    );
     auto resource_layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Compute},
@@ -787,14 +791,14 @@ void build_vxgi_mipmap_base_after_propagation_pass(
 
 void setup_vxgi_generate_mipmap_volume(
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shader_assets,
+    ResRW<ShaderCache> shader_cache,
     Commands commands
 ) {
-    auto shader_handle =
-        asset_server->load<Shader>("shader://aniso_mipmapvolume.comp");
-    auto shader = shader_assets->get(shader_handle).value();
-    auto shader_module = device->create_shader_module(shader.description());
+    auto shader_module = shader_cache->get_or_compile(
+        AssetPath("shader://aniso_mipmapvolume.slang"),
+        ShaderStages::Compute,
+        {}
+    );
     auto resource_layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Compute},
@@ -997,14 +1001,14 @@ void setup_inject_radiance(
     ResRO<VxgiVoxelization> voxelization,
     ResRO<LightingResources> lighting,
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shader_assets,
+    ResRW<ShaderCache> shader_cache,
     Commands commands
 ) {
-    auto shader_handle =
-        asset_server->load<Shader>("shader://inject_radiance.comp");
-    auto shader = shader_assets->get(shader_handle).value();
-    auto shader_module = device->create_shader_module(shader.description());
+    auto shader_module = shader_cache->get_or_compile(
+        AssetPath("shader://inject_radiance.slang"),
+        ShaderStages::Compute,
+        {}
+    );
     auto resource_layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Compute},
@@ -1132,14 +1136,14 @@ void build_vxgi_inject_radiance_pass(
 void setup_inject_propagation(
     ResRO<VxgiVolumes> volumes,
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shader_assets,
+    ResRW<ShaderCache> shader_cache,
     Commands commands
 ) {
-    auto shader_handle =
-        asset_server->load<Shader>("shader://inject_propagation.comp");
-    auto shader = shader_assets->get(shader_handle).value();
-    auto shader_module = device->create_shader_module(shader.description());
+    auto shader_module = shader_cache->get_or_compile(
+        AssetPath("shader://inject_propagation.slang"),
+        ShaderStages::Compute,
+        {}
+    );
     auto resource_layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Compute},

@@ -2,7 +2,6 @@
 
 #include "app/app.hpp"
 #include "asset/assets.hpp"
-#include "asset/server.hpp"
 #include "ecs/fwd.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_config.hpp"
@@ -13,6 +12,7 @@
 #include "rendering/gpu_image.hpp"
 #include "rendering/plugin.hpp"
 #include "rendering/render_asset.hpp"
+#include "rendering/shader_cache.hpp"
 
 #include <bit>
 
@@ -136,8 +136,7 @@ void generate_env_maps(
     Query<Entity, const GpuEnvironmentMap>::Filter<
         Without<EnvironmentMapGeneratedTag>> query,
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
-    ResRW<Assets<Shader>> shaders,
+    ResRW<ShaderCache> shader_cache,
     Commands commands
 ) {
     for (auto [entity, gpu_env_map] : query) {
@@ -146,11 +145,11 @@ void generate_env_maps(
             device->create_sampler(SamplerDescription::Linear);
 
         {
-            auto shader_handle =
-                asset_server->load<Shader>("shader://cubemap2irradiance.comp");
-            auto& shader = shaders->get(shader_handle).value();
-            auto compute_shader =
-                device->create_shader_module(shader.description());
+            auto compute_shader = shader_cache->get_or_compile(
+                AssetPath("shader://cubemap2irradiance.slang"),
+                ShaderStages::Compute,
+                {}
+            );
             auto layout = device->create_resource_layout(
                 ResourceLayoutDescription {
                     .elements = {
@@ -205,11 +204,11 @@ void generate_env_maps(
         }
 
         {
-            auto shader_handle =
-                asset_server->load<Shader>("shader://cubemap2radiance.comp");
-            auto& shader = shaders->get(shader_handle).value();
-            auto compute_shader =
-                device->create_shader_module(shader.description());
+            auto compute_shader = shader_cache->get_or_compile(
+                AssetPath("shader://cubemap2radiance.slang"),
+                ShaderStages::Compute,
+                {}
+            );
             auto uniform_buffer = device->create_buffer(
                 BufferDescription {
                     .size = sizeof(FilteringConstants),

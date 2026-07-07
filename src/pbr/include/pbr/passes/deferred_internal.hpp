@@ -1,7 +1,5 @@
 #pragma once
 
-#include "asset/assets.hpp"
-#include "asset/server.hpp"
 #include "ecs/system_params.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics/swapchain.hpp"
@@ -19,7 +17,7 @@
 #include "rendering/mesh/mesh_uniform.hpp"
 #include "rendering/render_asset.hpp"
 #include "rendering/render_graph.hpp"
-#include "rendering/shader.hpp"
+#include "rendering/shader_cache.hpp"
 #include "rendering/visibility.hpp"
 #include "window/window.hpp"
 
@@ -29,8 +27,7 @@ void setup_deferred_pipelines(
     ResRO<GraphicsDevice> device,
     ResRO<FullscreenQuad> fullscreen_quad,
     ResRO<Assets<Mesh>> meshes,
-    ResRW<Assets<Shader>> shader_assets,
-    ResRW<AssetServer> asset_server,
+    ResRW<ShaderCache> shader_cache,
     ResRO<MeshViewLayout> mesh_view_layout,
     ResRO<LightingResources> lighting_resources,
     ResRO<VxgiResources> vxgi_resources,

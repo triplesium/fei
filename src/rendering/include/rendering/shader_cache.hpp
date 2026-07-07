@@ -21,7 +21,8 @@ namespace fei {
 
 struct ShaderVariantKey {
     AssetId shader {invalid_asset_id};
-    std::string source;
+    ShaderStages stage {ShaderStages::None};
+    std::string entry;
     ShaderDefs defs;
 
     bool operator==(const ShaderVariantKey&) const = default;
@@ -33,7 +34,12 @@ namespace std {
 template<>
 struct hash<fei::ShaderVariantKey> { // NOLINT(readability-identifier-naming)
     std::size_t operator()(const fei::ShaderVariantKey& key) const {
-        return fei::hash_combine_all(key.shader, key.source, key.defs);
+        return fei::hash_combine_all(
+            key.shader,
+            key.stage,
+            key.entry,
+            key.defs
+        );
     }
 };
 } // namespace std
@@ -80,8 +86,34 @@ class ShaderCache {
     std::shared_ptr<ShaderModule> get(const AssetId& id) { return get(id, {}); }
 
     std::shared_ptr<ShaderModule> get(const AssetId& id, ShaderDefs defs) {
+        auto shader_asset = m_shaders.get(id);
+        if (!shader_asset) {
+            fatal("ShaderCache: Shader asset '{}' not found", id);
+        }
+        auto stage = shader_stage_from_path(shader_asset->path);
+        if (!stage) {
+            fatal(
+                "ShaderCache: shader '{}' requires explicit stage and entry",
+                shader_asset->path.string()
+            );
+        }
+        return get(
+            id,
+            stage.value(),
+            default_shader_entry(stage.value()),
+            std::move(defs)
+        );
+    }
+
+    std::shared_ptr<ShaderModule>
+    get(const AssetId& id,
+        ShaderStages stage,
+        std::string entry,
+        ShaderDefs defs = {}) {
         ShaderVariantKey key {
             .shader = id,
+            .stage = stage,
+            .entry = normalized_shader_entry(stage, std::move(entry)),
             .defs = normalized_shader_defs(std::move(defs)),
         };
         auto it = m_cache.find(key);
@@ -95,7 +127,8 @@ class ShaderCache {
         if (!shader_asset) {
             fatal("ShaderCache: Shader asset '{}' not found", id);
         }
-        auto compiled = make_description(*shader_asset, key.defs);
+        auto compiled =
+            make_description(*shader_asset, key.stage, key.entry, key.defs);
         auto shader_module =
             m_device.create_shader_module(compiled.description);
         m_cache.emplace(
@@ -111,32 +144,21 @@ class ShaderCache {
 
     std::shared_ptr<ShaderModule>
     get_or_compile(const AssetPath& path, ShaderDefs defs = {}) {
-        ShaderVariantKey key {
-            .shader = invalid_asset_id,
-            .source = path.as_string(),
-            .defs = normalized_shader_defs(std::move(defs)),
-        };
-        auto it = m_cache.find(key);
-        if (it != m_cache.end() && dependencies_are_current(it->second)) {
-            return it->second.module;
-        }
-        if (it != m_cache.end()) {
-            m_cache.erase(it);
-        }
+        return get(m_asset_server.load<Shader>(path), std::move(defs));
+    }
 
-        auto compiled =
-            compile_description(path.path(), key.defs, path.as_string());
-        auto shader_module =
-            m_device.create_shader_module(compiled.description);
-        m_cache.emplace(
-            std::move(key),
-            ShaderCacheEntry {
-                .module = shader_module,
-                .dependencies =
-                    make_file_dependencies(std::move(compiled.dependencies)),
-            }
+    std::shared_ptr<ShaderModule> get_or_compile(
+        const AssetPath& path,
+        ShaderStages stage,
+        std::string entry,
+        ShaderDefs defs = {}
+    ) {
+        return get(
+            m_asset_server.load<Shader>(path),
+            stage,
+            std::move(entry),
+            std::move(defs)
         );
-        return shader_module;
     }
 
     std::shared_ptr<ShaderModule> get(Handle<Shader> handle) {
@@ -147,20 +169,59 @@ class ShaderCache {
         return get(handle.id(), std::move(defs));
     }
 
+    std::shared_ptr<ShaderModule>
+    get(Handle<Shader> handle,
+        ShaderStages stage,
+        std::string entry,
+        ShaderDefs defs = {}) {
+        return get(handle.id(), stage, std::move(entry), std::move(defs));
+    }
+
     std::shared_ptr<ShaderModule> get(const ShaderRef& ref) {
         return get(ref.resolve(m_asset_server));
     }
 
     std::shared_ptr<ShaderModule> get(const ShaderRef& ref, ShaderDefs defs) {
-        if (!defs.empty()) {
-            if (auto path = ref.asset_path()) {
-                return get_or_compile(path.value(), std::move(defs));
-            }
-        }
         return get(ref.resolve(m_asset_server), std::move(defs));
     }
 
+    std::shared_ptr<ShaderModule>
+    get(const ShaderRef& ref,
+        ShaderStages stage,
+        std::string entry,
+        ShaderDefs defs = {}) {
+        return get(
+            ref.resolve(m_asset_server),
+            stage,
+            std::move(entry),
+            std::move(defs)
+        );
+    }
+
   private:
+    static std::string default_shader_entry(ShaderStages stage) {
+        switch (stage) {
+            case ShaderStages::Vertex:
+                return "vertex_main";
+            case ShaderStages::Geometry:
+                return "geometry_main";
+            case ShaderStages::Fragment:
+                return "fragment_main";
+            case ShaderStages::Compute:
+                return "compute_main";
+            default:
+                return "main";
+        }
+    }
+
+    static std::string
+    normalized_shader_entry(ShaderStages stage, std::string entry) {
+        if (entry.empty()) {
+            return default_shader_entry(stage);
+        }
+        return entry;
+    }
+
     static std::vector<ShaderFileDependency>
     make_file_dependencies(std::vector<std::filesystem::path> paths) {
         std::vector<ShaderFileDependency> dependencies;
@@ -193,39 +254,41 @@ class ShaderCache {
         return true;
     }
 
-    ShaderDescriptionWithDependencies
-    make_description(const Shader& shader, const ShaderDefs& defs) {
-        if (m_variant_compiler != nullptr && !defs.empty()) {
-            return compile_description(shader.path, defs, shader.path.string());
-        }
-
-        auto description = shader.description();
-        description.defs = defs;
-        return ShaderDescriptionWithDependencies {
-            .description = std::move(description),
-        };
+    ShaderDescriptionWithDependencies make_description(
+        const Shader& shader,
+        ShaderStages stage,
+        const std::string& entry,
+        const ShaderDefs& defs
+    ) {
+        return compile_description(shader, stage, entry, defs);
     }
 
     ShaderDescriptionWithDependencies compile_description(
-        const std::filesystem::path& logical_path,
-        const ShaderDefs& defs,
-        const std::string& display_path
+        const Shader& shader,
+        ShaderStages stage,
+        const std::string& entry,
+        const ShaderDefs& defs
     ) {
         if (m_variant_compiler == nullptr) {
             fatal(
-                "ShaderCache: cannot compile shader variant '{}' without a "
+                "ShaderCache: cannot compile shader '{}' without a "
                 "ShaderVariantCompiler",
-                display_path
+                shader.path.string()
             );
         }
 
-        auto compiled =
-            m_variant_compiler->compile_with_dependencies(logical_path, defs);
+        auto compiled = m_variant_compiler->compile_with_dependencies(
+            shader.path,
+            shader.source,
+            stage,
+            entry,
+            defs
+        );
         if (!compiled) {
             auto error = std::move(compiled).error();
             fatal(
-                "ShaderCache: failed to compile shader variant '{}': {}\n{}",
-                display_path,
+                "ShaderCache: failed to compile shader '{}': {}\n{}",
+                shader.path.string(),
                 error.message,
                 error.diagnostics
             );
