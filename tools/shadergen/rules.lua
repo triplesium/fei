@@ -284,10 +284,21 @@ local function helper_depfiles(shadergen)
     return files
 end
 
-local function shader_depfiles(sourcefile, make_depfile, shadergen)
+local function shader_header_depfiles(source_root)
+    local files = {}
+    for _, file in ipairs(os.files(path.join(source_root, "**.slangh"))) do
+        insert_unique(files, file)
+    end
+    return files
+end
+
+local function shader_depfiles(source_root, sourcefile, make_depfile, shadergen)
     local depfiles = {}
     insert_unique(depfiles, sourcefile)
     for _, file in ipairs(parse_make_depfile(make_depfile)) do
+        insert_unique(depfiles, file)
+    end
+    for _, file in ipairs(shader_header_depfiles(source_root)) do
         insert_unique(depfiles, file)
     end
     for _, file in ipairs(helper_depfiles(shadergen)) do
@@ -397,7 +408,7 @@ function buildcmd_file(target, batchcmds, sourcefile, opt)
             shadergen,
             shadergen_args
         )
-        batchcmds:add_depfiles(shader_depfiles(sourcefile, outputs.make_depfile, shadergen))
+        batchcmds:add_depfiles(shader_depfiles(source_root, sourcefile, outputs.make_depfile, shadergen))
         for _, required_output in ipairs(required_outputs(outputs, {slang = slang})) do
             table.insert(required, required_output)
         end
