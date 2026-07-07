@@ -1,6 +1,4 @@
-struct FragmentInput {
-    [vk::location(0)] float2 tex_coords : TEXCOORD0;
-};
+import lib.fullscreen;
 
 struct BlurData {
     float2 direction;
@@ -48,7 +46,7 @@ float4 blur9(Texture2D<float4> image, float2 uv, float2 direction) {
 }
 
 [shader("fragment")]
-float4 fragment_main(FragmentInput input) : SV_Target0 {
+float4 fragment_main(FullscreenFragmentInput input) : SV_Target0 {
     if (Blur.type == 1) {
         return blur5(source, input.tex_coords, Blur.direction);
     }

@@ -1,4 +1,4 @@
-#include "common.slangh"
+import lib.view;
 
 struct VertexInput {
     [vk::location(0)] float3 position : POSITION;

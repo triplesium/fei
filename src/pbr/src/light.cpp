@@ -1,7 +1,6 @@
 #include "pbr/light.hpp"
 
 #include "base/hash.hpp"
-#include "math/common.hpp"
 #include "math/matrix.hpp"
 #include "math/vector.hpp"
 #include "pbr/graph_resources.hpp"
@@ -50,32 +49,6 @@ struct ShadowBlurPassData {
     uint32 output_height {};
     bool horizontal {true};
     bool generate_mipmaps {false};
-};
-
-struct alignas(16) LightingUniform {
-    struct alignas(16) Light {
-        struct alignas(16) Attenuation {
-            float constant {1.0f};
-            float linear {0.1f};
-            float quadratic {0.08f};
-        };
-        float angle_inner_cone {25.0f * DEG2RAD};
-        float angle_outer_cone {30.0f * DEG2RAD};
-        alignas(16) Vector3 ambient;
-        alignas(16) Vector3 diffuse;
-        alignas(16) Vector3 specular;
-        alignas(16) Vector3 position;
-        alignas(16) Vector3 direction;
-        uint32 shadowing_method {2};
-        Attenuation attenuation;
-    };
-    std::array<Light, 3> directional_lights;
-    std::array<Light, 6> point_lights;
-    std::array<Light, 6> spot_lights;
-    uint32 num_directional_lights {0};
-    uint32 num_point_lights {0};
-    uint32 num_spot_lights {0};
-    alignas(16) Matrix4x4 light_view_projection;
 };
 
 TextureDescription shadow_depth_texture_desc(const Texture& shadow_texture) {

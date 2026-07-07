@@ -31,6 +31,7 @@ void write_text_file(
 class RecordingShaderCompiler final : public ShaderCompiler {
   public:
     std::vector<ShaderCompileRequest> requests;
+    std::vector<std::filesystem::path> dependencies;
 
     Result<ShaderCompileOutput, ShaderCompileError>
     compile(ShaderCompileRequest request) override {
@@ -52,7 +53,7 @@ class RecordingShaderCompiler final : public ShaderCompiler {
                     .resources = {},
                     .defs = normalized_shader_defs(std::move(request.defs)),
                 },
-            .dependencies = {},
+            .dependencies = dependencies,
         };
     }
 };
@@ -339,37 +340,28 @@ float4 fragment_main() : SV_Target0
 }
 
 TEST_CASE(
-    "ShaderCache recompiles runtime Slang shader assets when includes "
-    "change",
+    "ShaderCache recompiles runtime Slang shader assets when compiler "
+    "dependencies change",
     "[rendering][shader-cache][shader-compiler]"
 ) {
     auto root = std::filesystem::current_path() / "build" / "test" /
-                "shader-cache-source-include-invalidation";
+                "shader-cache-source-dependency-invalidation";
     std::filesystem::remove_all(root);
-    auto include_path = root / "shaders" / "common.slangh";
+    auto dependency_path = root / "shaders" / "shared.slang";
+    write_text_file(dependency_path, "first dependency content");
     write_text_file(
-        include_path,
+        root / "shaders" / "test.slang",
         R"(
-float4 test_color()
+[shader("fragment")]
+float4 fragment_main() : SV_Target0
 {
     return float4(1.0, 0.0, 0.0, 1.0);
 }
 )"
     );
-    write_text_file(
-        root / "shaders" / "test.slang",
-        R"(
-#include "common.slangh"
-
-[shader("fragment")]
-float4 fragment_main() : SV_Target0
-{
-    return test_color();
-}
-)"
-    );
 
     RecordingShaderCompiler compiler;
+    compiler.dependencies = {dependency_path};
     ShaderVariantCompiler variant_compiler(
         compiler,
         RuntimeShaderCompilerConfig {
@@ -399,17 +391,9 @@ float4 fragment_main() : SV_Target0
     REQUIRE(compiler.requests.size() == 1);
     REQUIRE(device.shader_descriptions.size() == 1);
 
-    write_text_file(
-        include_path,
-        R"(
-float4 test_color()
-{
-    return float4(0.0, 1.0, 0.0, 1.0);
-}
-)"
-    );
+    write_text_file(dependency_path, "changed dependency content");
     std::filesystem::last_write_time(
-        include_path,
+        dependency_path,
         std::filesystem::file_time_type::clock::now() + std::chrono::seconds(2)
     );
 

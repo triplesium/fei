@@ -4,17 +4,15 @@
 #include "shader_artifact.hpp"
 
 #include <algorithm>
-#include <cctype>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <exception>
 #include <fstream>
 #include <iterator>
-#include <sstream>
 #include <string_view>
 #include <type_traits>
-#include <unordered_set>
 #include <utility>
 
 #ifdef FEI_HAS_SLANG_SDK
@@ -203,46 +201,6 @@ read_text_file(const std::filesystem::path& path) {
     );
 }
 
-std::string trim_ascii(std::string_view value) {
-    while (!value.empty() &&
-           std::isspace(static_cast<unsigned char>(value.front())) != 0) {
-        value.remove_prefix(1);
-    }
-    while (!value.empty() &&
-           std::isspace(static_cast<unsigned char>(value.back())) != 0) {
-        value.remove_suffix(1);
-    }
-    return std::string(value);
-}
-
-Optional<std::filesystem::path> parse_include_path(std::string_view line) {
-    auto hash = line.find('#');
-    if (hash == std::string_view::npos) {
-        return nullopt;
-    }
-    line.remove_prefix(hash + 1);
-    auto trimmed = trim_ascii(line);
-    line = std::string_view(trimmed);
-    constexpr std::string_view include_keyword = "include";
-    if (!line.starts_with(include_keyword)) {
-        return nullopt;
-    }
-    line.remove_prefix(include_keyword.size());
-    trimmed = trim_ascii(line);
-    line = std::string_view(trimmed);
-    if (line.empty() || (line.front() != '"' && line.front() != '<')) {
-        return nullopt;
-    }
-
-    const char close = line.front() == '"' ? '"' : '>';
-    line.remove_prefix(1);
-    auto end = line.find(close);
-    if (end == std::string_view::npos) {
-        return nullopt;
-    }
-    return std::filesystem::path(std::string(line.substr(0, end)));
-}
-
 void insert_unique_dependency(
     std::vector<std::filesystem::path>& dependencies,
     const std::filesystem::path& path
@@ -252,136 +210,6 @@ void insert_unique_dependency(
         dependencies.end()) {
         dependencies.push_back(std::move(normalized));
     }
-}
-
-Optional<std::filesystem::path> resolve_include_path(
-    const std::filesystem::path& include_path,
-    const std::filesystem::path& includer,
-    const std::filesystem::path& source_root
-) {
-    std::vector<std::filesystem::path> candidates;
-    if (include_path.is_absolute()) {
-        candidates.push_back(include_path);
-    } else {
-        candidates.push_back(includer.parent_path() / include_path);
-        if (!source_root.empty()) {
-            candidates.push_back(source_root / include_path);
-        }
-    }
-
-    for (const auto& candidate : candidates) {
-        std::error_code error;
-        if (std::filesystem::is_regular_file(candidate, error)) {
-            return normalized_absolute_path(candidate);
-        }
-    }
-    return nullopt;
-}
-
-void collect_source_dependencies_recursive(
-    const std::filesystem::path& source_path,
-    const std::filesystem::path& source_root,
-    std::unordered_set<std::string>& visited,
-    std::vector<std::filesystem::path>& dependencies
-) {
-    auto normalized = normalized_absolute_path(source_path);
-    auto key = normalized.generic_string();
-    if (!visited.insert(key).second) {
-        return;
-    }
-
-    std::error_code error;
-    if (!std::filesystem::is_regular_file(normalized, error)) {
-        return;
-    }
-    insert_unique_dependency(dependencies, normalized);
-
-    auto source = read_text_file(normalized);
-    if (!source) {
-        return;
-    }
-
-    std::istringstream input(source.value());
-    std::string line;
-    while (std::getline(input, line)) {
-        auto include_path = parse_include_path(line);
-        if (!include_path) {
-            continue;
-        }
-        auto resolved =
-            resolve_include_path(include_path.value(), normalized, source_root);
-        if (!resolved) {
-            continue;
-        }
-        collect_source_dependencies_recursive(
-            resolved.value(),
-            source_root,
-            visited,
-            dependencies
-        );
-    }
-}
-
-std::vector<std::filesystem::path> collect_source_dependencies(
-    const std::filesystem::path& source_path,
-    const std::filesystem::path& source_root
-) {
-    std::unordered_set<std::string> visited;
-    std::vector<std::filesystem::path> dependencies;
-    collect_source_dependencies_recursive(
-        source_path,
-        normalized_absolute_path(source_root),
-        visited,
-        dependencies
-    );
-    return dependencies;
-}
-
-std::vector<std::filesystem::path> collect_source_dependencies(
-    std::string_view source,
-    const std::filesystem::path& source_path,
-    const std::filesystem::path& source_root
-) {
-    std::unordered_set<std::string> visited;
-    std::vector<std::filesystem::path> dependencies;
-    std::istringstream input {std::string(source)};
-    std::string line;
-    while (std::getline(input, line)) {
-        auto include_path = parse_include_path(line);
-        if (!include_path) {
-            continue;
-        }
-        auto resolved = resolve_include_path(
-            include_path.value(),
-            normalized_absolute_path(source_path),
-            normalized_absolute_path(source_root)
-        );
-        if (!resolved) {
-            continue;
-        }
-        collect_source_dependencies_recursive(
-            resolved.value(),
-            source_root,
-            visited,
-            dependencies
-        );
-    }
-    return dependencies;
-}
-
-std::vector<std::filesystem::path>
-shader_compile_dependencies(const ShaderCompileRequest& request) {
-    if (!request.source.empty()) {
-        return collect_source_dependencies(
-            request.source,
-            request.source_path,
-            request.source_root
-        );
-    }
-    return collect_source_dependencies(
-        request.source_path,
-        request.source_root
-    );
 }
 
 #ifdef FEI_HAS_SLANG_SDK
@@ -568,7 +396,205 @@ find_slang_entry_point(
 struct SlangCompileOutput {
     std::vector<std::byte> spirv;
     std::vector<ShaderArtifactLogicalResourceName> logical_resource_names;
+    std::vector<std::filesystem::path> dependencies;
 };
+
+class TrackingSlangFileSystem final : public ISlangFileSystemExt {
+  public:
+    SLANG_NO_THROW SlangResult SLANG_MCALL
+    queryInterface(SlangUUID const& uuid, void** outObject) override {
+        if (outObject == nullptr) {
+            return SLANG_E_INVALID_ARG;
+        }
+        if (auto* intf = getInterface(uuid)) {
+            addRef();
+            *outObject = intf;
+            return SLANG_OK;
+        }
+        *outObject = nullptr;
+        return SLANG_E_NO_INTERFACE;
+    }
+
+    SLANG_NO_THROW uint32_t SLANG_MCALL addRef() override {
+        return ++m_ref_count;
+    }
+
+    SLANG_NO_THROW uint32_t SLANG_MCALL release() override {
+        const auto ref_count = --m_ref_count;
+        if (ref_count == 0) {
+            delete this;
+        }
+        return ref_count;
+    }
+
+    SLANG_NO_THROW void* SLANG_MCALL castAs(const SlangUUID& guid) override {
+        return getInterface(guid);
+    }
+
+    SLANG_NO_THROW SlangResult SLANG_MCALL
+    loadFile(char const* path, ISlangBlob** outBlob) override {
+        if (path == nullptr || outBlob == nullptr) {
+            return SLANG_E_INVALID_ARG;
+        }
+        *outBlob = nullptr;
+
+        std::ifstream input(path, std::ios::binary);
+        if (!input) {
+            return SLANG_E_NOT_FOUND;
+        }
+        std::string contents {
+            std::istreambuf_iterator<char>(input),
+            std::istreambuf_iterator<char>()
+        };
+        *outBlob = slang_createBlob(contents.data(), contents.size());
+        if (*outBlob == nullptr) {
+            return SLANG_E_OUT_OF_MEMORY;
+        }
+
+        insert_unique_dependency(m_dependencies, std::filesystem::path(path));
+        return SLANG_OK;
+    }
+
+    SLANG_NO_THROW SlangResult SLANG_MCALL getFileUniqueIdentity(
+        const char* path,
+        ISlangBlob** outUniqueIdentity
+    ) override {
+        if (path == nullptr || outUniqueIdentity == nullptr) {
+            return SLANG_E_INVALID_ARG;
+        }
+        *outUniqueIdentity = nullptr;
+        return make_path_blob(
+            canonical_path(std::filesystem::path(path)),
+            outUniqueIdentity
+        );
+    }
+
+    SLANG_NO_THROW SlangResult SLANG_MCALL calcCombinedPath(
+        SlangPathType fromPathType,
+        const char* fromPath,
+        const char* path,
+        ISlangBlob** pathOut
+    ) override {
+        if (fromPath == nullptr || path == nullptr || pathOut == nullptr) {
+            return SLANG_E_INVALID_ARG;
+        }
+        *pathOut = nullptr;
+
+        auto dependency_path = std::filesystem::path(path);
+        if (!dependency_path.is_absolute()) {
+            auto base = std::filesystem::path(fromPath);
+            if (fromPathType == SLANG_PATH_TYPE_FILE) {
+                base = base.parent_path();
+            }
+            dependency_path = base / dependency_path;
+        }
+        return make_path_blob(dependency_path.lexically_normal(), pathOut);
+    }
+
+    SLANG_NO_THROW SlangResult SLANG_MCALL
+    getPathType(const char* path, SlangPathType* pathTypeOut) override {
+        if (path == nullptr || pathTypeOut == nullptr) {
+            return SLANG_E_INVALID_ARG;
+        }
+
+        std::error_code error;
+        const auto status = std::filesystem::status(path, error);
+        if (error || !std::filesystem::exists(status)) {
+            return SLANG_E_NOT_FOUND;
+        }
+        if (std::filesystem::is_directory(status)) {
+            *pathTypeOut = SLANG_PATH_TYPE_DIRECTORY;
+            return SLANG_OK;
+        }
+        if (std::filesystem::is_regular_file(status)) {
+            *pathTypeOut = SLANG_PATH_TYPE_FILE;
+            return SLANG_OK;
+        }
+        return SLANG_E_NOT_FOUND;
+    }
+
+    SLANG_NO_THROW SlangResult SLANG_MCALL
+    getPath(PathKind kind, const char* path, ISlangBlob** outPath) override {
+        if (path == nullptr || outPath == nullptr) {
+            return SLANG_E_INVALID_ARG;
+        }
+        *outPath = nullptr;
+
+        auto result = std::filesystem::path(path);
+        switch (kind) {
+            case PathKind::Canonical:
+            case PathKind::OperatingSystem:
+                result = canonical_path(result);
+                break;
+            case PathKind::Simplified:
+            case PathKind::Display:
+                result = result.lexically_normal();
+                break;
+            case PathKind::CountOf:
+                return SLANG_E_INVALID_ARG;
+        }
+        return make_path_blob(result, outPath);
+    }
+
+    SLANG_NO_THROW void SLANG_MCALL clearCache() override {}
+
+    SLANG_NO_THROW SlangResult SLANG_MCALL enumeratePathContents(
+        const char* /*path*/,
+        FileSystemContentsCallBack /*callback*/,
+        void* /*userData*/
+    ) override {
+        return SLANG_E_NOT_IMPLEMENTED;
+    }
+
+    SLANG_NO_THROW OSPathKind SLANG_MCALL getOSPathKind() override {
+        return OSPathKind::Direct;
+    }
+
+    [[nodiscard]] const std::vector<std::filesystem::path>&
+    dependencies() const {
+        return m_dependencies;
+    }
+
+  private:
+    ISlangUnknown* getInterface(const SlangUUID& uuid) {
+        if (uuid == ISlangUnknown::getTypeGuid() ||
+            uuid == ISlangCastable::getTypeGuid() ||
+            uuid == ISlangFileSystem::getTypeGuid() ||
+            uuid == ISlangFileSystemExt::getTypeGuid()) {
+            return static_cast<ISlangFileSystemExt*>(this);
+        }
+        return nullptr;
+    }
+
+    static std::filesystem::path
+    canonical_path(const std::filesystem::path& path) {
+        std::error_code error;
+        auto canonical = std::filesystem::weakly_canonical(path, error);
+        if (!error) {
+            return canonical.lexically_normal();
+        }
+        return normalized_absolute_path(path);
+    }
+
+    static SlangResult
+    make_path_blob(const std::filesystem::path& path, ISlangBlob** outBlob) {
+        auto string = path.lexically_normal().string();
+        *outBlob = slang_createBlob(string.c_str(), string.size() + 1);
+        return *outBlob == nullptr ? SLANG_E_OUT_OF_MEMORY : SLANG_OK;
+    }
+
+    std::atomic<uint32_t> m_ref_count {0};
+    std::vector<std::filesystem::path> m_dependencies;
+};
+
+Slang::ComPtr<TrackingSlangFileSystem> make_tracking_slang_file_system() {
+    auto* file_system = new TrackingSlangFileSystem;
+    file_system->addRef();
+    return Slang::ComPtr<TrackingSlangFileSystem>(
+        Slang::INIT_ATTACH,
+        file_system
+    );
+}
 
 Result<SlangCompileOutput, ShaderCompileError>
 compile_slang_to_spirv(const ShaderCompileRequest& request) {
@@ -596,6 +622,7 @@ compile_slang_to_spirv(const ShaderCompileRequest& request) {
     auto macros = make_slang_macro_storage(request.defs);
     auto search_path = request.source_root.string();
     const char* search_paths[] = {search_path.c_str()};
+    auto file_system = make_tracking_slang_file_system();
 
     slang::SessionDesc session_desc {};
     session_desc.targets = &target_desc;
@@ -606,6 +633,7 @@ compile_slang_to_spirv(const ShaderCompileRequest& request) {
     session_desc.preprocessorMacroCount =
         static_cast<SlangInt>(macros.macros.size());
     session_desc.defaultMatrixLayoutMode = SLANG_MATRIX_LAYOUT_ROW_MAJOR;
+    session_desc.fileSystem = file_system.get();
 
     Slang::ComPtr<slang::ISession> session;
     result = global_session->createSession(session_desc, session.writeRef());
@@ -689,9 +717,16 @@ compile_slang_to_spirv(const ShaderCompileRequest& request) {
         return failure(std::move(logical_resource_names).error());
     }
 
+    std::vector<std::filesystem::path> dependencies;
+    insert_unique_dependency(dependencies, request.source_path);
+    for (const auto& dependency : file_system->dependencies()) {
+        insert_unique_dependency(dependencies, dependency);
+    }
+
     return SlangCompileOutput {
         .spirv = std::move(spirv).value(),
         .logical_resource_names = std::move(logical_resource_names).value(),
+        .dependencies = std::move(dependencies),
     };
 }
 
@@ -784,15 +819,9 @@ ShaderVariantCompiler::compile_with_dependencies(
         return failure(std::move(output).error());
     }
 
-    auto dependencies = std::move(output->dependencies);
-    for (const auto& dependency :
-         shader_compile_dependencies(compile_request)) {
-        insert_unique_dependency(dependencies, dependency);
-    }
-
     return ShaderVariantCompileOutput {
         .description = std::move(output->description),
-        .dependencies = std::move(dependencies),
+        .dependencies = std::move(output->dependencies),
     };
 }
 
@@ -848,7 +877,7 @@ SlangLibraryShaderCompiler::compile(ShaderCompileRequest request) {
         return failure(std::move(artifacts).error());
     }
 
-    auto dependencies = shader_compile_dependencies(request);
+    auto dependencies = std::move(slang->dependencies);
     return ShaderCompileOutput {
         .description =
             ShaderDescription {

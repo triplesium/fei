@@ -1,8 +1,12 @@
-#include "mesh_common.slangh"
-#include "mesh_vertex_input.slangh"
-#include "prepass_io.slangh"
+import lib.normal;
+import lib.view;
+import material.types;
+import mesh.types;
+import mesh.vertex_input;
+import deferred.prepass_io;
 
-using namespace fei.pbr.prepass_io;
+using namespace pbr.prepass_io;
+using namespace pbr.normal;
 
 layout(set = 0, binding = 0) ConstantBuffer<ViewData> View;
 layout(set = 1, binding = 0) ConstantBuffer<MeshData> Mesh;
@@ -19,21 +23,16 @@ layout(set = 2, binding = 7) SamplerState sampler;
 float3 normal_mapping(VertexOutput input) {
     float3 tangent_normal =
         normal_map.Sample(sampler, input.tex_coords).xyz * 2.0 - 1.0;
-    float3 normal = normalize(input.normal_ws);
-    float3 tangent = normalize(input.tangent_ws);
-    tangent = normalize(tangent - dot(tangent, normal) * normal);
-    float3 bitangent = normalize(cross(normal, tangent));
-    float3x3 tbn = float3x3(tangent, bitangent, normal);
-    return normalize(mul(tangent_normal, tbn));
+    return from_tangent_frame(tangent_normal, input.normal_ws, input.tangent_ws);
 }
 #endif
 
 [shader("vertex")]
 VertexOutput vertex_main(MeshVertexInput input) {
     VertexOutput output;
-    output.position_ws = mesh_position_ws(Mesh.world_from_local, input.position);
+    output.position_ws = Mesh.position_ws(input.position);
 #ifdef VERTEX_NORMALS
-    output.normal_ws = mesh_normal_ws(Mesh.world_from_local, input.normal);
+    output.normal_ws = Mesh.normal_ws(input.normal);
 #else
     output.normal_ws = float3(0.0, 1.0, 0.0);
 #endif
@@ -41,9 +40,9 @@ VertexOutput vertex_main(MeshVertexInput input) {
     output.tex_coords = input.uv;
 #endif
 #ifdef VERTEX_TANGENTS
-    output.tangent_ws = mesh_tangent_ws(Mesh.world_from_local, input.tangent);
+    output.tangent_ws = Mesh.tangent_ws(input.tangent);
 #endif
-    output.position = mesh_position_cs(View.clip_from_world, output.position_ws);
+    output.position = View.position_cs(output.position_ws);
     return output;
 }
 

@@ -1,4 +1,11 @@
-#include "mesh_common.slangh"
+import lib.color;
+import lib.normal;
+import material.types;
+import mesh.types;
+import vxgi.types;
+
+using namespace pbr.color;
+using namespace pbr.normal;
 
 struct VertexInput {
     [vk::location(0)] float3 position : POSITION;
@@ -32,14 +39,6 @@ layout(set = 3, binding = 2, rgba8) RWTexture3D<float4> voxel_emissive;
 layout(set = 3, binding = 4, r8) RWTexture3D<float4> static_voxel_flag;
 layout(set = 4, binding = 0) ConstantBuffer<VxgiVoxelizationData> VxgiVoxelization;
 
-float3 srgb_to_linear(float3 value) {
-    return pow(max(value, float3(0.0)), float3(2.2));
-}
-
-float3 encode_normal(float3 normal) {
-    return normal * 0.5 + float3(0.5);
-}
-
 int calculate_axis(VertexOutput input[3]) {
     float3 p1 = input[1].position.xyz - input[0].position.xyz;
     float3 p2 = input[2].position.xyz - input[0].position.xyz;
@@ -69,8 +68,8 @@ float4 axis_aligned_bounding_box(float4 positions[3], float2 pixel_diagonal) {
 [shader("vertex")]
 VertexOutput vertex_main(VertexInput input) {
     VertexOutput output;
-    output.position = mesh_position_ws4(Mesh.world_from_local, input.position);
-    output.normal = mesh_normal_ws(Mesh.world_from_local, input.normal);
+    output.position = Mesh.position_ws4(input.position);
+    output.normal = Mesh.normal_ws(input.normal);
     output.tex_coords = input.uv;
     return output;
 }
@@ -80,7 +79,7 @@ VertexOutput vertex_main(VertexInput input) {
 void geometry_main(triangle VertexOutput input[3], inout TriangleStream<GeometryOutput> stream) {
     float2 tex_coords[3];
     int selected_index = calculate_axis(input);
-    float4x4 view_projection = VxgiVoxelization.view_projections[selected_index];
+    float4x4 view_projection = VxgiVoxelization.view_projection(selected_index);
 
     for (int i = 0; i < 3; i++) {
         tex_coords[i] = input[i].tex_coords;
@@ -115,7 +114,7 @@ void geometry_main(triangle VertexOutput input[3], inout TriangleStream<Geometry
         indices[1] = index_temp;
     }
 
-    float2 half_pixel = float2(1.0 / VxgiVoxelization.volume_dimension);
+    float2 half_pixel = VxgiVoxelization.half_pixel;
     if (triangle_plane.z == 0.0) {
         return;
     }
@@ -156,16 +155,13 @@ void geometry_main(triangle VertexOutput input[3], inout TriangleStream<Geometry
     }
 
     for (int i = 0; i < 3; ++i) {
-        float4 voxel_position = input[indices[i]].position;
-        voxel_position.xyz -= VxgiVoxelization.world_min_point;
-        voxel_position *= VxgiVoxelization.voxel_scale;
-
         GeometryOutput output;
         output.clip_position = positions[i];
         output.position = positions[i].xyz;
         output.normal = input[indices[i]].normal;
         output.tex_coords = tex_coords[i];
-        output.ws_position = voxel_position.xyz * VxgiVoxelization.volume_dimension;
+        output.ws_position =
+            VxgiVoxelization.world_to_voxel_index(input[indices[i]].position.xyz);
         output.triangle_aabb = triangle_aabb;
         stream.Append(output);
     }
@@ -202,7 +198,7 @@ float4 fragment_main(GeometryOutput input) : SV_Target0 {
         emissive.rgb = srgb_to_linear(emissive.rgb) * srgb_to_linear(Material.emissive);
         emissive.a = 1.0;
 
-        voxel_normal[position] = float4(encode_normal(normalize(input.normal)), 1.0);
+        voxel_normal[position] = float4(encode(normalize(input.normal)), 1.0);
         voxel_albedo[position] = albedo;
         voxel_emissive[position] = emissive;
 

@@ -1,41 +1,12 @@
+import lib.constants;
+import lib.cubemap;
+
+using namespace pbr.constants;
+using namespace pbr.ibl;
+
 layout(set = 0, binding = 0) TextureCube<float4> cubemap;
 layout(set = 0, binding = 1) SamplerState cubemap_sampler;
 layout(set = 0, binding = 2, rgba32f) RWTexture2DArray<float4> output_texture;
-
-static const float PI = 3.14159265359;
-static const float TWO_PI = 2.0 * PI;
-
-float3 get_sampling_vector(uint3 dispatch_thread_id) {
-    uint width;
-    uint height;
-    uint layers;
-    output_texture.GetDimensions(width, height, layers);
-    float2 st = float2(dispatch_thread_id.xy) / float2(width, height);
-    float2 uv = 2.0 * float2(st.x, 1.0 - st.y) - float2(1.0);
-
-    float3 result = float3(0.0);
-    switch (dispatch_thread_id.z) {
-    case 0:
-        result = float3(1.0, uv.y, -uv.x);
-        break;
-    case 1:
-        result = float3(-1.0, uv.y, uv.x);
-        break;
-    case 2:
-        result = float3(uv.x, 1.0, -uv.y);
-        break;
-    case 3:
-        result = float3(uv.x, -1.0, uv.y);
-        break;
-    case 4:
-        result = float3(uv.x, uv.y, 1.0);
-        break;
-    default:
-        result = float3(-uv.x, uv.y, -1.0);
-        break;
-    }
-    return normalize(result);
-}
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
@@ -50,7 +21,7 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
         return;
     }
 
-    float3 normal = get_sampling_vector(dispatch_thread_id);
+    float3 normal = cube_face_sampling_vector(dispatch_thread_id, uint2(width, height));
     float3 irradiance = float3(0.0);
     float3 up = abs(normal.y) > 0.999 ?
         float3(1.0, 0.0, 0.0) :

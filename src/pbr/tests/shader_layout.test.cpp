@@ -7,6 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <initializer_list>
 #include <string>
 #include <string_view>
@@ -33,6 +34,38 @@ struct PbrShaderCase {
     std::string_view source;
     ShaderStages stage;
 };
+
+std::filesystem::path pbr_shader_source_root() {
+#ifdef FEI_SHADER_SOURCE_PATH
+    return std::filesystem::path(FEI_SHADER_SOURCE_PATH);
+#else
+    return std::filesystem::current_path() / "src" / "pbr" / "shaders";
+#endif
+}
+
+bool has_include_directive(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    REQUIRE(input);
+
+    std::string line;
+    while (std::getline(input, line)) {
+        auto first = line.find_first_not_of(" \t");
+        if (first != std::string::npos &&
+            std::string_view(line).substr(first).starts_with("#include")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::filesystem::path normalized_absolute_path(std::filesystem::path path) {
+    std::error_code error;
+    auto absolute = std::filesystem::absolute(path, error);
+    if (!error) {
+        path = std::move(absolute);
+    }
+    return path.lexically_normal();
+}
 
 constexpr std::array<PbrShaderCase, 25> PbrShaders {
     PbrShaderCase {
@@ -139,10 +172,14 @@ PbrShaderCase pbr_shader_case(std::string_view shader_name) {
     return *it;
 }
 
-const ShaderDescription& compile_pbr_shader(std::string_view shader_name) {
+const ShaderVariantCompileOutput&
+compile_pbr_shader_output(std::string_view shader_name) {
     static SlangLibraryShaderCompiler compiler;
-    static ShaderVariantCompiler variant_compiler(compiler);
-    static std::unordered_map<std::string, ShaderDescription> cache;
+    static ShaderVariantCompiler variant_compiler(
+        compiler,
+        RuntimeShaderCompilerConfig {.source_root = pbr_shader_source_root()}
+    );
+    static std::unordered_map<std::string, ShaderVariantCompileOutput> cache;
 
     auto key = std::string(shader_name);
     auto it = cache.find(key);
@@ -151,10 +188,10 @@ const ShaderDescription& compile_pbr_shader(std::string_view shader_name) {
     }
 
     auto shader = pbr_shader_case(shader_name);
-    auto compiled = variant_compiler.compile(
+    auto compiled = variant_compiler.compile_with_dependencies(
         std::filesystem::path(shader.source),
         shader.stage,
-        {},
+        std::string {},
         {}
     );
     CAPTURE(shader_name);
@@ -167,6 +204,10 @@ const ShaderDescription& compile_pbr_shader(std::string_view shader_name) {
     auto [inserted, _] =
         cache.emplace(std::move(key), std::move(compiled).value());
     return inserted->second;
+}
+
+const ShaderDescription& compile_pbr_shader(std::string_view shader_name) {
+    return compile_pbr_shader_output(shader_name).description;
 }
 
 std::vector<uint32> spirv_words(const ShaderDescription& shader) {
@@ -228,21 +269,149 @@ void require_shader_resources(
         CHECK(it->array_size == resource.array_size);
     }
 }
+
+bool shader_has_dependency(
+    const ShaderVariantCompileOutput& output,
+    const std::filesystem::path& dependency
+) {
+    auto normalized = normalized_absolute_path(dependency);
+    return std::find(
+               output.dependencies.begin(),
+               output.dependencies.end(),
+               normalized
+           ) != output.dependencies.end();
+}
+
+void require_shader_dependencies(
+    std::string_view shader_name,
+    std::initializer_list<std::string_view> dependencies
+) {
+    const auto& output = compile_pbr_shader_output(shader_name);
+    for (auto dependency : dependencies) {
+        auto path = pbr_shader_source_root() /
+                    std::filesystem::path(std::string(dependency));
+        CAPTURE(shader_name);
+        CAPTURE(path);
+        CHECK(shader_has_dependency(output, path));
+    }
+}
 #endif
 
 } // namespace
+
+TEST_CASE(
+    "PBR shader sources use Slang modules instead of includes",
+    "[pbr][shader]"
+) {
+    auto root = pbr_shader_source_root();
+    REQUIRE(std::filesystem::is_directory(root));
+
+    bool found_shader_source = false;
+    for (const auto& entry :
+         std::filesystem::recursive_directory_iterator(root)) {
+        if (!entry.is_regular_file()) {
+            continue;
+        }
+
+        const auto& path = entry.path();
+        auto extension = path.extension();
+        if (extension != ".slang" && extension != ".slangh") {
+            continue;
+        }
+
+        found_shader_source = true;
+        CAPTURE(path);
+        CHECK(extension == ".slang");
+        CHECK_FALSE(has_include_directive(path));
+    }
+
+    CHECK(found_shader_source);
+}
 
 #ifdef FEI_HAS_SLANG_SDK
 TEST_CASE("PBR shaders compile through runtime compiler", "[pbr][shader]") {
     for (auto shader_case : PbrShaders) {
         CAPTURE(shader_case.label);
 
-        const auto& shader = compile_pbr_shader(shader_case.label);
+        const auto& output = compile_pbr_shader_output(shader_case.label);
+        const auto& shader = output.description;
         CHECK(shader.stage == shader_case.stage);
         CHECK(shader.path == shader_case.source);
         CHECK_FALSE(shader.source.empty());
         CHECK_FALSE(shader.spirv.empty());
+        CHECK(shader_has_dependency(
+            output,
+            pbr_shader_source_root() /
+                std::filesystem::path(std::string(shader_case.source))
+        ));
+        CHECK_FALSE(output.dependencies.empty());
+        for (const auto& dependency : output.dependencies) {
+            CAPTURE(shader_case.label);
+            CAPTURE(dependency);
+            CHECK(dependency.extension() == ".slang");
+            CHECK(std::filesystem::is_regular_file(dependency));
+        }
     }
+}
+
+TEST_CASE(
+    "PBR shader dependencies include imported Slang modules",
+    "[pbr][shader]"
+) {
+    require_shader_dependencies(
+        "forward.frag",
+        {
+            "forward.slang",
+            "forward/io.slang",
+            "lib/brdf.slang",
+            "lib/color.slang",
+            "lib/constants.slang",
+            "lib/normal.slang",
+            "lib/view.slang",
+            "material/types.slang",
+            "mesh/types.slang",
+            "mesh/vertex_input.slang",
+        }
+    );
+
+    require_shader_dependencies(
+        "deferred_gi_direct.frag",
+        {
+            "deferred_gi_direct.slang",
+            "deferred/gbuffer.slang",
+            "lib/brdf.slang",
+            "lib/color.slang",
+            "lib/constants.slang",
+            "lib/fullscreen.slang",
+            "lib/view.slang",
+            "lighting/evsm.slang",
+            "lighting/types.slang",
+        }
+    );
+
+    require_shader_dependencies(
+        "deferred_gi_indirect.frag",
+        {
+            "deferred_gi_indirect.slang",
+            "deferred/gbuffer.slang",
+            "lib/color.slang",
+            "lib/constants.slang",
+            "lib/fullscreen.slang",
+            "lib/view.slang",
+            "vxgi/basis.slang",
+            "vxgi/types.slang",
+        }
+    );
+
+    require_shader_dependencies(
+        "inject_propagation.comp",
+        {
+            "inject_propagation.slang",
+            "lib/constants.slang",
+            "lib/normal.slang",
+            "vxgi/basis.slang",
+        }
+    );
 }
 
 TEST_CASE(

@@ -1,4 +1,5 @@
 #pragma once
+#include "base/types.hpp"
 #include "core/transform.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
@@ -11,6 +12,9 @@
 #include "graphics/shader_module.hpp"
 #include "graphics/texture.hpp"
 #include "math/color.hpp"
+#include "math/common.hpp"
+#include "math/matrix.hpp"
+#include "math/vector.hpp"
 #include "pbr/material.hpp"
 #include "pbr/mesh_view.hpp"
 #include "pbr/pipeline_specializer.hpp"
@@ -27,6 +31,7 @@
 #include "rendering/view.hpp"
 #include "rendering/visibility.hpp"
 
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <vector>
@@ -52,6 +57,32 @@ struct SpotLight {
     float range {10.0f};
     float inner_cone_angle {15.0f};
     float outer_cone_angle {30.0f};
+};
+
+struct alignas(16) LightingUniform {
+    struct alignas(16) Light {
+        struct alignas(16) Attenuation {
+            float constant {1.0f};
+            float linear {0.1f};
+            float quadratic {0.08f};
+        };
+        float angle_inner_cone {25.0f * DEG2RAD};
+        float angle_outer_cone {30.0f * DEG2RAD};
+        alignas(16) Vector3 ambient;
+        alignas(16) Vector3 diffuse;
+        alignas(16) Vector3 specular;
+        alignas(16) Vector3 position;
+        alignas(16) Vector3 direction;
+        uint32 shadowing_method {2};
+        Attenuation attenuation;
+    };
+    std::array<Light, 3> directional_lights;
+    std::array<Light, 6> point_lights;
+    std::array<Light, 6> spot_lights;
+    uint32 num_directional_lights {0};
+    uint32 num_point_lights {0};
+    uint32 num_spot_lights {0};
+    alignas(16) Matrix4x4 light_view_projection;
 };
 
 class ShadowMapPipelineSpecializer : public PipelineSpecializer {

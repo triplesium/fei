@@ -1,4 +1,12 @@
-#include "common.slangh"
+import lib.constants;
+import lib.normal;
+import lighting.types;
+import lighting.evsm;
+import vxgi.types;
+
+using namespace pbr.constants;
+using namespace pbr.lighting.evsm;
+using namespace pbr.normal;
 
 layout(set = 0, binding = 0, rgba8) RWTexture3D<float4> voxel_albedo;
 layout(set = 0, binding = 1, rgba8) RWTexture3D<float4> voxel_normal;
@@ -16,25 +24,10 @@ struct VxgiInjectRadianceData {
 
 layout(set = 3, binding = 0) ConstantBuffer<VxgiInjectRadianceData> VxgiInjectRadiance;
 
-static const float EPSILON = 1e-30;
-static const float2 exponents = float2(40.0, 5.0);
-static const float light_bleeding_reduction = 0.0;
-
-float3 voxel_to_world(int3 position) {
-    float3 result = float3(position);
-    result *= VxgiVoxelization.voxel_size;
-    return result + VxgiVoxelization.world_min_point;
-}
-
-float3 world_to_voxel(float3 position) {
-    float3 voxel_position = position - VxgiVoxelization.world_min_point;
-    return voxel_position * VxgiVoxelization.voxel_scale;
-}
-
 float trace_shadow(float3 position, float3 direction, float max_tracing_distance) {
     float k = VxgiInjectRadiance.trace_shadow_hit *
         VxgiInjectRadiance.trace_shadow_hit;
-    float voxel_tex_size = 1.0 / VxgiVoxelization.volume_dimension;
+    float voxel_tex_size = VxgiVoxelization.voxel_texel_size;
     float dst = voxel_tex_size * 2.0;
     float3 sample_position = direction * dst + position;
     float visibility = 0.0;
@@ -49,9 +42,9 @@ float trace_shadow(float3 position, float3 direction, float max_tracing_distance
             break;
         }
 
-        float trace_sample = ceil(
-            voxel_albedo[int3(sample_position * float(VxgiVoxelization.volume_dimension))].a
-        ) * k;
+        float trace_sample =
+            ceil(voxel_albedo[VxgiVoxelization.voxel_index(sample_position)].a) *
+            k;
         if (trace_sample > 1.0 - EPSILON) {
             return 0.0;
         }
@@ -62,64 +55,6 @@ float trace_shadow(float3 position, float3 direction, float max_tracing_distance
     }
 
     return 1.0 - visibility;
-}
-
-float linstep(float low, float high, float value) {
-    return clamp((value - low) / (high - low), 0.0, 1.0);
-}
-
-float reduce_light_bleeding(float p_max, float amount) {
-    return linstep(amount, 1.0, p_max);
-}
-
-float2 warp_depth(float depth) {
-    depth = 2.0 * depth - 1.0;
-    float pos = exp(exponents.x * depth);
-    float neg = -exp(-exponents.y * depth);
-    return float2(pos, neg);
-}
-
-float chebyshev(float2 moments, float mean, float min_variance) {
-    if (mean <= moments.x) {
-        return 1.0;
-    }
-
-    float variance = moments.y - moments.x * moments.x;
-    variance = max(variance, min_variance);
-    float d = mean - moments.x;
-    float lit = variance / (variance + d * d);
-    return reduce_light_bleeding(lit, light_bleeding_reduction);
-}
-
-float visibility(float3 position) {
-    float4 light_space_position =
-        mul(Lighting.light_view_projection, float4(position, 1.0));
-    if (abs(light_space_position.w) <= EPSILON) {
-        return 1.0;
-    }
-
-    light_space_position /= light_space_position.w;
-    if (light_space_position.z < -1.0 || light_space_position.z > 1.0) {
-        return 1.0;
-    }
-
-    float2 uv = light_space_position.xy * 0.5 + 0.5;
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-        return 1.0;
-    }
-
-    float4 moments = shadow_map.SampleLevel(shadow_map_sampler, uv, 0.0);
-    if (dot(abs(moments), float4(1.0)) <= EPSILON) {
-        return 1.0;
-    }
-
-    float depth = light_space_position.z * 0.5 + 0.5;
-    float2 warped_depth = warp_depth(depth - 0.0001);
-    float2 depth_scale = 0.0001 * exponents * warped_depth;
-    float2 min_variance = depth_scale * depth_scale;
-    float positive = chebyshev(moments.xz, warped_depth.x, min_variance.x);
-    float negative = chebyshev(moments.yw, warped_depth.y, min_variance.y);
-    return min(positive, negative);
 }
 
 float3 brdf(LightData light, float3 normal, float3 albedo) {
@@ -149,9 +84,14 @@ float4 calculate_directional(
 ) {
     float light_visibility = 1.0;
     if (light.shadowing_method == 1) {
-        light_visibility = visibility(position);
+        light_visibility = visibility_level(
+            shadow_map,
+            shadow_map_sampler,
+            Lighting.light_view_projection,
+            position
+        );
     } else if (light.shadowing_method == 2) {
-        float3 voxel_position = world_to_voxel(position);
+        float3 voxel_position = VxgiVoxelization.world_to_voxel(position);
         light_visibility = trace_shadow(voxel_position, light.direction, 1.0);
     }
 
@@ -175,8 +115,8 @@ float4 calculate_point(LightData light, float3 normal, float3 position, float3 a
 
     float light_visibility = 1.0;
     if (light.shadowing_method == 2) {
-        float3 voxel_position = world_to_voxel(position);
-        float3 light_position = world_to_voxel(light.position);
+        float3 voxel_position = VxgiVoxelization.world_to_voxel(position);
+        float3 light_position = VxgiVoxelization.world_to_voxel(light.position);
         float3 light_dir = light_position - voxel_position;
         float trace_distance = length(light_dir);
         light_dir = normalize(light_dir);
@@ -215,8 +155,8 @@ float4 calculate_spot(LightData light, float3 normal, float3 position, float3 al
 
     float light_visibility = 1.0;
     if (light.shadowing_method == 2) {
-        float3 voxel_position = world_to_voxel(position);
-        float3 light_position = world_to_voxel(light.position);
+        float3 voxel_position = VxgiVoxelization.world_to_voxel(position);
+        float3 light_position = VxgiVoxelization.world_to_voxel(light.position);
         float3 light_dir = light_position - voxel_position;
         float trace_distance = length(light_dir);
         light_dir = normalize(light_dir);
@@ -235,8 +175,7 @@ float4 calculate_spot(LightData light, float3 normal, float3 position, float3 al
 
 float4 calculate_direct_lighting(float3 position, float3 normal, float3 albedo) {
     normal = normalize(normal);
-    float voxel_world_size =
-        1.0 / (VxgiVoxelization.voxel_scale * VxgiVoxelization.volume_dimension);
+    float voxel_world_size = VxgiVoxelization.voxel_world_size;
     float4 direct_lighting = float4(0.0);
     float4 current = float4(0.0);
     uint count = 0;
@@ -276,16 +215,10 @@ float4 calculate_direct_lighting(float3 position, float3 normal, float3 albedo) 
     return direct_lighting;
 }
 
-float3 decode_normal(float3 normal) {
-    return normal * 2.0 - float3(1.0);
-}
-
 [shader("compute")]
 [numthreads(8, 8, 8)]
 void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
-    if (dispatch_thread_id.x >= VxgiVoxelization.volume_dimension ||
-        dispatch_thread_id.y >= VxgiVoxelization.volume_dimension ||
-        dispatch_thread_id.z >= VxgiVoxelization.volume_dimension) {
+    if (!VxgiVoxelization.contains(dispatch_thread_id)) {
         return;
     }
 
@@ -297,11 +230,11 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
 
     albedo.a = 0.0;
     float3 base_normal = voxel_normal[write_pos].xyz;
-    float3 normal = decode_normal(base_normal);
+    float3 normal = decode(base_normal);
     float3 emissive = voxel_emissive[write_pos].rgb;
 
     if (albedo.r > 0.0 || albedo.g > 0.0 || albedo.b > 0.0) {
-        float3 world_position = voxel_to_world(write_pos);
+        float3 world_position = VxgiVoxelization.voxel_to_world(write_pos);
         albedo = calculate_direct_lighting(world_position, normal, albedo.rgb);
     }
 
