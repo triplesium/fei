@@ -29,7 +29,7 @@ struct GeometryOutput {
 };
 
 layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> Mesh;
-layout(set = 2) ParameterBlock<StandardMaterialBlock> material;
+layout(set = 2) ParameterBlock<StandardMaterialResources> material;
 layout(set = 3, binding = 0, rgba8) RWTexture3D<float4> voxel_albedo;
 layout(set = 3, binding = 1, rgba8) RWTexture3D<float4> voxel_normal;
 layout(set = 3, binding = 2, rgba8) RWTexture3D<float4> voxel_emissive;

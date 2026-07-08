@@ -5,12 +5,7 @@ import rendering.fullscreen;
 using namespace rendering.color;
 using namespace pbr.deferred;
 
-layout(set = 1, binding = 0) Texture2D<float4> g_position_ao;
-layout(set = 1, binding = 1) Texture2D<float4> g_normal_roughness;
-layout(set = 1, binding = 2) Texture2D<float4> g_albedo_metallic;
-layout(set = 1, binding = 3) Texture2D<float4> g_specular;
-layout(set = 1, binding = 4) Texture2D<float4> g_emissive_depth;
-layout(set = 1, binding = 5) SamplerState g_buffer_sampler;
+layout(set = 1) ParameterBlock<GBuffer> gbuffer;
 layout(set = 2, binding = 0) Texture2D<float4> direct_lighting;
 layout(set = 2, binding = 1) Texture2D<float4> indirect_lighting;
 layout(set = 2, binding = 2) SamplerState composite_sampler;
@@ -25,8 +20,8 @@ float4 upsample_indirect_bilateral(float2 uv) {
     float2 low_size = float2(low_width, low_height);
     float2 low_texel = 1.0 / low_size;
 
-    float3 center_position = read_position(g_position_ao, g_buffer_sampler, uv);
-    float3 center_normal = read_normal(g_normal_roughness, g_buffer_sampler, uv);
+    float3 center_position = gbuffer.read_position(uv);
+    float3 center_normal = gbuffer.read_normal(uv);
 
     float2 low_coord = uv * low_size - 0.5;
     float2 low_base = floor(low_coord);
@@ -41,8 +36,8 @@ float4 upsample_indirect_bilateral(float2 uv) {
             p = clamp(p, float2(0.0), float2(1.0));
 
             float4 indirect = indirect_lighting.Sample(composite_sampler, p);
-            float3 sample_position = read_position(g_position_ao, g_buffer_sampler, p);
-            float3 normal = read_normal(g_normal_roughness, g_buffer_sampler, p);
+            float3 sample_position = gbuffer.read_position(p);
+            float3 normal = gbuffer.read_normal(p);
 
             float pos_delta = length(sample_position - center_position);
             float w_depth = exp(-pos_delta * position_sigma);
@@ -67,8 +62,7 @@ float4 upsample_indirect_bilateral(float2 uv) {
 
 [shader("fragment")]
 float4 fragment_main(FullscreenFragmentInput input) : SV_Target0 {
-    float3 emissive =
-        read_emissive(g_emissive_depth, g_buffer_sampler, input.tex_coords);
+    float3 emissive = gbuffer.read_emissive(input.tex_coords);
     float3 direct_lighting_value =
         direct_lighting.Sample(composite_sampler, input.tex_coords).rgb;
     float4 indirect_lighting_value =

@@ -6,6 +6,11 @@ public struct Attenuation {
     public float constant;
     public float linear;
     public float quadratic;
+
+    public float falloff(float distance) {
+        return 1.0 /
+            (constant + linear * distance + quadratic * distance * distance + 1.0);
+    }
 };
 
 public struct Light {

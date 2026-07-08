@@ -2,7 +2,7 @@ import rendering.normal;
 
 using namespace rendering.normal;
 
-public struct StandardMaterial {
+public struct StandardMaterialUniform {
     public float3 albedo;
     public float metallic;
     public float roughness;
@@ -18,8 +18,52 @@ public static const int STANDARD_MATERIAL_FLAG_ROUGHNESS_MAP = 1 << 3;
 public static const int STANDARD_MATERIAL_FLAG_EMISSIVE_MAP = 1 << 4;
 public static const int STANDARD_MATERIAL_FLAG_SPECULAR_MAP = 1 << 5;
 
-public struct StandardMaterialBlock {
-    public StandardMaterial material;
+public struct StandardMaterial {
+    public float3 albedo;
+    public float metallic;
+    public float roughness;
+    public float3 emissive;
+    public float3 specular;
+    public float3 f0;
+
+    public static StandardMaterial from_values(
+        float3 albedo,
+        float metallic,
+        float roughness,
+        float3 emissive,
+        float3 specular
+    ) {
+        return StandardMaterial.from_f0(
+            albedo,
+            metallic,
+            roughness,
+            emissive,
+            specular,
+            lerp(float3(0.04), albedo, metallic)
+        );
+    }
+
+    public static StandardMaterial from_f0(
+        float3 albedo,
+        float metallic,
+        float roughness,
+        float3 emissive,
+        float3 specular,
+        float3 f0
+    ) {
+        StandardMaterial result;
+        result.albedo = albedo;
+        result.metallic = metallic;
+        result.roughness = roughness;
+        result.emissive = emissive;
+        result.specular = specular;
+        result.f0 = f0;
+        return result;
+    }
+};
+
+public struct StandardMaterialResources {
+    public StandardMaterialUniform material;
     public Texture2D<float4> albedo_map;
     public Texture2D<float4> normal_map;
     public Texture2D<float4> metallic_map;
@@ -159,6 +203,16 @@ public struct StandardMaterialBlock {
         }
 #endif
         return specular;
+    }
+
+    public StandardMaterial sample(float2 tex_coords) {
+        return StandardMaterial.from_values(
+            sample_albedo(tex_coords),
+            sample_metallic(tex_coords),
+            clamp(sample_roughness(tex_coords), 0.01, 1.0),
+            sample_emissive(tex_coords),
+            sample_specular(tex_coords)
+        );
     }
 
     public float3 sample_normal_from_derivatives(

@@ -106,9 +106,7 @@ float4 calculate_point(Light light, float3 normal, float3 position, float3 albed
     light.direction = light.position - position;
     float d = length(light.direction);
     light.direction = normalize(light.direction);
-    float falloff = 1.0 /
-        (light.attenuation.constant + light.attenuation.linear * d +
-         light.attenuation.quadratic * d * d + 1.0);
+    float falloff = light.attenuation.falloff(d);
     if (falloff <= 0.0) {
         return float4(0.0);
     }
@@ -132,7 +130,9 @@ float4 calculate_point(Light light, float3 normal, float3 position, float3 albed
 
 float4 calculate_spot(Light light, float3 normal, float3 position, float3 albedo) {
     float3 spot_direction = light.direction;
-    light.direction = normalize(light.position - position);
+    float3 light_vector = light.position - position;
+    float distance_to_light = length(light_vector);
+    light.direction = normalize(light_vector);
     float cos_angle = dot(-light.direction, spot_direction);
     if (cos_angle < light.angle_outer_cone) {
         return float4(0.0);
@@ -145,10 +145,7 @@ float4 calculate_spot(Light light, float3 normal, float3 position, float3 albedo
         return float4(0.0);
     }
 
-    float distance_to_light = distance(light.position, position);
-    float falloff = 1.0 /
-        (light.attenuation.constant + light.attenuation.linear * distance_to_light +
-         light.attenuation.quadratic * distance_to_light * distance_to_light + 1.0);
+    float falloff = light.attenuation.falloff(distance_to_light);
     if (falloff <= 0.0) {
         return float4(0.0);
     }

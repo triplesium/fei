@@ -1,3 +1,5 @@
+import pbr.material.types;
+import pbr.shading.types;
 import rendering.constants;
 
 namespace pbr.brdf {
@@ -21,11 +23,19 @@ public float geometry_schlick_ggx(float normal_dot_view, float roughness) {
         max(normal_dot_view * (1.0 - k) + k, EPSILON);
 }
 
+public float geometry_smith_from_dot(
+    float normal_dot_view,
+    float normal_dot_light,
+    float roughness
+) {
+    return geometry_schlick_ggx(normal_dot_view, roughness) *
+        geometry_schlick_ggx(normal_dot_light, roughness);
+}
+
 public float geometry_smith(float3 normal, float3 view, float3 light, float roughness) {
     float normal_dot_view = max(dot(normal, view), 0.0);
     float normal_dot_light = max(dot(normal, light), 0.0);
-    return geometry_schlick_ggx(normal_dot_view, roughness) *
-        geometry_schlick_ggx(normal_dot_light, roughness);
+    return geometry_smith_from_dot(normal_dot_view, normal_dot_light, roughness);
 }
 
 public float3 fresnel_schlick(float cos_theta, float3 f0) {
@@ -37,83 +47,76 @@ public float3 fresnel_schlick_roughness(float cos_theta, float3 f0, float roughn
         pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
 }
 
-public struct BrdfSurface {
-    public float3 normal;
-    public float3 view;
-    public float3 light;
-    public float3 radiance;
-    public float3 albedo;
-    public float metallic;
-    public float roughness;
-    public float3 f0;
+public struct BrdfEval {
+    public ShadingPoint point;
+    public StandardMaterial material;
+    public LightSample light;
 
     public property float3 half_vector {
         get {
-            return normalize(view + light);
+            return normalize(point.view_ws + light.direction_ws);
         }
     }
 
     public property float normal_dot_light {
         get {
-            return max(dot(normal, light), 0.0);
+            return max(dot(point.normal_ws, light.direction_ws), 0.0);
         }
     }
 
     public property float normal_dot_view {
         get {
-            return max(dot(normal, view), 0.0);
+            return point.normal_dot_view;
         }
     }
+};
 
-    public property float3 fresnel {
-        get {
-            return fresnel_schlick(clamp(dot(half_vector, view), 0.0, 1.0), f0);
-        }
-    }
-
-    public float3 evaluate_cook_torrance() {
-        float n_dot_l = normal_dot_light;
-        float n_dot_v = normal_dot_view;
+public struct CookTorranceBrdf {
+    public float3 evaluate(BrdfEval input) {
+        float n_dot_l = input.normal_dot_light;
+        float n_dot_v = input.normal_dot_view;
         if (n_dot_l <= 0.0 || n_dot_v <= 0.0) {
             return float3(0.0);
         }
 
-        float3 h = half_vector;
-        float3 f = fresnel_schlick(clamp(dot(h, view), 0.0, 1.0), f0);
-        float ndf = distribution_ggx(normal, h, roughness);
-        float geometry = geometry_smith(normal, view, light, roughness);
+        float3 h = input.half_vector;
+        float half_dot_view = clamp(dot(h, input.point.view_ws), 0.0, 1.0);
+        float3 f = fresnel_schlick(half_dot_view, input.material.f0);
+        float ndf = distribution_ggx(
+            input.point.normal_ws,
+            h,
+            input.material.roughness
+        );
+        float geometry = geometry_smith_from_dot(
+            n_dot_v,
+            n_dot_l,
+            input.material.roughness
+        );
 
         float3 numerator = ndf * geometry * f;
         float denominator = 4.0 * n_dot_v * n_dot_l + 0.001;
         float3 specular = numerator / denominator;
 
         float3 k_s = f;
-        float3 k_d = (float3(1.0) - k_s) * (1.0 - metallic);
-        float3 diffuse = k_d * albedo / PI;
-        return (diffuse + specular) * radiance * n_dot_l;
+        float3 k_d =
+            (float3(1.0) - k_s) * (1.0 - input.material.metallic);
+        float3 diffuse = k_d * input.material.albedo / PI;
+        return (diffuse + specular) * input.light.radiance * n_dot_l;
     }
 };
 
 public float3 evaluate_cook_torrance(
-    float3 normal,
-    float3 view,
-    float3 light,
-    float3 radiance,
-    float3 albedo,
-    float metallic,
-    float roughness,
-    float3 f0
+    ShadingPoint point,
+    StandardMaterial material,
+    LightSample light
 ) {
-    BrdfSurface surface;
-    surface.normal = normal;
-    surface.view = view;
-    surface.light = light;
-    surface.radiance = radiance;
-    surface.albedo = albedo;
-    surface.metallic = metallic;
-    surface.roughness = roughness;
-    surface.f0 = f0;
-    return surface.evaluate_cook_torrance();
+    BrdfEval input;
+    input.point = point;
+    input.material = material;
+    input.light = light;
+
+    CookTorranceBrdf brdf;
+    return brdf.evaluate(input);
 }
 
 } // namespace pbr.brdf

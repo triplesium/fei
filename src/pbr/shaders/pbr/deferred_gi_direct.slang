@@ -1,5 +1,7 @@
 import pbr.deferred.gbuffer;
 import pbr.lib.brdf;
+import pbr.material.types;
+import pbr.shading.types;
 import rendering.fullscreen;
 import rendering.view;
 import pbr.lighting.types;
@@ -10,79 +12,65 @@ using namespace pbr.deferred;
 using namespace pbr.lighting.evsm;
 
 layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
-layout(set = 1, binding = 0) Texture2D<float4> g_position_ao;
-layout(set = 1, binding = 1) Texture2D<float4> g_normal_roughness;
-layout(set = 1, binding = 2) Texture2D<float4> g_albedo_metallic;
-layout(set = 1, binding = 3) Texture2D<float4> g_specular;
-layout(set = 1, binding = 5) SamplerState g_buffer_sampler;
+layout(set = 1) ParameterBlock<GBuffer> gbuffer;
 layout(set = 2, binding = 0) ConstantBuffer<LightingUniform> Lighting;
 layout(set = 2, binding = 1) Texture2D<float4> shadow_map;
 layout(set = 2, binding = 2) SamplerState shadow_map_sampler;
 
 float3 calculate_directional(
     Light light,
-    GBufferSurface surface,
-    float3 view_dir
+    ShadingPoint point,
+    StandardMaterial material
 ) {
     float light_visibility =
         visibility(
             shadow_map,
             shadow_map_sampler,
             Lighting.light_view_projection,
-            surface.position
+            point.position_ws
         );
     if (light_visibility <= 0.0) {
         return float3(0.0);
     }
 
-    float3 light_dir = normalize(light.direction);
-    float3 radiance = max(light.diffuse, float3(0.0));
-    return evaluate_cook_torrance(
-        surface.normal,
-        view_dir,
-        light_dir,
-        radiance,
-        surface.albedo,
-        surface.metallic,
-        surface.roughness,
-        surface.f0
-    ) * light_visibility;
+    LightSample light_sample = LightSample.from_radiance(
+        normalize(light.direction),
+        max(light.diffuse, float3(0.0))
+    );
+
+    return evaluate_cook_torrance(point, material, light_sample) *
+        light_visibility;
 }
 
 float3 calculate_point(
     Light light,
-    GBufferSurface surface,
-    float3 view_dir
+    ShadingPoint point,
+    StandardMaterial material
 ) {
-    float3 light_dir = light.position - surface.position;
+    float3 light_dir = light.position - point.position_ws;
     float d = length(light_dir);
     light_dir = normalize(light_dir);
-    float falloff = 1.0 /
-        (light.attenuation.constant + light.attenuation.linear * d +
-         light.attenuation.quadratic * d * d + 1.0);
+    float falloff = light.attenuation.falloff(d);
     if (falloff <= 0.0) {
         return float3(0.0);
     }
 
-    float3 radiance = max(light.diffuse, float3(0.0)) * falloff;
-    return evaluate_cook_torrance(
-        surface.normal,
-        view_dir,
+    LightSample light_sample = LightSample.from_radiance(
         light_dir,
-        radiance,
-        surface.albedo,
-        surface.metallic,
-        surface.roughness,
-        surface.f0
+        max(light.diffuse, float3(0.0)) * falloff
     );
+
+    return evaluate_cook_torrance(point, material, light_sample);
 }
 
 float3 calculate_spot(
     Light light,
-    GBufferSurface surface,
-    float3 view_dir
+    ShadingPoint point,
+    StandardMaterial material
 ) {
-    float3 light_dir = normalize(light.position - surface.position);
+    float3 light_vector = light.position - point.position_ws;
+    float dst = length(light_vector);
+    float3 light_dir = normalize(light_vector);
     float cos_angle = dot(-light_dir, light.direction);
     if (cos_angle < light.angle_outer_cone) {
         return float3(0.0);
@@ -95,52 +83,46 @@ float3 calculate_spot(
         return float3(0.0);
     }
 
-    float dst = distance(light.position, surface.position);
-    float falloff = 1.0 /
-        (light.attenuation.constant + light.attenuation.linear * dst +
-         light.attenuation.quadratic * dst * dst + 1.0);
+    float falloff = light.attenuation.falloff(dst);
     if (falloff <= 0.0) {
         return float3(0.0);
     }
 
-    float3 radiance = max(light.diffuse, float3(0.0)) * falloff * spot_falloff;
-    return evaluate_cook_torrance(
-        surface.normal,
-        view_dir,
+    LightSample light_sample = LightSample.from_radiance(
         light_dir,
-        radiance,
-        surface.albedo,
-        surface.metallic,
-        surface.roughness,
-        surface.f0
+        max(light.diffuse, float3(0.0)) * falloff * spot_falloff
     );
+
+    return evaluate_cook_torrance(point, material, light_sample);
 }
 
 float3 calculate_direct_lighting(GBufferSurface surface) {
     float3 direct_lighting = float3(0.0);
     float3 view_dir = View.view_direction(surface.position);
+    ShadingPoint point = surface.shading_point(view_dir);
+    StandardMaterial material = surface.material;
 
     for (uint i = 0; i < Lighting.num_directional_lights; ++i) {
         direct_lighting += calculate_directional(
             Lighting.directional_lights[i],
-            surface,
-            view_dir
+            point,
+            material
         );
     }
 
     for (uint i = 0; i < Lighting.num_point_lights; ++i) {
         direct_lighting += calculate_point(
             Lighting.point_lights[i],
-            surface,
-            view_dir
+            point,
+            material
         );
     }
 
     for (uint i = 0; i < Lighting.num_spot_lights; ++i) {
         direct_lighting += calculate_spot(
             Lighting.spot_lights[i],
-            surface,
-            view_dir
+            point,
+            material
         );
     }
 
@@ -149,14 +131,7 @@ float3 calculate_direct_lighting(GBufferSurface surface) {
 
 [shader("fragment")]
 float4 fragment_main(FullscreenFragmentInput input) : SV_Target0 {
-    GBufferSurface surface = read_lighting_surface(
-        g_position_ao,
-        g_normal_roughness,
-        g_albedo_metallic,
-        g_specular,
-        g_buffer_sampler,
-        input.tex_coords
-    );
+    GBufferSurface surface = gbuffer.read_lighting_surface(input.tex_coords);
     float3 direct_lighting = calculate_direct_lighting(surface);
     return float4(direct_lighting, 1.0);
 }

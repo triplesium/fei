@@ -8,7 +8,7 @@ using namespace pbr.prepass_io;
 
 layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
 layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> Mesh;
-layout(set = 2) ParameterBlock<StandardMaterialBlock> material;
+layout(set = 2) ParameterBlock<StandardMaterialResources> material;
 
 [shader("vertex")]
 VertexOutput vertex_main(MeshVertexInput input) {

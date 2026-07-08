@@ -437,6 +437,7 @@ TEST_CASE(
             "pbr/forward.slang",
             "pbr/forward/io.slang",
             "pbr/lib/brdf.slang",
+            "pbr/shading/types.slang",
             "rendering/color.slang",
             "rendering/constants.slang",
             "rendering/normal.slang",
@@ -456,9 +457,12 @@ TEST_CASE(
             "rendering/color.slang",
             "rendering/constants.slang",
             "rendering/fullscreen.slang",
+            "rendering/normal.slang",
             "rendering/view.slang",
             "pbr/lighting/evsm.slang",
             "pbr/lighting/types.slang",
+            "pbr/material/types.slang",
+            "pbr/shading/types.slang",
         }
     );
 
