@@ -61,6 +61,7 @@ end
 
 target("fei-rendering")
     set_kind("static")
+    add_shader_source("rendering", path.join(os.scriptdir(), "shaders"))
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp", "src/mesh/*.cpp")
     add_includedirs("include", {public = true})

@@ -97,23 +97,32 @@ TEST_CASE(
                 "shader-source-prefix-reader";
     std::filesystem::remove_all(root);
     write_text_file(root / "pbr" / "forward.slang", "pbr source");
+    write_text_file(
+        root / "modules" / "rendering" / "color.slang",
+        "rendering source"
+    );
     write_text_file(root / "ui" / "widget.slang", "ui source");
 
     ShaderSourceRegistry registry;
     registry.add_root("pbr", root / "pbr");
+    registry.add_root("rendering", root / "modules");
     registry.add_root("ui", root / "ui");
     ShaderAssetSource source(std::move(registry));
 
     REQUIRE(source.exists("pbr/forward.slang"));
+    REQUIRE(source.exists("rendering/color.slang"));
     REQUIRE(source.exists("ui/widget.slang"));
     REQUIRE_FALSE(source.exists("forward.slang"));
     REQUIRE_FALSE(source.exists("missing/forward.slang"));
 
     auto pbr_reader = source.try_get_reader("pbr/forward.slang");
+    auto rendering_reader = source.try_get_reader("rendering/color.slang");
     auto ui_reader = source.try_get_reader("ui/widget.slang");
 
     REQUIRE(pbr_reader);
+    REQUIRE(rendering_reader);
     REQUIRE(ui_reader);
     REQUIRE(pbr_reader->as_string_view() == "pbr source");
+    REQUIRE(rendering_reader->as_string_view() == "rendering source");
     REQUIRE(ui_reader->as_string_view() == "ui source");
 }

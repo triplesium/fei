@@ -29,29 +29,33 @@ shader_load_error(const LoadContext& context, std::string message) {
     return shader_load_error(context.asset_path(), std::move(message));
 }
 
-Optional<std::filesystem::path>
-root_relative_path(const std::filesystem::path& path, std::string_view prefix) {
+std::vector<std::filesystem::path> root_relative_paths(
+    const std::filesystem::path& path,
+    std::string_view prefix
+) {
     if (path.empty() || path.is_absolute()) {
-        return nullopt;
+        return {};
     }
 
     if (prefix.empty()) {
-        return path;
+        return {path};
     }
 
     auto it = path.begin();
     if (it == path.end() || it->generic_string() != prefix) {
-        return nullopt;
+        return {};
     }
 
-    std::filesystem::path relative;
+    std::vector<std::filesystem::path> paths {path};
+
+    std::filesystem::path stripped;
     for (++it; it != path.end(); ++it) {
-        relative /= *it;
+        stripped /= *it;
     }
-    if (relative.empty()) {
-        return nullopt;
+    if (!stripped.empty() && stripped != path) {
+        paths.push_back(std::move(stripped));
     }
-    return relative;
+    return paths;
 }
 
 std::vector<std::filesystem::path>
@@ -117,23 +121,20 @@ void ShaderSourceRegistry::add_root(
 Optional<ResolvedShaderSource>
 ShaderSourceRegistry::resolve(const std::filesystem::path& path) const {
     for (const auto& source : m_roots) {
-        auto relative = root_relative_path(path, source.prefix);
-        if (!relative) {
-            continue;
-        }
+        for (auto relative : root_relative_paths(path, source.prefix)) {
+            for (auto candidate : shader_source_candidates(relative)) {
+                auto source_path = source.root / candidate;
+                if (!std::filesystem::exists(source_path)) {
+                    continue;
+                }
 
-        for (auto candidate : shader_source_candidates(*relative)) {
-            auto source_path = source.root / candidate;
-            if (!std::filesystem::exists(source_path)) {
-                continue;
+                return ResolvedShaderSource {
+                    .prefix = source.prefix,
+                    .root = source.root,
+                    .relative_path = std::move(candidate),
+                    .source_path = source_path.lexically_normal(),
+                };
             }
-
-            return ResolvedShaderSource {
-                .prefix = source.prefix,
-                .root = source.root,
-                .relative_path = std::move(candidate),
-                .source_path = source_path.lexically_normal(),
-            };
         }
     }
     return nullopt;

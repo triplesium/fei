@@ -341,14 +341,26 @@ bool shader_has_dependency(
            ) != output.dependencies.end();
 }
 
+std::filesystem::path
+shader_dependency_source_path(std::string_view dependency) {
+    auto logical_path = std::filesystem::path(std::string(dependency));
+    auto registry = generated_shader_source_registry();
+    auto source = registry.resolve(logical_path);
+    if (!source) {
+        source = registry.resolve(pbr_shader_logical_path(dependency));
+    }
+    CAPTURE(dependency);
+    REQUIRE(source.has_value());
+    return source->source_path;
+}
+
 void require_shader_dependencies(
     std::string_view shader_name,
     std::initializer_list<std::string_view> dependencies
 ) {
     const auto& output = compile_pbr_shader_output(shader_name);
     for (auto dependency : dependencies) {
-        auto path = pbr_shader_source_root() /
-                    std::filesystem::path(std::string(dependency));
+        auto path = shader_dependency_source_path(dependency);
         CAPTURE(shader_name);
         CAPTURE(path);
         CHECK(shader_has_dependency(output, path));
@@ -403,8 +415,7 @@ TEST_CASE("PBR shaders compile through runtime compiler", "[pbr][shader]") {
         CHECK_FALSE(shader.spirv.empty());
         CHECK(shader_has_dependency(
             output,
-            pbr_shader_source_root() /
-                std::filesystem::path(std::string(shader_case.source))
+            shader_dependency_source_path(shader_case.source)
         ));
         CHECK_FALSE(output.dependencies.empty());
         for (const auto& dependency : output.dependencies) {
@@ -423,55 +434,55 @@ TEST_CASE(
     require_shader_dependencies(
         "forward.frag",
         {
-            "forward.slang",
-            "forward/io.slang",
-            "lib/brdf.slang",
-            "lib/color.slang",
-            "lib/constants.slang",
-            "lib/normal.slang",
-            "lib/view.slang",
-            "material/types.slang",
-            "mesh/types.slang",
-            "mesh/vertex_input.slang",
+            "pbr/forward.slang",
+            "pbr/forward/io.slang",
+            "pbr/lib/brdf.slang",
+            "rendering/color.slang",
+            "rendering/constants.slang",
+            "rendering/normal.slang",
+            "rendering/view.slang",
+            "pbr/material/types.slang",
+            "rendering/mesh.slang",
+            "rendering/vertex_input.slang",
         }
     );
 
     require_shader_dependencies(
         "deferred_gi_direct.frag",
         {
-            "deferred_gi_direct.slang",
-            "deferred/gbuffer.slang",
-            "lib/brdf.slang",
-            "lib/color.slang",
-            "lib/constants.slang",
-            "lib/fullscreen.slang",
-            "lib/view.slang",
-            "lighting/evsm.slang",
-            "lighting/types.slang",
+            "pbr/deferred_gi_direct.slang",
+            "pbr/deferred/gbuffer.slang",
+            "pbr/lib/brdf.slang",
+            "rendering/color.slang",
+            "rendering/constants.slang",
+            "rendering/fullscreen.slang",
+            "rendering/view.slang",
+            "pbr/lighting/evsm.slang",
+            "pbr/lighting/types.slang",
         }
     );
 
     require_shader_dependencies(
         "deferred_gi_indirect.frag",
         {
-            "deferred_gi_indirect.slang",
-            "deferred/gbuffer.slang",
-            "lib/color.slang",
-            "lib/constants.slang",
-            "lib/fullscreen.slang",
-            "lib/view.slang",
-            "vxgi/basis.slang",
-            "vxgi/types.slang",
+            "pbr/deferred_gi_indirect.slang",
+            "pbr/deferred/gbuffer.slang",
+            "rendering/color.slang",
+            "rendering/constants.slang",
+            "rendering/fullscreen.slang",
+            "rendering/view.slang",
+            "pbr/vxgi/basis.slang",
+            "pbr/vxgi/types.slang",
         }
     );
 
     require_shader_dependencies(
         "inject_propagation.comp",
         {
-            "inject_propagation.slang",
-            "lib/constants.slang",
-            "lib/normal.slang",
-            "vxgi/basis.slang",
+            "pbr/inject_propagation.slang",
+            "rendering/constants.slang",
+            "rendering/normal.slang",
+            "pbr/vxgi/basis.slang",
         }
     );
 }

@@ -96,7 +96,7 @@ local function shader_sources_define_value()
 end
 
 rule("fei.shader_sources")
-    on_load(function(target)
+    after_load(function(target)
         local sources = shader_sources_define_value()
         if sources and #sources > 0 then
             target:add("defines", "FEI_SHADER_SOURCES=\"" .. sources .. "\"")
