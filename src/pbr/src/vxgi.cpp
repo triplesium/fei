@@ -359,17 +359,17 @@ void setup_vxgi(
 
     std::vector<std::shared_ptr<const ShaderModule>> shader_modules {
         shader_cache->get_or_compile(
-            AssetPath("shader://voxelization.slang"),
+            AssetPath("shader://pbr/voxelization.slang"),
             ShaderStages::Vertex,
             {}
         ),
         shader_cache->get_or_compile(
-            AssetPath("shader://voxelization.slang"),
+            AssetPath("shader://pbr/voxelization.slang"),
             ShaderStages::Geometry,
             {}
         ),
         shader_cache->get_or_compile(
-            AssetPath("shader://voxelization.slang"),
+            AssetPath("shader://pbr/voxelization.slang"),
             ShaderStages::Fragment,
             {}
         ),
@@ -673,7 +673,7 @@ void setup_vxgi_generate_mipmap_base(
     Commands commands
 ) {
     auto shader_module = shader_cache->get_or_compile(
-        AssetPath("shader://aniso_mipmapbase.slang"),
+        AssetPath("shader://pbr/aniso_mipmapbase.slang"),
         ShaderStages::Compute,
         {}
     );
@@ -795,7 +795,7 @@ void setup_vxgi_generate_mipmap_volume(
     Commands commands
 ) {
     auto shader_module = shader_cache->get_or_compile(
-        AssetPath("shader://aniso_mipmapvolume.slang"),
+        AssetPath("shader://pbr/aniso_mipmapvolume.slang"),
         ShaderStages::Compute,
         {}
     );
@@ -1005,7 +1005,7 @@ void setup_inject_radiance(
     Commands commands
 ) {
     auto shader_module = shader_cache->get_or_compile(
-        AssetPath("shader://inject_radiance.slang"),
+        AssetPath("shader://pbr/inject_radiance.slang"),
         ShaderStages::Compute,
         {}
     );
@@ -1140,7 +1140,7 @@ void setup_inject_propagation(
     Commands commands
 ) {
     auto shader_module = shader_cache->get_or_compile(
-        AssetPath("shader://inject_propagation.slang"),
+        AssetPath("shader://pbr/inject_propagation.slang"),
         ShaderStages::Compute,
         {}
     );

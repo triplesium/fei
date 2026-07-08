@@ -1,4 +1,4 @@
-public struct ViewData {
+public struct ViewUniform {
     public float4x4 clip_from_world;
     public float4x4 view_from_world;
     public float4x4 clip_from_view;

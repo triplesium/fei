@@ -62,9 +62,49 @@ end
 
 local project_dir = os.scriptdir():gsub("\\", "/")
 add_defines("FEI_ASSETS_PATH=\"" .. project_dir .. "/assets\"")
-add_defines("FEI_SHADER_SOURCE_PATH=\"" .. project_dir .. "/src/pbr/shaders\"")
 add_defines("FEI_SHADER_ASSETS_PATH=\"" .. project_dir .. "/build/generated/shaders\"")
 add_defines("FEI_PROFILE_OUTPUT_PATH=\"" .. project_dir .. "/build/profile/latest\"")
+
+local shader_sources = {}
+
+function add_shader_source(prefix, root)
+    if not prefix or #prefix == 0 then
+        raise("shader source prefix is required")
+    end
+    if not root or #root == 0 then
+        raise("shader source root is required")
+    end
+
+    local normalized_prefix = prefix:gsub("\\", "/")
+    local normalized_root = path.absolute(root):gsub("\\", "/")
+    table.insert(shader_sources, {
+        prefix = normalized_prefix,
+        root = normalized_root,
+    })
+end
+
+local function shader_sources_define_value()
+    table.sort(shader_sources, function(a, b)
+        return a.prefix < b.prefix
+    end)
+
+    local entries = {}
+    for _, source in ipairs(shader_sources) do
+        table.insert(entries, source.prefix .. "=" .. source.root)
+    end
+    return table.concat(entries, ";")
+end
+
+rule("fei.shader_sources")
+    on_load(function(target)
+        local sources = shader_sources_define_value()
+        if sources and #sources > 0 then
+            target:add("defines", "FEI_SHADER_SOURCES=\"" .. sources .. "\"")
+        end
+    end)
+rule_end()
+
+add_rules("fei.shader_sources")
 
 rule("fei.test")
     on_load(function(target)

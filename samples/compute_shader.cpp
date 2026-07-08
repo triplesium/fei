@@ -103,7 +103,7 @@ void equirect_to_cubemap(
         }
     );
     auto compute_shader = shader_cache->get_or_compile(
-        AssetPath("shader://equirect2cube.slang"),
+        AssetPath("shader://pbr/equirect2cube.slang"),
         ShaderStages::Compute,
         {}
     );
@@ -200,7 +200,7 @@ void cubemap_to_irradiance_map(
         }
     );
     auto compute_shader = shader_cache->get_or_compile(
-        AssetPath("shader://cubemap2irradiance.slang"),
+        AssetPath("shader://pbr/cubemap2irradiance.slang"),
         ShaderStages::Compute,
         {}
     );

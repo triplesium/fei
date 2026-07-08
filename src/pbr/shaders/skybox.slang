@@ -9,7 +9,7 @@ struct VertexOutput {
     [vk::location(0)] float3 tex_coords : TEXCOORD0;
 };
 
-layout(set = 0, binding = 0) ConstantBuffer<ViewData> View;
+layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
 layout(set = 1, binding = 0) TextureCube<float4> skybox;
 layout(set = 1, binding = 1) SamplerState skybox_sampler;
 

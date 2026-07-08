@@ -28,16 +28,13 @@ struct GeometryOutput {
     [vk::location(4)] nointerpolation float4 triangle_aabb : TEXCOORD1;
 };
 
-layout(set = 1, binding = 0) ConstantBuffer<MeshData> Mesh;
-layout(set = 2, binding = 0) ConstantBuffer<PbrMaterialData> Material;
-layout(set = 2, binding = 1) Texture2D<float4> albedo_map;
-layout(set = 2, binding = 5) Texture2D<float4> emissive_map;
-layout(set = 2, binding = 7) SamplerState sampler;
+layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> Mesh;
+layout(set = 2) ParameterBlock<StandardMaterialBlock> material;
 layout(set = 3, binding = 0, rgba8) RWTexture3D<float4> voxel_albedo;
 layout(set = 3, binding = 1, rgba8) RWTexture3D<float4> voxel_normal;
 layout(set = 3, binding = 2, rgba8) RWTexture3D<float4> voxel_emissive;
 layout(set = 3, binding = 4, r8) RWTexture3D<float4> static_voxel_flag;
-layout(set = 4, binding = 0) ConstantBuffer<VxgiVoxelizationData> VxgiVoxelization;
+layout(set = 4, binding = 0) ConstantBuffer<VxgiVoxelizationUniform> VxgiVoxelization;
 
 int calculate_axis(VertexOutput input[3]) {
     float3 p1 = input[1].position.xyz - input[0].position.xyz;
@@ -179,7 +176,7 @@ float4 fragment_main(GeometryOutput input) : SV_Target0 {
     }
 
     int3 position = int3(input.ws_position);
-    float4 albedo = albedo_map.Sample(sampler, input.tex_coords);
+    float4 albedo = material.sample_albedo_texture(input.tex_coords);
     float opacity = albedo.a;
 
     if (VxgiVoxelization.flag_static_voxels == 0) {
@@ -190,12 +187,12 @@ float4 fragment_main(GeometryOutput input) : SV_Target0 {
     }
 
     if (opacity > 0.0) {
-        albedo.rgb = srgb_to_linear(Material.albedo) * srgb_to_linear(albedo.rgb);
+        albedo.rgb = srgb_to_linear(material.albedo) * srgb_to_linear(albedo.rgb);
         albedo.rgb *= opacity;
         albedo.a = 1.0;
 
-        float4 emissive = emissive_map.Sample(sampler, input.tex_coords);
-        emissive.rgb = srgb_to_linear(emissive.rgb) * srgb_to_linear(Material.emissive);
+        float4 emissive = material.sample_emissive_texture(input.tex_coords);
+        emissive.rgb = srgb_to_linear(emissive.rgb) * srgb_to_linear(material.emissive);
         emissive.a = 1.0;
 
         voxel_normal[position] = float4(encode(normalize(input.normal)), 1.0);

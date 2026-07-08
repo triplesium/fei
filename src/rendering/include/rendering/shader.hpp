@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace fei {
 
@@ -21,6 +22,35 @@ struct Shader {
     std::filesystem::path path;
     std::string source;
 };
+
+struct ShaderSourceRoot {
+    std::string prefix;
+    std::filesystem::path root;
+};
+
+struct ResolvedShaderSource {
+    std::string prefix;
+    std::filesystem::path root;
+    std::filesystem::path relative_path;
+    std::filesystem::path source_path;
+};
+
+class ShaderSourceRegistry {
+  private:
+    std::vector<ShaderSourceRoot> m_roots;
+
+  public:
+    void add_root(std::string prefix, std::filesystem::path root);
+
+    [[nodiscard]] bool empty() const { return m_roots.empty(); }
+
+    [[nodiscard]] Optional<ResolvedShaderSource>
+    resolve(const std::filesystem::path& path) const;
+
+    [[nodiscard]] std::vector<std::filesystem::path> roots() const;
+};
+
+ShaderSourceRegistry generated_shader_source_registry();
 
 Optional<ShaderStages>
 shader_stage_from_path(const std::filesystem::path& path);
@@ -33,11 +63,12 @@ class ShaderLoader : public AssetLoader<Shader> {
 
 class ShaderAssetSource : public AssetSource {
   private:
-    std::filesystem::path m_root;
+    ShaderSourceRegistry m_registry;
 
   public:
     ShaderAssetSource();
     explicit ShaderAssetSource(std::filesystem::path root);
+    explicit ShaderAssetSource(ShaderSourceRegistry registry);
 
     std::string name() const override;
     bool exists(const std::filesystem::path& path) const override;

@@ -441,3 +441,51 @@ TEST_CASE(
     REQUIRE(output.error().message.contains("test.slang"));
     REQUIRE(compiler.requests.empty());
 }
+
+TEST_CASE(
+    "ShaderVariantCompiler resolves registered shader source prefixes",
+    "[rendering][shader-cache][shader-compiler]"
+) {
+    auto root = std::filesystem::current_path() / "build" / "test" /
+                "shader-cache-runtime-prefix";
+    std::filesystem::remove_all(root);
+    write_text_file(
+        root / "pbr" / "test.slang",
+        R"(
+[shader("fragment")]
+float4 fragment_main() : SV_Target0
+{
+    return float4(1.0, 0.0, 0.0, 1.0);
+}
+)"
+    );
+
+    ShaderSourceRegistry registry;
+    registry.add_root("pbr", root / "pbr");
+
+    RecordingShaderCompiler compiler;
+    ShaderVariantCompiler variant_compiler(
+        compiler,
+        RuntimeShaderCompilerConfig {
+            .shader_sources = registry,
+        }
+    );
+
+    auto output = variant_compiler.compile(
+        "pbr/test.slang",
+        ShaderStages::Fragment,
+        {},
+        {ShaderDefVal::bool_def("ALPHA_TEST")}
+    );
+
+    REQUIRE(output.has_value());
+    REQUIRE(compiler.requests.size() == 1);
+    CHECK(
+        compiler.requests[0].logical_path ==
+        std::filesystem::path("pbr/test.slang")
+    );
+    CHECK(compiler.requests[0].source_path == root / "pbr" / "test.slang");
+    CHECK(compiler.requests[0].source_root == root / "pbr");
+    REQUIRE(compiler.requests[0].search_roots.size() == 1);
+    CHECK(compiler.requests[0].search_roots[0] == root / "pbr");
+}

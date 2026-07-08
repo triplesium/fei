@@ -63,12 +63,12 @@ void setup_skybox_resources(
     skybox_resource->mesh = meshes->add(std::move(mesh));
     skybox_resource->shader_modules = {
         shader_cache->get_or_compile(
-            AssetPath("shader://skybox.slang"),
+            AssetPath("shader://pbr/skybox.slang"),
             ShaderStages::Vertex,
             {}
         ),
         shader_cache->get_or_compile(
-            AssetPath("shader://skybox.slang"),
+            AssetPath("shader://pbr/skybox.slang"),
             ShaderStages::Fragment,
             {}
         ),

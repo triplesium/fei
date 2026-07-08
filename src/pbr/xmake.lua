@@ -1,5 +1,6 @@
 target("fei-pbr")
     set_kind("static")
+    add_shader_source("pbr", path.join(os.scriptdir(), "shaders"))
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp", "src/passes/*.cpp")
     add_includedirs("include", {public = true})

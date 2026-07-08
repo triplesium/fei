@@ -6,7 +6,7 @@ using namespace pbr.constants;
 using namespace pbr.normal;
 using namespace pbr.vxgi;
 
-struct VxgiInjectPropagationData {
+struct VxgiInjectPropagationUniform {
     float max_tracing_distance_global;
     int volume_dimension;
     uint check_boundaries;
@@ -43,7 +43,7 @@ struct VxgiInjectPropagationData {
     }
 };
 
-layout(set = 0, binding = 0) ConstantBuffer<VxgiInjectPropagationData> VxgiInjectPropagation;
+layout(set = 0, binding = 0) ConstantBuffer<VxgiInjectPropagationUniform> VxgiInjectPropagation;
 layout(set = 0, binding = 1, rgba8) RWTexture3D<float4> voxel_composite;
 layout(set = 0, binding = 2) Texture3D<float4> voxel_albedo;
 layout(set = 0, binding = 3) Texture3D<float4> voxel_normal;

@@ -16,7 +16,7 @@ public float3x3 inverse_transpose(float3x3 m) {
     return float3x3(row0 / determinant, row1 / determinant, row2 / determinant);
 }
 
-public struct MeshData {
+public struct MeshUniform {
     public float4x4 world_from_local;
 
     public float4 position_ws4(float3 position_local) {

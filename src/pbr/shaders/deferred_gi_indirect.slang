@@ -9,13 +9,13 @@ using namespace pbr.constants;
 using namespace pbr.deferred;
 using namespace pbr.vxgi;
 
-layout(set = 0, binding = 0) ConstantBuffer<ViewData> View;
+layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
 layout(set = 1, binding = 0) Texture2D<float4> g_position_ao;
 layout(set = 1, binding = 1) Texture2D<float4> g_normal_roughness;
 layout(set = 1, binding = 2) Texture2D<float4> g_albedo_metallic;
 layout(set = 1, binding = 3) Texture2D<float4> g_specular;
 layout(set = 1, binding = 5) SamplerState g_buffer_sampler;
-layout(set = 2, binding = 0) ConstantBuffer<VxgiData> Vxgi;
+layout(set = 2, binding = 0) ConstantBuffer<VxgiUniform> Vxgi;
 layout(set = 2, binding = 2) Texture3D<float4> voxel_tex;
 layout(set = 2, binding = 3) Texture3D<float4> voxel_tex_mipmap[6];
 layout(set = 2, binding = 9) SamplerState voxel_sampler;

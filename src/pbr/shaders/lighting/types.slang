@@ -2,13 +2,13 @@ public static const int MAX_DIRECTIONAL_LIGHTS = 3;
 public static const int MAX_POINT_LIGHTS = 6;
 public static const int MAX_SPOT_LIGHTS = 6;
 
-public struct AttenuationData {
+public struct Attenuation {
     public float constant;
     public float linear;
     public float quadratic;
 };
 
-public struct LightData {
+public struct Light {
     public float angle_inner_cone;
     public float angle_outer_cone;
     public float3 ambient;
@@ -17,13 +17,13 @@ public struct LightData {
     public float3 position;
     public float3 direction;
     public uint shadowing_method;
-    public AttenuationData attenuation;
+    public Attenuation attenuation;
 };
 
-public struct LightingData {
-    public LightData directional_lights[MAX_DIRECTIONAL_LIGHTS];
-    public LightData point_lights[MAX_POINT_LIGHTS];
-    public LightData spot_lights[MAX_SPOT_LIGHTS];
+public struct LightingUniform {
+    public Light directional_lights[MAX_DIRECTIONAL_LIGHTS];
+    public Light point_lights[MAX_POINT_LIGHTS];
+    public Light spot_lights[MAX_SPOT_LIGHTS];
     public uint num_directional_lights;
     public uint num_point_lights;
     public uint num_spot_lights;

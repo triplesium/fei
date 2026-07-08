@@ -2,11 +2,11 @@ import vxgi.aniso_mipmap;
 
 using namespace pbr.vxgi.aniso_mipmap;
 
-struct VxgiGenerateMipmapBaseData {
+struct VxgiGenerateMipmapBaseUniform {
     int mip_dimension;
 };
 
-layout(set = 0, binding = 0) ConstantBuffer<VxgiGenerateMipmapBaseData> VxgiGenerateMipmapBase;
+layout(set = 0, binding = 0) ConstantBuffer<VxgiGenerateMipmapBaseUniform> VxgiGenerateMipmapBase;
 layout(set = 0, binding = 1) Texture3D<float4> voxel_base;
 layout(set = 0, binding = 2, rgba8) RWTexture3D<float4> voxel_mipmap[6];
 

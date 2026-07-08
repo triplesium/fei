@@ -402,12 +402,12 @@ void setup_shadow_mapping(
 ) {
     std::vector<std::shared_ptr<const ShaderModule>> shadow_shader_modules {
         shader_cache->get_or_compile(
-            AssetPath("shader://shadow.slang"),
+            AssetPath("shader://pbr/shadow.slang"),
             ShaderStages::Vertex,
             {}
         ),
         shader_cache->get_or_compile(
-            AssetPath("shader://shadow.slang"),
+            AssetPath("shader://pbr/shadow.slang"),
             ShaderStages::Fragment,
             {}
         ),
@@ -435,12 +435,12 @@ void setup_shadow_mapping(
 
     std::vector<std::shared_ptr<const ShaderModule>> blur_shader_modules {
         shader_cache->get_or_compile(
-            AssetPath("shader://quad.slang"),
+            AssetPath("shader://pbr/quad.slang"),
             ShaderStages::Vertex,
             {}
         ),
         shader_cache->get_or_compile(
-            AssetPath("shader://blur.slang"),
+            AssetPath("shader://pbr/blur.slang"),
             ShaderStages::Fragment,
             {}
         ),

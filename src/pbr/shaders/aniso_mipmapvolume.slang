@@ -2,12 +2,12 @@ import vxgi.aniso_mipmap;
 
 using namespace pbr.vxgi.aniso_mipmap;
 
-struct VxgiGenerateMipmapVolumeData {
+struct VxgiGenerateMipmapVolumeUniform {
     float3 mip_dimension;
     int mip_level;
 };
 
-layout(set = 0, binding = 0) ConstantBuffer<VxgiGenerateMipmapVolumeData> VxgiGenerateMipmapVolume;
+layout(set = 0, binding = 0) ConstantBuffer<VxgiGenerateMipmapVolumeUniform> VxgiGenerateMipmapVolume;
 layout(set = 0, binding = 1, rgba8) RWTexture3D<float4> voxel_mipmap_dst[6];
 layout(set = 0, binding = 7) Texture3D<float4> voxel_mipmap_src[6];
 

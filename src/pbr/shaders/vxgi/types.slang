@@ -1,4 +1,4 @@
-public struct VxgiData {
+public struct VxgiUniform {
     public float voxel_scale;
     public float3 world_min_point;
     public float3 world_max_point;
@@ -42,7 +42,7 @@ public struct VxgiData {
     }
 };
 
-public struct VxgiVoxelizationData {
+public struct VxgiVoxelizationUniform {
     public float4x4 view_projections[3];
     public float4x4 inv_view_projections[3];
     public uint volume_dimension;

@@ -3,10 +3,7 @@
 #include "asset/assets.hpp"
 #include "core/image.hpp"
 
-#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
-#include <string_view>
-#include <variant>
 
 using namespace fei;
 
@@ -25,17 +22,17 @@ Handle<Image> make_image_handle(Assets<Image>& images) {
     );
 }
 
-bool has_bool_def(const ShaderDefs& defs, std::string_view name) {
-    return std::any_of(defs.begin(), defs.end(), [&](const ShaderDefVal& def) {
-        return def.name == name && std::holds_alternative<bool>(def.value) &&
-               std::get<bool>(def.value);
-    });
+bool has_uniform_flag(
+    const StandardMaterialUniform& uniform,
+    StandardMaterialFlags flag
+) {
+    return (uniform.flags & static_cast<uint32>(flag)) != 0;
 }
 
 } // namespace
 
 TEST_CASE(
-    "StandardMaterial reports texture map shader variants",
+    "StandardMaterial tracks texture maps with uniform flags",
     "[pbr][material]"
 ) {
     Assets<Image> images(nullptr);
@@ -48,52 +45,21 @@ TEST_CASE(
 
     material.albedo_map = make_image_handle(images);
     material.normal_map = make_image_handle(images);
+    material.metallic_map = make_image_handle(images);
     material.roughness_map = make_image_handle(images);
     material.emissive_map = make_image_handle(images);
     material.specular_map = make_image_handle(images);
 
-    const auto fragment_defs =
-        material.shader_defs(MaterialShaderType::Fragment);
-    const auto prepass_defs =
-        material.shader_defs(MaterialShaderType::PrepassFragment);
+    CHECK(material.shader_defs(MaterialShaderType::Vertex).empty());
+    CHECK(material.shader_defs(MaterialShaderType::PrepassVertex).empty());
+    CHECK(material.shader_defs(MaterialShaderType::Fragment).empty());
+    CHECK(material.shader_defs(MaterialShaderType::PrepassFragment).empty());
 
-    REQUIRE(fragment_defs.size() == 3);
-    CHECK(
-        has_bool_def(fragment_defs, StandardMaterial::HAS_ALBEDO_MAP_SHADER_DEF)
-    );
-    CHECK(
-        has_bool_def(fragment_defs, StandardMaterial::HAS_NORMAL_MAP_SHADER_DEF)
-    );
-    CHECK(has_bool_def(
-        fragment_defs,
-        StandardMaterial::HAS_ROUGHNESS_MAP_SHADER_DEF
-    ));
-    CHECK_FALSE(has_bool_def(
-        fragment_defs,
-        StandardMaterial::HAS_EMISSIVE_MAP_SHADER_DEF
-    ));
-    CHECK_FALSE(has_bool_def(
-        fragment_defs,
-        StandardMaterial::HAS_SPECULAR_MAP_SHADER_DEF
-    ));
-
-    REQUIRE(prepass_defs.size() == 5);
-    CHECK(
-        has_bool_def(prepass_defs, StandardMaterial::HAS_ALBEDO_MAP_SHADER_DEF)
-    );
-    CHECK(
-        has_bool_def(prepass_defs, StandardMaterial::HAS_NORMAL_MAP_SHADER_DEF)
-    );
-    CHECK(has_bool_def(
-        prepass_defs,
-        StandardMaterial::HAS_ROUGHNESS_MAP_SHADER_DEF
-    ));
-    CHECK(has_bool_def(
-        prepass_defs,
-        StandardMaterial::HAS_EMISSIVE_MAP_SHADER_DEF
-    ));
-    CHECK(has_bool_def(
-        prepass_defs,
-        StandardMaterial::HAS_SPECULAR_MAP_SHADER_DEF
-    ));
+    const auto uniform = material.create_uniform();
+    CHECK(has_uniform_flag(uniform, StandardMaterialFlags::AlbedoMap));
+    CHECK(has_uniform_flag(uniform, StandardMaterialFlags::NormalMap));
+    CHECK(has_uniform_flag(uniform, StandardMaterialFlags::MetallicMap));
+    CHECK(has_uniform_flag(uniform, StandardMaterialFlags::RoughnessMap));
+    CHECK(has_uniform_flag(uniform, StandardMaterialFlags::EmissiveMap));
+    CHECK(has_uniform_flag(uniform, StandardMaterialFlags::SpecularMap));
 }

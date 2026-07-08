@@ -1,11 +1,11 @@
 import lib.fullscreen;
 
-struct BlurData {
+struct BlurUniform {
     float2 direction;
     int type;
 };
 
-layout(set = 0, binding = 0) ConstantBuffer<BlurData> Blur;
+layout(set = 0, binding = 0) ConstantBuffer<BlurUniform> Blur;
 layout(set = 0, binding = 1) Texture2D<float4> source;
 layout(set = 0, binding = 2) SamplerState sampler;
 

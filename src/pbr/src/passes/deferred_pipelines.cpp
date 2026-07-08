@@ -63,21 +63,21 @@ void setup_deferred_pipelines(
     };
 
     auto quad_vert_shader =
-        create_shader_module("shader://quad.slang", ShaderStages::Vertex);
+        create_shader_module("shader://pbr/quad.slang", ShaderStages::Vertex);
     auto direct_lighting_shader = create_shader_module(
-        "shader://deferred_gi_direct.slang",
+        "shader://pbr/deferred_gi_direct.slang",
         ShaderStages::Fragment
     );
     auto indirect_lighting_shader = create_shader_module(
-        "shader://deferred_gi_indirect.slang",
+        "shader://pbr/deferred_gi_indirect.slang",
         ShaderStages::Fragment
     );
     auto composite_shader = create_shader_module(
-        "shader://deferred_gi_composite.slang",
+        "shader://pbr/deferred_gi_composite.slang",
         ShaderStages::Fragment
     );
     auto present_shader = create_shader_module(
-        "shader://deferred_present.slang",
+        "shader://pbr/deferred_present.slang",
         ShaderStages::Fragment
     );
 

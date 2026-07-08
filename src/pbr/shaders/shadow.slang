@@ -15,9 +15,9 @@ struct VertexOutput {
     [vk::location(0)] float2 tex_coords : TEXCOORD0;
 };
 
-layout(set = 0, binding = 0) ConstantBuffer<ViewData> View;
-layout(set = 1, binding = 0) ConstantBuffer<MeshData> Mesh;
-layout(set = 2, binding = 0) ConstantBuffer<PbrMaterialData> Material;
+layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
+layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> Mesh;
+layout(set = 2) ParameterBlock<StandardMaterialBlock> material;
 
 [shader("vertex")]
 VertexOutput vertex_main(VertexInput input) {

@@ -9,18 +9,18 @@ using namespace pbr.brdf;
 using namespace pbr.deferred;
 using namespace pbr.lighting.evsm;
 
-layout(set = 0, binding = 0) ConstantBuffer<ViewData> View;
+layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
 layout(set = 1, binding = 0) Texture2D<float4> g_position_ao;
 layout(set = 1, binding = 1) Texture2D<float4> g_normal_roughness;
 layout(set = 1, binding = 2) Texture2D<float4> g_albedo_metallic;
 layout(set = 1, binding = 3) Texture2D<float4> g_specular;
 layout(set = 1, binding = 5) SamplerState g_buffer_sampler;
-layout(set = 2, binding = 0) ConstantBuffer<LightingData> Lighting;
+layout(set = 2, binding = 0) ConstantBuffer<LightingUniform> Lighting;
 layout(set = 2, binding = 1) Texture2D<float4> shadow_map;
 layout(set = 2, binding = 2) SamplerState shadow_map_sampler;
 
 float3 calculate_directional(
-    LightData light,
+    Light light,
     GBufferSurface surface,
     float3 view_dir
 ) {
@@ -50,7 +50,7 @@ float3 calculate_directional(
 }
 
 float3 calculate_point(
-    LightData light,
+    Light light,
     GBufferSurface surface,
     float3 view_dir
 ) {
@@ -78,7 +78,7 @@ float3 calculate_point(
 }
 
 float3 calculate_spot(
-    LightData light,
+    Light light,
     GBufferSurface surface,
     float3 view_dir
 ) {

@@ -10,11 +10,11 @@ layout(set = 0, binding = 0) TextureCube<float4> cubemap;
 layout(set = 0, binding = 1) SamplerState cubemap_sampler;
 layout(set = 0, binding = 2, rgba32f) RWTexture2DArray<float4> output_texture;
 
-struct FilteringConstantsData {
+struct FilteringConstants {
     float roughness;
 };
 
-layout(set = 0, binding = 3) ConstantBuffer<FilteringConstantsData> Constants;
+layout(set = 0, binding = 3) ConstantBuffer<FilteringConstants> Constants;
 
 static const uint SAMPLE_COUNT = 1024u;
 

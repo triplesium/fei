@@ -1,6 +1,5 @@
 import lib.brdf;
 import lib.color;
-import lib.normal;
 import lib.view;
 import material.types;
 import mesh.types;
@@ -10,33 +9,14 @@ import forward.io;
 using namespace pbr.forward_io;
 using namespace pbr.brdf;
 using namespace pbr.color;
-using namespace pbr.normal;
 
-layout(set = 0, binding = 0) ConstantBuffer<ViewData> View;
+layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
 layout(set = 0, binding = 1) TextureCube<float4> irradiance_map;
 layout(set = 0, binding = 2) TextureCube<float4> radiance_map;
 layout(set = 0, binding = 3) SamplerState cubemap_sampler;
 layout(set = 0, binding = 4) Texture2D<float4> brdf_lut;
-layout(set = 1, binding = 0) ConstantBuffer<MeshData> Mesh;
-layout(set = 2, binding = 0) ConstantBuffer<SimpleMaterialData> Material;
-layout(set = 2, binding = 1) Texture2D<float4> albedo_map;
-layout(set = 2, binding = 2) Texture2D<float4> normal_map;
-layout(set = 2, binding = 3) Texture2D<float4> metallic_map;
-layout(set = 2, binding = 4) Texture2D<float4> roughness_map;
-layout(set = 2, binding = 7) SamplerState sampler;
-
-#ifdef VERTEX_UVS
-float3 get_normal_from_map(VertexOutput input) {
-    float3 tangent_normal =
-        normal_map.Sample(sampler, input.tex_coords).xyz * 2.0 - 1.0;
-    return from_derivatives(
-        tangent_normal,
-        input.position_ws,
-        input.normal_ws,
-        input.tex_coords
-    );
-}
-#endif
+layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> Mesh;
+layout(set = 2) ParameterBlock<StandardMaterialBlock> material;
 
 [shader("vertex")]
 VertexOutput vertex_main(MeshVertexInput input) {
@@ -60,30 +40,21 @@ VertexOutput vertex_main(MeshVertexInput input) {
 [shader("fragment")]
 FragmentOutput fragment_main(VertexOutput input) {
     FragmentOutput output;
-#if defined(STANDARD_MATERIAL_HAS_ALBEDO_MAP) && defined(VERTEX_UVS)
-    float3 albedo = albedo_map.Sample(sampler, input.tex_coords).rgb;
-#else
-    float3 albedo = Material.albedo;
+    float2 tex_coords = float2(0.0);
+#ifdef VERTEX_UVS
+    tex_coords = input.tex_coords;
 #endif
 
-#if defined(STANDARD_MATERIAL_HAS_METALLIC_MAP) && defined(VERTEX_UVS)
-    float metallic = metallic_map.Sample(sampler, input.tex_coords).r;
-#else
-    float metallic = Material.metallic;
-#endif
-
-#if defined(STANDARD_MATERIAL_HAS_ROUGHNESS_MAP) && defined(VERTEX_UVS)
-    float roughness = roughness_map.Sample(sampler, input.tex_coords).r;
-#else
-    float roughness = Material.roughness;
-#endif
+    float3 albedo = material.sample_albedo(tex_coords);
+    float metallic = material.sample_metallic(tex_coords);
+    float roughness = material.sample_roughness(tex_coords);
     roughness = clamp(roughness, 0.01, 1.0);
 
-#if defined(STANDARD_MATERIAL_HAS_NORMAL_MAP) && defined(VERTEX_UVS)
-    float3 normal = get_normal_from_map(input);
-#else
-    float3 normal = normalize(input.normal_ws);
-#endif
+    float3 normal = material.sample_normal_from_derivatives(
+        tex_coords,
+        input.position_ws,
+        input.normal_ws
+    );
 
     float3 view = View.view_direction(input.position_ws);
     float3 reflection = reflect(-view, normal);
@@ -104,7 +75,10 @@ FragmentOutput fragment_main(VertexOutput input) {
     float3 prefiltered_color =
         radiance_map.SampleLevel(cubemap_sampler, reflection, roughness * float(levels)).rgb;
     float2 brdf =
-        brdf_lut.Sample(sampler, float2(max(dot(normal, view), 0.0), roughness)).rg;
+        brdf_lut.Sample(
+            material.sampler,
+            float2(max(dot(normal, view), 0.0), roughness)
+        ).rg;
     float3 specular = prefiltered_color * (fresnel * brdf.x + brdf.y);
     float3 ambient = k_d * diffuse + specular;
 

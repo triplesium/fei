@@ -1,4 +1,3 @@
-import lib.normal;
 import lib.view;
 import material.types;
 import mesh.types;
@@ -6,26 +5,10 @@ import mesh.vertex_input;
 import deferred.prepass_io;
 
 using namespace pbr.prepass_io;
-using namespace pbr.normal;
 
-layout(set = 0, binding = 0) ConstantBuffer<ViewData> View;
-layout(set = 1, binding = 0) ConstantBuffer<MeshData> Mesh;
-layout(set = 2, binding = 0) ConstantBuffer<PbrMaterialData> Material;
-layout(set = 2, binding = 1) Texture2D<float4> albedo_map;
-layout(set = 2, binding = 2) Texture2D<float4> normal_map;
-layout(set = 2, binding = 3) Texture2D<float4> metallic_map;
-layout(set = 2, binding = 4) Texture2D<float4> roughness_map;
-layout(set = 2, binding = 5) Texture2D<float4> emissive_map;
-layout(set = 2, binding = 6) Texture2D<float4> specular_map;
-layout(set = 2, binding = 7) SamplerState sampler;
-
-#if defined(VERTEX_UVS) && defined(VERTEX_TANGENTS)
-float3 normal_mapping(VertexOutput input) {
-    float3 tangent_normal =
-        normal_map.Sample(sampler, input.tex_coords).xyz * 2.0 - 1.0;
-    return from_tangent_frame(tangent_normal, input.normal_ws, input.tangent_ws);
-}
-#endif
+layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
+layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> Mesh;
+layout(set = 2) ParameterBlock<StandardMaterialBlock> material;
 
 [shader("vertex")]
 VertexOutput vertex_main(MeshVertexInput input) {
@@ -49,44 +32,32 @@ VertexOutput vertex_main(MeshVertexInput input) {
 [shader("fragment")]
 FragmentOutput fragment_main(VertexOutput input, float4 frag_coord : SV_Position) {
     FragmentOutput output;
-    output.position_ao = float4(input.position_ws, 1.0);
-#if defined(STANDARD_MATERIAL_HAS_NORMAL_MAP) && defined(VERTEX_UVS) && defined(VERTEX_TANGENTS)
-    output.normal_roughness.rgb = normal_mapping(input);
-#else
-    output.normal_roughness.rgb = normalize(input.normal_ws);
+    float2 tex_coords = float2(0.0);
+#ifdef VERTEX_UVS
+    tex_coords = input.tex_coords;
 #endif
 
-#if defined(STANDARD_MATERIAL_HAS_ROUGHNESS_MAP) && defined(VERTEX_UVS)
-    output.normal_roughness.a = roughness_map.Sample(sampler, input.tex_coords).r;
-#else
-    output.normal_roughness.a = Material.roughness;
+    float3 tangent_ws = float3(1.0, 0.0, 0.0);
+#ifdef VERTEX_TANGENTS
+    tangent_ws = input.tangent_ws;
 #endif
+
+    output.position_ao = float4(input.position_ws, 1.0);
+
+    output.normal_roughness.rgb = material.sample_normal_from_tangent_frame(
+        tex_coords,
+        input.normal_ws,
+        tangent_ws
+    );
+    output.normal_roughness.a = material.sample_roughness(tex_coords);
     output.normal_roughness.a = clamp(output.normal_roughness.a, 0.05, 0.96);
 
-#if defined(STANDARD_MATERIAL_HAS_ALBEDO_MAP) && defined(VERTEX_UVS)
-    output.albedo_metallic.rgb = albedo_map.Sample(sampler, input.tex_coords).rgb;
-#else
-    output.albedo_metallic.rgb = Material.albedo;
-#endif
-
-#if defined(STANDARD_MATERIAL_HAS_METALLIC_MAP) && defined(VERTEX_UVS)
-    output.albedo_metallic.a = metallic_map.Sample(sampler, input.tex_coords).r;
-#else
-    output.albedo_metallic.a = Material.metallic;
-#endif
-
-#if defined(STANDARD_MATERIAL_HAS_SPECULAR_MAP) && defined(VERTEX_UVS)
-    output.specular.rgb = specular_map.Sample(sampler, input.tex_coords).rgb;
-#else
-    output.specular.rgb = Material.specular;
-#endif
+    output.albedo_metallic.rgb = material.sample_albedo(tex_coords);
+    output.albedo_metallic.a = material.sample_metallic(tex_coords);
+    output.specular.rgb = material.sample_specular(tex_coords);
     output.specular.a = 1.0;
 
-#if defined(STANDARD_MATERIAL_HAS_EMISSIVE_MAP) && defined(VERTEX_UVS)
-    output.emissive_depth.rgb = emissive_map.Sample(sampler, input.tex_coords).rgb;
-#else
-    output.emissive_depth.rgb = Material.emissive;
-#endif
+    output.emissive_depth.rgb = material.sample_emissive(tex_coords);
     output.emissive_depth.a = frag_coord.z;
     return output;
 }

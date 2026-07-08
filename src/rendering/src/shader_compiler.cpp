@@ -28,14 +28,6 @@ ShaderCompileError shader_compile_error(std::string message) {
     return ShaderCompileError {.message = std::move(message)};
 }
 
-std::filesystem::path default_runtime_shader_source_root() {
-#ifdef FEI_SHADER_SOURCE_PATH
-    return std::filesystem::path(FEI_SHADER_SOURCE_PATH);
-#else
-    return std::filesystem::current_path() / "src" / "pbr" / "shaders";
-#endif
-}
-
 std::filesystem::path
 with_suffix(std::filesystem::path path, std::string_view suffix) {
     path += suffix;
@@ -73,17 +65,6 @@ std::filesystem::path strip_slang_suffix(std::filesystem::path path) {
     return path;
 }
 
-std::filesystem::path relative_source_path(
-    const std::filesystem::path& source_root,
-    const std::filesystem::path& source_path
-) {
-    auto relative = source_path.lexically_relative(source_root);
-    if (!relative.empty()) {
-        return relative;
-    }
-    return source_path.filename();
-}
-
 std::string shader_def_define_value(const ShaderDefValue& value) {
     return std::visit(
         [](const auto& typed_value) -> std::string {
@@ -100,13 +81,41 @@ std::string shader_def_define_value(const ShaderDefValue& value) {
 
 RuntimeShaderCompilerConfig
 normalize_runtime_shader_compiler_config(RuntimeShaderCompilerConfig config) {
+    if (config.shader_sources.empty()) {
+        if (!config.source_root.empty()) {
+            config.shader_sources.add_root({}, config.source_root);
+        } else {
+            config.shader_sources = generated_shader_source_registry();
+        }
+    }
+
     if (config.source_root.empty()) {
-        config.source_root = default_runtime_shader_source_root();
+        auto roots = config.shader_sources.roots();
+        if (!roots.empty()) {
+            config.source_root = roots.front();
+        }
     }
     return config;
 }
 
-Result<std::filesystem::path, ShaderCompileError> resolve_shader_source_path(
+std::string
+shader_source_roots_message(const RuntimeShaderCompilerConfig& config) {
+    auto roots = config.shader_sources.roots();
+    if (roots.empty()) {
+        return "<none>";
+    }
+
+    std::string message;
+    for (std::size_t i = 0; i < roots.size(); ++i) {
+        if (i > 0) {
+            message += ", ";
+        }
+        message += roots[i].string();
+    }
+    return message;
+}
+
+ShaderCompileError shader_source_not_found_error(
     const RuntimeShaderCompilerConfig& config,
     const std::filesystem::path& logical_path
 ) {
@@ -114,27 +123,11 @@ Result<std::filesystem::path, ShaderCompileError> resolve_shader_source_path(
     auto base_slang = logical_path;
     base_slang.replace_extension(".slang");
 
-    std::vector<std::filesystem::path> candidates {
-        stage_specific_slang,
-        base_slang,
-    };
-    candidates.erase(
-        std::unique(candidates.begin(), candidates.end()),
-        candidates.end()
-    );
-
-    for (const auto& candidate : candidates) {
-        auto source_path = config.source_root / candidate;
-        if (std::filesystem::exists(source_path)) {
-            return source_path.lexically_normal();
-        }
-    }
-
-    return failure(shader_compile_error(
+    return shader_compile_error(
         "Runtime Slang shader source not found for " + logical_path.string() +
         "; expected " + stage_specific_slang.string() + " or " +
-        base_slang.string() + " under " + config.source_root.string()
-    ));
+        base_slang.string() + " under " + shader_source_roots_message(config)
+    );
 }
 
 Result<ShaderCompileRequest, ShaderCompileError>
@@ -153,21 +146,23 @@ make_runtime_shader_compile_request(
         ));
     }
 
-    auto source_path = resolve_shader_source_path(config, logical_path);
+    auto source_path = config.shader_sources.resolve(logical_path);
+    std::filesystem::path source_root = config.source_root;
     std::filesystem::path resolved_source_path;
+    std::filesystem::path relative_source = logical_path;
     if (!source_path) {
         if (source.empty()) {
-            return failure(std::move(source_path).error());
+            return failure(shader_source_not_found_error(config, logical_path));
         }
-        resolved_source_path =
-            (config.source_root / logical_path).lexically_normal();
+        resolved_source_path = (source_root / logical_path).lexically_normal();
     } else {
-        resolved_source_path = std::move(source_path).value();
+        auto resolved_source = std::move(source_path).value();
+        source_root = std::move(resolved_source.root);
+        relative_source = std::move(resolved_source.relative_path);
+        resolved_source_path = std::move(resolved_source.source_path);
     }
 
     auto normalized_defs = normalized_shader_defs(std::move(defs));
-    auto relative_source =
-        relative_source_path(config.source_root, resolved_source_path);
     if (entry.empty()) {
         entry = "main";
         if (strip_slang_suffix(relative_source).generic_string() !=
@@ -178,7 +173,8 @@ make_runtime_shader_compile_request(
 
     return ShaderCompileRequest {
         .source_path = std::move(resolved_source_path),
-        .source_root = config.source_root,
+        .source_root = std::move(source_root),
+        .search_roots = config.shader_sources.roots(),
         .logical_path = std::move(logical_path),
         .source = std::move(source),
         .stage = stage,
@@ -291,6 +287,181 @@ bool is_slang_unknown_binding(unsigned value) {
     return value == static_cast<unsigned>(SLANG_UNKNOWN_SIZE);
 }
 
+bool is_slang_unknown_size(std::size_t value) {
+    return value == static_cast<std::size_t>(SLANG_UNKNOWN_SIZE) ||
+           value == static_cast<std::size_t>(SLANG_UNBOUNDED_SIZE);
+}
+
+bool is_slang_parameter_block(slang::VariableLayoutReflection& parameter) {
+    auto* type = parameter.getType();
+    if (type != nullptr &&
+        type->getKind() == slang::TypeReflection::Kind::ParameterBlock) {
+        return true;
+    }
+
+    auto* type_layout = parameter.getTypeLayout();
+    return type_layout != nullptr &&
+           type_layout->getKind() ==
+               slang::TypeReflection::Kind::ParameterBlock;
+}
+
+bool has_slang_ordinary_data(slang::TypeLayoutReflection& type_layout) {
+    const auto size = type_layout.getSize(slang::ParameterCategory::Uniform);
+    return !is_slang_unknown_size(size) && size > 0;
+}
+
+std::string slang_variable_name(slang::VariableLayoutReflection& variable) {
+    const char* name = variable.getName();
+    return name == nullptr ? std::string {} : std::string {name};
+}
+
+void append_slang_logical_resource_name(
+    std::vector<ShaderArtifactLogicalResourceName>& names,
+    std::string name,
+    uint32_t set,
+    uint32_t binding
+) {
+    if (name.empty()) {
+        return;
+    }
+
+    auto it = std::find_if(
+        names.begin(),
+        names.end(),
+        [&](const ShaderArtifactLogicalResourceName& resource) {
+            return resource.set == set && resource.binding == binding &&
+                   resource.name == name;
+        }
+    );
+    if (it != names.end()) {
+        return;
+    }
+
+    names.push_back(
+        ShaderArtifactLogicalResourceName {
+            .name = std::move(name),
+            .set = set,
+            .binding = binding,
+        }
+    );
+}
+
+uint32_t
+slang_descriptor_binding_count(slang::TypeLayoutReflection& type_layout) {
+    if (!type_layout.isArray()) {
+        return 1;
+    }
+
+    const auto count = type_layout.getTotalArrayElementCount();
+    if (is_slang_unknown_size(count) || count == 0) {
+        return 1;
+    }
+    return static_cast<uint32_t>(count);
+}
+
+bool slang_parameter_block_set(
+    slang::VariableLayoutReflection& parameter,
+    uint32_t& set
+) {
+    const auto register_space =
+        parameter.getOffset(slang::ParameterCategory::SubElementRegisterSpace);
+    if (!is_slang_unknown_size(register_space)) {
+        set = static_cast<uint32_t>(register_space);
+        return true;
+    }
+
+    const auto binding_index = parameter.getBindingIndex();
+    if (!is_slang_unknown_binding(binding_index)) {
+        set = static_cast<uint32_t>(binding_index);
+        return true;
+    }
+
+    const auto category_space = parameter.getBindingSpace(
+        slang::ParameterCategory::SubElementRegisterSpace
+    );
+    if (!is_slang_unknown_size(category_space)) {
+        set = static_cast<uint32_t>(category_space);
+        return true;
+    }
+
+    const auto binding_space = parameter.getBindingSpace();
+    if (!is_slang_unknown_binding(binding_space)) {
+        set = static_cast<uint32_t>(binding_space);
+        return true;
+    }
+
+    return false;
+}
+
+void append_slang_parameter_block_logical_resource_names(
+    std::vector<ShaderArtifactLogicalResourceName>& names,
+    slang::VariableLayoutReflection& parameter
+) {
+    uint32_t set = 0;
+    if (!slang_parameter_block_set(parameter, set)) {
+        return;
+    }
+
+    auto* block_layout = parameter.getTypeLayout();
+    if (block_layout == nullptr) {
+        return;
+    }
+    auto* element_layout = block_layout->getElementTypeLayout();
+    if (element_layout == nullptr) {
+        return;
+    }
+
+    uint32_t binding = 0;
+    if (has_slang_ordinary_data(*element_layout)) {
+        append_slang_logical_resource_name(
+            names,
+            slang_variable_name(parameter),
+            set,
+            binding
+        );
+        ++binding;
+    }
+
+    const auto field_count = element_layout->getFieldCount();
+    for (unsigned i = 0; i < field_count; ++i) {
+        auto* field = element_layout->getFieldByIndex(i);
+        if (field == nullptr || !is_slang_descriptor_resource(*field)) {
+            continue;
+        }
+
+        append_slang_logical_resource_name(
+            names,
+            slang_variable_name(*field),
+            set,
+            binding
+        );
+
+        auto* field_type_layout = field->getTypeLayout();
+        binding += field_type_layout == nullptr ?
+                       1 :
+                       slang_descriptor_binding_count(*field_type_layout);
+    }
+}
+
+void append_slang_global_parameter_block_logical_resource_names(
+    std::vector<ShaderArtifactLogicalResourceName>& names,
+    slang::ProgramLayout& layout
+) {
+    auto* global_params = layout.getGlobalParamsTypeLayout();
+    if (global_params == nullptr) {
+        return;
+    }
+
+    const auto field_count = global_params->getFieldCount();
+    for (unsigned i = 0; i < field_count; ++i) {
+        auto* field = global_params->getFieldByIndex(i);
+        if (field == nullptr || !is_slang_parameter_block(*field)) {
+            continue;
+        }
+        append_slang_parameter_block_logical_resource_names(names, *field);
+    }
+}
+
 Result<std::vector<ShaderArtifactLogicalResourceName>, ShaderCompileError>
 slang_logical_resource_names(slang::IComponentType& linked_program) {
     Slang::ComPtr<slang::IBlob> layout_diagnostics;
@@ -307,27 +478,38 @@ slang_logical_resource_names(slang::IComponentType& linked_program) {
     names.reserve(parameter_count);
     for (unsigned i = 0; i < parameter_count; ++i) {
         auto* parameter = layout->getParameterByIndex(i);
-        if (parameter == nullptr || !is_slang_descriptor_resource(*parameter)) {
+        if (parameter == nullptr) {
             continue;
         }
 
-        const char* name = parameter->getName();
+        if (is_slang_parameter_block(*parameter)) {
+            append_slang_parameter_block_logical_resource_names(
+                names,
+                *parameter
+            );
+            continue;
+        }
+
+        if (!is_slang_descriptor_resource(*parameter)) {
+            continue;
+        }
+
         const auto binding = parameter->getBindingIndex();
         const auto space = parameter->getBindingSpace();
-        if (name == nullptr || name[0] == '\0' ||
-            is_slang_unknown_binding(binding) ||
+        if (is_slang_unknown_binding(binding) ||
             is_slang_unknown_binding(space)) {
             continue;
         }
 
-        names.push_back(
-            ShaderArtifactLogicalResourceName {
-                .name = name,
-                .set = static_cast<uint32_t>(space),
-                .binding = static_cast<uint32_t>(binding),
-            }
+        append_slang_logical_resource_name(
+            names,
+            slang_variable_name(*parameter),
+            static_cast<uint32_t>(space),
+            static_cast<uint32_t>(binding)
         );
     }
+
+    append_slang_global_parameter_block_logical_resource_names(names, *layout);
 
     return names;
 }
@@ -620,15 +802,27 @@ compile_slang_to_spirv(const ShaderCompileRequest& request) {
     target_desc.profile = global_session->findProfile("glsl_450");
 
     auto macros = make_slang_macro_storage(request.defs);
-    auto search_path = request.source_root.string();
-    const char* search_paths[] = {search_path.c_str()};
+    auto search_roots = request.search_roots;
+    if (search_roots.empty() && !request.source_root.empty()) {
+        search_roots.push_back(request.source_root);
+    }
+
+    std::vector<std::string> search_path_storage;
+    std::vector<const char*> search_paths;
+    search_path_storage.reserve(search_roots.size());
+    search_paths.reserve(search_roots.size());
+    for (const auto& root : search_roots) {
+        search_path_storage.push_back(root.string());
+        search_paths.push_back(search_path_storage.back().c_str());
+    }
     auto file_system = make_tracking_slang_file_system();
 
     slang::SessionDesc session_desc {};
     session_desc.targets = &target_desc;
     session_desc.targetCount = 1;
-    session_desc.searchPaths = search_path.empty() ? nullptr : search_paths;
-    session_desc.searchPathCount = search_path.empty() ? 0 : 1;
+    session_desc.searchPaths =
+        search_paths.empty() ? nullptr : search_paths.data();
+    session_desc.searchPathCount = static_cast<SlangInt>(search_paths.size());
     session_desc.preprocessorMacros = macros.macros.data();
     session_desc.preprocessorMacroCount =
         static_cast<SlangInt>(macros.macros.size());

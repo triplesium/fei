@@ -3,6 +3,7 @@
 #include "graphics/enums.hpp"
 #include "graphics/shader_defs.hpp"
 #include "graphics/shader_module.hpp"
+#include "rendering/shader.hpp"
 
 #include <filesystem>
 #include <string>
@@ -13,6 +14,7 @@ namespace fei {
 struct ShaderCompileRequest {
     std::filesystem::path source_path;
     std::filesystem::path source_root;
+    std::vector<std::filesystem::path> search_roots;
     std::filesystem::path logical_path;
     std::string source;
     ShaderStages stage {ShaderStages::None};
@@ -32,6 +34,7 @@ struct ShaderCompileError {
 
 struct RuntimeShaderCompilerConfig {
     std::filesystem::path source_root;
+    ShaderSourceRegistry shader_sources;
 };
 
 struct ShaderVariantCompileOutput {

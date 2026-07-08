@@ -146,7 +146,7 @@ void generate_env_maps(
 
         {
             auto compute_shader = shader_cache->get_or_compile(
-                AssetPath("shader://cubemap2irradiance.slang"),
+                AssetPath("shader://pbr/cubemap2irradiance.slang"),
                 ShaderStages::Compute,
                 {}
             );
@@ -205,7 +205,7 @@ void generate_env_maps(
 
         {
             auto compute_shader = shader_cache->get_or_compile(
-                AssetPath("shader://cubemap2radiance.slang"),
+                AssetPath("shader://pbr/cubemap2radiance.slang"),
                 ShaderStages::Compute,
                 {}
             );

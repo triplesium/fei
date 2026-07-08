@@ -103,7 +103,7 @@ void EquirectToCubemap::setup(
     ShaderCache& shader_cache
 ) {
     auto compute_shader = shader_cache.get_or_compile(
-        AssetPath("shader://equirect2cube.slang"),
+        AssetPath("shader://pbr/equirect2cube.slang"),
         ShaderStages::Compute,
         {}
     );

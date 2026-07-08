@@ -1,5 +1,4 @@
 #include "graphics/resource.hpp"
-#include "rendering/shader.hpp"
 #include "rendering/shader_compiler.hpp"
 
 #include <algorithm>
@@ -35,12 +34,17 @@ struct PbrShaderCase {
     ShaderStages stage;
 };
 
+std::filesystem::path pbr_shader_logical_path(std::string_view source) {
+    return std::filesystem::path("pbr") /
+           std::filesystem::path(std::string(source));
+}
+
 std::filesystem::path pbr_shader_source_root() {
-#ifdef FEI_SHADER_SOURCE_PATH
-    return std::filesystem::path(FEI_SHADER_SOURCE_PATH);
-#else
-    return std::filesystem::current_path() / "src" / "pbr" / "shaders";
-#endif
+    auto source = generated_shader_source_registry().resolve(
+        pbr_shader_logical_path("forward.slang")
+    );
+    REQUIRE(source.has_value());
+    return source->root;
 }
 
 bool has_include_directive(const std::filesystem::path& path) {
@@ -177,7 +181,9 @@ compile_pbr_shader_output(std::string_view shader_name) {
     static SlangLibraryShaderCompiler compiler;
     static ShaderVariantCompiler variant_compiler(
         compiler,
-        RuntimeShaderCompilerConfig {.source_root = pbr_shader_source_root()}
+        RuntimeShaderCompilerConfig {
+            .shader_sources = generated_shader_source_registry(),
+        }
     );
     static std::unordered_map<std::string, ShaderVariantCompileOutput> cache;
 
@@ -189,7 +195,7 @@ compile_pbr_shader_output(std::string_view shader_name) {
 
     auto shader = pbr_shader_case(shader_name);
     auto compiled = variant_compiler.compile_with_dependencies(
-        std::filesystem::path(shader.source),
+        pbr_shader_logical_path(shader.source),
         shader.stage,
         std::string {},
         {}
@@ -208,6 +214,39 @@ compile_pbr_shader_output(std::string_view shader_name) {
 
 const ShaderDescription& compile_pbr_shader(std::string_view shader_name) {
     return compile_pbr_shader_output(shader_name).description;
+}
+
+ShaderDescription
+compile_pbr_shader_with_defs(std::string_view shader_name, ShaderDefs defs) {
+    static SlangLibraryShaderCompiler compiler;
+    static ShaderVariantCompiler variant_compiler(
+        compiler,
+        RuntimeShaderCompilerConfig {
+            .shader_sources = generated_shader_source_registry(),
+        }
+    );
+
+    auto shader = pbr_shader_case(shader_name);
+    auto compiled = variant_compiler.compile_with_dependencies(
+        pbr_shader_logical_path(shader.source),
+        shader.stage,
+        std::string {},
+        std::move(defs)
+    );
+    CAPTURE(shader_name);
+    if (!compiled) {
+        INFO(compiled.error().message);
+        INFO(compiled.error().diagnostics);
+    }
+    REQUIRE(compiled.has_value());
+    return std::move(compiled).value().description;
+}
+
+ShaderDefs full_standard_material_shader_defs() {
+    return normalized_shader_defs({
+        ShaderDefVal::bool_def("VERTEX_UVS"),
+        ShaderDefVal::bool_def("VERTEX_TANGENTS"),
+    });
 }
 
 std::vector<uint32> spirv_words(const ShaderDescription& shader) {
@@ -243,12 +282,11 @@ bool has_spirv_execution_mode(
     return false;
 }
 
-void require_shader_resources(
+void require_shader_resource_bindings(
     std::string_view shader_name,
+    const std::vector<ShaderResourceBinding>& bindings,
     std::initializer_list<ExpectedBinding> expected
 ) {
-    const auto& bindings = compile_pbr_shader(shader_name).resources;
-
     CAPTURE(shader_name);
     REQUIRE(bindings.size() == expected.size());
 
@@ -268,6 +306,27 @@ void require_shader_resources(
         CHECK(it->binding == resource.binding);
         CHECK(it->array_size == resource.array_size);
     }
+}
+
+void require_shader_resources(
+    std::string_view shader_name,
+    std::initializer_list<ExpectedBinding> expected
+) {
+    require_shader_resource_bindings(
+        shader_name,
+        compile_pbr_shader(shader_name).resources,
+        expected
+    );
+}
+
+void require_shader_resources(
+    std::string_view shader_name,
+    ShaderDefs defs,
+    std::initializer_list<ExpectedBinding> expected
+) {
+    const auto shader =
+        compile_pbr_shader_with_defs(shader_name, std::move(defs));
+    require_shader_resource_bindings(shader_name, shader.resources, expected);
 }
 
 bool shader_has_dependency(
@@ -336,7 +395,10 @@ TEST_CASE("PBR shaders compile through runtime compiler", "[pbr][shader]") {
         const auto& output = compile_pbr_shader_output(shader_case.label);
         const auto& shader = output.description;
         CHECK(shader.stage == shader_case.stage);
-        CHECK(shader.path == shader_case.source);
+        CHECK(
+            std::filesystem::path(shader.path) ==
+            pbr_shader_logical_path(shader_case.source)
+        );
         CHECK_FALSE(shader.source.empty());
         CHECK_FALSE(shader.spirv.empty());
         CHECK(shader_has_dependency(
@@ -439,7 +501,27 @@ TEST_CASE(
             {"radiance_map", ResourceKind::TextureReadOnly, 0, 2},
             {"cubemap_sampler", ResourceKind::Sampler, 0, 3},
             {"brdf_lut", ResourceKind::TextureReadOnly, 0, 4},
-            {"Material", ResourceKind::UniformBuffer, 2, 0},
+            {"material", ResourceKind::UniformBuffer, 2, 0},
+            {"sampler", ResourceKind::Sampler, 2, 7},
+        }
+    );
+}
+
+TEST_CASE(
+    "PBR material ParameterBlock resources match StandardMaterial layout",
+    "[pbr][shader]"
+) {
+    require_shader_resources(
+        "deferred_prepass.frag",
+        full_standard_material_shader_defs(),
+        {
+            {"material", ResourceKind::UniformBuffer, 2, 0},
+            {"albedo_map", ResourceKind::TextureReadOnly, 2, 1},
+            {"normal_map", ResourceKind::TextureReadOnly, 2, 2},
+            {"metallic_map", ResourceKind::TextureReadOnly, 2, 3},
+            {"roughness_map", ResourceKind::TextureReadOnly, 2, 4},
+            {"emissive_map", ResourceKind::TextureReadOnly, 2, 5},
+            {"specular_map", ResourceKind::TextureReadOnly, 2, 6},
             {"sampler", ResourceKind::Sampler, 2, 7},
         }
     );
@@ -509,7 +591,7 @@ TEST_CASE(
     require_shader_resources(
         "voxelization.frag",
         {
-            {"Material", ResourceKind::UniformBuffer, 2, 0},
+            {"material", ResourceKind::UniformBuffer, 2, 0},
             {"albedo_map", ResourceKind::TextureReadOnly, 2, 1},
             {"emissive_map", ResourceKind::TextureReadOnly, 2, 5},
             {"sampler", ResourceKind::Sampler, 2, 7},

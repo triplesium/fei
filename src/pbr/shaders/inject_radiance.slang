@@ -12,17 +12,17 @@ layout(set = 0, binding = 0, rgba8) RWTexture3D<float4> voxel_albedo;
 layout(set = 0, binding = 1, rgba8) RWTexture3D<float4> voxel_normal;
 layout(set = 0, binding = 2, rgba8) RWTexture3D<float4> voxel_emissive;
 layout(set = 0, binding = 3, rgba8) RWTexture3D<float4> voxel_radiance;
-layout(set = 1, binding = 0) ConstantBuffer<VxgiVoxelizationData> VxgiVoxelization;
-layout(set = 2, binding = 0) ConstantBuffer<LightingData> Lighting;
+layout(set = 1, binding = 0) ConstantBuffer<VxgiVoxelizationUniform> VxgiVoxelization;
+layout(set = 2, binding = 0) ConstantBuffer<LightingUniform> Lighting;
 layout(set = 2, binding = 1) Texture2D<float4> shadow_map;
 layout(set = 2, binding = 2) SamplerState shadow_map_sampler;
 
-struct VxgiInjectRadianceData {
+struct VxgiInjectRadianceUniform {
     uint normal_weighted_lambert;
     float trace_shadow_hit;
 };
 
-layout(set = 3, binding = 0) ConstantBuffer<VxgiInjectRadianceData> VxgiInjectRadiance;
+layout(set = 3, binding = 0) ConstantBuffer<VxgiInjectRadianceUniform> VxgiInjectRadiance;
 
 float trace_shadow(float3 position, float3 direction, float max_tracing_distance) {
     float k = VxgiInjectRadiance.trace_shadow_hit *
@@ -57,7 +57,7 @@ float trace_shadow(float3 position, float3 direction, float max_tracing_distance
     return 1.0 - visibility;
 }
 
-float3 brdf(LightData light, float3 normal, float3 albedo) {
+float3 brdf(Light light, float3 normal, float3 albedo) {
     float normal_dot_light = 0.0;
     if (VxgiInjectRadiance.normal_weighted_lambert == 1) {
         float3 weight = normal * normal;
@@ -77,7 +77,7 @@ float3 brdf(LightData light, float3 normal, float3 albedo) {
 }
 
 float4 calculate_directional(
-    LightData light,
+    Light light,
     float3 normal,
     float3 position,
     float3 albedo
@@ -102,7 +102,7 @@ float4 calculate_directional(
     return float4(brdf(light, normal, albedo) * light_visibility, light_visibility);
 }
 
-float4 calculate_point(LightData light, float3 normal, float3 position, float3 albedo) {
+float4 calculate_point(Light light, float3 normal, float3 position, float3 albedo) {
     light.direction = light.position - position;
     float d = length(light.direction);
     light.direction = normalize(light.direction);
@@ -130,7 +130,7 @@ float4 calculate_point(LightData light, float3 normal, float3 position, float3 a
     return float4(brdf(light, normal, albedo) * falloff * light_visibility, light_visibility);
 }
 
-float4 calculate_spot(LightData light, float3 normal, float3 position, float3 albedo) {
+float4 calculate_spot(Light light, float3 normal, float3 position, float3 albedo) {
     float3 spot_direction = light.direction;
     light.direction = normalize(light.position - position);
     float cos_angle = dot(-light.direction, spot_direction);

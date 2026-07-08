@@ -27,22 +27,22 @@ void init_pbr_mesh_shader_defaults(
         };
 
     defaults->forward_vertex = create_shader_module(
-        "shader://forward.slang",
+        "shader://pbr/forward.slang",
         ShaderStages::Vertex,
         "vertex_main"
     );
     defaults->forward_fragment = create_shader_module(
-        "shader://forward.slang",
+        "shader://pbr/forward.slang",
         ShaderStages::Fragment,
         "fragment_main"
     );
     defaults->prepass_vertex = create_shader_module(
-        "shader://deferred_prepass.slang",
+        "shader://pbr/deferred_prepass.slang",
         ShaderStages::Vertex,
         "vertex_main"
     );
     defaults->prepass_fragment = create_shader_module(
-        "shader://deferred_prepass.slang",
+        "shader://pbr/deferred_prepass.slang",
         ShaderStages::Fragment,
         "fragment_main"
     );
