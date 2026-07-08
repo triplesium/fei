@@ -10,6 +10,9 @@
 #include "core/image.hpp"
 #include "core/time.hpp"
 #include "core/transform.hpp"
+#include "devtools/plugin.hpp"
+#include "devtools_input/plugin.hpp"
+#include "devtools_rendering/plugin.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
@@ -31,7 +34,6 @@
 #include "scripting_lua/plugin.hpp"
 #include "scripting_lua/script_system_registry.hpp"
 #include "ui/plugin.hpp"
-#include "web_preview/plugin.hpp"
 #include "window/input.hpp"
 
 #include <cstdio>
@@ -326,12 +328,18 @@ int main(int argc, char** argv) {
     }
 
     app.add_plugin(
-        WebPreviewPlugin {WebPreviewConfig {
+        devtools::CorePlugin {devtools::Config {
             .host = "127.0.0.1",
             .port = 8080,
+            .enable_ui = true,
+        }}
+    );
+    app.add_plugin(
+        devtools::rendering::ProviderPlugin {devtools::rendering::Config {
             .jpeg_quality = 80,
         }}
     );
+    app.add_plugin(devtools::input::ProviderPlugin {});
 
     app.run();
 

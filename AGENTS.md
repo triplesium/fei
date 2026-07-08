@@ -57,8 +57,9 @@
 ## Sample Rendering Debugging
 
 - When debugging renderer output from a `sample-*` target, it is acceptable to
-  add or enable `WebPreviewPlugin` in that sample.
-- Use the web preview output exposed by `WebPreviewPlugin` to inspect, capture,
+  add or enable `devtools::CorePlugin` plus the relevant DevTools provider
+  plugins in that sample.
+- Use the DevTools HTTP API and UI exposed by those plugins to inspect, capture,
   and compare the engine's rendered result while debugging rendering behavior.
 
 ## Coding Style & Naming Conventions

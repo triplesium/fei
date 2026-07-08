@@ -13,7 +13,9 @@ add_sample("scripting")
 add_sample("scene")
 target("sample-scene")
     add_deps(
-        "fei-web-preview",
+        "fei-devtools",
+        "fei-devtools-input",
+        "fei-devtools-rendering",
         "fei-graphics-opengl",
         "fei-graphics-opengl-glfw",
         "fei-graphics-vulkan",
