@@ -702,6 +702,48 @@ void transition_resource_set_images(
     }
 }
 
+void transition_resource_set_buffers(
+    VkCommandBuffer command_buffer,
+    const ResourceSetVulkan& resource_set
+) {
+    for (const auto& binding : resource_set.buffer_bindings()) {
+        if (!binding.buffer) {
+            fatal("CommandBufferVulkan resource set has null buffer binding");
+        }
+        VkBufferMemoryBarrier barrier {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+            .pNext = nullptr,
+            .srcAccessMask =
+                VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+            .dstAccessMask =
+                VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = binding.buffer->handle(),
+            .offset = binding.offset,
+            .size = binding.range,
+        };
+        vkCmdPipelineBarrier(
+            command_buffer,
+            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT |
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT |
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0,
+            0,
+            nullptr,
+            1,
+            &barrier,
+            0,
+            nullptr
+        );
+    }
+}
+
 void record_buffer_copy(
     VkCommandBuffer command_buffer,
     const BufferVulkan& src,
@@ -1254,6 +1296,7 @@ void CommandBufferVulkan::prepare_graphics_resource_sets() {
         if (!resource_set) {
             continue;
         }
+        transition_resource_set_buffers(m_command_buffer, *resource_set);
         transition_resource_set_images(m_command_buffer, *resource_set);
     }
 }
@@ -1263,6 +1306,7 @@ void CommandBufferVulkan::prepare_compute_resource_sets() {
         if (!resource_set) {
             continue;
         }
+        transition_resource_set_buffers(m_command_buffer, *resource_set);
         transition_resource_set_images(m_command_buffer, *resource_set);
     }
 }

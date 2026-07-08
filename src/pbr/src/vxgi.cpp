@@ -28,8 +28,25 @@ struct VxgiVoxelizationPassData {
     std::vector<VxgiVoxelDrawItem> draw_items;
     RgResourceSetHandle volumes_set;
     RgResourceSetHandle voxelization_set;
+    RgResourceSetHandle accumulation_set;
     RgTextureHandle target;
     uint32 viewport_size {};
+};
+
+struct VxgiClearPassData {
+    RgResourceSetHandle volumes_set;
+    RgResourceSetHandle voxelization_set;
+    RgResourceSetHandle accumulation_set;
+    std::shared_ptr<Pipeline> pipeline;
+    uint32 work_groups {};
+};
+
+struct VxgiResolveVoxelsPassData {
+    RgResourceSetHandle volumes_set;
+    RgResourceSetHandle voxelization_set;
+    RgResourceSetHandle accumulation_set;
+    std::shared_ptr<Pipeline> pipeline;
+    uint32 work_groups {};
 };
 
 struct VxgiInjectRadiancePassData {
@@ -80,6 +97,25 @@ TextureDescription texture_desc_from(const Texture& texture) {
     };
 }
 
+std::size_t vxgi_voxel_count(uint32 voxel_resolution) {
+    const auto resolution = static_cast<std::size_t>(voxel_resolution);
+    return resolution * resolution * resolution;
+}
+
+std::shared_ptr<Buffer> create_vxgi_accumulation_buffer(
+    const GraphicsDevice& device,
+    uint32 voxel_resolution,
+    std::size_t channels
+) {
+    return device.create_buffer(
+        BufferDescription {
+            .size =
+                vxgi_voxel_count(voxel_resolution) * channels * sizeof(uint32),
+            .usages = BufferUsages::Storage,
+        }
+    );
+}
+
 OutputDescription single_color_output_description(PixelFormat format) {
     return OutputDescription {
         .color_attachments =
@@ -107,6 +143,16 @@ std::vector<RenderGraphResourceBinding>
 vxgi_voxelization_bindings(const VxgiVoxelization& voxelization) {
     return {
         voxelization.voxelization_uniform_buffer,
+    };
+}
+
+std::vector<RenderGraphResourceBinding>
+vxgi_accumulation_bindings(const VxgiVoxelization& voxelization) {
+    return {
+        voxelization.albedo_accumulation_buffer,
+        voxelization.normal_accumulation_buffer,
+        voxelization.emissive_accumulation_buffer,
+        voxelization.count_accumulation_buffer,
     };
 }
 
@@ -264,16 +310,19 @@ bool collect_vxgi_voxel_draw_items(
 VxgiVoxelizationSpecializer::VxgiVoxelizationSpecializer(
     std::vector<std::shared_ptr<const ShaderModule>> shader_modules,
     std::shared_ptr<const ResourceLayout> volumes_layout,
-    std::shared_ptr<const ResourceLayout> voxelization_layout
+    std::shared_ptr<const ResourceLayout> voxelization_layout,
+    std::shared_ptr<const ResourceLayout> accumulation_layout
 ) :
     m_shader_modules(std::move(shader_modules)),
     m_volumes_layout(std::move(volumes_layout)),
-    m_voxelization_layout(std::move(voxelization_layout)) {
+    m_voxelization_layout(std::move(voxelization_layout)),
+    m_accumulation_layout(std::move(accumulation_layout)) {
     for (const auto& shader_module : m_shader_modules) {
         hash_combine(m_cache_key, shader_module.get());
     }
     hash_combine(m_cache_key, m_volumes_layout.get());
     hash_combine(m_cache_key, m_voxelization_layout.get());
+    hash_combine(m_cache_key, m_accumulation_layout.get());
 }
 
 void VxgiVoxelizationSpecializer::specialize(
@@ -287,6 +336,7 @@ void VxgiVoxelizationSpecializer::specialize(
     desc.rasterizer_state.cull_mode = CullMode::None;
     desc.resource_layouts.push_back(m_volumes_layout);
     desc.resource_layouts.push_back(m_voxelization_layout);
+    desc.resource_layouts.push_back(m_accumulation_layout);
     desc.output_description =
         single_color_output_description(PixelFormat::Rgba8Unorm);
 }
@@ -384,6 +434,17 @@ void setup_vxgi(
             {uniform_buffer("VxgiVoxelization")}
         )
     );
+    auto accumulation_resource_layout = device->create_resource_layout(
+        ResourceLayoutDescription::sequencial(
+            {ShaderStages::Fragment, ShaderStages::Compute},
+            {
+                storage_buffer_read_write("voxel_albedo_accum"),
+                storage_buffer_read_write("voxel_normal_accum"),
+                storage_buffer_read_write("voxel_emissive_accum"),
+                storage_buffer_read_write("voxel_count_accum"),
+            }
+        )
+    );
 
     auto voxelization_uniform_buffer = device->create_buffer(
         BufferDescription {
@@ -391,10 +452,52 @@ void setup_vxgi(
             .usages = BufferUsages::Uniform,
         }
     );
+    auto albedo_accumulation_buffer =
+        create_vxgi_accumulation_buffer(*device, config.voxel_resolution, 4);
+    auto normal_accumulation_buffer =
+        create_vxgi_accumulation_buffer(*device, config.voxel_resolution, 3);
+    auto emissive_accumulation_buffer =
+        create_vxgi_accumulation_buffer(*device, config.voxel_resolution, 4);
+    auto count_accumulation_buffer =
+        create_vxgi_accumulation_buffer(*device, config.voxel_resolution, 1);
+    auto clear_shader_module = shader_cache->get_or_compile(
+        AssetPath("shader://pbr/clear_voxels.slang"),
+        ShaderStages::Compute,
+        {}
+    );
+    auto clear_pipeline = device->create_compute_pipeline(
+        ComputePipelineDescription {
+            .shader = clear_shader_module,
+            .resource_layouts = {
+                volumes->resource_layout,
+                voxelization_resource_layout,
+                accumulation_resource_layout
+            },
+        }
+    );
+    auto resolve_shader_module = shader_cache->get_or_compile(
+        AssetPath("shader://pbr/resolve_voxels.slang"),
+        ShaderStages::Compute,
+        {}
+    );
+    auto resolve_pipeline = device->create_compute_pipeline(
+        ComputePipelineDescription {
+            .shader = resolve_shader_module,
+            .resource_layouts = {
+                volumes->resource_layout,
+                voxelization_resource_layout,
+                accumulation_resource_layout
+            },
+        }
+    );
 
     commands.add_resource(
         VxgiVoxelization {
             .voxelization_uniform_buffer = voxelization_uniform_buffer,
+            .albedo_accumulation_buffer = albedo_accumulation_buffer,
+            .normal_accumulation_buffer = normal_accumulation_buffer,
+            .emissive_accumulation_buffer = emissive_accumulation_buffer,
+            .count_accumulation_buffer = count_accumulation_buffer,
             .temp_texture = device->create_texture(
                 TextureDescription {
                     .width = 1920,
@@ -408,10 +511,14 @@ void setup_vxgi(
                 }
             ),
             .resource_layout = voxelization_resource_layout,
+            .accumulation_layout = accumulation_resource_layout,
+            .clear_pipeline = clear_pipeline,
+            .resolve_pipeline = resolve_pipeline,
             .pipeline_specializer = VxgiVoxelizationSpecializer(
                 shader_modules,
                 volumes->resource_layout,
-                voxelization_resource_layout
+                voxelization_resource_layout,
+                accumulation_resource_layout
             ),
         }
     );
@@ -479,10 +586,11 @@ void prepare_vxgi_voxelization(
         proj *
         look_at(center + Vector3::Right * half_size, center, Vector3::Up);
     uniform.view_projections[1] =
-        proj * look_at(center + Vector3::Left * half_size, center, Vector3::Up);
-    uniform.view_projections[2] =
         proj *
         look_at(center + Vector3::Up * half_size, center, Vector3::Forward);
+    uniform.view_projections[2] =
+        proj *
+        look_at(center + Vector3::Forward * half_size, center, Vector3::Up);
     for (int i = 0; i < 3; ++i) {
         uniform.inv_view_projections[i] =
             uniform.view_projections[i].inverse_affine();
@@ -546,6 +654,142 @@ void queue_vxgi_voxelization_pipelines(
     }
 }
 
+void add_vxgi_clear_pass(
+    RenderGraph& render_graph,
+    const VxgiVolumes& volumes,
+    const VxgiVoxelization& voxelization
+) {
+    render_graph.add_pass<VxgiClearPassData>(
+        "vxgi_clear",
+        [&](RenderGraphBuilder& builder, VxgiClearPassData& data) {
+            auto& handles = ensure_vxgi_graph_handles(
+                builder,
+                render_graph.blackboard(),
+                volumes
+            );
+            data.volumes_set =
+                create_vxgi_volumes_set(builder, volumes, handles);
+            data.voxelization_set = builder.create_resource_set(
+                "vxgi.voxelization",
+                voxelization.resource_layout,
+                vxgi_voxelization_bindings(voxelization)
+            );
+            data.accumulation_set = builder.create_resource_set(
+                "vxgi.accumulation",
+                voxelization.accumulation_layout,
+                vxgi_accumulation_bindings(voxelization)
+            );
+            data.pipeline = voxelization.clear_pipeline;
+            data.work_groups = (volumes.config.voxel_resolution + 7) / 8;
+
+            handles.albedo = builder.write_texture(
+                handles.albedo,
+                RenderGraphAccess::TextureReadWrite
+            );
+            handles.normal = builder.write_texture(
+                handles.normal,
+                RenderGraphAccess::TextureReadWrite
+            );
+            handles.emissive = builder.write_texture(
+                handles.emissive,
+                RenderGraphAccess::TextureReadWrite
+            );
+            handles.radiance = builder.write_texture(
+                handles.radiance,
+                RenderGraphAccess::TextureReadWrite
+            );
+            handles.static_flag = builder.write_texture(
+                handles.static_flag,
+                RenderGraphAccess::TextureReadWrite
+            );
+        },
+        [](RenderGraphContext& context, const VxgiClearPassData& data) {
+            auto& command_buffer = context.command_buffer();
+            command_buffer.set_compute_pipeline(data.pipeline);
+            command_buffer.set_resource_set(
+                0,
+                context.resource_set(data.volumes_set)
+            );
+            command_buffer.set_resource_set(
+                1,
+                context.resource_set(data.voxelization_set)
+            );
+            command_buffer.set_resource_set(
+                2,
+                context.resource_set(data.accumulation_set)
+            );
+            command_buffer
+                .dispatch(data.work_groups, data.work_groups, data.work_groups);
+        }
+    );
+}
+
+void add_vxgi_resolve_voxels_pass(
+    RenderGraph& render_graph,
+    const VxgiVolumes& volumes,
+    const VxgiVoxelization& voxelization
+) {
+    render_graph.add_pass<VxgiResolveVoxelsPassData>(
+        "vxgi_resolve_voxels",
+        [&](RenderGraphBuilder& builder, VxgiResolveVoxelsPassData& data) {
+            auto& handles = ensure_vxgi_graph_handles(
+                builder,
+                render_graph.blackboard(),
+                volumes
+            );
+            data.volumes_set =
+                create_vxgi_volumes_set(builder, volumes, handles);
+            data.voxelization_set = builder.create_resource_set(
+                "vxgi.voxelization",
+                voxelization.resource_layout,
+                vxgi_voxelization_bindings(voxelization)
+            );
+            data.accumulation_set = builder.create_resource_set(
+                "vxgi.accumulation",
+                voxelization.accumulation_layout,
+                vxgi_accumulation_bindings(voxelization)
+            );
+            data.pipeline = voxelization.resolve_pipeline;
+            data.work_groups = (volumes.config.voxel_resolution + 7) / 8;
+
+            handles.albedo = builder.write_texture(
+                handles.albedo,
+                RenderGraphAccess::TextureReadWrite
+            );
+            handles.normal = builder.write_texture(
+                handles.normal,
+                RenderGraphAccess::TextureReadWrite
+            );
+            handles.emissive = builder.write_texture(
+                handles.emissive,
+                RenderGraphAccess::TextureReadWrite
+            );
+            handles.static_flag = builder.write_texture(
+                handles.static_flag,
+                RenderGraphAccess::TextureReadWrite
+            );
+        },
+        [](RenderGraphContext& context, const VxgiResolveVoxelsPassData& data) {
+            auto& command_buffer = context.command_buffer();
+            command_buffer.set_compute_pipeline(data.pipeline);
+            command_buffer.set_resource_set(
+                0,
+                context.resource_set(data.volumes_set)
+            );
+            command_buffer.set_resource_set(
+                1,
+                context.resource_set(data.voxelization_set)
+            );
+            command_buffer.set_resource_set(
+                2,
+                context.resource_set(data.accumulation_set)
+            );
+            command_buffer
+                .dispatch(data.work_groups, data.work_groups, data.work_groups);
+        }
+    );
+}
+
 void build_vxgi_voxelization_pass(
     Query<
         Entity,
@@ -575,8 +819,13 @@ void build_vxgi_voxelization_pass(
             *materials,
             *mesh_uniforms,
             draw_items
-        ) ||
-        draw_items.empty()) {
+        )) {
+        return;
+    }
+
+    add_vxgi_clear_pass(*render_graph, *volumes, *voxelization);
+    if (draw_items.empty()) {
+        voxelization->dirty = false;
         return;
     }
 
@@ -595,6 +844,11 @@ void build_vxgi_voxelization_pass(
                 "vxgi.voxelization",
                 voxelization->resource_layout,
                 vxgi_voxelization_bindings(*voxelization)
+            );
+            data.accumulation_set = builder.create_resource_set(
+                "vxgi.accumulation",
+                voxelization->accumulation_layout,
+                vxgi_accumulation_bindings(*voxelization)
             );
             data.target = builder.create_texture(
                 "vxgi.voxelization_target",
@@ -648,6 +902,10 @@ void build_vxgi_voxelization_pass(
                     4,
                     context.resource_set(data.voxelization_set)
                 );
+                command_buffer.set_resource_set(
+                    5,
+                    context.resource_set(data.accumulation_set)
+                );
                 command_buffer.set_vertex_buffer(item.vertex_buffer);
                 if (item.index_buffer) {
                     command_buffer.set_index_buffer(
@@ -663,6 +921,7 @@ void build_vxgi_voxelization_pass(
         }
     );
 
+    add_vxgi_resolve_voxels_pass(*render_graph, *volumes, *voxelization);
     voxelization->dirty = false;
 }
 

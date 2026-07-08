@@ -18,12 +18,6 @@ namespace fei {
 
 namespace {
 
-struct BufferBindingResource {
-    std::shared_ptr<const BufferVulkan> buffer;
-    VkDeviceSize offset {0};
-    VkDeviceSize range {VK_WHOLE_SIZE};
-};
-
 struct DescriptorArrayElementName {
     std::string base_name;
     uint32 index {0};
@@ -114,7 +108,7 @@ require_layout(const std::shared_ptr<const ResourceLayout>& layout) {
     return layout_vk;
 }
 
-BufferBindingResource resolve_buffer_binding_resource(
+ResourceSetBufferBinding resolve_buffer_binding_resource(
     const std::shared_ptr<const BindableResource>& resource
 ) {
     if (auto range = std::dynamic_pointer_cast<const BufferRange>(resource)) {
@@ -130,7 +124,7 @@ BufferBindingResource resolve_buffer_binding_resource(
             range->offset() + range->size() > buffer_vk->size()) {
             fatal("ResourceSetVulkan buffer range exceeds buffer size");
         }
-        return BufferBindingResource {
+        return ResourceSetBufferBinding {
             .buffer = std::move(buffer_vk),
             .offset = static_cast<VkDeviceSize>(range->offset()),
             .range = range->size() == BufferRange::WholeSize ?
@@ -143,7 +137,7 @@ BufferBindingResource resolve_buffer_binding_resource(
     if (!buffer_vk) {
         fatal("ResourceSetVulkan resource is not a Vulkan buffer");
     }
-    return BufferBindingResource {
+    return ResourceSetBufferBinding {
         .buffer = std::move(buffer_vk),
         .offset = 0,
         .range = VK_WHOLE_SIZE,
@@ -420,6 +414,10 @@ ResourceSetVulkan::ResourceSetVulkan(
                 }
             );
             write.pBufferInfo = &buffer_infos.back();
+            if (element.kind == ResourceKind::StorageBufferReadOnly ||
+                element.kind == ResourceKind::StorageBufferReadWrite) {
+                m_buffer_bindings.push_back(std::move(binding));
+            }
         } else if (is_texture_resource_kind(element.kind)) {
             auto view = resolve_texture_view(
                 m_state,

@@ -35,6 +35,10 @@ layout(set = 3, binding = 1, rgba8) RWTexture3D<float4> voxel_normal;
 layout(set = 3, binding = 2, rgba8) RWTexture3D<float4> voxel_emissive;
 layout(set = 3, binding = 4, r8) RWTexture3D<float4> static_voxel_flag;
 layout(set = 4, binding = 0) ConstantBuffer<VxgiVoxelizationUniform> VxgiVoxelization;
+layout(set = 5, binding = 0) RWStructuredBuffer<uint> voxel_albedo_accum;
+layout(set = 5, binding = 1) RWStructuredBuffer<uint> voxel_normal_accum;
+layout(set = 5, binding = 2) RWStructuredBuffer<uint> voxel_emissive_accum;
+layout(set = 5, binding = 3) RWStructuredBuffer<uint> voxel_count_accum;
 
 int calculate_axis(VertexOutput input[3]) {
     float3 p1 = input[1].position.xyz - input[0].position.xyz;
@@ -60,6 +64,20 @@ float4 axis_aligned_bounding_box(float4 positions[3], float2 pixel_diagonal) {
     aabb.xy -= pixel_diagonal;
     aabb.zw += pixel_diagonal;
     return aabb;
+}
+
+uint voxel_linear_index(int3 position) {
+    uint dimension = VxgiVoxelization.volume_dimension;
+    uint3 voxel = uint3(position);
+    return voxel.x + voxel.y * dimension + voxel.z * dimension * dimension;
+}
+
+uint color_channel(float value) {
+    return uint(round(saturate(value) * 255.0));
+}
+
+uint normal_channel(float value) {
+    return uint(round(saturate(value * 0.5 + 0.5) * 65535.0));
 }
 
 [shader("vertex")]
@@ -175,7 +193,8 @@ float4 fragment_main(GeometryOutput input) : SV_Target0 {
         discard;
     }
 
-    int3 position = int3(input.ws_position);
+    int3 volume_max = int3(int(VxgiVoxelization.volume_dimension) - 1);
+    int3 position = clamp(int3(input.ws_position), int3(0), volume_max);
     float4 albedo = material.sample_albedo_texture(input.tex_coords);
     float opacity = albedo.a;
 
@@ -195,13 +214,40 @@ float4 fragment_main(GeometryOutput input) : SV_Target0 {
         emissive.rgb = srgb_to_linear(emissive.rgb) * srgb_to_linear(material.emissive);
         emissive.a = 1.0;
 
-        voxel_normal[position] = float4(encode(normalize(input.normal)), 1.0);
-        voxel_albedo[position] = albedo;
-        voxel_emissive[position] = emissive;
+        uint linear_index = voxel_linear_index(position);
+        uint color_offset = linear_index * 4;
+        uint normal_offset = linear_index * 3;
+        uint4 albedo_value = uint4(
+            color_channel(albedo.r),
+            color_channel(albedo.g),
+            color_channel(albedo.b),
+            color_channel(albedo.a)
+        );
+        float3 normal = normalize(input.normal);
+        uint3 normal_value = uint3(
+            normal_channel(normal.x),
+            normal_channel(normal.y),
+            normal_channel(normal.z)
+        );
+        uint4 emissive_value = uint4(
+            color_channel(emissive.r),
+            color_channel(emissive.g),
+            color_channel(emissive.b),
+            color_channel(emissive.a)
+        );
 
-        if (VxgiVoxelization.flag_static_voxels == 1) {
-            static_voxel_flag[position] = float4(1.0);
-        }
+        InterlockedAdd(voxel_albedo_accum[color_offset + 0], albedo_value.x);
+        InterlockedAdd(voxel_albedo_accum[color_offset + 1], albedo_value.y);
+        InterlockedAdd(voxel_albedo_accum[color_offset + 2], albedo_value.z);
+        InterlockedAdd(voxel_albedo_accum[color_offset + 3], albedo_value.w);
+        InterlockedAdd(voxel_normal_accum[normal_offset + 0], normal_value.x);
+        InterlockedAdd(voxel_normal_accum[normal_offset + 1], normal_value.y);
+        InterlockedAdd(voxel_normal_accum[normal_offset + 2], normal_value.z);
+        InterlockedAdd(voxel_emissive_accum[color_offset + 0], emissive_value.x);
+        InterlockedAdd(voxel_emissive_accum[color_offset + 1], emissive_value.y);
+        InterlockedAdd(voxel_emissive_accum[color_offset + 2], emissive_value.z);
+        InterlockedAdd(voxel_emissive_accum[color_offset + 3], emissive_value.w);
+        InterlockedAdd(voxel_count_accum[linear_index], 1);
     }
 
     return float4(0.0);

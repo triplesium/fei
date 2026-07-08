@@ -8,9 +8,16 @@
 namespace fei {
 
 class VulkanDeviceState;
+class BufferVulkan;
 class TextureVulkan;
 class TextureViewVulkan;
 class SamplerVulkan;
+
+struct ResourceSetBufferBinding {
+    std::shared_ptr<const BufferVulkan> buffer;
+    VkDeviceSize offset {0};
+    VkDeviceSize range {VK_WHOLE_SIZE};
+};
 
 struct ResourceSetImageBinding {
     std::shared_ptr<const TextureVulkan> texture;
@@ -67,6 +74,7 @@ class ResourceSetVulkan : public ResourceSet {
     std::shared_ptr<const ResourceLayoutVulkan> m_layout;
     std::vector<std::shared_ptr<const BindableResource>> m_resources;
     std::vector<std::shared_ptr<const TextureViewVulkan>> m_owned_texture_views;
+    std::vector<ResourceSetBufferBinding> m_buffer_bindings;
     std::vector<ResourceSetImageBinding> m_image_bindings;
     std::shared_ptr<const SamplerVulkan> m_default_sampler;
     VkDescriptorSet m_descriptor_set {VK_NULL_HANDLE};
@@ -90,6 +98,10 @@ class ResourceSetVulkan : public ResourceSet {
     const std::vector<std::shared_ptr<const BindableResource>>&
     resources() const {
         return m_resources;
+    }
+    [[nodiscard]] const std::vector<ResourceSetBufferBinding>&
+    buffer_bindings() const {
+        return m_buffer_bindings;
     }
     [[nodiscard]] const std::vector<ResourceSetImageBinding>&
     image_bindings() const {

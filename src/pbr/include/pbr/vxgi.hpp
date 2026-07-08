@@ -66,13 +66,15 @@ class VxgiVoxelizationSpecializer : public PipelineSpecializer {
     std::vector<std::shared_ptr<const ShaderModule>> m_shader_modules;
     std::shared_ptr<const ResourceLayout> m_volumes_layout;
     std::shared_ptr<const ResourceLayout> m_voxelization_layout;
+    std::shared_ptr<const ResourceLayout> m_accumulation_layout;
     std::size_t m_cache_key {0};
 
   public:
     VxgiVoxelizationSpecializer(
         std::vector<std::shared_ptr<const ShaderModule>> shader_modules,
         std::shared_ptr<const ResourceLayout> volumes_layout,
-        std::shared_ptr<const ResourceLayout> voxelization_layout
+        std::shared_ptr<const ResourceLayout> voxelization_layout,
+        std::shared_ptr<const ResourceLayout> accumulation_layout
     );
 
     std::size_t cache_key() const override { return m_cache_key; }
@@ -92,8 +94,15 @@ class VxgiVoxelizationSpecializer : public PipelineSpecializer {
 
 struct VxgiVoxelization {
     std::shared_ptr<Buffer> voxelization_uniform_buffer;
+    std::shared_ptr<Buffer> albedo_accumulation_buffer;
+    std::shared_ptr<Buffer> normal_accumulation_buffer;
+    std::shared_ptr<Buffer> emissive_accumulation_buffer;
+    std::shared_ptr<Buffer> count_accumulation_buffer;
     std::shared_ptr<Texture> temp_texture;
     std::shared_ptr<ResourceLayout> resource_layout;
+    std::shared_ptr<ResourceLayout> accumulation_layout;
+    std::shared_ptr<Pipeline> clear_pipeline;
+    std::shared_ptr<Pipeline> resolve_pipeline;
     VxgiVoxelizationSpecializer pipeline_specializer;
     Aabb scene_aabb;
     bool dirty {false};

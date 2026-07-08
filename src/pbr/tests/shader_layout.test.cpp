@@ -71,7 +71,7 @@ std::filesystem::path normalized_absolute_path(std::filesystem::path path) {
     return path.lexically_normal();
 }
 
-constexpr std::array<PbrShaderCase, 25> PbrShaders {
+constexpr std::array<PbrShaderCase, 27> PbrShaders {
     PbrShaderCase {
         "aniso_mipmapbase.comp",
         "aniso_mipmapbase.slang",
@@ -83,6 +83,11 @@ constexpr std::array<PbrShaderCase, 25> PbrShaders {
         ShaderStages::Compute
     },
     PbrShaderCase {"blur.frag", "blur.slang", ShaderStages::Fragment},
+    PbrShaderCase {
+        "clear_voxels.comp",
+        "clear_voxels.slang",
+        ShaderStages::Compute
+    },
     PbrShaderCase {"color.frag", "color.slang", ShaderStages::Fragment},
     PbrShaderCase {
         "cubemap2irradiance.comp",
@@ -142,6 +147,11 @@ constexpr std::array<PbrShaderCase, 25> PbrShaders {
         ShaderStages::Compute
     },
     PbrShaderCase {"quad.vert", "quad.slang", ShaderStages::Vertex},
+    PbrShaderCase {
+        "resolve_voxels.comp",
+        "resolve_voxels.slang",
+        ShaderStages::Compute
+    },
     PbrShaderCase {"shadow.frag", "shadow.slang", ShaderStages::Fragment},
     PbrShaderCase {"shadow.vert", "shadow.slang", ShaderStages::Vertex},
     PbrShaderCase {"skybox.frag", "skybox.slang", ShaderStages::Fragment},
@@ -610,11 +620,52 @@ TEST_CASE(
             {"albedo_map", ResourceKind::TextureReadOnly, 2, 1},
             {"emissive_map", ResourceKind::TextureReadOnly, 2, 5},
             {"sampler", ResourceKind::Sampler, 2, 7},
-            {"voxel_albedo", ResourceKind::TextureReadWrite, 3, 0},
-            {"voxel_normal", ResourceKind::TextureReadWrite, 3, 1},
-            {"voxel_emissive", ResourceKind::TextureReadWrite, 3, 2},
             {"static_voxel_flag", ResourceKind::TextureReadWrite, 3, 4},
             {"VxgiVoxelization", ResourceKind::UniformBuffer, 4, 0},
+            {"voxel_albedo_accum", ResourceKind::StorageBufferReadWrite, 5, 0},
+            {"voxel_normal_accum", ResourceKind::StorageBufferReadWrite, 5, 1},
+            {"voxel_emissive_accum",
+             ResourceKind::StorageBufferReadWrite,
+             5,
+             2},
+            {"voxel_count_accum", ResourceKind::StorageBufferReadWrite, 5, 3},
+        }
+    );
+
+    require_shader_resources(
+        "clear_voxels.comp",
+        {
+            {"voxel_albedo", ResourceKind::TextureReadWrite, 0, 0},
+            {"voxel_normal", ResourceKind::TextureReadWrite, 0, 1},
+            {"voxel_emissive", ResourceKind::TextureReadWrite, 0, 2},
+            {"voxel_radiance", ResourceKind::TextureReadWrite, 0, 3},
+            {"static_voxel_flag", ResourceKind::TextureReadWrite, 0, 4},
+            {"VxgiVoxelization", ResourceKind::UniformBuffer, 1, 0},
+            {"voxel_albedo_accum", ResourceKind::StorageBufferReadWrite, 2, 0},
+            {"voxel_normal_accum", ResourceKind::StorageBufferReadWrite, 2, 1},
+            {"voxel_emissive_accum",
+             ResourceKind::StorageBufferReadWrite,
+             2,
+             2},
+            {"voxel_count_accum", ResourceKind::StorageBufferReadWrite, 2, 3},
+        }
+    );
+
+    require_shader_resources(
+        "resolve_voxels.comp",
+        {
+            {"voxel_albedo", ResourceKind::TextureReadWrite, 0, 0},
+            {"voxel_normal", ResourceKind::TextureReadWrite, 0, 1},
+            {"voxel_emissive", ResourceKind::TextureReadWrite, 0, 2},
+            {"static_voxel_flag", ResourceKind::TextureReadWrite, 0, 4},
+            {"VxgiVoxelization", ResourceKind::UniformBuffer, 1, 0},
+            {"voxel_albedo_accum", ResourceKind::StorageBufferReadWrite, 2, 0},
+            {"voxel_normal_accum", ResourceKind::StorageBufferReadWrite, 2, 1},
+            {"voxel_emissive_accum",
+             ResourceKind::StorageBufferReadWrite,
+             2,
+             2},
+            {"voxel_count_accum", ResourceKind::StorageBufferReadWrite, 2, 3},
         }
     );
 

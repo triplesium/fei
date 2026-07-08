@@ -190,6 +190,70 @@ float4 fragment_main() : SV_Target0
 }
 
 TEST_CASE(
+    "SlangLibraryShaderCompiler uses storage buffer names for OpenGL blocks",
+    "[rendering][shader-compiler][slang]"
+) {
+    auto root = std::filesystem::current_path() / "build" / "test" /
+                "slang-library-shader-compiler-storage-buffer-names";
+    std::filesystem::remove_all(root);
+    auto source_path = root / "shader.slang";
+    write_text_file(
+        source_path,
+        R"(
+layout(set = 0, binding = 0) RWStructuredBuffer<uint> first_buffer;
+layout(set = 0, binding = 1) RWStructuredBuffer<uint> second_buffer;
+
+[shader("compute")]
+[numthreads(1, 1, 1)]
+void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID)
+{
+    first_buffer[dispatch_thread_id.x] = second_buffer[dispatch_thread_id.x];
+}
+)"
+    );
+
+    ShaderCompileRequest request {
+        .source_path = source_path,
+        .source_root = root,
+        .logical_path = "shader.slang",
+        .stage = ShaderStages::Compute,
+        .entry = "compute_main",
+    };
+
+    SlangLibraryShaderCompiler compiler;
+
+    auto output = compiler.compile(request);
+
+    if (!output) {
+        INFO(output.error().message);
+        INFO(output.error().diagnostics);
+    }
+    REQUIRE(output.has_value());
+
+    const auto& first = require_resource(output->description, "first_buffer");
+    CHECK(first.kind == ResourceKind::StorageBufferReadWrite);
+    CHECK(first.backend_name == "first_buffer_block");
+
+    const auto& second = require_resource(output->description, "second_buffer");
+    CHECK(second.kind == ResourceKind::StorageBufferReadWrite);
+    CHECK(second.backend_name == "second_buffer_block");
+
+    INFO(output->description.source);
+    CHECK(
+        output->description.source.find("buffer first_buffer_block") !=
+        std::string::npos
+    );
+    CHECK(
+        output->description.source.find("buffer second_buffer_block") !=
+        std::string::npos
+    );
+    CHECK(
+        output->description.source.find("buffer RWStructuredBuffer") ==
+        std::string::npos
+    );
+}
+
+TEST_CASE(
     "SlangLibraryShaderCompiler tracks imported Slang modules",
     "[rendering][shader-compiler][slang]"
 ) {

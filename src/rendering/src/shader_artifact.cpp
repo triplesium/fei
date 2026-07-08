@@ -1,6 +1,7 @@
 #include "shader_artifact.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -33,6 +34,19 @@ using SkippedResourceIds = std::unordered_set<uint32_t>;
 struct OpenGLResourceNames {
     BackendResourceNames backend_names;
     SkippedResourceIds skipped_resource_ids;
+};
+
+struct StorageBufferBlockDeclaration {
+    size_t block_name_position;
+    size_t block_name_length;
+    std::string block_name;
+    std::string instance_name;
+};
+
+struct SourceReplacement {
+    size_t position;
+    size_t length;
+    std::string value;
 };
 
 std::string spvc_error_message(spvc_context context, std::string_view action) {
@@ -147,6 +161,182 @@ decoration_or_zero(spvc_compiler compiler, SpvId id, SpvDecoration decoration) {
         return 0;
     }
     return spvc_compiler_get_decoration(compiler, id, decoration);
+}
+
+bool is_identifier_char(char value) {
+    return std::isalnum(static_cast<unsigned char>(value)) != 0 || value == '_';
+}
+
+size_t skip_whitespace(std::string_view source, size_t offset) {
+    while (offset < source.size() &&
+           std::isspace(static_cast<unsigned char>(source[offset])) != 0) {
+        ++offset;
+    }
+    return offset;
+}
+
+std::string
+read_identifier(std::string_view source, size_t offset, size_t& end) {
+    end = offset;
+    if (offset >= source.size() || !is_identifier_char(source[offset]) ||
+        std::isdigit(static_cast<unsigned char>(source[offset])) != 0) {
+        return {};
+    }
+
+    while (end < source.size() && is_identifier_char(source[end])) {
+        ++end;
+    }
+    return std::string(source.substr(offset, end - offset));
+}
+
+std::vector<StorageBufferBlockDeclaration>
+find_storage_buffer_blocks(std::string_view source) {
+    std::vector<StorageBufferBlockDeclaration> declarations;
+    size_t offset = 0;
+    while ((offset = source.find("buffer", offset)) != std::string_view::npos) {
+        const auto previous_is_identifier =
+            offset > 0 && is_identifier_char(source[offset - 1]);
+        const auto after_keyword = offset + std::string_view("buffer").size();
+        const auto next_is_identifier =
+            after_keyword < source.size() &&
+            is_identifier_char(source[after_keyword]);
+        if (previous_is_identifier || next_is_identifier) {
+            offset = after_keyword;
+            continue;
+        }
+
+        auto block_name_position = skip_whitespace(source, after_keyword);
+        size_t block_name_end = block_name_position;
+        auto block_name =
+            read_identifier(source, block_name_position, block_name_end);
+        if (block_name.empty()) {
+            offset = after_keyword;
+            continue;
+        }
+
+        auto body_start = skip_whitespace(source, block_name_end);
+        if (body_start >= source.size() || source[body_start] != '{') {
+            offset = block_name_end;
+            continue;
+        }
+
+        size_t body_end = std::string_view::npos;
+        int depth = 0;
+        for (size_t cursor = body_start; cursor < source.size(); ++cursor) {
+            if (source[cursor] == '{') {
+                ++depth;
+            } else if (source[cursor] == '}') {
+                --depth;
+                if (depth == 0) {
+                    body_end = cursor;
+                    break;
+                }
+            }
+        }
+        if (body_end == std::string_view::npos) {
+            offset = body_start + 1;
+            continue;
+        }
+
+        auto instance_name_position = skip_whitespace(source, body_end + 1);
+        size_t instance_name_end = instance_name_position;
+        auto instance_name =
+            read_identifier(source, instance_name_position, instance_name_end);
+        declarations.push_back(
+            StorageBufferBlockDeclaration {
+                .block_name_position = block_name_position,
+                .block_name_length = block_name_end - block_name_position,
+                .block_name = std::move(block_name),
+                .instance_name = std::move(instance_name),
+            }
+        );
+        offset = instance_name_end;
+    }
+    return declarations;
+}
+
+bool resource_name_matches(
+    std::string_view name,
+    const ShaderResourceBinding& resource
+) {
+    if (name.empty()) {
+        return false;
+    }
+    if (name == resource.name || name == resource.backend_name) {
+        return true;
+    }
+    return std::any_of(
+        resource.backend_names.begin(),
+        resource.backend_names.end(),
+        [name](const std::string& backend_name) {
+            return name == backend_name;
+        }
+    );
+}
+
+void rewrite_opengl_storage_buffer_blocks(
+    std::string& source,
+    std::vector<ShaderResourceBinding>& bindings
+) {
+    auto declarations = find_storage_buffer_blocks(source);
+    std::vector<bool> used(declarations.size(), false);
+    std::vector<SourceReplacement> replacements;
+
+    for (auto& binding : bindings) {
+        if (binding.kind != ResourceKind::StorageBufferReadWrite) {
+            continue;
+        }
+
+        auto declaration_index = declarations.size();
+        for (size_t i = 0; i < declarations.size(); ++i) {
+            if (!used[i] &&
+                resource_name_matches(declarations[i].instance_name, binding)) {
+                declaration_index = i;
+                break;
+            }
+        }
+        if (declaration_index == declarations.size()) {
+            for (size_t i = 0; i < declarations.size(); ++i) {
+                if (!used[i] && resource_name_matches(
+                                    declarations[i].block_name,
+                                    binding
+                                )) {
+                    declaration_index = i;
+                    break;
+                }
+            }
+        }
+        if (declaration_index == declarations.size()) {
+            continue;
+        }
+
+        used[declaration_index] = true;
+        auto block_name = binding.name + "_block";
+        replacements.push_back(
+            SourceReplacement {
+                .position = declarations[declaration_index].block_name_position,
+                .length = declarations[declaration_index].block_name_length,
+                .value = block_name,
+            }
+        );
+        binding.backend_name = block_name;
+        binding.backend_names = {std::move(block_name)};
+    }
+
+    std::sort(
+        replacements.begin(),
+        replacements.end(),
+        [](const SourceReplacement& lhs, const SourceReplacement& rhs) {
+            return lhs.position > rhs.position;
+        }
+    );
+    for (const auto& replacement : replacements) {
+        source.replace(
+            replacement.position,
+            replacement.length,
+            replacement.value
+        );
+    }
 }
 
 std::vector<uint32_t> resource_array_dimensions(
@@ -480,6 +670,7 @@ prepare_opengl_resource_names(const SpirvCrossCompiler& cross) {
         );
         names.skipped_resource_ids.insert(combined.combined_id);
     }
+
     return names;
 }
 
@@ -539,6 +730,7 @@ generate_shader_artifacts(const ShaderArtifactGenerationInput& input) {
     auto resources =
         make_resource_bindings(compiler, logical_names, opengl_names);
     auto glsl = compile_opengl_glsl(compiler);
+    rewrite_opengl_storage_buffer_blocks(glsl, resources);
 
     return ShaderArtifactGenerationOutput {
         .opengl_source = std::move(glsl),
