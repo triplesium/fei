@@ -1,7 +1,9 @@
 #pragma once
 
+#include "base/optional.hpp"
 #include "refl/utils.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -48,12 +50,20 @@ struct TypeOps {
     using DefaultConstructFunc = void (*)(const void* context, void* dest);
     using CopyConstructFunc =
         void (*)(const void* context, void* dest, const void* src);
+    // Unsafe C++ move operations are represented by a null callback. Exposed
+    // move and destruction callbacks form a non-throwing relocation boundary.
     using MoveConstructFunc =
-        void (*)(const void* context, void* dest, void* src);
-    using DestroyFunc = void (*)(const void* context, void* ptr);
+        void (*)(const void* context, void* dest, void* src) noexcept;
+    using DestroyFunc = void (*)(const void* context, void* ptr) noexcept;
     using CopyAssignFunc =
         bool (*)(const void* context, void* dest, const void* src);
-    using MoveAssignFunc = bool (*)(const void* context, void* dest, void* src);
+    using MoveAssignFunc =
+        bool (*)(const void* context, void* dest, void* src) noexcept;
+    using EqualFunc =
+        bool (*)(const void* context, const void* lhs, const void* rhs);
+    // Runtime hash for in-process lookup. It is not a persistent or stable ID.
+    using HashValueFunc =
+        std::size_t (*)(const void* context, const void* value);
 
     const void* context {nullptr};
     std::shared_ptr<const void> context_owner;
@@ -63,6 +73,8 @@ struct TypeOps {
     DestroyFunc destroy {nullptr};
     CopyAssignFunc copy_assign {nullptr};
     MoveAssignFunc move_assign {nullptr};
+    EqualFunc equal {nullptr};
+    HashValueFunc hash_value {nullptr};
 };
 
 class Type {
@@ -74,6 +86,8 @@ class Type {
     using DestroyFunc = TypeOps::DestroyFunc;
     using CopyAssignFunc = TypeOps::CopyAssignFunc;
     using MoveAssignFunc = TypeOps::MoveAssignFunc;
+    using EqualFunc = TypeOps::EqualFunc;
+    using HashValueFunc = TypeOps::HashValueFunc;
 
   private:
     std::string m_name;
@@ -116,6 +130,8 @@ class Type {
     DestroyFunc destroy_func() const { return m_ops.destroy; }
     CopyAssignFunc copy_assign_func() const { return m_ops.copy_assign; }
     MoveAssignFunc move_assign_func() const { return m_ops.move_assign; }
+    EqualFunc equal_func() const { return m_ops.equal; }
+    HashValueFunc hash_value_func() const { return m_ops.hash_value; }
 
     bool default_construct(void* dest) const {
         if (!m_ops.default_construct) {
@@ -131,14 +147,14 @@ class Type {
         m_ops.copy_construct(m_ops.context, dest, src);
         return true;
     }
-    bool move_construct(void* dest, void* src) const {
+    bool move_construct(void* dest, void* src) const noexcept {
         if (!m_ops.move_construct) {
             return false;
         }
         m_ops.move_construct(m_ops.context, dest, src);
         return true;
     }
-    bool destroy(void* ptr) const {
+    bool destroy(void* ptr) const noexcept {
         if (!m_ops.destroy) {
             return false;
         }
@@ -151,11 +167,25 @@ class Type {
         }
         return m_ops.copy_assign(m_ops.context, dest, src);
     }
-    bool move_assign(void* dest, void* src) const {
+    bool move_assign(void* dest, void* src) const noexcept {
         if (!m_ops.move_assign) {
             return false;
         }
         return m_ops.move_assign(m_ops.context, dest, src);
+    }
+
+    Optional<bool> equals(const void* lhs, const void* rhs) const {
+        if (!m_ops.equal) {
+            return nullopt;
+        }
+        return m_ops.equal(m_ops.context, lhs, rhs);
+    }
+
+    Optional<std::size_t> hash_value(const void* value) const {
+        if (!m_ops.hash_value) {
+            return nullopt;
+        }
+        return m_ops.hash_value(m_ops.context, value);
     }
 
     bool default_constructible() const {
@@ -166,6 +196,8 @@ class Type {
     bool copy_assignable() const { return m_ops.copy_assign != nullptr; }
     bool move_assignable() const { return m_ops.move_assign != nullptr; }
     bool destructible() const { return m_ops.destroy != nullptr; }
+    bool equality_comparable() const { return m_ops.equal != nullptr; }
+    bool hashable() const { return m_ops.hash_value != nullptr; }
 
     auto operator<=>(const Type& other) const { return m_id <=> other.m_id; }
 };

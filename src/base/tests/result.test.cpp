@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <string>
+#include <type_traits>
 
 using namespace fei;
 
@@ -11,7 +12,28 @@ struct RefTarget {
     int value {0};
 };
 
+struct ThrowingMoveValue {
+    ThrowingMoveValue() = default;
+    ThrowingMoveValue(const ThrowingMoveValue&) = default;
+    ThrowingMoveValue& operator=(const ThrowingMoveValue&) = default;
+    ThrowingMoveValue(ThrowingMoveValue&&) noexcept(false) {}
+    ThrowingMoveValue& operator=(ThrowingMoveValue&&) noexcept(false) {
+        return *this;
+    }
+};
+
 } // namespace
+
+TEST_CASE("Result derives its move exception contract", "[base][result]") {
+    STATIC_REQUIRE(std::is_nothrow_move_constructible_v<Result<int, int>>);
+    STATIC_REQUIRE(std::is_nothrow_move_assignable_v<Result<int, int>>);
+    STATIC_REQUIRE_FALSE(
+        std::is_nothrow_move_constructible_v<Result<ThrowingMoveValue, int>>
+    );
+    STATIC_REQUIRE_FALSE(
+        std::is_nothrow_move_assignable_v<Result<ThrowingMoveValue, int>>
+    );
+}
 
 TEST_CASE("Result stores values and errors", "[base][result]") {
     Result<int, std::string> value = 3;

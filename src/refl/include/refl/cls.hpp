@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -58,6 +59,8 @@ class Cls {
 
     template<typename P>
     Cls& add_property(std::string name, P member_ptr) {
+        using MemberType = typename MemberTrait<P>::Type;
+        Registry::instance().register_type<std::remove_cvref_t<MemberType>>();
         m_properties[name] =
             std::make_unique<PropertyImpl<P>>(name, member_ptr);
         return *this;

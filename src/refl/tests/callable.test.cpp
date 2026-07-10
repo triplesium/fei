@@ -701,6 +701,8 @@ TEST_CASE("Constructor validates argument types", "[refl][constructor]") {
 }
 
 TEST_CASE("Cls try_get reports missing members", "[refl][cls]") {
+    Registry::instance().register_type<float>();
+
     auto& cls = Registry::instance()
                     .register_cls<LookupFixture>()
                     .add_property("value", &LookupFixture::value)

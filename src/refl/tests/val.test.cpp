@@ -6,11 +6,36 @@
 #include "test_types.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <cstdint>
+#include <stdexcept>
+#include <type_traits>
 #include <utility>
 
 using namespace fei;
 using namespace fei::refl_test;
+
+namespace {
+
+struct ThrowingMovePayload {
+    static inline std::size_t move_attempts {0};
+
+    int value;
+
+    explicit ThrowingMovePayload(int value) : value(value) {}
+    ThrowingMovePayload(const ThrowingMovePayload&) = default;
+    ThrowingMovePayload& operator=(const ThrowingMovePayload&) = default;
+    ThrowingMovePayload(ThrowingMovePayload&&) noexcept(false) {
+        ++move_attempts;
+        throw std::runtime_error("payload move should not run");
+    }
+    ThrowingMovePayload& operator=(ThrowingMovePayload&&) noexcept(false) {
+        ++move_attempts;
+        throw std::runtime_error("payload move assignment should not run");
+    }
+};
+
+} // namespace
 
 TEST_CASE("Val owns small and heap values", "[refl][val]") {
     Registry& registry = Registry::instance();
@@ -86,6 +111,30 @@ TEST_CASE("Val owns small and heap values", "[refl][val]") {
     }
 }
 
+TEST_CASE(
+    "Val heap-stores payloads without noexcept reflected move",
+    "[refl][val]"
+) {
+    auto& type = Registry::instance().register_type<ThrowingMovePayload>();
+    REQUIRE_FALSE(type.move_constructible());
+    REQUIRE_FALSE(type.move_assignable());
+
+    ThrowingMovePayload::move_attempts = 0;
+    Val source = make_val<ThrowingMovePayload>(42);
+    void* original_storage = source.ref().ptr();
+
+    Val moved = std::move(source);
+    REQUIRE(source.empty());
+    REQUIRE(moved.ref().ptr() == original_storage);
+    REQUIRE(moved.get<ThrowingMovePayload>().value == 42);
+    REQUIRE(ThrowingMovePayload::move_attempts == 0);
+
+    Val copied = moved;
+    REQUIRE(copied.get<ThrowingMovePayload>().value == 42);
+    REQUIRE(copied.ref().ptr() != moved.ref().ptr());
+    REQUIRE(ThrowingMovePayload::move_attempts == 0);
+}
+
 TEST_CASE("Val destroys owned objects", "[refl][val]") {
     struct Counted {
         int* count;
@@ -105,6 +154,9 @@ TEST_CASE("Val destroys owned objects", "[refl][val]") {
 }
 
 TEST_CASE("Val copies and moves owned objects", "[refl][val]") {
+    STATIC_REQUIRE(std::is_nothrow_move_constructible_v<Val>);
+    STATIC_REQUIRE(std::is_nothrow_move_assignable_v<Val>);
+
     Registry& registry = Registry::instance();
     registry.register_type<TestStruct>();
     registry.register_type<HeapValStruct>();
@@ -130,7 +182,9 @@ TEST_CASE("Val copies and moves owned objects", "[refl][val]") {
         REQUIRE(val1.get<HeapValStruct>().arr[31] == 31);
         REQUIRE(assigned.get<HeapValStruct>().arr[31] == 100);
 
+        void* original_storage = val1.ref().ptr();
         Val moved = std::move(val1);
+        REQUIRE(moved.ref().ptr() == original_storage);
         REQUIRE(moved.get<HeapValStruct>().arr[0] == 7);
         REQUIRE(moved.get<HeapValStruct>().arr[31] == 31);
         REQUIRE(moved.get<HeapValStruct>().values[0] == 1.5);
@@ -186,6 +240,13 @@ TEST_CASE("Val handles non-copyable type capabilities", "[refl][val]") {
         Val val1 = make_val<MoveOnlyType>(42);
         REQUIRE(val1);
         REQUIRE(val1.get<MoveOnlyType>().value == 42);
+        REQUIRE_THROWS_AS(
+            [&] {
+                Val copied = val1;
+                (void)copied;
+            }(),
+            std::logic_error
+        );
 
         Val val2 = std::move(val1);
         REQUIRE(val2);
@@ -212,30 +273,58 @@ TEST_CASE("Val handles non-copyable type capabilities", "[refl][val]") {
             NonCopyableNonMovableType&
             operator=(NonCopyableNonMovableType&&) = delete;
         };
-        registry.register_type<NonCopyableNonMovableType>();
+        Type& reflected_type =
+            registry.register_type<NonCopyableNonMovableType>();
+        REQUIRE_FALSE(reflected_type.copy_constructible());
+        REQUIRE_FALSE(reflected_type.move_constructible());
 
-        Val val1 = make_val<NonCopyableNonMovableType>(42);
-        REQUIRE(val1);
-        REQUIRE(val1.get<NonCopyableNonMovableType>().value == 42);
+        Val owned = make_val<NonCopyableNonMovableType>(42);
+        void* original_storage = owned.ref().ptr();
+        Val moved = std::move(owned);
+        REQUIRE(owned.empty());
+        REQUIRE(moved.ref().ptr() == original_storage);
+        REQUIRE(moved.get<NonCopyableNonMovableType>().value == 42);
+        REQUIRE_THROWS_AS(
+            [&] {
+                Val copied = moved;
+                (void)copied;
+            }(),
+            std::logic_error
+        );
 
-        {
-            StdoutCapture logs;
-            // NOLINTNEXTLINE(performance-unnecessary-copy-initialization)
-            Val val2 = val1;
-            REQUIRE(val2.empty());
-            REQUIRE(
-                logs.str().contains("Attempting to copy non-copyable type")
-            );
-        }
-
-        {
-            StdoutCapture logs;
-            Val val3 = std::move(val1);
-            REQUIRE(val3.empty());
-            REQUIRE(logs.str().contains(
-                "Attempting to move non-movable and non-copyable type"
-            ));
-        }
-        REQUIRE(val1);
+        NonCopyableNonMovableType source {42};
+        auto rejected = Val::copy(Ref(source));
+        REQUIRE_FALSE(rejected);
+        REQUIRE(rejected.error().kind == ValError::Kind::NotCopyConstructible);
     }
+}
+
+TEST_CASE("Val safely takes ownership from Ref", "[refl][val]") {
+    Registry& registry = Registry::instance();
+    registry.register_type<int>();
+
+    int source = 42;
+    auto copied = Val::copy(Ref(source));
+    REQUIRE(copied);
+    REQUIRE(copied->get<int>() == 42);
+    source = 7;
+    REQUIRE(copied->get<int>() == 42);
+
+    struct MoveOnly {
+        int value;
+
+        explicit MoveOnly(int value) : value(value) {}
+        MoveOnly(const MoveOnly&) = delete;
+        MoveOnly& operator=(const MoveOnly&) = delete;
+        MoveOnly(MoveOnly&& other) noexcept : value(other.value) {
+            other.value = 0;
+        }
+        MoveOnly& operator=(MoveOnly&&) = default;
+    };
+    registry.register_type<MoveOnly>();
+
+    MoveOnly source_move_only {9};
+    auto rejected = Val::copy(Ref(source_move_only));
+    REQUIRE_FALSE(rejected);
+    REQUIRE(rejected.error().kind == ValError::Kind::NotCopyConstructible);
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include "refl/argument_adapter.hpp"
 #include "refl/callable.hpp"
+#include "refl/registry.hpp"
 #include "refl/return_adapter.hpp"
 #include "refl/type.hpp"
 
@@ -9,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -90,7 +92,9 @@ class MethodImpl : public Method {
   public:
     MethodImpl(std::string name, P ptr) :
         Method(std::move(name), make_params(), QualType::of<ReturnType>()),
-        m_ptr(ptr) {}
+        m_ptr(ptr) {
+        register_reflected_types(std::make_index_sequence<c_params_count>());
+    }
 
     bool is_const() const override { return c_is_const; }
 
@@ -178,6 +182,20 @@ class MethodImpl : public Method {
             params.emplace_back("", type);
         }
         return params;
+    }
+
+    template<class T>
+    static void register_type_dependency() {
+        using NoRef = std::remove_reference_t<T>;
+        using NoPtr = std::remove_pointer_t<NoRef>;
+        using Base = std::remove_cv_t<NoPtr>;
+        Registry::instance().register_type<Base>();
+    }
+
+    template<std::size_t... ArgIdx>
+    static void register_reflected_types(std::index_sequence<ArgIdx...>) {
+        register_type_dependency<ReturnType>();
+        (register_type_dependency<TypeOfParam<ArgIdx>>(), ...);
     }
 
     InvokeResult invalid_call(std::string message) const {

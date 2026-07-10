@@ -3,11 +3,13 @@
 #include "refl/argument_adapter.hpp"
 #include "refl/callable.hpp"
 #include "refl/qual_type.hpp"
+#include "refl/registry.hpp"
 #include "refl/type.hpp"
 #include "refl/val.hpp"
 
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 namespace fei {
@@ -29,7 +31,10 @@ template<typename T, typename... Args>
 class ConstructorImpl : public Constructor {
   public:
     ConstructorImpl() :
-        Constructor({Param {"args", QualType::of<Args>()}...}, type_id<T>()) {}
+        Constructor({Param {"args", QualType::of<Args>()}...}, type_id<T>()) {
+        register_type_dependency<T>();
+        (register_type_dependency<Args>(), ...);
+    }
 
     bool accepts_variadic(const std::vector<Ref>& args) const override {
         return match_score(args).has_value();
@@ -68,6 +73,14 @@ class ConstructorImpl : public Constructor {
     }
 
   private:
+    template<class U>
+    static void register_type_dependency() {
+        using NoRef = std::remove_reference_t<U>;
+        using NoPtr = std::remove_pointer_t<NoRef>;
+        using Base = std::remove_cv_t<NoPtr>;
+        Registry::instance().register_type<Base>();
+    }
+
     InvokeResult invalid_call(std::string message) const {
         return failure(InvokeFailure::invalid_call(std::move(message)));
     }

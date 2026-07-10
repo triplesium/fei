@@ -121,3 +121,99 @@ TEST_CASE("Registry try_get reports missing metadata", "[refl][registry]") {
         std::string(type_name<RegistryMissingEnum>())
     ));
 }
+
+TEST_CASE(
+    "Registry resolves exact and unique stripped type names",
+    "[refl][registry]"
+) {
+    Registry& registry = Registry::instance();
+
+    const std::string exact_name = "RegistryExactPreferredLookupType";
+    Type& exact_type = registry.register_type(
+        TypeId(std::string_view {exact_name}),
+        exact_name,
+        0,
+        0,
+        {}
+    );
+    const std::string qualified_exact_name =
+        "registry::lookup::RegistryExactPreferredLookupType";
+    registry.register_type(
+        TypeId(std::string_view {qualified_exact_name}),
+        qualified_exact_name,
+        0,
+        0,
+        {}
+    );
+
+    auto exact = registry.try_get_type_exact(exact_name);
+    REQUIRE(exact);
+    REQUIRE(&*exact == &exact_type);
+
+    auto exact_first = registry.try_get_type(std::string_view {exact_name});
+    REQUIRE(exact_first);
+    REQUIRE(&*exact_first == &exact_type);
+
+    const std::string unique_name =
+        "registry::lookup::RegistryUniqueStrippedLookupType";
+    Type& unique_type = registry.register_type(
+        TypeId(std::string_view {unique_name}),
+        unique_name,
+        0,
+        0,
+        {}
+    );
+
+    auto missing_exact =
+        registry.try_get_type_exact("RegistryUniqueStrippedLookupType");
+    REQUIRE_FALSE(missing_exact);
+    REQUIRE(missing_exact.error().kind == RegistryError::Kind::TypeNotFound);
+
+    auto unique_stripped =
+        registry.try_get_type("RegistryUniqueStrippedLookupType");
+    REQUIRE(unique_stripped);
+    REQUIRE(&*unique_stripped == &unique_type);
+}
+
+TEST_CASE(
+    "Registry rejects ambiguous stripped type names",
+    "[refl][registry]"
+) {
+    Registry& registry = Registry::instance();
+
+    const std::string left_name =
+        "registry::left::RegistryAmbiguousStrippedLookupType";
+    const std::string right_name =
+        "registry::right::RegistryAmbiguousStrippedLookupType";
+    Type& left_type = registry.register_type(
+        TypeId(std::string_view {left_name}),
+        left_name,
+        0,
+        0,
+        {}
+    );
+    Type& right_type = registry.register_type(
+        TypeId(std::string_view {right_name}),
+        right_name,
+        0,
+        0,
+        {}
+    );
+
+    auto left_exact = registry.try_get_type(std::string_view {left_name});
+    REQUIRE(left_exact);
+    REQUIRE(&*left_exact == &left_type);
+    auto right_exact = registry.try_get_type(std::string_view {right_name});
+    REQUIRE(right_exact);
+    REQUIRE(&*right_exact == &right_type);
+
+    auto ambiguous =
+        registry.try_get_type("RegistryAmbiguousStrippedLookupType");
+    REQUIRE_FALSE(ambiguous);
+    REQUIRE(ambiguous.error().kind == RegistryError::Kind::AmbiguousTypeName);
+    REQUIRE(ambiguous.error().type_name.has_value());
+    REQUIRE(
+        *ambiguous.error().type_name == "RegistryAmbiguousStrippedLookupType"
+    );
+    REQUIRE(ambiguous.error().message.contains("ambiguous"));
+}

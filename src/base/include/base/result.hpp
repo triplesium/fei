@@ -18,9 +18,9 @@ class Result : public std::expected<T, E> {
 
     Result() = default;
     Result(const Result&) = default;
-    Result(Result&&) noexcept = default;
+    Result(Result&&) = default;
     Result& operator=(const Result&) = default;
-    Result& operator=(Result&&) noexcept = default;
+    Result& operator=(Result&&) = default;
 
     constexpr Result(const Base& expected) : Base(expected) {}
     constexpr Result(Base&& expected) : Base(std::move(expected)) {}

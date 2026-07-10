@@ -1,16 +1,32 @@
 #pragma once
 
 #include "base/log.hpp"
+#include "base/result.hpp"
 #include "refl/ref.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
 
 #include <cstddef>
+#include <exception>
 #include <new>
+#include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <utility>
 
 namespace fei {
+
+struct ValError {
+    enum class Kind {
+        EmptySource,
+        TypeNotFound,
+        NotCopyConstructible,
+    };
+
+    Kind kind;
+    TypeId type_id;
+    std::string message;
+};
 
 class Val {
   public:
@@ -28,7 +44,10 @@ class Val {
     InlineStorage m_storage;
 
     static bool fits_inline(const Type& type) {
-        return type.size() <= c_inline_size && type.align() <= c_inline_align;
+        // A payload without reflected noexcept move stays on the heap so
+        // moving Val only transfers its allocation.
+        return type.move_constructible() && type.size() <= c_inline_size &&
+               type.align() <= c_inline_align;
     }
 
     void* inline_ptr() { return &m_storage; }
@@ -49,7 +68,7 @@ class Val {
         return inline_ptr();
     }
 
-    void deallocate_storage() {
+    void deallocate_storage() noexcept {
         if (m_heap && m_heap_ptr) {
             ::operator delete(
                 m_heap_ptr,
@@ -60,7 +79,7 @@ class Val {
         m_heap_ptr = nullptr;
     }
 
-    void deallocate_storage(const Type& type) {
+    void deallocate_storage(const Type& type) noexcept {
         if (m_heap && m_heap_ptr) {
             ::operator delete(m_heap_ptr, std::align_val_t {type.align()});
         }
@@ -68,7 +87,7 @@ class Val {
         m_heap_ptr = nullptr;
     }
 
-    void reset() {
+    void reset() noexcept {
         if (!m_type) {
             return;
         }
@@ -77,51 +96,59 @@ class Val {
         m_type = nullptr;
     }
 
-    bool copy_from(const Val& other) {
+    void copy_from(const Val& other) {
         if (!other.m_type) {
-            return true;
+            return;
         }
         if (!other.m_type->copy_constructible()) {
-            error(
-                "Attempting to copy non-copyable type {}",
-                other.m_type->name()
+            throw std::logic_error(
+                "Cannot copy Val containing non-copyable type '" +
+                other.m_type->name() + "'"
             );
-            return false;
         }
-        m_type = other.m_type;
-        void* dest = allocate_storage(*m_type);
-        m_type->copy_construct(dest, other.data_ptr());
-        return true;
+        const Type* type = other.m_type;
+        void* dest = allocate_storage(*type);
+        try {
+            type->copy_construct(dest, other.data_ptr());
+        } catch (...) {
+            deallocate_storage(*type);
+            throw;
+        }
+        m_type = type;
     }
 
-    bool move_from(Val& other) {
+    void move_from(Val& other) noexcept {
         if (!other.m_type) {
-            return true;
+            return;
         }
-        if (other.m_type->move_constructible()) {
-            m_type = other.m_type;
-            void* dest = allocate_storage(*m_type);
-            m_type->move_construct(dest, const_cast<void*>(other.data_ptr()));
-            other.reset();
-            return true;
+
+        const Type* type = other.m_type;
+        if (other.m_heap) {
+            m_type = type;
+            m_heap = true;
+            m_heap_ptr = std::exchange(other.m_heap_ptr, nullptr);
+            other.m_type = nullptr;
+            other.m_heap = false;
+            return;
         }
-        if (copy_from(other)) {
-            return true;
+
+        if (!type->move_construct(inline_ptr(), other.inline_ptr())) {
+            std::terminate();
         }
-        error(
-            "Attempting to move non-movable and non-copyable type {}",
-            other.m_type->name()
-        );
-        return false;
+        m_type = type;
+        other.reset();
     }
 
   public:
     Val() = default;
 
-    ~Val() { reset(); }
+    ~Val() noexcept { reset(); }
 
     template<class Construct>
     static Val construct(const Type& type, Construct&& construct) {
+        if (!type.destructible()) {
+            fatal("Cannot store type '{}' in Val", type.name());
+        }
         Val val;
         void* dest = val.allocate_storage(type);
         try {
@@ -142,6 +169,41 @@ class Val {
         });
     }
 
+    static Result<Val, ValError> copy(Ref source) {
+        if (!source) {
+            return failure(
+                ValError {
+                    .kind = ValError::Kind::EmptySource,
+                    .message = "Cannot copy an empty Ref into Val",
+                }
+            );
+        }
+
+        auto type = Registry::instance().try_get_type(source.type_id());
+        if (!type) {
+            return failure(
+                ValError {
+                    .kind = ValError::Kind::TypeNotFound,
+                    .type_id = source.type_id(),
+                    .message = type.error().message,
+                }
+            );
+        }
+        if (!type->copy_constructible()) {
+            return failure(
+                ValError {
+                    .kind = ValError::Kind::NotCopyConstructible,
+                    .type_id = source.type_id(),
+                    .message =
+                        "Type '" + type->name() + "' is not copy constructible",
+                }
+            );
+        }
+        return Val::construct(*type, [&](void* dest) {
+            type->copy_construct(dest, source.const_ptr());
+        });
+    }
+
     Val(const Val& other) { copy_from(other); }
 
     Val(Val&& other) noexcept { move_from(other); }
@@ -150,8 +212,8 @@ class Val {
         if (this == &other) {
             return *this;
         }
-        reset();
-        copy_from(other);
+        Val copy(other);
+        swap(copy);
         return *this;
     }
 
@@ -162,6 +224,15 @@ class Val {
         reset();
         move_from(other);
         return *this;
+    }
+
+    void swap(Val& other) noexcept {
+        if (this == &other) {
+            return;
+        }
+        Val temp(std::move(other));
+        other = std::move(*this);
+        *this = std::move(temp);
     }
 
     Ref ref() {
@@ -219,6 +290,10 @@ template<class T, class... Args>
 Val make_val(Args&&... args) {
     using U = std::remove_cvref_t<T>;
     static_assert(!std::is_reference_v<T>, "Val cannot own a reference type");
+    static_assert(
+        std::is_nothrow_destructible_v<U>,
+        "Val payloads must be nothrow destructible"
+    );
 
     Type& type = Registry::instance().register_type<U>();
     return Val::construct(type, [&](void* dest) {
