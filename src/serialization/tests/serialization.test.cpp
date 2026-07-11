@@ -1022,6 +1022,165 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Reflection serializer supports strict wire-format objects",
+    "[serialization][reflection][options]"
+) {
+    register_test_types();
+
+    RootValue expected {
+        .enabled = true,
+        .count = 12,
+        .seed = 34,
+        .ratio = 5.5,
+        .name = "wire",
+        .mode = TestMode::Running,
+        .nested = NestedValue {.x = 7, .y = 8.0f},
+    };
+    auto node =
+        serialize(Ref(expected), SerializeOptions {.include_type_tag = false});
+    REQUIRE(node);
+
+    auto object = node->try_object();
+    REQUIRE(object != nullptr);
+    REQUIRE(find_field(*object, "$type") == nullptr);
+    auto nested_field = find_field(*object, "nested");
+    REQUIRE(nested_field != nullptr);
+    auto nested = nested_field->value.try_object();
+    REQUIRE(nested != nullptr);
+    REQUIRE(find_field(*nested, "$type") == nullptr);
+
+    auto value = deserialize(
+        type_id<RootValue>(),
+        *node,
+        DeserializeOptions {
+            .object_fields = ObjectFieldPolicy::Strict,
+            .enum_input = EnumInputPolicy::NameOnly,
+            .allow_type_tag = false,
+        }
+    );
+    REQUIRE(value);
+    const auto& actual = value->get<RootValue>();
+    REQUIRE(actual.enabled == expected.enabled);
+    REQUIRE(actual.count == expected.count);
+    REQUIRE(actual.seed == expected.seed);
+    REQUIRE(actual.ratio == expected.ratio);
+    REQUIRE(actual.name == expected.name);
+    REQUIRE(actual.mode == expected.mode);
+    REQUIRE(actual.nested.x == expected.nested.x);
+    REQUIRE(actual.nested.y == expected.nested.y);
+}
+
+TEST_CASE(
+    "Strict object deserialization rejects unknown duplicate and missing "
+    "fields",
+    "[serialization][reflection][options]"
+) {
+    register_test_types();
+    const DeserializeOptions strict {
+        .object_fields = ObjectFieldPolicy::Strict,
+        .allow_type_tag = false,
+    };
+
+    RootValue expected;
+    auto make_node = [&]() {
+        return serialize(
+            Ref(expected),
+            SerializeOptions {.include_type_tag = false}
+        );
+    };
+
+    auto unknown_node = make_node();
+    REQUIRE(unknown_node);
+    auto unknown_object = unknown_node->try_object();
+    REQUIRE(unknown_object != nullptr);
+    auto nested_field = find_field(*unknown_object, "nested");
+    REQUIRE(nested_field != nullptr);
+    auto nested = nested_field->value.try_object();
+    REQUIRE(nested != nullptr);
+    nested->push_back(
+        SerializedField {
+            .name = "unknown",
+            .value = SerializedNode::boolean(true),
+        }
+    );
+    auto unknown = deserialize(type_id<RootValue>(), *unknown_node, strict);
+    REQUIRE_FALSE(unknown);
+    REQUIRE(unknown.error().kind == DeserializeError::Kind::InvalidNode);
+    REQUIRE(unknown.error().path == "$.nested.unknown");
+    REQUIRE(unknown.error().message == "Unknown field 'unknown'");
+
+    auto duplicate_node = make_node();
+    REQUIRE(duplicate_node);
+    auto duplicate_object = duplicate_node->try_object();
+    REQUIRE(duplicate_object != nullptr);
+    duplicate_object->push_back(
+        SerializedField {
+            .name = "count",
+            .value = SerializedNode::signed_integer(99),
+        }
+    );
+    auto duplicate = deserialize(type_id<RootValue>(), *duplicate_node, strict);
+    REQUIRE_FALSE(duplicate);
+    REQUIRE(duplicate.error().kind == DeserializeError::Kind::InvalidNode);
+    REQUIRE(duplicate.error().path == "$.count");
+    REQUIRE(duplicate.error().message == "Duplicate field 'count'");
+
+    auto missing =
+        deserialize(type_id<RootValue>(), SerializedNode::object({}), strict);
+    REQUIRE_FALSE(missing);
+    REQUIRE(missing.error().kind == DeserializeError::Kind::InvalidNode);
+    REQUIRE(missing.error().path == "$.count");
+    REQUIRE(missing.error().message == "Missing required field 'count'");
+}
+
+TEST_CASE(
+    "Wire deserialization rejects type tags and numeric enums",
+    "[serialization][reflection][options]"
+) {
+    register_test_types();
+
+    RootValue expected;
+    auto tagged = serialize(Ref(expected));
+    REQUIRE(tagged);
+    auto disallowed_tag = deserialize(
+        type_id<RootValue>(),
+        *tagged,
+        DeserializeOptions {.allow_type_tag = false}
+    );
+    REQUIRE_FALSE(disallowed_tag);
+    REQUIRE(disallowed_tag.error().kind == DeserializeError::Kind::InvalidNode);
+    REQUIRE(disallowed_tag.error().path == "$.$type");
+
+    auto numeric_enum =
+        serialize(Ref(expected), SerializeOptions {.include_type_tag = false});
+    REQUIRE(numeric_enum);
+    auto object = numeric_enum->try_object();
+    REQUIRE(object != nullptr);
+    auto mode = find_field(*object, "mode");
+    REQUIRE(mode != nullptr);
+    mode->value = SerializedNode::signed_integer(
+        static_cast<std::int64_t>(TestMode::Running)
+    );
+
+    auto rejected_enum = deserialize(
+        type_id<RootValue>(),
+        *numeric_enum,
+        DeserializeOptions {
+            .object_fields = ObjectFieldPolicy::Strict,
+            .enum_input = EnumInputPolicy::NameOnly,
+            .allow_type_tag = false,
+        }
+    );
+    REQUIRE_FALSE(rejected_enum);
+    REQUIRE(rejected_enum.error().kind == DeserializeError::Kind::InvalidNode);
+    REQUIRE(rejected_enum.error().path == "$.mode");
+    REQUIRE(
+        rejected_enum.error().message.find("Expected enum string") !=
+        std::string::npos
+    );
+}
+
+TEST_CASE(
     "Reflection deserializer keeps defaults for missing fields",
     "[serialization][reflection]"
 ) {

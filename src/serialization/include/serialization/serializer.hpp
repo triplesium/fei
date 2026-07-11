@@ -10,6 +10,26 @@
 
 namespace fei::serialization {
 
+enum class ObjectFieldPolicy {
+    Permissive,
+    Strict,
+};
+
+enum class EnumInputPolicy {
+    NameOrInteger,
+    NameOnly,
+};
+
+struct SerializeOptions {
+    bool include_type_tag {true};
+};
+
+struct DeserializeOptions {
+    ObjectFieldPolicy object_fields {ObjectFieldPolicy::Permissive};
+    EnumInputPolicy enum_input {EnumInputPolicy::NameOrInteger};
+    bool allow_type_tag {true};
+};
+
 struct SerializeError {
     enum class Kind {
         EmptyRef,
@@ -43,9 +63,13 @@ struct DeserializeError {
     std::string message;
 };
 
-Result<SerializedNode, SerializeError> serialize(Ref value);
+Result<SerializedNode, SerializeError>
+serialize(Ref value, const SerializeOptions& options = {});
 
-Result<Val, DeserializeError>
-deserialize(TypeId type_id, const SerializedNode& node);
+Result<Val, DeserializeError> deserialize(
+    TypeId type_id,
+    const SerializedNode& node,
+    const DeserializeOptions& options = {}
+);
 
 } // namespace fei::serialization

@@ -17,6 +17,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -74,6 +75,59 @@ DeserializeError deserialize_error(
         .path = std::move(path),
         .message = std::move(message),
     };
+}
+
+Status<DeserializeError> validate_object_fields(
+    const SerializedNode::Object& object,
+    TypeId type_id,
+    const std::string& path,
+    const std::vector<std::string_view>& required,
+    const std::vector<std::string_view>& optional,
+    const DeserializeOptions& options
+) {
+    if (options.object_fields != ObjectFieldPolicy::Strict) {
+        return {};
+    }
+
+    std::unordered_map<std::string_view, std::size_t> counts;
+    for (const auto& field : object) {
+        const auto name = std::string_view {field.name};
+        const auto is_required =
+            std::ranges::find(required, name) != required.end();
+        const auto is_optional =
+            std::ranges::find(optional, name) != optional.end();
+        if (!is_required && !is_optional) {
+            return failure(deserialize_error(
+                DeserializeError::Kind::InvalidNode,
+                type_id,
+                child_path(path, field.name),
+                "Unknown field '" + field.name + "'"
+            ));
+        }
+
+        auto& count = counts[name];
+        ++count;
+        if (count > 1) {
+            return failure(deserialize_error(
+                DeserializeError::Kind::InvalidNode,
+                type_id,
+                child_path(path, field.name),
+                "Duplicate field '" + field.name + "'"
+            ));
+        }
+    }
+
+    for (auto name : required) {
+        if (!counts.contains(name)) {
+            return failure(deserialize_error(
+                DeserializeError::Kind::InvalidNode,
+                type_id,
+                child_path(path, std::string {name}),
+                "Missing required field '" + std::string {name} + "'"
+            ));
+        }
+    }
+    return {};
 }
 
 Status<DeserializeError> validate_default_val_construction(
@@ -348,11 +402,17 @@ serialize_floating_point(Ref value, const std::string&) {
     return SerializedNode::null();
 }
 
-Result<SerializedNode, SerializeError>
-serialize_value(Ref value, const std::string& path);
+Result<SerializedNode, SerializeError> serialize_value(
+    Ref value,
+    const std::string& path,
+    const SerializeOptions& options
+);
 
-Result<SerializedNode, SerializeError>
-serialize_dynamic_array(Ref value, const std::string& path) {
+Result<SerializedNode, SerializeError> serialize_dynamic_array(
+    Ref value,
+    const std::string& path,
+    const SerializeOptions& options
+) {
     const auto& dynamic_array = value.get_const<DynamicArray>();
     auto type = Registry::instance().try_get_type(dynamic_array.element_type());
     if (!type) {
@@ -379,7 +439,7 @@ serialize_dynamic_array(Ref value, const std::string& path) {
             ));
         }
         auto serialized =
-            serialize_value(*element, index_path(values_path, index));
+            serialize_value(*element, index_path(values_path, index), options);
         if (!serialized) {
             return failure(std::move(serialized.error()));
         }
@@ -404,8 +464,11 @@ serialize_dynamic_array(Ref value, const std::string& path) {
     });
 }
 
-Result<SerializedNode, SerializeError>
-serialize_dynamic_map(Ref value, const std::string& path) {
+Result<SerializedNode, SerializeError> serialize_dynamic_map(
+    Ref value,
+    const std::string& path,
+    const SerializeOptions& options
+) {
     const auto& dynamic_map = value.get_const<DynamicMap>();
     auto key = Registry::instance().try_get_type(dynamic_map.key_type());
     if (!key) {
@@ -436,8 +499,11 @@ serialize_dynamic_map(Ref value, const std::string& path) {
         [&](DynamicMapEntryRef entry,
             std::size_t index) -> Status<DynamicMapError> {
             const auto entry_path = index_path(entries_path, index);
-            auto key =
-                serialize_value(entry.key, child_path(entry_path, "key"));
+            auto key = serialize_value(
+                entry.key,
+                child_path(entry_path, "key"),
+                options
+            );
             if (!key) {
                 visitor_error = std::move(key.error());
                 return failure(
@@ -447,8 +513,11 @@ serialize_dynamic_map(Ref value, const std::string& path) {
                     }
                 );
             }
-            auto mapped =
-                serialize_value(entry.value, child_path(entry_path, "value"));
+            auto mapped = serialize_value(
+                entry.value,
+                child_path(entry_path, "value"),
+                options
+            );
             if (!mapped) {
                 visitor_error = std::move(mapped.error());
                 return failure(
@@ -516,7 +585,8 @@ serialize_dynamic_map(Ref value, const std::string& path) {
 Result<SerializedNode, SerializeError> serialize_container(
     Ref value,
     const ContainerAdapter& container,
-    const std::string& path
+    const std::string& path,
+    const SerializeOptions& options
 ) {
     const auto type_id = value.type_id();
     auto size = container.size(value);
@@ -545,7 +615,8 @@ Result<SerializedNode, SerializeError> serialize_container(
             [&](Ref element, std::size_t) -> Status<ContainerError> {
                 auto serialized = serialize_value(
                     element,
-                    child_path(path, c_optional_value_field)
+                    child_path(path, c_optional_value_field),
+                    options
                 );
                 if (!serialized) {
                     visitor_error = std::move(serialized.error());
@@ -598,7 +669,7 @@ Result<SerializedNode, SerializeError> serialize_container(
                 const auto key_path = associative->has_mapped_value() ?
                                           child_path(entry_path, "key") :
                                           entry_path;
-                auto key = serialize_value(entry.key, key_path);
+                auto key = serialize_value(entry.key, key_path, options);
                 if (!key) {
                     visitor_error = std::move(key.error());
                     return failure(
@@ -615,7 +686,8 @@ Result<SerializedNode, SerializeError> serialize_container(
                 }
                 auto mapped = serialize_value(
                     entry.value,
-                    child_path(entry_path, "value")
+                    child_path(entry_path, "value"),
+                    options
                 );
                 if (!mapped) {
                     visitor_error = std::move(mapped.error());
@@ -669,7 +741,7 @@ Result<SerializedNode, SerializeError> serialize_container(
         value,
         [&](Ref element, std::size_t index) -> Status<ContainerError> {
             auto element_path = index_path(path, index);
-            auto serialized = serialize_value(element, element_path);
+            auto serialized = serialize_value(element, element_path, options);
             if (!serialized) {
                 visitor_error = std::move(serialized.error());
                 return failure(
@@ -751,8 +823,11 @@ serialize_enum(Ref value, const std::string& path) {
     ));
 }
 
-Result<SerializedNode, SerializeError>
-serialize_object(Ref value, const std::string& path) {
+Result<SerializedNode, SerializeError> serialize_object(
+    Ref value,
+    const std::string& path,
+    const SerializeOptions& options
+) {
     auto& registry = Registry::instance();
     const auto type_id = value.type_id();
     auto type = registry.try_get_type(type_id);
@@ -776,12 +851,14 @@ serialize_object(Ref value, const std::string& path) {
     }
 
     SerializedNode::Object object;
-    object.push_back(
-        SerializedField {
-            .name = "$type",
-            .value = SerializedNode::string(type->name()),
-        }
-    );
+    if (options.include_type_tag) {
+        object.push_back(
+            SerializedField {
+                .name = "$type",
+                .value = SerializedNode::string(type->name()),
+            }
+        );
+    }
 
     auto properties = cls->get_properties();
     std::ranges::sort(properties, [](const Property* lhs, const Property* rhs) {
@@ -800,7 +877,8 @@ serialize_object(Ref value, const std::string& path) {
             ));
         }
 
-        auto serialized = serialize_value(*property_ref, property_path);
+        auto serialized =
+            serialize_value(*property_ref, property_path, options);
         if (!serialized) {
             return failure(std::move(serialized.error()));
         }
@@ -815,8 +893,11 @@ serialize_object(Ref value, const std::string& path) {
     return SerializedNode::object(std::move(object));
 }
 
-Result<SerializedNode, SerializeError>
-serialize_value(Ref value, const std::string& path) {
+Result<SerializedNode, SerializeError> serialize_value(
+    Ref value,
+    const std::string& path,
+    const SerializeOptions& options
+) {
     if (!value) {
         return failure(serialize_error(
             SerializeError::Kind::EmptyRef,
@@ -841,10 +922,10 @@ serialize_value(Ref value, const std::string& path) {
         return serialize_floating_point(value, path);
     }
     if (same_type<DynamicArray>(type_id)) {
-        return serialize_dynamic_array(value, path);
+        return serialize_dynamic_array(value, path, options);
     }
     if (same_type<DynamicMap>(type_id)) {
-        return serialize_dynamic_map(value, path);
+        return serialize_dynamic_map(value, path, options);
     }
 
     auto& registry = Registry::instance();
@@ -852,10 +933,10 @@ serialize_value(Ref value, const std::string& path) {
         return serialize_enum(value, path);
     }
     if (auto container = registry.try_get_container_adapter(type_id)) {
-        return serialize_container(value, *container, path);
+        return serialize_container(value, *container, path, options);
     }
     if (auto cls = registry.try_get_cls(type_id)) {
-        return serialize_object(value, path);
+        return serialize_object(value, path, options);
     }
 
     return failure(serialize_error(
@@ -1003,11 +1084,15 @@ Result<Val, DeserializeError> make_floating_val(
 Result<Val, DeserializeError> deserialize_value(
     TypeId type_id,
     const SerializedNode& node,
-    const std::string& path
+    const std::string& path,
+    const DeserializeOptions& options
 );
 
-Result<Val, DeserializeError>
-deserialize_dynamic_array(const SerializedNode& node, const std::string& path) {
+Result<Val, DeserializeError> deserialize_dynamic_array(
+    const SerializedNode& node,
+    const std::string& path,
+    const DeserializeOptions& options
+) {
     const auto dynamic_array_type = type_id<DynamicArray>();
     auto object = node.try_object();
     if (!object) {
@@ -1017,6 +1102,18 @@ deserialize_dynamic_array(const SerializedNode& node, const std::string& path) {
             path,
             "Expected object for DynamicArray, got " + node_kind_name(node)
         ));
+    }
+
+    auto fields = validate_object_fields(
+        *object,
+        dynamic_array_type,
+        path,
+        {"$elementType", "values"},
+        {"$elementTypeId"},
+        options
+    );
+    if (!fields) {
+        return failure(std::move(fields.error()));
     }
 
     const auto* element_type_field = find_field(*object, "$elementType");
@@ -1069,7 +1166,8 @@ deserialize_dynamic_array(const SerializedNode& node, const std::string& path) {
         auto element = deserialize_value(
             dynamic_array->element_type(),
             (*elements)[index],
-            element_path
+            element_path,
+            options
         );
         if (!element) {
             return failure(std::move(element.error()));
@@ -1089,8 +1187,11 @@ deserialize_dynamic_array(const SerializedNode& node, const std::string& path) {
     return make_val<DynamicArray>(std::move(*dynamic_array));
 }
 
-Result<Val, DeserializeError>
-deserialize_dynamic_map(const SerializedNode& node, const std::string& path) {
+Result<Val, DeserializeError> deserialize_dynamic_map(
+    const SerializedNode& node,
+    const std::string& path,
+    const DeserializeOptions& options
+) {
     const auto dynamic_map_type = type_id<DynamicMap>();
     auto object = node.try_object();
     if (!object) {
@@ -1100,6 +1201,18 @@ deserialize_dynamic_map(const SerializedNode& node, const std::string& path) {
             path,
             "Expected object for DynamicMap, got " + node_kind_name(node)
         ));
+    }
+
+    auto fields = validate_object_fields(
+        *object,
+        dynamic_map_type,
+        path,
+        {"$keyType", "$mappedType", "entries"},
+        {"$keyTypeId", "$mappedTypeId"},
+        options
+    );
+    if (!fields) {
+        return failure(std::move(fields.error()));
     }
 
     const auto* key_type_field = find_field(*object, "$keyType");
@@ -1173,6 +1286,18 @@ deserialize_dynamic_map(const SerializedNode& node, const std::string& path) {
             ));
         }
 
+        auto entry_fields = validate_object_fields(
+            *entry,
+            dynamic_map_type,
+            entry_path,
+            {"key", "value"},
+            {},
+            options
+        );
+        if (!entry_fields) {
+            return failure(std::move(entry_fields.error()));
+        }
+
         const auto* key_field = find_field(*entry, "key");
         const auto* value_field = find_field(*entry, "value");
         if (!key_field || !value_field) {
@@ -1187,7 +1312,8 @@ deserialize_dynamic_map(const SerializedNode& node, const std::string& path) {
         auto key = deserialize_value(
             dynamic_map->key_type(),
             key_field->value,
-            child_path(entry_path, "key")
+            child_path(entry_path, "key"),
+            options
         );
         if (!key) {
             return failure(std::move(key.error()));
@@ -1204,7 +1330,8 @@ deserialize_dynamic_map(const SerializedNode& node, const std::string& path) {
         auto mapped = deserialize_value(
             dynamic_map->mapped_type(),
             value_field->value,
-            child_path(entry_path, "value")
+            child_path(entry_path, "value"),
+            options
         );
         if (!mapped) {
             return failure(std::move(mapped.error()));
@@ -1230,7 +1357,8 @@ Result<Val, DeserializeError> deserialize_optional_container(
     IndexedContainerAdapter& container,
     const SerializedNode& node,
     const std::string& path,
-    const Type& type
+    const Type& type,
+    const DeserializeOptions& options
 ) {
     Val value = Val::default_construct(type);
     if (node.is_null()) {
@@ -1260,8 +1388,12 @@ Result<Val, DeserializeError> deserialize_optional_container(
         }
     }
 
-    auto element =
-        deserialize_value(container.element_type(), *payload, payload_path);
+    auto element = deserialize_value(
+        container.element_type(),
+        *payload,
+        payload_path,
+        options
+    );
     if (!element) {
         return failure(std::move(element.error()));
     }
@@ -1280,7 +1412,8 @@ Result<Val, DeserializeError> deserialize_associative_container(
     AssociativeContainerAdapter& container,
     const SerializedNode& node,
     const std::string& path,
-    const Type& type
+    const Type& type,
+    const DeserializeOptions& options
 ) {
     auto array = node.try_array();
     if (!array) {
@@ -1306,7 +1439,8 @@ Result<Val, DeserializeError> deserialize_associative_container(
             auto key = deserialize_value(
                 container.key_type(),
                 (*array)[index],
-                entry_path
+                entry_path,
+                options
             );
             if (!key) {
                 return failure(std::move(key.error()));
@@ -1337,6 +1471,18 @@ Result<Val, DeserializeError> deserialize_associative_container(
             ));
         }
 
+        auto fields = validate_object_fields(
+            *object,
+            type_id,
+            entry_path,
+            {"key", "value"},
+            {},
+            options
+        );
+        if (!fields) {
+            return failure(std::move(fields.error()));
+        }
+
         auto key_field = find_field(*object, "key");
         auto value_field = find_field(*object, "value");
         if (!key_field || !value_field) {
@@ -1351,7 +1497,8 @@ Result<Val, DeserializeError> deserialize_associative_container(
         auto key = deserialize_value(
             container.key_type(),
             key_field->value,
-            child_path(entry_path, "key")
+            child_path(entry_path, "key"),
+            options
         );
         if (!key) {
             return failure(std::move(key.error()));
@@ -1359,7 +1506,8 @@ Result<Val, DeserializeError> deserialize_associative_container(
         auto mapped = deserialize_value(
             container.mapped_type(),
             value_field->value,
-            child_path(entry_path, "value")
+            child_path(entry_path, "value"),
+            options
         );
         if (!mapped) {
             return failure(std::move(mapped.error()));
@@ -1387,7 +1535,8 @@ Result<Val, DeserializeError> deserialize_sequence_container(
     IndexedContainerAdapter& container,
     const SerializedNode& node,
     const std::string& path,
-    const Type& type
+    const Type& type,
+    const DeserializeOptions& options
 ) {
     auto array = node.try_array();
     if (!array) {
@@ -1430,8 +1579,12 @@ Result<Val, DeserializeError> deserialize_sequence_container(
                 ));
             }
 
-            auto element =
-                deserialize_value(*element_type, (*array)[index], element_path);
+            auto element = deserialize_value(
+                *element_type,
+                (*array)[index],
+                element_path,
+                options
+            );
             if (!element) {
                 return failure(std::move(element.error()));
             }
@@ -1465,8 +1618,12 @@ Result<Val, DeserializeError> deserialize_sequence_container(
             ));
         }
 
-        auto element =
-            deserialize_value(*element_type, (*array)[index], element_path);
+        auto element = deserialize_value(
+            *element_type,
+            (*array)[index],
+            element_path,
+            options
+        );
         if (!element) {
             return failure(std::move(element.error()));
         }
@@ -1488,7 +1645,8 @@ Result<Val, DeserializeError> deserialize_container(
     TypeId type_id,
     ContainerAdapter& container,
     const SerializedNode& node,
-    const std::string& path
+    const std::string& path,
+    const DeserializeOptions& options
 ) {
     auto type = Registry::instance().try_get_type(type_id);
     if (!type) {
@@ -1519,7 +1677,8 @@ Result<Val, DeserializeError> deserialize_container(
             *indexed,
             node,
             path,
-            *type
+            *type,
+            options
         );
     }
     if (auto* associative = container.associative()) {
@@ -1528,7 +1687,8 @@ Result<Val, DeserializeError> deserialize_container(
             *associative,
             node,
             path,
-            *type
+            *type,
+            options
         );
     }
     auto* indexed = container.indexed();
@@ -1540,13 +1700,21 @@ Result<Val, DeserializeError> deserialize_container(
             "Container exposes neither indexed nor associative operations"
         ));
     }
-    return deserialize_sequence_container(type_id, *indexed, node, path, *type);
+    return deserialize_sequence_container(
+        type_id,
+        *indexed,
+        node,
+        path,
+        *type,
+        options
+    );
 }
 
 Result<Val, DeserializeError> deserialize_enum(
     TypeId type_id,
     const SerializedNode& node,
-    const std::string& path
+    const std::string& path,
+    const DeserializeOptions& options
 ) {
     auto enm = Registry::instance().try_get_enum(type_id);
     if (!enm) {
@@ -1573,6 +1741,15 @@ Result<Val, DeserializeError> deserialize_enum(
         return enm->make_val(it->second);
     }
 
+    if (options.enum_input == EnumInputPolicy::NameOnly) {
+        return failure(deserialize_error(
+            DeserializeError::Kind::InvalidNode,
+            type_id,
+            path,
+            "Expected enum string for " + type_label(type_id)
+        ));
+    }
+
     auto underlying = read_integral<std::int64_t>(node, type_id, path);
     if (!underlying) {
         return failure(deserialize_error(
@@ -1589,11 +1766,21 @@ Status<DeserializeError> validate_type_field(
     TypeId type_id,
     const Type& type,
     const SerializedNode::Object& object,
-    const std::string& path
+    const std::string& path,
+    const DeserializeOptions& options
 ) {
     auto field = find_field(object, "$type");
     if (!field) {
         return {};
+    }
+
+    if (!options.allow_type_tag) {
+        return failure(deserialize_error(
+            DeserializeError::Kind::InvalidNode,
+            type_id,
+            child_path(path, "$type"),
+            "Type tag '$type' is not allowed"
+        ));
     }
 
     auto serialized_name = field->value.try_string();
@@ -1629,7 +1816,8 @@ Status<DeserializeError> validate_type_field(
 Result<Val, DeserializeError> deserialize_object(
     TypeId type_id,
     const SerializedNode& node,
-    const std::string& path
+    const std::string& path,
+    const DeserializeOptions& options
 ) {
     auto object = node.try_object();
     if (!object) {
@@ -1657,11 +1845,6 @@ Result<Val, DeserializeError> deserialize_object(
         return failure(std::move(construction.error()));
     }
 
-    auto type_status = validate_type_field(type_id, *type, *object, path);
-    if (!type_status) {
-        return failure(std::move(type_status.error()));
-    }
-
     auto cls = registry.try_get_cls(type_id);
     if (!cls) {
         return failure(deserialize_error(
@@ -1678,6 +1861,30 @@ Result<Val, DeserializeError> deserialize_object(
         return lhs->name() < rhs->name();
     });
 
+    std::vector<std::string_view> required_fields;
+    required_fields.reserve(properties.size());
+    for (const auto* property : properties) {
+        required_fields.emplace_back(property->name());
+    }
+    const std::vector<std::string_view> optional_fields {"$type"};
+    auto fields = validate_object_fields(
+        *object,
+        type_id,
+        path,
+        required_fields,
+        optional_fields,
+        options
+    );
+    if (!fields) {
+        return failure(std::move(fields.error()));
+    }
+
+    auto type_status =
+        validate_type_field(type_id, *type, *object, path, options);
+    if (!type_status) {
+        return failure(std::move(type_status.error()));
+    }
+
     for (const auto* property : properties) {
         auto field = find_field(*object, property->name());
         if (!field) {
@@ -1685,8 +1892,12 @@ Result<Val, DeserializeError> deserialize_object(
         }
 
         auto property_path = child_path(path, property->name());
-        auto property_value =
-            deserialize_value(property->type_id(), field->value, property_path);
+        auto property_value = deserialize_value(
+            property->type_id(),
+            field->value,
+            property_path,
+            options
+        );
         if (!property_value) {
             return failure(std::move(property_value.error()));
         }
@@ -1790,7 +2001,8 @@ Result<Val, DeserializeError> deserialize_primitive(
 Result<Val, DeserializeError> deserialize_value(
     TypeId type_id,
     const SerializedNode& node,
-    const std::string& path
+    const std::string& path,
+    const DeserializeOptions& options
 ) {
     if (same_type<bool>(type_id) || same_type<std::string>(type_id) ||
         is_signed_integral_type(type_id) ||
@@ -1798,21 +2010,21 @@ Result<Val, DeserializeError> deserialize_value(
         return deserialize_primitive(type_id, node, path);
     }
     if (same_type<DynamicArray>(type_id)) {
-        return deserialize_dynamic_array(node, path);
+        return deserialize_dynamic_array(node, path, options);
     }
     if (same_type<DynamicMap>(type_id)) {
-        return deserialize_dynamic_map(node, path);
+        return deserialize_dynamic_map(node, path, options);
     }
 
     auto& registry = Registry::instance();
     if (registry.has_enum(type_id)) {
-        return deserialize_enum(type_id, node, path);
+        return deserialize_enum(type_id, node, path, options);
     }
     if (auto container = registry.try_get_container_adapter(type_id)) {
-        return deserialize_container(type_id, *container, node, path);
+        return deserialize_container(type_id, *container, node, path, options);
     }
     if (auto cls = registry.try_get_cls(type_id)) {
-        return deserialize_object(type_id, node, path);
+        return deserialize_object(type_id, node, path, options);
     }
 
     return failure(deserialize_error(
@@ -1825,13 +2037,17 @@ Result<Val, DeserializeError> deserialize_value(
 
 } // namespace
 
-Result<SerializedNode, SerializeError> serialize(Ref value) {
-    return serialize_value(value, c_root_path);
+Result<SerializedNode, SerializeError>
+serialize(Ref value, const SerializeOptions& options) {
+    return serialize_value(value, c_root_path, options);
 }
 
-Result<Val, DeserializeError>
-deserialize(TypeId type_id, const SerializedNode& node) {
-    return deserialize_value(type_id, node, c_root_path);
+Result<Val, DeserializeError> deserialize(
+    TypeId type_id,
+    const SerializedNode& node,
+    const DeserializeOptions& options
+) {
+    return deserialize_value(type_id, node, c_root_path, options);
 }
 
 } // namespace fei::serialization
