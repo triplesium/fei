@@ -53,6 +53,14 @@ TEST_CASE(
         values[1] = 8
         assert(values[1] == 8)
 
+        local visited = 0
+        for index, value in pairs(values) do
+            assert(index == visited)
+            assert(value == values[index])
+            visited = visited + 1
+        end
+        assert(visited == #values)
+
         local out_of_range_ok = pcall(function()
             return values[99]
         end)
@@ -156,6 +164,13 @@ TEST_CASE(
         array[1] = 11
         assert(array[1] == 11)
 
+        local total = 0
+        for index, value in pairs(array) do
+            assert(value == array[index])
+            total = total + value
+        end
+        assert(total == 18)
+
         local array_ok = pcall(function()
             array:append("wrong")
         end)
@@ -202,6 +217,14 @@ TEST_CASE(
         assert(values:at(0) == 1)
         assert(#values == 2)
         assert(values[0] == 1)
+
+        local visited = 0
+        for index, value in pairs(values) do
+            assert(index == visited)
+            assert(value == values[index])
+            visited = visited + 1
+        end
+        assert(visited == #values)
 
         local ok = pcall(function()
             values:append(3)

@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <lua.hpp>
 #include <string>
 #include <utility>
@@ -117,6 +118,8 @@ int dispatch_new(lua_State* L);
 int dispatch_method(lua_State* L);
 int dispatch_gc(lua_State* L);
 int dispatch_len(lua_State* L);
+int dispatch_pairs(lua_State* L);
+int dispatch_indexed_next(lua_State* L);
 int dispatch_index(lua_State* L);
 int dispatch_newindex(lua_State* L);
 int dispatch_operator(lua_State* L);
@@ -159,10 +162,18 @@ void LuaRuntime::register_lua_type(Type& type) {
         lua_pushcclosure(L, &dispatch_gc, 1);
         lua_setfield(L, -2, "__gc");
 
-        if (Registry::instance().try_get_container_adapter(id)) {
+        auto container_adapter =
+            Registry::instance().try_get_container_adapter(id);
+        if (container_adapter) {
             lua_pushinteger(L, to_lua_integer(id.id()));
             lua_pushcclosure(L, &dispatch_len, 1);
             lua_setfield(L, -2, "__len");
+
+            if (container_adapter->indexed()) {
+                lua_pushinteger(L, to_lua_integer(id.id()));
+                lua_pushcclosure(L, &dispatch_pairs, 1);
+                lua_setfield(L, -2, "__pairs");
+            }
         }
 
         lua_pushinteger(L, to_lua_integer(id.id()));
@@ -403,6 +414,69 @@ int dispatch_len(lua_State* L) {
     }
     lua_pushinteger(L, static_cast<lua_Integer>(*size));
     return 1;
+}
+
+int dispatch_pairs(lua_State* L) {
+    TypeId type_id = lua_tointeger(L, lua_upvalueindex(1));
+    auto adapter = Registry::instance().try_get_container_adapter(type_id);
+    if (!adapter) {
+        return lua_raise_registry_error(L, adapter.error());
+    }
+    if (!adapter->indexed()) {
+        luaL_error(L, "Container does not support indexed iteration");
+        return 0;
+    }
+
+    lua_pushinteger(L, to_lua_integer(type_id.id()));
+    lua_pushcclosure(L, &dispatch_indexed_next, 1);
+    lua_pushvalue(L, 1);
+    lua_pushinteger(L, -1);
+    return 3;
+}
+
+int dispatch_indexed_next(lua_State* L) {
+    TypeId type_id = lua_tointeger(L, lua_upvalueindex(1));
+    auto adapter = Registry::instance().try_get_container_adapter(type_id);
+    if (!adapter) {
+        return lua_raise_registry_error(L, adapter.error());
+    }
+    auto* indexed = adapter->indexed();
+    if (!indexed) {
+        luaL_error(L, "Container does not support indexed iteration");
+        return 0;
+    }
+
+    if (!lua_isinteger(L, 2)) {
+        luaL_error(L, "Container iteration index must be an integer");
+        return 0;
+    }
+    auto previous = lua_tointeger(L, 2);
+    if (previous < -1) {
+        luaL_error(L, "Container iteration index must not be less than -1");
+        return 0;
+    }
+    if (previous == std::numeric_limits<lua_Integer>::max()) {
+        return 0;
+    }
+
+    auto instance = lua_to_ref(L, 1);
+    auto size = indexed->size(instance);
+    if (!size) {
+        return lua_raise_container_error(L, size.error());
+    }
+
+    auto index = static_cast<std::size_t>(previous + 1);
+    if (index >= *size) {
+        return 0;
+    }
+
+    auto element = indexed->at(instance, index);
+    if (!element) {
+        return lua_raise_container_error(L, element.error());
+    }
+    lua_pushinteger(L, static_cast<lua_Integer>(index));
+    lua_push_ref(L, *element);
+    return 2;
 }
 
 int dispatch_index(lua_State* L) {
