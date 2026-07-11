@@ -63,6 +63,7 @@ end
 local project_dir = os.scriptdir():gsub("\\", "/")
 add_defines("FEI_ASSETS_PATH=\"" .. project_dir .. "/assets\"")
 add_defines("FEI_SHADER_ASSETS_PATH=\"" .. project_dir .. "/build/generated/shaders\"")
+add_defines("FEI_SHADER_CACHE_PATH=\"" .. project_dir .. "/build/cache/shaders\"")
 add_defines("FEI_PROFILE_OUTPUT_PATH=\"" .. project_dir .. "/build/profile/latest\"")
 
 local shader_sources = {}

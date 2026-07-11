@@ -6,10 +6,13 @@
 #include "rendering/shader.hpp"
 
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace fei {
+
+class ShaderArtifactCache;
 
 struct ShaderCompileRequest {
     std::filesystem::path source_path;
@@ -22,9 +25,15 @@ struct ShaderCompileRequest {
     ShaderDefs defs;
 };
 
+struct ShaderDependencySnapshot {
+    std::filesystem::path path;
+    std::string source;
+};
+
 struct ShaderCompileOutput {
     ShaderDescription description;
     std::vector<std::filesystem::path> dependencies;
+    std::vector<ShaderDependencySnapshot> dependency_snapshots;
 };
 
 struct ShaderCompileError {
@@ -35,6 +44,7 @@ struct ShaderCompileError {
 struct RuntimeShaderCompilerConfig {
     std::filesystem::path source_root;
     ShaderSourceRegistry shader_sources;
+    std::filesystem::path cache_root;
 };
 
 struct ShaderVariantCompileOutput {
@@ -45,6 +55,7 @@ struct ShaderVariantCompileOutput {
 class ShaderCompiler {
   public:
     virtual ~ShaderCompiler() = default;
+    [[nodiscard]] virtual std::string cache_identity() const { return {}; }
     virtual Result<ShaderCompileOutput, ShaderCompileError>
     compile(ShaderCompileRequest request) = 0;
 };
@@ -53,6 +64,7 @@ class ShaderVariantCompiler {
   private:
     ShaderCompiler* m_compiler;
     RuntimeShaderCompilerConfig m_config;
+    std::shared_ptr<ShaderArtifactCache> m_artifact_cache;
 
   public:
     ShaderVariantCompiler(
@@ -101,6 +113,8 @@ class ShaderVariantCompiler {
 #ifdef FEI_HAS_SLANG_SDK
 class SlangLibraryShaderCompiler final : public ShaderCompiler {
   public:
+    [[nodiscard]] std::string cache_identity() const override;
+
     Result<ShaderCompileOutput, ShaderCompileError>
     compile(ShaderCompileRequest request) override;
 };

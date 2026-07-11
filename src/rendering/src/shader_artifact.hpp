@@ -27,4 +27,6 @@ struct ShaderArtifactGenerationOutput {
 ShaderArtifactGenerationOutput
 generate_shader_artifacts(const ShaderArtifactGenerationInput& input);
 
+std::string shader_artifact_cache_identity();
+
 } // namespace fei

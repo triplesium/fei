@@ -26,6 +26,18 @@
 
 namespace fei {
 
+namespace {
+
+std::filesystem::path default_shader_cache_root() {
+#ifdef FEI_SHADER_CACHE_PATH
+    return FEI_SHADER_CACHE_PATH;
+#else
+    return std::filesystem::current_path() / "build" / "cache" / "shaders";
+#endif
+}
+
+} // namespace
+
 void begin_render_graph(ResRW<RenderGraph> render_graph) {
     render_graph->clear();
 }
@@ -77,9 +89,12 @@ void RenderingPlugin::setup(App& app) {
     app.resource<AssetServer>().emplace_source<ShaderAssetSource>();
 #ifdef FEI_HAS_SLANG_SDK
     app.add_resource(SlangLibraryShaderCompiler {});
-    app.add_resource(
-        ShaderVariantCompiler(app.resource<SlangLibraryShaderCompiler>())
-    );
+    app.add_resource(ShaderVariantCompiler(
+        app.resource<SlangLibraryShaderCompiler>(),
+        RuntimeShaderCompilerConfig {
+            .cache_root = default_shader_cache_root(),
+        }
+    ));
 #endif
 
     app.configure_sets(

@@ -1,7 +1,9 @@
 #include "rendering/shader_compiler.hpp"
 
+#include "base/log.hpp"
 #include "rendering/shader.hpp"
 #include "shader_artifact.hpp"
+#include "shader_artifact_cache.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -11,6 +13,7 @@
 #include <exception>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -579,6 +582,7 @@ struct SlangCompileOutput {
     std::vector<std::byte> spirv;
     std::vector<ShaderArtifactLogicalResourceName> logical_resource_names;
     std::vector<std::filesystem::path> dependencies;
+    std::vector<ShaderDependencySnapshot> dependency_snapshots;
 };
 
 class TrackingSlangFileSystem final : public ISlangFileSystemExt {
@@ -633,7 +637,14 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
             return SLANG_E_OUT_OF_MEMORY;
         }
 
-        insert_unique_dependency(m_dependencies, std::filesystem::path(path));
+        auto dependency_path = normalized_absolute_path(path);
+        insert_unique_dependency(m_dependencies, dependency_path);
+        m_dependency_snapshots.push_back(
+            ShaderDependencySnapshot {
+                .path = std::move(dependency_path),
+                .source = std::move(contents),
+            }
+        );
         return SLANG_OK;
     }
 
@@ -737,6 +748,11 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
         return m_dependencies;
     }
 
+    [[nodiscard]] const std::vector<ShaderDependencySnapshot>&
+    dependency_snapshots() const {
+        return m_dependency_snapshots;
+    }
+
   private:
     ISlangUnknown* getInterface(const SlangUUID& uuid) {
         if (uuid == ISlangUnknown::getTypeGuid() ||
@@ -767,6 +783,7 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
 
     std::atomic<uint32_t> m_ref_count {0};
     std::vector<std::filesystem::path> m_dependencies;
+    std::vector<ShaderDependencySnapshot> m_dependency_snapshots;
 };
 
 Slang::ComPtr<TrackingSlangFileSystem> make_tracking_slang_file_system() {
@@ -916,11 +933,19 @@ compile_slang_to_spirv(const ShaderCompileRequest& request) {
     for (const auto& dependency : file_system->dependencies()) {
         insert_unique_dependency(dependencies, dependency);
     }
+    auto dependency_snapshots = file_system->dependency_snapshots();
+    dependency_snapshots.push_back(
+        ShaderDependencySnapshot {
+            .path = normalized_absolute_path(request.source_path),
+            .source = source,
+        }
+    );
 
     return SlangCompileOutput {
         .spirv = std::move(spirv).value(),
         .logical_resource_names = std::move(logical_resource_names).value(),
         .dependencies = std::move(dependencies),
+        .dependency_snapshots = std::move(dependency_snapshots),
     };
 }
 
@@ -944,7 +969,15 @@ ShaderVariantCompiler::ShaderVariantCompiler(
     RuntimeShaderCompilerConfig config
 ) :
     m_compiler(&compiler),
-    m_config(normalize_runtime_shader_compiler_config(std::move(config))) {}
+    m_config(normalize_runtime_shader_compiler_config(std::move(config))) {
+    auto compiler_identity = compiler.cache_identity();
+    if (!m_config.cache_root.empty() && !compiler_identity.empty()) {
+        m_artifact_cache = std::make_shared<ShaderArtifactCache>(
+            m_config.cache_root,
+            std::move(compiler_identity)
+        );
+    }
+}
 
 Result<ShaderVariantCompileOutput, ShaderCompileError>
 ShaderVariantCompiler::compile_with_dependencies(
@@ -1008,9 +1041,36 @@ ShaderVariantCompiler::compile_with_dependencies(
     }
 
     auto compile_request = std::move(request).value();
+    if (m_artifact_cache && compile_request.source.empty()) {
+        auto source = read_text_file(compile_request.source_path);
+        if (!source) {
+            return failure(std::move(source).error());
+        }
+        compile_request.source = std::move(source).value();
+    }
+    std::optional<ShaderArtifactCache::Key> artifact_cache_key;
+    if (m_artifact_cache) {
+        artifact_cache_key = m_artifact_cache->key(compile_request);
+        if (artifact_cache_key) {
+            auto cached = m_artifact_cache->load(*artifact_cache_key);
+            if (cached) {
+                trace(
+                    "Shader cache hit for '{}' ({})",
+                    compile_request.logical_path.string(),
+                    compile_request.entry
+                );
+                return std::move(*cached);
+            }
+        }
+    }
+
     auto output = m_compiler->compile(compile_request);
     if (!output) {
         return failure(std::move(output).error());
+    }
+
+    if (artifact_cache_key) {
+        m_artifact_cache->store(*artifact_cache_key, compile_request, *output);
     }
 
     return ShaderVariantCompileOutput {
@@ -1052,6 +1112,14 @@ Result<ShaderDescription, ShaderCompileError> ShaderVariantCompiler::compile(
 }
 
 #ifdef FEI_HAS_SLANG_SDK
+std::string SlangLibraryShaderCompiler::cache_identity() const {
+    auto* build_tag = spGetBuildTagString();
+    if (build_tag == nullptr) {
+        return {};
+    }
+    return std::string(build_tag) + '|' + shader_artifact_cache_identity();
+}
+
 Result<ShaderCompileOutput, ShaderCompileError>
 SlangLibraryShaderCompiler::compile(ShaderCompileRequest request) {
     request.defs = normalized_shader_defs(std::move(request.defs));
@@ -1072,6 +1140,7 @@ SlangLibraryShaderCompiler::compile(ShaderCompileRequest request) {
     }
 
     auto dependencies = std::move(slang->dependencies);
+    auto dependency_snapshots = std::move(slang->dependency_snapshots);
     return ShaderCompileOutput {
         .description =
             ShaderDescription {
@@ -1083,6 +1152,7 @@ SlangLibraryShaderCompiler::compile(ShaderCompileRequest request) {
                 .defs = std::move(request.defs),
             },
         .dependencies = std::move(dependencies),
+        .dependency_snapshots = std::move(dependency_snapshots),
     };
 }
 #endif

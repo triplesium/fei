@@ -10,6 +10,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <string_view>
 #include <vector>
@@ -28,14 +29,41 @@ void write_text_file(
     output << content;
 }
 
+std::string read_text_file(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    return std::string(
+        std::istreambuf_iterator<char>(input),
+        std::istreambuf_iterator<char>()
+    );
+}
+
 class RecordingShaderCompiler final : public ShaderCompiler {
   public:
     std::vector<ShaderCompileRequest> requests;
     std::vector<std::filesystem::path> dependencies;
+    std::vector<ShaderResourceBinding> resources;
+    std::function<void()> after_dependency_snapshot;
+
+    [[nodiscard]] std::string cache_identity() const override {
+        return "recording-shader-compiler-v1";
+    }
 
     Result<ShaderCompileOutput, ShaderCompileError>
     compile(ShaderCompileRequest request) override {
         requests.push_back(request);
+        std::vector<ShaderDependencySnapshot> dependency_snapshots;
+        dependency_snapshots.reserve(dependencies.size());
+        for (const auto& dependency : dependencies) {
+            dependency_snapshots.push_back(
+                ShaderDependencySnapshot {
+                    .path = dependency,
+                    .source = read_text_file(dependency),
+                }
+            );
+        }
+        if (after_dependency_snapshot) {
+            after_dependency_snapshot();
+        }
 
         return ShaderCompileOutput {
             .description =
@@ -50,10 +78,11 @@ class RecordingShaderCompiler final : public ShaderCompiler {
                             std::byte {0x07},
                         },
                     .path = request.logical_path.string(),
-                    .resources = {},
+                    .resources = resources,
                     .defs = normalized_shader_defs(std::move(request.defs)),
                 },
             .dependencies = dependencies,
+            .dependency_snapshots = std::move(dependency_snapshots),
         };
     }
 };
@@ -406,6 +435,156 @@ float4 fragment_main() : SV_Target0
     REQUIRE(recompiled != first);
     REQUIRE(compiler.requests.size() == 2);
     REQUIRE(device.shader_descriptions.size() == 2);
+}
+
+TEST_CASE(
+    "ShaderVariantCompiler persists compiled variants between instances",
+    "[rendering][shader-cache][shader-compiler]"
+) {
+    auto root = std::filesystem::current_path() / "build" / "test" /
+                "shader-cache-persistent";
+    std::filesystem::remove_all(root);
+    auto dependency_path = root / "shaders" / "shared.slang";
+    write_text_file(dependency_path, "first dependency content");
+    write_text_file(root / "shaders" / "test.slang", "shader source");
+
+    auto config = RuntimeShaderCompilerConfig {
+        .source_root = root / "shaders",
+        .cache_root = root / "cache",
+    };
+
+    RecordingShaderCompiler first_compiler;
+    first_compiler.dependencies = {dependency_path};
+    first_compiler.resources = {
+        ShaderResourceBinding {
+            .name = "material",
+            .backend_name = "material_1",
+            .backend_names = {"material_1", "material_2"},
+            .kind = ResourceKind::StorageBufferReadOnly,
+            .set = 1,
+            .binding = 2,
+            .array_size = 2,
+        },
+    };
+    ShaderVariantCompiler first_variant_compiler(first_compiler, config);
+    auto first = first_variant_compiler.compile_with_dependencies(
+        "test.slang",
+        "shader source",
+        ShaderStages::Fragment,
+        "fragment_main",
+        {
+            ShaderDefVal::bool_def("ALPHA_TEST"),
+            ShaderDefVal::int_def("OFFSET", -2),
+            ShaderDefVal::uint_def("LIGHT_COUNT", 4),
+        }
+    );
+
+    REQUIRE(first.has_value());
+    REQUIRE(first_compiler.requests.size() == 1);
+
+    RecordingShaderCompiler second_compiler;
+    second_compiler.dependencies = {dependency_path};
+    ShaderVariantCompiler second_variant_compiler(second_compiler, config);
+    auto cached = second_variant_compiler.compile_with_dependencies(
+        "test.slang",
+        "shader source",
+        ShaderStages::Fragment,
+        "fragment_main",
+        {
+            ShaderDefVal::uint_def("LIGHT_COUNT", 4),
+            ShaderDefVal::bool_def("ALPHA_TEST"),
+            ShaderDefVal::int_def("OFFSET", -2),
+        }
+    );
+
+    REQUIRE(cached.has_value());
+    REQUIRE(second_compiler.requests.empty());
+    CHECK(cached->description.source == first->description.source);
+    CHECK(cached->description.spirv == first->description.spirv);
+    CHECK(cached->description.defs == first->description.defs);
+    REQUIRE(cached->description.resources.size() == 1);
+    CHECK(cached->description.resources[0].name == "material");
+    CHECK(cached->description.resources[0].backend_name == "material_1");
+    CHECK(
+        cached->description.resources[0].backend_names ==
+        std::vector<std::string> {"material_1", "material_2"}
+    );
+    CHECK(
+        cached->description.resources[0].kind ==
+        ResourceKind::StorageBufferReadOnly
+    );
+    CHECK(cached->description.resources[0].set == 1);
+    CHECK(cached->description.resources[0].binding == 2);
+    CHECK(cached->description.resources[0].array_size == 2);
+
+    write_text_file(dependency_path, "changed dependency content");
+
+    RecordingShaderCompiler third_compiler;
+    third_compiler.dependencies = {dependency_path};
+    ShaderVariantCompiler third_variant_compiler(third_compiler, config);
+    auto recompiled = third_variant_compiler.compile_with_dependencies(
+        "test.slang",
+        "shader source",
+        ShaderStages::Fragment,
+        "fragment_main",
+        {
+            ShaderDefVal::bool_def("ALPHA_TEST"),
+            ShaderDefVal::int_def("OFFSET", -2),
+            ShaderDefVal::uint_def("LIGHT_COUNT", 4),
+        }
+    );
+
+    REQUIRE(recompiled.has_value());
+    REQUIRE(third_compiler.requests.size() == 1);
+}
+
+TEST_CASE(
+    "ShaderVariantCompiler skips cache writes when dependencies change during "
+    "compilation",
+    "[rendering][shader-cache][shader-compiler]"
+) {
+    auto root = std::filesystem::current_path() / "build" / "test" /
+                "shader-cache-concurrent-dependency-change";
+    std::filesystem::remove_all(root);
+    auto dependency_path = root / "shaders" / "shared.slang";
+    write_text_file(dependency_path, "dependency before compilation");
+    write_text_file(root / "shaders" / "test.slang", "shader source");
+
+    auto config = RuntimeShaderCompilerConfig {
+        .source_root = root / "shaders",
+        .cache_root = root / "cache",
+    };
+
+    RecordingShaderCompiler first_compiler;
+    first_compiler.dependencies = {dependency_path};
+    first_compiler.after_dependency_snapshot = [&] {
+        write_text_file(dependency_path, "dependency changed during compile");
+    };
+    ShaderVariantCompiler first_variant_compiler(first_compiler, config);
+    auto first = first_variant_compiler.compile_with_dependencies(
+        "test.slang",
+        "shader source",
+        ShaderStages::Fragment,
+        "fragment_main",
+        {}
+    );
+
+    REQUIRE(first.has_value());
+    REQUIRE(first_compiler.requests.size() == 1);
+
+    RecordingShaderCompiler second_compiler;
+    second_compiler.dependencies = {dependency_path};
+    ShaderVariantCompiler second_variant_compiler(second_compiler, config);
+    auto second = second_variant_compiler.compile_with_dependencies(
+        "test.slang",
+        "shader source",
+        ShaderStages::Fragment,
+        "fragment_main",
+        {}
+    );
+
+    REQUIRE(second.has_value());
+    REQUIRE(second_compiler.requests.size() == 1);
 }
 
 TEST_CASE(
