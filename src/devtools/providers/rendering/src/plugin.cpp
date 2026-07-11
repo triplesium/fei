@@ -491,6 +491,7 @@ void ProviderPlugin::setup(App& app) {
         "Render Graph",
         SnapshotCapability {
             .schema = c_render_graph_schema,
+            .data_type = type_id<RenderGraphSnapshot>(),
             .mode = PublishMode::Cached,
         }
     );
@@ -500,6 +501,7 @@ void ProviderPlugin::setup(App& app) {
         "Graphics Cache",
         SnapshotCapability {
             .schema = c_graphics_cache_schema,
+            .data_type = type_id<GraphicsCacheSnapshot>(),
             .mode = PublishMode::Cached,
         }
     );

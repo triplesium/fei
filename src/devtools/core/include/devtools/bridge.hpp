@@ -17,6 +17,9 @@ struct ManifestEntry {
     std::string kind;
     std::string mime;
     std::string schema;
+    std::string data_type;
+    std::string request_type;
+    std::string response_type;
     PublishMode mode {PublishMode::Cached};
     bool waitable {false};
 };
@@ -115,8 +118,10 @@ class Bridge {
     void complete_error(ErrorResponse response);
 
     void update_manifest(std::vector<ManifestEntry> entries);
+    void update_schema_json(std::string json);
     Optional<ManifestEntry> find_capability(const std::string& id) const;
     std::string manifest_json() const;
+    std::string schema_json() const;
     std::string status_json() const;
 
   private:

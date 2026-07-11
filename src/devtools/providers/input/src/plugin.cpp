@@ -174,13 +174,21 @@ void ProviderPlugin::setup(App& app) {
         app.world(),
         "input.key",
         "Keyboard Key",
-        CommandCapability {.schema = "input.key.v1"}
+        CommandCapability {
+            .schema = "input.key.v1",
+            .request_type = type_id<KeyCommandBody>(),
+            .response_type = type_id<KeyCommandResponse>(),
+        }
     );
     declare_capability(
         app.world(),
         "input.clear",
         "Clear Input",
-        CommandCapability {.schema = "input.clear.v1"}
+        CommandCapability {
+            .schema = "input.clear.v1",
+            .request_type = type_id<ClearCommandBody>(),
+            .response_type = type_id<ClearCommandResponse>(),
+        }
     );
 
     app.add_resource(InputState {});

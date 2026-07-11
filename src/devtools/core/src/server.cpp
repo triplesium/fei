@@ -441,6 +441,13 @@ void install_routes(
     );
 
     server.Get(
+        "/api/v1/schemas",
+        [bridge](const httplib::Request&, httplib::Response& res) mutable {
+            set_text(res, 200, bridge.schema_json());
+        }
+    );
+
+    server.Get(
         R"(/api/v1/blobs/([^/]+)/stream)",
         [bridge](const httplib::Request& req, httplib::Response& res) mutable {
             const auto capability = req.matches[1].str();

@@ -1,21 +1,45 @@
 #include "devtools/plugin.hpp"
 
 #include "app/app.hpp"
+#include "base/log.hpp"
 #include "devtools/bridge.hpp"
 #include "devtools/capability.hpp"
+#include "devtools/schema.hpp"
 #include "devtools/server.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
 #include "ecs/world.hpp"
+#include "refl/registry.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <string>
 #include <utility>
 #include <vector>
 
 namespace fei::devtools {
 
 namespace {
+
+struct SchemaSyncState {
+    std::vector<TypeId> roots;
+    bool initialized {false};
+};
+
+std::string reflected_type_name(TypeId id) {
+    if (!id) {
+        return {};
+    }
+    auto type = Registry::instance().try_get_type(id);
+    return type ? type->name() : std::string {};
+}
+
+void append_schema_root(std::vector<TypeId>& roots, TypeId id) {
+    if (id) {
+        roots.push_back(id);
+    }
+}
 
 void import_devtools_requests(
     ResRW<Bridge> bridge,
@@ -67,11 +91,13 @@ void import_devtools_requests(
 
 void sync_devtools_manifest(
     ResRW<Bridge> bridge,
+    ResRW<SchemaSyncState> schema_state,
     Query<const Capability, const BlobCapability> blobs,
     Query<const Capability, const SnapshotCapability> snapshots,
     Query<const Capability, const CommandCapability> commands
 ) {
     std::vector<ManifestEntry> entries;
+    std::vector<TypeId> schema_roots;
     for (auto [capability, blob] : blobs) {
         entries.push_back(
             ManifestEntry {
@@ -91,10 +117,12 @@ void sync_devtools_manifest(
                 .label = capability.label,
                 .kind = "snapshot",
                 .schema = snapshot.schema,
+                .data_type = reflected_type_name(snapshot.data_type),
                 .mode = snapshot.mode,
                 .waitable = true,
             }
         );
+        append_schema_root(schema_roots, snapshot.data_type);
     }
     for (auto [capability, command] : commands) {
         entries.push_back(
@@ -103,12 +131,34 @@ void sync_devtools_manifest(
                 .label = capability.label,
                 .kind = "command",
                 .schema = command.schema,
+                .request_type = reflected_type_name(command.request_type),
+                .response_type = reflected_type_name(command.response_type),
                 .mode = PublishMode::OnDemand,
                 .waitable = true,
             }
         );
+        append_schema_root(schema_roots, command.request_type);
+        append_schema_root(schema_roots, command.response_type);
     }
     bridge->update_manifest(std::move(entries));
+
+    std::ranges::sort(schema_roots);
+    schema_roots.erase(
+        std::ranges::unique(schema_roots).begin(),
+        schema_roots.end()
+    );
+    if (schema_state->initialized && schema_state->roots == schema_roots) {
+        return;
+    }
+
+    schema_state->roots = schema_roots;
+    schema_state->initialized = true;
+    auto schema = build_schema_json(schema_roots);
+    if (!schema) {
+        error("Failed to build DevTools schemas: {}", schema.error());
+        return;
+    }
+    bridge->update_schema_json(std::move(*schema));
 }
 
 bool has_response_component(World& world, Entity entity) {
@@ -254,6 +304,7 @@ CorePlugin::CorePlugin(Config config) : m_config(std::move(config)) {}
 
 void CorePlugin::setup(App& app) {
     app.add_resource(Bridge {});
+    app.add_resource(SchemaSyncState {});
 
     declare_capability(
         app.world(),

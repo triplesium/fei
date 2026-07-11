@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/types.hpp"
+#include "refl/type.hpp"
 
 #include <chrono>
 #include <string>
@@ -44,11 +45,14 @@ struct BlobCapability {
 
 struct SnapshotCapability {
     std::string schema;
+    TypeId data_type;
     PublishMode mode {PublishMode::Cached};
 };
 
 struct CommandCapability {
     std::string schema;
+    TypeId request_type;
+    TypeId response_type;
 };
 
 struct Request {

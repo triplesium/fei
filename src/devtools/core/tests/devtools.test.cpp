@@ -177,6 +177,8 @@ TEST_CASE("Bridge stores manifest JSON", "[devtools]") {
             .label = "Clear Input",
             .kind = "command",
             .schema = "input.clear.v1",
+            .request_type = "fei::devtools::input::ClearCommandBody",
+            .response_type = "fei::devtools::input::ClearCommandResponse",
             .mode = PublishMode::OnDemand,
             .waitable = true,
         },
@@ -185,6 +187,9 @@ TEST_CASE("Bridge stores manifest JSON", "[devtools]") {
     auto manifest = bridge.manifest_json();
     REQUIRE(manifest.find("rendering.frame") != std::string::npos);
     REQUIRE(manifest.find("on_demand") != std::string::npos);
+    REQUIRE(
+        manifest.find("\"schemas\":\"/api/v1/schemas\"") != std::string::npos
+    );
     REQUIRE(
         manifest.find("\"get\":\"/api/v1/blobs/rendering.frame\"") !=
         std::string::npos
@@ -201,9 +206,25 @@ TEST_CASE("Bridge stores manifest JSON", "[devtools]") {
         manifest.find("\"post\":\"/api/v1/commands/input.clear\"") !=
         std::string::npos
     );
+    REQUIRE(
+        manifest.find(
+            "\"request_type\":\"fei::devtools::input::ClearCommandBody\""
+        ) != std::string::npos
+    );
+    REQUIRE(
+        manifest.find(
+            "\"response_type\":"
+            "\"fei::devtools::input::ClearCommandResponse\""
+        ) != std::string::npos
+    );
 
     auto capability = bridge.find_capability("rendering.frame");
     REQUIRE(capability);
     REQUIRE(capability->kind == "blob");
     REQUIRE_FALSE(bridge.find_capability("missing"));
+
+    const std::string schemas =
+        R"({"version":1,"roots":["test.Root"],"types":{}})";
+    bridge.update_schema_json(schemas);
+    REQUIRE(bridge.schema_json() == schemas);
 }

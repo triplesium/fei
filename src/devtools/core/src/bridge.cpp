@@ -104,6 +104,7 @@ struct Bridge::State {
     std::unordered_map<std::string, BridgeBlob> blobs;
     std::unordered_map<std::string, BridgeSnapshot> snapshots;
     std::vector<ManifestEntry> manifest;
+    std::string schema_json {R"({"version":1,"roots":[],"types":{}})"};
 };
 
 Bridge::Bridge() : m_state(std::make_shared<State>()) {}
@@ -353,6 +354,11 @@ void Bridge::update_manifest(std::vector<ManifestEntry> entries) {
     m_state->manifest = std::move(entries);
 }
 
+void Bridge::update_schema_json(std::string json) {
+    std::scoped_lock lock(m_state->mutex);
+    m_state->schema_json = std::move(json);
+}
+
 Optional<ManifestEntry> Bridge::find_capability(const std::string& id) const {
     std::scoped_lock lock(m_state->mutex);
     for (const auto& entry : m_state->manifest) {
@@ -382,14 +388,29 @@ std::string Bridge::manifest_json() const {
         if (!entry.schema.empty()) {
             value["schema"] = entry.schema;
         }
+        if (!entry.data_type.empty()) {
+            value["data_type"] = entry.data_type;
+        }
+        if (!entry.request_type.empty()) {
+            value["request_type"] = entry.request_type;
+        }
+        if (!entry.response_type.empty()) {
+            value["response_type"] = entry.response_type;
+        }
         entries.push_back(std::move(value));
     }
 
     return Json {
         {"version", 1},
+        {"schemas", "/api/v1/schemas"},
         {"capabilities", std::move(entries)},
     }
         .dump();
+}
+
+std::string Bridge::schema_json() const {
+    std::scoped_lock lock(m_state->mutex);
+    return m_state->schema_json;
 }
 
 std::string Bridge::status_json() const {
