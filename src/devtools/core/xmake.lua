@@ -3,7 +3,13 @@ target("fei-devtools")
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
-    add_deps("fei-app", "fei-asset", "fei-base", "fei-ecs")
+    add_deps(
+        "fei-app",
+        "fei-asset",
+        "fei-base",
+        "fei-ecs",
+        "fei-serialization"
+    )
     add_packages("cpp-httplib", "nlohmann_json")
     add_rules("utils.bin2obj", {extensions = {".html"}})
     add_files("ui/index.html", {zeroend = true})

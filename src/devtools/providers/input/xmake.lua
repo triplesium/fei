@@ -1,10 +1,10 @@
 target("fei-devtools-input")
     set_kind("static")
+    add_rules("fei.reflect")
     add_headerfiles("include/**.hpp", "src/*.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
     add_deps("fei-devtools", "fei-window")
-    add_packages("nlohmann_json")
 
 target("fei-devtools-input-tests")
     set_kind("binary")

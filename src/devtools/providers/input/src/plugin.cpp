@@ -9,6 +9,7 @@
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
 #include "input_commands.hpp"
+#include "refl/registry.hpp"
 #include "window/input.hpp"
 
 #include <algorithm>
@@ -65,11 +66,23 @@ void apply_input_commands(
             }
 
             input_state->clear();
+            auto response = clear_command_response_json();
+            if (!response) {
+                commands.entity(entity).add(
+                    ErrorResponse {
+                        .token = request.token,
+                        .capability = request.capability,
+                        .status = 500,
+                        .message = std::move(response.error()),
+                    }
+                );
+                continue;
+            }
             commands.entity(entity).add(
                 CommandResponse {
                     .token = request.token,
                     .capability = request.capability,
-                    .json = clear_command_response_json(),
+                    .json = std::move(*response),
                 }
             );
             continue;
@@ -101,11 +114,23 @@ void apply_input_commands(
             );
             continue;
         }
+        auto response = key_command_response_json(*key_command);
+        if (!response) {
+            commands.entity(entity).add(
+                ErrorResponse {
+                    .token = request.token,
+                    .capability = request.capability,
+                    .status = 500,
+                    .message = std::move(response.error()),
+                }
+            );
+            continue;
+        }
         commands.entity(entity).add(
             CommandResponse {
                 .token = request.token,
                 .capability = request.capability,
-                .json = key_command_response_json(*key_command),
+                .json = std::move(*response),
             }
         );
     }
@@ -130,6 +155,18 @@ void ProviderPlugin::setup(App& app) {
         fatal(
             "devtools::input::ProviderPlugin requires InputPlugin. Add "
             "InputPlugin before devtools::input::ProviderPlugin."
+        );
+    }
+
+    auto& registry = Registry::instance();
+    if (!registry.has_enum(type_id<KeyCode>()) ||
+        !registry.try_get_cls(type_id<KeyCommandBody>()) ||
+        !registry.try_get_cls(type_id<KeyCommandResponse>()) ||
+        !registry.try_get_cls(type_id<ClearCommandBody>()) ||
+        !registry.try_get_cls(type_id<ClearCommandResponse>())) {
+        fatal(
+            "devtools::input::ProviderPlugin requires ReflectionPlugin. Add "
+            "ReflectionPlugin before devtools::input::ProviderPlugin."
         );
     }
 

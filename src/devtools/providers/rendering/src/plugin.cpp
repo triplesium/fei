@@ -4,6 +4,7 @@
 #include "base/log.hpp"
 #include "devtools/bridge.hpp"
 #include "devtools/capability.hpp"
+#include "devtools/json.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
@@ -12,12 +13,13 @@
 #include "graphics/texture.hpp"
 #include "graphics/texture_readback.hpp"
 #include "pbr/passes/target.hpp"
+#include "refl/registry.hpp"
 #include "rendering/render_graph.hpp"
+#include "snapshot_types.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
-#include <nlohmann/json.hpp>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -31,7 +33,10 @@ namespace fei::devtools::rendering {
 
 namespace {
 
-using Json = nlohmann::json;
+constexpr const char* c_render_graph_capability = "rendering.render_graph";
+constexpr const char* c_render_graph_schema = "rendering.render_graph.v2";
+constexpr const char* c_graphics_cache_capability = "graphics.cache";
+constexpr const char* c_graphics_cache_schema = "graphics.cache.v2";
 
 struct SelectedFrameTarget {
     std::shared_ptr<Texture> texture;
@@ -157,145 +162,6 @@ std::vector<byte> encode_jpeg(
     return jpeg;
 }
 
-Json texture_use_to_json(const RgTextureUseDebugInfo& use) {
-    return Json {
-        {"index", use.handle.index},
-        {"generation", use.handle.generation},
-        {"name", use.texture_name},
-        {"access", use.access_name},
-    };
-}
-
-Json render_graph_json(const Optional<ResRO<RenderGraph>>& render_graph) {
-    if (!render_graph) {
-        return Json {{"available", false}};
-    }
-
-    const auto& debug = (*render_graph)->debug_info();
-    const auto& stats = debug.stats;
-
-    Json passes = Json::array();
-    for (const auto& pass : debug.passes) {
-        Json reads = Json::array();
-        for (const auto& read : pass.reads) {
-            reads.push_back(texture_use_to_json(read));
-        }
-        Json writes = Json::array();
-        for (const auto& write : pass.writes) {
-            writes.push_back(texture_use_to_json(write));
-        }
-        passes.push_back(
-            Json {
-                {"index", pass.index},
-                {"name", pass.name},
-                {"active", pass.active},
-                {"side_effect", pass.side_effect},
-                {"dependencies", pass.dependencies},
-                {"reads", std::move(reads)},
-                {"writes", std::move(writes)},
-            }
-        );
-    }
-
-    Json textures = Json::array();
-    for (const auto& texture : debug.textures) {
-        textures.push_back(
-            Json {
-                {"index", texture.index},
-                {"name", texture.name},
-                {"active", texture.active},
-                {"imported", texture.imported},
-                {"width", texture.width},
-                {"height", texture.height},
-                {"depth", texture.depth},
-                {"mip_level", texture.mip_level},
-                {"layer", texture.layer},
-                {"format", texture.format},
-                {"usage", texture.usage},
-                {"type", texture.type},
-                {"sample_count", texture.sample_count},
-                {"version_count", texture.version_count},
-                {"first_active_use", texture.first_active_use},
-                {"last_active_use", texture.last_active_use},
-            }
-        );
-    }
-
-    Json resource_sets = Json::array();
-    for (const auto& resource_set : debug.resource_sets) {
-        Json bindings = Json::array();
-        for (const auto& binding : resource_set.bindings) {
-            Json binding_json {
-                {"index", binding.index},
-                {"kind", binding.kind},
-                {"resource_name", binding.resource_name},
-                {"valid", binding.valid},
-            };
-            if (binding.kind == "texture") {
-                binding_json["texture_index"] = binding.texture.index;
-                binding_json["texture_generation"] = binding.texture.generation;
-            }
-            bindings.push_back(std::move(binding_json));
-        }
-        resource_sets.push_back(
-            Json {
-                {"index", resource_set.index},
-                {"generation", resource_set.generation},
-                {"pass_index", resource_set.pass_index},
-                {"name", resource_set.name},
-                {"active", resource_set.active},
-                {"resolved", resource_set.resolved},
-                {"has_layout", resource_set.has_layout},
-                {"bindings", std::move(bindings)},
-            }
-        );
-    }
-
-    return Json {
-        {"available", true},
-        {"compiled", debug.compiled},
-        {"compile_error", debug.compile_error},
-        {"total_passes", stats.total_passes},
-        {"active_passes", stats.active_passes},
-        {"culled_passes", stats.culled_passes},
-        {"transient_texture_requests", stats.transient_texture_requests},
-        {"transient_texture_hits", stats.transient_texture_hits},
-        {"transient_texture_creates", stats.transient_texture_creates},
-        {"texture_pool_size", stats.texture_pool_size},
-        {"active_order", debug.active_pass_names},
-        {"passes", std::move(passes)},
-        {"textures", std::move(textures)},
-        {"resource_sets", std::move(resource_sets)},
-    };
-}
-
-Json graphics_cache_json(const GraphicsDevice& device) {
-    auto stats = device.resource_cache_stats();
-    Json sources = Json::array();
-    for (const auto& source : stats.resource_set_sources) {
-        sources.push_back(
-            Json {
-                {"name", source.name},
-                {"requests", source.requests},
-                {"hits", source.hits},
-                {"creates", source.creates},
-                {"cache_size", source.cache_size},
-            }
-        );
-    }
-    return Json {
-        {"framebuffer_requests", stats.framebuffer_requests},
-        {"framebuffer_hits", stats.framebuffer_hits},
-        {"framebuffer_creates", stats.framebuffer_creates},
-        {"framebuffer_cache_size", stats.framebuffer_cache_size},
-        {"resource_set_requests", stats.resource_set_requests},
-        {"resource_set_hits", stats.resource_set_hits},
-        {"resource_set_creates", stats.resource_set_creates},
-        {"resource_set_cache_size", stats.resource_set_cache_size},
-        {"resource_set_sources", std::move(sources)},
-    };
-}
-
 void respond_snapshot_requests(
     Query<Entity, const Request, const SnapshotRequest> requests,
     Commands commands,
@@ -326,6 +192,56 @@ void respond_snapshot_requests(
     }
 }
 
+void publish_snapshot_result(
+    Query<Entity, const Request, const SnapshotRequest> requests,
+    Commands commands,
+    const std::string& capability,
+    const std::string& schema,
+    Result<std::string, std::string> json,
+    uint64 version
+) {
+    if (!json) {
+        error(
+            "Failed to encode DevTools snapshot {}: {}",
+            capability,
+            json.error()
+        );
+        for (auto [entity, request, snapshot_request] : requests) {
+            (void)snapshot_request;
+            if (request.capability != capability) {
+                continue;
+            }
+            commands.spawn().add(
+                ErrorResponse {
+                    .token = request.token,
+                    .capability = request.capability,
+                    .status = 500,
+                    .message = json.error(),
+                }
+            );
+            commands.entity(entity).despawn();
+        }
+        return;
+    }
+
+    commands.spawn().add(
+        SnapshotResponse {
+            .capability = capability,
+            .json = *json,
+            .schema = schema,
+            .version = version,
+        }
+    );
+    respond_snapshot_requests(
+        requests,
+        commands,
+        capability,
+        schema,
+        *json,
+        version
+    );
+}
+
 void publish_rendering_snapshots(
     Optional<ResRO<RenderGraph>> render_graph,
     ResRO<GraphicsDevice> graphics_device,
@@ -337,40 +253,28 @@ void publish_rendering_snapshots(
     ++render_graph_version;
     ++graphics_cache_version;
 
-    auto graph = render_graph_json(render_graph).dump();
-    auto cache = graphics_cache_json(*graphics_device).dump();
+    RenderGraphSnapshot graph_snapshot;
+    if (render_graph) {
+        graph_snapshot =
+            make_render_graph_snapshot((*render_graph)->debug_info());
+    }
+    auto cache_snapshot =
+        make_graphics_cache_snapshot(graphics_device->resource_cache_stats());
 
-    commands.spawn().add(
-        SnapshotResponse {
-            .capability = "rendering.render_graph",
-            .json = graph,
-            .schema = "rendering.render_graph.v1",
-            .version = render_graph_version,
-        }
-    );
-    commands.spawn().add(
-        SnapshotResponse {
-            .capability = "graphics.cache",
-            .json = cache,
-            .schema = "graphics.cache.v1",
-            .version = graphics_cache_version,
-        }
-    );
-
-    respond_snapshot_requests(
+    publish_snapshot_result(
         requests,
         commands,
-        "rendering.render_graph",
-        "rendering.render_graph.v1",
-        graph,
+        c_render_graph_capability,
+        c_render_graph_schema,
+        encode_json(Ref(graph_snapshot)),
         render_graph_version
     );
-    respond_snapshot_requests(
+    publish_snapshot_result(
         requests,
         commands,
-        "graphics.cache",
-        "graphics.cache.v1",
-        cache,
+        c_graphics_cache_capability,
+        c_graphics_cache_schema,
+        encode_json(Ref(cache_snapshot)),
         graphics_cache_version
     );
 }
@@ -555,6 +459,22 @@ void ProviderPlugin::setup(App& app) {
         );
     }
 
+    auto& registry = Registry::instance();
+    if (!registry.try_get_cls(type_id<TextureUseSnapshot>()) ||
+        !registry.try_get_cls(type_id<RenderPassSnapshot>()) ||
+        !registry.try_get_cls(type_id<TextureSnapshot>()) ||
+        !registry.try_get_cls(type_id<ResourceBindingSnapshot>()) ||
+        !registry.try_get_cls(type_id<ResourceSetSnapshot>()) ||
+        !registry.try_get_cls(type_id<RenderGraphSnapshot>()) ||
+        !registry.try_get_cls(type_id<ResourceSetSourceSnapshot>()) ||
+        !registry.try_get_cls(type_id<GraphicsCacheSnapshot>())) {
+        fatal(
+            "devtools::rendering::ProviderPlugin requires ReflectionPlugin. "
+            "Add ReflectionPlugin before "
+            "devtools::rendering::ProviderPlugin."
+        );
+    }
+
     declare_capability(
         app.world(),
         "rendering.frame",
@@ -570,7 +490,7 @@ void ProviderPlugin::setup(App& app) {
         "rendering.render_graph",
         "Render Graph",
         SnapshotCapability {
-            .schema = "rendering.render_graph.v1",
+            .schema = c_render_graph_schema,
             .mode = PublishMode::Cached,
         }
     );
@@ -579,7 +499,7 @@ void ProviderPlugin::setup(App& app) {
         "graphics.cache",
         "Graphics Cache",
         SnapshotCapability {
-            .schema = "graphics.cache.v1",
+            .schema = c_graphics_cache_schema,
             .mode = PublishMode::Cached,
         }
     );
