@@ -1,5 +1,6 @@
 #include "refl/callable.hpp"
 #include "refl/cls.hpp"
+#include "refl/container_adapter.hpp"
 #include "refl/method.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
@@ -49,6 +50,25 @@ int lua_raise_cls_error(lua_State* L, const ClsError& failure) {
     return 0;
 }
 
+int lua_raise_container_error(lua_State* L, const ContainerError& failure) {
+    luaL_error(L, "%s", failure.message.c_str());
+    return 0;
+}
+
+std::size_t lua_check_container_index(lua_State* L, int idx) {
+    if (!lua_isinteger(L, idx)) {
+        luaL_error(L, "Container index must be an integer");
+        return 0;
+    }
+
+    auto index = lua_tointeger(L, idx);
+    if (index < 0) {
+        luaL_error(L, "Container index must not be negative");
+        return 0;
+    }
+    return static_cast<std::size_t>(index);
+}
+
 int lua_push_return_item(lua_State* L, const ReturnItem& item) {
     if (item.is_ref()) {
         lua_push_ref(L, item.ref());
@@ -96,6 +116,7 @@ int lua_push_invoke_result(lua_State* L, const InvokeResult& result) {
 int dispatch_new(lua_State* L);
 int dispatch_method(lua_State* L);
 int dispatch_gc(lua_State* L);
+int dispatch_len(lua_State* L);
 int dispatch_index(lua_State* L);
 int dispatch_newindex(lua_State* L);
 int dispatch_operator(lua_State* L);
@@ -137,6 +158,12 @@ void LuaRuntime::register_lua_type(Type& type) {
         lua_pushinteger(L, to_lua_integer(id.id()));
         lua_pushcclosure(L, &dispatch_gc, 1);
         lua_setfield(L, -2, "__gc");
+
+        if (Registry::instance().try_get_container_adapter(id)) {
+            lua_pushinteger(L, to_lua_integer(id.id()));
+            lua_pushcclosure(L, &dispatch_len, 1);
+            lua_setfield(L, -2, "__len");
+        }
 
         lua_pushinteger(L, to_lua_integer(id.id()));
         lua_setfield(L, -2, "__type_id");
@@ -363,11 +390,46 @@ int dispatch_gc(lua_State* L) {
     return 0;
 }
 
+int dispatch_len(lua_State* L) {
+    TypeId type_id = lua_tointeger(L, lua_upvalueindex(1));
+    auto adapter = Registry::instance().try_get_container_adapter(type_id);
+    if (!adapter) {
+        return lua_raise_registry_error(L, adapter.error());
+    }
+
+    auto size = adapter->size(lua_to_ref(L, 1));
+    if (!size) {
+        return lua_raise_container_error(L, size.error());
+    }
+    lua_pushinteger(L, static_cast<lua_Integer>(*size));
+    return 1;
+}
+
 int dispatch_index(lua_State* L) {
     TypeId type_id = lua_tointeger(L, lua_upvalueindex(1));
     auto type = Registry::instance().try_get_type(type_id);
     if (!type) {
         return lua_raise_registry_error(L, type.error());
+    }
+
+    if (lua_type(L, 2) == LUA_TNUMBER) {
+        auto adapter = Registry::instance().try_get_container_adapter(type_id);
+        if (!adapter) {
+            return lua_raise_registry_error(L, adapter.error());
+        }
+        auto* indexed = adapter->indexed();
+        if (!indexed) {
+            luaL_error(L, "Container does not support indexed access");
+            return 0;
+        }
+
+        auto element =
+            indexed->at(lua_to_ref(L, 1), lua_check_container_index(L, 2));
+        if (!element) {
+            return lua_raise_container_error(L, element.error());
+        }
+        lua_push_ref(L, *element);
+        return 1;
     }
 
     const char* key = lua_tostring(L, 2);
@@ -423,6 +485,30 @@ int dispatch_newindex(lua_State* L) {
     if (!type) {
         return lua_raise_registry_error(L, type.error());
     }
+
+    if (lua_type(L, 2) == LUA_TNUMBER) {
+        auto adapter = Registry::instance().try_get_container_adapter(type_id);
+        if (!adapter) {
+            return lua_raise_registry_error(L, adapter.error());
+        }
+        auto* indexed = adapter->indexed();
+        if (!indexed) {
+            luaL_error(L, "Container does not support indexed access");
+            return 0;
+        }
+
+        auto value = lua_to_argument(L, 3);
+        auto assigned = indexed->assign(
+            lua_to_ref(L, 1),
+            lua_check_container_index(L, 2),
+            value.ref()
+        );
+        if (!assigned) {
+            return lua_raise_container_error(L, assigned.error());
+        }
+        return 0;
+    }
+
     auto cls = Registry::instance().try_get_cls(type_id);
     if (!cls) {
         return lua_raise_registry_error(L, cls.error());

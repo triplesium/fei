@@ -34,6 +34,8 @@ TEST_CASE(
     auto status = runtime.run_script(R"(
         assert(values:size() == 1)
         assert(values:at(0) == 1)
+        assert(#values == 1)
+        assert(values[0] == 1)
 
         values:append(2)
         values:insert(1, 3)
@@ -43,12 +45,25 @@ TEST_CASE(
         assert(values:at(0) == 4)
         assert(values:at(1) == 3)
         assert(values:at(2) == 2)
+        assert(#values == 3)
+        assert(values[0] == 4)
+        assert(values[1] == 3)
+        assert(values[2] == 2)
+
+        values[1] = 8
+        assert(values[1] == 8)
+
+        local out_of_range_ok = pcall(function()
+            return values[99]
+        end)
+        assert(not out_of_range_ok)
 
         values:erase(2)
         assert(values:size() == 2)
 
         values:clear()
         assert(values:size() == 0)
+        assert(#values == 0)
     )");
 
     REQUIRE(status);
@@ -79,6 +94,7 @@ TEST_CASE(
         scores:insert(1, "one")
         scores:insert(2, "two")
         assert(scores:size() == 2)
+        assert(#scores == 2)
         assert(scores:contains(1))
         assert(scores:find(2) == "two")
 
@@ -88,6 +104,7 @@ TEST_CASE(
         tags:insert(3)
         tags:insert(5)
         assert(tags:size() == 2)
+        assert(#tags == 2)
         assert(tags:contains(3))
         assert(tags:find(5) == 5)
 
@@ -130,8 +147,14 @@ TEST_CASE(
         array:append(7)
         array:append(9)
         assert(array:size() == 2)
+        assert(#array == 2)
         assert(array:at(0) == 7)
         assert(array:at(1) == 9)
+        assert(array[0] == 7)
+        assert(array[1] == 9)
+
+        array[1] = 11
+        assert(array[1] == 11)
 
         local array_ok = pcall(function()
             array:append("wrong")
@@ -140,6 +163,7 @@ TEST_CASE(
 
         map:insert(4, "four")
         assert(map:size() == 1)
+        assert(#map == 1)
         assert(map:contains(4))
         assert(map:find(4) == "four")
 
@@ -153,6 +177,7 @@ TEST_CASE(
     REQUIRE(array.size() == 2);
     REQUIRE(map.size() == 1);
     REQUIRE(array.at(0)->get_const<int>() == 7);
+    REQUIRE(array.at(1)->get_const<int>() == 11);
     int map_key = 4;
     REQUIRE(map.find(Ref(map_key))->get_const<std::string>() == "four");
 }
@@ -175,11 +200,18 @@ TEST_CASE(
     auto status = runtime.run_script(R"(
         assert(values:size() == 2)
         assert(values:at(0) == 1)
+        assert(#values == 2)
+        assert(values[0] == 1)
 
         local ok = pcall(function()
             values:append(3)
         end)
         assert(not ok)
+
+        local assign_ok = pcall(function()
+            values[0] = 9
+        end)
+        assert(not assign_ok)
     )");
 
     REQUIRE(status);
