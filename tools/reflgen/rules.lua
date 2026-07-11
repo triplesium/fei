@@ -359,7 +359,10 @@ local function reflection_runtime_headers()
             insert_unique(files, file)
         end
     end
-    insert_unique(files, path.join(os.projectdir(), "src/base/result.hpp"))
+    insert_unique(
+        files,
+        path.join(os.projectdir(), "src/base/include/base/result.hpp")
+    )
     return files
 end
 
