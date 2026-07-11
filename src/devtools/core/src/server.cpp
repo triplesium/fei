@@ -1,6 +1,5 @@
 #include "devtools/server.hpp"
 
-#include "asset/embed.hpp"
 #include "base/log.hpp"
 
 #include <charconv>
@@ -10,29 +9,21 @@
 #include <string_view>
 #include <utility>
 
-EMBED(index_html, "ui/index.html");
-
 namespace fei::devtools {
 
 namespace {
 
 constexpr std::string_view c_mjpeg_boundary {"fei-frame"};
 constexpr std::chrono::milliseconds c_default_timeout {5000};
+constexpr std::string_view c_discovery_json {
+    R"({"name":"fei-devtools","version":1,"manifest":"/api/v1/manifest","schemas":"/api/v1/schemas","status":"/api/v1/status"})"
+};
 
 struct RequestParams {
     uint64 after {0};
     bool fresh {false};
     std::chrono::milliseconds timeout {c_default_timeout};
 };
-
-std::string_view devtools_index_html() {
-    auto reader = EmbededAssets::get("ui/index.html").reader();
-    auto html = reader.as_string_view();
-    if (!html.empty() && html.back() == '\0') {
-        html.remove_suffix(1);
-    }
-    return html;
-}
 
 bool write_sink(httplib::DataSink& sink, std::string_view content) {
     return sink.write(content.data(), content.size());
@@ -416,14 +407,9 @@ void install_routes(
     const Config& config,
     Bridge bridge
 ) {
-    server.Get("/", [config](const httplib::Request&, httplib::Response& res) {
+    server.Get("/", [](const httplib::Request&, httplib::Response& res) {
         res.set_header("Cache-Control", "no-store");
-        if (!config.enable_ui) {
-            set_text(res, 404, error_json("DevTools UI is disabled", 404));
-            return;
-        }
-        auto html = devtools_index_html();
-        res.set_content(html.data(), html.size(), "text/html; charset=utf-8");
+        set_text(res, 200, c_discovery_json);
     });
 
     server.Get(

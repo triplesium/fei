@@ -27,7 +27,6 @@ enum class RequestKind : uint8 {
 struct Config {
     std::string host {"127.0.0.1"};
     uint16 port {8080};
-    bool enable_ui {true};
     bool agent_mode {false};
     std::string artifact_dir;
 };

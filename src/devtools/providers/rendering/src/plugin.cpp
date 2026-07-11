@@ -15,6 +15,7 @@
 #include "pbr/passes/target.hpp"
 #include "refl/registry.hpp"
 #include "rendering/render_graph.hpp"
+#include "snapshot_demand.hpp"
 #include "snapshot_types.hpp"
 
 #include <algorithm>
@@ -33,10 +34,13 @@ namespace fei::devtools::rendering {
 
 namespace {
 
-constexpr const char* c_render_graph_capability = "rendering.render_graph";
 constexpr const char* c_render_graph_schema = "rendering.render_graph.v2";
-constexpr const char* c_graphics_cache_capability = "graphics.cache";
 constexpr const char* c_graphics_cache_schema = "graphics.cache.v2";
+
+struct SnapshotPublishState {
+    uint64 render_graph_version {0};
+    uint64 graphics_cache_version {0};
+};
 
 struct SelectedFrameTarget {
     std::shared_ptr<Texture> texture;
@@ -245,38 +249,48 @@ void publish_snapshot_result(
 void publish_rendering_snapshots(
     Optional<ResRO<RenderGraph>> render_graph,
     ResRO<GraphicsDevice> graphics_device,
+    ResRW<SnapshotPublishState> state,
     Query<Entity, const Request, const SnapshotRequest> requests,
     Commands commands
 ) {
-    static uint64 render_graph_version = 0;
-    static uint64 graphics_cache_version = 0;
-    ++render_graph_version;
-    ++graphics_cache_version;
-
-    RenderGraphSnapshot graph_snapshot;
-    if (render_graph) {
-        graph_snapshot =
-            make_render_graph_snapshot((*render_graph)->debug_info());
+    SnapshotDemand demand;
+    for (auto [entity, request, snapshot_request] : requests) {
+        (void)entity;
+        (void)snapshot_request;
+        demand.include(request.capability);
     }
-    auto cache_snapshot =
-        make_graphics_cache_snapshot(graphics_device->resource_cache_stats());
+    if (!demand.any()) {
+        return;
+    }
 
-    publish_snapshot_result(
-        requests,
-        commands,
-        c_render_graph_capability,
-        c_render_graph_schema,
-        encode_json(Ref(graph_snapshot)),
-        render_graph_version
-    );
-    publish_snapshot_result(
-        requests,
-        commands,
-        c_graphics_cache_capability,
-        c_graphics_cache_schema,
-        encode_json(Ref(cache_snapshot)),
-        graphics_cache_version
-    );
+    if (demand.render_graph) {
+        RenderGraphSnapshot snapshot;
+        if (render_graph) {
+            snapshot =
+                make_render_graph_snapshot((*render_graph)->debug_info());
+        }
+        publish_snapshot_result(
+            requests,
+            commands,
+            c_render_graph_capability,
+            c_render_graph_schema,
+            encode_json(Ref(snapshot)),
+            ++state->render_graph_version
+        );
+    }
+    if (demand.graphics_cache) {
+        auto snapshot = make_graphics_cache_snapshot(
+            graphics_device->resource_cache_stats()
+        );
+        publish_snapshot_result(
+            requests,
+            commands,
+            c_graphics_cache_capability,
+            c_graphics_cache_schema,
+            encode_json(Ref(snapshot)),
+            ++state->graphics_cache_version
+        );
+    }
 }
 
 bool has_frame_demand(
@@ -507,6 +521,7 @@ void ProviderPlugin::setup(App& app) {
     );
 
     app.add_resource(Config {m_config});
+    app.add_resource(SnapshotPublishState {});
     app.add_resource(
         FrameCaptureState {
             .readback =

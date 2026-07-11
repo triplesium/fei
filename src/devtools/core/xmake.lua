@@ -5,14 +5,11 @@ target("fei-devtools")
     add_includedirs("include", {public = true})
     add_deps(
         "fei-app",
-        "fei-asset",
         "fei-base",
         "fei-ecs",
         "fei-serialization"
     )
     add_packages("cpp-httplib", "nlohmann_json")
-    add_rules("utils.bin2obj", {extensions = {".html"}})
-    add_files("ui/index.html", {zeroend = true})
     if is_plat("windows") then
         add_syslinks("ws2_32")
     end

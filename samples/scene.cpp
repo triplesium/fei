@@ -331,7 +331,6 @@ int main(int argc, char** argv) {
         devtools::CorePlugin {devtools::Config {
             .host = "127.0.0.1",
             .port = 8080,
-            .enable_ui = true,
         }}
     );
     app.add_plugin(
