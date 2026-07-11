@@ -1,6 +1,8 @@
 #include "refl/registry.hpp"
 
 #include "base/log.hpp"
+#include "container_method.hpp"
+#include "dynamic_container_adapter.hpp"
 #include "refl/cls.hpp"
 #include "refl/enum.hpp"
 #include "refl/type.hpp"
@@ -11,6 +13,7 @@ Registry* Registry::s_instance = nullptr;
 Registry& Registry::instance() {
     if (!s_instance) {
         s_instance = new Registry();
+        register_dynamic_container_adapters(*s_instance);
     }
     return *s_instance;
 }
@@ -211,6 +214,7 @@ ContainerAdapter& Registry::register_container_adapter(
 ) {
     auto it = m_container_adapters.find(id);
     if (it != m_container_adapters.end()) {
+        register_container_methods(add_cls(id), *it->second);
         return *it->second;
     }
     if (!adapter) {
@@ -225,7 +229,9 @@ ContainerAdapter& Registry::register_container_adapter(
         );
     }
     auto inserted = m_container_adapters.emplace(id, std::move(adapter));
-    return *inserted.first->second;
+    auto& registered = *inserted.first->second;
+    register_container_methods(add_cls(id), registered);
+    return registered;
 }
 
 ContainerAdapter& Registry::get_container_adapter(TypeId id) {
@@ -257,6 +263,10 @@ bool Registry::has_enum(TypeId id) const {
 void Registry::clear_generated_metadata() {
     m_classes.clear();
     m_enums.clear();
+
+    for (const auto& [id, adapter] : m_container_adapters) {
+        register_container_methods(add_cls(id), *adapter);
+    }
 }
 
 Type& type(TypeId id) {

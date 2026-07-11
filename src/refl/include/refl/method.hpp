@@ -8,6 +8,7 @@
 #include <array>
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <tuple>
 #include <type_traits>
@@ -72,6 +73,59 @@ enum class MethodConstFilter {
     NonConstOnly,
     PreferConst,
     PreferNonConst,
+};
+
+using MethodCallback =
+    std::function<InvokeResult(Ref instance, std::span<const Ref> args)>;
+
+class CallbackMethod final : public Method {
+  public:
+    CallbackMethod(
+        TypeId owner_type,
+        std::string name,
+        std::vector<Param> params,
+        QualType return_type,
+        bool is_const,
+        MethodCallback callback
+    ) :
+        Method(std::move(name), params, return_type), m_owner_type(owner_type),
+        m_is_const(is_const), m_callback(std::move(callback)) {}
+
+    InvokeResult invoke_variadic(const std::vector<Ref>& args) const override {
+        if (!match_score(args)) {
+            return failure(
+                InvokeFailure::invalid_call(
+                    "Invalid arguments passed to callback method " + name()
+                )
+            );
+        }
+        return m_callback(args.front(), std::span<const Ref>(args).subspan(1));
+    }
+
+    bool accepts_variadic(const std::vector<Ref>& args) const override {
+        return match_score(args).has_value();
+    }
+
+    std::optional<int>
+    match_score(const std::vector<Ref>& args) const override {
+        if (args.size() != params().size() + 1 || args.empty()) {
+            return std::nullopt;
+        }
+        const auto instance = args.front();
+        if (!instance || instance.type_id() != m_owner_type ||
+            (!m_is_const && instance.is_const())) {
+            return std::nullopt;
+        }
+        return 0;
+    }
+
+    bool is_const() const override { return m_is_const; }
+    bool is_static() const override { return false; }
+
+  private:
+    TypeId m_owner_type;
+    bool m_is_const;
+    MethodCallback m_callback;
 };
 
 template<typename P>

@@ -20,8 +20,11 @@ class Param {
     Param(std::string name, TypeId type_id);
     Param(std::string name, QualType type);
 
+    static Param dynamic(std::string name);
+
     TypeId type_id() const;
     QualType type() const;
+    bool is_dynamic() const;
 
     const std::string& name() const;
 

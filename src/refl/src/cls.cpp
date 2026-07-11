@@ -114,6 +114,30 @@ Result<Property&, ClsError> Cls::try_get_property(const std::string& name) {
     return failure(ClsError::property_not_found(m_type_id, name));
 }
 
+Cls& Cls::add_method(std::unique_ptr<Method> method) {
+    if (!method) {
+        fatal("Cannot add a null method to class {}", describe_type(m_type_id));
+    }
+    auto& methods = m_methods[method->name()];
+    auto is_duplicate = [&](const std::unique_ptr<Method>& existing) {
+        if (existing->params().size() != method->params().size()) {
+            return false;
+        }
+        for (std::size_t i = 0; i < method->params().size(); ++i) {
+            if (existing->params()[i].type() != method->params()[i].type()) {
+                return false;
+            }
+        }
+        return existing->return_type() == method->return_type() &&
+               existing->is_const() == method->is_const() &&
+               existing->is_static() == method->is_static();
+    };
+    if (std::ranges::none_of(methods, is_duplicate)) {
+        methods.push_back(std::move(method));
+    }
+    return *this;
+}
+
 Method& Cls::get_method(
     const std::string& name,
     std::vector<TypeId> arg_types,

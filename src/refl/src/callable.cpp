@@ -10,12 +10,20 @@ Param::Param(std::string name, TypeId type_id) :
 Param::Param(std::string name, QualType type) :
     m_name(std::move(name)), m_type(type) {}
 
+Param Param::dynamic(std::string name) {
+    return Param(std::move(name), QualType {});
+}
+
 TypeId Param::type_id() const {
     return m_type.type_id();
 }
 
 QualType Param::type() const {
     return m_type;
+}
+
+bool Param::is_dynamic() const {
+    return !m_type.type_id();
 }
 
 const std::string& Param::name() const {
@@ -190,7 +198,8 @@ bool Callable::validate(const std::vector<Ref>& args) const {
         return false;
     }
     for (std::size_t i = 0; i < args.size(); ++i) {
-        if (!args[i] || args[i].type_id() != m_params[i].type_id()) {
+        if (!args[i] || (!m_params[i].is_dynamic() &&
+                         args[i].type_id() != m_params[i].type_id())) {
             return false;
         }
     }

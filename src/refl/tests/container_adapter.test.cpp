@@ -3,6 +3,8 @@
 #include "base/optional.hpp"
 #include "base/result.hpp"
 #include "refl/cls.hpp"
+#include "refl/dynamic_array.hpp"
+#include "refl/dynamic_map.hpp"
 #include "refl/registry.hpp"
 
 #include <array>
@@ -107,6 +109,7 @@ TEST_CASE(
         const bool is_associative =
             expected == ContainerKind::Map || expected == ContainerKind::Set;
         REQUIRE((container.associative() != nullptr) == is_associative);
+        REQUIRE((container.indexed() != nullptr) == !is_associative);
 
         if (auto* associative = container.associative()) {
             REQUIRE(
@@ -128,6 +131,686 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Indexed container methods invoke adapters through reflection",
+    "[refl][container][method]"
+) {
+    Registry& registry = Registry::instance();
+    using TestVector = std::vector<int>;
+    registry.register_type<TestVector>();
+
+    auto cls_result = registry.try_get_cls<TestVector>();
+    REQUIRE(cls_result);
+    auto& cls = *cls_result;
+    REQUIRE(cls.has_method("size"));
+    REQUIRE(cls.has_method("at"));
+    REQUIRE(cls.has_method("assign"));
+    REQUIRE(cls.has_method("append"));
+    REQUIRE(cls.has_method("insert"));
+    REQUIRE(cls.has_method("erase"));
+    REQUIRE(cls.has_method("clear"));
+
+    TestVector values;
+    int value = 7;
+    std::vector<Ref> append_args {Ref(values), Ref(value)};
+    auto append_method = cls.get_method_for_args(
+        "append",
+        append_args,
+        MethodConstFilter::PreferNonConst
+    );
+    REQUIRE(append_method);
+    auto appended = append_method->invoke_variadic(append_args);
+    REQUIRE(appended);
+    REQUIRE(appended->is_status());
+    REQUIRE(values == TestVector {7});
+
+    std::vector<Ref> size_args {Ref(values)};
+    auto size_method = cls.get_method_for_args(
+        "size",
+        size_args,
+        MethodConstFilter::PreferNonConst
+    );
+    REQUIRE(size_method);
+    auto size = size_method->invoke_variadic(size_args);
+    REQUIRE(size);
+    REQUIRE(size->is_value());
+    REQUIRE(size->value().get<std::size_t>() == 1);
+
+    int index = 0;
+    std::vector<Ref> at_args {Ref(values), Ref(index)};
+    auto at_method = cls.get_method_for_args(
+        "at",
+        at_args,
+        MethodConstFilter::PreferNonConst
+    );
+    REQUIRE(at_method);
+    auto element = at_method->invoke_variadic(at_args);
+    REQUIRE(element);
+    REQUIRE(element->is_ref());
+    REQUIRE_FALSE(element->ref().is_const());
+    element->ref().get<int>() = 9;
+    REQUIRE(values[0] == 9);
+
+    int replacement = 11;
+    std::vector<Ref> assign_args {
+        Ref(values),
+        Ref(index),
+        Ref(replacement),
+    };
+    auto assign_method = cls.get_method_for_args(
+        "assign",
+        assign_args,
+        MethodConstFilter::PreferNonConst
+    );
+    REQUIRE(assign_method);
+    REQUIRE(assign_method->invoke_variadic(assign_args));
+    REQUIRE(values[0] == 11);
+
+    const TestVector& const_values = values;
+    std::vector<Ref> const_at_args {Ref(const_values), Ref(index)};
+    auto const_at_method = cls.get_method_for_args(
+        "at",
+        const_at_args,
+        MethodConstFilter::ConstOnly
+    );
+    REQUIRE(const_at_method);
+    auto const_element = const_at_method->invoke_variadic(const_at_args);
+    REQUIRE(const_element);
+    REQUIRE(const_element->ref().is_const());
+
+    std::vector<Ref> const_append_args {Ref(const_values), Ref(value)};
+    auto const_append = cls.get_method_for_args(
+        "append",
+        const_append_args,
+        MethodConstFilter::ConstOnly
+    );
+    REQUIRE_FALSE(const_append);
+
+    using TestArray = std::array<int, 2>;
+    registry.register_type<TestArray>();
+    auto& array_cls = registry.get_cls<TestArray>();
+    REQUIRE(array_cls.has_method("size"));
+    REQUIRE(array_cls.has_method("at"));
+    REQUIRE(array_cls.has_method("assign"));
+    REQUIRE_FALSE(array_cls.has_method("append"));
+    REQUIRE_FALSE(array_cls.has_method("insert"));
+    REQUIRE_FALSE(array_cls.has_method("erase"));
+    REQUIRE_FALSE(array_cls.has_method("clear"));
+}
+
+TEST_CASE(
+    "Dynamic container methods validate instance schemas during invocation",
+    "[refl][container][method][dynamic-array]"
+) {
+    Registry& registry = Registry::instance();
+    registry.register_type<int>();
+    registry.register_type<float>();
+
+    auto array_result = DynamicArray::create(type_id<int>());
+    REQUIRE(array_result);
+    auto& array = *array_result;
+    auto& cls = registry.get_cls<DynamicArray>();
+
+    int value = 4;
+    std::vector<Ref> append_args {Ref(array), Ref(value)};
+    auto append_method = cls.get_method_for_args(
+        "append",
+        append_args,
+        MethodConstFilter::PreferNonConst
+    );
+    REQUIRE(append_method);
+    REQUIRE(append_method->invoke_variadic(append_args));
+    REQUIRE(array.at(0)->get_const<int>() == 4);
+
+    float wrong = 1.5F;
+    std::vector<Ref> wrong_args {Ref(array), Ref(wrong)};
+    auto same_method = cls.get_method_for_args(
+        "append",
+        wrong_args,
+        MethodConstFilter::PreferNonConst
+    );
+    REQUIRE(same_method);
+    auto wrong_result = same_method->invoke_variadic(wrong_args);
+    REQUIRE_FALSE(wrong_result);
+    REQUIRE(wrong_result.error().kind == InvokeFailure::Kind::ReturnedError);
+    REQUIRE(
+        wrong_result.error().error.get<ContainerError>().kind ==
+        ContainerError::Kind::InvalidElement
+    );
+
+    auto map_result = DynamicMap::create(type_id<int>(), type_id<float>());
+    REQUIRE(map_result);
+    auto& map = *map_result;
+    auto& map_cls = registry.get_cls<DynamicMap>();
+
+    int key = 2;
+    float mapped = 2.5F;
+    std::vector<Ref> insert_args {Ref(map), Ref(key), Ref(mapped)};
+    auto insert_method = map_cls.get_method_for_args(
+        "insert",
+        insert_args,
+        MethodConstFilter::PreferNonConst
+    );
+    REQUIRE(insert_method);
+    REQUIRE(insert_method->invoke_variadic(insert_args));
+    REQUIRE(map.find(Ref(key))->get_const<float>() == 2.5F);
+
+    std::vector<Ref> wrong_insert_args {Ref(map), Ref(key), Ref(value)};
+    auto same_insert_method = map_cls.get_method_for_args(
+        "insert",
+        wrong_insert_args,
+        MethodConstFilter::PreferNonConst
+    );
+    REQUIRE(same_insert_method);
+    auto wrong_insert = same_insert_method->invoke_variadic(wrong_insert_args);
+    REQUIRE_FALSE(wrong_insert);
+    REQUIRE(wrong_insert.error().kind == InvokeFailure::Kind::ReturnedError);
+    REQUIRE(
+        wrong_insert.error().error.get<ContainerError>().kind ==
+        ContainerError::Kind::InvalidElement
+    );
+}
+
+TEST_CASE(
+    "Associative container methods invoke map and set adapters",
+    "[refl][container][method][associative]"
+) {
+    Registry& registry = Registry::instance();
+
+    using TestMap = std::map<int, std::string>;
+    registry.register_type<TestMap>();
+    auto& map_cls = registry.get_cls<TestMap>();
+    REQUIRE(map_cls.has_method("size"));
+    REQUIRE(map_cls.has_method("find"));
+    REQUIRE(map_cls.has_method("contains"));
+    REQUIRE(map_cls.has_method("insert"));
+    REQUIRE(map_cls.has_method("erase"));
+    REQUIRE(map_cls.has_method("clear"));
+    REQUIRE_FALSE(map_cls.has_method("at"));
+    REQUIRE_FALSE(map_cls.has_method("append"));
+
+    TestMap map;
+    int key = 3;
+    std::string value = "three";
+    std::vector<Ref> insert_args {Ref(map), Ref(key), Ref(value)};
+    auto insert_method = map_cls.get_method_for_args(
+        "insert",
+        insert_args,
+        MethodConstFilter::PreferNonConst
+    );
+    REQUIRE(insert_method);
+    REQUIRE(insert_method->invoke_variadic(insert_args));
+    REQUIRE(map.at(3) == "three");
+
+    std::vector<Ref> find_args {Ref(map), Ref(key)};
+    auto find_method = map_cls.get_method_for_args(
+        "find",
+        find_args,
+        MethodConstFilter::PreferNonConst
+    );
+    REQUIRE(find_method);
+    auto found = find_method->invoke_variadic(find_args);
+    REQUIRE(found);
+    REQUIRE(found->is_ref());
+    REQUIRE(found->ref().get_const<std::string>() == "three");
+
+    auto contains_method = map_cls.get_method_for_args(
+        "contains",
+        find_args,
+        MethodConstFilter::PreferNonConst
+    );
+    REQUIRE(contains_method);
+    auto contains = contains_method->invoke_variadic(find_args);
+    REQUIRE(contains);
+    REQUIRE(contains->value().get<bool>());
+
+    using TestSet = std::set<int>;
+    registry.register_type<TestSet>();
+    auto& set_cls = registry.get_cls<TestSet>();
+    TestSet set;
+    std::vector<Ref> set_insert_args {Ref(set), Ref(key)};
+    auto set_insert = set_cls.get_method_for_args(
+        "insert",
+        set_insert_args,
+        MethodConstFilter::PreferNonConst
+    );
+    REQUIRE(set_insert);
+    REQUIRE(set_insert->invoke_variadic(set_insert_args));
+    REQUIRE(set.contains(3));
+}
+
+TEST_CASE(
+    "Container adapters unify static and dynamic sequences through Ref",
+    "[refl][container][dynamic-array]"
+) {
+    Registry& registry = Registry::instance();
+    registry.register_type<int>();
+    registry.register_type<float>();
+    registry.register_type<std::vector<int>>();
+
+    auto int_array_result = DynamicArray::create(type_id<int>());
+    auto float_array_result = DynamicArray::create(type_id<float>());
+    REQUIRE(int_array_result);
+    REQUIRE(float_array_result);
+    auto& int_array = *int_array_result;
+    auto& float_array = *float_array_result;
+
+    auto dynamic_result =
+        registry.try_get_container_adapter(type_id<DynamicArray>());
+    REQUIRE(dynamic_result);
+    auto* dynamic_adapter = dynamic_result->indexed();
+    REQUIRE(dynamic_adapter != nullptr);
+    auto& dynamic = *dynamic_adapter;
+    REQUIRE(dynamic.kind() == ContainerKind::Sequence);
+    REQUIRE_FALSE(dynamic.element_type());
+
+    auto int_schema = dynamic.element_type(Ref(int_array));
+    auto float_schema = dynamic.element_type(Ref(float_array));
+    REQUIRE(int_schema);
+    REQUIRE(float_schema);
+    REQUIRE(*int_schema == type_id<int>());
+    REQUIRE(*float_schema == type_id<float>());
+    REQUIRE(*dynamic.element_type(Ref(int_array), 99) == type_id<int>());
+
+    auto static_result =
+        registry.try_get_container_adapter(type_id<std::vector<int>>());
+    REQUIRE(static_result);
+    auto* static_indexed = static_result->indexed();
+    REQUIRE(static_indexed != nullptr);
+    auto& static_container = *static_indexed;
+    std::vector<int> static_values;
+    REQUIRE(
+        *static_container.element_type(Ref(static_values)) == type_id<int>()
+    );
+
+    auto append_and_size =
+        [&](Ref container, Ref value) -> Result<std::size_t, ContainerError> {
+        auto* adapter =
+            registry.get_container_adapter(container.type_id()).indexed();
+        REQUIRE(adapter != nullptr);
+        auto status = adapter->append(container, value);
+        if (!status) {
+            return failure(std::move(status.error()));
+        }
+        return adapter->size(container);
+    };
+
+    int value = 7;
+    auto static_size = append_and_size(Ref(static_values), Ref(value));
+    auto dynamic_size = append_and_size(Ref(int_array), Ref(value));
+    REQUIRE(static_size);
+    REQUIRE(dynamic_size);
+    REQUIRE(*static_size == 1);
+    REQUIRE(*dynamic_size == 1);
+    REQUIRE(static_values == std::vector<int> {7});
+    REQUIRE(int_array.at(0)->get_const<int>() == 7);
+
+    auto insert_read_erase = [&](Ref container,
+                                 Ref inserted) -> Result<int, ContainerError> {
+        auto& adapter = registry.get_container_adapter(container.type_id());
+        auto* indexed = adapter.indexed();
+        REQUIRE(indexed != nullptr);
+        auto insert_status = indexed->insert(container, 0, inserted);
+        if (!insert_status) {
+            return failure(std::move(insert_status.error()));
+        }
+        auto element = indexed->at(container, 0);
+        if (!element) {
+            return failure(std::move(element.error()));
+        }
+        auto result = element->get_const<int>();
+        auto erase_status = indexed->erase(container, 0);
+        if (!erase_status) {
+            return failure(std::move(erase_status.error()));
+        }
+        return result;
+    };
+
+    int inserted = 5;
+    auto static_inserted = insert_read_erase(Ref(static_values), Ref(inserted));
+    auto dynamic_inserted = insert_read_erase(Ref(int_array), Ref(inserted));
+    REQUIRE(static_inserted);
+    REQUIRE(dynamic_inserted);
+    REQUIRE(*static_inserted == 5);
+    REQUIRE(*dynamic_inserted == 5);
+    REQUIRE(static_values == std::vector<int> {7});
+    REQUIRE(int_array.at(0)->get_const<int>() == 7);
+
+    value = 11;
+    REQUIRE(dynamic.assign(Ref(int_array), 0, Ref(value)));
+    REQUIRE(int_array.at(0)->get_const<int>() == 11);
+
+    float wrong = 1.5F;
+    auto wrong_type = dynamic.append(Ref(int_array), Ref(wrong));
+    REQUIRE_FALSE(wrong_type);
+    REQUIRE(wrong_type.error().kind == ContainerError::Kind::InvalidElement);
+
+    auto out_of_range = dynamic.assign(Ref(int_array), 4, Ref(value));
+    REQUIRE_FALSE(out_of_range);
+    REQUIRE(out_of_range.error().kind == ContainerError::Kind::OutOfRange);
+    auto missing_element = dynamic.at(Ref(int_array), 4);
+    REQUIRE_FALSE(missing_element);
+    REQUIRE(missing_element.error().kind == ContainerError::Kind::OutOfRange);
+
+    const DynamicArray& const_array = int_array;
+    auto const_element = dynamic.at(Ref(const_array), 0);
+    REQUIRE(const_element);
+    REQUIRE(const_element->is_const());
+    REQUIRE(const_element->get_const<int>() == 11);
+    auto const_append = dynamic.append(Ref(const_array), Ref(value));
+    REQUIRE_FALSE(const_append);
+    REQUIRE(
+        const_append.error().kind == ContainerError::Kind::InvalidContainer
+    );
+
+    bool visited_const = false;
+    REQUIRE(dynamic.for_each(
+        Ref(const_array),
+        [&](Ref element, std::size_t index) -> Status<ContainerError> {
+            REQUIRE(index == 0);
+            REQUIRE(element.get_const<int>() == 11);
+            visited_const = element.is_const();
+            return {};
+        }
+    ));
+    REQUIRE(visited_const);
+
+    int not_a_container = 0;
+    auto invalid_schema = dynamic.element_type(Ref(not_a_container));
+    REQUIRE_FALSE(invalid_schema);
+    REQUIRE(
+        invalid_schema.error().kind == ContainerError::Kind::InvalidContainer
+    );
+}
+
+TEST_CASE(
+    "Dynamic map adapters expose instance schemas and borrowed entries",
+    "[refl][container][dynamic-map]"
+) {
+    Registry& registry = Registry::instance();
+    registry.register_type<int>();
+    registry.register_type<float>();
+    registry.register_type<std::string>();
+    registry.register_type<std::map<int, std::string>>();
+
+    auto map_result =
+        DynamicMap::create(type_id<int>(), type_id<std::string>());
+    auto other_result =
+        DynamicMap::create(type_id<std::string>(), type_id<float>());
+    REQUIRE(map_result);
+    REQUIRE(other_result);
+    auto& map = *map_result;
+    auto& other = *other_result;
+
+    auto adapter_result =
+        registry.try_get_container_adapter(type_id<DynamicMap>());
+    REQUIRE(adapter_result);
+    auto* adapter = adapter_result->associative();
+    REQUIRE(adapter != nullptr);
+    REQUIRE(adapter_result->indexed() == nullptr);
+    REQUIRE(adapter->kind() == ContainerKind::Map);
+    REQUIRE_FALSE(adapter->key_type());
+    REQUIRE_FALSE(adapter->mapped_type());
+    REQUIRE(*adapter->key_type(Ref(map)) == type_id<int>());
+    REQUIRE(*adapter->mapped_type(Ref(map)) == type_id<std::string>());
+    REQUIRE(*adapter->key_type(Ref(other)) == type_id<std::string>());
+    REQUIRE(*adapter->mapped_type(Ref(other)) == type_id<float>());
+
+    int key = 3;
+    std::string value = "three";
+    std::map<int, std::string> static_map;
+
+    auto insert_and_find = [&](Ref container, Ref map_key, Ref mapped_value)
+        -> Result<Ref, ContainerError> {
+        auto& container_adapter =
+            registry.get_container_adapter(container.type_id());
+        auto* associative = container_adapter.associative();
+        if (!associative) {
+            return failure(
+                ContainerError::make(
+                    ContainerError::Kind::InvalidContainer,
+                    container.type_id(),
+                    "Container is not associative"
+                )
+            );
+        }
+        auto insert_status = associative->insert(
+            container,
+            AssociativeElementRef {.key = map_key, .value = mapped_value}
+        );
+        if (!insert_status) {
+            return failure(std::move(insert_status.error()));
+        }
+        return associative->find(container, map_key);
+    };
+
+    auto dynamic_found = insert_and_find(Ref(map), Ref(key), Ref(value));
+    auto static_found = insert_and_find(Ref(static_map), Ref(key), Ref(value));
+    REQUIRE(dynamic_found);
+    REQUIRE(static_found);
+    REQUIRE_FALSE(dynamic_found->is_const());
+    REQUIRE_FALSE(static_found->is_const());
+    REQUIRE(dynamic_found->get_const<std::string>() == "three");
+    REQUIRE(static_found->get_const<std::string>() == "three");
+    REQUIRE(*adapter->contains(Ref(map), Ref(key)));
+
+    value = "changed";
+    REQUIRE(map.find(Ref(key))->get_const<std::string>() == "three");
+    REQUIRE(static_map.at(3) == "three");
+
+    bool visited = false;
+    REQUIRE(adapter->for_each_entry(
+        Ref(map),
+        [&](AssociativeElementRef entry,
+            std::size_t index) -> Status<ContainerError> {
+            REQUIRE(index == 0);
+            REQUIRE(entry.key.is_const());
+            REQUIRE_FALSE(entry.value.is_const());
+            REQUIRE(entry.key.get_const<int>() == 3);
+            REQUIRE(entry.value.get_const<std::string>() == "three");
+            visited = true;
+            return {};
+        }
+    ));
+    REQUIRE(visited);
+
+    float wrong_value = 4.0F;
+    auto wrong_type = adapter->insert(
+        Ref(map),
+        AssociativeElementRef {.key = Ref(key), .value = Ref(wrong_value)}
+    );
+    REQUIRE_FALSE(wrong_type);
+    REQUIRE(wrong_type.error().kind == ContainerError::Kind::InvalidElement);
+
+    const DynamicMap& const_map = map;
+    auto const_found = adapter->find(Ref(const_map), Ref(key));
+    REQUIRE(const_found);
+    REQUIRE(const_found->is_const());
+    auto const_insert = adapter->insert(
+        Ref(const_map),
+        AssociativeElementRef {.key = Ref(key), .value = Ref(value)}
+    );
+    REQUIRE_FALSE(const_insert);
+    REQUIRE(
+        const_insert.error().kind == ContainerError::Kind::InvalidContainer
+    );
+
+    REQUIRE(adapter->for_each_entry(
+        Ref(const_map),
+        [](AssociativeElementRef entry, std::size_t) -> Status<ContainerError> {
+            REQUIRE(entry.key.is_const());
+            REQUIRE(entry.value.is_const());
+            return {};
+        }
+    ));
+
+    auto visitor_failure = adapter->for_each_entry(
+        Ref(map),
+        [](AssociativeElementRef, std::size_t) -> Status<ContainerError> {
+            return failure(
+                ContainerError::make(
+                    ContainerError::Kind::UnsupportedOperation,
+                    type_id<DynamicMap>(),
+                    "stop"
+                )
+            );
+        }
+    );
+    REQUIRE_FALSE(visitor_failure);
+    REQUIRE(
+        visitor_failure.error().kind ==
+        ContainerError::Kind::UnsupportedOperation
+    );
+    REQUIRE(visitor_failure.error().message == "stop");
+
+    int missing_key = 99;
+    auto missing = adapter->find(Ref(map), Ref(missing_key));
+    REQUIRE_FALSE(missing);
+    REQUIRE(missing.error().kind == ContainerError::Kind::NotFound);
+    auto missing_contains = adapter->contains(Ref(map), Ref(missing_key));
+    REQUIRE(missing_contains);
+    REQUIRE_FALSE(*missing_contains);
+    auto missing_erase = adapter->erase(Ref(map), Ref(missing_key));
+    REQUIRE_FALSE(missing_erase);
+    REQUIRE(missing_erase.error().kind == ContainerError::Kind::NotFound);
+    float wrong_key = 99.0F;
+    auto wrong_contains = adapter->contains(Ref(map), Ref(wrong_key));
+    REQUIRE_FALSE(wrong_contains);
+    REQUIRE(
+        wrong_contains.error().kind == ContainerError::Kind::InvalidElement
+    );
+
+    auto* static_adapter =
+        registry.get_container_adapter(Ref(static_map).type_id()).associative();
+    REQUIRE(static_adapter != nullptr);
+    REQUIRE(static_adapter->erase(Ref(static_map), Ref(key)));
+    REQUIRE_FALSE(*static_adapter->contains(Ref(static_map), Ref(key)));
+    auto static_missing = static_adapter->find(Ref(static_map), Ref(key));
+    REQUIRE_FALSE(static_missing);
+    REQUIRE(static_missing.error().kind == ContainerError::Kind::NotFound);
+    REQUIRE(adapter->erase(Ref(map), Ref(key)));
+    REQUIRE_FALSE(*adapter->contains(Ref(map), Ref(key)));
+
+    REQUIRE(adapter->clear(Ref(map)));
+    REQUIRE(map.empty());
+    REQUIRE(map.key_type() == type_id<int>());
+    REQUIRE(map.mapped_type() == type_id<std::string>());
+}
+
+TEST_CASE(
+    "Fixed and optional adapters expose borrowed indexed access",
+    "[refl][container][at]"
+) {
+    Registry& registry = Registry::instance();
+
+    using TestArray = std::array<int, 2>;
+    registry.register_type<TestArray>();
+    auto* array_adapter = registry.get_container_adapter<TestArray>().indexed();
+    REQUIRE(array_adapter != nullptr);
+    TestArray array {1, 2};
+
+    auto array_element = array_adapter->at(Ref(array), 1);
+    REQUIRE(array_element);
+    REQUIRE_FALSE(array_element->is_const());
+    array_element->get<int>() = 4;
+    REQUIRE(array[1] == 4);
+
+    const TestArray& const_array = array;
+    auto const_array_element = array_adapter->at(Ref(const_array), 0);
+    REQUIRE(const_array_element);
+    REQUIRE(const_array_element->is_const());
+    REQUIRE(const_array_element->get_const<int>() == 1);
+
+    int value = 3;
+    auto fixed_insert = array_adapter->insert(Ref(array), 0, Ref(value));
+    auto fixed_erase = array_adapter->erase(Ref(array), 0);
+    REQUIRE_FALSE(fixed_insert);
+    REQUIRE_FALSE(fixed_erase);
+    REQUIRE(
+        fixed_insert.error().kind == ContainerError::Kind::UnsupportedOperation
+    );
+    REQUIRE(
+        fixed_erase.error().kind == ContainerError::Kind::UnsupportedOperation
+    );
+
+    using TestProduct = std::pair<int, std::string>;
+    registry.register_type<TestProduct>();
+    auto* product_adapter =
+        registry.get_container_adapter<TestProduct>().indexed();
+    REQUIRE(product_adapter != nullptr);
+    TestProduct product {5, "five"};
+    auto product_value = product_adapter->at(Ref(product), 1);
+    REQUIRE(product_value);
+    REQUIRE(product_value->type_id() == type_id<std::string>());
+    product_value->get<std::string>() = "changed";
+    REQUIRE(product.second == "changed");
+
+    auto product_missing = product_adapter->at(Ref(product), 2);
+    REQUIRE_FALSE(product_missing);
+    REQUIRE(product_missing.error().kind == ContainerError::Kind::OutOfRange);
+    REQUIRE_FALSE(product_adapter->insert(Ref(product), 0, Ref(value)));
+    REQUIRE_FALSE(product_adapter->erase(Ref(product), 0));
+
+    using TestOptional = Optional<std::string>;
+    registry.register_type<TestOptional>();
+    auto* optional_adapter =
+        registry.get_container_adapter<TestOptional>().indexed();
+    REQUIRE(optional_adapter != nullptr);
+    TestOptional optional {std::string {"value"}};
+    auto optional_value = optional_adapter->at(Ref(optional), 0);
+    REQUIRE(optional_value);
+    REQUIRE_FALSE(optional_value->is_const());
+    REQUIRE(optional_value->get_const<std::string>() == "value");
+
+    REQUIRE(optional_adapter->erase(Ref(optional), 0));
+    REQUIRE_FALSE(optional);
+    auto empty_value = optional_adapter->at(Ref(optional), 0);
+    REQUIRE_FALSE(empty_value);
+    REQUIRE(empty_value.error().kind == ContainerError::Kind::OutOfRange);
+
+    std::string replacement = "replacement";
+    REQUIRE(optional_adapter->insert(Ref(optional), 0, Ref(replacement)));
+    REQUIRE(optional);
+    REQUIRE(*optional == "replacement");
+}
+
+TEST_CASE(
+    "Set adapters find contain and erase keys through Ref",
+    "[refl][container][set]"
+) {
+    Registry& registry = Registry::instance();
+
+    using TestSet = std::set<int>;
+    registry.register_type<TestSet>();
+    auto* adapter = registry.get_container_adapter<TestSet>().associative();
+    REQUIRE(adapter != nullptr);
+
+    TestSet values {2, 4};
+    int key = 2;
+    auto found = adapter->find(Ref(values), Ref(key));
+    REQUIRE(found);
+    REQUIRE(found->is_const());
+    REQUIRE(found->get_const<int>() == 2);
+    REQUIRE(*adapter->contains(Ref(values), Ref(key)));
+
+    int missing_key = 3;
+    auto missing = adapter->find(Ref(values), Ref(missing_key));
+    REQUIRE_FALSE(missing);
+    REQUIRE(missing.error().kind == ContainerError::Kind::NotFound);
+    REQUIRE_FALSE(*adapter->contains(Ref(values), Ref(missing_key)));
+
+    REQUIRE(adapter->erase(Ref(values), Ref(key)));
+    REQUIRE_FALSE(values.contains(2));
+    auto erased_again = adapter->erase(Ref(values), Ref(key));
+    REQUIRE_FALSE(erased_again);
+    REQUIRE(erased_again.error().kind == ContainerError::Kind::NotFound);
+
+    const TestSet& const_values = values;
+    auto const_erase = adapter->erase(Ref(const_values), Ref(missing_key));
+    REQUIRE_FALSE(const_erase);
+    REQUIRE(const_erase.error().kind == ContainerError::Kind::InvalidContainer);
+}
+
+TEST_CASE(
     "Registry automatically registers vector container adapters",
     "[refl][container]"
 ) {
@@ -138,7 +821,9 @@ TEST_CASE(
         registry.try_get_container_adapter<std::vector<int>>();
     REQUIRE(container_result);
 
-    ContainerAdapter& container = *container_result;
+    auto* indexed = container_result->indexed();
+    REQUIRE(indexed != nullptr);
+    IndexedContainerAdapter& container = *indexed;
     REQUIRE(container.container_type() == type_id<std::vector<int>>());
     REQUIRE(container.element_type() == type_id<int>());
     REQUIRE(container.kind() == ContainerKind::Sequence);
@@ -196,7 +881,9 @@ TEST_CASE(
     auto container_result = registry.try_get_container_adapter<TestVector>();
     REQUIRE(container_result);
 
-    ContainerAdapter& container = *container_result;
+    auto* indexed = container_result->indexed();
+    REQUIRE(indexed != nullptr);
+    IndexedContainerAdapter& container = *indexed;
     TestVector values;
     auto value = std::make_unique<int>(42);
     int* raw_value = value.get();
@@ -206,6 +893,18 @@ TEST_CASE(
     REQUIRE(values.size() == 1);
     REQUIRE(values.front().get() == raw_value);
     REQUIRE(*values.front() == 42);
+
+    auto inserted = std::make_unique<int>(7);
+    int* raw_inserted = inserted.get();
+    REQUIRE(container.insert(Ref(values), 0, Ref(inserted)));
+    REQUIRE(inserted == nullptr);
+    REQUIRE(
+        container.at(Ref(values), 0)->get_const<std::unique_ptr<int>>().get() ==
+        raw_inserted
+    );
+    REQUIRE(container.erase(Ref(values), 0));
+    REQUIRE(values.size() == 1);
+    REQUIRE(values.front().get() == raw_value);
 
     const auto const_value = std::make_unique<int>(7);
     auto const_append = container.append(Ref(values), Ref(const_value));
@@ -224,7 +923,9 @@ TEST_CASE(
     auto container_result = registry.try_get_container_adapter<TestArray>();
     REQUIRE(container_result);
 
-    ContainerAdapter& container = *container_result;
+    auto* indexed = container_result->indexed();
+    REQUIRE(indexed != nullptr);
+    IndexedContainerAdapter& container = *indexed;
     REQUIRE(container.kind() == ContainerKind::Sequence);
     REQUIRE(container.fixed_size());
 
@@ -271,7 +972,9 @@ TEST_CASE(
     auto container_result = registry.try_get_container_adapter<TestArray>();
     REQUIRE(container_result);
 
-    ContainerAdapter& container = *container_result;
+    auto* indexed = container_result->indexed();
+    REQUIRE(indexed != nullptr);
+    IndexedContainerAdapter& container = *indexed;
     REQUIRE(container.kind() == ContainerKind::Sequence);
     REQUIRE(container.fixed_size());
     REQUIRE(container.element_type() == type_id<int>());
@@ -309,7 +1012,9 @@ TEST_CASE(
         registry.try_get_container_adapter<TestArray>();
     REQUIRE(array_container_result);
 
-    ContainerAdapter& array_container = *array_container_result;
+    auto* array_indexed = array_container_result->indexed();
+    REQUIRE(array_indexed != nullptr);
+    IndexedContainerAdapter& array_container = *array_indexed;
     TestArray values {ConstructibleButNotAssignable {1}};
 
     REQUIRE(array_container.assign(Ref(values), 0, Ref(values[0])));
@@ -330,7 +1035,9 @@ TEST_CASE(
     auto pair_container_result = registry.try_get_container_adapter<TestPair>();
     REQUIRE(pair_container_result);
 
-    ContainerAdapter& pair_container = *pair_container_result;
+    auto* pair_indexed = pair_container_result->indexed();
+    REQUIRE(pair_indexed != nullptr);
+    IndexedContainerAdapter& pair_container = *pair_indexed;
     TestPair pair {ConstructibleButNotAssignable {3}, 4};
     auto pair_assignment =
         pair_container.assign(Ref(pair), 0, Ref(replacement));
@@ -353,7 +1060,9 @@ TEST_CASE(
     auto container_result = registry.try_get_container_adapter<TestOptional>();
     REQUIRE(container_result);
 
-    ContainerAdapter& container = *container_result;
+    auto* indexed = container_result->indexed();
+    REQUIRE(indexed != nullptr);
+    IndexedContainerAdapter& container = *indexed;
     REQUIRE(container.kind() == ContainerKind::Optional);
     REQUIRE_FALSE(container.fixed_size());
     REQUIRE(container.element_type() == type_id<std::string>());
@@ -417,7 +1126,7 @@ TEST_CASE(
 
     ContainerAdapter& container = *container_result;
     REQUIRE(container.kind() == ContainerKind::Map);
-    REQUIRE(container.element_type() == type_id<TestMap::value_type>());
+    REQUIRE(container.indexed() == nullptr);
 
     auto* map_container = container.associative();
     REQUIRE(map_container != nullptr);
@@ -481,7 +1190,7 @@ TEST_CASE(
 
     ContainerAdapter& container = *container_result;
     REQUIRE(container.kind() == ContainerKind::Map);
-    REQUIRE(container.element_type() == type_id<TestMap::value_type>());
+    REQUIRE(container.indexed() == nullptr);
 
     auto* map_container = container.associative();
     REQUIRE(map_container != nullptr);
@@ -531,7 +1240,7 @@ TEST_CASE(
 
     ContainerAdapter& container = *container_result;
     REQUIRE(container.kind() == ContainerKind::Set);
-    REQUIRE(container.element_type() == type_id<std::string>());
+    REQUIRE(container.indexed() == nullptr);
 
     auto* set_container = container.associative();
     REQUIRE(set_container != nullptr);
@@ -616,7 +1325,9 @@ TEST_CASE(
     auto entry_container_result = registry.try_get_container_adapter<Entry>();
     REQUIRE(entry_container_result);
 
-    ContainerAdapter& entry_container = *entry_container_result;
+    auto* entry_indexed = entry_container_result->indexed();
+    REQUIRE(entry_indexed != nullptr);
+    IndexedContainerAdapter& entry_container = *entry_indexed;
     REQUIRE(entry_container.kind() == ContainerKind::Product);
     REQUIRE(entry_container.fixed_size());
     REQUIRE_FALSE(entry_container.element_type());
@@ -694,7 +1405,9 @@ TEST_CASE(
     ));
     auto pair_container_result = registry.try_get_container_adapter<TestPair>();
     REQUIRE(pair_container_result);
-    ContainerAdapter& pair_container = *pair_container_result;
+    auto* pair_indexed = pair_container_result->indexed();
+    REQUIRE(pair_indexed != nullptr);
+    IndexedContainerAdapter& pair_container = *pair_indexed;
     REQUIRE(pair_container.fixed_size());
     REQUIRE(pair_container.kind() == ContainerKind::Product);
     TestPair empty_pair {};
@@ -740,7 +1453,9 @@ TEST_CASE(
     auto tuple_container_result =
         registry.try_get_container_adapter<TestTuple>();
     REQUIRE(tuple_container_result);
-    ContainerAdapter& tuple_container = *tuple_container_result;
+    auto* tuple_indexed = tuple_container_result->indexed();
+    REQUIRE(tuple_indexed != nullptr);
+    IndexedContainerAdapter& tuple_container = *tuple_indexed;
     REQUIRE(tuple_container.fixed_size());
     REQUIRE(tuple_container.kind() == ContainerKind::Product);
     REQUIRE_FALSE(tuple_container.element_type());
@@ -765,7 +1480,9 @@ TEST_CASE(
     auto empty_tuple_container_result =
         registry.try_get_container_adapter<EmptyTuple>();
     REQUIRE(empty_tuple_container_result);
-    ContainerAdapter& empty_tuple_container = *empty_tuple_container_result;
+    auto* empty_tuple_indexed = empty_tuple_container_result->indexed();
+    REQUIRE(empty_tuple_indexed != nullptr);
+    IndexedContainerAdapter& empty_tuple_container = *empty_tuple_indexed;
     REQUIRE(empty_tuple_container.fixed_size());
     REQUIRE(empty_tuple_container.kind() == ContainerKind::Product);
     REQUIRE_FALSE(empty_tuple_container.element_type());
@@ -884,6 +1601,15 @@ TEST_CASE(
     REQUIRE(values.begin()->get() == raw_key);
     REQUIRE(*(*values.begin()) == 44);
 
+    auto lookup = std::make_unique<int>(44);
+    auto found = set_container->find(Ref(values), Ref(lookup));
+    REQUIRE(found);
+    REQUIRE(found->is_const());
+    REQUIRE(found->get_const<std::unique_ptr<int>>().get() == raw_key);
+    REQUIRE(*set_container->contains(Ref(values), Ref(lookup)));
+    REQUIRE(set_container->erase(Ref(values), Ref(lookup)));
+    REQUIRE(values.empty());
+
     const auto const_key = std::make_unique<int>(55);
     auto const_insert = set_container->insert(
         Ref(values),
@@ -916,7 +1642,8 @@ TEST_CASE(
             {type_id<std::string>()}
         );
     REQUIRE(names.kind() == ContainerKind::Sequence);
-    REQUIRE(names.element_type() == type_id<std::string>());
+    REQUIRE(names.indexed() != nullptr);
+    REQUIRE(names.indexed()->element_type() == type_id<std::string>());
 
     auto& weights =
         require_registered_adapter_from_property<std::array<int, 2>>(
@@ -924,16 +1651,18 @@ TEST_CASE(
             {type_id<int>()}
         );
     REQUIRE(weights.kind() == ContainerKind::Sequence);
-    REQUIRE(weights.fixed_size());
-    REQUIRE(weights.element_type() == type_id<int>());
+    REQUIRE(weights.indexed() != nullptr);
+    REQUIRE(weights.indexed()->fixed_size());
+    REQUIRE(weights.indexed()->element_type() == type_id<int>());
 
     auto& ratio = require_registered_adapter_from_property<Optional<float>>(
         "fei::Optional",
         {type_id<float>()}
     );
     REQUIRE(ratio.kind() == ContainerKind::Optional);
-    REQUIRE_FALSE(ratio.fixed_size());
-    REQUIRE(ratio.element_type() == type_id<float>());
+    REQUIRE(ratio.indexed() != nullptr);
+    REQUIRE_FALSE(ratio.indexed()->fixed_size());
+    REQUIRE(ratio.indexed()->element_type() == type_id<float>());
 
     auto& scores = require_registered_adapter_from_property<
         std::unordered_map<std::string, int>>(
@@ -977,7 +1706,8 @@ TEST_CASE(
             {type_id<int>(), type_id<std::string>()}
         );
     REQUIRE(pair.kind() == ContainerKind::Product);
-    REQUIRE(pair.fixed_size());
+    REQUIRE(pair.indexed() != nullptr);
+    REQUIRE(pair.indexed()->fixed_size());
 
     auto& tuple = require_registered_adapter_from_property<
         std::tuple<int, float, std::string>>(
@@ -985,5 +1715,6 @@ TEST_CASE(
         {type_id<int>(), type_id<float>(), type_id<std::string>()}
     );
     REQUIRE(tuple.kind() == ContainerKind::Product);
-    REQUIRE(tuple.fixed_size());
+    REQUIRE(tuple.indexed() != nullptr);
+    REQUIRE(tuple.indexed()->fixed_size());
 }

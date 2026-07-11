@@ -14,7 +14,7 @@ namespace fei {
 // model used for arrays. The elements can have different types, so callers must
 // query element_type(index) before assigning or deserializing each element.
 template<class Container>
-class TupleLikeContainerAdapter final : public ContainerAdapter {
+class TupleLikeContainerAdapter final : public IndexedContainerAdapter {
   public:
     static constexpr std::size_t c_size = std::tuple_size_v<Container>;
 
@@ -76,6 +76,44 @@ class TupleLikeContainerAdapter final : public ContainerAdapter {
             **result,
             container,
             visitor,
+            std::make_index_sequence<c_size> {}
+        );
+    }
+
+    Result<Ref, ContainerError>
+    at(Ref container, std::size_t index) const override {
+        if (index >= c_size) {
+            return failure(out_of_range_error(index));
+        }
+        if (container.is_const()) {
+            auto result = detail::const_container<Container>(
+                container,
+                container_type(),
+                "at"
+            );
+            if (!result) {
+                return failure(std::move(result.error()));
+            }
+            return at_impl(
+                **result,
+                container,
+                index,
+                std::make_index_sequence<c_size> {}
+            );
+        }
+
+        auto result = detail::mutable_container<Container>(
+            container,
+            container_type(),
+            "at"
+        );
+        if (!result) {
+            return failure(std::move(result.error()));
+        }
+        return at_impl(
+            **result,
+            container,
+            index,
             std::make_index_sequence<c_size> {}
         );
     }
@@ -158,6 +196,35 @@ class TupleLikeContainerAdapter final : public ContainerAdapter {
             }(),
             ...);
         return status;
+    }
+
+    template<class ContainerRef, std::size_t... Indexes>
+    Result<Ref, ContainerError> at_impl(
+        ContainerRef& container,
+        Ref owner,
+        std::size_t index,
+        std::index_sequence<Indexes...>
+    ) const {
+        if constexpr (sizeof...(Indexes) == 0) {
+            (void)container;
+            (void)owner;
+            (void)index;
+            return failure(out_of_range_error(0));
+        } else {
+            Ref result;
+            bool found =
+                ((index == Indexes ? (result = detail::element_ref(
+                                          owner,
+                                          std::get<Indexes>(container)
+                                      ),
+                                      true) :
+                                     false) ||
+                 ...);
+            if (!found) {
+                return failure(out_of_range_error(index));
+            }
+            return result;
+        }
     }
 
     template<class ContainerRef, std::size_t... Indexes>

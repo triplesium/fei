@@ -17,8 +17,6 @@ class MapContainerAdapter final : public AssociativeContainerAdapter {
 
     TypeId container_type() const override { return fei::type_id<Container>(); }
 
-    TypeId element_type() const override { return fei::type_id<Element>(); }
-
     TypeId key_type() const override { return fei::type_id<Key>(); }
 
     TypeId mapped_type() const override { return fei::type_id<Mapped>(); }
@@ -33,56 +31,6 @@ class MapContainerAdapter final : public AssociativeContainerAdapter {
             return failure(std::move(result.error()));
         }
         return (*result)->size();
-    }
-
-    bool fixed_size() const override { return false; }
-
-    Status<ContainerError> for_each(
-        Ref container,
-        const ContainerElementVisitor& visitor
-    ) const override {
-        auto result = detail::const_container<Container>(
-            container,
-            container_type(),
-            "for_each"
-        );
-        if (!result) {
-            return failure(std::move(result.error()));
-        }
-
-        if (container.is_const()) {
-            std::size_t index = 0;
-            for (auto it = (*result)->begin(); it != (*result)->end(); ++it) {
-                auto status =
-                    visitor(Ref(&*it, fei::type_id<Element>()), index);
-                if (!status) {
-                    return failure(std::move(status.error()));
-                }
-                ++index;
-            }
-            return {};
-        }
-
-        auto mutable_result = detail::mutable_container<Container>(
-            container,
-            container_type(),
-            "for_each"
-        );
-        if (!mutable_result) {
-            return failure(std::move(mutable_result.error()));
-        }
-
-        std::size_t index = 0;
-        for (auto it = (*mutable_result)->begin();
-             it != (*mutable_result)->end();
-             ++it) {
-            auto status = visitor(Ref(&*it, fei::type_id<Element>()), index);
-            if (!status) {
-                return failure(std::move(status.error()));
-            }
-            ++index;
-        }
-        return {};
     }
 
     Status<ContainerError> for_each_entry(
@@ -221,6 +169,122 @@ class MapContainerAdapter final : public AssociativeContainerAdapter {
             }
         );
     }
+
+    Result<Ref, ContainerError> find(Ref container, Ref key) const override {
+        if (container.is_const()) {
+            auto result = detail::const_container<Container>(
+                container,
+                container_type(),
+                "find"
+            );
+            if (!result) {
+                return failure(std::move(result.error()));
+            }
+            if (!key || key.type_id() != fei::type_id<Key>()) {
+                return failure(
+                    detail::container_error(
+                        ContainerError::Kind::InvalidElement,
+                        container_type(),
+                        "Invalid key passed to map find"
+                    )
+                );
+            }
+            auto it = (*result)->find(key.get_const<Key>());
+            if (it == (*result)->end()) {
+                return failure(
+                    detail::container_error(
+                        ContainerError::Kind::NotFound,
+                        container_type(),
+                        "Map key was not found"
+                    )
+                );
+            }
+            return Ref(&it->second, fei::type_id<Mapped>());
+        }
+
+        auto result = detail::mutable_container<Container>(
+            container,
+            container_type(),
+            "find"
+        );
+        if (!result) {
+            return failure(std::move(result.error()));
+        }
+        if (!key || key.type_id() != fei::type_id<Key>()) {
+            return failure(
+                detail::container_error(
+                    ContainerError::Kind::InvalidElement,
+                    container_type(),
+                    "Invalid key passed to map find"
+                )
+            );
+        }
+        auto it = (*result)->find(key.get_const<Key>());
+        if (it == (*result)->end()) {
+            return failure(
+                detail::container_error(
+                    ContainerError::Kind::NotFound,
+                    container_type(),
+                    "Map key was not found"
+                )
+            );
+        }
+        return Ref(&it->second, fei::type_id<Mapped>());
+    }
+
+    Result<bool, ContainerError>
+    contains(Ref container, Ref key) const override {
+        auto result = detail::const_container<Container>(
+            container,
+            container_type(),
+            "contains"
+        );
+        if (!result) {
+            return failure(std::move(result.error()));
+        }
+        if (!key || key.type_id() != fei::type_id<Key>()) {
+            return failure(
+                detail::container_error(
+                    ContainerError::Kind::InvalidElement,
+                    container_type(),
+                    "Invalid key passed to map contains"
+                )
+            );
+        }
+        return (*result)->find(key.get_const<Key>()) != (*result)->end();
+    }
+
+    Status<ContainerError> erase(Ref container, Ref key) const override {
+        auto result = detail::mutable_container<Container>(
+            container,
+            container_type(),
+            "erase"
+        );
+        if (!result) {
+            return failure(std::move(result.error()));
+        }
+        if (!key || key.type_id() != fei::type_id<Key>()) {
+            return failure(
+                detail::container_error(
+                    ContainerError::Kind::InvalidElement,
+                    container_type(),
+                    "Invalid key passed to map erase"
+                )
+            );
+        }
+        auto it = (*result)->find(key.get_const<Key>());
+        if (it == (*result)->end()) {
+            return failure(
+                detail::container_error(
+                    ContainerError::Kind::NotFound,
+                    container_type(),
+                    "Map key was not found"
+                )
+            );
+        }
+        (*result)->erase(it);
+        return {};
+    }
 };
 
 template<class Container, class Key>
@@ -231,8 +295,6 @@ class SetContainerAdapter final : public AssociativeContainerAdapter {
     ContainerKind kind() const override { return ContainerKind::Set; }
 
     TypeId container_type() const override { return fei::type_id<Container>(); }
-
-    TypeId element_type() const override { return fei::type_id<Element>(); }
 
     TypeId key_type() const override { return fei::type_id<Key>(); }
 
@@ -246,32 +308,6 @@ class SetContainerAdapter final : public AssociativeContainerAdapter {
             return failure(std::move(result.error()));
         }
         return (*result)->size();
-    }
-
-    bool fixed_size() const override { return false; }
-
-    Status<ContainerError> for_each(
-        Ref container,
-        const ContainerElementVisitor& visitor
-    ) const override {
-        auto result = detail::const_container<Container>(
-            container,
-            container_type(),
-            "for_each"
-        );
-        if (!result) {
-            return failure(std::move(result.error()));
-        }
-
-        std::size_t index = 0;
-        for (auto it = (*result)->begin(); it != (*result)->end(); ++it) {
-            auto status = visitor(Ref(&*it, fei::type_id<Element>()), index);
-            if (!status) {
-                return failure(std::move(status.error()));
-            }
-            ++index;
-        }
-        return {};
     }
 
     Status<ContainerError> for_each_entry(
@@ -366,6 +402,91 @@ class SetContainerAdapter final : public AssociativeContainerAdapter {
                 );
             }
         );
+    }
+
+    Result<Ref, ContainerError> find(Ref container, Ref key) const override {
+        auto result = detail::const_container<Container>(
+            container,
+            container_type(),
+            "find"
+        );
+        if (!result) {
+            return failure(std::move(result.error()));
+        }
+        if (!key || key.type_id() != fei::type_id<Key>()) {
+            return failure(
+                detail::container_error(
+                    ContainerError::Kind::InvalidElement,
+                    container_type(),
+                    "Invalid key passed to set find"
+                )
+            );
+        }
+        auto it = (*result)->find(key.get_const<Key>());
+        if (it == (*result)->end()) {
+            return failure(
+                detail::container_error(
+                    ContainerError::Kind::NotFound,
+                    container_type(),
+                    "Set key was not found"
+                )
+            );
+        }
+        return Ref(&*it, fei::type_id<Key>());
+    }
+
+    Result<bool, ContainerError>
+    contains(Ref container, Ref key) const override {
+        auto result = detail::const_container<Container>(
+            container,
+            container_type(),
+            "contains"
+        );
+        if (!result) {
+            return failure(std::move(result.error()));
+        }
+        if (!key || key.type_id() != fei::type_id<Key>()) {
+            return failure(
+                detail::container_error(
+                    ContainerError::Kind::InvalidElement,
+                    container_type(),
+                    "Invalid key passed to set contains"
+                )
+            );
+        }
+        return (*result)->find(key.get_const<Key>()) != (*result)->end();
+    }
+
+    Status<ContainerError> erase(Ref container, Ref key) const override {
+        auto result = detail::mutable_container<Container>(
+            container,
+            container_type(),
+            "erase"
+        );
+        if (!result) {
+            return failure(std::move(result.error()));
+        }
+        if (!key || key.type_id() != fei::type_id<Key>()) {
+            return failure(
+                detail::container_error(
+                    ContainerError::Kind::InvalidElement,
+                    container_type(),
+                    "Invalid key passed to set erase"
+                )
+            );
+        }
+        auto it = (*result)->find(key.get_const<Key>());
+        if (it == (*result)->end()) {
+            return failure(
+                detail::container_error(
+                    ContainerError::Kind::NotFound,
+                    container_type(),
+                    "Set key was not found"
+                )
+            );
+        }
+        (*result)->erase(it);
+        return {};
     }
 };
 

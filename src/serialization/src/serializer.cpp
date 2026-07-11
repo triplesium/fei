@@ -525,13 +525,22 @@ Result<SerializedNode, SerializeError> serialize_container(
     }
 
     if (container.kind() == ContainerKind::Optional) {
+        const auto* indexed = container.indexed();
+        if (!indexed) {
+            return failure(serialize_error(
+                SerializeError::Kind::UnsupportedType,
+                type_id,
+                path,
+                "Optional container does not expose indexed operations"
+            ));
+        }
         if (*size == 0) {
             return SerializedNode::null();
         }
 
         Optional<SerializedNode> serialized_value;
         Optional<SerializeError> visitor_error;
-        auto visit_status = container.for_each(
+        auto visit_status = indexed->for_each(
             value,
             [&](Ref element, std::size_t) -> Status<ContainerError> {
                 auto serialized = serialize_value(
@@ -645,8 +654,18 @@ Result<SerializedNode, SerializeError> serialize_container(
         return SerializedNode::array(std::move(array));
     }
 
+    const auto* indexed = container.indexed();
+    if (!indexed) {
+        return failure(serialize_error(
+            SerializeError::Kind::UnsupportedType,
+            type_id,
+            path,
+            "Container exposes neither indexed nor associative operations"
+        ));
+    }
+
     Optional<SerializeError> visitor_error;
-    auto visit_status = container.for_each(
+    auto visit_status = indexed->for_each(
         value,
         [&](Ref element, std::size_t index) -> Status<ContainerError> {
             auto element_path = index_path(path, index);
@@ -1208,7 +1227,7 @@ deserialize_dynamic_map(const SerializedNode& node, const std::string& path) {
 
 Result<Val, DeserializeError> deserialize_optional_container(
     TypeId type_id,
-    ContainerAdapter& container,
+    IndexedContainerAdapter& container,
     const SerializedNode& node,
     const std::string& path,
     const Type& type
@@ -1365,7 +1384,7 @@ Result<Val, DeserializeError> deserialize_associative_container(
 
 Result<Val, DeserializeError> deserialize_sequence_container(
     TypeId type_id,
-    ContainerAdapter& container,
+    IndexedContainerAdapter& container,
     const SerializedNode& node,
     const std::string& path,
     const Type& type
@@ -1486,9 +1505,18 @@ Result<Val, DeserializeError> deserialize_container(
     }
 
     if (container.kind() == ContainerKind::Optional) {
+        auto* indexed = container.indexed();
+        if (!indexed) {
+            return failure(deserialize_error(
+                DeserializeError::Kind::UnsupportedType,
+                type_id,
+                path,
+                "Optional container does not expose indexed operations"
+            ));
+        }
         return deserialize_optional_container(
             type_id,
-            container,
+            *indexed,
             node,
             path,
             *type
@@ -1503,13 +1531,16 @@ Result<Val, DeserializeError> deserialize_container(
             *type
         );
     }
-    return deserialize_sequence_container(
-        type_id,
-        container,
-        node,
-        path,
-        *type
-    );
+    auto* indexed = container.indexed();
+    if (!indexed) {
+        return failure(deserialize_error(
+            DeserializeError::Kind::UnsupportedType,
+            type_id,
+            path,
+            "Container exposes neither indexed nor associative operations"
+        ));
+    }
+    return deserialize_sequence_container(type_id, *indexed, node, path, *type);
 }
 
 Result<Val, DeserializeError> deserialize_enum(
