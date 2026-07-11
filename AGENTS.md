@@ -56,11 +56,7 @@
 
 ## Sample Rendering Debugging
 
-- When debugging renderer output from a `sample-*` target, it is acceptable to
-  add or enable `devtools::CorePlugin` plus the relevant DevTools provider
-  plugins in that sample.
-- Use the DevTools HTTP API and UI exposed by those plugins to inspect, capture,
-  and compare the engine's rendered result while debugging rendering behavior.
+- When debugging a running `sample-*` target, use the `devtools` skill.
 
 ## Coding Style & Naming Conventions
 

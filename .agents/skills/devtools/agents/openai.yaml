@@ -1,0 +1,4 @@
+interface:
+  display_name: "DevTools"
+  short_description: "Inspect and control running fei samples"
+  default_prompt: "Use $devtools to inspect a running fei sample and diagnose its rendering state."
