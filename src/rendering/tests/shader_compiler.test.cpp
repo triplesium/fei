@@ -35,7 +35,6 @@ require_resource(const ShaderDescription& shader, std::string_view name) {
 
 } // namespace
 
-#ifdef FEI_HAS_SLANG_SDK
 TEST_CASE(
     "SlangLibraryShaderCompiler compiles Slang with in-process artifact "
     "generation",
@@ -333,4 +332,3 @@ float4 fragment_main() : SV_Target0
         ) != output->dependencies.end()
     );
 }
-#endif

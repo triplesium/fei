@@ -110,7 +110,6 @@ class ShaderVariantCompiler {
     );
 };
 
-#ifdef FEI_HAS_SLANG_SDK
 class SlangLibraryShaderCompiler final : public ShaderCompiler {
   public:
     [[nodiscard]] std::string cache_identity() const override;
@@ -118,6 +117,5 @@ class SlangLibraryShaderCompiler final : public ShaderCompiler {
     Result<ShaderCompileOutput, ShaderCompileError>
     compile(ShaderCompileRequest request) override;
 };
-#endif
 
 } // namespace fei

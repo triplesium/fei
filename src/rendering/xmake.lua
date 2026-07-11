@@ -15,16 +15,31 @@ local function add_system_slang_sdk(target, public)
     end
 
     if public then
-        target:add("defines", "FEI_HAS_SLANG_SDK=1", {public = true})
         target:add("linkdirs", lib_dir, {public = true})
         target:add("links", "slang", {public = true})
     else
-        target:add("defines", "FEI_HAS_SLANG_SDK=1")
         target:add("linkdirs", lib_dir)
         target:add("links", "slang")
     end
     target:add("includedirs", include_dir)
     target:add("runenvs", "PATH", bin_dir)
+end
+
+local function require_system_slang_sdk()
+    local slang_sdk = get_config("shader_slang_sdk")
+    if not slang_sdk or #slang_sdk == 0 then
+        os.raise("Slang SDK is required; configure shader_slang_sdk with the SDK path")
+    end
+
+    local header = path.join(slang_sdk, "Include", "slang", "slang.h")
+    local import_lib = path.join(slang_sdk, "Lib", "slang.lib")
+    local runtime = path.join(slang_sdk, "Bin", "slang.dll")
+    if not os.isfile(header) or not os.isfile(import_lib) or not os.isfile(runtime) then
+        os.raise(
+            "Invalid Slang SDK at '%s'; expected Include/slang/slang.h, Lib/slang.lib, and Bin/slang.dll",
+            slang_sdk
+        )
+    end
 end
 
 local function find_system_spirv_cross_sdk()
@@ -77,6 +92,9 @@ target("fei-rendering")
     end
     on_load(function(target)
         add_system_slang_sdk(target, true)
+    end)
+    before_build(function()
+        require_system_slang_sdk()
     end)
 
 target("fei-rendering-tests")

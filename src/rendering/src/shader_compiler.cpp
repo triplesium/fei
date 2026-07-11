@@ -14,14 +14,11 @@
 #include <fstream>
 #include <iterator>
 #include <optional>
+#include <slang-com-ptr.h>
+#include <slang.h>
 #include <string_view>
 #include <type_traits>
 #include <utility>
-
-#ifdef FEI_HAS_SLANG_SDK
-#    include <slang-com-ptr.h>
-#    include <slang.h>
-#endif
 
 namespace fei {
 
@@ -211,7 +208,6 @@ void insert_unique_dependency(
     }
 }
 
-#ifdef FEI_HAS_SLANG_SDK
 std::string blob_text(slang::IBlob* blob) {
     if (!blob || !blob->getBufferPointer() || blob->getBufferSize() == 0) {
         return {};
@@ -949,8 +945,6 @@ compile_slang_to_spirv(const ShaderCompileRequest& request) {
     };
 }
 
-#endif
-
 Result<ShaderArtifactGenerationOutput, ShaderCompileError>
 generate_backend_artifacts(ShaderArtifactGenerationInput input) {
     try {
@@ -1111,7 +1105,6 @@ Result<ShaderDescription, ShaderCompileError> ShaderVariantCompiler::compile(
     return std::move(value.description);
 }
 
-#ifdef FEI_HAS_SLANG_SDK
 std::string SlangLibraryShaderCompiler::cache_identity() const {
     auto* build_tag = spGetBuildTagString();
     if (build_tag == nullptr) {
@@ -1155,6 +1148,5 @@ SlangLibraryShaderCompiler::compile(ShaderCompileRequest request) {
         .dependency_snapshots = std::move(dependency_snapshots),
     };
 }
-#endif
 
 } // namespace fei

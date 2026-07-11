@@ -87,7 +87,6 @@ void present_main_swapchain(
 
 void RenderingPlugin::setup(App& app) {
     app.resource<AssetServer>().emplace_source<ShaderAssetSource>();
-#ifdef FEI_HAS_SLANG_SDK
     app.add_resource(SlangLibraryShaderCompiler {});
     app.add_resource(ShaderVariantCompiler(
         app.resource<SlangLibraryShaderCompiler>(),
@@ -95,7 +94,6 @@ void RenderingPlugin::setup(App& app) {
             .cache_root = default_shader_cache_root(),
         }
     ));
-#endif
 
     app.configure_sets(
            RenderUpdate,
@@ -123,20 +121,12 @@ void RenderingPlugin::setup(App& app) {
         .add_resource(PipelineCache(app.resource<GraphicsDevice>()))
         .add_resource<RenderGraph>();
 
-#ifdef FEI_HAS_SLANG_SDK
     app.add_resource(ShaderCache(
         app.resource<AssetServer>(),
         app.resource<Assets<Shader>>(),
         app.resource<GraphicsDevice>(),
         &app.resource<ShaderVariantCompiler>()
     ));
-#else
-    app.add_resource(ShaderCache(
-        app.resource<AssetServer>(),
-        app.resource<Assets<Shader>>(),
-        app.resource<GraphicsDevice>()
-    ));
-#endif
 
     app.add_systems(PostUpdate, compute_mesh_aabb)
         .add_systems(

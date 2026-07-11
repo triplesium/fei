@@ -173,7 +173,6 @@ constexpr std::array<PbrShaderCase, 27> PbrShaders {
     },
 };
 
-#ifdef FEI_HAS_SLANG_SDK
 PbrShaderCase pbr_shader_case(std::string_view shader_name) {
     auto it = std::find_if(
         PbrShaders.begin(),
@@ -376,7 +375,6 @@ void require_shader_dependencies(
         CHECK(shader_has_dependency(output, path));
     }
 }
-#endif
 
 } // namespace
 
@@ -409,7 +407,6 @@ TEST_CASE(
     CHECK(found_shader_source);
 }
 
-#ifdef FEI_HAS_SLANG_SDK
 TEST_CASE("PBR shaders compile through runtime compiler", "[pbr][shader]") {
     for (auto shader_case : PbrShaders) {
         CAPTURE(shader_case.label);
@@ -714,8 +711,3 @@ TEST_CASE(
         }
     );
 }
-#else
-TEST_CASE("PBR shader layout tests require Slang SDK", "[pbr][shader]") {
-    SUCCEED("Slang SDK is not available in this build");
-}
-#endif
