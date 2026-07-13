@@ -5,6 +5,7 @@
 #include "graphics_vulkan/framebuffer.hpp"
 #include "graphics_vulkan/texture.hpp"
 #include "graphics_vulkan/utils.hpp"
+#include "graphics_vulkan_glfw/swapchain_extent.hpp"
 #include "profiling/profiling.hpp"
 
 #ifndef GLFW_INCLUDE_NONE
@@ -20,10 +21,6 @@
 namespace fei {
 
 namespace {
-
-uint32 positive_extent(uint32 extent) {
-    return std::max(extent, uint32 {1});
-}
 
 VkSurfaceCapabilitiesKHR
 surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface) {
@@ -181,41 +178,6 @@ choose_present_mode(const std::vector<VkPresentModeKHR>& modes) {
     return modes.empty() ? VK_PRESENT_MODE_FIFO_KHR : modes.front();
 }
 
-uint32 clamp_extent_dimension(uint32 desired, uint32 min, uint32 max) {
-    desired = positive_extent(desired);
-    if (max < min) {
-        return desired;
-    }
-    return std::clamp(desired, min, max);
-}
-
-VkExtent2D choose_extent(
-    const VkSurfaceCapabilitiesKHR& capabilities,
-    uint32 desired_width,
-    uint32 desired_height
-) {
-    if (capabilities.currentExtent.width !=
-        std::numeric_limits<uint32>::max()) {
-        return VkExtent2D {
-            .width = positive_extent(capabilities.currentExtent.width),
-            .height = positive_extent(capabilities.currentExtent.height),
-        };
-    }
-
-    return VkExtent2D {
-        .width = clamp_extent_dimension(
-            desired_width,
-            capabilities.minImageExtent.width,
-            capabilities.maxImageExtent.width
-        ),
-        .height = clamp_extent_dimension(
-            desired_height,
-            capabilities.minImageExtent.height,
-            capabilities.maxImageExtent.height
-        ),
-    };
-}
-
 uint32 choose_image_count(const VkSurfaceCapabilitiesKHR& capabilities) {
     auto image_count = capabilities.minImageCount + 1;
     if (capabilities.maxImageCount != 0) {
@@ -293,15 +255,48 @@ FramebufferDescription swapchain_framebuffer_description(
 
 } // namespace
 
+namespace vulkan_glfw_detail {
+
+VkExtent2D choose_swapchain_extent(
+    const VkSurfaceCapabilitiesKHR& capabilities,
+    uint32 desired_width,
+    uint32 desired_height
+) {
+    if (desired_width == 0 || desired_height == 0) {
+        return {};
+    }
+    if (capabilities.currentExtent.width !=
+        std::numeric_limits<uint32>::max()) {
+        return capabilities.currentExtent;
+    }
+
+    const auto clamp_dimension = [](uint32 desired, uint32 min, uint32 max) {
+        return max < min ? desired : std::clamp(desired, min, max);
+    };
+    return VkExtent2D {
+        .width = clamp_dimension(
+            desired_width,
+            capabilities.minImageExtent.width,
+            capabilities.maxImageExtent.width
+        ),
+        .height = clamp_dimension(
+            desired_height,
+            capabilities.minImageExtent.height,
+            capabilities.maxImageExtent.height
+        ),
+    };
+}
+
+} // namespace vulkan_glfw_detail
+
 SwapchainVulkanGlfw::SwapchainVulkanGlfw(
     std::shared_ptr<VulkanDeviceState> state,
     GLFWwindow* window,
     uint32 width,
     uint32 height
 ) :
-    m_state(std::move(state)), m_window(window),
-    m_desired_width(positive_extent(width)),
-    m_desired_height(positive_extent(height)) {
+    m_state(std::move(state)), m_window(window), m_desired_width(width),
+    m_desired_height(height) {
     if (!m_state) {
         fatal("SwapchainVulkanGlfw requires a VulkanDeviceState");
     }
@@ -372,8 +367,23 @@ void SwapchainVulkanGlfw::destroy_swapchain_resources() const {
     }
 }
 
-void SwapchainVulkanGlfw::recreate_swapchain() const {
+bool SwapchainVulkanGlfw::recreate_swapchain() const {
     FEI_PROFILE_SCOPE("Vulkan GLFW Recreate Swapchain");
+
+    if (m_desired_width == 0 || m_desired_height == 0) {
+        return false;
+    }
+
+    const auto capabilities =
+        surface_capabilities(m_state->physical_device(), m_surface);
+    const auto extent = vulkan_glfw_detail::choose_swapchain_extent(
+        capabilities,
+        m_desired_width,
+        m_desired_height
+    );
+    if (extent.width == 0 || extent.height == 0) {
+        return false;
+    }
 
     if (m_swapchain != VK_NULL_HANDLE) {
         m_state->wait_idle();
@@ -383,16 +393,12 @@ void SwapchainVulkanGlfw::recreate_swapchain() const {
     m_framebuffers.clear();
     m_images.clear();
 
-    const auto capabilities =
-        surface_capabilities(m_state->physical_device(), m_surface);
     const auto surface_format = choose_surface_format(
         surface_formats(m_state->physical_device(), m_surface)
     );
     const auto present_mode = choose_present_mode(
         present_modes(m_state->physical_device(), m_surface)
     );
-    const auto extent =
-        choose_extent(capabilities, m_desired_width, m_desired_height);
     const auto image_count = choose_image_count(capabilities);
     const auto composite_alpha = choose_composite_alpha(capabilities);
 
@@ -480,14 +486,20 @@ void SwapchainVulkanGlfw::recreate_swapchain() const {
         m_images.push_back(std::move(texture));
         m_framebuffers.push_back(std::move(framebuffer));
     }
+    return true;
 }
 
-void SwapchainVulkanGlfw::acquire_current_image() const {
+bool SwapchainVulkanGlfw::acquire_current_image() const {
     if (m_acquired) {
-        return;
+        return true;
+    }
+    if (m_desired_width == 0 || m_desired_height == 0) {
+        return false;
     }
     if (m_swapchain == VK_NULL_HANDLE || m_framebuffers.empty()) {
-        recreate_swapchain();
+        if (!recreate_swapchain()) {
+            return false;
+        }
     }
 
     while (true) {
@@ -500,7 +512,9 @@ void SwapchainVulkanGlfw::acquire_current_image() const {
             &m_current_image_index
         );
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-            recreate_swapchain();
+            if (!recreate_swapchain()) {
+                return false;
+            }
             continue;
         }
         if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
@@ -532,11 +546,14 @@ void SwapchainVulkanGlfw::acquire_current_image() const {
         );
     }
     m_acquired = true;
+    return true;
 }
 
 std::shared_ptr<const Framebuffer> SwapchainVulkanGlfw::framebuffer() const {
     std::scoped_lock lock(m_mutex);
-    acquire_current_image();
+    if (!acquire_current_image()) {
+        return nullptr;
+    }
     return m_framebuffers[m_current_image_index];
 }
 
@@ -557,14 +574,16 @@ PixelFormat SwapchainVulkanGlfw::color_format() const {
 
 void SwapchainVulkanGlfw::resize(uint32 width, uint32 height) {
     std::scoped_lock lock(m_mutex);
-    width = positive_extent(width);
-    height = positive_extent(height);
     if (m_desired_width == width && m_desired_height == height) {
         return;
     }
 
     m_desired_width = width;
     m_desired_height = height;
+    if (width == 0 || height == 0) {
+        m_acquired = false;
+        return;
+    }
     recreate_swapchain();
 }
 

@@ -36,8 +36,8 @@ class VulkanGlfwSwapchainPlugin : public Plugin {
     void setup(App& app) override;
 };
 
-uint32 positive_window_extent(int extent) {
-    return static_cast<uint32>(std::max(extent, 1));
+uint32 window_extent(int extent) {
+    return extent > 0 ? static_cast<uint32>(extent) : 0;
 }
 
 void append_unique(std::vector<std::string>& values, const char* value) {
@@ -69,8 +69,8 @@ void sync_main_swapchain_size(
         return;
     }
 
-    const auto width = positive_window_extent(window->width);
-    const auto height = positive_window_extent(window->height);
+    const auto width = window_extent(window->width);
+    const auto height = window_extent(window->height);
     if (main_swapchain->swapchain->width() != width ||
         main_swapchain->swapchain->height() != height) {
         main_swapchain->swapchain->resize(width, height);
@@ -130,8 +130,8 @@ void VulkanGlfwSwapchainPlugin::setup(App& app) {
             .swapchain = std::make_shared<SwapchainVulkanGlfw>(
                 vulkan_device->state(),
                 window.glfw_window,
-                positive_window_extent(window.width),
-                positive_window_extent(window.height)
+                window_extent(window.width),
+                window_extent(window.height)
             ),
         }
     );

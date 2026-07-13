@@ -34,8 +34,8 @@ class SwapchainVulkanGlfw final : public Swapchain {
     mutable std::mutex m_mutex;
 
     void create_surface();
-    void recreate_swapchain() const;
-    void acquire_current_image() const;
+    bool recreate_swapchain() const;
+    bool acquire_current_image() const;
     void destroy_swapchain_resources() const;
 
   public:
