@@ -193,7 +193,14 @@ void ProviderPlugin::setup(App& app) {
 
     app.add_resource(InputState {});
     app.add_systems(Update, apply_input_commands);
-    app.add_systems(PreUpdate, apply_pressed_keys | after(key_input_system));
+    app.configure_sets(
+           PreUpdate,
+           chain(InputSystems::Update {}, InputSystems::ApplyDevtools {})
+    )
+        .add_systems(
+            PreUpdate,
+            apply_pressed_keys | in_set<InputSystems::ApplyDevtools>()
+        );
 }
 
 void ProviderPlugin::finish(App&) {}

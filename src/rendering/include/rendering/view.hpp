@@ -8,6 +8,7 @@
 #include "graphics/graphics_device.hpp"
 #include "math/matrix.hpp"
 #include "math/vector.hpp"
+#include "rendering/render_queue.hpp"
 #include "rendering/visibility.hpp"
 
 #include <memory>
@@ -36,7 +37,8 @@ void init_camera_view_uniform(
 
 void prepare_camera_view_uniform(
     Query<Entity, const Camera3d, const Transform3d, ViewUniformBuffer> query,
-    ResRO<GraphicsDevice> device
+    ResRO<GraphicsDevice> device,
+    ResRO<RenderQueue> render_queue
 );
 
 } // namespace fei

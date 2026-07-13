@@ -1,11 +1,8 @@
-#include "pbr/graph_resources.hpp"
 #include "pbr/mesh_queue.hpp"
 #include "pbr/passes/deferred_internal.hpp"
 #include "pbr/pipeline_specializer.hpp"
 
 #include <memory>
-#include <vector>
-
 namespace fei {
 
 namespace {
@@ -80,25 +77,6 @@ struct DeferredPrepassDrawItem {
     uint32 vertex_count {};
 };
 
-struct DeferredPrepassPassData {
-    DeferredGBufferGraphHandles gbuffer;
-    std::vector<DeferredPrepassDrawItem> draw_items;
-};
-
-TextureDescription
-make_render_texture_desc(uint32 width, uint32 height, PixelFormat format) {
-    return TextureDescription {
-        .width = width,
-        .height = height,
-        .depth = 1,
-        .mip_level = 1,
-        .layer = 1,
-        .texture_format = format,
-        .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
-        .texture_type = TextureType::Texture2D,
-    };
-}
-
 void draw_deferred_prepass_item(
     CommandBuffer& command_buffer,
     const DeferredPrepassDrawItem& item
@@ -141,6 +119,9 @@ void queue_deferred_prepass_meshes(
     ResRW<PipelineCache>
 ) {
     phase->clear();
+    if (query_cameras.empty()) {
+        return;
+    }
 
     auto [camera_entity, mesh_view_resource_set] = query_cameras.first();
     auto visible_meshes =
@@ -169,20 +150,51 @@ void queue_deferred_prepass_meshes(
     );
 }
 
-void build_deferred_prepass(
-    ResRW<RenderGraph> render_graph,
+void deferred_prepass(
+    ResRW<RenderFrameContext> frame,
     ResRO<DeferredPrepassPhase> phase,
     ResRO<RenderTarget> target,
-    ResRO<Window> window,
+    ResRO<DeferredViewTargets> targets,
     ResRO<PipelineCache> pipeline_cache
 ) {
-    auto& blackboard_gbuffer =
-        render_graph->blackboard().emplace<DeferredGBufferGraphHandles>();
+    auto* command_buffer = frame->command_buffer();
+    if (!command_buffer || !target->valid() || !targets->valid()) {
+        return;
+    }
 
-    std::vector<DeferredPrepassDrawItem> draw_items;
-    draw_items.reserve(phase->items.size());
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments =
+                {
+                    {.texture = targets->position_ao,
+                     .load_op = LoadOp::Clear,
+                     .clear_color = Color4F {0.0f, 0.0f, 0.0f, 0.0f}},
+                    {.texture = targets->normal_roughness,
+                     .load_op = LoadOp::Clear,
+                     .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f}},
+                    {.texture = targets->albedo_metallic,
+                     .load_op = LoadOp::Clear,
+                     .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f}},
+                    {.texture = targets->specular,
+                     .load_op = LoadOp::Clear,
+                     .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f}},
+                    {.texture = targets->emissive_depth,
+                     .load_op = LoadOp::Clear,
+                     .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f}},
+                },
+            .depth_stencil_attachment = RenderPassDepthStencilAttachment {
+                .texture = target->depth_texture,
+                .depth_load_op = LoadOp::Clear,
+                .stencil_load_op = LoadOp::Clear,
+                .clear_depth = 1.0f,
+                .clear_stencil = 0,
+            },
+        }
+    );
+    command_buffer->set_viewport(0, 0, targets->width, targets->height);
     for (const auto& item : phase->items) {
-        draw_items.push_back(
+        draw_deferred_prepass_item(
+            *command_buffer,
             DeferredPrepassDrawItem {
                 .pipeline = pipeline_cache->get_render_pipeline(item.pipeline),
                 .view_set = item.view_set,
@@ -195,137 +207,7 @@ void build_deferred_prepass(
             }
         );
     }
-
-    render_graph->add_pass<DeferredPrepassPassData>(
-        "deferred_prepass",
-        [&](RenderGraphBuilder& builder, DeferredPrepassPassData& data) {
-            data.draw_items = std::move(draw_items);
-            auto& gbuffer = data.gbuffer;
-
-            gbuffer.position_ao = builder.create_texture(
-                "g_position_ao",
-                make_render_texture_desc(
-                    window->width,
-                    window->height,
-                    PixelFormat::Rgba16Float
-                )
-            );
-            gbuffer.normal_roughness = builder.create_texture(
-                "g_normal_roughness",
-                make_render_texture_desc(
-                    window->width,
-                    window->height,
-                    PixelFormat::Rgba16Float
-                )
-            );
-            gbuffer.albedo_metallic = builder.create_texture(
-                "g_albedo_metallic",
-                make_render_texture_desc(
-                    window->width,
-                    window->height,
-                    PixelFormat::Rgba8Unorm
-                )
-            );
-            gbuffer.specular = builder.create_texture(
-                "g_specular",
-                make_render_texture_desc(
-                    window->width,
-                    window->height,
-                    PixelFormat::Rgba8Unorm
-                )
-            );
-            gbuffer.emissive_depth = builder.create_texture(
-                "g_emissive_depth",
-                make_render_texture_desc(
-                    window->width,
-                    window->height,
-                    PixelFormat::Rgba16Float
-                )
-            );
-            gbuffer.depth =
-                builder.import_texture("camera_depth", target->depth_texture);
-
-            gbuffer.position_ao = builder.write_texture(
-                gbuffer.position_ao,
-                RenderGraphAccess::ColorAttachmentWrite
-            );
-            gbuffer.normal_roughness = builder.write_texture(
-                gbuffer.normal_roughness,
-                RenderGraphAccess::ColorAttachmentWrite
-            );
-            gbuffer.albedo_metallic = builder.write_texture(
-                gbuffer.albedo_metallic,
-                RenderGraphAccess::ColorAttachmentWrite
-            );
-            gbuffer.specular = builder.write_texture(
-                gbuffer.specular,
-                RenderGraphAccess::ColorAttachmentWrite
-            );
-            gbuffer.emissive_depth = builder.write_texture(
-                gbuffer.emissive_depth,
-                RenderGraphAccess::ColorAttachmentWrite
-            );
-            gbuffer.depth = builder.write_texture(
-                gbuffer.depth,
-                RenderGraphAccess::DepthStencilWrite
-            );
-
-            blackboard_gbuffer = gbuffer;
-        },
-        [](RenderGraphContext& context, const DeferredPrepassPassData& data) {
-            const auto& gbuffer = data.gbuffer;
-            auto& command_buffer = context.command_buffer();
-            command_buffer.begin_render_pass(
-                RenderPassDescription {
-                    .color_attachments =
-                        {
-                            {
-                                .texture = context.texture(gbuffer.position_ao),
-                                .load_op = LoadOp::Clear,
-                                .clear_color = Color4F {0.0f, 0.0f, 0.0f, 0.0f},
-                            },
-                            {
-                                .texture =
-                                    context.texture(gbuffer.normal_roughness),
-                                .load_op = LoadOp::Clear,
-                                .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
-                            },
-                            {
-                                .texture =
-                                    context.texture(gbuffer.albedo_metallic),
-                                .load_op = LoadOp::Clear,
-                                .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
-                            },
-                            {
-                                .texture = context.texture(gbuffer.specular),
-                                .load_op = LoadOp::Clear,
-                                .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
-                            },
-                            {
-                                .texture =
-                                    context.texture(gbuffer.emissive_depth),
-                                .load_op = LoadOp::Clear,
-                                .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
-                            },
-                        },
-                    .depth_stencil_attachment =
-                        RenderPassDepthStencilAttachment {
-                            .texture = context.texture(gbuffer.depth),
-                            .depth_load_op = LoadOp::Clear,
-                            .stencil_load_op = LoadOp::Clear,
-                            .clear_depth = 1.0f,
-                            .clear_stencil = 0,
-                        },
-                }
-            );
-            auto color = context.texture(gbuffer.position_ao);
-            command_buffer.set_viewport(0, 0, color->width(), color->height());
-            for (const auto& item : data.draw_items) {
-                draw_deferred_prepass_item(command_buffer, item);
-            }
-            command_buffer.end_render_pass();
-        }
-    );
+    command_buffer->end_render_pass();
 }
 
 } // namespace fei

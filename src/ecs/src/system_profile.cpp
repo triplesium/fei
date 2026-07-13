@@ -209,15 +209,15 @@ SystemProfileRegistry& SystemProfileRegistry::instance() {
 }
 
 void SystemProfileRegistry::register_system(
-    std::size_t hash,
+    std::size_t key,
     SystemProfileInfo info
 ) {
-    m_profiles[hash] = std::move(info);
+    m_profiles[key] = std::move(info);
 }
 
-std::optional<SystemProfileInfo>
-SystemProfileRegistry::find(std::size_t hash) const {
-    auto it = m_profiles.find(hash);
+auto SystemProfileRegistry::find(std::size_t key) const
+    -> std::optional<SystemProfileInfo> {
+    auto it = m_profiles.find(key);
     if (it == m_profiles.end()) {
         return std::nullopt;
     }

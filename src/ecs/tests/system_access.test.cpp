@@ -151,8 +151,10 @@ TEST_CASE("ECS named systems preserve system metadata", "[ecs][system]") {
 
     REQUIRE(named.profile.name == "named_profile_system");
     REQUIRE(named.profile.named());
-    REQUIRE(named.system->hashable());
-    REQUIRE(named.system->hash() == hash_system(named_profile_system));
+    REQUIRE(named.system->has_profile_key());
+    REQUIRE(
+        named.system->profile_key() == system_profile_key(named_profile_system)
+    );
     REQUIRE(
         named.system->access().read_components == bare.access().read_components
     );
@@ -168,7 +170,7 @@ TEST_CASE(
 ) {
 #if defined(_WIN32)
     auto profile = SystemProfileRegistry::instance().symbolize(
-        hash_system(named_profile_system)
+        system_profile_key(named_profile_system)
     );
 
     if (!profile) {
@@ -186,7 +188,7 @@ TEST_CASE(
     REQUIRE(profile_value.name == "named_profile_system");
 
     auto template_profile = SystemProfileRegistry::instance().symbolize(
-        hash_system(template_profile_system<Position>)
+        system_profile_key(template_profile_system<Position>)
     );
     if (!template_profile) {
         FAIL("template_profile_system was not symbolized");
@@ -201,9 +203,10 @@ TEST_CASE(
     );
     REQUIRE(template_profile_value.name == "template_profile_system");
 
-    auto template_static_profile = SystemProfileRegistry::instance().symbolize(
-        hash_system(TemplateProfileSystems<Position>::static_profile_system)
-    );
+    auto template_static_profile =
+        SystemProfileRegistry::instance().symbolize(system_profile_key(
+            TemplateProfileSystems<Position>::static_profile_system
+        ));
     if (!template_static_profile) {
         FAIL("static_profile_system was not symbolized");
         return;

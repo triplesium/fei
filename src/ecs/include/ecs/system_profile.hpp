@@ -34,12 +34,12 @@ struct SystemProfileInfo {
 };
 
 template<typename Func>
-concept ProfileHashableSystem =
+concept ProfileKeyedFunction =
     std::is_pointer_v<std::remove_cvref_t<Func>> &&
     std::is_function_v<std::remove_pointer_t<std::remove_cvref_t<Func>>>;
 
-template<ProfileHashableSystem Func>
-std::size_t system_profile_hash(Func func) {
+template<ProfileKeyedFunction Func>
+std::size_t system_profile_key(Func func) {
     return reinterpret_cast<std::size_t>(func);
 }
 
@@ -50,14 +50,14 @@ class SystemProfileRegistry {
   public:
     static SystemProfileRegistry& instance();
 
-    void register_system(std::size_t hash, SystemProfileInfo info);
+    void register_system(std::size_t key, SystemProfileInfo info);
 
-    template<ProfileHashableSystem Func>
+    template<ProfileKeyedFunction Func>
     void register_system(Func func, SystemProfileInfo info) {
-        register_system(system_profile_hash(func), std::move(info));
+        register_system(system_profile_key(func), std::move(info));
     }
 
-    std::optional<SystemProfileInfo> find(std::size_t hash) const;
+    std::optional<SystemProfileInfo> find(std::size_t key) const;
     std::optional<SystemProfileInfo> symbolize(std::size_t address) const;
     void clear();
 };

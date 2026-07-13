@@ -25,8 +25,10 @@
 #include "rendering/mesh/mesh_uniform.hpp"
 #include "rendering/pipeline_cache.hpp"
 #include "rendering/render_asset.hpp"
-#include "rendering/render_graph.hpp"
+#include "rendering/render_frame.hpp"
 #include "rendering/render_phase.hpp"
+#include "rendering/render_queue.hpp"
+#include "rendering/resource_set_cache.hpp"
 #include "rendering/shader_cache.hpp"
 #include "rendering/view.hpp"
 #include "rendering/visibility.hpp"
@@ -126,12 +128,14 @@ struct BlurResources {
 
 struct ShadowMap {
     std::shared_ptr<Texture> texture;
+    std::shared_ptr<Texture> blur_texture;
 };
 
 struct ShadowMapPhase {
     struct Pass : RenderPhase<MeshDrawItem> {
         ViewId view;
         std::shared_ptr<Texture> texture;
+        std::shared_ptr<Texture> blur_texture;
     };
 
     std::vector<Pass> passes;
@@ -155,16 +159,8 @@ void init_light_view_uniform_buffer(
 void prepare_light_view_uniform_buffer(
     Query<Entity, const DirectionalLight, const Transform3d, ViewUniformBuffer>
         query_light,
-    ResRO<GraphicsDevice> device
-);
-
-RgTextureHandle
-first_shadow_map_graph_handle(RenderGraphBlackboard& blackboard);
-
-std::vector<RenderGraphResourceBinding> lighting_resource_bindings(
-    const LightingResources& lighting,
-    RgTextureHandle shadow_map,
-    std::shared_ptr<Texture> fallback_shadow_map
+    ResRO<GraphicsDevice> device,
+    ResRO<RenderQueue> render_queue
 );
 
 void setup_lighting(ResRO<GraphicsDevice> device, Commands commands);
@@ -177,7 +173,7 @@ void prepare_lighting(
         const ShadowMap> query_directional_lights,
     Query<const PointLight, const Transform3d> query_point_lights,
     ResRW<LightingResources> lighting,
-    ResRO<GraphicsDevice> device
+    ResRO<RenderQueue> render_queue
 );
 
 void setup_shadow_mapping(
@@ -216,14 +212,18 @@ void queue_shadow_map_meshes(
     ResRW<ShadowMapPhase> phase
 );
 
-void build_shadow_map_passes(
-    ResRW<RenderGraph> render_graph,
+void render_shadow_map_passes(
+    ResRW<RenderFrameContext> frame,
     ResRO<ShadowMapPhase> phase,
+    ResRO<ShadowMappingResources> shadow_mapping_resources,
     ResRO<PipelineCache> pipeline_cache
 );
 
-void build_shadow_blur_passes(
-    ResRW<RenderGraph> render_graph,
+void render_shadow_blur_passes(
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device,
+    ResRO<ShadowMapPhase> phase,
     ResRO<BlurResources> blur_resources,
     ResRO<FullscreenQuad> fullscreen_quad_resource,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes

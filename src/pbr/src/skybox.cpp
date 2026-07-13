@@ -5,6 +5,7 @@
 #include "ecs/system_params.hpp"
 #include "pbr/cubemap.hpp"
 #include "pbr/mesh_view.hpp"
+#include "pbr/plugin.hpp"
 #include "rendering/mesh/mesh.hpp"
 #include "rendering/plugin.hpp"
 #include "rendering/shader_cache.hpp"
@@ -157,7 +158,7 @@ void SkyboxPlugin::setup(App& app) {
     app.add_resource(SkyboxResource {})
         .add_systems(
             StartUp,
-            setup_skybox_resources | after(init_mesh_view_layout)
+            setup_skybox_resources | in_set<PbrSystems::StartupSkybox>()
         )
         .add_systems(
             RenderUpdate,

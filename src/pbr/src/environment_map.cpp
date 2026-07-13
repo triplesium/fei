@@ -9,6 +9,7 @@
 #include "graphics/enums.hpp"
 #include "graphics/graphics_device.hpp"
 #include "pbr/cubemap.hpp"
+#include "pbr/plugin.hpp"
 #include "rendering/gpu_image.hpp"
 #include "rendering/plugin.hpp"
 #include "rendering/render_asset.hpp"
@@ -313,7 +314,8 @@ void EnvironmentMapPlugin::setup(App& app) {
                 insert_gpu_env_map,
                 convert_equirect_to_cubemap,
                 generate_env_maps
-            ) | in_set<RenderingSystems::PrepareResources>()
+            ) | in_set<RenderingSystems::PrepareResources>() |
+                in_set<PbrSystems::PrepareEnvironmentMaps>()
         );
 }
 

@@ -15,7 +15,6 @@
 #include "math/matrix.hpp"
 #include "math/primitives.hpp"
 #include "math/vector.hpp"
-#include "pbr/graph_resources.hpp"
 #include "pbr/light.hpp"
 #include "pbr/material.hpp"
 #include "pbr/pipelines.hpp"
@@ -23,7 +22,9 @@
 #include "rendering/defaults.hpp"
 #include "rendering/mesh/mesh_uniform.hpp"
 #include "rendering/pipeline_cache.hpp"
-#include "rendering/render_graph.hpp"
+#include "rendering/render_frame.hpp"
+#include "rendering/render_queue.hpp"
+#include "rendering/resource_set_cache.hpp"
 #include "rendering/shader_cache.hpp"
 
 #include <array>
@@ -123,7 +124,7 @@ void compute_scene_aabb(
 void prepare_vxgi_voxelization(
     ResRW<VxgiVoxelization> voxelization,
     ResRO<VxgiVolumes> volumes,
-    ResRO<GraphicsDevice> device
+    ResRO<RenderQueue> render_queue
 );
 
 void mark_vxgi_voxelization_dirty(
@@ -143,7 +144,7 @@ void queue_vxgi_voxelization_pipelines(
     ResRO<RenderAssets<PreparedMaterial>> materials
 );
 
-void build_vxgi_voxelization_pass(
+void render_vxgi_voxelization_pass(
     Query<
         Entity,
         const Mesh3d,
@@ -156,7 +157,9 @@ void build_vxgi_voxelization_pass(
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<RenderAssets<PreparedMaterial>> materials,
     ResRO<MeshUniforms> mesh_uniforms,
-    ResRW<RenderGraph> render_graph
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device
 );
 
 struct VxgiGenerateMipmapBase {
@@ -166,6 +169,7 @@ struct VxgiGenerateMipmapBase {
     std::shared_ptr<Pipeline> pipeline;
     std::shared_ptr<ResourceLayout> resource_layout;
     std::shared_ptr<Buffer> uniform_buffer;
+    std::array<std::shared_ptr<TextureView>, 6> output_views;
 };
 
 void setup_vxgi_generate_mipmap_base(
@@ -175,16 +179,20 @@ void setup_vxgi_generate_mipmap_base(
     Commands commands
 );
 
-void build_vxgi_mipmap_base_pass(
+void render_vxgi_mipmap_base_pass(
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiGenerateMipmapBase> generate_mipmap_base,
-    ResRW<RenderGraph> render_graph
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device
 );
 
-void build_vxgi_mipmap_base_after_propagation_pass(
+void render_vxgi_mipmap_base_after_propagation_pass(
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiGenerateMipmapBase> generate_mipmap_base,
-    ResRW<RenderGraph> render_graph
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device
 );
 
 struct VxgiGenerateMipmapVolume {
@@ -217,16 +225,20 @@ void prepare_vxgi_generate_mipmap_volume(
     ResRO<GraphicsDevice> device
 );
 
-void build_vxgi_mipmap_volume_pass(
+void render_vxgi_mipmap_volume_pass(
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiGenerateMipmapVolume> generate_mipmap_volume,
-    ResRW<RenderGraph> render_graph
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device
 );
 
-void build_vxgi_mipmap_volume_after_propagation_pass(
+void render_vxgi_mipmap_volume_after_propagation_pass(
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiGenerateMipmapVolume> generate_mipmap_volume,
-    ResRW<RenderGraph> render_graph
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device
 );
 
 struct alignas(16) VxgiInjectRadianceUniform {
@@ -251,16 +263,19 @@ void setup_inject_radiance(
 
 void prepare_inject_radiance(
     ResRW<VxgiInjectRadiance> inject_radiance,
-    ResRO<GraphicsDevice> device
+    ResRO<RenderQueue> render_queue
 );
 
-void build_vxgi_inject_radiance_pass(
+void render_vxgi_inject_radiance_pass(
+    Query<const ShadowMap> query_shadow_maps,
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiVoxelization> voxelization,
     ResRO<VxgiInjectRadiance> inject_radiance,
     ResRO<LightingResources> lighting,
     ResRO<RenderingDefaults> rendering_defaults,
-    ResRW<RenderGraph> render_graph
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device
 );
 
 struct alignas(16) VxgiInjectPropagationUniform {
@@ -283,31 +298,13 @@ void setup_inject_propagation(
     Commands commands
 );
 
-void build_vxgi_inject_propagation_pass(
+void render_vxgi_inject_propagation_pass(
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiInjectPropagation> inject_propagation,
-    ResRW<RenderGraph> render_graph
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device
 );
-
-inline std::vector<RenderGraphResourceBinding>
-vxgi_inject_propagation_resource_bindings(
-    const VxgiInjectPropagation& inject_propagation,
-    const VxgiGraphHandles& vxgi
-) {
-    return {
-        inject_propagation.uniform_buffer,
-        vxgi.radiance,
-        vxgi.albedo,
-        vxgi.normal,
-        vxgi.mipmap[0],
-        vxgi.mipmap[1],
-        vxgi.mipmap[2],
-        vxgi.mipmap[3],
-        vxgi.mipmap[4],
-        vxgi.mipmap[5],
-        inject_propagation.voxel_sampler,
-    };
-}
 
 struct alignas(16) VxgiUniform {
     float voxel_scale {};
@@ -328,31 +325,13 @@ struct VxgiResources {
     std::shared_ptr<Sampler> voxel_sampler;
 };
 
-inline std::vector<RenderGraphResourceBinding> vxgi_deferred_resource_bindings(
-    const VxgiResources& vxgi_resources,
-    const VxgiGraphHandles& vxgi
-) {
-    return {
-        vxgi_resources.uniform_buffer,
-        vxgi.normal,
-        vxgi.radiance,
-        vxgi.mipmap[0],
-        vxgi.mipmap[1],
-        vxgi.mipmap[2],
-        vxgi.mipmap[3],
-        vxgi.mipmap[4],
-        vxgi.mipmap[5],
-        vxgi_resources.voxel_sampler,
-    };
-}
-
 void setup_vxgi_resources(ResRO<GraphicsDevice> device, Commands commands);
 
 void prepare_vxgi_resources(
     ResRW<VxgiResources> vxgi,
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiVoxelization> voxelization,
-    ResRO<GraphicsDevice> device
+    ResRO<RenderQueue> render_queue
 );
 
 class VxgiPlugin : public Plugin {

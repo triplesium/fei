@@ -25,7 +25,8 @@ void init_camera_view_uniform(
 
 void prepare_camera_view_uniform(
     Query<Entity, const Camera3d, const Transform3d, ViewUniformBuffer> query,
-    ResRO<GraphicsDevice> device
+    ResRO<GraphicsDevice> device,
+    ResRO<RenderQueue> render_queue
 ) {
     for (auto [entity, camera, transform, view_uniform_buffer_component] :
          query) {
@@ -58,7 +59,7 @@ void prepare_camera_view_uniform(
             .world_position = uniform.world_position,
             .frustum = extract_frustum(logical_clip_from_world),
         };
-        device->update_buffer(
+        render_queue->write_buffer(
             view_uniform_buffer_component.buffer,
             0,
             &view_uniform_buffer_component.uniform,

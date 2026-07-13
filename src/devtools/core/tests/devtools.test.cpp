@@ -97,7 +97,7 @@ TEST_CASE("Bridge wraps snapshot responses", "[devtools]") {
     Bridge bridge;
 
     auto token = bridge.enqueue_snapshot_request(
-        "rendering.render_graph",
+        "rendering.render_schedule",
         0,
         true,
         std::chrono::milliseconds {100}
@@ -106,9 +106,9 @@ TEST_CASE("Bridge wraps snapshot responses", "[devtools]") {
     bridge.publish_snapshot(
         SnapshotResponse {
             .token = token,
-            .capability = "rendering.render_graph",
+            .capability = "rendering.render_schedule",
             .json = R"({"passes":[]})",
-            .schema = "rendering.render_graph.v1",
+            .schema = "rendering.render_schedule.v1",
             .version = 12,
         }
     );
@@ -119,11 +119,11 @@ TEST_CASE("Bridge wraps snapshot responses", "[devtools]") {
     REQUIRE(response->status == 200);
     REQUIRE(response->content_type == "application/json");
     REQUIRE(
-        response->text.find("\"id\":\"rendering.render_graph\"") !=
+        response->text.find("\"id\":\"rendering.render_schedule\"") !=
         std::string::npos
     );
     REQUIRE(
-        response->text.find("\"schema\":\"rendering.render_graph.v1\"") !=
+        response->text.find("\"schema\":\"rendering.render_schedule.v1\"") !=
         std::string::npos
     );
     REQUIRE(response->text.find("\"version\":12") != std::string::npos);
@@ -131,11 +131,13 @@ TEST_CASE("Bridge wraps snapshot responses", "[devtools]") {
         response->text.find("\"data\":{\"passes\":[]}") != std::string::npos
     );
 
-    auto cached = bridge.cached_snapshot("rendering.render_graph", 11, false);
+    auto cached =
+        bridge.cached_snapshot("rendering.render_schedule", 11, false);
     REQUIRE(cached);
     auto envelope = snapshot_envelope_json(*cached);
     REQUIRE(
-        envelope.find("\"id\":\"rendering.render_graph\"") != std::string::npos
+        envelope.find("\"id\":\"rendering.render_schedule\"") !=
+        std::string::npos
     );
     REQUIRE(envelope.find("\"data\":{\"passes\":[]}") != std::string::npos);
 }

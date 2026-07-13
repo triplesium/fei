@@ -9,6 +9,7 @@ namespace fei {
 void prepare_mesh_uniforms(
     Query<Entity, const Mesh3d, const Transform3d> query,
     ResRO<GraphicsDevice> device,
+    ResRO<RenderQueue> render_queue,
     ResRW<MeshUniforms> mesh_uniforms
 ) {
     // TODO: Cleanup unused uniforms
@@ -44,7 +45,7 @@ void prepare_mesh_uniforms(
             );
             mesh_uniforms->entries[entity] = std::move(entry);
         }
-        device->update_buffer(
+        render_queue->write_buffer(
             mesh_uniforms->entries[entity].uniform_buffer,
             0,
             &uniform,

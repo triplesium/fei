@@ -8,12 +8,16 @@ namespace fei {
 struct RenderingSystems {
     struct PrepareAssets : SystemSet<PrepareAssets> {};
     struct PrepareResources : SystemSet<PrepareResources> {};
+    struct PrepareView : SystemSet<PrepareView> {};
     struct CheckVisibility : SystemSet<CheckVisibility> {};
     struct Queue : SystemSet<Queue> {};
     struct PreparePipelines : SystemSet<PreparePipelines> {};
-    struct BuildRenderGraph : SystemSet<BuildRenderGraph> {};
     struct Render : SystemSet<Render> {};
-    struct ExecuteRenderGraph : SystemSet<ExecuteRenderGraph> {};
+    struct BeginRender : SystemSet<BeginRender> {};
+    struct Prepass : SystemSet<Prepass> {};
+    struct MainPass : SystemSet<MainPass> {};
+    struct PostProcess : SystemSet<PostProcess> {};
+    struct Submit : SystemSet<Submit> {};
 };
 
 class RenderingPlugin : public Plugin {

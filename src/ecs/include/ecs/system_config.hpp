@@ -21,9 +21,8 @@ template<typename T>
 concept IntoSystemConfig = IntoSystem<T> || NamedIntoSystem<T>;
 
 struct SystemDependencies {
-    // These are hashes of systems
-    std::unordered_set<std::size_t> before;
-    std::unordered_set<std::size_t> after;
+    std::unordered_set<SystemId> before;
+    std::unordered_set<SystemId> after;
     std::unordered_set<TypeId> in_sets;
 };
 
@@ -36,13 +35,13 @@ struct SystemConfig {
     SystemId id;
     static SystemId next_id;
 
-    SystemConfig(std::unique_ptr<System> sys) :
+    explicit SystemConfig(std::unique_ptr<System> sys) :
         system(std::move(sys)), id(next_id++) {}
     template<IntoSystem F>
-    SystemConfig(F func) :
+    explicit SystemConfig(F func) :
         SystemConfig(std::make_unique<FunctionSystem<F>>(func)) {}
     template<NamedIntoSystem F>
-    SystemConfig(F&& named) :
+    explicit SystemConfig(F&& named) :
         SystemConfig(
             std::make_unique<
                 FunctionSystem<typename std::remove_cvref_t<F>::FuncType>>(
@@ -58,12 +57,20 @@ struct SystemConfig {
     SystemConfig(SystemConfig&&) noexcept = default;
     SystemConfig& operator=(SystemConfig&&) noexcept = default;
 
-    SystemConfig&& before(size_t hash) && {
-        dependencies.before.insert(hash);
+    SystemConfig& before(const SystemConfig& target) & {
+        dependencies.before.insert(target.id);
+        return *this;
+    }
+    SystemConfig&& before(const SystemConfig& target) && {
+        before(target);
         return std::move(*this);
     }
-    SystemConfig&& after(size_t hash) && {
-        dependencies.after.insert(hash);
+    SystemConfig& after(const SystemConfig& target) & {
+        dependencies.after.insert(target.id);
+        return *this;
+    }
+    SystemConfig&& after(const SystemConfig& target) && {
+        after(target);
         return std::move(*this);
     }
     SystemConfig&& in_set(TypeId set_id) && {
@@ -109,48 +116,47 @@ struct SystemConfigs {
 };
 
 struct SystemBeforeTag {
-    std::size_t hash;
+    SystemId id;
 };
-inline SystemBeforeTag before(HashableSystem auto&& system) {
-    return {.hash = hash_system(system)};
-}
-template<NamedIntoSystem T>
-    requires HashableSystem<typename std::remove_cvref_t<T>::FuncType>
-inline SystemBeforeTag before(T&& system) {
-    return {.hash = hash_system(system.func)};
+inline SystemBeforeTag before(const SystemConfig& system) {
+    return {.id = system.id};
 }
 inline SystemConfig operator|(IntoSystem auto&& system, SystemBeforeTag tag) {
-    return SystemConfig(system).before(tag.hash);
+    auto config = SystemConfig(system);
+    config.dependencies.before.insert(tag.id);
+    return config;
 }
 inline SystemConfig
 operator|(NamedIntoSystem auto&& system, SystemBeforeTag tag) {
-    return SystemConfig(std::forward<decltype(system)>(system))
-        .before(tag.hash);
+    auto config = SystemConfig(std::forward<decltype(system)>(system));
+    config.dependencies.before.insert(tag.id);
+    return config;
 }
 inline SystemConfig operator|(SystemConfig&& config, SystemBeforeTag tag) {
-    return std::move(config).before(tag.hash);
+    config.dependencies.before.insert(tag.id);
+    return std::move(config);
 }
 
 struct SystemAfterTag {
-    std::size_t hash;
+    SystemId id;
 };
-inline SystemAfterTag after(HashableSystem auto&& system) {
-    return {.hash = hash_system(system)};
-}
-template<NamedIntoSystem T>
-    requires HashableSystem<typename std::remove_cvref_t<T>::FuncType>
-inline SystemAfterTag after(T&& system) {
-    return {.hash = hash_system(system.func)};
+inline SystemAfterTag after(const SystemConfig& system) {
+    return {.id = system.id};
 }
 inline SystemConfig operator|(IntoSystem auto&& system, SystemAfterTag tag) {
-    return SystemConfig(system).after(tag.hash);
+    auto config = SystemConfig(system);
+    config.dependencies.after.insert(tag.id);
+    return config;
 }
 inline SystemConfig
 operator|(NamedIntoSystem auto&& system, SystemAfterTag tag) {
-    return SystemConfig(std::forward<decltype(system)>(system)).after(tag.hash);
+    auto config = SystemConfig(std::forward<decltype(system)>(system));
+    config.dependencies.after.insert(tag.id);
+    return config;
 }
 inline SystemConfig operator|(SystemConfig&& config, SystemAfterTag tag) {
-    return std::move(config).after(tag.hash);
+    config.dependencies.after.insert(tag.id);
+    return std::move(config);
 }
 
 struct SystemInSetTag {
@@ -247,9 +253,7 @@ chain(std::convertible_to<SystemConfigs> auto&&... configs) {
         auto& latter = system_configs[i + 1];
         for (auto& former_config : former.systems) {
             for (auto& latter_config : latter.systems) {
-                former_config.dependencies.before.insert(
-                    latter_config.system->hash()
-                );
+                former_config.dependencies.before.insert(latter_config.id);
             }
         }
     }
@@ -266,14 +270,14 @@ chain(std::convertible_to<SystemConfigs> auto&&... configs) {
 
 inline SystemConfigs operator|(SystemConfigs&& config, SystemBeforeTag tag) {
     for (auto& sys_config : config.systems) {
-        sys_config.dependencies.before.insert(tag.hash);
+        sys_config.dependencies.before.insert(tag.id);
     }
     return std::move(config);
 }
 
 inline SystemConfigs operator|(SystemConfigs&& config, SystemAfterTag tag) {
     for (auto& sys_config : config.systems) {
-        sys_config.dependencies.after.insert(tag.hash);
+        sys_config.dependencies.after.insert(tag.id);
     }
     return std::move(config);
 }

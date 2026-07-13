@@ -109,6 +109,10 @@ class World {
         m_schedules.run_systems(schedule, *this);
     }
 
+    Optional<ScheduleDebugInfo> schedule_debug_info(ScheduleId schedule) {
+        return m_schedules.debug_info(schedule);
+    }
+
     void sort_systems() { m_schedules.sort_systems(); }
 
     void set_worker_threads(std::size_t thread_count) {

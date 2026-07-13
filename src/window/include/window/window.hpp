@@ -3,6 +3,7 @@
 #include "app/plugin.hpp"
 #include "ecs/resource_traits.hpp"
 #include "ecs/system_params.hpp"
+#include "ecs/system_set.hpp"
 
 #include <string>
 #include <vector>
@@ -10,6 +11,11 @@
 struct GLFWwindow;
 
 namespace fei {
+
+struct WindowSystems {
+    struct Prepare : SystemSet<Prepare> {};
+    struct SyncSwapchain : SystemSet<SyncSwapchain> {};
+};
 
 struct Window {
     GLFWwindow* glfw_window;
@@ -53,7 +59,10 @@ class WindowPlugin : public Plugin {
                 .height = config.height,
             }
         );
-        app.add_systems(First, window_prepare);
+        app.add_systems(
+            First,
+            window_prepare | in_set<WindowSystems::Prepare>()
+        );
         app.add_systems(Last, update_should_close);
     }
 };

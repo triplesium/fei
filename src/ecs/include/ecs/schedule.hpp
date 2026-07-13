@@ -1,5 +1,6 @@
 #pragma once
 #include "base/log.hpp"
+#include "base/optional.hpp"
 #include "base/thread_pool.hpp"
 #include "ecs/fwd.hpp"
 #include "ecs/system.hpp"
@@ -10,11 +11,26 @@
 #include <concepts>
 #include <cstddef>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace fei {
+
+struct SystemScheduleDebugInfo {
+    SystemId id {0};
+    std::string name;
+    std::vector<SystemId> dependencies;
+    std::size_t topological_index {0};
+    std::size_t batch_index {0};
+};
+
+struct ScheduleDebugInfo {
+    ScheduleId id {0};
+    std::vector<SystemScheduleDebugInfo> systems;
+    std::vector<std::vector<SystemId>> batches;
+};
 
 class ScheduleGraph {
   private:
@@ -42,9 +58,8 @@ class ScheduleGraph {
 
 class Schedule {
   private:
-    std::unordered_map<std::size_t, SystemId> m_system_hash_map;
     std::unordered_map<TypeId, SystemSetConfig> m_system_set_configs;
-    std::unordered_map<TypeId, std::vector<SystemId>> m_system_set_hash_map;
+    std::unordered_map<TypeId, std::vector<SystemId>> m_system_set_members;
     std::unordered_map<SystemId, SystemConfig> m_systems;
     ScheduleGraph m_graph;
     std::vector<std::vector<SystemId>> m_execution_batches;
@@ -108,6 +123,8 @@ class Schedule {
         return m_execution_batches;
     }
 
+    ScheduleDebugInfo debug_info(ScheduleId schedule);
+
   private:
     void ensure_execution_plan();
     void rebuild_execution_plan();
@@ -115,21 +132,18 @@ class Schedule {
     void build_execution_batches();
 
     void resolve_dependencies() {
-        // Build the system hash map & system set hash map
+        // Build the system set map.
         for (auto& [id, config] : m_systems) {
-            if (config.system->hashable()) {
-                m_system_hash_map[config.system->hash()] = id;
-            }
             for (auto set_id : config.dependencies.in_sets) {
-                m_system_set_hash_map[set_id].push_back(id);
+                m_system_set_members[set_id].push_back(id);
                 if (!m_system_set_configs.contains(set_id)) {
                     m_system_set_configs.emplace(set_id, SystemSetConfig {});
                 }
             }
         }
         for (auto& [set_id, set_config] : m_system_set_configs) {
-            if (!m_system_set_hash_map.contains(set_id)) {
-                m_system_set_hash_map[set_id] = {};
+            if (!m_system_set_members.contains(set_id)) {
+                m_system_set_members[set_id] = {};
             }
         }
     }
@@ -139,17 +153,27 @@ class Schedule {
             m_graph.add_node(id);
         }
         for (auto& [id, config] : m_systems) {
-            for (auto before_hash : config.dependencies.before) {
-                auto it = m_system_hash_map.find(before_hash);
-                if (it != m_system_hash_map.end()) {
-                    m_graph.add_edge(id, it->second);
+            for (auto before_id : config.dependencies.before) {
+                if (!m_systems.contains(before_id)) {
+                    fei::fatal(
+                        "System {} 'before' dependency target {} is not "
+                        "registered",
+                        id,
+                        before_id
+                    );
                 }
+                m_graph.add_edge(id, before_id);
             }
-            for (auto after_hash : config.dependencies.after) {
-                auto it = m_system_hash_map.find(after_hash);
-                if (it != m_system_hash_map.end()) {
-                    m_graph.add_edge(it->second, id);
+            for (auto after_id : config.dependencies.after) {
+                if (!m_systems.contains(after_id)) {
+                    fei::fatal(
+                        "System {} 'after' dependency target {} is not "
+                        "registered",
+                        id,
+                        after_id
+                    );
                 }
+                m_graph.add_edge(after_id, id);
             }
             for (auto set_id : config.dependencies.in_sets) {
                 if (!m_system_set_configs.contains(set_id)) {
@@ -157,18 +181,18 @@ class Schedule {
                 }
                 auto& set_config = m_system_set_configs[set_id];
                 for (auto before_set : set_config.dependencies.before) {
-                    if (!m_system_set_hash_map.contains(before_set)) {
+                    if (!m_system_set_members.contains(before_set)) {
                         fei::fatal("SystemSet dependency not found");
                     }
-                    for (auto sys_id : m_system_set_hash_map[before_set]) {
+                    for (auto sys_id : m_system_set_members[before_set]) {
                         m_graph.add_edge(id, sys_id);
                     }
                 }
                 for (auto after_set : set_config.dependencies.after) {
-                    if (!m_system_set_hash_map.contains(after_set)) {
+                    if (!m_system_set_members.contains(after_set)) {
                         fei::fatal("SystemSet dependency not found");
                     }
-                    for (auto sys_id : m_system_set_hash_map[after_set]) {
+                    for (auto sys_id : m_system_set_members[after_set]) {
                         m_graph.add_edge(sys_id, id);
                     }
                 }
@@ -237,6 +261,7 @@ class Schedules {
     std::size_t worker_threads() const;
 
     void run_systems(ScheduleId schedule, World& world);
+    Optional<ScheduleDebugInfo> debug_info(ScheduleId schedule);
 };
 
 } // namespace fei

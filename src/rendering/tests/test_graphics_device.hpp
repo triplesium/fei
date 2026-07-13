@@ -97,6 +97,8 @@ class FakeGraphicsDevice : public GraphicsDevice {
     mutable std::vector<std::shared_ptr<FakeTexture>> textures;
     mutable std::vector<std::shared_ptr<Pipeline>> render_pipelines;
     mutable std::vector<std::shared_ptr<Pipeline>> compute_pipelines;
+    mutable std::shared_ptr<CommandBuffer> next_command_buffer;
+    mutable std::vector<std::shared_ptr<CommandBuffer>> submitted_commands;
     bool fail_render_pipeline_creation {false};
     bool fail_compute_pipeline_creation {false};
 
@@ -129,7 +131,7 @@ class FakeGraphicsDevice : public GraphicsDevice {
     }
 
     std::shared_ptr<CommandBuffer> create_command_buffer() const override {
-        return nullptr;
+        return next_command_buffer;
     }
 
     std::shared_ptr<Pipeline> create_render_pipeline(
@@ -180,7 +182,9 @@ class FakeGraphicsDevice : public GraphicsDevice {
         return std::make_shared<Sampler>();
     }
 
-    void submit_commands(std::shared_ptr<CommandBuffer>) const override {}
+    void submit_commands(std::shared_ptr<CommandBuffer> commands) const override {
+        submitted_commands.push_back(std::move(commands));
+    }
 
     void update_texture(
         std::shared_ptr<Texture> texture,

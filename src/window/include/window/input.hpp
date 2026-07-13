@@ -8,6 +8,11 @@
 #include <unordered_map>
 
 namespace fei {
+
+struct InputSystems {
+    struct Update : SystemSet<Update> {};
+    struct ApplyDevtools : SystemSet<ApplyDevtools> {};
+};
 enum class FEI_REFLECT KeyCode : std::int32_t {
 #define KEY_CODE(name, code) name = (code),
 #include "keycode.def"
@@ -131,7 +136,11 @@ class InputPlugin : public Plugin {
     void setup(App& app) override {
         app.add_resource<KeyInput>();
         app.add_resource<MouseInput>();
-        app.add_systems(PreUpdate, key_input_system, mouse_input_system);
+        app.add_systems(
+            PreUpdate,
+            key_input_system | in_set<InputSystems::Update>(),
+            mouse_input_system | in_set<InputSystems::Update>()
+        );
     }
 };
 

@@ -3,7 +3,6 @@
 #include "base/hash.hpp"
 #include "math/matrix.hpp"
 #include "math/vector.hpp"
-#include "pbr/graph_resources.hpp"
 
 #include <array>
 #include <cmath>
@@ -30,15 +29,9 @@ struct ShadowMapDrawItem {
     uint32 vertex_count {};
 };
 
-struct ShadowMapRenderPassData {
-    std::vector<ShadowMapDrawItem> draw_items;
-    RgTextureHandle shadow;
-    RgTextureHandle depth;
-};
-
 struct ShadowBlurPassData {
-    RgResourceSetHandle resource_set;
-    RgTextureHandle target;
+    std::shared_ptr<ResourceSet> resource_set;
+    std::shared_ptr<Texture> target;
     std::shared_ptr<Pipeline> pipeline;
     std::shared_ptr<Buffer> uniform_buffer;
     std::shared_ptr<const Buffer> quad_vertex_buffer;
@@ -50,19 +43,6 @@ struct ShadowBlurPassData {
     bool horizontal {true};
     bool generate_mipmaps {false};
 };
-
-TextureDescription shadow_depth_texture_desc(const Texture& shadow_texture) {
-    return TextureDescription {
-        .width = shadow_texture.width(),
-        .height = shadow_texture.height(),
-        .depth = 1,
-        .mip_level = 1,
-        .layer = 1,
-        .texture_format = PixelFormat::Depth32Float,
-        .texture_usage = TextureUsage::DepthStencil,
-        .texture_type = TextureType::Texture2D,
-    };
-}
 
 TextureDescription shadow_blur_texture_desc(const Texture& shadow_texture) {
     return TextureDescription {
@@ -144,11 +124,13 @@ void draw_shadow_map_item(
 }
 
 void execute_shadow_blur_pass(
-    RenderGraphContext& context,
+    CommandBuffer& command_buffer,
     const ShadowBlurPassData& data
 ) {
-    auto target = context.texture(data.target);
-    auto& command_buffer = context.command_buffer();
+    auto target = data.target;
+    if (!target || !data.pipeline || !data.resource_set) {
+        return;
+    }
     constexpr float blur_scale = 1.0f;
     BlurUniform blur_uniform {
         .direction =
@@ -179,7 +161,7 @@ void execute_shadow_blur_pass(
     command_buffer.set_viewport(0, 0, data.output_width, data.output_height);
 
     command_buffer.set_render_pipeline(data.pipeline);
-    command_buffer.set_resource_set(0, context.resource_set(data.resource_set));
+    command_buffer.set_resource_set(0, data.resource_set);
     draw_shadow_blur_quad(command_buffer, data);
     command_buffer.end_render_pass();
 
@@ -237,7 +219,8 @@ void init_light_view_uniform_buffer(
 void prepare_light_view_uniform_buffer(
     Query<Entity, const DirectionalLight, const Transform3d, ViewUniformBuffer>
         query_light,
-    ResRO<GraphicsDevice> device
+    ResRO<GraphicsDevice> device,
+    ResRO<RenderQueue> render_queue
 ) {
     for (auto [entity, light, transform, view_uniform_buffer] : query_light) {
         auto view = look_at(
@@ -272,38 +255,13 @@ void prepare_light_view_uniform_buffer(
             .world_position = uniform.world_position,
             .frustum = extract_frustum(logical_clip_from_world),
         };
-        device->update_buffer(
+        render_queue->write_buffer(
             view_uniform_buffer.buffer,
             0,
             &view_uniform_buffer.uniform,
             sizeof(ViewUniform)
         );
     }
-}
-
-RgTextureHandle
-first_shadow_map_graph_handle(RenderGraphBlackboard& blackboard) {
-    if (!blackboard.contains<ShadowMapGraphHandles>()) {
-        return {};
-    }
-    return blackboard.get<ShadowMapGraphHandles>().first();
-}
-
-std::vector<RenderGraphResourceBinding> lighting_resource_bindings(
-    const LightingResources& lighting,
-    RgTextureHandle shadow_map,
-    std::shared_ptr<Texture> fallback_shadow_map
-) {
-    std::vector<RenderGraphResourceBinding> bindings {
-        lighting.uniform_buffer,
-    };
-    if (shadow_map.is_valid()) {
-        bindings.emplace_back(shadow_map);
-    } else {
-        bindings.emplace_back(std::move(fallback_shadow_map));
-    }
-    bindings.emplace_back(lighting.shadow_map_sampler);
-    return bindings;
 }
 
 void setup_lighting(ResRO<GraphicsDevice> device, Commands commands) {
@@ -347,7 +305,7 @@ void prepare_lighting(
         const ShadowMap> query_directional_lights,
     Query<const PointLight, const Transform3d> query_point_lights,
     ResRW<LightingResources> lighting,
-    ResRO<GraphicsDevice> device
+    ResRO<RenderQueue> render_queue
 ) {
     LightingUniform uniform {};
 
@@ -385,7 +343,7 @@ void prepare_lighting(
     }
     uniform.num_point_lights = static_cast<uint32>(point_light_count);
 
-    device->update_buffer(
+    render_queue->write_buffer(
         lighting->uniform_buffer,
         0,
         &uniform,
@@ -425,8 +383,7 @@ void setup_shadow_mapping(
                     .mip_level = 1,
                     .layer = 1,
                     .texture_format = PixelFormat::Depth32Float,
-                    .texture_usage =
-                        {TextureUsage::RenderTarget, TextureUsage::Sampled},
+                    .texture_usage = TextureUsage::DepthStencil,
                     .texture_type = TextureType::Texture2D,
                 }
             )
@@ -534,6 +491,9 @@ void setup_shadow_map(
         commands.entity(entity).add(
             ShadowMap {
                 .texture = shadow_map_texture,
+                .blur_texture = device->create_texture(
+                    shadow_blur_texture_desc(*shadow_map_texture)
+                ),
             }
         );
     }
@@ -575,6 +535,7 @@ void queue_shadow_map_meshes(
         auto& pass = phase->passes.emplace_back();
         pass.view = light_view_id;
         pass.texture = shadow_map.texture;
+        pass.blur_texture = shadow_map.blur_texture;
 
         for (auto [entity, mesh, mesh_material, mesh_transform] :
              query_meshes) {
@@ -611,22 +572,45 @@ void queue_shadow_map_meshes(
     }
 }
 
-void build_shadow_map_passes(
-    ResRW<RenderGraph> render_graph,
+void render_shadow_map_passes(
+    ResRW<RenderFrameContext> frame,
     ResRO<ShadowMapPhase> phase,
+    ResRO<ShadowMappingResources> shadow_mapping_resources,
     ResRO<PipelineCache> pipeline_cache
 ) {
-    if (phase->passes.empty()) {
+    auto* command_buffer = frame->command_buffer();
+    if (!command_buffer || phase->passes.empty()) {
         return;
     }
 
-    auto& handles = render_graph->blackboard().emplace<ShadowMapGraphHandles>();
-
     for (const auto& pass : phase->passes) {
-        std::vector<ShadowMapDrawItem> draw_items;
-        draw_items.reserve(pass.items.size());
+        if (!pass.texture || !shadow_mapping_resources->temp_depth_texture) {
+            continue;
+        }
+        command_buffer->begin_render_pass(
+            RenderPassDescription {
+                .color_attachments =
+                    {
+                        RenderPassColorAttachment {
+                            .texture = pass.texture,
+                            .load_op = LoadOp::Clear,
+                            .clear_color = Color4F {0.0f, 0.0f, 0.0f, 0.0f},
+                        },
+                    },
+                .depth_stencil_attachment = RenderPassDepthStencilAttachment {
+                    .texture = shadow_mapping_resources->temp_depth_texture,
+                    .depth_load_op = LoadOp::Clear,
+                    .stencil_load_op = LoadOp::Clear,
+                    .clear_depth = 1.0f,
+                    .clear_stencil = 0,
+                },
+            }
+        );
+        command_buffer
+            ->set_viewport(0, 0, pass.texture->width(), pass.texture->height());
         for (const auto& item : pass.items) {
-            draw_items.push_back(
+            draw_shadow_map_item(
+                *command_buffer,
                 ShadowMapDrawItem {
                     .pipeline =
                         pipeline_cache->get_render_pipeline(item.pipeline),
@@ -640,78 +624,21 @@ void build_shadow_map_passes(
                 }
             );
         }
-        auto shadow_texture = pass.texture;
-        render_graph->add_pass<ShadowMapRenderPassData>(
-            "shadow_map",
-            [&](RenderGraphBuilder& builder, ShadowMapRenderPassData& data) {
-                data.draw_items = std::move(draw_items);
-                auto shadow =
-                    builder.import_texture("shadow_map", shadow_texture);
-                data.shadow = builder.write_texture(
-                    shadow,
-                    RenderGraphAccess::ColorAttachmentWrite
-                );
-                auto depth = builder.create_texture(
-                    "shadow_depth",
-                    shadow_depth_texture_desc(*shadow_texture)
-                );
-                data.depth = builder.write_texture(
-                    depth,
-                    RenderGraphAccess::DepthStencilWrite
-                );
-                handles.entries.push_back(
-                    ShadowMapGraphEntry {
-                        .texture = shadow_texture,
-                        .handle = data.shadow,
-                    }
-                );
-            },
-            [](RenderGraphContext& context,
-               const ShadowMapRenderPassData& data) {
-                auto shadow = context.texture(data.shadow);
-                auto depth = context.texture(data.depth);
-                auto& command_buffer = context.command_buffer();
-
-                command_buffer.begin_render_pass(
-                    RenderPassDescription {
-                        .color_attachments =
-                            {
-                                RenderPassColorAttachment {
-                                    .texture = shadow,
-                                    .load_op = LoadOp::Clear,
-                                    .clear_color =
-                                        Color4F {0.0f, 0.0f, 0.0f, 0.0f},
-                                },
-                            },
-                        .depth_stencil_attachment =
-                            RenderPassDepthStencilAttachment {
-                                .texture = depth,
-                                .depth_load_op = LoadOp::Clear,
-                                .stencil_load_op = LoadOp::Clear,
-                                .clear_depth = 1.0f,
-                                .clear_stencil = 0,
-                            },
-                    }
-                );
-                command_buffer
-                    .set_viewport(0, 0, shadow->width(), shadow->height());
-
-                for (const auto& item : data.draw_items) {
-                    draw_shadow_map_item(command_buffer, item);
-                }
-                command_buffer.end_render_pass();
-            }
-        );
+        command_buffer->end_render_pass();
     }
 }
 
-void build_shadow_blur_passes(
-    ResRW<RenderGraph> render_graph,
+void render_shadow_blur_passes(
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device,
+    ResRO<ShadowMapPhase> phase,
     ResRO<BlurResources> blur_resources,
     ResRO<FullscreenQuad> fullscreen_quad_resource,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes
 ) {
-    if (!render_graph->blackboard().contains<ShadowMapGraphHandles>()) {
+    auto* command_buffer = frame->command_buffer();
+    if (!command_buffer || phase->passes.empty()) {
         return;
     }
 
@@ -731,71 +658,56 @@ void build_shadow_blur_passes(
         quad_mesh.index_buffer_size() / sizeof(std::uint32_t)
     );
     auto quad_vertex_count = static_cast<uint32>(quad_mesh.vertex_count());
-    auto& handles = render_graph->blackboard().get<ShadowMapGraphHandles>();
-
-    for (auto& entry : handles.entries) {
-        auto& horizontal_data = render_graph->add_pass<ShadowBlurPassData>(
-            "shadow_blur_horizontal",
-            [&](RenderGraphBuilder& builder, ShadowBlurPassData& data) {
-                data.pipeline = blur_pipeline;
-                data.uniform_buffer = blur_uniform_buffer;
-                data.quad_vertex_buffer = quad_vertex_buffer;
-                data.quad_index_buffer =
-                    quad_index_buffer ? *quad_index_buffer : nullptr;
-                data.quad_index_count = quad_index_count;
-                data.quad_vertex_count = quad_vertex_count;
-                data.output_width = entry.texture->width();
-                data.output_height = entry.texture->height();
-                data.horizontal = true;
-                data.generate_mipmaps = false;
-                data.target = builder.create_texture(
-                    "shadow_blur_intermediate",
-                    shadow_blur_texture_desc(*entry.texture)
-                );
-                data.target = builder.write_texture(
-                    data.target,
-                    RenderGraphAccess::ColorAttachmentWrite
-                );
-                data.resource_set = builder.create_resource_set(
-                    "shadow.blur.horizontal",
-                    blur_resource_layout,
-                    {blur_uniform_buffer, entry.handle, blur_sampler}
-                );
-            },
-            [](RenderGraphContext& context, const ShadowBlurPassData& data) {
-                execute_shadow_blur_pass(context, data);
+    for (const auto& pass : phase->passes) {
+        if (!pass.texture || !pass.blur_texture) {
+            continue;
+        }
+        auto horizontal_set = resource_sets->get_or_create(
+            *device,
+            "shadow.blur.horizontal",
+            blur_resource_layout,
+            {blur_uniform_buffer, pass.texture, blur_sampler}
+        );
+        execute_shadow_blur_pass(
+            *command_buffer,
+            ShadowBlurPassData {
+                .resource_set = std::move(horizontal_set),
+                .target = pass.blur_texture,
+                .pipeline = blur_pipeline,
+                .uniform_buffer = blur_uniform_buffer,
+                .quad_vertex_buffer = quad_vertex_buffer,
+                .quad_index_buffer =
+                    quad_index_buffer ? *quad_index_buffer : nullptr,
+                .quad_index_count = quad_index_count,
+                .quad_vertex_count = quad_vertex_count,
+                .output_width = pass.texture->width(),
+                .output_height = pass.texture->height(),
+                .horizontal = true,
+                .generate_mipmaps = false,
             }
         );
-
-        auto horizontal_target = horizontal_data.target;
-        render_graph->add_pass<ShadowBlurPassData>(
-            "shadow_blur_vertical",
-            [&](RenderGraphBuilder& builder, ShadowBlurPassData& data) {
-                data.pipeline = blur_pipeline;
-                data.uniform_buffer = blur_uniform_buffer;
-                data.quad_vertex_buffer = quad_vertex_buffer;
-                data.quad_index_buffer =
-                    quad_index_buffer ? *quad_index_buffer : nullptr;
-                data.quad_index_count = quad_index_count;
-                data.quad_vertex_count = quad_vertex_count;
-                data.output_width = entry.texture->width();
-                data.output_height = entry.texture->height();
-                data.horizontal = false;
-                data.generate_mipmaps = true;
-                data.target = builder.write_texture(
-                    entry.handle,
-                    RenderGraphAccess::ColorAttachmentWrite
-                );
-                data.resource_set = builder.create_resource_set(
-                    "shadow.blur.vertical",
-                    blur_resource_layout,
-                    {blur_uniform_buffer, horizontal_target, blur_sampler}
-                );
-                builder.side_effect();
-                entry.handle = data.target;
-            },
-            [](RenderGraphContext& context, const ShadowBlurPassData& data) {
-                execute_shadow_blur_pass(context, data);
+        auto vertical_set = resource_sets->get_or_create(
+            *device,
+            "shadow.blur.vertical",
+            blur_resource_layout,
+            {blur_uniform_buffer, pass.blur_texture, blur_sampler}
+        );
+        execute_shadow_blur_pass(
+            *command_buffer,
+            ShadowBlurPassData {
+                .resource_set = std::move(vertical_set),
+                .target = pass.texture,
+                .pipeline = blur_pipeline,
+                .uniform_buffer = blur_uniform_buffer,
+                .quad_vertex_buffer = quad_vertex_buffer,
+                .quad_index_buffer =
+                    quad_index_buffer ? *quad_index_buffer : nullptr,
+                .quad_index_count = quad_index_count,
+                .quad_vertex_count = quad_vertex_count,
+                .output_width = pass.texture->width(),
+                .output_height = pass.texture->height(),
+                .horizontal = false,
+                .generate_mipmaps = true,
             }
         );
     }

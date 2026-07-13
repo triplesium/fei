@@ -1,6 +1,7 @@
 #include "pbr/vxgi.hpp"
 
 #include "base/hash.hpp"
+#include "pbr/plugin.hpp"
 #include "scene/scene.hpp"
 
 #include <algorithm>
@@ -13,89 +14,6 @@
 namespace fei {
 
 namespace {
-
-struct VxgiVoxelDrawItem {
-    std::shared_ptr<const Buffer> vertex_buffer;
-    std::shared_ptr<const Buffer> index_buffer;
-    uint32 index_count {};
-    uint32 vertex_count {};
-    std::shared_ptr<const ResourceSet> mesh_set;
-    std::shared_ptr<const ResourceSet> material_set;
-    std::shared_ptr<Pipeline> pipeline;
-};
-
-struct VxgiVoxelizationPassData {
-    std::vector<VxgiVoxelDrawItem> draw_items;
-    RgResourceSetHandle volumes_set;
-    RgResourceSetHandle voxelization_set;
-    RgResourceSetHandle accumulation_set;
-    RgTextureHandle target;
-    uint32 viewport_size {};
-};
-
-struct VxgiClearPassData {
-    RgResourceSetHandle volumes_set;
-    RgResourceSetHandle voxelization_set;
-    RgResourceSetHandle accumulation_set;
-    std::shared_ptr<Pipeline> pipeline;
-    uint32 work_groups {};
-};
-
-struct VxgiResolveVoxelsPassData {
-    RgResourceSetHandle volumes_set;
-    RgResourceSetHandle voxelization_set;
-    RgResourceSetHandle accumulation_set;
-    std::shared_ptr<Pipeline> pipeline;
-    uint32 work_groups {};
-};
-
-struct VxgiInjectRadiancePassData {
-    RgResourceSetHandle volumes_set;
-    RgResourceSetHandle voxelization_set;
-    RgResourceSetHandle lighting_set;
-    RgResourceSetHandle inject_set;
-    std::shared_ptr<Pipeline> pipeline;
-    uint32 work_groups {};
-};
-
-struct VxgiMipmapBasePassData {
-    RgResourceSetHandle resource_set;
-    std::shared_ptr<Pipeline> pipeline;
-    uint32 work_groups {};
-};
-
-struct VxgiMipmapVolumeEntryPassData {
-    RgResourceSetHandle resource_set;
-    uint32 mip_dimension {};
-    uint32 mip_level {};
-    uint32 work_groups {};
-};
-
-struct VxgiMipmapVolumePassData {
-    std::shared_ptr<Pipeline> pipeline;
-    std::shared_ptr<Buffer> uniform_buffer;
-    std::vector<VxgiMipmapVolumeEntryPassData> entries;
-};
-
-struct VxgiInjectPropagationPassData {
-    RgResourceSetHandle resource_set;
-    std::shared_ptr<Pipeline> pipeline;
-    uint32 work_groups {};
-};
-
-TextureDescription texture_desc_from(const Texture& texture) {
-    return TextureDescription {
-        .width = texture.width(),
-        .height = texture.height(),
-        .depth = texture.depth(),
-        .mip_level = texture.mip_level(),
-        .layer = texture.layer(),
-        .texture_format = texture.format(),
-        .texture_usage = texture.usage(),
-        .texture_type = texture.type(),
-        .sample_count = texture.sample_count(),
-    };
-}
 
 std::size_t vxgi_voxel_count(uint32 voxel_resolution) {
     const auto resolution = static_cast<std::size_t>(voxel_resolution);
@@ -126,183 +44,6 @@ OutputDescription single_color_output_description(PixelFormat format) {
             },
         .sample_count = TextureSampleCount::Count1,
     };
-}
-
-std::vector<RenderGraphResourceBinding>
-vxgi_volume_bindings(const VxgiGraphHandles& handles) {
-    return {
-        handles.albedo,
-        handles.normal,
-        handles.emissive,
-        handles.radiance,
-        handles.static_flag,
-    };
-}
-
-std::vector<RenderGraphResourceBinding>
-vxgi_voxelization_bindings(const VxgiVoxelization& voxelization) {
-    return {
-        voxelization.voxelization_uniform_buffer,
-    };
-}
-
-std::vector<RenderGraphResourceBinding>
-vxgi_accumulation_bindings(const VxgiVoxelization& voxelization) {
-    return {
-        voxelization.albedo_accumulation_buffer,
-        voxelization.normal_accumulation_buffer,
-        voxelization.emissive_accumulation_buffer,
-        voxelization.count_accumulation_buffer,
-    };
-}
-
-VxgiGraphHandles& ensure_vxgi_graph_handles(
-    RenderGraphBuilder& builder,
-    RenderGraphBlackboard& blackboard,
-    const VxgiVolumes& volumes
-) {
-    auto& handles = blackboard.contains<VxgiGraphHandles>() ?
-                        blackboard.get<VxgiGraphHandles>() :
-                        blackboard.emplace<VxgiGraphHandles>();
-    if (handles.imported) {
-        return handles;
-    }
-
-    handles.albedo = builder.import_texture("vxgi.albedo", volumes.albedo);
-    handles.normal = builder.import_texture("vxgi.normal", volumes.normal);
-    handles.emissive =
-        builder.import_texture("vxgi.emissive", volumes.emissive);
-    handles.radiance =
-        builder.import_texture("vxgi.radiance", volumes.radiance);
-    handles.static_flag =
-        builder.import_texture("vxgi.static_flag", volumes.static_flag);
-    for (std::size_t i = 0; i < handles.mipmap.size(); ++i) {
-        handles.mipmap[i] = builder.import_texture(
-            std::format("vxgi.mipmap.{}", i),
-            volumes.mipmap[i]
-        );
-    }
-    handles.imported = true;
-    return handles;
-}
-
-RgResourceSetHandle create_vxgi_volumes_set(
-    RenderGraphBuilder& builder,
-    const VxgiVolumes& volumes,
-    const VxgiGraphHandles& handles
-) {
-    return builder.create_resource_set(
-        "vxgi.volumes",
-        volumes.resource_layout,
-        vxgi_volume_bindings(handles)
-    );
-}
-
-RgTextureHandle shadow_map_handle(RenderGraphBlackboard& blackboard) {
-    if (!blackboard.contains<ShadowMapGraphHandles>()) {
-        return {};
-    }
-    return blackboard.get<ShadowMapGraphHandles>().first();
-}
-
-std::vector<RenderGraphResourceBinding> vxgi_mipmap_base_bindings(
-    const VxgiGenerateMipmapBase& mipmap_base,
-    const VxgiGraphHandles& handles
-) {
-    return {
-        mipmap_base.uniform_buffer,
-        handles.radiance,
-        handles.mipmap[0],
-        handles.mipmap[1],
-        handles.mipmap[2],
-        handles.mipmap[3],
-        handles.mipmap[4],
-        handles.mipmap[5],
-    };
-}
-
-std::vector<RenderGraphResourceBinding> vxgi_mipmap_volume_bindings(
-    const VxgiGenerateMipmapVolume& mipmap_volume,
-    const VxgiGenerateMipmapVolume::MipEntry& entry,
-    const VxgiGraphHandles& handles
-) {
-    return {
-        mipmap_volume.uniform_buffer,
-        entry.dst_views[0],
-        entry.dst_views[1],
-        entry.dst_views[2],
-        entry.dst_views[3],
-        entry.dst_views[4],
-        entry.dst_views[5],
-        entry.src_views[0],
-        entry.src_views[1],
-        entry.src_views[2],
-        entry.src_views[3],
-        entry.src_views[4],
-        entry.src_views[5],
-    };
-}
-
-template<class QueryT>
-bool collect_vxgi_voxel_draw_items(
-    QueryT&& query_meshes,
-    const VxgiVoxelization& voxelization,
-    MeshMaterialPipelines& pipelines,
-    const PipelineCache& pipeline_cache,
-    const RenderAssets<GpuMesh>& gpu_meshes,
-    const RenderAssets<PreparedMaterial>& materials,
-    const MeshUniforms& mesh_uniforms,
-    std::vector<VxgiVoxelDrawItem>& draw_items
-) {
-    draw_items.clear();
-
-    for (const auto& [entity, mesh3d, mesh_material3d, transform3d] :
-         query_meshes) {
-        auto gpu_mesh_opt = gpu_meshes.get(mesh3d.mesh);
-        auto material_opt = materials.get(mesh_material3d.material);
-        auto mesh_uniform_it = mesh_uniforms.entries.find(entity);
-        if (!gpu_mesh_opt || !material_opt ||
-            mesh_uniform_it == mesh_uniforms.entries.end()) {
-            return false;
-        }
-
-        auto& gpu_mesh = *gpu_mesh_opt;
-        auto& material = *material_opt;
-        auto pipeline_id = pipelines.find(
-            entity,
-            material,
-            gpu_mesh,
-            voxelization.pipeline_specializer
-        );
-        if (!pipeline_id) {
-            return false;
-        }
-        auto pipeline = pipeline_cache.get_render_pipeline(*pipeline_id);
-        if (!pipeline) {
-            return false;
-        }
-
-        std::shared_ptr<const Buffer> index_buffer;
-        if (auto mesh_index_buffer = gpu_mesh.index_buffer()) {
-            index_buffer = *mesh_index_buffer;
-        }
-
-        draw_items.push_back(
-            VxgiVoxelDrawItem {
-                .vertex_buffer = gpu_mesh.vertex_buffer(),
-                .index_buffer = std::move(index_buffer),
-                .index_count = static_cast<uint32>(
-                    gpu_mesh.index_buffer_size() / sizeof(std::uint32_t)
-                ),
-                .vertex_count = static_cast<uint32>(gpu_mesh.vertex_count()),
-                .mesh_set = mesh_uniform_it->second.resource_set,
-                .material_set = material.resource_set(),
-                .pipeline = std::move(pipeline),
-            }
-        );
-    }
-
-    return true;
 }
 
 } // namespace
@@ -565,7 +306,7 @@ void compute_scene_aabb(
 void prepare_vxgi_voxelization(
     ResRW<VxgiVoxelization> voxelization,
     ResRO<VxgiVolumes> volumes,
-    ResRO<GraphicsDevice> device
+    ResRO<RenderQueue> render_queue
 ) {
     auto axis_size = voxelization->scene_aabb.extent() * 2.0f;
     auto center = voxelization->scene_aabb.center();
@@ -601,7 +342,7 @@ void prepare_vxgi_voxelization(
     uniform.voxel_size = voxel_size;
     auto cube_half_extent = Vector3 {half_size, half_size, half_size};
     uniform.world_min_point = center - cube_half_extent;
-    device->update_buffer(
+    render_queue->write_buffer(
         voxelization->voxelization_uniform_buffer,
         0,
         &uniform,
@@ -654,277 +395,6 @@ void queue_vxgi_voxelization_pipelines(
     }
 }
 
-void add_vxgi_clear_pass(
-    RenderGraph& render_graph,
-    const VxgiVolumes& volumes,
-    const VxgiVoxelization& voxelization
-) {
-    render_graph.add_pass<VxgiClearPassData>(
-        "vxgi_clear",
-        [&](RenderGraphBuilder& builder, VxgiClearPassData& data) {
-            auto& handles = ensure_vxgi_graph_handles(
-                builder,
-                render_graph.blackboard(),
-                volumes
-            );
-            data.volumes_set =
-                create_vxgi_volumes_set(builder, volumes, handles);
-            data.voxelization_set = builder.create_resource_set(
-                "vxgi.voxelization",
-                voxelization.resource_layout,
-                vxgi_voxelization_bindings(voxelization)
-            );
-            data.accumulation_set = builder.create_resource_set(
-                "vxgi.accumulation",
-                voxelization.accumulation_layout,
-                vxgi_accumulation_bindings(voxelization)
-            );
-            data.pipeline = voxelization.clear_pipeline;
-            data.work_groups = (volumes.config.voxel_resolution + 7) / 8;
-
-            handles.albedo = builder.write_texture(
-                handles.albedo,
-                RenderGraphAccess::TextureReadWrite
-            );
-            handles.normal = builder.write_texture(
-                handles.normal,
-                RenderGraphAccess::TextureReadWrite
-            );
-            handles.emissive = builder.write_texture(
-                handles.emissive,
-                RenderGraphAccess::TextureReadWrite
-            );
-            handles.radiance = builder.write_texture(
-                handles.radiance,
-                RenderGraphAccess::TextureReadWrite
-            );
-            handles.static_flag = builder.write_texture(
-                handles.static_flag,
-                RenderGraphAccess::TextureReadWrite
-            );
-        },
-        [](RenderGraphContext& context, const VxgiClearPassData& data) {
-            auto& command_buffer = context.command_buffer();
-            command_buffer.set_compute_pipeline(data.pipeline);
-            command_buffer.set_resource_set(
-                0,
-                context.resource_set(data.volumes_set)
-            );
-            command_buffer.set_resource_set(
-                1,
-                context.resource_set(data.voxelization_set)
-            );
-            command_buffer.set_resource_set(
-                2,
-                context.resource_set(data.accumulation_set)
-            );
-            command_buffer
-                .dispatch(data.work_groups, data.work_groups, data.work_groups);
-        }
-    );
-}
-
-void add_vxgi_resolve_voxels_pass(
-    RenderGraph& render_graph,
-    const VxgiVolumes& volumes,
-    const VxgiVoxelization& voxelization
-) {
-    render_graph.add_pass<VxgiResolveVoxelsPassData>(
-        "vxgi_resolve_voxels",
-        [&](RenderGraphBuilder& builder, VxgiResolveVoxelsPassData& data) {
-            auto& handles = ensure_vxgi_graph_handles(
-                builder,
-                render_graph.blackboard(),
-                volumes
-            );
-            data.volumes_set =
-                create_vxgi_volumes_set(builder, volumes, handles);
-            data.voxelization_set = builder.create_resource_set(
-                "vxgi.voxelization",
-                voxelization.resource_layout,
-                vxgi_voxelization_bindings(voxelization)
-            );
-            data.accumulation_set = builder.create_resource_set(
-                "vxgi.accumulation",
-                voxelization.accumulation_layout,
-                vxgi_accumulation_bindings(voxelization)
-            );
-            data.pipeline = voxelization.resolve_pipeline;
-            data.work_groups = (volumes.config.voxel_resolution + 7) / 8;
-
-            handles.albedo = builder.write_texture(
-                handles.albedo,
-                RenderGraphAccess::TextureReadWrite
-            );
-            handles.normal = builder.write_texture(
-                handles.normal,
-                RenderGraphAccess::TextureReadWrite
-            );
-            handles.emissive = builder.write_texture(
-                handles.emissive,
-                RenderGraphAccess::TextureReadWrite
-            );
-            handles.static_flag = builder.write_texture(
-                handles.static_flag,
-                RenderGraphAccess::TextureReadWrite
-            );
-        },
-        [](RenderGraphContext& context, const VxgiResolveVoxelsPassData& data) {
-            auto& command_buffer = context.command_buffer();
-            command_buffer.set_compute_pipeline(data.pipeline);
-            command_buffer.set_resource_set(
-                0,
-                context.resource_set(data.volumes_set)
-            );
-            command_buffer.set_resource_set(
-                1,
-                context.resource_set(data.voxelization_set)
-            );
-            command_buffer.set_resource_set(
-                2,
-                context.resource_set(data.accumulation_set)
-            );
-            command_buffer
-                .dispatch(data.work_groups, data.work_groups, data.work_groups);
-        }
-    );
-}
-
-void build_vxgi_voxelization_pass(
-    Query<
-        Entity,
-        const Mesh3d,
-        const MeshMaterial3d<StandardMaterial>,
-        const Transform3d> query_meshes,
-    ResRW<VxgiVoxelization> voxelization,
-    ResRW<VxgiVolumes> volumes,
-    ResRW<MeshMaterialPipelines> pipelines,
-    ResRO<PipelineCache> pipeline_cache,
-    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
-    ResRO<RenderAssets<PreparedMaterial>> materials,
-    ResRO<MeshUniforms> mesh_uniforms,
-    ResRW<RenderGraph> render_graph
-) {
-    if (!voxelization->dirty) {
-        return;
-    }
-
-    std::vector<VxgiVoxelDrawItem> draw_items;
-    if (!collect_vxgi_voxel_draw_items(
-            query_meshes,
-            *voxelization,
-            *pipelines,
-            *pipeline_cache,
-            *gpu_meshes,
-            *materials,
-            *mesh_uniforms,
-            draw_items
-        )) {
-        return;
-    }
-
-    add_vxgi_clear_pass(*render_graph, *volumes, *voxelization);
-    if (draw_items.empty()) {
-        voxelization->dirty = false;
-        return;
-    }
-
-    render_graph->add_pass<VxgiVoxelizationPassData>(
-        "vxgi_voxelize",
-        [&](RenderGraphBuilder& builder, VxgiVoxelizationPassData& data) {
-            auto& handles = ensure_vxgi_graph_handles(
-                builder,
-                render_graph->blackboard(),
-                *volumes
-            );
-            data.draw_items = std::move(draw_items);
-            data.volumes_set =
-                create_vxgi_volumes_set(builder, *volumes, handles);
-            data.voxelization_set = builder.create_resource_set(
-                "vxgi.voxelization",
-                voxelization->resource_layout,
-                vxgi_voxelization_bindings(*voxelization)
-            );
-            data.accumulation_set = builder.create_resource_set(
-                "vxgi.accumulation",
-                voxelization->accumulation_layout,
-                vxgi_accumulation_bindings(*voxelization)
-            );
-            data.target = builder.create_texture(
-                "vxgi.voxelization_target",
-                texture_desc_from(*voxelization->temp_texture)
-            );
-            data.target = builder.write_texture(
-                data.target,
-                RenderGraphAccess::ColorAttachmentWrite
-            );
-            data.viewport_size = volumes->config.voxel_resolution;
-
-            handles.albedo = builder.write_texture(
-                handles.albedo,
-                RenderGraphAccess::TextureReadWrite
-            );
-            handles.normal = builder.write_texture(
-                handles.normal,
-                RenderGraphAccess::TextureReadWrite
-            );
-            handles.emissive = builder.write_texture(
-                handles.emissive,
-                RenderGraphAccess::TextureReadWrite
-            );
-            handles.static_flag = builder.write_texture(
-                handles.static_flag,
-                RenderGraphAccess::TextureReadWrite
-            );
-        },
-        [](RenderGraphContext& context, const VxgiVoxelizationPassData& data) {
-            auto& command_buffer = context.command_buffer();
-            command_buffer.begin_render_pass(
-                RenderPassDescription {
-                    .color_attachments = {
-                        RenderPassColorAttachment {
-                            .texture = context.texture(data.target),
-                            .load_op = LoadOp::Clear,
-                            .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
-                        },
-                    },
-                }
-            );
-            command_buffer
-                .set_viewport(0, 0, data.viewport_size, data.viewport_size);
-            auto volumes_set = context.resource_set(data.volumes_set);
-            for (const auto& item : data.draw_items) {
-                command_buffer.set_render_pipeline(item.pipeline);
-                command_buffer.set_resource_set(1, item.mesh_set);
-                command_buffer.set_resource_set(2, item.material_set);
-                command_buffer.set_resource_set(3, volumes_set);
-                command_buffer.set_resource_set(
-                    4,
-                    context.resource_set(data.voxelization_set)
-                );
-                command_buffer.set_resource_set(
-                    5,
-                    context.resource_set(data.accumulation_set)
-                );
-                command_buffer.set_vertex_buffer(item.vertex_buffer);
-                if (item.index_buffer) {
-                    command_buffer.set_index_buffer(
-                        item.index_buffer,
-                        IndexFormat::Uint32
-                    );
-                    command_buffer.draw_indexed(item.index_count);
-                } else {
-                    command_buffer.draw(0, item.vertex_count);
-                }
-            }
-            command_buffer.end_render_pass();
-        }
-    );
-
-    add_vxgi_resolve_voxels_pass(*render_graph, *volumes, *voxelization);
-    voxelization->dirty = false;
-}
-
 void setup_vxgi_generate_mipmap_base(
     ResRO<VxgiVolumes> volumes,
     ResRO<GraphicsDevice> device,
@@ -972,79 +442,23 @@ void setup_vxgi_generate_mipmap_base(
         &uniform,
         sizeof(VxgiGenerateMipmapBase::Uniform)
     );
+    std::array<std::shared_ptr<TextureView>, 6> output_views;
+    for (int i = 0; i < 6; ++i) {
+        output_views[i] = device->create_texture_view(
+            TextureViewDescription {
+                .target = volumes->mipmap[i],
+                .base_mip_level = 0,
+                .mip_levels = 1,
+            }
+        );
+    }
     commands.add_resource(
         VxgiGenerateMipmapBase {
             .pipeline = pipeline,
             .resource_layout = resource_layout,
             .uniform_buffer = uniform_buffer,
+            .output_views = std::move(output_views),
         }
-    );
-}
-
-void add_vxgi_mipmap_base_pass(
-    RenderGraph& render_graph,
-    const VxgiVolumes& volumes,
-    const VxgiGenerateMipmapBase& generate_mipmap_base,
-    std::string name
-) {
-    render_graph.add_pass<VxgiMipmapBasePassData>(
-        std::move(name),
-        [&](RenderGraphBuilder& builder, VxgiMipmapBasePassData& data) {
-            auto& handles = ensure_vxgi_graph_handles(
-                builder,
-                render_graph.blackboard(),
-                volumes
-            );
-            data.pipeline = generate_mipmap_base.pipeline;
-            data.resource_set = builder.create_resource_set(
-                "vxgi.mipmap_base",
-                generate_mipmap_base.resource_layout,
-                vxgi_mipmap_base_bindings(generate_mipmap_base, handles)
-            );
-            data.work_groups = (volumes.config.voxel_resolution / 2) / 8;
-            for (auto& mipmap : handles.mipmap) {
-                mipmap = builder.write_texture(
-                    mipmap,
-                    RenderGraphAccess::TextureReadWrite
-                );
-            }
-        },
-        [](RenderGraphContext& context, const VxgiMipmapBasePassData& data) {
-            auto& command_buffer = context.command_buffer();
-            command_buffer.set_compute_pipeline(data.pipeline);
-            command_buffer.set_resource_set(
-                0,
-                context.resource_set(data.resource_set)
-            );
-            command_buffer
-                .dispatch(data.work_groups, data.work_groups, data.work_groups);
-        }
-    );
-}
-
-void build_vxgi_mipmap_base_pass(
-    ResRO<VxgiVolumes> volumes,
-    ResRO<VxgiGenerateMipmapBase> generate_mipmap_base,
-    ResRW<RenderGraph> render_graph
-) {
-    add_vxgi_mipmap_base_pass(
-        *render_graph,
-        *volumes,
-        *generate_mipmap_base,
-        "vxgi_mipmap_base"
-    );
-}
-
-void build_vxgi_mipmap_base_after_propagation_pass(
-    ResRO<VxgiVolumes> volumes,
-    ResRO<VxgiGenerateMipmapBase> generate_mipmap_base,
-    ResRW<RenderGraph> render_graph
-) {
-    add_vxgi_mipmap_base_pass(
-        *render_graph,
-        *volumes,
-        *generate_mipmap_base,
-        "vxgi_mipmap_base_after_propagation"
     );
 }
 
@@ -1149,112 +563,6 @@ void prepare_vxgi_generate_mipmap_volume(
         volumes->config.voxel_resolution;
 }
 
-void add_vxgi_mipmap_volume_pass(
-    RenderGraph& render_graph,
-    const VxgiVolumes& volumes,
-    const VxgiGenerateMipmapVolume& generate_mipmap_volume,
-    std::string name
-) {
-    if (generate_mipmap_volume.mip_entries.empty()) {
-        return;
-    }
-
-    render_graph.add_pass<VxgiMipmapVolumePassData>(
-        std::move(name),
-        [&](RenderGraphBuilder& builder, VxgiMipmapVolumePassData& data) {
-            auto& handles = ensure_vxgi_graph_handles(
-                builder,
-                render_graph.blackboard(),
-                volumes
-            );
-            data.pipeline = generate_mipmap_volume.pipeline;
-            data.uniform_buffer = generate_mipmap_volume.uniform_buffer;
-            data.entries.clear();
-            data.entries.reserve(generate_mipmap_volume.mip_entries.size());
-            for (const auto& mipmap : handles.mipmap) {
-                builder.read_texture(mipmap, RenderGraphAccess::TextureRead);
-            }
-            for (const auto& entry : generate_mipmap_volume.mip_entries) {
-                auto resource_set = builder.create_resource_set(
-                    "vxgi.mipmap_volume",
-                    generate_mipmap_volume.resource_layout,
-                    vxgi_mipmap_volume_bindings(
-                        generate_mipmap_volume,
-                        entry,
-                        handles
-                    )
-                );
-                data.entries.push_back(
-                    VxgiMipmapVolumeEntryPassData {
-                        .resource_set = resource_set,
-                        .mip_dimension = entry.mip_dimension,
-                        .mip_level = entry.mip_level,
-                        .work_groups = (entry.mip_dimension + 7) / 8,
-                    }
-                );
-            }
-            for (auto& mipmap : handles.mipmap) {
-                mipmap = builder.write_texture(
-                    mipmap,
-                    RenderGraphAccess::TextureReadWrite
-                );
-            }
-        },
-        [](RenderGraphContext& context, const VxgiMipmapVolumePassData& data) {
-            auto& command_buffer = context.command_buffer();
-            command_buffer.set_compute_pipeline(data.pipeline);
-
-            for (const auto& entry : data.entries) {
-                VxgiGenerateMipmapVolume::Uniform uniform {
-                    .mip_dimension =
-                        Vector3 {static_cast<float>(entry.mip_dimension)},
-                    .mip_level = static_cast<int>(entry.mip_level),
-                };
-                command_buffer.update_buffer(
-                    data.uniform_buffer,
-                    &uniform,
-                    sizeof(VxgiGenerateMipmapVolume::Uniform)
-                );
-                command_buffer.set_resource_set(
-                    0,
-                    context.resource_set(entry.resource_set)
-                );
-                command_buffer.dispatch(
-                    entry.work_groups,
-                    entry.work_groups,
-                    entry.work_groups
-                );
-            }
-        }
-    );
-}
-
-void build_vxgi_mipmap_volume_pass(
-    ResRO<VxgiVolumes> volumes,
-    ResRO<VxgiGenerateMipmapVolume> generate_mipmap_volume,
-    ResRW<RenderGraph> render_graph
-) {
-    add_vxgi_mipmap_volume_pass(
-        *render_graph,
-        *volumes,
-        *generate_mipmap_volume,
-        "vxgi_mipmap_volume"
-    );
-}
-
-void build_vxgi_mipmap_volume_after_propagation_pass(
-    ResRO<VxgiVolumes> volumes,
-    ResRO<VxgiGenerateMipmapVolume> generate_mipmap_volume,
-    ResRW<RenderGraph> render_graph
-) {
-    add_vxgi_mipmap_volume_pass(
-        *render_graph,
-        *volumes,
-        *generate_mipmap_volume,
-        "vxgi_mipmap_volume_after_propagation"
-    );
-}
-
 void setup_inject_radiance(
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiVoxelization> voxelization,
@@ -1305,90 +613,15 @@ void setup_inject_radiance(
 
 void prepare_inject_radiance(
     ResRW<VxgiInjectRadiance> inject_radiance,
-    ResRO<GraphicsDevice> device
+    ResRO<RenderQueue> render_queue
 ) {
     VxgiInjectRadianceUniform uniform {};
 
-    device->update_buffer(
+    render_queue->write_buffer(
         inject_radiance->uniform_buffer,
         0,
         &uniform,
         sizeof(VxgiInjectRadianceUniform)
-    );
-}
-
-void build_vxgi_inject_radiance_pass(
-    ResRO<VxgiVolumes> volumes,
-    ResRO<VxgiVoxelization> voxelization,
-    ResRO<VxgiInjectRadiance> inject_radiance,
-    ResRO<LightingResources> lighting,
-    ResRO<RenderingDefaults> rendering_defaults,
-    ResRW<RenderGraph> render_graph
-) {
-    render_graph->add_pass<VxgiInjectRadiancePassData>(
-        "vxgi_inject_radiance",
-        [&](RenderGraphBuilder& builder, VxgiInjectRadiancePassData& data) {
-            auto& handles = ensure_vxgi_graph_handles(
-                builder,
-                render_graph->blackboard(),
-                *volumes
-            );
-            data.volumes_set =
-                create_vxgi_volumes_set(builder, *volumes, handles);
-            data.voxelization_set = builder.create_resource_set(
-                "vxgi.voxelization",
-                voxelization->resource_layout,
-                vxgi_voxelization_bindings(*voxelization)
-            );
-            data.lighting_set = builder.create_resource_set(
-                "lighting",
-                lighting->resource_layout,
-                lighting_resource_bindings(
-                    *lighting,
-                    shadow_map_handle(render_graph->blackboard()),
-                    rendering_defaults->default_texture
-                )
-            );
-            data.inject_set = builder.create_resource_set(
-                "vxgi.inject_radiance",
-                inject_radiance->resource_layout,
-                {inject_radiance->uniform_buffer}
-            );
-            data.pipeline = inject_radiance->pipeline;
-            data.work_groups = volumes->config.voxel_resolution / 8;
-
-            handles.normal = builder.write_texture(
-                handles.normal,
-                RenderGraphAccess::TextureReadWrite
-            );
-            handles.radiance = builder.write_texture(
-                handles.radiance,
-                RenderGraphAccess::TextureReadWrite
-            );
-        },
-        [](RenderGraphContext& context,
-           const VxgiInjectRadiancePassData& data) {
-            auto& command_buffer = context.command_buffer();
-            command_buffer.set_compute_pipeline(data.pipeline);
-            command_buffer.set_resource_set(
-                0,
-                context.resource_set(data.volumes_set)
-            );
-            command_buffer.set_resource_set(
-                1,
-                context.resource_set(data.voxelization_set)
-            );
-            command_buffer.set_resource_set(
-                2,
-                context.resource_set(data.lighting_set)
-            );
-            command_buffer.set_resource_set(
-                3,
-                context.resource_set(data.inject_set)
-            );
-            command_buffer
-                .dispatch(data.work_groups, data.work_groups, data.work_groups);
-        }
     );
 }
 
@@ -1460,48 +693,6 @@ void setup_inject_propagation(
     );
 }
 
-void build_vxgi_inject_propagation_pass(
-    ResRO<VxgiVolumes> volumes,
-    ResRO<VxgiInjectPropagation> inject_propagation,
-    ResRW<RenderGraph> render_graph
-) {
-    render_graph->add_pass<VxgiInjectPropagationPassData>(
-        "vxgi_inject_propagation",
-        [&](RenderGraphBuilder& builder, VxgiInjectPropagationPassData& data) {
-            auto& handles = ensure_vxgi_graph_handles(
-                builder,
-                render_graph->blackboard(),
-                *volumes
-            );
-            data.resource_set = builder.create_resource_set(
-                "vxgi.inject_propagation",
-                inject_propagation->resource_layout,
-                vxgi_inject_propagation_resource_bindings(
-                    *inject_propagation,
-                    handles
-                )
-            );
-            handles.radiance = builder.write_texture(
-                handles.radiance,
-                RenderGraphAccess::TextureReadWrite
-            );
-            data.pipeline = inject_propagation->pipeline;
-            data.work_groups = volumes->config.voxel_resolution / 8;
-        },
-        [](RenderGraphContext& context,
-           const VxgiInjectPropagationPassData& data) {
-            auto& command_buffer = context.command_buffer();
-            command_buffer.set_compute_pipeline(data.pipeline);
-            command_buffer.set_resource_set(
-                0,
-                context.resource_set(data.resource_set)
-            );
-            command_buffer
-                .dispatch(data.work_groups, data.work_groups, data.work_groups);
-        }
-    );
-}
-
 void setup_vxgi_resources(ResRO<GraphicsDevice> device, Commands commands) {
     auto resource_layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
@@ -1546,7 +737,7 @@ void prepare_vxgi_resources(
     ResRW<VxgiResources> vxgi,
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiVoxelization> voxelization,
-    ResRO<GraphicsDevice> device
+    ResRO<RenderQueue> render_queue
 ) {
     VxgiUniform uniform {};
     auto axis_size = voxelization->scene_aabb.extent() * 2.0f;
@@ -1562,8 +753,8 @@ void prepare_vxgi_resources(
     uniform.volume_dimension =
         static_cast<int>(volumes->config.voxel_resolution);
 
-    device
-        ->update_buffer(vxgi->uniform_buffer, 0, &uniform, sizeof(VxgiUniform));
+    render_queue
+        ->write_buffer(vxgi->uniform_buffer, 0, &uniform, sizeof(VxgiUniform));
 }
 
 void VxgiPlugin::setup(App& app) {
@@ -1578,7 +769,7 @@ void VxgiPlugin::setup(App& app) {
                     setup_vxgi_generate_mipmap_base,
                     setup_vxgi_generate_mipmap_volume,
                     setup_vxgi_resources)
-            ) | after(setup_lighting)
+            ) | in_set<PbrSystems::StartupVxgi>()
         )
         .add_systems(
             RenderUpdate,
@@ -1588,21 +779,26 @@ void VxgiPlugin::setup(App& app) {
                 prepare_vxgi_generate_mipmap_volume,
                 prepare_inject_radiance,
                 prepare_vxgi_resources
-            ) | after(setup_shadow_map) |
-                in_set<RenderingSystems::PrepareResources>(),
+            ) | in_set<RenderingSystems::PrepareResources>() |
+                in_set<PbrSystems::PrepareVxgi>(),
             chain(
                 mark_vxgi_voxelization_dirty,
                 queue_vxgi_voxelization_pipelines
             ) | in_set<RenderingSystems::Queue>(),
             chain(
-                build_vxgi_voxelization_pass,
-                build_vxgi_inject_radiance_pass,
-                build_vxgi_mipmap_base_pass,
-                build_vxgi_mipmap_volume_pass,
-                build_vxgi_inject_propagation_pass,
-                build_vxgi_mipmap_base_after_propagation_pass,
-                build_vxgi_mipmap_volume_after_propagation_pass
-            ) | in_set<RenderingSystems::BuildRenderGraph>()
+                FEI_NAMED_SYSTEM(render_vxgi_voxelization_pass),
+                FEI_NAMED_SYSTEM(render_vxgi_inject_radiance_pass),
+                FEI_NAMED_SYSTEM(render_vxgi_mipmap_base_pass),
+                FEI_NAMED_SYSTEM(render_vxgi_mipmap_volume_pass),
+                FEI_NAMED_SYSTEM(render_vxgi_inject_propagation_pass),
+                FEI_NAMED_SYSTEM(
+                    render_vxgi_mipmap_base_after_propagation_pass
+                ),
+                FEI_NAMED_SYSTEM(
+                    render_vxgi_mipmap_volume_after_propagation_pass
+                )
+            ) | in_set<RenderingSystems::Prepass>() |
+                in_set<PbrSystems::VxgiPass>()
         );
 }
 

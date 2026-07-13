@@ -16,11 +16,10 @@
 #include "rendering/mesh/mesh.hpp"
 #include "rendering/mesh/mesh_uniform.hpp"
 #include "rendering/render_asset.hpp"
-#include "rendering/render_graph.hpp"
+#include "rendering/render_frame.hpp"
+#include "rendering/resource_set_cache.hpp"
 #include "rendering/shader_cache.hpp"
 #include "rendering/visibility.hpp"
-#include "window/window.hpp"
-
 namespace fei {
 
 void setup_deferred_pipelines(
@@ -54,50 +53,61 @@ void queue_deferred_prepass_meshes(
     ResRW<PipelineCache>
 );
 
-void build_deferred_prepass(
-    ResRW<RenderGraph> render_graph,
+void deferred_prepass(
+    ResRW<RenderFrameContext> frame,
     ResRO<DeferredPrepassPhase> phase,
     ResRO<RenderTarget> target,
-    ResRO<Window> window,
+    ResRO<DeferredViewTargets> targets,
     ResRO<PipelineCache> pipeline_cache
 );
 
-void build_direct_lighting_pass(
+void direct_lighting_pass(
     Query<const MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    Query<const ShadowMap> query_shadow_maps,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
-    ResRW<RenderGraph> render_graph,
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device,
+    ResRO<DeferredViewTargets> targets,
     ResRO<LightingResources> lighting_resources,
     ResRO<DeferredRenderPipelines> pipelines,
     ResRO<PipelineCache> pipeline_cache,
     ResRO<FullscreenQuad> fullscreen_quad,
-    ResRO<Window> window,
     ResRO<RenderingDefaults> rendering_defaults
 );
 
-void build_indirect_lighting_pass(
+void indirect_lighting_pass(
     Query<const MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
-    ResRW<RenderGraph> render_graph,
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device,
+    ResRO<DeferredViewTargets> targets,
+    ResRO<VxgiVolumes> volumes,
     ResRO<VxgiResources> vxgi_resources,
-    ResRO<DeferredRenderPipelines> pipelines,
-    ResRO<PipelineCache> pipeline_cache,
-    ResRO<FullscreenQuad> fullscreen_quad,
-    ResRO<Window> window
-);
-
-void build_composite_pass(
-    Query<const MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
-    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
-    ResRW<RenderGraph> render_graph,
-    ResRO<RenderTarget> target,
     ResRO<DeferredRenderPipelines> pipelines,
     ResRO<PipelineCache> pipeline_cache,
     ResRO<FullscreenQuad> fullscreen_quad
 );
 
-void build_present_composite_pass(
+void composite_pass(
+    Query<const MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device,
+    ResRO<DeferredViewTargets> targets,
+    ResRO<DeferredRenderPipelines> pipelines,
+    ResRO<PipelineCache> pipeline_cache,
+    ResRO<FullscreenQuad> fullscreen_quad
+);
+
+void present_composite_pass(
     Optional<ResRO<RenderAssets<GpuMesh>>> gpu_meshes,
-    ResRW<RenderGraph> render_graph,
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device,
+    ResRO<DeferredViewTargets> targets,
     Optional<ResRO<DeferredRenderPipelines>> pipelines,
     Optional<ResRO<PipelineCache>> pipeline_cache,
     Optional<ResRO<FullscreenQuad>> fullscreen_quad,

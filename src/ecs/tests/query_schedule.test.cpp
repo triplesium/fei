@@ -14,6 +14,8 @@ namespace {
 struct ScheduleMergeFirstSet : SystemSet<ScheduleMergeFirstSet> {};
 struct ScheduleMergeSecondSet : SystemSet<ScheduleMergeSecondSet> {};
 struct ScheduleMergeThirdSet : SystemSet<ScheduleMergeThirdSet> {};
+struct ScheduleInstallSet : SystemSet<ScheduleInstallSet> {};
+struct ScheduleInstalledSet : SystemSet<ScheduleInstalledSet> {};
 struct RunIfCounter {
     int calls = 0;
 };
@@ -32,7 +34,7 @@ void scheduled_install_second(Commands commands, ResRW<ScheduleTrace> trace) {
     trace->entries.emplace_back("install");
     commands.add_system(
         TestSchedule,
-        scheduled_second | after(scheduled_install_second)
+        scheduled_second | in_set<ScheduleInstalledSet>()
     );
 }
 
@@ -174,7 +176,14 @@ TEST_CASE("ECS schedules run systems added after sorting", "[ecs][schedule]") {
     world.add_resource(CommandsQueue {});
     world.add_resource(ScheduleTrace {});
 
-    auto handles = world.add_systems(TestSchedule, scheduled_first);
+    world.configure_sets(
+        TestSchedule,
+        chain(ScheduleFirstSet {}, ScheduleSecondSet {})
+    );
+    auto handles = world.add_systems(
+        TestSchedule,
+        scheduled_first | in_set<ScheduleFirstSet>()
+    );
     REQUIRE(handles.size() == 1);
     REQUIRE(handles[0].schedule == TestSchedule);
 
@@ -188,7 +197,7 @@ TEST_CASE("ECS schedules run systems added after sorting", "[ecs][schedule]") {
     world.resource<ScheduleTrace>().entries.clear();
     auto added_handles = world.add_systems(
         TestSchedule,
-        scheduled_second | after(scheduled_first)
+        scheduled_second | in_set<ScheduleSecondSet>()
     );
     REQUIRE(added_handles.size() == 1);
     REQUIRE(added_handles[0].schedule == TestSchedule);
@@ -209,10 +218,13 @@ TEST_CASE("ECS schedules remove systems by handle", "[ecs][schedule]") {
     world.add_resource(CommandsQueue {});
     world.add_resource(ScheduleTrace {});
 
+    auto first_config = SystemConfig(scheduled_first);
+    auto second_config = SystemConfig(scheduled_second);
+    second_config.after(first_config);
     auto handles = world.add_systems(
         TestSchedule,
-        scheduled_first,
-        scheduled_second | after(scheduled_first)
+        std::move(first_config),
+        std::move(second_config)
     );
     REQUIRE(handles.size() == 2);
     REQUIRE(world.remove_system(handles[1]));
@@ -295,7 +307,14 @@ TEST_CASE(
     world.add_resource(CommandsQueue {});
     world.add_resource(ScheduleTrace {});
 
-    world.add_systems(TestSchedule, scheduled_install_second);
+    world.configure_sets(
+        TestSchedule,
+        chain(ScheduleInstallSet {}, ScheduleInstalledSet {})
+    );
+    world.add_systems(
+        TestSchedule,
+        scheduled_install_second | in_set<ScheduleInstallSet>()
+    );
 
     world.run_schedule(TestSchedule);
     REQUIRE(

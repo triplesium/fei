@@ -46,8 +46,12 @@ class RecordingCommandBuffer : public CommandBuffer {
         resource_sets.at(slot) = std::move(resource_set);
     }
 
-    void
-    update_buffer(std::shared_ptr<Buffer>, const void*, std::size_t) override {}
+    void update_buffer(
+        std::shared_ptr<Buffer>,
+        uint32,
+        const void*,
+        std::size_t
+    ) override {}
 
     void draw(std::size_t start, std::size_t count) override {
         draw_start = start;

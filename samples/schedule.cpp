@@ -60,17 +60,32 @@ int main() {
         chain(all(Set1 {}), Set2 {}),
         chain(Set4 {}, Set3 {})
     );
-    schedule.add_systems(
-        test1,
-        test2_before1_after3 | before(test1) | after(test3),
-        test3,
-        test4_after2 | after(test2_before1_after3),
-        test5_in_set1 | in_set<Set1>(),
-        test6_in_set1_before5 | in_set<Set1>() | before(test5_in_set1),
-        test7_in_set2 | in_set<Set2>(),
-        test8_in_set2_before4 | in_set<Set2>() | before(test4_after2),
+
+    auto test1_config = SystemConfig(test1);
+    auto test2_config = SystemConfig(test2_before1_after3);
+    auto test3_config = SystemConfig(test3);
+    auto test4_config = SystemConfig(test4_after2);
+    auto test5_config = SystemConfig(test5_in_set1);
+    auto test6_config = SystemConfig(test6_in_set1_before5);
+    auto test8_config = SystemConfig(test8_in_set2_before4);
+    test2_config.before(test1_config).after(test3_config);
+    test4_config.after(test2_config);
+    test6_config.before(test5_config);
+    test8_config.before(test4_config);
+    auto chained_configs =
         chain(chain1_before1, chain(chain2_before1, chain3_before1)) |
-            before(test1),
+        before(test1_config);
+
+    schedule.add_systems(
+        std::move(test1_config),
+        std::move(test2_config),
+        std::move(test3_config),
+        std::move(test4_config),
+        std::move(test5_config) | in_set<Set1>(),
+        std::move(test6_config) | in_set<Set1>(),
+        test7_in_set2 | in_set<Set2>(),
+        std::move(test8_config) | in_set<Set2>(),
+        std::move(chained_configs),
         test9_in_set3 | in_set<Set3>(),
         test10_in_set4 | in_set<Set4>(),
         all(nested1 | in_set<Set4>(), all(nested2)) | in_set<Set2>()

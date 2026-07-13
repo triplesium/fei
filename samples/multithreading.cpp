@@ -94,11 +94,16 @@ World make_world(std::size_t worker_threads) {
         world.add_component(entity, Velocity {1.0f, 0.25f});
     }
 
+    auto read_positions_config = SystemConfig(read_positions);
+    auto read_velocities_config = SystemConfig(read_velocities);
+    auto integrate_positions_config = SystemConfig(integrate_positions);
+    integrate_positions_config.after(read_positions_config);
+    integrate_positions_config.after(read_velocities_config);
     world.add_systems(
         DemoSchedule,
-        read_positions,
-        read_velocities,
-        integrate_positions | after(read_positions) | after(read_velocities)
+        std::move(read_positions_config),
+        std::move(read_velocities_config),
+        std::move(integrate_positions_config)
     );
     world.sort_systems();
 

@@ -1,10 +1,9 @@
-#include "pbr/graph_resources.hpp"
 #include "pbr/passes/deferred_internal.hpp"
 
-#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <utility>
+#include <vector>
 
 namespace fei {
 
@@ -17,46 +16,6 @@ struct FullscreenQuadPassData {
     uint32 index_count {};
     uint32 vertex_count {};
 };
-
-struct DeferredLightingPassData {
-    RgResourceSetHandle gbuffer_set;
-    RgResourceSetHandle lighting_set;
-    RgResourceSetHandle vxgi_set;
-    RgTextureHandle target;
-    FullscreenQuadPassData fullscreen_quad;
-    std::shared_ptr<Pipeline> pipeline;
-};
-
-struct DeferredCompositePassData {
-    RgResourceSetHandle gbuffer_set;
-    RgResourceSetHandle composite_set;
-    RgTextureHandle target;
-    FullscreenQuadPassData fullscreen_quad;
-    std::shared_ptr<Pipeline> pipeline;
-};
-
-struct PresentCompositePassData {
-    RgResourceSetHandle present_set;
-    std::shared_ptr<const Framebuffer> target_framebuffer;
-    FullscreenQuadPassData fullscreen_quad;
-    std::shared_ptr<Pipeline> pipeline;
-    uint32 target_width {};
-    uint32 target_height {};
-};
-
-TextureDescription
-make_render_texture_desc(uint32 width, uint32 height, PixelFormat format) {
-    return TextureDescription {
-        .width = width,
-        .height = height,
-        .depth = 1,
-        .mip_level = 1,
-        .layer = 1,
-        .texture_format = format,
-        .texture_usage = {TextureUsage::RenderTarget, TextureUsage::Sampled},
-        .texture_type = TextureType::Texture2D,
-    };
-}
 
 FullscreenQuadPassData make_fullscreen_quad_pass_data(
     std::shared_ptr<const ResourceSet> view_set,
@@ -89,13 +48,15 @@ void draw_fullscreen_quad(
 
 template<typename Draw>
 void execute_fullscreen_lighting_pass(
-    RenderGraphContext& context,
+    CommandBuffer& command_buffer,
     const FullscreenQuadPassData& fullscreen_quad,
     std::shared_ptr<Pipeline> pipeline,
-    std::shared_ptr<Texture> target,
+    const std::shared_ptr<Texture>& target,
     Draw&& draw
 ) {
-    auto& command_buffer = context.command_buffer();
+    if (!target) {
+        return;
+    }
     command_buffer.begin_render_pass(
         RenderPassDescription {
             .color_attachments = {
@@ -108,300 +69,259 @@ void execute_fullscreen_lighting_pass(
         }
     );
     command_buffer.set_viewport(0, 0, target->width(), target->height());
-    if (!pipeline) {
-        command_buffer.end_render_pass();
-        return;
+    if (pipeline) {
+        command_buffer.set_render_pipeline(std::move(pipeline));
+        command_buffer.set_resource_set(0, fullscreen_quad.view_set);
+        std::forward<Draw>(draw)(command_buffer);
+        draw_fullscreen_quad(command_buffer, fullscreen_quad);
     }
-
-    command_buffer.set_render_pipeline(std::move(pipeline));
-    command_buffer.set_resource_set(0, fullscreen_quad.view_set);
-    std::forward<Draw>(draw)(command_buffer);
-    draw_fullscreen_quad(command_buffer, fullscreen_quad);
     command_buffer.end_render_pass();
+}
+
+std::vector<std::shared_ptr<const BindableResource>> gbuffer_bindings(
+    const DeferredViewTargets& targets,
+    const std::shared_ptr<Sampler>& sampler
+) {
+    return {
+        targets.position_ao,
+        targets.normal_roughness,
+        targets.albedo_metallic,
+        targets.specular,
+        targets.emissive_depth,
+        sampler,
+    };
+}
+
+std::shared_ptr<Texture> first_shadow_map(Query<const ShadowMap> query) {
+    for (auto [shadow_map] : query) {
+        if (shadow_map.texture) {
+            return shadow_map.texture;
+        }
+    }
+    return nullptr;
+}
+
+std::vector<std::shared_ptr<const BindableResource>> lighting_bindings(
+    const LightingResources& lighting,
+    std::shared_ptr<Texture> shadow_map,
+    std::shared_ptr<Texture> fallback
+) {
+    return {
+        lighting.uniform_buffer,
+        shadow_map ? std::move(shadow_map) : std::move(fallback),
+        lighting.shadow_map_sampler,
+    };
+}
+
+std::vector<std::shared_ptr<const BindableResource>>
+vxgi_bindings(const VxgiResources& resources, const VxgiVolumes& volumes) {
+    return {
+        resources.uniform_buffer,
+        volumes.normal,
+        volumes.radiance,
+        volumes.mipmap[0],
+        volumes.mipmap[1],
+        volumes.mipmap[2],
+        volumes.mipmap[3],
+        volumes.mipmap[4],
+        volumes.mipmap[5],
+        resources.voxel_sampler,
+    };
 }
 
 } // namespace
 
-void build_direct_lighting_pass(
+void direct_lighting_pass(
     Query<const MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    Query<const ShadowMap> query_shadow_maps,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
-    ResRW<RenderGraph> render_graph,
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device,
+    ResRO<DeferredViewTargets> targets,
     ResRO<LightingResources> lighting_resources,
     ResRO<DeferredRenderPipelines> pipelines,
     ResRO<PipelineCache> pipeline_cache,
     ResRO<FullscreenQuad> fullscreen_quad,
-    ResRO<Window> window,
     ResRO<RenderingDefaults> rendering_defaults
 ) {
-    if (!render_graph->blackboard().contains<DeferredGBufferGraphHandles>()) {
+    auto* command_buffer = frame->command_buffer();
+    if (!command_buffer || !targets->valid() || query_cameras.empty()) {
         return;
     }
-
     auto [mesh_view_resource_set] = query_cameras.first();
     auto gpu_mesh = gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id());
     if (!gpu_mesh) {
         return;
     }
 
-    auto fullscreen_quad_data = make_fullscreen_quad_pass_data(
-        mesh_view_resource_set.resource_set,
-        gpu_mesh.value()
+    auto gbuffer_set = resource_sets->get_or_create(
+        *device,
+        "deferred.gbuffer",
+        pipelines->gbuffer_resource_layout,
+        gbuffer_bindings(*targets, pipelines->point_sampler)
+    );
+    auto lighting_set = resource_sets->get_or_create(
+        *device,
+        "lighting",
+        lighting_resources->resource_layout,
+        lighting_bindings(
+            *lighting_resources,
+            first_shadow_map(query_shadow_maps),
+            rendering_defaults->default_texture
+        )
     );
     auto pipeline = pipeline_cache->get_render_pipeline(
         pipelines->direct_lighting_pipeline
     );
-
-    auto& lighting =
-        render_graph->blackboard().contains<DeferredLightingGraphHandles>() ?
-            render_graph->blackboard().get<DeferredLightingGraphHandles>() :
-            render_graph->blackboard().emplace<DeferredLightingGraphHandles>();
-    const auto& gbuffer =
-        render_graph->blackboard().get<DeferredGBufferGraphHandles>();
-
-    render_graph->add_pass<DeferredLightingPassData>(
-        "direct_lighting",
-        [&](RenderGraphBuilder& builder, DeferredLightingPassData& data) {
-            data.fullscreen_quad = fullscreen_quad_data;
-            data.pipeline = pipeline;
-            data.gbuffer_set = builder.create_resource_set(
-                "deferred.gbuffer",
-                pipelines->gbuffer_resource_layout,
-                deferred_gbuffer_resource_bindings(
-                    gbuffer,
-                    pipelines->point_sampler
-                )
-            );
-            data.lighting_set = builder.create_resource_set(
-                "lighting",
-                lighting_resources->resource_layout,
-                lighting_resource_bindings(
-                    *lighting_resources,
-                    first_shadow_map_graph_handle(render_graph->blackboard()),
-                    rendering_defaults->default_texture
-                )
-            );
-            data.target = builder.create_texture(
-                "direct_lighting",
-                make_render_texture_desc(
-                    window->width,
-                    window->height,
-                    PixelFormat::Rgba16Float
-                )
-            );
-            data.target = builder.write_texture(
-                data.target,
-                RenderGraphAccess::ColorAttachmentWrite
-            );
-            lighting.direct = data.target;
-        },
-        [](RenderGraphContext& context, const DeferredLightingPassData& data) {
-            auto gbuffer_set = context.resource_set(data.gbuffer_set);
-            auto lighting_set = context.resource_set(data.lighting_set);
-            auto target = context.texture(data.target);
-            execute_fullscreen_lighting_pass(
-                context,
-                data.fullscreen_quad,
-                data.pipeline,
-                target,
-                [gbuffer_set, lighting_set](CommandBuffer& command_buffer) {
-                    command_buffer.set_resource_set(1, gbuffer_set);
-                    command_buffer.set_resource_set(2, lighting_set);
-                }
-            );
-        }
-    );
-}
-
-void build_indirect_lighting_pass(
-    Query<const MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
-    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
-    ResRW<RenderGraph> render_graph,
-    ResRO<VxgiResources> vxgi_resources,
-    ResRO<DeferredRenderPipelines> pipelines,
-    ResRO<PipelineCache> pipeline_cache,
-    ResRO<FullscreenQuad> fullscreen_quad,
-    ResRO<Window> window
-) {
-    if (!render_graph->blackboard().contains<DeferredGBufferGraphHandles>()) {
-        return;
+    if (!gbuffer_set || !lighting_set) {
+        pipeline.reset();
     }
-
-    auto [mesh_view_resource_set] = query_cameras.first();
-    auto gpu_mesh = gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id());
-    if (!gpu_mesh) {
-        return;
-    }
-
     auto fullscreen_quad_data = make_fullscreen_quad_pass_data(
         mesh_view_resource_set.resource_set,
         gpu_mesh.value()
     );
-    auto pipeline = pipeline_cache->get_render_pipeline(
-        pipelines->indirect_lighting_pipeline
-    );
-
-    auto& lighting =
-        render_graph->blackboard().contains<DeferredLightingGraphHandles>() ?
-            render_graph->blackboard().get<DeferredLightingGraphHandles>() :
-            render_graph->blackboard().emplace<DeferredLightingGraphHandles>();
-    const auto& gbuffer =
-        render_graph->blackboard().get<DeferredGBufferGraphHandles>();
-
-    render_graph->add_pass<DeferredLightingPassData>(
-        "indirect_lighting",
-        [&](RenderGraphBuilder& builder, DeferredLightingPassData& data) {
-            data.fullscreen_quad = fullscreen_quad_data;
-            data.pipeline = pipeline;
-            data.gbuffer_set = builder.create_resource_set(
-                "deferred.gbuffer",
-                pipelines->gbuffer_resource_layout,
-                deferred_gbuffer_resource_bindings(
-                    gbuffer,
-                    pipelines->point_sampler
-                )
-            );
-            if (render_graph->blackboard().contains<VxgiGraphHandles>()) {
-                auto& vxgi_handles =
-                    render_graph->blackboard().get<VxgiGraphHandles>();
-                data.vxgi_set = builder.create_resource_set(
-                    "vxgi",
-                    vxgi_resources->resource_layout,
-                    vxgi_deferred_resource_bindings(
-                        *vxgi_resources,
-                        vxgi_handles
-                    )
-                );
-            }
-            data.target = builder.create_texture(
-                "indirect_lighting",
-                make_render_texture_desc(
-                    std::max<uint32>(1, window->width / 2),
-                    std::max<uint32>(1, window->height / 2),
-                    PixelFormat::Rgba16Float
-                )
-            );
-            data.target = builder.write_texture(
-                data.target,
-                RenderGraphAccess::ColorAttachmentWrite
-            );
-            lighting.indirect = data.target;
-        },
-        [](RenderGraphContext& context, const DeferredLightingPassData& data) {
-            auto gbuffer_set = context.resource_set(data.gbuffer_set);
-            auto vxgi_set = context.resource_set(data.vxgi_set);
-            auto target = context.texture(data.target);
-            execute_fullscreen_lighting_pass(
-                context,
-                data.fullscreen_quad,
-                data.pipeline,
-                target,
-                [gbuffer_set, vxgi_set](CommandBuffer& command_buffer) {
-                    command_buffer.set_resource_set(1, gbuffer_set);
-                    command_buffer.set_resource_set(2, vxgi_set);
-                }
-            );
+    execute_fullscreen_lighting_pass(
+        *command_buffer,
+        fullscreen_quad_data,
+        std::move(pipeline),
+        targets->direct,
+        [gbuffer_set = std::move(gbuffer_set),
+         lighting_set = std::move(lighting_set)](CommandBuffer& commands) {
+            commands.set_resource_set(1, gbuffer_set);
+            commands.set_resource_set(2, lighting_set);
         }
     );
 }
 
-void build_composite_pass(
+void indirect_lighting_pass(
     Query<const MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
-    ResRW<RenderGraph> render_graph,
-    ResRO<RenderTarget> target,
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device,
+    ResRO<DeferredViewTargets> targets,
+    ResRO<VxgiVolumes> volumes,
+    ResRO<VxgiResources> vxgi_resources,
     ResRO<DeferredRenderPipelines> pipelines,
     ResRO<PipelineCache> pipeline_cache,
     ResRO<FullscreenQuad> fullscreen_quad
 ) {
-    if (!render_graph->blackboard().contains<DeferredGBufferGraphHandles>() ||
-        !render_graph->blackboard().contains<DeferredLightingGraphHandles>()) {
+    auto* command_buffer = frame->command_buffer();
+    if (!command_buffer || !targets->valid() || query_cameras.empty()) {
         return;
     }
-
     auto [mesh_view_resource_set] = query_cameras.first();
     auto gpu_mesh = gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id());
     if (!gpu_mesh) {
         return;
     }
 
+    auto gbuffer_set = resource_sets->get_or_create(
+        *device,
+        "deferred.gbuffer",
+        pipelines->gbuffer_resource_layout,
+        gbuffer_bindings(*targets, pipelines->point_sampler)
+    );
+    auto vxgi_set = resource_sets->get_or_create(
+        *device,
+        "vxgi.deferred",
+        vxgi_resources->resource_layout,
+        vxgi_bindings(*vxgi_resources, *volumes)
+    );
+    auto pipeline = pipeline_cache->get_render_pipeline(
+        pipelines->indirect_lighting_pipeline
+    );
+    if (!gbuffer_set || !vxgi_set) {
+        pipeline.reset();
+    }
     auto fullscreen_quad_data = make_fullscreen_quad_pass_data(
         mesh_view_resource_set.resource_set,
         gpu_mesh.value()
     );
-    auto pipeline = pipeline_cache->get_render_pipeline(
-        pipelines->composite_lighting_pipeline
-    );
-
-    auto& lighting =
-        render_graph->blackboard().get<DeferredLightingGraphHandles>();
-    const auto& gbuffer =
-        render_graph->blackboard().get<DeferredGBufferGraphHandles>();
-    if (!lighting.direct.is_valid() || !lighting.indirect.is_valid()) {
-        return;
-    }
-
-    render_graph->add_pass<DeferredCompositePassData>(
-        "composite_lighting",
-        [&](RenderGraphBuilder& builder, DeferredCompositePassData& data) {
-            data.fullscreen_quad = fullscreen_quad_data;
-            data.pipeline = pipeline;
-            data.gbuffer_set = builder.create_resource_set(
-                "deferred.gbuffer",
-                pipelines->gbuffer_resource_layout,
-                deferred_gbuffer_resource_bindings(
-                    gbuffer,
-                    pipelines->point_sampler
-                )
-            );
-            data.composite_set = builder.create_resource_set(
-                "deferred.composite",
-                pipelines->composite_resource_layout,
-                deferred_composite_resource_bindings(
-                    lighting,
-                    pipelines->point_sampler
-                )
-            );
-            data.target = builder.import_texture(
-                "composite_lighting",
-                target->color_texture
-            );
-            data.target = builder.write_texture(
-                data.target,
-                RenderGraphAccess::ColorAttachmentWrite
-            );
-            lighting.composite = data.target;
-        },
-        [](RenderGraphContext& context, const DeferredCompositePassData& data) {
-            auto gbuffer_set = context.resource_set(data.gbuffer_set);
-            auto composite_set = context.resource_set(data.composite_set);
-            auto target = context.texture(data.target);
-            execute_fullscreen_lighting_pass(
-                context,
-                data.fullscreen_quad,
-                data.pipeline,
-                target,
-                [gbuffer_set, composite_set](CommandBuffer& command_buffer) {
-                    command_buffer.set_resource_set(1, gbuffer_set);
-                    command_buffer.set_resource_set(2, composite_set);
-                }
-            );
+    execute_fullscreen_lighting_pass(
+        *command_buffer,
+        fullscreen_quad_data,
+        std::move(pipeline),
+        targets->indirect,
+        [gbuffer_set = std::move(gbuffer_set),
+         vxgi_set = std::move(vxgi_set)](CommandBuffer& commands) {
+            commands.set_resource_set(1, gbuffer_set);
+            commands.set_resource_set(2, vxgi_set);
         }
     );
 }
 
-void build_present_composite_pass(
+void composite_pass(
+    Query<const MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
+    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device,
+    ResRO<DeferredViewTargets> targets,
+    ResRO<DeferredRenderPipelines> pipelines,
+    ResRO<PipelineCache> pipeline_cache,
+    ResRO<FullscreenQuad> fullscreen_quad
+) {
+    auto* command_buffer = frame->command_buffer();
+    if (!command_buffer || !targets->valid() || query_cameras.empty()) {
+        return;
+    }
+    auto [mesh_view_resource_set] = query_cameras.first();
+    auto gpu_mesh = gpu_meshes->get(fullscreen_quad->fullscreen_quad_mesh.id());
+    if (!gpu_mesh) {
+        return;
+    }
+
+    auto gbuffer_set = resource_sets->get_or_create(
+        *device,
+        "deferred.gbuffer",
+        pipelines->gbuffer_resource_layout,
+        gbuffer_bindings(*targets, pipelines->point_sampler)
+    );
+    auto composite_set = resource_sets->get_or_create(
+        *device,
+        "deferred.composite",
+        pipelines->composite_resource_layout,
+        {targets->direct, targets->indirect, pipelines->point_sampler}
+    );
+    auto pipeline = pipeline_cache->get_render_pipeline(
+        pipelines->composite_lighting_pipeline
+    );
+    if (!gbuffer_set || !composite_set) {
+        pipeline.reset();
+    }
+    auto fullscreen_quad_data = make_fullscreen_quad_pass_data(
+        mesh_view_resource_set.resource_set,
+        gpu_mesh.value()
+    );
+    execute_fullscreen_lighting_pass(
+        *command_buffer,
+        fullscreen_quad_data,
+        std::move(pipeline),
+        targets->composite,
+        [gbuffer_set = std::move(gbuffer_set),
+         composite_set = std::move(composite_set)](CommandBuffer& commands) {
+            commands.set_resource_set(1, gbuffer_set);
+            commands.set_resource_set(2, composite_set);
+        }
+    );
+}
+
+void present_composite_pass(
     Optional<ResRO<RenderAssets<GpuMesh>>> gpu_meshes,
-    ResRW<RenderGraph> render_graph,
+    ResRW<RenderFrameContext> frame,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device,
+    ResRO<DeferredViewTargets> targets,
     Optional<ResRO<DeferredRenderPipelines>> pipelines,
     Optional<ResRO<PipelineCache>> pipeline_cache,
     Optional<ResRO<FullscreenQuad>> fullscreen_quad,
     Optional<ResRO<MainSwapchain>> main_swapchain
 ) {
-    if (!render_graph->blackboard().contains<DeferredLightingGraphHandles>()) {
-        return;
-    }
-
-    if (!main_swapchain || !(*main_swapchain)->swapchain) {
+    auto* command_buffer = frame->command_buffer();
+    if (!command_buffer || !targets->valid() || !main_swapchain ||
+        !(*main_swapchain)->swapchain) {
         return;
     }
     if (!gpu_meshes || !pipelines || !pipeline_cache || !fullscreen_quad) {
@@ -413,69 +333,46 @@ void build_present_composite_pass(
     if (!gpu_mesh) {
         return;
     }
-
-    const auto composite = render_graph->blackboard()
-                               .get<DeferredLightingGraphHandles>()
-                               .composite;
-    if (!composite.is_valid()) {
-        return;
-    }
-
     auto pipeline = (*pipelines)->present_composite_pipeline_requested ?
                         (*pipeline_cache)
                             ->get_render_pipeline(
                                 (*pipelines)->present_composite_pipeline
                             ) :
                         nullptr;
+    auto present_set = resource_sets->get_or_create(
+        *device,
+        "deferred.present",
+        (*pipelines)->present_resource_layout,
+        {targets->composite, (*pipelines)->point_sampler}
+    );
     auto fullscreen_quad_data =
         make_fullscreen_quad_pass_data(nullptr, gpu_mesh.value());
     auto target_framebuffer = (*main_swapchain)->swapchain->framebuffer();
+    if (!target_framebuffer) {
+        return;
+    }
     const auto target_width = (*main_swapchain)->swapchain->width();
     const auto target_height = (*main_swapchain)->swapchain->height();
 
-    render_graph->add_pass<PresentCompositePassData>(
-        "present_composite",
-        [&](RenderGraphBuilder& builder, PresentCompositePassData& data) {
-            data.fullscreen_quad = fullscreen_quad_data;
-            data.pipeline = pipeline;
-            data.target_framebuffer = target_framebuffer;
-            data.target_width = target_width;
-            data.target_height = target_height;
-            data.present_set = builder.create_resource_set(
-                "deferred.present",
-                (*pipelines)->present_resource_layout,
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments =
                 {
-                    composite,
-                    (*pipelines)->point_sampler,
-                }
-            );
-            builder.side_effect();
-        },
-        [](RenderGraphContext& context, const PresentCompositePassData& data) {
-            auto present_set = context.resource_set(data.present_set);
-            auto& command_buffer = context.command_buffer();
-            command_buffer.begin_render_pass(
-                RenderPassDescription {
-                    .color_attachments =
-                        {
-                            RenderPassColorAttachment {
-                                .load_op = LoadOp::Clear,
-                                .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
-                            },
-                        },
-                    .framebuffer = data.target_framebuffer,
-                }
-            );
-            command_buffer
-                .set_viewport(0, 0, data.target_width, data.target_height);
-            if (data.pipeline && present_set) {
-                command_buffer.set_render_pipeline(data.pipeline);
-                command_buffer.set_resource_set(0, present_set);
-                draw_fullscreen_quad(command_buffer, data.fullscreen_quad);
-            }
-            command_buffer.end_render_pass();
+                    RenderPassColorAttachment {
+                        .load_op = LoadOp::Clear,
+                        .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
+                    },
+                },
+            .framebuffer = target_framebuffer,
         }
     );
+    command_buffer->set_viewport(0, 0, target_width, target_height);
+    if (pipeline && present_set) {
+        command_buffer->set_render_pipeline(std::move(pipeline));
+        command_buffer->set_resource_set(0, std::move(present_set));
+        draw_fullscreen_quad(*command_buffer, fullscreen_quad_data);
+    }
+    command_buffer->end_render_pass();
 }
 
 } // namespace fei

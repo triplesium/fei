@@ -14,9 +14,9 @@ TEST_CASE(
     demand.include("unrelated.snapshot");
     REQUIRE_FALSE(demand.any());
 
-    demand.include(c_render_graph_capability);
+    demand.include(c_render_schedule_capability);
     REQUIRE(demand.any());
-    REQUIRE(demand.render_graph);
+    REQUIRE(demand.render_schedule);
     REQUIRE_FALSE(demand.graphics_cache);
 
     demand.include(c_graphics_cache_capability);

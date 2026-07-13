@@ -5,6 +5,7 @@
 #include "ecs/system.hpp"
 #include "ecs/world.hpp"
 
+#include <algorithm>
 #include <exception>
 #include <future>
 #include <queue>
@@ -23,11 +24,11 @@ namespace {
 
 #if defined(FEI_ENABLE_TRACY) || defined(FEI_ENABLE_PROFILE_SUMMARY)
 void resolve_system_profile(SystemConfig& config) {
-    if (!config.profile.named() && config.system->hashable()) {
+    if (!config.profile.named() && config.system->has_profile_key()) {
         auto& registry = SystemProfileRegistry::instance();
-        auto profile = registry.symbolize(config.system->hash());
+        auto profile = registry.symbolize(config.system->profile_key());
         if (!profile) {
-            profile = registry.find(config.system->hash());
+            profile = registry.find(config.system->profile_key());
         }
         if (profile && profile->named()) {
             config.profile = std::move(*profile);
@@ -145,6 +146,14 @@ void Schedules::run_systems(ScheduleId schedule, World& world) {
     }
 }
 
+Optional<ScheduleDebugInfo> Schedules::debug_info(ScheduleId schedule) {
+    auto it = m_schedules.find(schedule);
+    if (it == m_schedules.end()) {
+        return nullopt;
+    }
+    return it->second.debug_info(schedule);
+}
+
 void Schedules::set_worker_threads(std::size_t thread_count) {
     m_thread_pool = std::make_unique<ThreadPool>(thread_count);
 }
@@ -198,8 +207,7 @@ void Schedule::ensure_execution_plan() {
 }
 
 void Schedule::rebuild_execution_plan() {
-    m_system_hash_map.clear();
-    m_system_set_hash_map.clear();
+    m_system_set_members.clear();
     m_graph.clear();
     m_execution_batches.clear();
 
@@ -209,6 +217,51 @@ void Schedule::rebuild_execution_plan() {
     m_graph.sort();
     build_execution_batches();
     m_dirty = false;
+}
+
+ScheduleDebugInfo Schedule::debug_info(ScheduleId schedule) {
+    ensure_execution_plan();
+    ScheduleDebugInfo debug {
+        .id = schedule,
+        .batches = m_execution_batches,
+    };
+    std::unordered_map<SystemId, std::vector<SystemId>> incoming;
+    for (const auto& [from, targets] : m_graph.edges()) {
+        for (auto target : targets) {
+            incoming[target].push_back(from);
+        }
+    }
+    for (auto& [_, dependencies] : incoming) {
+        std::ranges::sort(dependencies);
+        dependencies.erase(
+            std::unique(dependencies.begin(), dependencies.end()),
+            dependencies.end()
+        );
+    }
+    std::unordered_map<SystemId, std::size_t> batch_indices;
+    for (std::size_t batch_index = 0; batch_index < m_execution_batches.size();
+         ++batch_index) {
+        for (auto system : m_execution_batches[batch_index]) {
+            batch_indices[system] = batch_index;
+        }
+    }
+    const auto& sorted = m_graph.sorted_nodes();
+    debug.systems.reserve(sorted.size());
+    for (std::size_t index = 0; index < sorted.size(); ++index) {
+        const auto id = sorted[index];
+        const auto& config = m_systems.at(id);
+        debug.systems.push_back(
+            SystemScheduleDebugInfo {
+                .id = id,
+                .name = config.profile.named() ? config.profile.name :
+                                                 "system#" + std::to_string(id),
+                .dependencies = std::move(incoming[id]),
+                .topological_index = index,
+                .batch_index = batch_indices[id],
+            }
+        );
+    }
+    return debug;
 }
 
 void Schedule::run_systems(World& world) {

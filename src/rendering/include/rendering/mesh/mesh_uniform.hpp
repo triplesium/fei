@@ -7,6 +7,7 @@
 #include "graphics/graphics_device.hpp"
 #include "graphics/resource.hpp"
 #include "math/matrix.hpp"
+#include "rendering/render_queue.hpp"
 
 #include <memory>
 #include <unordered_map>
@@ -32,6 +33,7 @@ struct Mesh3d;
 void prepare_mesh_uniforms(
     Query<Entity, const Mesh3d, const Transform3d> query,
     ResRO<GraphicsDevice> device,
+    ResRO<RenderQueue> render_queue,
     ResRW<MeshUniforms> mesh_uniforms
 );
 

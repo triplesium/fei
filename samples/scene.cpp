@@ -6,12 +6,12 @@
 #include "asset/server.hpp"
 #include "base/log.hpp"
 #include "core/camera.hpp"
-#include "core/fps_counter.hpp"
 #include "core/image.hpp"
 #include "core/time.hpp"
 #include "core/transform.hpp"
 #include "devtools/plugin.hpp"
 #include "devtools_input/plugin.hpp"
+#include "devtools_profiling/plugin.hpp"
 #include "devtools_rendering/plugin.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
@@ -26,8 +26,8 @@
 #include "pbr/plugin.hpp"
 #include "pbr/skybox.hpp"
 #include "pbr/vxgi.hpp"
+#include "profiling/profiling.hpp"
 #include "rendering/plugin.hpp"
-#include "rendering/render_graph.hpp"
 #include "rendering/shader.hpp"
 #include "scene/plugin.hpp"
 #include "scripting_lua/asset.hpp"
@@ -131,22 +131,17 @@ float percent(uint64 value, uint64 total) {
     return static_cast<float>(value) * 100.0f / static_cast<float>(total);
 }
 
-void draw_render_graph_stats(const RenderGraphStats& stats) {
+void draw_render_schedule_stats(const Optional<ScheduleDebugInfo>& debug) {
     ImGui::Separator();
+    if (!debug) {
+        ImGui::TextUnformatted("Render schedule unavailable");
+        return;
+    }
     ImGui::Text(
-        "RenderGraph passes: %llu active / %llu total (%llu culled)",
-        static_cast<unsigned long long>(stats.active_passes),
-        static_cast<unsigned long long>(stats.total_passes),
-        static_cast<unsigned long long>(stats.culled_passes)
+        "Render schedule: %zu systems, %zu batches",
+        debug->systems.size(),
+        debug->batches.size()
     );
-    ImGui::Text(
-        "Transient textures: %llu req, %llu hit, %llu create (%.1f%%)",
-        static_cast<unsigned long long>(stats.transient_texture_requests),
-        static_cast<unsigned long long>(stats.transient_texture_hits),
-        static_cast<unsigned long long>(stats.transient_texture_creates),
-        percent(stats.transient_texture_hits, stats.transient_texture_requests)
-    );
-    ImGui::Text("Texture pool: %zu", stats.texture_pool_size);
 }
 
 void draw_graphics_cache_stats(const GraphicsDevice& device) {
@@ -252,17 +247,14 @@ void update_directional_light(
 void update_imgui(
     Query<DirectionalLight, Transform3d> query_directional_lights,
     Query<PointLight, Transform3d> query_point_lights,
-    ResRO<FpsCounter> fps_counter,
-    ResRO<RenderGraph> render_graph,
-    ResRO<GraphicsDevice> graphics_device
+    ResRO<GraphicsDevice> graphics_device,
+    WorldRef world
 ) {
+    const auto frame_stats = profile_frame_stats();
     ImGui::Begin("FPS");
-    ImGui::Text("FPS: %.2f", fps_counter->fps);
-    ImGui::Text(
-        "Frame Time: %.2f ms",
-        fps_counter->frame_time_seconds * 1000.0f
-    );
-    draw_render_graph_stats(render_graph->stats());
+    ImGui::Text("FPS: %.2f", frame_stats.fps);
+    ImGui::Text("Frame Time: %.2f ms", frame_stats.latest_frame_ms);
+    draw_render_schedule_stats(world->schedule_debug_info(RenderUpdate));
     draw_graphics_cache_stats(*graphics_device);
     ImGui::End();
 
@@ -311,7 +303,6 @@ int main(int argc, char** argv) {
         .add_plugin<PbrPlugin>()
         .add_plugin<InputPlugin>()
         .add_plugin<TimePlugin>()
-        .add_plugin<FpsCounterPlugin>()
         .add_plugin<EnvironmentMapPlugin>()
         .add_plugin<ScenePlugin>()
         .add_plugin<ReflectionPlugin>()
@@ -338,6 +329,7 @@ int main(int argc, char** argv) {
             .jpeg_quality = 80,
         }}
     );
+    app.add_plugin(devtools::profiling::ProviderPlugin {});
     app.add_plugin(devtools::input::ProviderPlugin {});
 
     app.run();

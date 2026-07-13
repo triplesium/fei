@@ -14,7 +14,6 @@
 #include "graphics/texture_readback.hpp"
 #include "pbr/passes/target.hpp"
 #include "refl/registry.hpp"
-#include "rendering/render_graph.hpp"
 #include "snapshot_demand.hpp"
 #include "snapshot_types.hpp"
 
@@ -34,11 +33,11 @@ namespace fei::devtools::rendering {
 
 namespace {
 
-constexpr const char* c_render_graph_schema = "rendering.render_graph.v2";
+constexpr const char* c_render_schedule_schema = "rendering.render_schedule.v1";
 constexpr const char* c_graphics_cache_schema = "graphics.cache.v2";
 
 struct SnapshotPublishState {
-    uint64 render_graph_version {0};
+    uint64 render_schedule_version {0};
     uint64 graphics_cache_version {0};
 };
 
@@ -98,11 +97,11 @@ void mark_capture_enqueued(
 }
 
 SelectedFrameTarget
-select_frame_target(const Optional<ResRO<RenderTarget>>& render_target) {
-    if (render_target && (*render_target)->color_texture) {
+select_frame_target(const Optional<ResRO<DeferredViewTargets>>& targets) {
+    if (targets && (*targets)->composite) {
         return {
-            .texture = (*render_target)->color_texture,
-            .name = "render_target.color_texture",
+            .texture = (*targets)->composite,
+            .name = "deferred_view_targets.composite",
         };
     }
     return {};
@@ -247,7 +246,6 @@ void publish_snapshot_result(
 }
 
 void publish_rendering_snapshots(
-    Optional<ResRO<RenderGraph>> render_graph,
     ResRO<GraphicsDevice> graphics_device,
     ResRW<SnapshotPublishState> state,
     Query<Entity, const Request, const SnapshotRequest> requests,
@@ -263,19 +261,18 @@ void publish_rendering_snapshots(
         return;
     }
 
-    if (demand.render_graph) {
-        RenderGraphSnapshot snapshot;
-        if (render_graph) {
-            snapshot =
-                make_render_graph_snapshot((*render_graph)->debug_info());
+    if (demand.render_schedule) {
+        RenderScheduleSnapshot snapshot;
+        if (auto debug = commands.world().schedule_debug_info(RenderUpdate)) {
+            snapshot = make_render_schedule_snapshot(*debug);
         }
         publish_snapshot_result(
             requests,
             commands,
-            c_render_graph_capability,
-            c_render_graph_schema,
+            c_render_schedule_capability,
+            c_render_schedule_schema,
             encode_json(Ref(snapshot)),
-            ++state->render_graph_version
+            ++state->render_schedule_version
         );
     }
     if (demand.graphics_cache) {
@@ -379,7 +376,7 @@ void publish_completed_frame(
 }
 
 void capture_rendering_frame(
-    Optional<ResRO<RenderTarget>> render_target,
+    Optional<ResRO<DeferredViewTargets>> targets,
     ResRW<FrameCaptureState> state,
     ResRO<Config> config,
     Query<Entity, const Request, const BlobRequest> requests,
@@ -420,7 +417,7 @@ void capture_rendering_frame(
         return;
     }
 
-    auto target = select_frame_target(render_target);
+    auto target = select_frame_target(targets);
     if (!target.texture) {
         respond_frame_errors(
             requests,
@@ -474,12 +471,8 @@ void ProviderPlugin::setup(App& app) {
     }
 
     auto& registry = Registry::instance();
-    if (!registry.try_get_cls(type_id<TextureUseSnapshot>()) ||
-        !registry.try_get_cls(type_id<RenderPassSnapshot>()) ||
-        !registry.try_get_cls(type_id<TextureSnapshot>()) ||
-        !registry.try_get_cls(type_id<ResourceBindingSnapshot>()) ||
-        !registry.try_get_cls(type_id<ResourceSetSnapshot>()) ||
-        !registry.try_get_cls(type_id<RenderGraphSnapshot>()) ||
+    if (!registry.try_get_cls(type_id<RenderSystemSnapshot>()) ||
+        !registry.try_get_cls(type_id<RenderScheduleSnapshot>()) ||
         !registry.try_get_cls(type_id<ResourceSetSourceSnapshot>()) ||
         !registry.try_get_cls(type_id<GraphicsCacheSnapshot>())) {
         fatal(
@@ -501,11 +494,11 @@ void ProviderPlugin::setup(App& app) {
     );
     declare_capability(
         app.world(),
-        "rendering.render_graph",
-        "Render Graph",
+        c_render_schedule_capability,
+        "Render Schedule",
         SnapshotCapability {
-            .schema = c_render_graph_schema,
-            .data_type = type_id<RenderGraphSnapshot>(),
+            .schema = c_render_schedule_schema,
+            .data_type = type_id<RenderScheduleSnapshot>(),
             .mode = PublishMode::Cached,
         }
     );

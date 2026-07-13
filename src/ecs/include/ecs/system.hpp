@@ -80,14 +80,6 @@ concept IntoCondition =
          return (ConditionParam<Ts> && ...);
      }(std::type_identity<typename fei::FunctionTraits<T>::args_tuple>()));
 
-template<typename T>
-concept HashableSystem =
-    IntoSystem<T> && (std::is_function_v<std::remove_cvref_t<T>>);
-
-std::size_t hash_system(HashableSystem auto&& system) {
-    return reinterpret_cast<std::size_t>(system);
-}
-
 class System {
   public:
     System() = default;
@@ -95,14 +87,17 @@ class System {
 
     virtual void run(World& world) = 0;
     virtual const SystemAccess& access() const = 0;
-    virtual bool hashable() const { return false; }
-    virtual std::size_t hash() const { return 0; }
+    virtual bool has_profile_key() const { return false; }
+    virtual std::size_t profile_key() const { return 0; }
 };
 
 template<typename Func>
 class FunctionSystem : public System {
   private:
     using ParamTypes = typename FunctionTraits<Func>::args_tuple;
+    static constexpr bool HasProfileKey =
+        std::is_pointer_v<Func> &&
+        std::is_function_v<std::remove_pointer_t<Func>>;
     Func m_func;
     SystemAccess m_access {system_access_for_params<ParamTypes>()};
 
@@ -132,19 +127,13 @@ class FunctionSystem : public System {
 
     const SystemAccess& access() const override { return m_access; }
 
-    bool hashable() const override {
-        return std::is_pointer_v<Func> &&
-               std::is_function_v<std::remove_pointer_t<Func>>;
-    }
+    bool has_profile_key() const override { return HasProfileKey; }
 
-    std::size_t hash() const override {
-        if constexpr (
-            std::is_pointer_v<Func> &&
-            std::is_function_v<std::remove_pointer_t<Func>>
-        ) {
+    std::size_t profile_key() const override {
+        if constexpr (HasProfileKey) {
             return reinterpret_cast<std::size_t>(m_func);
         }
-        fei::fatal("Cannot hash non-function pointer systems");
+        fei::fatal("Cannot get a profile key for non-function pointer systems");
         return 0;
     }
 

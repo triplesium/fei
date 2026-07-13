@@ -3,7 +3,6 @@
 #include "app/app.hpp"
 #include "asset/plugin.hpp"
 #include "base/log.hpp"
-#include "ecs/commands.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
 #include "ecs/system_profile.hpp"
@@ -17,7 +16,9 @@
 #include "rendering/mesh/mesh_uniform.hpp"
 #include "rendering/pipeline_cache.hpp"
 #include "rendering/render_asset.hpp"
-#include "rendering/render_graph.hpp"
+#include "rendering/render_frame.hpp"
+#include "rendering/render_queue.hpp"
+#include "rendering/resource_set_cache.hpp"
 #include "rendering/shader.hpp"
 #include "rendering/shader_cache.hpp"
 #include "rendering/shader_compiler.hpp"
@@ -38,10 +39,6 @@ std::filesystem::path default_shader_cache_root() {
 
 } // namespace
 
-void begin_render_graph(ResRW<RenderGraph> render_graph) {
-    render_graph->clear();
-}
-
 void flush_graphics_device(ResRW<GraphicsDevice> device) {
     device->flush();
 }
@@ -50,24 +47,8 @@ void process_pipelines(ResRW<PipelineCache> pipeline_cache) {
     pipeline_cache->process_queued_pipelines();
 }
 
-void execute_render_graph(
-    ResRW<RenderGraph> render_graph,
-    ResRO<GraphicsDevice> device
-) {
-    auto command_buffer = device->create_command_buffer();
-    if (!command_buffer) {
-        error("GraphicsDevice returned null command buffer for RenderGraph");
-        return;
-    }
-
-    command_buffer->begin();
-    if (render_graph->compile()) {
-        render_graph->execute(*device, *command_buffer);
-    } else {
-        error("RenderGraph compile failed: {}", render_graph->compile_error());
-    }
-    command_buffer->end();
-    device->submit_commands(command_buffer);
+void begin_render_resource_set_cache(ResRW<RenderResourceSetCache> cache) {
+    cache->begin_frame();
 }
 
 void present_main_swapchain(
@@ -103,13 +84,13 @@ void RenderingPlugin::setup(App& app) {
                RenderingSystems::CheckVisibility(),
                RenderingSystems::Queue(),
                RenderingSystems::PreparePipelines(),
-               RenderingSystems::BuildRenderGraph(),
-               RenderingSystems::ExecuteRenderGraph()
-           ),
-           RenderingSystems::Render()
-               .after<RenderingSystems::BuildRenderGraph>(),
-           RenderingSystems::Render()
-               .before<RenderingSystems::ExecuteRenderGraph>()
+               RenderingSystems::Render(),
+               RenderingSystems::BeginRender(),
+               RenderingSystems::Prepass(),
+               RenderingSystems::MainPass(),
+               RenderingSystems::PostProcess(),
+               RenderingSystems::Submit()
+           )
     )
         .add_plugins(
             AssetPlugin<Shader, ShaderLoader> {},
@@ -119,7 +100,9 @@ void RenderingPlugin::setup(App& app) {
             RenderingDefaultsPlugin {}
         )
         .add_resource(PipelineCache(app.resource<GraphicsDevice>()))
-        .add_resource<RenderGraph>();
+        .add_resource<RenderFrameContext>()
+        .add_resource(RenderQueue {})
+        .add_resource<RenderResourceSetCache>();
 
     app.add_resource(ShaderCache(
         app.resource<AssetServer>(),
@@ -135,7 +118,8 @@ void RenderingPlugin::setup(App& app) {
                 init_camera_view_uniform,
                 prepare_mesh_uniforms,
                 prepare_camera_view_uniform
-            ) | in_set<RenderingSystems::PrepareResources>()
+            ) | in_set<RenderingSystems::PrepareResources>() |
+                in_set<RenderingSystems::PrepareView>()
         )
         .add_resource<MeshUniforms>()
         .add_systems(
@@ -147,11 +131,15 @@ void RenderingPlugin::setup(App& app) {
             process_pipelines | in_set<RenderingSystems::PreparePipelines>()
         )
         .add_resource<ViewVisibleEntities>()
-        .add_systems(RenderFirst, begin_render_graph)
         .add_systems(
             RenderUpdate,
-            execute_render_graph |
-                in_set<RenderingSystems::ExecuteRenderGraph>()
+            chain(
+                FEI_NAMED_SYSTEM(begin_render_resource_set_cache),
+                FEI_NAMED_SYSTEM(begin_render_frame),
+                FEI_NAMED_SYSTEM(flush_render_queue)
+            ) | in_set<RenderingSystems::BeginRender>(),
+            FEI_NAMED_SYSTEM(submit_render_frame) |
+                in_set<RenderingSystems::Submit>()
         )
         .add_systems(RenderLast, present_main_swapchain | main_thread());
 }

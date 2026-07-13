@@ -51,6 +51,33 @@ void init_pbr_mesh_shader_defaults(
 } // namespace
 
 void PbrPlugin::setup(App& app) {
+    app.configure_sets(
+           StartUp,
+           chain(
+               PbrSystems::StartupLighting {},
+               PbrSystems::StartupVxgi {},
+               PbrSystems::StartupDeferred {}
+           ),
+           chain(
+               PbrSystems::StartupMeshView {},
+               all(PbrSystems::StartupSkybox {}, PbrSystems::StartupDeferred {})
+           )
+    )
+        .configure_sets(
+            RenderUpdate,
+            chain(
+                all(RenderingSystems::PrepareView {},
+                    PbrSystems::PrepareEnvironmentMaps {}),
+                PbrSystems::PrepareLighting {},
+                PbrSystems::PrepareVxgi {}
+            ),
+            chain(
+                PbrSystems::ShadowPass {},
+                PbrSystems::VxgiPass {},
+                PbrSystems::DeferredPrepass {}
+            )
+        );
+
     app.add_plugins(
            MaterialPlugin<StandardMaterial> {},
            VxgiPlugin {},
@@ -71,8 +98,8 @@ void PbrPlugin::setup(App& app) {
         .add_systems(
             StartUp,
             init_pbr_mesh_shader_defaults,
-            init_mesh_view_layout,
-            setup_lighting,
+            init_mesh_view_layout | in_set<PbrSystems::StartupMeshView>(),
+            setup_lighting | in_set<PbrSystems::StartupLighting>(),
             setup_shadow_mapping
         )
         .add_systems(
@@ -83,9 +110,8 @@ void PbrPlugin::setup(App& app) {
                 prepare_mesh_view_resource_set,
                 setup_shadow_map,
                 prepare_lighting
-            ) | after(generate_env_maps) |
-                after(prepare_camera_view_uniform) |
-                in_set<RenderingSystems::PrepareResources>()
+            ) | in_set<RenderingSystems::PrepareResources>() |
+                in_set<PbrSystems::PrepareLighting>()
         )
         .add_systems(
             RenderUpdate,
@@ -93,9 +119,11 @@ void PbrPlugin::setup(App& app) {
         )
         .add_systems(
             RenderUpdate,
-            chain(build_shadow_map_passes, build_shadow_blur_passes) |
-                before(build_vxgi_inject_radiance_pass) |
-                in_set<RenderingSystems::BuildRenderGraph>()
+            chain(
+                FEI_NAMED_SYSTEM(render_shadow_map_passes),
+                FEI_NAMED_SYSTEM(render_shadow_blur_passes)
+            ) | in_set<RenderingSystems::Prepass>() |
+                in_set<PbrSystems::ShadowPass>()
         );
 }
 

@@ -135,7 +135,14 @@ void VulkanGlfwSwapchainPlugin::setup(App& app) {
             ),
         }
     );
-    app.add_systems(First, sync_main_swapchain_size | after(window_prepare));
+    app.configure_sets(
+           First,
+           chain(WindowSystems::Prepare {}, WindowSystems::SyncSwapchain {})
+    )
+        .add_systems(
+            First,
+            sync_main_swapchain_size | in_set<WindowSystems::SyncSwapchain>()
+        );
 }
 
 } // namespace fei
