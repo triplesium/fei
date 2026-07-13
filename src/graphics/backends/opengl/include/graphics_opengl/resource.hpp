@@ -19,18 +19,15 @@ class ResourceLayoutOpenGL : public ResourceLayout {
 };
 
 class ResourceSetOpenGL : public ResourceSet {
-  private:
-    std::shared_ptr<const ResourceLayout> m_layout;
-    std::vector<std::shared_ptr<const BindableResource>> m_resources;
-
   public:
-    ResourceSetOpenGL(const ResourceSetDescription& desc) :
-        ResourceSet(desc), m_layout(desc.layout), m_resources(desc.resources) {}
+    ResourceSetOpenGL(const ResourceSetDescription& desc) : ResourceSet(desc) {}
     ~ResourceSetOpenGL() override = default;
-    std::shared_ptr<const ResourceLayout> layout() const { return m_layout; }
+    std::shared_ptr<const ResourceLayout> layout() const {
+        return resource_layout();
+    }
     const std::vector<std::shared_ptr<const BindableResource>>&
     resources() const {
-        return m_resources;
+        return bound_resources();
     }
 };
 

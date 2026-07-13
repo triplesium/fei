@@ -248,7 +248,7 @@ void CommandBufferExecutorOpenGL::execute_command(
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::UpdateBuffer>
             ) {
-                execute_update_buffer(cmd.buffer, cmd.data);
+                execute_update_buffer(cmd.buffer, cmd.offset, cmd.data);
             } else if constexpr (std::is_same_v<CommandT, ogl_cmd::Draw>) {
                 execute_draw(state, cmd.start, cmd.count);
             } else if constexpr (
@@ -612,16 +612,28 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
 
 void CommandBufferExecutorOpenGL::execute_update_buffer(
     std::shared_ptr<Buffer> buffer,
+    uint32 offset,
     const std::vector<std::byte>& data
 ) {
     auto buffer_gl = std::static_pointer_cast<BufferOpenGL>(buffer);
     buffer_gl->ensure_created();
 
-    FEI_GL_CALL(glNamedBufferData(
+    if (static_cast<std::size_t>(offset) > buffer_gl->size() ||
+        data.size() > buffer_gl->size() - offset) {
+        fatal(
+            "CommandBufferOpenGL::update_buffer range [{}, {}) exceeds "
+            "buffer size {}",
+            offset,
+            static_cast<std::size_t>(offset) + data.size(),
+            buffer_gl->size()
+        );
+    }
+
+    FEI_GL_CALL(glNamedBufferSubData(
         buffer_gl->id(),
+        static_cast<GLintptr>(offset),
         to_gl_sizeiptr(data.size()),
-        data.data(),
-        to_gl_buffer_usage(buffer_gl->usages())
+        data.data()
     ));
 }
 

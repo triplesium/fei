@@ -72,7 +72,6 @@ class ResourceSetVulkan : public ResourceSet {
   private:
     std::shared_ptr<VulkanDeviceState> m_state;
     std::shared_ptr<const ResourceLayoutVulkan> m_layout;
-    std::vector<std::shared_ptr<const BindableResource>> m_resources;
     std::vector<std::shared_ptr<const TextureViewVulkan>> m_owned_texture_views;
     std::vector<ResourceSetBufferBinding> m_buffer_bindings;
     std::vector<ResourceSetImageBinding> m_image_bindings;
@@ -97,7 +96,7 @@ class ResourceSetVulkan : public ResourceSet {
     }
     const std::vector<std::shared_ptr<const BindableResource>>&
     resources() const {
-        return m_resources;
+        return bound_resources();
     }
     [[nodiscard]] const std::vector<ResourceSetBufferBinding>&
     buffer_bindings() const {

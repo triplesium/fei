@@ -46,6 +46,7 @@ struct SetResourceSet {
 };
 struct UpdateBuffer {
     std::shared_ptr<Buffer> buffer;
+    uint32 offset;
     std::vector<std::byte> data;
 };
 struct Draw {

@@ -70,8 +70,16 @@ class CommandBuffer {
         std::shared_ptr<const ResourceSet> resource_set,
         std::span<const uint32> dynamic_offsets
     ) = 0;
+    void update_buffer(
+        std::shared_ptr<Buffer> buffer,
+        const void* data,
+        std::size_t size
+    ) {
+        update_buffer(std::move(buffer), 0, data, size);
+    }
     virtual void update_buffer(
         std::shared_ptr<Buffer> buffer,
+        uint32 offset,
         const void* data,
         std::size_t size
     ) = 0;

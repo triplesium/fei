@@ -991,14 +991,30 @@ CommandBufferVulkan::CommandBufferVulkan(
         fatal("CommandBufferVulkan requires a VulkanDeviceState");
     }
 
+    VkCommandPoolCreateInfo pool_info {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
+                 VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = m_state->graphics_queue_family(),
+    };
+    check_vk(
+        vkCreateCommandPool(
+            m_state->device(),
+            &pool_info,
+            nullptr,
+            &m_command_pool
+        ),
+        "vkCreateCommandPool"
+    );
+
     VkCommandBufferAllocateInfo allocate_info {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .pNext = nullptr,
-        .commandPool = m_state->command_pool(),
+        .commandPool = m_command_pool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
     };
-    std::scoped_lock lock(m_state->immediate_mutex());
     check_vk(
         vkAllocateCommandBuffers(
             m_state->device(),
@@ -1010,14 +1026,9 @@ CommandBufferVulkan::CommandBufferVulkan(
 }
 
 CommandBufferVulkan::~CommandBufferVulkan() {
-    if (m_state && m_command_buffer != VK_NULL_HANDLE) {
-        std::scoped_lock lock(m_state->immediate_mutex());
-        vkFreeCommandBuffers(
-            m_state->device(),
-            m_state->command_pool(),
-            1,
-            &m_command_buffer
-        );
+    if (m_state && m_command_pool != VK_NULL_HANDLE) {
+        vkDestroyCommandPool(m_state->device(), m_command_pool, nullptr);
+        m_command_pool = VK_NULL_HANDLE;
         m_command_buffer = VK_NULL_HANDLE;
     }
 }
@@ -1046,11 +1057,9 @@ void CommandBufferVulkan::begin() {
     m_active_render_pass_desc = RenderPassDescription {};
     m_active_clear_values.clear();
     m_active_render_pass = VK_NULL_HANDLE;
-    m_referenced_framebuffers.clear();
+    m_resource_retention.clear();
     m_bound_graphics_resource_sets.clear();
     m_bound_compute_resource_sets.clear();
-    m_referenced_resource_sets.clear();
-    m_transient_buffers.clear();
     m_logical_render_pass_active = false;
     m_native_render_pass_active = false;
 
@@ -1091,7 +1100,7 @@ void CommandBufferVulkan::begin_render_pass(const RenderPassDescription& desc) {
 
     m_active_render_pass_desc = desc;
     m_active_framebuffer = framebuffer;
-    m_referenced_framebuffers.push_back(std::move(framebuffer));
+    m_resource_retention.retain_framebuffer(std::move(framebuffer));
     m_logical_render_pass_active = true;
     m_native_render_pass_active = false;
 }
@@ -1284,7 +1293,7 @@ void CommandBufferVulkan::set_resource_set(
     if (bound_resource_sets.size() <= slot) {
         bound_resource_sets.resize(slot + 1);
     }
-    m_referenced_resource_sets.push_back(resource_set_vk);
+    m_resource_retention.retain_resource_set(resource_set_vk);
     bound_resource_sets[slot] = std::move(resource_set_vk);
 }
 
@@ -1313,6 +1322,7 @@ void CommandBufferVulkan::prepare_compute_resource_sets() {
 
 void CommandBufferVulkan::update_buffer(
     std::shared_ptr<Buffer> buffer,
+    uint32 offset,
     const void* data,
     std::size_t size
 ) {
@@ -1328,19 +1338,18 @@ void CommandBufferVulkan::update_buffer(
     if (!buffer_vk) {
         fatal("CommandBufferVulkan::update_buffer received non-Vulkan buffer");
     }
-    if (size > buffer_vk->size()) {
+    if (static_cast<std::size_t>(offset) > buffer_vk->size() ||
+        size > buffer_vk->size() - offset) {
         fatal(
-            "CommandBufferVulkan::update_buffer size {} exceeds buffer size {}",
-            size,
+            "CommandBufferVulkan::update_buffer range [{}, {}) exceeds "
+            "buffer size {}",
+            offset,
+            static_cast<std::size_t>(offset) + size,
             buffer_vk->size()
         );
     }
 
     const auto update_size = checked_u32(size, "update buffer size");
-    if (buffer_vk->host_visible()) {
-        buffer_vk->update(0, data, update_size);
-        return;
-    }
     if (m_logical_render_pass_active) {
         fatal(
             "CommandBufferVulkan::update_buffer cannot stage-copy a "
@@ -1360,10 +1369,10 @@ void CommandBufferVulkan::update_buffer(
         m_command_buffer,
         *staging,
         *buffer_vk,
-        0,
+        offset,
         static_cast<VkDeviceSize>(size)
     );
-    m_transient_buffers.push_back(std::move(staging));
+    m_resource_retention.retain_transient_buffer(std::move(staging));
 }
 
 void CommandBufferVulkan::draw(std::size_t start, std::size_t count) {
@@ -1759,11 +1768,9 @@ void CommandBufferVulkan::mark_submitted() {
 }
 
 void CommandBufferVulkan::mark_completed() {
-    m_referenced_framebuffers.clear();
+    m_resource_retention.clear();
     m_bound_graphics_resource_sets.clear();
     m_bound_compute_resource_sets.clear();
-    m_referenced_resource_sets.clear();
-    m_transient_buffers.clear();
     if (m_state_value == State::Submitted) {
         m_state_value = State::Initial;
     }

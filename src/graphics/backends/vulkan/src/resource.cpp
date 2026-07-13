@@ -201,7 +201,9 @@ std::shared_ptr<const TextureViewVulkan> resolve_texture_view(
         TextureViewDescription {
             .target = texture_vk,
             .base_mip_level = 0,
-            .mip_levels = texture_vk->mip_level(),
+            .mip_levels = kind == ResourceKind::TextureReadWrite ?
+                              1 :
+                              texture_vk->mip_level(),
             .base_array_layer = 0,
             .array_layers = texture_vk->layer(),
             .format = texture_vk->format(),
@@ -334,15 +336,16 @@ ResourceSetVulkan::ResourceSetVulkan(
     const ResourceSetDescription& desc
 ) :
     ResourceSet(desc), m_state(std::move(state)),
-    m_layout(require_layout(desc.layout)), m_resources(desc.resources) {
+    m_layout(require_layout(desc.layout)) {
     if (!m_state) {
         fatal("ResourceSetVulkan requires a VulkanDeviceState");
     }
-    if (m_resources.size() != m_layout->elements().size()) {
+    const auto& resources = bound_resources();
+    if (resources.size() != m_layout->elements().size()) {
         fatal(
             "ResourceSetVulkan resource count {} does not match layout "
             "element count {}",
-            m_resources.size(),
+            resources.size(),
             m_layout->elements().size()
         );
     }
@@ -370,15 +373,15 @@ ResourceSetVulkan::ResourceSetVulkan(
     std::vector<VkDescriptorBufferInfo> buffer_infos;
     std::vector<VkDescriptorImageInfo> image_infos;
     std::vector<VkWriteDescriptorSet> writes;
-    buffer_infos.reserve(m_resources.size());
-    image_infos.reserve(m_resources.size());
-    writes.reserve(m_resources.size());
+    buffer_infos.reserve(resources.size());
+    image_infos.reserve(resources.size());
+    writes.reserve(resources.size());
 
     const auto& elements = m_layout->elements();
     const auto& descriptor_types = m_layout->descriptor_types();
     for (std::size_t index = 0; index < elements.size(); ++index) {
         const auto& element = elements[index];
-        const auto& resource = m_resources[index];
+        const auto& resource = resources[index];
         if (!resource) {
             fatal("ResourceSetVulkan resource '{}' is null", element.name);
         }
@@ -436,7 +439,7 @@ ResourceSetVulkan::ResourceSetVulkan(
             VkSampler sampler = VK_NULL_HANDLE;
             if (element.kind == ResourceKind::TextureReadOnly) {
                 auto sampler_resource =
-                    find_sampler_for_texture(elements, m_resources, index);
+                    find_sampler_for_texture(elements, resources, index);
                 if (!sampler_resource) {
                     if (!m_default_sampler) {
                         m_default_sampler = std::make_shared<SamplerVulkan>(

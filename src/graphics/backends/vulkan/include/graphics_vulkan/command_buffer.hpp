@@ -1,6 +1,7 @@
 #pragma once
 
 #include "graphics/command_buffer.hpp"
+#include "graphics_vulkan/command_buffer_resource_retention.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -30,6 +31,7 @@ class CommandBufferVulkan : public CommandBuffer {
     };
 
     std::shared_ptr<VulkanDeviceState> m_state;
+    VkCommandPool m_command_pool {VK_NULL_HANDLE};
     VkCommandBuffer m_command_buffer {VK_NULL_HANDLE};
     State m_state_value {State::Initial};
     std::shared_ptr<const PipelineVulkan> m_graphics_pipeline;
@@ -38,19 +40,17 @@ class CommandBufferVulkan : public CommandBuffer {
     RenderPassDescription m_active_render_pass_desc;
     std::vector<VkClearValue> m_active_clear_values;
     VkRenderPass m_active_render_pass {VK_NULL_HANDLE};
-    std::vector<std::shared_ptr<const FramebufferVulkan>>
-        m_referenced_framebuffers;
+    vulkan_detail::CommandBufferResourceRetention m_resource_retention;
     std::vector<std::shared_ptr<const ResourceSetVulkan>>
         m_bound_graphics_resource_sets;
     std::vector<std::shared_ptr<const ResourceSetVulkan>>
         m_bound_compute_resource_sets;
-    std::vector<std::shared_ptr<const ResourceSetVulkan>>
-        m_referenced_resource_sets;
-    std::vector<std::shared_ptr<const BufferVulkan>> m_transient_buffers;
     bool m_logical_render_pass_active {false};
     bool m_native_render_pass_active {false};
 
   public:
+    using CommandBuffer::update_buffer;
+
     explicit CommandBufferVulkan(std::shared_ptr<VulkanDeviceState> state);
     ~CommandBufferVulkan() override;
 
@@ -79,6 +79,7 @@ class CommandBufferVulkan : public CommandBuffer {
     ) override;
     void update_buffer(
         std::shared_ptr<Buffer> buffer,
+        uint32 offset,
         const void* data,
         std::size_t size
     ) override;

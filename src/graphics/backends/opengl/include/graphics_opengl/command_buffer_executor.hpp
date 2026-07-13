@@ -64,6 +64,7 @@ class CommandBufferExecutorOpenGL {
     );
     void execute_update_buffer(
         std::shared_ptr<Buffer> buffer,
+        uint32 offset,
         const std::vector<std::byte>& data
     );
     void

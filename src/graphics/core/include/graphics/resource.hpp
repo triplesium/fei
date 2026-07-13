@@ -221,8 +221,22 @@ struct ResourceSetDescription {
 };
 
 class ResourceSet {
+  private:
+    std::shared_ptr<const ResourceLayout> m_layout;
+    std::vector<std::shared_ptr<const BindableResource>> m_resources;
+
+  protected:
+    const std::shared_ptr<const ResourceLayout>& resource_layout() const {
+        return m_layout;
+    }
+    const std::vector<std::shared_ptr<const BindableResource>>&
+    bound_resources() const {
+        return m_resources;
+    }
+
   public:
-    ResourceSet(const ResourceSetDescription& desc) {}
+    ResourceSet(const ResourceSetDescription& desc) :
+        m_layout(desc.layout), m_resources(desc.resources) {}
     virtual ~ResourceSet() = default;
 };
 

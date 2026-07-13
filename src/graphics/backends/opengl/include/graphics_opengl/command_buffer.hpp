@@ -29,6 +29,8 @@ class CommandBufferOpenGL : public CommandBuffer {
     const GraphicsDeviceOpenGL& m_device;
 
   public:
+    using CommandBuffer::update_buffer;
+
     CommandBufferOpenGL(const GraphicsDeviceOpenGL& device) :
         m_device(device) {}
     void begin() override;
@@ -51,6 +53,7 @@ class CommandBufferOpenGL : public CommandBuffer {
     ) override;
     void update_buffer(
         std::shared_ptr<Buffer> buffer,
+        uint32 offset,
         const void* data,
         std::size_t size
     ) override;

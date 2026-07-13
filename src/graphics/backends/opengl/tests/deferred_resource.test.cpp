@@ -326,3 +326,91 @@ TEST_CASE(
     REQUIRE(third != first);
     REQUIRE(create_count == 2);
 }
+
+TEST_CASE(
+    "Queued OpenGL commands retain frame resources until CPU execution",
+    "[graphics][opengl][command-buffer][lifetime]"
+) {
+    OpenGLDeviceState state;
+    auto uniform = std::make_shared<BufferOpenGL>(BufferDescription {
+        .size = 64,
+        .usages = BufferUsages::Uniform,
+    });
+    auto sampled_texture =
+        std::make_shared<TextureOpenGL>(make_texture_description());
+    auto target_description = make_texture_description();
+    target_description.texture_usage = TextureUsage::RenderTarget;
+    auto target = std::make_shared<TextureOpenGL>(target_description);
+    auto layout = std::make_shared<ResourceLayoutOpenGL>(
+        ResourceLayoutDescription::sequencial(
+            ShaderStages::Fragment,
+            {
+                uniform_buffer("frame_uniform"),
+                texture_read_only("frame_texture"),
+            }
+        )
+    );
+    auto resource_set =
+        std::make_shared<ResourceSetOpenGL>(ResourceSetDescription {
+            .layout = layout,
+            .resources = {uniform, sampled_texture},
+            .name = "frame resources",
+        });
+    auto framebuffer = std::make_shared<Framebuffer>(FramebufferDescription {
+        .color_targets = {FramebufferAttachment {.texture = target}},
+    });
+
+    std::weak_ptr<const Buffer> weak_uniform = uniform;
+    std::weak_ptr<const Texture> weak_sampled_texture = sampled_texture;
+    std::weak_ptr<const Texture> weak_target = target;
+    std::weak_ptr<const ResourceLayout> weak_layout = layout;
+
+    std::vector<opengl_commands::Command> commands;
+    commands.emplace_back(
+        opengl_commands::BeginRenderPass {
+            .desc = RenderPassDescription {.framebuffer = framebuffer},
+        }
+    );
+    commands.emplace_back(
+        opengl_commands::SetResourceSet {
+            .slot = 0,
+            .resource_set = resource_set,
+            .dynamic_offsets = {},
+        }
+    );
+    commands.emplace_back(
+        opengl_commands::UpdateBuffer {
+            .buffer = uniform,
+            .offset = 0,
+            .data = std::vector<std::byte>(16),
+        }
+    );
+    state.enqueue_operation(
+        OpenGLPendingCommandSubmit {.commands = std::move(commands)}
+    );
+
+    uniform.reset();
+    sampled_texture.reset();
+    target.reset();
+    layout.reset();
+    resource_set.reset();
+    framebuffer.reset();
+
+    CHECK_FALSE(weak_uniform.expired());
+    CHECK_FALSE(weak_sampled_texture.expired());
+    CHECK_FALSE(weak_target.expired());
+    CHECK_FALSE(weak_layout.expired());
+
+    auto pending = state.take_pending_operations();
+    REQUIRE(pending.size() == 1);
+    CHECK_FALSE(weak_uniform.expired());
+    CHECK_FALSE(weak_sampled_texture.expired());
+    CHECK_FALSE(weak_target.expired());
+    CHECK_FALSE(weak_layout.expired());
+
+    pending.clear();
+    CHECK(weak_uniform.expired());
+    CHECK(weak_sampled_texture.expired());
+    CHECK(weak_target.expired());
+    CHECK(weak_layout.expired());
+}

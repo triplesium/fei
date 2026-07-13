@@ -84,6 +84,7 @@ void CommandBufferOpenGL::set_resource_set(
 
 void CommandBufferOpenGL::update_buffer(
     std::shared_ptr<Buffer> buffer,
+    uint32 offset,
     const void* data,
     std::size_t size
 ) {
@@ -100,6 +101,7 @@ void CommandBufferOpenGL::update_buffer(
     m_commands.emplace_back(
         ogl_cmd::UpdateBuffer {
             .buffer = std::move(buffer),
+            .offset = offset,
             .data = std::move(bytes),
         }
     );
