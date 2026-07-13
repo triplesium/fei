@@ -15,13 +15,26 @@ TEST_CASE(
 ) {
     FrameCaptureState state;
 
-    auto first = state.remember_capture("capability.first", "target.first");
-    auto second = state.remember_capture("capability.second", "target.second");
+    auto first = state.remember_capture(
+        PendingFrameCapture {
+            .capability = "capability.first",
+            .target = "target.first",
+            .view = "view.first",
+        }
+    );
+    auto second = state.remember_capture(
+        PendingFrameCapture {
+            .capability = "capability.second",
+            .target = "target.second",
+            .view = "view.second",
+        }
+    );
 
     REQUIRE(first != second);
     auto capture = state.take_capture(first);
     CHECK(capture.capability == "capability.first");
     CHECK(capture.target == "target.first");
+    CHECK(capture.view == "view.first");
     CHECK(state.take_capture(first).capability.empty());
 
     state.forget_capture(second);

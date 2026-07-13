@@ -32,27 +32,36 @@ make_render_targets_snapshot(const DeferredViewTargets& targets) {
 
     for (const auto& descriptor : descriptors) {
         auto texture = resolve_render_target(targets, descriptor);
-        const auto capturable = is_directly_capturable(texture) &&
-                                descriptor.blob_capability[0] != '\0';
-        snapshot.targets.push_back(
-            RenderTargetSnapshot {
-                .id = descriptor.id,
-                .label = descriptor.label,
-                .available = texture != nullptr,
-                .directly_capturable = capturable,
-                .blob_capability = descriptor.blob_capability,
-                .format = pixel_format_name(
-                    texture ? texture->format() : descriptor.expected_format
-                ),
-                .width = texture ? texture->width() : 0,
-                .height = texture ? texture->height() : 0,
-                .depth = texture ? texture->depth() : 0,
-                .mip_levels = texture ? texture->mip_level() : 0,
-                .layers = texture ? texture->layer() : 0,
-            }
-        );
+        const auto previewable = is_previewable(texture);
+        RenderTargetSnapshot target_snapshot {
+            .id = descriptor.id,
+            .label = descriptor.label,
+            .available = texture != nullptr,
+            .format = pixel_format_name(
+                texture ? texture->format() : descriptor.expected_format
+            ),
+            .width = texture ? texture->width() : 0,
+            .height = texture ? texture->height() : 0,
+            .depth = texture ? texture->depth() : 0,
+            .mip_levels = texture ? texture->mip_level() : 0,
+            .layers = texture ? texture->layer() : 0,
+        };
+        target_snapshot.views.reserve(descriptor.views.size());
+        for (const auto& view : descriptor.views) {
+            target_snapshot.views.push_back(
+                RenderTargetViewSnapshot {
+                    .id = view.id,
+                    .label = view.label,
+                    .available = previewable,
+                    .blob_capability = view.blob_capability,
+                    .visualization = preview_mode_name(view.mode),
+                }
+            );
+            ++snapshot.total_views;
+            snapshot.available_views += previewable ? 1 : 0;
+        }
+        snapshot.targets.push_back(std::move(target_snapshot));
         snapshot.available_targets += texture != nullptr ? 1 : 0;
-        snapshot.directly_capturable_targets += capturable ? 1 : 0;
     }
 
     return snapshot;

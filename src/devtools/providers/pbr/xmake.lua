@@ -1,5 +1,6 @@
 target("fei-devtools-pbr")
     set_kind("static")
+    add_shader_source("devtools_pbr", path.join(os.scriptdir(), "shaders"))
     add_rules("fei.reflect")
     add_headerfiles("include/**.hpp", "src/*.hpp")
     add_files("src/*.cpp")

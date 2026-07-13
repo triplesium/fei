@@ -10,15 +10,9 @@
 
 namespace fei::devtools::pbr {
 
-uint64 FrameCaptureState::remember_capture(
-    std::string capability,
-    std::string target
-) {
+uint64 FrameCaptureState::remember_capture(PendingFrameCapture capture) {
     auto user_data = next_user_data++;
-    pending_captures[user_data] = PendingFrameCapture {
-        .capability = std::move(capability),
-        .target = std::move(target),
-    };
+    pending_captures[user_data] = std::move(capture);
     return user_data;
 }
 
