@@ -26,6 +26,9 @@ void log(LogLevel level, const FormatString& format, std::format_args args) {
     const auto& loc = format.loc;
     std::cout << make_log_prefix(level, loc) << std::vformat(format.str, args)
               << "\n";
+    if (level == LogLevel::Fatal) {
+        std::cout.flush();
+    }
 }
 
 } // namespace fei::detail
