@@ -276,6 +276,16 @@ function releaseBlobUrl(capabilityState) {
   }
 }
 
+function ensureBlobUrl(capabilityState) {
+  if (!capabilityState?.blob) {
+    return null;
+  }
+  if (!capabilityState.blobUrl) {
+    capabilityState.blobUrl = URL.createObjectURL(capabilityState.blob.blob);
+  }
+  return capabilityState.blobUrl;
+}
+
 function cleanupSelectedBlob(nextId) {
   if (state.selectedId && state.selectedId !== nextId) {
     releaseBlobUrl(state.capabilityState.get(state.selectedId));
@@ -1611,6 +1621,7 @@ function renderBlob(capability, body, header) {
     }
 
     const { blob, mime, metadata, version } = capabilityState.blob;
+    const blobUrl = ensureBlobUrl(capabilityState);
     const preview = createElement("div", { className: "blob-preview" });
     const metadataRow = createElement("div", { className: "blob-metadata" });
     metadataRow.append(
@@ -1621,7 +1632,7 @@ function renderBlob(capability, body, header) {
     const download = createElement("a", {
       className: "button ghost",
       text: "Save blob",
-      href: capabilityState.blobUrl,
+      href: blobUrl,
       attributes: { download: downloadName(capability, mime) },
     });
     metadataRow.append(download);
@@ -1631,7 +1642,7 @@ function renderBlob(capability, body, header) {
       preview.append(
         createElement("img", {
           attributes: {
-            src: capabilityState.blobUrl,
+            src: blobUrl,
             alt: `${capability.label || capability.id} preview`,
           },
         }),

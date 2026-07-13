@@ -292,6 +292,15 @@ TEST_CASE("DevTools embeds its schema-driven web UI", "[devtools][ui]") {
         std::string_view::npos
     );
     REQUIRE(
+        script->content.find("ensureBlobUrl(capabilityState)") !=
+        std::string_view::npos
+    );
+    REQUIRE(
+        script->content.find(
+            "URL.createObjectURL(capabilityState.blob.blob)"
+        ) != std::string_view::npos
+    );
+    REQUIRE(
         script->content.find("const actionButton") != std::string_view::npos
     );
     REQUIRE(
