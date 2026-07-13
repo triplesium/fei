@@ -11,6 +11,7 @@
 #include "core/transform.hpp"
 #include "devtools/plugin.hpp"
 #include "devtools_input/plugin.hpp"
+#include "devtools_pbr/plugin.hpp"
 #include "devtools_profiling/plugin.hpp"
 #include "devtools_rendering/plugin.hpp"
 #include "ecs/commands.hpp"
@@ -324,8 +325,9 @@ int main(int argc, char** argv) {
             .port = 8080,
         }}
     );
+    app.add_plugin(devtools::rendering::ProviderPlugin {});
     app.add_plugin(
-        devtools::rendering::ProviderPlugin {devtools::rendering::Config {
+        devtools::pbr::ProviderPlugin {devtools::pbr::Config {
             .jpeg_quality = 80,
         }}
     );

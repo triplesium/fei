@@ -15,6 +15,7 @@ target("sample-scene")
     add_deps(
         "fei-devtools",
         "fei-devtools-input",
+        "fei-devtools-pbr",
         "fei-devtools-profiling",
         "fei-devtools-rendering",
         "fei-graphics-opengl",
