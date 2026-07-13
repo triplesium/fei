@@ -1,5 +1,8 @@
 #include "profiling/profiling.hpp"
 
+#include "frame_profile_accumulator.hpp"
+
+#include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -8,7 +11,6 @@
 
 #if defined(FEI_ENABLE_PROFILE_SUMMARY)
 #    include <algorithm>
-#    include <chrono>
 #    include <cstdlib>
 #    include <filesystem>
 #    include <fstream>
@@ -59,6 +61,7 @@ struct ProfileFrameRecord {
 struct ProfileState {
     std::mutex mutex;
     std::unordered_map<std::uint64_t, std::string> schedule_names;
+    profiling_detail::FrameProfileAccumulator frame_stats;
 #if defined(FEI_ENABLE_PROFILE_SUMMARY)
     std::unordered_map<std::string, ProfileRecord> records;
     std::vector<ProfileFrameRecord> frames;
@@ -84,14 +87,6 @@ struct ActiveProfileScope {
 };
 
 thread_local std::vector<ActiveProfileScope> active_scopes;
-thread_local std::int64_t last_frame_mark_ns = 0;
-
-std::int64_t profile_now_ns() {
-    return std::chrono::duration_cast<std::chrono::nanoseconds>(
-               std::chrono::steady_clock::now().time_since_epoch()
-    )
-        .count();
-}
 
 std::string profile_record_key(
     ProfileZoneKind kind,
@@ -337,6 +332,13 @@ void record_profile_scope(
 
 #endif
 
+std::int64_t profile_now_ns() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch()
+    )
+        .count();
+}
+
 } // namespace
 
 void register_profile_schedule_name(
@@ -372,22 +374,36 @@ std::string profile_schedule_name(std::uint64_t schedule_id) {
 void profile_frame_mark() {
 #if defined(FEI_ENABLE_PROFILE_SUMMARY)
     ensure_profile_summary_atexit();
-    const auto now = profile_now_ns();
-    if (last_frame_mark_ns == 0) {
-        last_frame_mark_ns = now;
-        return;
-    }
+#endif
 
     auto& state = profile_state();
     std::scoped_lock lock(state.mutex);
+#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+    auto duration = state.frame_stats.mark(profile_now_ns());
+    if (!duration) {
+        return;
+    }
     state.frames.push_back(
         ProfileFrameRecord {
             .frame = static_cast<std::uint64_t>(state.frames.size()),
-            .duration_ns = now - last_frame_mark_ns,
+            .duration_ns = *duration,
         }
     );
-    last_frame_mark_ns = now;
+#else
+    (void)state.frame_stats.mark(profile_now_ns());
 #endif
+}
+
+FrameProfileStats profile_frame_stats() {
+    auto& state = profile_state();
+    std::scoped_lock lock(state.mutex);
+    return state.frame_stats.stats();
+}
+
+void clear_profile_frame_stats() {
+    auto& state = profile_state();
+    std::scoped_lock lock(state.mutex);
+    state.frame_stats.clear();
 }
 
 void flush_profile_summary() {
@@ -408,12 +424,12 @@ void flush_profile_summary() {
 }
 
 void clear_profile_summary() {
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
     auto& state = profile_state();
     std::scoped_lock lock(state.mutex);
+    state.frame_stats.clear();
+#if defined(FEI_ENABLE_PROFILE_SUMMARY)
     state.records.clear();
     state.frames.clear();
-    last_frame_mark_ns = 0;
 #endif
 }
 

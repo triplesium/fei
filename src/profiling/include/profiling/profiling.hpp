@@ -15,6 +15,13 @@ enum class ProfileZoneKind : std::uint8_t {
     System,
 };
 
+struct FrameProfileStats {
+    std::uint64_t frame_count {0};
+    double fps {0.0};
+    double latest_frame_ms {0.0};
+    double average_frame_ms {0.0};
+};
+
 void register_profile_schedule_name(
     std::uint64_t schedule_id,
     std::string_view name
@@ -23,6 +30,8 @@ void clear_profile_schedule_names();
 std::string profile_schedule_name(std::uint64_t schedule_id);
 
 void profile_frame_mark();
+FrameProfileStats profile_frame_stats();
+void clear_profile_frame_stats();
 void flush_profile_summary();
 void clear_profile_summary();
 void set_profile_summary_output_directory(std::string path);
@@ -108,7 +117,6 @@ class SummaryProfileScope {
 #endif
 
 #if defined(FEI_ENABLE_PROFILE_SUMMARY)
-#    define FEI_PROFILE_SUMMARY_FRAME() ::fei::profile_frame_mark()
 #    define FEI_PROFILE_SUMMARY_SCOPE(                      \
         kind,                                               \
         schedule_id,                                        \
@@ -121,7 +129,6 @@ class SummaryProfileScope {
             fei_summary_profile_scope_                      \
         ) {kind, schedule_id, name, file, function, line};
 #else
-#    define FEI_PROFILE_SUMMARY_FRAME()
 #    define FEI_PROFILE_SUMMARY_SCOPE( \
         kind,                          \
         schedule_id,                   \
@@ -134,7 +141,7 @@ class SummaryProfileScope {
 
 #define FEI_PROFILE_FRAME()    \
     FEI_PROFILE_TRACY_FRAME(); \
-    FEI_PROFILE_SUMMARY_FRAME()
+    ::fei::profile_frame_mark()
 
 #define FEI_PROFILE_SCOPE(name)          \
     FEI_PROFILE_TRACY_SCOPE(name)        \

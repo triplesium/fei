@@ -1,6 +1,6 @@
 target("fei-profiling")
     set_kind("static")
-    add_headerfiles("include/**.hpp")
+    add_headerfiles("include/**.hpp", "src/*.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
     if has_config("profile_summary") then
@@ -31,4 +31,5 @@ target("fei-profiling-tests")
     set_default(false)
     add_rules("fei.test")
     add_files("tests/*.cpp")
+    add_includedirs("src")
     add_deps("fei-profiling")
