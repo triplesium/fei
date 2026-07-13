@@ -35,6 +35,32 @@ struct ThrowingMovePayload {
     }
 };
 
+struct ThrowingHeapPayload {
+    static inline int live_instances {0};
+    static inline int copy_attempts {0};
+
+    std::byte padding[64] {};
+    int value {0};
+
+    explicit ThrowingHeapPayload(int value, bool should_throw = false) :
+        value(value) {
+        if (should_throw) {
+            throw std::runtime_error("heap payload construction failed");
+        }
+        ++live_instances;
+    }
+
+    ThrowingHeapPayload(const ThrowingHeapPayload&) {
+        ++copy_attempts;
+        throw std::runtime_error("heap payload copy failed");
+    }
+    ThrowingHeapPayload& operator=(const ThrowingHeapPayload&) = delete;
+    ThrowingHeapPayload(ThrowingHeapPayload&&) = delete;
+    ThrowingHeapPayload& operator=(ThrowingHeapPayload&&) = delete;
+
+    ~ThrowingHeapPayload() { --live_instances; }
+};
+
 } // namespace
 
 TEST_CASE("Val owns small and heap values", "[refl][val]") {
@@ -151,6 +177,37 @@ TEST_CASE("Val destroys owned objects", "[refl][val]") {
         REQUIRE(val);
     }
     REQUIRE(destroyed == 1);
+}
+
+TEST_CASE("Val releases heap storage when construction fails", "[refl][val]") {
+    Registry::instance().register_type<ThrowingHeapPayload>();
+    ThrowingHeapPayload::live_instances = 0;
+    ThrowingHeapPayload::copy_attempts = 0;
+
+    REQUIRE_THROWS_AS(
+        make_val<ThrowingHeapPayload>(1, true),
+        std::runtime_error
+    );
+    REQUIRE(ThrowingHeapPayload::live_instances == 0);
+
+    {
+        Val source = make_val<ThrowingHeapPayload>(42);
+        REQUIRE(ThrowingHeapPayload::live_instances == 1);
+        REQUIRE(source.get<ThrowingHeapPayload>().value == 42);
+
+        REQUIRE_THROWS_AS(
+            [&] {
+                Val copy = source;
+                (void)copy;
+            }(),
+            std::runtime_error
+        );
+        REQUIRE(ThrowingHeapPayload::copy_attempts == 1);
+        REQUIRE(ThrowingHeapPayload::live_instances == 1);
+        REQUIRE(source.get<ThrowingHeapPayload>().value == 42);
+    }
+
+    REQUIRE(ThrowingHeapPayload::live_instances == 0);
 }
 
 TEST_CASE("Val copies and moves owned objects", "[refl][val]") {

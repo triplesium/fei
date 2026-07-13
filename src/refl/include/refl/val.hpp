@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <exception>
+#include <memory>
 #include <new>
 #include <stdexcept>
 #include <string>
@@ -38,9 +39,18 @@ class Val {
         std::byte bytes[c_inline_size];
     };
 
+    struct AlignedStorageDeleter {
+        std::size_t alignment {c_inline_align};
+
+        void operator()(std::byte* ptr) const noexcept {
+            ::operator delete(ptr, std::align_val_t {alignment});
+        }
+    };
+
+    using HeapStorage = std::unique_ptr<std::byte, AlignedStorageDeleter>;
+
     const Type* m_type {nullptr};
-    bool m_heap {false};
-    void* m_heap_ptr {nullptr};
+    HeapStorage m_heap {nullptr, AlignedStorageDeleter {}};
     InlineStorage m_storage;
 
     static bool fits_inline(const Type& type) {
@@ -53,47 +63,35 @@ class Val {
     void* inline_ptr() { return &m_storage; }
     const void* inline_ptr() const { return &m_storage; }
 
-    void* data_ptr() { return m_heap ? m_heap_ptr : inline_ptr(); }
+    void* data_ptr() { return m_heap ? m_heap.get() : inline_ptr(); }
 
-    const void* data_ptr() const { return m_heap ? m_heap_ptr : inline_ptr(); }
+    const void* data_ptr() const {
+        return m_heap ? m_heap.get() : inline_ptr();
+    }
 
     void* allocate_storage(const Type& type) {
-        m_heap = !fits_inline(type);
-        if (m_heap) {
-            m_heap_ptr =
-                ::operator new(type.size(), std::align_val_t {type.align()});
-            return m_heap_ptr;
+        if (fits_inline(type)) {
+            m_heap.reset();
+            return inline_ptr();
         }
-        m_heap_ptr = nullptr;
-        return inline_ptr();
-    }
 
-    void deallocate_storage() noexcept {
-        if (m_heap && m_heap_ptr) {
-            ::operator delete(
-                m_heap_ptr,
-                std::align_val_t {m_type ? m_type->align() : c_inline_align}
-            );
-        }
-        m_heap = false;
-        m_heap_ptr = nullptr;
-    }
-
-    void deallocate_storage(const Type& type) noexcept {
-        if (m_heap && m_heap_ptr) {
-            ::operator delete(m_heap_ptr, std::align_val_t {type.align()});
-        }
-        m_heap = false;
-        m_heap_ptr = nullptr;
+        HeapStorage storage {
+            static_cast<std::byte*>(
+                ::operator new(type.size(), std::align_val_t {type.align()})
+            ),
+            AlignedStorageDeleter {.alignment = type.align()},
+        };
+        auto* result = storage.get();
+        m_heap = std::move(storage);
+        return result;
     }
 
     void reset() noexcept {
-        if (!m_type) {
-            return;
+        if (m_type) {
+            m_type->destroy(data_ptr());
+            m_type = nullptr;
         }
-        m_type->destroy(data_ptr());
-        deallocate_storage();
-        m_type = nullptr;
+        m_heap.reset();
     }
 
     void copy_from(const Val& other) {
@@ -108,12 +106,7 @@ class Val {
         }
         const Type* type = other.m_type;
         void* dest = allocate_storage(*type);
-        try {
-            type->copy_construct(dest, other.data_ptr());
-        } catch (...) {
-            deallocate_storage(*type);
-            throw;
-        }
+        type->copy_construct(dest, other.data_ptr());
         m_type = type;
     }
 
@@ -124,11 +117,8 @@ class Val {
 
         const Type* type = other.m_type;
         if (other.m_heap) {
-            m_type = type;
-            m_heap = true;
-            m_heap_ptr = std::exchange(other.m_heap_ptr, nullptr);
-            other.m_type = nullptr;
-            other.m_heap = false;
+            m_type = std::exchange(other.m_type, nullptr);
+            m_heap = std::move(other.m_heap);
             return;
         }
 
@@ -151,12 +141,7 @@ class Val {
         }
         Val val;
         void* dest = val.allocate_storage(type);
-        try {
-            std::forward<Construct>(construct)(dest);
-        } catch (...) {
-            val.deallocate_storage(type);
-            throw;
-        }
+        std::forward<Construct>(construct)(dest);
         val.m_type = &type;
         return val;
     }
