@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <title>FEI DevTools</title>
+    <link rel="stylesheet" href="/ui/app.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div class="app-shell">
+      <header class="topbar">
+        <button
+          id="sidebar-toggle"
+          class="icon-button sidebar-toggle"
+          type="button"
+          aria-label="Toggle capability navigation"
+          aria-controls="sidebar"
+          aria-expanded="false"
+        >☰</button>
+        <a class="brand" href="#" aria-label="FEI DevTools home">
+          <span class="brand-mark">F</span>
+          <span>
+            <strong>FEI DevTools</strong>
+            <small id="service-name">Connecting</small>
+          </span>
+        </a>
+        <div class="topbar-actions">
+          <span id="connection-state" class="connection-state pending">
+            <span class="connection-dot" aria-hidden="true"></span>
+            <span>Connecting</span>
+          </span>
+          <span id="status-summary" class="status-summary"></span>
+          <button id="refresh-devtools" class="button ghost" type="button">
+            Refresh
+          </button>
+        </div>
+      </header>
+
+      <aside id="sidebar" class="sidebar" aria-label="Capabilities">
+        <div class="sidebar-tools">
+          <div
+            id="sidebar-grouping"
+            class="sidebar-grouping"
+            role="group"
+            aria-label="Group capabilities by"
+          >
+            <button
+              class="sidebar-group-button active"
+              type="button"
+              data-grouping="namespace"
+              aria-pressed="true"
+            >Namespace</button>
+            <button
+              class="sidebar-group-button"
+              type="button"
+              data-grouping="kind"
+              aria-pressed="false"
+            >Kind</button>
+          </div>
+          <label class="search-field">
+            <span class="visually-hidden">Search capabilities</span>
+            <span aria-hidden="true">⌕</span>
+            <input
+              id="capability-search"
+              type="search"
+              placeholder="Search capabilities"
+              autocomplete="off"
+            >
+          </label>
+        </div>
+        <nav id="capability-nav" class="capability-nav"></nav>
+        <footer class="sidebar-footer">
+          <span id="protocol-version">Protocol —</span>
+          <span id="capability-count">0 capabilities</span>
+        </footer>
+      </aside>
+
+      <main id="main-content" class="main-content" tabindex="-1">
+        <section id="content" class="content-card" aria-live="polite">
+          <div class="loading-state">
+            <span class="spinner" aria-hidden="true"></span>
+            <h1>Connecting to DevTools</h1>
+            <p>Discovering the local service and its capabilities.</p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast-region" class="toast-region" aria-live="polite"></div>
+
+    <script type="module" src="/ui/app.js"></script>
+  </body>
+</html>

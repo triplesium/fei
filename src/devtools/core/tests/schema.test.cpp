@@ -8,7 +8,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <nlohmann/json.hpp>
+#include <set>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
@@ -26,12 +28,20 @@ struct SchemaNested {
     bool enabled {false};
 };
 
+struct SchemaUnsupported {
+    int value {0};
+};
+
 struct SchemaFixture {
     SchemaMode mode {SchemaMode::Idle};
     SchemaNested nested;
     std::vector<int> values;
     Optional<std::string> label;
     std::unordered_map<std::string, int> scores;
+    std::set<int> tags;
+    std::tuple<int, std::string> product;
+    float ratio {0.0F};
+    SchemaUnsupported unsupported;
 };
 
 void register_schema_types() {
@@ -56,7 +66,11 @@ void register_schema_types() {
         .add_property("nested", &SchemaFixture::nested)
         .add_property("values", &SchemaFixture::values)
         .add_property("label", &SchemaFixture::label)
-        .add_property("scores", &SchemaFixture::scores);
+        .add_property("scores", &SchemaFixture::scores)
+        .add_property("tags", &SchemaFixture::tags)
+        .add_property("product", &SchemaFixture::product)
+        .add_property("ratio", &SchemaFixture::ratio)
+        .add_property("unsupported", &SchemaFixture::unsupported);
     registered = true;
 }
 
@@ -94,6 +108,9 @@ TEST_CASE(
     auto optional_name = reflected_name(type_id<Optional<std::string>>());
     auto map_name =
         reflected_name(type_id<std::unordered_map<std::string, int>>());
+    auto set_name = reflected_name(type_id<std::set<int>>());
+    auto product_name = reflected_name(type_id<std::tuple<int, std::string>>());
+    auto unsupported_name = reflected_name(type_id<SchemaUnsupported>());
 
     REQUIRE(document.at("version") == 1);
     REQUIRE(document.at("roots") == nlohmann::json::array({fixture_name}));
@@ -128,5 +145,15 @@ TEST_CASE(
     );
     REQUIRE(
         types.at(map_name).at("mapped_type") == reflected_name(type_id<int>())
+    );
+    REQUIRE(types.at(set_name).at("kind") == "set");
+    REQUIRE(
+        types.at(set_name).at("key_type") == reflected_name(type_id<int>())
+    );
+    REQUIRE(types.at(product_name).at("kind") == "product");
+    REQUIRE(types.at(product_name).at("fixed_size") == true);
+    REQUIRE(types.at(unsupported_name).at("kind") == "unsupported");
+    REQUIRE(
+        types.at(reflected_name(type_id<float>())).at("kind") == "floating"
     );
 }

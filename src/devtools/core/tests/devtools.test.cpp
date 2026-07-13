@@ -1,7 +1,9 @@
 #include "devtools/bridge.hpp"
+#include "ui_assets.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -229,4 +231,127 @@ TEST_CASE("Bridge stores manifest JSON", "[devtools]") {
         R"({"version":1,"roots":["test.Root"],"types":{}})";
     bridge.update_schema_json(schemas);
     REQUIRE(bridge.schema_json() == schemas);
+}
+
+TEST_CASE("DevTools embeds its schema-driven web UI", "[devtools][ui]") {
+    using namespace fei::devtools::detail;
+
+    auto discovery = nlohmann::json::parse(c_discovery_json);
+    REQUIRE(discovery.at("name") == "fei-devtools");
+    REQUIRE(discovery.at("version") == 1);
+    REQUIRE(discovery.at("manifest") == "/api/v1/manifest");
+    REQUIRE(discovery.at("schemas") == "/api/v1/schemas");
+    REQUIRE(discovery.at("status") == "/api/v1/status");
+    REQUIRE(discovery.at("ui") == "/ui/");
+
+    auto index = find_ui_asset("/ui/");
+    REQUIRE(index);
+    REQUIRE(index->content_type == "text/html; charset=utf-8");
+    REQUIRE(index->content.find("FEI DevTools") != std::string_view::npos);
+    REQUIRE(index->content.find("/ui/app.js") != std::string_view::npos);
+    REQUIRE(
+        index->content.find(R"(id="refresh-devtools")") !=
+        std::string_view::npos
+    );
+    REQUIRE(index->content.find("refresh-status") == std::string_view::npos);
+    REQUIRE(index->content.find("refresh-manifest") == std::string_view::npos);
+    REQUIRE(index->content.find("command-confirm") == std::string_view::npos);
+    REQUIRE(
+        index->content.find(R"(data-grouping="namespace")") !=
+        std::string_view::npos
+    );
+    REQUIRE(
+        index->content.find(R"(data-grouping="kind")") != std::string_view::npos
+    );
+
+    auto styles = find_ui_asset("/ui/app.css");
+    REQUIRE(styles);
+    REQUIRE(styles->content_type == "text/css; charset=utf-8");
+    REQUIRE_FALSE(styles->content.empty());
+    REQUIRE(styles->content.find(".data-search") != std::string_view::npos);
+    REQUIRE(
+        styles->content.find(".collection-summary") != std::string_view::npos
+    );
+    REQUIRE(styles->content.find(".field-row:has") != std::string_view::npos);
+
+    auto script = find_ui_asset("/ui/app.js");
+    REQUIRE(script);
+    REQUIRE(script->content_type == "text/javascript; charset=utf-8");
+    REQUIRE(
+        script->content.find("manifest.capabilities") != std::string_view::npos
+    );
+    REQUIRE(script->content.find("rendering.frame") == std::string_view::npos);
+    REQUIRE(script->content.find("input.key") == std::string_view::npos);
+    REQUIRE(script->content.find("/stream") == std::string_view::npos);
+    REQUIRE(
+        script->content.find(R"(capability.mode === "cached")") !=
+        std::string_view::npos
+    );
+    REQUIRE(
+        script->content.find("snapshotAutoLoadAttempted") !=
+        std::string_view::npos
+    );
+    REQUIRE(
+        script->content.find("const actionButton") != std::string_view::npos
+    );
+    REQUIRE(
+        script->content.find("const freshButton") == std::string_view::npos
+    );
+    REQUIRE(script->content.find("Force refresh") == std::string_view::npos);
+    REQUIRE(script->content.find("Load cached") == std::string_view::npos);
+    REQUIRE(script->content.find("confirmCommand") == std::string_view::npos);
+    REQUIRE(script->content.find("Review command") == std::string_view::npos);
+    REQUIRE(script->content.find("Search data") != std::string_view::npos);
+    REQUIRE(
+        script->content.find("data-search-alias") != std::string_view::npos
+    );
+    REQUIRE(script->content.find("Expand all") != std::string_view::npos);
+    REQUIRE(
+        script->content.find("capabilityNamespace") != std::string_view::npos
+    );
+    REQUIRE(
+        script->content.find(R"(viewMode === "raw")") != std::string_view::npos
+    );
+    REQUIRE(
+        script->content.find("capability-details") != std::string_view::npos
+    );
+    REQUIRE(script->content.find("Snapshot data") == std::string_view::npos);
+
+    REQUIRE_FALSE(find_ui_asset("/ui/missing.js"));
+    REQUIRE(
+        c_ui_content_security_policy.find("connect-src 'self'") !=
+        std::string_view::npos
+    );
+    REQUIRE(
+        c_ui_content_security_policy.find("frame-ancestors 'none'") !=
+        std::string_view::npos
+    );
+}
+
+TEST_CASE(
+    "Manifest accepts capabilities unknown to the UI",
+    "[devtools][ui][manifest]"
+) {
+    Bridge bridge;
+    bridge.update_manifest({
+        ManifestEntry {
+            .id = "fixture.experimental",
+            .label = "Experimental Fixture",
+            .kind = "snapshot",
+            .schema = "fixture.experimental.v1",
+            .data_type = "fixture::ExperimentalSnapshot",
+            .mode = PublishMode::Cached,
+            .waitable = true,
+        },
+    });
+
+    auto manifest = nlohmann::json::parse(bridge.manifest_json());
+    const auto& capability = manifest.at("capabilities").at(0);
+    REQUIRE(capability.at("id") == "fixture.experimental");
+    REQUIRE(capability.at("kind") == "snapshot");
+    REQUIRE(
+        capability.at("endpoints").at("get") ==
+        "/api/v1/snapshots/fixture.experimental"
+    );
+    REQUIRE(bridge.find_capability("fixture.experimental"));
 }

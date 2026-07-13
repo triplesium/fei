@@ -1,6 +1,7 @@
 #include "devtools/server.hpp"
 
 #include "base/log.hpp"
+#include "ui_assets.hpp"
 
 #include <charconv>
 #include <chrono>
@@ -15,10 +16,6 @@ namespace {
 
 constexpr std::string_view c_mjpeg_boundary {"fei-frame"};
 constexpr std::chrono::milliseconds c_default_timeout {5000};
-constexpr std::string_view c_discovery_json {
-    R"({"name":"fei-devtools","version":1,"manifest":"/api/v1/manifest","schemas":"/api/v1/schemas","status":"/api/v1/status"})"
-};
-
 struct RequestParams {
     uint64 after {0};
     bool fresh {false};
@@ -166,6 +163,34 @@ void set_text(
     res.status = status;
     res.set_header("Cache-Control", "no-store");
     res.set_content(content.data(), content.size(), std::string(content_type));
+}
+
+void set_ui_security_headers(httplib::Response& res) {
+    res.set_header("Cache-Control", "no-store");
+    res.set_header(
+        "Content-Security-Policy",
+        std::string(detail::c_ui_content_security_policy)
+    );
+    res.set_header("Referrer-Policy", "no-referrer");
+    res.set_header("X-Content-Type-Options", "nosniff");
+    res.set_header("X-Frame-Options", "DENY");
+}
+
+void serve_ui_asset(std::string_view path, httplib::Response& res) {
+    auto asset = detail::find_ui_asset(path);
+    if (!asset) {
+        set_ui_security_headers(res);
+        set_text(res, 404, "Not Found", "text/plain; charset=utf-8");
+        return;
+    }
+
+    set_ui_security_headers(res);
+    res.status = 200;
+    res.set_content(
+        asset->content.data(),
+        asset->content.size(),
+        std::string(asset->content_type)
+    );
 }
 
 void set_bridge_response(
@@ -343,25 +368,10 @@ void serve_command_request(
     std::string capability,
     std::string body,
     const httplib::Request& req,
-    httplib::Response& res,
-    bool agent_mode
+    httplib::Response& res
 ) {
     const auto capability_id = capability;
     if (!validate_capability(bridge, capability, "command", res)) {
-        return;
-    }
-
-    if (capability == "devtools.shutdown" && !agent_mode) {
-        set_text(
-            res,
-            403,
-            error_json(
-                "Shutdown requires agent_mode",
-                403,
-                capability,
-                "command"
-            )
-        );
         return;
     }
 
@@ -402,15 +412,41 @@ void serve_command_request(
     set_bridge_response(res, *response);
 }
 
-void install_routes(
-    httplib::Server& server,
-    const Config& config,
-    Bridge bridge
-) {
+void install_routes(httplib::Server& server, Bridge bridge) {
     server.Get("/", [](const httplib::Request&, httplib::Response& res) {
         res.set_header("Cache-Control", "no-store");
-        set_text(res, 200, c_discovery_json);
+        set_text(res, 200, detail::c_discovery_json);
     });
+
+    server.Get("/ui", [](const httplib::Request&, httplib::Response& res) {
+        set_ui_security_headers(res);
+        res.set_redirect("/ui/", 302);
+    });
+
+    server.Get("/ui/", [](const httplib::Request&, httplib::Response& res) {
+        serve_ui_asset("/ui/", res);
+    });
+
+    server.Get(
+        "/ui/index.html",
+        [](const httplib::Request&, httplib::Response& res) {
+            serve_ui_asset("/ui/index.html", res);
+        }
+    );
+
+    server.Get(
+        "/ui/app.css",
+        [](const httplib::Request&, httplib::Response& res) {
+            serve_ui_asset("/ui/app.css", res);
+        }
+    );
+
+    server.Get(
+        "/ui/app.js",
+        [](const httplib::Request&, httplib::Response& res) {
+            serve_ui_asset("/ui/app.js", res);
+        }
+    );
 
     server.Get(
         "/api/v1/manifest",
@@ -497,43 +533,21 @@ void install_routes(
 
     server.Post(
         R"(/api/v1/commands/([^/]+))",
-        [bridge, agent_mode = config.agent_mode](
-            const httplib::Request& req,
-            httplib::Response& res
-        ) mutable {
+        [bridge](const httplib::Request& req, httplib::Response& res) mutable {
             serve_command_request(
                 bridge,
                 req.matches[1].str(),
                 req.body,
                 req,
-                res,
-                agent_mode
+                res
             );
         }
     );
 
     server.Post(
         "/api/v1/shutdown",
-        [bridge, agent_mode = config.agent_mode](
-            const httplib::Request& req,
-            httplib::Response& res
-        ) mutable {
-            if (!agent_mode) {
-                set_text(
-                    res,
-                    403,
-                    error_json("Shutdown requires agent_mode", 403)
-                );
-                return;
-            }
-            serve_command_request(
-                bridge,
-                "devtools.shutdown",
-                "{}",
-                req,
-                res,
-                true
-            );
+        [bridge](const httplib::Request& req, httplib::Response& res) mutable {
+            serve_command_request(bridge, "devtools.shutdown", "{}", req, res);
         }
     );
 }
@@ -543,7 +557,7 @@ void install_routes(
 Server::Server(Config config, Bridge bridge) :
     m_config(std::move(config)), m_bridge(std::move(bridge)),
     m_server(std::make_unique<httplib::Server>()) {
-    install_routes(*m_server, m_config, m_bridge);
+    install_routes(*m_server, m_bridge);
 }
 
 Server::~Server() {

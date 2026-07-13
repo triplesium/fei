@@ -1,10 +1,23 @@
 target("fei-devtools")
     set_kind("static")
-    add_headerfiles("include/**.hpp")
+    add_headerfiles("include/**.hpp", "src/*.hpp")
     add_files("src/*.cpp")
+    add_rules(
+        "utils.bin2obj",
+        {
+            extensions = {".html", ".css", ".js"},
+            symbol_prefix = "_binary_devtools_"
+        }
+    )
+    add_files(
+        "ui/index.html",
+        "ui/app.css",
+        "ui/app.js"
+    )
     add_includedirs("include", {public = true})
     add_deps(
         "fei-app",
+        "fei-asset",
         "fei-base",
         "fei-ecs",
         "fei-serialization"
@@ -19,5 +32,6 @@ target("fei-devtools-tests")
     set_default(false)
     add_rules("fei.test")
     add_files("tests/*.cpp")
+    add_includedirs("src")
     add_deps("fei-devtools")
     add_packages("nlohmann_json")
