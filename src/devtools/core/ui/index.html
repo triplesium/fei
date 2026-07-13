@@ -40,24 +40,33 @@
 
       <aside id="sidebar" class="sidebar" aria-label="Capabilities">
         <div class="sidebar-tools">
-          <div
-            id="sidebar-grouping"
-            class="sidebar-grouping"
-            role="group"
-            aria-label="Group capabilities by"
-          >
+          <div class="sidebar-view-controls">
+            <div
+              id="sidebar-grouping"
+              class="sidebar-grouping"
+              role="group"
+              aria-label="Group capabilities by"
+            >
+              <button
+                class="sidebar-group-button active"
+                type="button"
+                data-grouping="namespace"
+                aria-pressed="true"
+              >Namespace</button>
+              <button
+                class="sidebar-group-button"
+                type="button"
+                data-grouping="kind"
+                aria-pressed="false"
+              >Kind</button>
+            </div>
             <button
-              class="sidebar-group-button active"
+              id="toggle-blobs"
+              class="sidebar-filter-button"
               type="button"
-              data-grouping="namespace"
-              aria-pressed="true"
-            >Namespace</button>
-            <button
-              class="sidebar-group-button"
-              type="button"
-              data-grouping="kind"
               aria-pressed="false"
-            >Kind</button>
+              title="Show blob capabilities"
+            >Blobs</button>
           </div>
           <label class="search-field">
             <span class="visually-hidden">Search capabilities</span>

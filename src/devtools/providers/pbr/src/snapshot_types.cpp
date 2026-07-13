@@ -3,6 +3,7 @@
 #include "render_targets.hpp"
 
 #include <string>
+#include <utility>
 
 namespace fei::devtools::pbr {
 
@@ -19,15 +20,21 @@ std::string pixel_format_name(PixelFormat format) {
     }
 }
 
+Optional<BlobRef> make_blob_ref(bool available, const char* capability) {
+    if (!available) {
+        return nullopt;
+    }
+    return BlobRef {.capability = capability};
+}
+
 } // namespace
 
 RenderTargetsSnapshot
 make_render_targets_snapshot(const DeferredViewTargets& targets) {
     const auto& descriptors = render_target_descriptors();
-    RenderTargetsSnapshot snapshot {
-        .available = true,
-        .total_targets = descriptors.size(),
-    };
+    RenderTargetsSnapshot snapshot;
+    snapshot.available = true;
+    snapshot.total_targets = descriptors.size();
     snapshot.targets.reserve(descriptors.size());
 
     for (const auto& descriptor : descriptors) {
@@ -48,15 +55,19 @@ make_render_targets_snapshot(const DeferredViewTargets& targets) {
         };
         target_snapshot.views.reserve(descriptor.views.size());
         for (const auto& view : descriptor.views) {
+            auto blob_ref = make_blob_ref(previewable, view.blob_capability);
             target_snapshot.views.push_back(
                 RenderTargetViewSnapshot {
                     .id = view.id,
                     .label = view.label,
                     .available = previewable,
-                    .blob_capability = view.blob_capability,
+                    .preview = blob_ref,
                     .visualization = preview_mode_name(view.mode),
                 }
             );
+            if (blob_ref) {
+                snapshot.previews.push_back(std::move(*blob_ref));
+            }
             ++snapshot.total_views;
             snapshot.available_views += previewable ? 1 : 0;
         }

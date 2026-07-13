@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/types.hpp"
+#include "refl/reflect.hpp"
 #include "refl/type.hpp"
 
 #include <chrono>
@@ -33,6 +34,10 @@ struct Config {
 struct Capability {
     std::string id;
     std::string label;
+};
+
+struct FEI_REFLECT BlobRef {
+    std::string capability;
 };
 
 struct BlobCapability {

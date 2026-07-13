@@ -1,5 +1,6 @@
 target("fei-devtools")
     set_kind("static")
+    add_rules("fei.reflect")
     add_headerfiles("include/**.hpp", "src/*.hpp")
     add_files("src/*.cpp")
     add_rules(
@@ -20,6 +21,7 @@ target("fei-devtools")
         "fei-asset",
         "fei-base",
         "fei-ecs",
+        "fei-refl",
         "fei-serialization"
     )
     add_packages("cpp-httplib", "nlohmann_json")

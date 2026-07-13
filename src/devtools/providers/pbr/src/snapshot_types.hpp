@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base/optional.hpp"
+#include "devtools/types.hpp"
 #include "pbr/passes/target.hpp"
 #include "refl/reflect.hpp"
 
@@ -13,7 +15,7 @@ struct FEI_REFLECT RenderTargetViewSnapshot {
     std::string id;
     std::string label;
     bool available {false};
-    std::string blob_capability;
+    Optional<BlobRef> preview;
     std::string visualization;
 };
 
@@ -31,6 +33,7 @@ struct FEI_REFLECT RenderTargetSnapshot {
 };
 
 struct FEI_REFLECT RenderTargetsSnapshot {
+    std::vector<BlobRef> previews;
     bool available {false};
     std::uint64_t total_targets {0};
     std::uint64_t available_targets {0};

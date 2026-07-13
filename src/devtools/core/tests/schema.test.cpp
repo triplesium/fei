@@ -1,6 +1,7 @@
 #include "devtools/schema.hpp"
 
 #include "base/optional.hpp"
+#include "devtools/types.hpp"
 #include "refl/cls.hpp"
 #include "refl/enum.hpp"
 #include "refl/registry.hpp"
@@ -33,6 +34,7 @@ struct SchemaUnsupported {
 };
 
 struct SchemaFixture {
+    BlobRef blob;
     SchemaMode mode {SchemaMode::Idle};
     SchemaNested nested;
     std::vector<int> values;
@@ -51,6 +53,10 @@ void register_schema_types() {
     }
 
     auto& registry = Registry::instance();
+    registry.register_cls<BlobRef>().add_property(
+        "capability",
+        &BlobRef::capability
+    );
     registry.register_enum<SchemaMode>()
         .add_enumerator("Idle", static_cast<std::int64_t>(SchemaMode::Idle))
         .add_enumerator(
@@ -62,6 +68,7 @@ void register_schema_types() {
         &SchemaNested::enabled
     );
     registry.register_cls<SchemaFixture>()
+        .add_property("blob", &SchemaFixture::blob)
         .add_property("mode", &SchemaFixture::mode)
         .add_property("nested", &SchemaFixture::nested)
         .add_property("values", &SchemaFixture::values)
@@ -103,6 +110,7 @@ TEST_CASE(
     const auto& types = document.at("types");
 
     auto fixture_name = reflected_name(type_id<SchemaFixture>());
+    auto blob_name = reflected_name(type_id<BlobRef>());
     auto mode_name = reflected_name(type_id<SchemaMode>());
     auto vector_name = reflected_name(type_id<std::vector<int>>());
     auto optional_name = reflected_name(type_id<Optional<std::string>>());
@@ -115,6 +123,10 @@ TEST_CASE(
     REQUIRE(document.at("version") == 1);
     REQUIRE(document.at("roots") == nlohmann::json::array({fixture_name}));
     REQUIRE(types.at(fixture_name).at("kind") == "object");
+    REQUIRE(
+        find_property(types.at(fixture_name), "blob").at("type") == blob_name
+    );
+    REQUIRE(types.at(blob_name).at("kind") == "blob_ref");
 
     REQUIRE(
         find_property(types.at(fixture_name), "mode").at("type") == mode_name

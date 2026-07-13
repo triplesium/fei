@@ -218,6 +218,12 @@ a {
   padding: 16px 14px 10px;
 }
 
+.sidebar-view-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
 .sidebar-grouping {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -246,6 +252,28 @@ a {
 .sidebar-group-button.active {
   color: var(--accent-strong);
   background: var(--panel-hover);
+}
+
+.sidebar-filter-button {
+  min-height: 37px;
+  padding: 4px 10px;
+  color: var(--text-faint);
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-small);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.sidebar-filter-button:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.sidebar-filter-button.active {
+  color: var(--accent-strong);
+  background: var(--panel-hover);
+  border-color: #31558d;
 }
 
 .search-field {
@@ -1086,6 +1114,80 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.blob-reference {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 560px);
+  padding: 10px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-small);
+}
+
+.blob-reference-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.blob-reference-title {
+  display: grid;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.blob-reference-title strong,
+.blob-reference-title code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blob-reference-title strong {
+  font-size: 12px;
+}
+
+.blob-reference-title code {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.blob-reference-action,
+.blob-preview.compact .button {
+  min-height: 31px;
+  padding: 5px 9px;
+  font-size: 11px;
+}
+
+.blob-reference-content {
+  min-width: 0;
+}
+
+.blob-reference-error {
+  display: grid;
+  gap: 8px;
+  max-width: 560px;
+  padding: 10px;
+  color: #ffd2d2;
+  background: rgb(126 41 47 / 18%);
+  border: 1px solid rgb(214 91 98 / 35%);
+  border-radius: var(--radius-small);
+}
+
+.blob-preview.compact {
+  gap: 10px;
+}
+
+.blob-preview.compact img {
+  max-height: 320px;
+  margin: 0;
+}
+
+.blob-preview.compact .blob-metadata {
+  gap: 6px;
 }
 
 .loading-state,

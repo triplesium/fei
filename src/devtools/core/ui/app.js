@@ -9,6 +9,7 @@ const elements = {
   search: document.querySelector("#capability-search"),
   serviceName: document.querySelector("#service-name"),
   sidebar: document.querySelector("#sidebar"),
+  sidebarBlobToggle: document.querySelector("#toggle-blobs"),
   sidebarGrouping: document.querySelector("#sidebar-grouping"),
   sidebarToggle: document.querySelector("#sidebar-toggle"),
   statusSummary: document.querySelector("#status-summary"),
@@ -22,10 +23,12 @@ const state = {
     namespace: new Set(),
   },
   discovery: null,
+  inlineBlobIds: new Set(),
   manifest: null,
   schemas: null,
   selectedId: null,
   sidebarGrouping: loadSidebarGrouping(),
+  showSidebarBlobs: loadShowSidebarBlobs(),
   status: null,
 };
 
@@ -40,6 +43,7 @@ const supportedProtocolVersion = 1;
 const maximumCollectionRows = 200;
 const maximumPreviewBytes = 2 * 1024 * 1024;
 const sidebarGroupingStorageKey = "fei-devtools-sidebar-grouping";
+const sidebarShowBlobsStorageKey = "fei-devtools-sidebar-show-blobs";
 
 function loadSidebarGrouping() {
   try {
@@ -47,6 +51,14 @@ function loadSidebarGrouping() {
     return stored === "kind" || stored === "namespace" ? stored : "namespace";
   } catch {
     return "namespace";
+  }
+}
+
+function loadShowSidebarBlobs() {
+  try {
+    return window.localStorage.getItem("fei-devtools-sidebar-show-blobs") === "true";
+  } catch {
+    return false;
   }
 }
 
@@ -286,7 +298,13 @@ function ensureBlobUrl(capabilityState) {
   return capabilityState.blobUrl;
 }
 
-function cleanupSelectedBlob(nextId) {
+function cleanupRenderedBlobs(nextId) {
+  for (const id of state.inlineBlobIds) {
+    if (id !== nextId) {
+      releaseBlobUrl(state.capabilityState.get(id));
+    }
+  }
+  state.inlineBlobIds.clear();
   if (state.selectedId && state.selectedId !== nextId) {
     releaseBlobUrl(state.capabilityState.get(state.selectedId));
   }
@@ -310,6 +328,10 @@ function navigateToCapability(id) {
 
 function selectedCapability() {
   return state.manifest?.capabilities.find((item) => item.id === state.selectedId) ?? null;
+}
+
+function capabilityById(id) {
+  return state.manifest?.capabilities.find((item) => item.id === id) ?? null;
 }
 
 function updateStatusSummary() {
@@ -338,6 +360,14 @@ function updateSidebarGroupingControls() {
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
   }
+  elements.sidebarBlobToggle.classList.toggle("active", state.showSidebarBlobs);
+  elements.sidebarBlobToggle.setAttribute(
+    "aria-pressed",
+    String(state.showSidebarBlobs),
+  );
+  elements.sidebarBlobToggle.title = state.showSidebarBlobs
+    ? "Hide blob capabilities"
+    : "Show blob capabilities";
 }
 
 function setSidebarGrouping(grouping) {
@@ -353,9 +383,22 @@ function setSidebarGrouping(grouping) {
   renderSidebar();
 }
 
+function setShowSidebarBlobs(show) {
+  state.showSidebarBlobs = show;
+  try {
+    window.localStorage.setItem(sidebarShowBlobsStorageKey, String(show));
+  } catch {
+    // The visibility preference remains available for the current page session.
+  }
+  renderSidebar();
+}
+
 function renderSidebar() {
   const query = elements.search.value.trim().toLowerCase();
   const capabilities = state.manifest?.capabilities ?? [];
+  const sidebarCapabilities = state.showSidebarBlobs
+    ? capabilities
+    : capabilities.filter((capability) => capability.kind !== "blob");
   const grouped =
     state.sidebarGrouping === "kind"
       ? new Map([
@@ -366,7 +409,7 @@ function renderSidebar() {
         ])
       : new Map();
 
-  for (const capability of capabilities) {
+  for (const capability of sidebarCapabilities) {
     const searchable = `${capability.label ?? ""} ${capability.id}`.toLowerCase();
     if (query && !searchable.includes(query)) {
       continue;
@@ -468,9 +511,16 @@ function renderSidebar() {
   }
   replaceChildren(elements.capabilityNav, ...groups);
   updateSidebarGroupingControls();
-  elements.capabilityCount.textContent = `${capabilities.length} ${
-    capabilities.length === 1 ? "capability" : "capabilities"
-  }`;
+  const hiddenBlobCount = capabilities.length - sidebarCapabilities.length;
+  elements.capabilityCount.textContent =
+    state.showSidebarBlobs || hiddenBlobCount === 0
+      ? `${capabilities.length} ${capabilities.length === 1 ? "capability" : "capabilities"}`
+      : `${sidebarCapabilities.length} of ${capabilities.length}`;
+  elements.capabilityCount.title = hiddenBlobCount
+    ? `${hiddenBlobCount} blob ${
+        hiddenBlobCount === 1 ? "capability" : "capabilities"
+      } hidden`
+    : "";
 }
 
 function chip(value) {
@@ -843,10 +893,18 @@ function renderAuto(value, typeName, depth = 0) {
       return value === null || value === undefined
         ? primitiveNode(value)
         : createElement("span", { className: "enum-value", text: value });
-    case "optional":
-      return value === null || value === undefined
-        ? createElement("span", { className: "null-value", text: "None" })
-        : renderAuto(value, schema.element_type, depth + 1);
+    case "optional": {
+      if (value === null || value === undefined) {
+        return createElement("span", { className: "null-value", text: "None" });
+      }
+      const payload =
+        typeof value === "object" && !Array.isArray(value) && "$optional" in value
+          ? value.$optional
+          : value;
+      return renderAuto(payload, schema.element_type, depth + 1);
+    }
+    case "blob_ref":
+      return renderBlobReference(value);
     case "object":
       return renderObject(value, schema, depth);
     case "sequence":
@@ -1573,6 +1631,220 @@ function downloadName(capability, mime) {
   return `${safeId}.${extensionByMime[mime] ?? "bin"}`;
 }
 
+async function createBlobPreview(capability, capabilityState, options = {}) {
+  const { compact = false } = options;
+  const { blob, mime, metadata, version } = capabilityState.blob;
+  const blobUrl = ensureBlobUrl(capabilityState);
+  const preview = createElement("div", {
+    className: `blob-preview${compact ? " compact" : ""}`,
+  });
+  const metadataRow = createElement("div", { className: "blob-metadata" });
+  metadataRow.append(
+    chip(mime || "application/octet-stream"),
+    chip(`${blob.size} bytes`),
+    chip(`version ${version ?? "—"}`),
+  );
+  metadataRow.append(
+    createElement("a", {
+      className: "button ghost",
+      text: "Save blob",
+      href: blobUrl,
+      attributes: { download: downloadName(capability, mime) },
+    }),
+  );
+  preview.append(metadataRow);
+
+  if (mime.startsWith("image/")) {
+    preview.append(
+      createElement("img", {
+        attributes: {
+          src: blobUrl,
+          alt: `${capability.label || capability.id} preview`,
+        },
+      }),
+    );
+  } else if (
+    (mime.startsWith("text/") || mime.includes("json")) &&
+    blob.size <= maximumPreviewBytes
+  ) {
+    preview.append(
+      createElement("pre", { className: "raw-json", text: await blob.text() }),
+    );
+  } else {
+    preview.append(
+      createElement("p", {
+        className: "muted",
+        text:
+          blob.size > maximumPreviewBytes
+            ? "Preview skipped because this blob is larger than 2 MiB."
+            : "This MIME type has no inline preview.",
+      }),
+    );
+  }
+  if (!compact && metadata !== null) {
+    preview.append(
+      createElement("h3", { text: "Metadata" }),
+      createElement("pre", { className: "raw-json", text: safeStringify(metadata) }),
+    );
+  }
+  return preview;
+}
+
+async function requestBlobCapability(
+  capability,
+  forceFresh,
+  onChange = () => {},
+) {
+  const capabilityState = getCapabilityState(capability.id);
+  if (capabilityState.loading) {
+    return;
+  }
+  const endpoint = capability.endpoints?.get;
+  if (!endpoint) {
+    capabilityState.error = new DevToolsError(
+      "Manifest does not provide a blob GET endpoint",
+      {
+        capability: capability.id,
+        kind: capability.kind,
+      },
+    );
+    await onChange();
+    return;
+  }
+
+  capabilityState.loading = true;
+  capabilityState.error = null;
+  await onChange();
+  try {
+    const params = {};
+    if ((capability.params ?? []).includes("timeout_ms")) {
+      params.timeout_ms = 5000;
+    }
+    if (forceFresh && (capability.params ?? []).includes("fresh")) {
+      params.fresh = true;
+    }
+    const response = await fetch(sameOriginUrl(endpoint, params), {
+      cache: "no-store",
+      redirect: "error",
+    });
+    if (!response.ok) {
+      throw await readErrorResponse(response);
+    }
+    const blob = await response.blob();
+    releaseBlobUrl(capabilityState);
+    capabilityState.blob = {
+      blob,
+      mime: response.headers.get("Content-Type") || capability.mime || blob.type || "",
+      metadata: parseBlobMetadata(response),
+      version: response.headers.get("X-DevTools-Version"),
+    };
+    capabilityState.updatedAt = new Date();
+  } catch (error) {
+    capabilityState.error = normalizeError(error, capability);
+  } finally {
+    capabilityState.loading = false;
+    await onChange();
+  }
+}
+
+function blobReferenceError(message, value) {
+  return createElement(
+    "div",
+    { className: "blob-reference-error" },
+    createElement("span", { text: message }),
+    value === undefined ? null : jsonTree(value),
+  );
+}
+
+function renderBlobReference(value) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    typeof value.capability !== "string"
+  ) {
+    return blobReferenceError("Blob reference has an invalid shape", value);
+  }
+  const capability = capabilityById(value.capability);
+  if (!capability) {
+    return blobReferenceError(
+      `Blob capability '${value.capability}' is not in the manifest`,
+    );
+  }
+  if (capability.kind !== "blob") {
+    return blobReferenceError(`Capability '${value.capability}' is not a blob`);
+  }
+
+  state.inlineBlobIds.add(capability.id);
+  const ownerId = state.selectedId;
+  const capabilityState = getCapabilityState(capability.id);
+  const image = (capability.mime ?? "").startsWith("image/");
+  const action = createElement("button", {
+    className: "button ghost blob-reference-action",
+    type: "button",
+    text: image ? "Load image" : "Load blob",
+  });
+  const content = createElement("div", { className: "blob-reference-content" });
+  const card = createElement(
+    "div",
+    { className: "blob-reference" },
+    createElement(
+      "div",
+      { className: "blob-reference-header" },
+      createElement(
+        "div",
+        { className: "blob-reference-title" },
+        createElement("strong", {
+          text: capability.label || displayLabel(capability.id),
+        }),
+        createElement("code", { text: capability.id }),
+      ),
+      action,
+    ),
+    content,
+  );
+
+  const update = async () => {
+    if (state.selectedId !== ownerId) {
+      return;
+    }
+    action.disabled = capabilityState.loading;
+    action.textContent = capabilityState.loading
+      ? "Loading…"
+      : capabilityState.error
+        ? "Retry"
+        : capabilityState.blob
+          ? "Refresh"
+          : image
+            ? "Load image"
+            : "Load blob";
+    if (capabilityState.loading) {
+      replaceChildren(content, loadingInline("Waiting for blob"));
+    } else if (capabilityState.error) {
+      replaceChildren(content, requestError(capabilityState.error));
+    } else if (!capabilityState.blob) {
+      replaceChildren(
+        content,
+        createElement("span", {
+          className: "muted",
+          text: "Preview is loaded only when requested.",
+        }),
+      );
+    } else {
+      replaceChildren(
+        content,
+        await createBlobPreview(capability, capabilityState, { compact: true }),
+      );
+    }
+  };
+
+  action.addEventListener("click", () => {
+    void requestBlobCapability(capability, Boolean(capabilityState.blob), update);
+  });
+  void update();
+  return card;
+}
+
 function renderBlob(capability, body, header) {
   const capabilityState = getCapabilityState(capability.id);
   const section = createElement("section", { className: "section" });
@@ -1581,11 +1853,13 @@ function renderBlob(capability, body, header) {
     type: "button",
     text: "Load blob",
   });
-  const supportsFresh = (capability.params ?? []).includes("fresh");
   header.actions.append(actionButton);
   const panel = createElement("div", { className: "blob-panel" });
 
   const update = async () => {
+    if (state.selectedId !== capability.id) {
+      return;
+    }
     actionButton.disabled = capabilityState.loading;
     actionButton.textContent = capabilityState.loading
       ? "Loading…"
@@ -1620,107 +1894,11 @@ function renderBlob(capability, body, header) {
       return;
     }
 
-    const { blob, mime, metadata, version } = capabilityState.blob;
-    const blobUrl = ensureBlobUrl(capabilityState);
-    const preview = createElement("div", { className: "blob-preview" });
-    const metadataRow = createElement("div", { className: "blob-metadata" });
-    metadataRow.append(
-      chip(mime || "application/octet-stream"),
-      chip(`${blob.size} bytes`),
-      chip(`version ${version ?? "—"}`),
-    );
-    const download = createElement("a", {
-      className: "button ghost",
-      text: "Save blob",
-      href: blobUrl,
-      attributes: { download: downloadName(capability, mime) },
-    });
-    metadataRow.append(download);
-    preview.append(metadataRow);
-
-    if (mime.startsWith("image/")) {
-      preview.append(
-        createElement("img", {
-          attributes: {
-            src: blobUrl,
-            alt: `${capability.label || capability.id} preview`,
-          },
-        }),
-      );
-    } else if ((mime.startsWith("text/") || mime.includes("json")) && blob.size <= maximumPreviewBytes) {
-      const text = await blob.text();
-      preview.append(createElement("pre", { className: "raw-json", text }));
-    } else {
-      preview.append(
-        createElement("p", {
-          className: "muted",
-          text:
-            blob.size > maximumPreviewBytes
-              ? "Preview skipped because this blob is larger than 2 MiB."
-              : "This MIME type has no inline preview.",
-        }),
-      );
-    }
-    if (metadata !== null) {
-      preview.append(
-        createElement("h3", { text: "Metadata" }),
-        createElement("pre", { className: "raw-json", text: safeStringify(metadata) }),
-      );
-    }
-    replaceChildren(panel, preview);
-  };
-
-  const request = async (forceFresh) => {
-    if (capabilityState.loading) {
-      return;
-    }
-    const endpoint = capability.endpoints?.get;
-    if (!endpoint) {
-      capabilityState.error = new DevToolsError("Manifest does not provide a blob GET endpoint", {
-        capability: capability.id,
-        kind: capability.kind,
-      });
-      await update();
-      return;
-    }
-    capabilityState.loading = true;
-    capabilityState.error = null;
-    await update();
-    try {
-      const params = {};
-      if ((capability.params ?? []).includes("timeout_ms")) {
-        params.timeout_ms = 5000;
-      }
-      if (forceFresh && supportsFresh) {
-        params.fresh = true;
-      }
-      const response = await fetch(sameOriginUrl(endpoint, params), {
-        cache: "no-store",
-        redirect: "error",
-      });
-      if (!response.ok) {
-        throw await readErrorResponse(response);
-      }
-      const blob = await response.blob();
-      releaseBlobUrl(capabilityState);
-      capabilityState.blobUrl = URL.createObjectURL(blob);
-      capabilityState.blob = {
-        blob,
-        mime: response.headers.get("Content-Type") || capability.mime || blob.type || "",
-        metadata: parseBlobMetadata(response),
-        version: response.headers.get("X-DevTools-Version"),
-      };
-      capabilityState.updatedAt = new Date();
-    } catch (error) {
-      capabilityState.error = normalizeError(error, capability);
-    } finally {
-      capabilityState.loading = false;
-      await update();
-    }
+    replaceChildren(panel, await createBlobPreview(capability, capabilityState));
   };
 
   actionButton.addEventListener("click", () => {
-    void request(Boolean(capabilityState.blob));
+    void requestBlobCapability(capability, Boolean(capabilityState.blob), update);
   });
   section.append(panel);
   body.append(section);
@@ -1757,7 +1935,7 @@ function renderUnsupported(capability, body) {
 }
 
 function renderCapability(capability) {
-  cleanupSelectedBlob(capability.id);
+  cleanupRenderedBlobs(capability.id);
   state.selectedId = capability.id;
   const body = createElement("div");
   const header = capabilityHeader(capability);
@@ -1777,7 +1955,7 @@ function renderCapability(capability) {
 }
 
 function renderHome() {
-  cleanupSelectedBlob(null);
+  cleanupRenderedBlobs(null);
   state.selectedId = null;
   const capabilities = state.manifest?.capabilities ?? [];
   const body = createElement(
@@ -1826,7 +2004,7 @@ function renderRoute() {
   }
   const capability = state.manifest.capabilities.find((item) => item.id === id);
   if (!capability) {
-    cleanupSelectedBlob(null);
+    cleanupRenderedBlobs(null);
     state.selectedId = null;
     replaceChildren(
       elements.content,
@@ -1972,6 +2150,9 @@ elements.sidebarGrouping.addEventListener("click", (event) => {
   if (button) {
     setSidebarGrouping(button.dataset.grouping);
   }
+});
+elements.sidebarBlobToggle.addEventListener("click", () => {
+  setShowSidebarBlobs(!state.showSidebarBlobs);
 });
 elements.refresh.addEventListener("click", refreshDevTools);
 elements.sidebarToggle.addEventListener("click", () => {

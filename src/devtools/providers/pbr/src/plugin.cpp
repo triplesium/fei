@@ -38,7 +38,7 @@ namespace fei::devtools::pbr {
 
 namespace {
 
-constexpr const char* c_render_targets_schema = "pbr.render_targets.v2";
+constexpr const char* c_render_targets_schema = "pbr.render_targets.v4";
 
 struct SnapshotPublishState {
     uint64 render_targets_version {0};

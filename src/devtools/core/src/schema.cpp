@@ -1,5 +1,6 @@
 #include "devtools/schema.hpp"
 
+#include "devtools/types.hpp"
 #include "refl/cls.hpp"
 #include "refl/container_adapter.hpp"
 #include "refl/dynamic_array.hpp"
@@ -241,6 +242,8 @@ class SchemaBuilder {
             schema["kind"] = "unsigned_integer";
         } else if (is_floating(id)) {
             schema["kind"] = "floating";
+        } else if (same_type<BlobRef>(id)) {
+            schema["kind"] = "blob_ref";
         } else if (same_type<DynamicArray>(id)) {
             schema["kind"] = "dynamic_array";
             schema["runtime_schema"] = true;

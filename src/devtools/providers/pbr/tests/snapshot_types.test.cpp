@@ -63,6 +63,16 @@ find_view(const RenderTargetSnapshot& target, const std::string& id) {
     return *iter;
 }
 
+const BlobRef& find_preview(
+    const RenderTargetsSnapshot& snapshot,
+    const std::string& capability
+) {
+    auto iter =
+        std::ranges::find(snapshot.previews, capability, &BlobRef::capability);
+    REQUIRE(iter != snapshot.previews.end());
+    return *iter;
+}
+
 } // namespace
 
 TEST_CASE(
@@ -88,6 +98,12 @@ TEST_CASE(
     CHECK(snapshot.available_targets == 4);
     CHECK(snapshot.total_views == 11);
     CHECK(snapshot.available_views == 5);
+    REQUIRE(snapshot.previews.size() == snapshot.available_views);
+
+    CHECK(
+        find_preview(snapshot, "pbr.gbuffer.position").capability ==
+        "pbr.gbuffer.position"
+    );
 
     const auto& position = find_target(snapshot, "pbr.deferred.position_ao");
     CHECK(position.available);
@@ -95,7 +111,8 @@ TEST_CASE(
     REQUIRE(position.views.size() == 1);
     const auto& position_view = find_view(position, "position");
     CHECK(position_view.available);
-    CHECK(position_view.blob_capability == "pbr.gbuffer.position");
+    REQUIRE(position_view.preview);
+    CHECK(position_view.preview->capability == "pbr.gbuffer.position");
     CHECK(position_view.visualization == "position");
 
     const auto& albedo = find_target(snapshot, "pbr.deferred.albedo_metallic");
@@ -104,26 +121,35 @@ TEST_CASE(
     CHECK(albedo.height == 720);
     REQUIRE(albedo.views.size() == 2);
     const auto& albedo_view = find_view(albedo, "albedo");
-    CHECK(albedo_view.blob_capability == "pbr.gbuffer.albedo");
+    REQUIRE(albedo_view.preview);
+    CHECK(albedo_view.preview->capability == "pbr.gbuffer.albedo");
     CHECK(albedo_view.visualization == "color");
     const auto& metallic_view = find_view(albedo, "metallic");
-    CHECK(metallic_view.blob_capability == "pbr.gbuffer.metallic");
+    REQUIRE(metallic_view.preview);
+    CHECK(metallic_view.preview->capability == "pbr.gbuffer.metallic");
     CHECK(metallic_view.visualization == "scalar_alpha");
 
     const auto& normal = find_target(snapshot, "pbr.deferred.normal_roughness");
     CHECK_FALSE(normal.available);
     CHECK(normal.format == "Rgba16Float");
     REQUIRE(normal.views.size() == 2);
-    CHECK_FALSE(find_view(normal, "normal").available);
-    CHECK_FALSE(find_view(normal, "roughness").available);
+    const auto& normal_view = find_view(normal, "normal");
+    CHECK_FALSE(normal_view.available);
+    CHECK_FALSE(normal_view.preview);
+    const auto& roughness_view = find_view(normal, "roughness");
+    CHECK_FALSE(roughness_view.available);
+    CHECK_FALSE(roughness_view.preview);
 
     auto json = encode_json(Ref(snapshot));
     REQUIRE(json);
+    CHECK(json->find(R"("previews":[)") < json->find(R"("targets":[)"));
     CHECK(json->find(R"("total_targets":8)") != std::string::npos);
     CHECK(json->find(R"("total_views":11)") != std::string::npos);
     CHECK(
-        json->find(R"("blob_capability":"pbr.gbuffer.specular")") !=
-        std::string::npos
+        json->find(
+            R"("preview":{"$optional":{"capability":"pbr.gbuffer.specular"}})"
+        ) != std::string::npos
     );
+    CHECK(json->find("blob_capability") == std::string::npos);
     CHECK(json->find("$type") == std::string::npos);
 }

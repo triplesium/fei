@@ -263,6 +263,9 @@ TEST_CASE("DevTools embeds its schema-driven web UI", "[devtools][ui]") {
     REQUIRE(
         index->content.find(R"(data-grouping="kind")") != std::string_view::npos
     );
+    REQUIRE(
+        index->content.find(R"(id="toggle-blobs")") != std::string_view::npos
+    );
 
     auto styles = find_ui_asset("/ui/app.css");
     REQUIRE(styles);
@@ -273,6 +276,10 @@ TEST_CASE("DevTools embeds its schema-driven web UI", "[devtools][ui]") {
         styles->content.find(".collection-summary") != std::string_view::npos
     );
     REQUIRE(styles->content.find(".field-row:has") != std::string_view::npos);
+    REQUIRE(styles->content.find(".blob-reference") != std::string_view::npos);
+    REQUIRE(
+        styles->content.find(".sidebar-filter-button") != std::string_view::npos
+    );
 
     auto script = find_ui_asset("/ui/app.js");
     REQUIRE(script);
@@ -293,6 +300,27 @@ TEST_CASE("DevTools embeds its schema-driven web UI", "[devtools][ui]") {
     );
     REQUIRE(
         script->content.find("ensureBlobUrl(capabilityState)") !=
+        std::string_view::npos
+    );
+    REQUIRE(
+        script->content.find(R"(case "blob_ref")") != std::string_view::npos
+    );
+    REQUIRE(
+        script->content.find("renderBlobReference") != std::string_view::npos
+    );
+    REQUIRE(
+        script->content.find("requestBlobCapability") != std::string_view::npos
+    );
+    REQUIRE(
+        script->content.find("capability.kind !== \"blob\"") !=
+        std::string_view::npos
+    );
+    REQUIRE(
+        script->content.find("fei-devtools-sidebar-show-blobs") !=
+        std::string_view::npos
+    );
+    REQUIRE(
+        script->content.find(R"("$optional" in value)") !=
         std::string_view::npos
     );
     REQUIRE(
