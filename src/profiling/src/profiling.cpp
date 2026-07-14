@@ -2,6 +2,10 @@
 
 #include "frame_profile_accumulator.hpp"
 
+#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#    include "frame_profile_history.hpp"
+#endif
+
 #include <chrono>
 #include <cstdint>
 #include <mutex>
@@ -51,11 +55,6 @@ struct ProfileRecord {
     ProfileStats stats;
 };
 
-struct ProfileFrameRecord {
-    std::uint64_t frame = 0;
-    std::int64_t duration_ns = 0;
-};
-
 #endif
 
 struct ProfileState {
@@ -64,7 +63,7 @@ struct ProfileState {
     profiling_detail::FrameProfileAccumulator frame_stats;
 #if defined(FEI_ENABLE_PROFILE_SUMMARY)
     std::unordered_map<std::string, ProfileRecord> records;
-    std::vector<ProfileFrameRecord> frames;
+    profiling_detail::FrameProfileHistory frame_history;
 #    if defined(FEI_PROFILE_OUTPUT_PATH)
     std::string output_directory = FEI_PROFILE_OUTPUT_PATH;
 #    else
@@ -143,159 +142,106 @@ std::string escape_csv(std::string_view value) {
     return escaped;
 }
 
-std::string escape_json(std::string_view value) {
-    std::string escaped;
-    escaped.reserve(value.size());
-    for (auto ch : value) {
-        switch (ch) {
-            case '"':
-                escaped += "\\\"";
-                break;
-            case '\\':
-                escaped += "\\\\";
-                break;
-            case '\n':
-                escaped += "\\n";
-                break;
-            case '\r':
-                escaped += "\\r";
-                break;
-            case '\t':
-                escaped += "\\t";
-                break;
-            default:
-                escaped.push_back(ch);
-                break;
-        }
-    }
-    return escaped;
-}
-
 double ns_to_ms(std::int64_t ns) {
     return static_cast<double>(ns) / 1'000'000.0;
 }
 
-std::vector<ProfileRecord> sorted_records(ProfileZoneKind kind) {
+struct RawProfileSummary {
+    FrameProfileStats frame_stats;
     std::vector<ProfileRecord> records;
+    std::vector<profiling_detail::FrameProfileHistorySample> frames;
+};
+
+RawProfileSummary copy_profile_summary() {
+    RawProfileSummary result;
     auto& state = profile_state();
     {
         std::scoped_lock lock(state.mutex);
-        records.reserve(state.records.size());
+        result.frame_stats = state.frame_stats.stats();
+        result.records.reserve(state.records.size());
         for (const auto& [_, record] : state.records) {
-            if (record.kind == kind && record.stats.count > 0) {
-                records.push_back(record);
+            if (record.stats.count > 0) {
+                result.records.push_back(record);
             }
         }
+        result.frames = state.frame_history.samples();
     }
+    return result;
+}
 
-    std::ranges::sort(records, [](const auto& lhs, const auto& rhs) {
-        if (lhs.stats.total_ns == rhs.stats.total_ns) {
+ProfileEntrySnapshot make_profile_entry(const ProfileRecord& record) {
+    const auto count = static_cast<double>(record.stats.count);
+    return ProfileEntrySnapshot {
+        .kind = record.kind,
+        .schedule_id = record.schedule_id,
+        .schedule_name = record.schedule_name,
+        .name = record.name,
+        .file = record.file,
+        .function = record.function,
+        .line = record.line,
+        .count = record.stats.count,
+        .total_ms = ns_to_ms(record.stats.total_ns),
+        .self_ms = ns_to_ms(record.stats.self_ns),
+        .mean_ms = ns_to_ms(record.stats.total_ns) / count,
+        .self_mean_ms = ns_to_ms(record.stats.self_ns) / count,
+        .min_ms = ns_to_ms(record.stats.min_ns),
+        .max_ms = ns_to_ms(record.stats.max_ns),
+    };
+}
+
+void sort_profile_entries(std::vector<ProfileEntrySnapshot>& entries) {
+    std::ranges::sort(entries, [](const auto& lhs, const auto& rhs) {
+        if (lhs.total_ms == rhs.total_ms) {
             return lhs.name < rhs.name;
         }
-        return lhs.stats.total_ns > rhs.stats.total_ns;
+        return lhs.total_ms > rhs.total_ms;
     });
-    return records;
 }
 
-std::vector<ProfileFrameRecord> frame_records() {
-    auto& state = profile_state();
-    std::scoped_lock lock(state.mutex);
-    return state.frames;
-}
-
-void write_system_records(const std::filesystem::path& path) {
+void write_system_records(
+    const std::filesystem::path& path,
+    const std::vector<ProfileEntrySnapshot>& records
+) {
     std::ofstream out(path);
     out << "schedule,system,total_ms,self_ms,count,mean_ms,self_mean_ms,min_ms,"
            "max_ms,file,line,function\n";
 
-    for (const auto& record : sorted_records(ProfileZoneKind::System)) {
-        const auto count = static_cast<double>(record.stats.count);
+    for (const auto& record : records) {
         out << escape_csv(record.schedule_name) << ','
-            << escape_csv(record.name) << ',' << ns_to_ms(record.stats.total_ns)
-            << ',' << ns_to_ms(record.stats.self_ns) << ','
-            << record.stats.count << ','
-            << ns_to_ms(
-                   static_cast<std::int64_t>(
-                       static_cast<double>(record.stats.total_ns) / count
-                   )
-               )
-            << ','
-            << ns_to_ms(
-                   static_cast<std::int64_t>(
-                       static_cast<double>(record.stats.self_ns) / count
-                   )
-               )
-            << ',' << ns_to_ms(record.stats.min_ns) << ','
-            << ns_to_ms(record.stats.max_ns) << ',' << escape_csv(record.file)
-            << ',' << record.line << ',' << escape_csv(record.function) << '\n';
+            << escape_csv(record.name) << ',' << record.total_ms << ','
+            << record.self_ms << ',' << record.count << ',' << record.mean_ms
+            << ',' << record.self_mean_ms << ',' << record.min_ms << ','
+            << record.max_ms << ',' << escape_csv(record.file) << ','
+            << record.line << ',' << escape_csv(record.function) << '\n';
     }
 }
 
-void write_zone_records(const std::filesystem::path& path) {
+void write_zone_records(
+    const std::filesystem::path& path,
+    const std::vector<ProfileEntrySnapshot>& records
+) {
     std::ofstream out(path);
     out << "zone,total_ms,self_ms,count,mean_ms,self_mean_ms,min_ms,max_ms,"
            "file,line,function\n";
 
-    for (const auto& record : sorted_records(ProfileZoneKind::Generic)) {
-        const auto count = static_cast<double>(record.stats.count);
-        out << escape_csv(record.name) << ',' << ns_to_ms(record.stats.total_ns)
-            << ',' << ns_to_ms(record.stats.self_ns) << ','
-            << record.stats.count << ','
-            << ns_to_ms(
-                   static_cast<std::int64_t>(
-                       static_cast<double>(record.stats.total_ns) / count
-                   )
-               )
-            << ','
-            << ns_to_ms(
-                   static_cast<std::int64_t>(
-                       static_cast<double>(record.stats.self_ns) / count
-                   )
-               )
-            << ',' << ns_to_ms(record.stats.min_ns) << ','
-            << ns_to_ms(record.stats.max_ns) << ',' << escape_csv(record.file)
-            << ',' << record.line << ',' << escape_csv(record.function) << '\n';
+    for (const auto& record : records) {
+        out << escape_csv(record.name) << ',' << record.total_ms << ','
+            << record.self_ms << ',' << record.count << ',' << record.mean_ms
+            << ',' << record.self_mean_ms << ',' << record.min_ms << ','
+            << record.max_ms << ',' << escape_csv(record.file) << ','
+            << record.line << ',' << escape_csv(record.function) << '\n';
     }
 }
 
-void write_frame_records(const std::filesystem::path& path) {
+void write_frame_records(
+    const std::filesystem::path& path,
+    const std::vector<ProfileFrameSample>& frames
+) {
     std::ofstream out(path);
     out << "frame,duration_ms\n";
-    for (const auto& frame : frame_records()) {
-        out << frame.frame << ',' << ns_to_ms(frame.duration_ns) << '\n';
+    for (const auto& frame : frames) {
+        out << frame.frame << ',' << frame.duration_ms << '\n';
     }
-}
-
-void write_summary_json(const std::filesystem::path& path) {
-    auto systems = sorted_records(ProfileZoneKind::System);
-    auto zones = sorted_records(ProfileZoneKind::Generic);
-    auto frames = frame_records();
-
-    std::ofstream out(path);
-    out << "{\n";
-    out << "  \"systems\": " << systems.size() << ",\n";
-    out << "  \"zones\": " << zones.size() << ",\n";
-    out << "  \"frames\": " << frames.size();
-    if (!systems.empty()) {
-        out << ",\n  \"top_system_by_total_ms\": {\n";
-        out << R"(    "schedule": ")"
-            << escape_json(systems.front().schedule_name) << "\",\n";
-        out << R"(    "name": ")" << escape_json(systems.front().name)
-            << "\",\n";
-        out << "    \"total_ms\": " << ns_to_ms(systems.front().stats.total_ns)
-            << ",\n";
-        out << "    \"self_ms\": " << ns_to_ms(systems.front().stats.self_ns)
-            << "\n  }";
-    }
-    if (!zones.empty()) {
-        out << ",\n  \"top_zone_by_total_ms\": {\n";
-        out << R"(    "name": ")" << escape_json(zones.front().name) << "\",\n";
-        out << "    \"total_ms\": " << ns_to_ms(zones.front().stats.total_ns)
-            << ",\n";
-        out << "    \"self_ms\": " << ns_to_ms(zones.front().stats.self_ns)
-            << "\n  }";
-    }
-    out << "\n}\n";
 }
 
 void record_profile_scope(
@@ -383,12 +329,7 @@ void profile_frame_mark() {
     if (!duration) {
         return;
     }
-    state.frames.push_back(
-        ProfileFrameRecord {
-            .frame = static_cast<std::uint64_t>(state.frames.size()),
-            .duration_ns = *duration,
-        }
-    );
+    state.frame_history.push(*duration);
 #else
     (void)state.frame_stats.mark(profile_now_ns());
 #endif
@@ -400,6 +341,43 @@ FrameProfileStats profile_frame_stats() {
     return state.frame_stats.stats();
 }
 
+ProfileSummarySnapshot profile_summary_snapshot() {
+#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+    auto raw = copy_profile_summary();
+    ProfileSummarySnapshot snapshot {
+        .available = true,
+        .frame_stats = raw.frame_stats,
+    };
+    snapshot.systems.reserve(raw.records.size());
+    snapshot.zones.reserve(raw.records.size());
+    for (const auto& record : raw.records) {
+        auto entry = make_profile_entry(record);
+        if (record.kind == ProfileZoneKind::System) {
+            snapshot.systems.push_back(std::move(entry));
+        } else {
+            snapshot.zones.push_back(std::move(entry));
+        }
+    }
+    sort_profile_entries(snapshot.systems);
+    sort_profile_entries(snapshot.zones);
+
+    snapshot.frames.reserve(raw.frames.size());
+    for (const auto& frame : raw.frames) {
+        snapshot.frames.push_back(
+            ProfileFrameSample {
+                .frame = frame.frame,
+                .duration_ms = ns_to_ms(frame.duration_ns),
+            }
+        );
+    }
+    return snapshot;
+#else
+    return ProfileSummarySnapshot {
+        .frame_stats = profile_frame_stats(),
+    };
+#endif
+}
+
 void clear_profile_frame_stats() {
     auto& state = profile_state();
     std::scoped_lock lock(state.mutex);
@@ -408,6 +386,7 @@ void clear_profile_frame_stats() {
 
 void flush_profile_summary() {
 #if defined(FEI_ENABLE_PROFILE_SUMMARY)
+    auto snapshot = profile_summary_snapshot();
     auto& state = profile_state();
     std::filesystem::path output_directory;
     {
@@ -416,10 +395,9 @@ void flush_profile_summary() {
     }
 
     std::filesystem::create_directories(output_directory);
-    write_system_records(output_directory / "systems.csv");
-    write_zone_records(output_directory / "zones.csv");
-    write_frame_records(output_directory / "frames.csv");
-    write_summary_json(output_directory / "summary.json");
+    write_system_records(output_directory / "systems.csv", snapshot.systems);
+    write_zone_records(output_directory / "zones.csv", snapshot.zones);
+    write_frame_records(output_directory / "frames.csv", snapshot.frames);
 #endif
 }
 
@@ -429,7 +407,7 @@ void clear_profile_summary() {
     state.frame_stats.clear();
 #if defined(FEI_ENABLE_PROFILE_SUMMARY)
     state.records.clear();
-    state.frames.clear();
+    state.frame_history.clear();
 #endif
 }
 

@@ -79,7 +79,6 @@ The summary backend writes:
 build/profile/latest/systems.csv
 build/profile/latest/zones.csv
 build/profile/latest/frames.csv
-build/profile/latest/summary.json
 ```
 
 Use `systems.csv` for ECS system timing. Useful columns:

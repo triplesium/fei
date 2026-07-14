@@ -1,14 +1,17 @@
 #include "profiling/profiling.hpp"
 
 #include "frame_profile_accumulator.hpp"
+#include "frame_profile_history.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <thread>
 
 TEST_CASE(
     "frame profile accumulator reports deterministic rolling statistics",
@@ -59,6 +62,92 @@ TEST_CASE(
     REQUIRE(fei::profile_schedule_name(42) == "Update");
 }
 
+TEST_CASE(
+    "frame profile history evicts old samples and preserves frame numbers",
+    "[base][profiling]"
+) {
+    using fei::profiling_detail::FrameProfileHistory;
+
+    FrameProfileHistory history;
+    constexpr auto extra_samples = 3U;
+    for (std::size_t frame = 0;
+         frame < FrameProfileHistory::Capacity + extra_samples;
+         ++frame) {
+        history.push(static_cast<std::int64_t>(frame + 1));
+    }
+
+    auto samples = history.samples();
+    REQUIRE(samples.size() == FrameProfileHistory::Capacity);
+    REQUIRE(samples.front().frame == extra_samples);
+    REQUIRE(
+        samples.back().frame ==
+        FrameProfileHistory::Capacity + extra_samples - 1
+    );
+    REQUIRE(samples.front().duration_ns == extra_samples + 1);
+
+    history.clear();
+    REQUIRE(history.samples().empty());
+
+    history.push(42);
+    samples = history.samples();
+    REQUIRE(samples.size() == 1);
+    REQUIRE(samples.front().frame == 0);
+    REQUIRE(samples.front().duration_ns == 42);
+}
+
+TEST_CASE(
+    "profile summary snapshot returns a consistently sorted view",
+    "[base][profiling]"
+) {
+#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+    struct TestProfileInfo {
+        std::string name;
+        std::string file;
+        std::string function;
+        std::uint32_t line;
+    };
+
+    fei::clear_profile_schedule_names();
+    fei::clear_profile_summary();
+    fei::register_profile_schedule_name(7, "TestSchedule");
+
+    TestProfileInfo outer {
+        .name = "outer_system",
+        .file = "test.cpp",
+        .function = "outer_system()",
+        .line = 20,
+    };
+    TestProfileInfo inner {
+        .name = "inner_system",
+        .file = "test.cpp",
+        .function = "inner_system()",
+        .line = 21,
+    };
+
+    {
+        FEI_PROFILE_SYSTEM_SCOPE(7, outer);
+        std::this_thread::sleep_for(std::chrono::milliseconds {2});
+        { FEI_PROFILE_SYSTEM_SCOPE(7, inner); }
+    }
+
+    const auto snapshot = fei::profile_summary_snapshot();
+    REQUIRE(snapshot.available);
+    REQUIRE(snapshot.systems.size() == 2);
+    REQUIRE(snapshot.systems.front().name == "outer_system");
+    REQUIRE(snapshot.systems.front().schedule_name == "TestSchedule");
+    REQUIRE(
+        snapshot.systems.front().total_ms >= snapshot.systems.back().total_ms
+    );
+    REQUIRE(snapshot.zones.empty());
+#else
+    const auto snapshot = fei::profile_summary_snapshot();
+    REQUIRE_FALSE(snapshot.available);
+    REQUIRE(snapshot.systems.empty());
+    REQUIRE(snapshot.zones.empty());
+    REQUIRE(snapshot.frames.empty());
+#endif
+}
+
 TEST_CASE("profile system scopes can write summary csv", "[base][profiling]") {
 #if defined(FEI_ENABLE_PROFILE_SUMMARY)
     struct TestProfileInfo {
@@ -86,6 +175,8 @@ TEST_CASE("profile system scopes can write summary csv", "[base][profiling]") {
 
     { FEI_PROFILE_SYSTEM_SCOPE(7, profile); }
     fei::flush_profile_summary();
+
+    REQUIRE_FALSE(std::filesystem::exists(output_dir / "summary.json"));
 
     std::ifstream input(output_dir / "systems.csv");
     REQUIRE(input.is_open());
