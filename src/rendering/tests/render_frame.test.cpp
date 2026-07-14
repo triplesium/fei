@@ -34,6 +34,7 @@ class LifecycleCommandBuffer : public CommandBuffer {
     void begin_render_pass(const RenderPassDescription&) override {}
     void end_render_pass() override {}
     void set_viewport(int32, int32, uint32, uint32) override {}
+    void set_scissor(int32, int32, uint32, uint32) override {}
     void set_vertex_buffer(std::shared_ptr<const Buffer>) override {}
     void set_resource_set(
         uint32,
@@ -56,7 +57,7 @@ class LifecycleCommandBuffer : public CommandBuffer {
         );
     }
     void draw(std::size_t, std::size_t) override {}
-    void draw_indexed(std::size_t) override {}
+    void draw_indexed(std::size_t, uint32, int32) override {}
     void dispatch(std::size_t, std::size_t, std::size_t) override {}
 
   protected:

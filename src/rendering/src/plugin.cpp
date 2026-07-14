@@ -89,6 +89,7 @@ void RenderingPlugin::setup(App& app) {
                RenderingSystems::Prepass(),
                RenderingSystems::MainPass(),
                RenderingSystems::PostProcess(),
+               RenderingSystems::Overlay(),
                RenderingSystems::Submit()
            )
     )

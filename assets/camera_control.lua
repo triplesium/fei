@@ -9,6 +9,10 @@ function update_camera(args)
     local time = args.time
     local app = args.app
 
+    if args.imgui_capture.keyboard then
+        return
+    end
+
     local move_speed = 10.0
     local rotate_speed = 90.0
     local move_step = move_speed * time:delta()
@@ -65,6 +69,7 @@ system {
     schedule = MainSchedules.Update,
     params = {
         input = res.read(KeyInput),
+        imgui_capture = res.read(ImGuiInputCapture),
         time = res.read(Time),
         app = res.write(AppStates),
         cameras = query {

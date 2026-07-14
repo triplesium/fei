@@ -25,6 +25,12 @@ class RecordingCommandBuffer : public CommandBuffer {
     usize draw_start {0};
     usize draw_count {0};
     usize draw_indexed_count {0};
+    uint32 draw_first_index {0};
+    int32 draw_vertex_offset {0};
+    int32 scissor_x {0};
+    int32 scissor_y {0};
+    uint32 scissor_width {0};
+    uint32 scissor_height {0};
 
     void begin() override { began = true; }
     void end() override { ended = true; }
@@ -33,6 +39,12 @@ class RecordingCommandBuffer : public CommandBuffer {
     void end_render_pass() override {}
 
     void set_viewport(int32, int32, uint32, uint32) override {}
+    void set_scissor(int32 x, int32 y, uint32 width, uint32 height) override {
+        scissor_x = x;
+        scissor_y = y;
+        scissor_width = width;
+        scissor_height = height;
+    }
 
     void set_vertex_buffer(std::shared_ptr<const Buffer> buffer) override {
         vertex_buffer = std::move(buffer);
@@ -58,8 +70,14 @@ class RecordingCommandBuffer : public CommandBuffer {
         draw_count = count;
     }
 
-    void draw_indexed(std::size_t count) override {
+    void draw_indexed(
+        std::size_t count,
+        uint32 first_index,
+        int32 vertex_offset
+    ) override {
         draw_indexed_count = count;
+        draw_first_index = first_index;
+        draw_vertex_offset = vertex_offset;
     }
 
     void dispatch(std::size_t, std::size_t, std::size_t) override {}
@@ -121,6 +139,30 @@ MeshVertexBufferLayout make_vertex_layout() {
 }
 
 } // namespace
+
+TEST_CASE(
+    "CommandBuffer forwards indexed convenience draws and records scissor",
+    "[graphics][command-buffer]"
+) {
+    RecordingCommandBuffer command_buffer;
+    CommandBuffer& base = command_buffer;
+
+    base.draw_indexed(7);
+    REQUIRE(command_buffer.draw_indexed_count == 7);
+    REQUIRE(command_buffer.draw_first_index == 0);
+    REQUIRE(command_buffer.draw_vertex_offset == 0);
+
+    base.draw_indexed(11, 5, -3);
+    REQUIRE(command_buffer.draw_indexed_count == 11);
+    REQUIRE(command_buffer.draw_first_index == 5);
+    REQUIRE(command_buffer.draw_vertex_offset == -3);
+
+    base.set_scissor(4, 6, 80, 40);
+    REQUIRE(command_buffer.scissor_x == 4);
+    REQUIRE(command_buffer.scissor_y == 6);
+    REQUIRE(command_buffer.scissor_width == 80);
+    REQUIRE(command_buffer.scissor_height == 40);
+}
 
 TEST_CASE(
     "RenderPhase clears and sorts mesh draw items by pipeline",

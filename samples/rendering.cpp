@@ -11,6 +11,7 @@
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
 #include "graphics_opengl_glfw/plugin.hpp"
+#include "imgui/plugin.hpp"
 #include "math/vector.hpp"
 #include "pbr/environment_map.hpp"
 #include "pbr/light.hpp"
@@ -22,10 +23,8 @@
 #include "rendering/mesh/mesh_factory.hpp"
 #include "rendering/plugin.hpp"
 #include "rendering/shader.hpp"
-#include "ui/plugin.hpp"
 #include "window/input.hpp"
 
-#include <glad/glad.h>
 #include <imgui.h>
 #include <memory>
 
@@ -160,8 +159,12 @@ void handle_control(
     Query<Transform3d>::Filter<With<Camera3d>> query,
     ResRO<KeyInput> key_input,
     ResRO<Time> time,
-    ResRW<AppStates> app_states
+    ResRW<AppStates> app_states,
+    ResRO<ImGuiInputCapture> imgui_capture
 ) {
+    if (imgui_capture->keyboard) {
+        return;
+    }
     auto [transform] = query.first();
     float move_speed = 1.0f;
     float rotate_speed = 20.0f;
@@ -283,7 +286,7 @@ int main() {
         .add_systems(PreStartUp, setup)
         .add_systems(Update, handle_control, update_light_cube);
 
-    app.add_plugin<UIPlugin>().add_systems(
+    app.add_plugin<ImGuiPlugin>().add_systems(
         RenderUpdate,
         update_imgui | in_set<RenderingSystems::Render>() | main_thread()
     );

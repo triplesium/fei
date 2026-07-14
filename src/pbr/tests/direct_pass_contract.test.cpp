@@ -47,6 +47,7 @@ class ContractCommandBuffer : public CommandBuffer {
     void set_viewport(int32 x, int32 y, uint32 width, uint32 height) override {
         viewports.push_back({x, y, width, height});
     }
+    void set_scissor(int32, int32, uint32, uint32) override {}
     void set_vertex_buffer(std::shared_ptr<const Buffer>) override {}
     void set_resource_set(
         uint32 slot,
@@ -62,7 +63,7 @@ class ContractCommandBuffer : public CommandBuffer {
         std::size_t
     ) override {}
     void draw(std::size_t, std::size_t) override { ++draw_calls; }
-    void draw_indexed(std::size_t) override {}
+    void draw_indexed(std::size_t, uint32, int32) override {}
     void dispatch(
         std::size_t group_x,
         std::size_t group_y,

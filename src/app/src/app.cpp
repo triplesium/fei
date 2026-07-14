@@ -42,10 +42,12 @@ void App::run() {
     const auto start_time = std::chrono::steady_clock::now();
     std::uint64_t frame_count = 0;
 
-    for (auto& plugin : m_plugins) {
-        plugin->finish(*this);
-    }
-    m_world.sort_systems();
+    const auto cleanup_plugins = [this]() noexcept {
+        for (auto plugin = m_plugins.rbegin(); plugin != m_plugins.rend();
+             ++plugin) {
+            (*plugin)->cleanup(*this);
+        }
+    };
 
 #define FEI_RUN_PROFILED_SCHEDULE(schedule) \
     do {                                    \
@@ -53,40 +55,51 @@ void App::run() {
         run_schedule(schedule);             \
     } while (false)
 
-    FEI_RUN_PROFILED_SCHEDULE(PreStartUp);
-    FEI_RUN_PROFILED_SCHEDULE(StartUp);
-    bool should_stop = false;
-    while (!should_stop) {
-        FEI_RUN_PROFILED_SCHEDULE(First);
-        FEI_RUN_PROFILED_SCHEDULE(PreUpdate);
-        FEI_RUN_PROFILED_SCHEDULE(StateTransitionSchedule);
-        FEI_RUN_PROFILED_SCHEDULE(Update);
-        FEI_RUN_PROFILED_SCHEDULE(PostUpdate);
-        FEI_RUN_PROFILED_SCHEDULE(Last);
-
-        FEI_RUN_PROFILED_SCHEDULE(RenderPrepare);
-        FEI_RUN_PROFILED_SCHEDULE(RenderFirst);
-        FEI_RUN_PROFILED_SCHEDULE(RenderStart);
-        FEI_RUN_PROFILED_SCHEDULE(RenderUpdate);
-        FEI_RUN_PROFILED_SCHEDULE(RenderEnd);
-        FEI_RUN_PROFILED_SCHEDULE(RenderLast);
-        FEI_PROFILE_FRAME();
-        ++frame_count;
-
-        auto& app_states = m_world.resource<AppStates>();
-        if (exit_after_frames && frame_count >= *exit_after_frames) {
-            app_states.should_stop = true;
+    try {
+        for (auto& plugin : m_plugins) {
+            plugin->finish(*this);
         }
-        if (exit_after_seconds) {
-            const auto elapsed = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - start_time
-            );
-            if (elapsed.count() >= *exit_after_seconds) {
+        m_world.sort_systems();
+
+        FEI_RUN_PROFILED_SCHEDULE(PreStartUp);
+        FEI_RUN_PROFILED_SCHEDULE(StartUp);
+        bool should_stop = false;
+        while (!should_stop) {
+            FEI_RUN_PROFILED_SCHEDULE(First);
+            FEI_RUN_PROFILED_SCHEDULE(PreUpdate);
+            FEI_RUN_PROFILED_SCHEDULE(StateTransitionSchedule);
+            FEI_RUN_PROFILED_SCHEDULE(Update);
+            FEI_RUN_PROFILED_SCHEDULE(PostUpdate);
+            FEI_RUN_PROFILED_SCHEDULE(Last);
+
+            FEI_RUN_PROFILED_SCHEDULE(RenderPrepare);
+            FEI_RUN_PROFILED_SCHEDULE(RenderFirst);
+            FEI_RUN_PROFILED_SCHEDULE(RenderStart);
+            FEI_RUN_PROFILED_SCHEDULE(RenderUpdate);
+            FEI_RUN_PROFILED_SCHEDULE(RenderEnd);
+            FEI_RUN_PROFILED_SCHEDULE(RenderLast);
+            FEI_PROFILE_FRAME();
+            ++frame_count;
+
+            auto& app_states = m_world.resource<AppStates>();
+            if (exit_after_frames && frame_count >= *exit_after_frames) {
                 app_states.should_stop = true;
             }
+            if (exit_after_seconds) {
+                const auto elapsed = std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - start_time
+                );
+                if (elapsed.count() >= *exit_after_seconds) {
+                    app_states.should_stop = true;
+                }
+            }
+            should_stop = app_states.should_stop;
         }
-        should_stop = app_states.should_stop;
+    } catch (...) {
+        cleanup_plugins();
+        throw;
     }
+    cleanup_plugins();
 
 #undef FEI_RUN_PROFILED_SCHEDULE
 }

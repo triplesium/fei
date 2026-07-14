@@ -20,6 +20,7 @@
 #include "graphics/graphics_device.hpp"
 #include "graphics_opengl_glfw/plugin.hpp"
 #include "graphics_vulkan_glfw/plugin.hpp"
+#include "imgui/plugin.hpp"
 #include "math/vector.hpp"
 #include "pbr/environment_map.hpp"
 #include "pbr/light.hpp"
@@ -34,7 +35,6 @@
 #include "scripting_lua/asset.hpp"
 #include "scripting_lua/plugin.hpp"
 #include "scripting_lua/script_system_registry.hpp"
-#include "ui/plugin.hpp"
 #include "window/input.hpp"
 
 #include <cstdio>
@@ -312,12 +312,10 @@ int main(int argc, char** argv) {
         .add_systems(PreStartUp, setup)
         .add_systems(Update, update_directional_light);
 
-    if (args.backend == SceneGraphicsBackend::OpenGL) {
-        app.add_plugin<UIPlugin>().add_systems(
-            RenderUpdate,
-            update_imgui | in_set<RenderingSystems::Render>() | main_thread()
-        );
-    }
+    app.add_plugin<ImGuiPlugin>().add_systems(
+        RenderUpdate,
+        update_imgui | in_set<RenderingSystems::Render>() | main_thread()
+    );
 
     app.add_plugin(
         devtools::CorePlugin {devtools::Config {

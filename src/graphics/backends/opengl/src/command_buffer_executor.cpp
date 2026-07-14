@@ -138,6 +138,21 @@ bool is_buffer_resource_kind(ResourceKind kind) {
            kind == ResourceKind::StorageBufferReadWrite;
 }
 
+bool color_mask_contains(ColorWriteMask mask, ColorWriteMask component) {
+    return (static_cast<uint8>(mask) & static_cast<uint8>(component)) != 0;
+}
+
+std::size_t index_element_size(GLenum type) {
+    switch (type) {
+        case GL_UNSIGNED_SHORT:
+            return sizeof(std::uint16_t);
+        case GL_UNSIGNED_INT:
+            return sizeof(std::uint32_t);
+        default:
+            fatal("Unsupported OpenGL index element type {}", type);
+    }
+}
+
 void bind_buffer_resource(
     GLenum target,
     GLuint binding_index,
@@ -171,6 +186,11 @@ struct CommandBufferExecutorOpenGL::ExecutionState {
     std::vector<std::shared_ptr<const ResourceSetOpenGL>> bound_resource_sets;
     GLenum draw_elements_type {GL_UNSIGNED_INT};
     uint32 index_buffer_offset {0};
+    std::int32_t viewport_x {0};
+    std::int32_t viewport_y {0};
+    std::uint32_t viewport_width {0};
+    std::uint32_t viewport_height {0};
+    bool viewport_set {false};
 };
 
 void CommandBufferExecutorOpenGL::execute(CommandBufferOpenGL& command_buffer) {
@@ -209,6 +229,36 @@ void CommandBufferExecutorOpenGL::execute_command(
                 FEI_GL_CALL(glViewport(
                     cmd.x,
                     cmd.y,
+                    to_gl_sizei(cmd.w),
+                    to_gl_sizei(cmd.h)
+                ));
+                FEI_GL_CALL(glScissor(
+                    cmd.x,
+                    cmd.y,
+                    to_gl_sizei(cmd.w),
+                    to_gl_sizei(cmd.h)
+                ));
+                state.viewport_x = cmd.x;
+                state.viewport_y = cmd.y;
+                state.viewport_width = cmd.w;
+                state.viewport_height = cmd.h;
+                state.viewport_set = true;
+            } else if constexpr (
+                std::is_same_v<CommandT, ogl_cmd::SetScissor>
+            ) {
+                if (!state.viewport_set) {
+                    fatal(
+                        "CommandBufferOpenGL::set_scissor executed before "
+                        "set_viewport"
+                    );
+                }
+                const auto scissor_y =
+                    state.viewport_y +
+                    static_cast<std::int32_t>(state.viewport_height) - cmd.y -
+                    static_cast<std::int32_t>(cmd.h);
+                FEI_GL_CALL(glScissor(
+                    state.viewport_x + cmd.x,
+                    scissor_y,
                     to_gl_sizei(cmd.w),
                     to_gl_sizei(cmd.h)
                 ));
@@ -254,7 +304,12 @@ void CommandBufferExecutorOpenGL::execute_command(
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::DrawIndexed>
             ) {
-                execute_draw_indexed(state, cmd.count);
+                execute_draw_indexed(
+                    state,
+                    cmd.count,
+                    cmd.first_index,
+                    cmd.vertex_offset
+                );
             } else if constexpr (std::is_same_v<CommandT, ogl_cmd::Dispatch>) {
                 execute_dispatch(cmd.group_x, cmd.group_y, cmd.group_z);
             } else if constexpr (
@@ -303,9 +358,35 @@ void CommandBufferExecutorOpenGL::execute_begin_render_pass(
     execute_set_framebuffer(state, framebuffer);
     auto fb_gl = std::static_pointer_cast<const FramebufferOpenGL>(framebuffer);
 
+    const bool clears_color = std::ranges::any_of(
+        desc.color_attachments,
+        [](const RenderPassColorAttachment& attachment) {
+            return attachment.load_op == LoadOp::Clear;
+        }
+    );
+    const bool clears_depth =
+        desc.depth_stencil_attachment &&
+        desc.depth_stencil_attachment->depth_load_op == LoadOp::Clear;
+    const bool clears_stencil =
+        desc.depth_stencil_attachment &&
+        desc.depth_stencil_attachment->stencil_load_op == LoadOp::Clear;
+    if (clears_color || clears_depth || clears_stencil) {
+        // Attachment load operations must not inherit raster state from the
+        // previous pass. In particular, the ImGui overlay leaves scissor
+        // enabled and depth writes disabled at the end of each frame.
+        FEI_GL_CALL(glDisable(GL_SCISSOR_TEST));
+    }
+
     for (size_t i = 0; i < desc.color_attachments.size(); ++i) {
         const auto& att = desc.color_attachments[i];
         if (att.load_op == LoadOp::Clear) {
+            FEI_GL_CALL(glColorMaski(
+                static_cast<GLuint>(i),
+                GL_TRUE,
+                GL_TRUE,
+                GL_TRUE,
+                GL_TRUE
+            ));
             clear_color_attachment(
                 fb_gl->id(),
                 static_cast<GLint>(i),
@@ -316,6 +397,13 @@ void CommandBufferExecutorOpenGL::execute_begin_render_pass(
 
     if (desc.depth_stencil_attachment) {
         const auto& att = *desc.depth_stencil_attachment;
+        if (clears_depth) {
+            FEI_GL_CALL(glDepthMask(GL_TRUE));
+        }
+        if (clears_stencil) {
+            FEI_GL_CALL(glStencilMaskSeparate(GL_FRONT, 0xffffffffU));
+            FEI_GL_CALL(glStencilMaskSeparate(GL_BACK, 0xffffffffU));
+        }
         if (att.depth_load_op == LoadOp::Clear &&
             att.stencil_load_op == LoadOp::Clear) {
             clear_depth_stencil_attachment(
@@ -364,14 +452,46 @@ void CommandBufferExecutorOpenGL::execute_set_render_pipeline(
     FEI_GL_CALL(glUseProgram(pipeline_gl->program()));
 
     const auto& blend_state = pipeline_gl->blend_state();
-    if (!blend_state.attachment_states.empty()) {
-        const auto& att = blend_state.attachment_states[0];
+    const auto color_attachment_count = pipeline_gl->color_attachment_count();
+    if (blend_state.attachment_states.size() > 1 &&
+        blend_state.attachment_states.size() != color_attachment_count) {
+        fatal(
+            "PipelineOpenGL blend state has {} attachment(s), but output has "
+            "{} color attachment(s)",
+            blend_state.attachment_states.size(),
+            color_attachment_count
+        );
+    }
+    for (GLuint index = 0; index < color_attachment_count; ++index) {
+        const auto& att =
+            blend_state.attachment_states.empty() ?
+                BlendAttachmentDescription::Disabled :
+                blend_state.attachment_states
+                    [blend_state.attachment_states.size() == 1 ? 0 : index];
         if (att.enabled) {
-            FEI_GL_CALL(glEnable(GL_BLEND));
-            // TODO: configure blend factors and operations.
+            FEI_GL_CALL(glEnablei(GL_BLEND, index));
+            FEI_GL_CALL(glBlendFuncSeparatei(
+                index,
+                to_gl_blend_factor(att.source_color_factor),
+                to_gl_blend_factor(att.destination_color_factor),
+                to_gl_blend_factor(att.source_alpha_factor),
+                to_gl_blend_factor(att.destination_alpha_factor)
+            ));
+            FEI_GL_CALL(glBlendEquationSeparatei(
+                index,
+                to_gl_blend_function(att.color_function),
+                to_gl_blend_function(att.alpha_function)
+            ));
         } else {
-            FEI_GL_CALL(glDisable(GL_BLEND));
+            FEI_GL_CALL(glDisablei(GL_BLEND, index));
         }
+        FEI_GL_CALL(glColorMaski(
+            index,
+            color_mask_contains(att.color_write_mask, ColorWriteMask::Red),
+            color_mask_contains(att.color_write_mask, ColorWriteMask::Green),
+            color_mask_contains(att.color_write_mask, ColorWriteMask::Blue),
+            color_mask_contains(att.color_write_mask, ColorWriteMask::Alpha)
+        ));
     }
 
     const auto& depth_stencil_state = pipeline_gl->depth_stencil_state();
@@ -383,6 +503,7 @@ void CommandBufferExecutorOpenGL::execute_set_render_pipeline(
     } else {
         FEI_GL_CALL(glDisable(GL_DEPTH_TEST));
     }
+    FEI_GL_CALL(glDepthMask(depth_stencil_state.depth_write_enabled));
 
     const auto& rasterizer_state = pipeline_gl->rasterizer_state();
     if (rasterizer_state.cull_mode == CullMode::None) {
@@ -390,6 +511,11 @@ void CommandBufferExecutorOpenGL::execute_set_render_pipeline(
     } else {
         FEI_GL_CALL(glEnable(GL_CULL_FACE));
         FEI_GL_CALL(glCullFace(to_gl_cull_mode(rasterizer_state.cull_mode)));
+    }
+    if (rasterizer_state.scissor_test_enabled) {
+        FEI_GL_CALL(glEnable(GL_SCISSOR_TEST));
+    } else {
+        FEI_GL_CALL(glDisable(GL_SCISSOR_TEST));
     }
 
     state.pipeline = std::move(pipeline);
@@ -662,7 +788,9 @@ void CommandBufferExecutorOpenGL::execute_draw(
 
 void CommandBufferExecutorOpenGL::execute_draw_indexed(
     ExecutionState& state,
-    std::size_t count
+    std::size_t count,
+    uint32 first_index,
+    std::int32_t vertex_offset
 ) {
     if (!state.pipeline) {
         fatal("CommandBufferOpenGL::draw_indexed executed without pipeline");
@@ -672,14 +800,17 @@ void CommandBufferExecutorOpenGL::execute_draw_indexed(
         std::static_pointer_cast<const PipelineOpenGL>(state.pipeline);
     pipeline_gl->ensure_created();
     auto index_offset = reinterpret_cast<const GLvoid*>(
-        static_cast<std::uintptr_t>(state.index_buffer_offset)
+        static_cast<std::uintptr_t>(state.index_buffer_offset) +
+        static_cast<std::uintptr_t>(first_index) *
+            index_element_size(state.draw_elements_type)
     );
 
-    FEI_GL_CALL(glDrawElements(
+    FEI_GL_CALL(glDrawElementsBaseVertex(
         to_gl_render_primitive(pipeline_gl->render_primitive()),
         static_cast<GLsizei>(count),
         state.draw_elements_type,
-        index_offset
+        index_offset,
+        vertex_offset
     ));
     if (pipeline_gl->memory_barriers() != 0) {
         FEI_GL_CALL(glMemoryBarrier(pipeline_gl->memory_barriers()));

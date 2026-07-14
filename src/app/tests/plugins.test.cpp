@@ -127,6 +127,7 @@ TEST_CASE(
 ) {
     StopOnFinishPlugin::setup_count = 0;
     StopOnFinishPlugin::finish_count = 0;
+    StopOnFinishPlugin::cleanup_count = 0;
 
     App app;
     app.add_plugin<StopOnFinishPlugin>();
@@ -134,6 +135,7 @@ TEST_CASE(
 
     REQUIRE(StopOnFinishPlugin::setup_count == 1);
     REQUIRE(StopOnFinishPlugin::finish_count == 1);
+    REQUIRE(StopOnFinishPlugin::cleanup_count == 1);
     REQUIRE(app.resource<AppStates>().should_stop);
 }
 
@@ -141,6 +143,7 @@ TEST_CASE("App finishes plugins in insertion order", "[app][plugin]") {
     PluginTrace::reset();
     StopOnFinishPlugin::setup_count = 0;
     StopOnFinishPlugin::finish_count = 0;
+    StopOnFinishPlugin::cleanup_count = 0;
 
     App app;
     app.add_plugins(
@@ -151,5 +154,22 @@ TEST_CASE("App finishes plugins in insertion order", "[app][plugin]") {
     app.run();
 
     REQUIRE(PluginTrace::finish_order == std::vector<int> {1, 2});
+    REQUIRE(PluginTrace::cleanup_order == std::vector<int> {2, 1});
     REQUIRE(StopOnFinishPlugin::finish_count == 1);
+    REQUIRE(StopOnFinishPlugin::cleanup_count == 1);
+}
+
+TEST_CASE(
+    "App cleans up plugins exactly once in reverse order on exceptions",
+    "[app][plugin]"
+) {
+    PluginTrace::reset();
+    ThrowingPlugin::cleanup_count = 0;
+
+    App app;
+    app.add_plugins(OrderedPluginA {}, ThrowingPlugin {}, OrderedPluginB {});
+
+    REQUIRE_THROWS_AS(app.run(), std::runtime_error);
+    REQUIRE(ThrowingPlugin::cleanup_count == 1);
+    REQUIRE(PluginTrace::cleanup_order == std::vector<int> {2, 9, 1});
 }

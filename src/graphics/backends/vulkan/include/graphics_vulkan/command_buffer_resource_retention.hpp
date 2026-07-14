@@ -14,7 +14,7 @@ class CommandBufferResourceRetention {
   private:
     std::vector<std::shared_ptr<const Framebuffer>> m_framebuffers;
     std::vector<std::shared_ptr<const ResourceSet>> m_resource_sets;
-    std::vector<std::shared_ptr<const Buffer>> m_transient_buffers;
+    std::vector<std::shared_ptr<const Buffer>> m_buffers;
 
   public:
     void retain_framebuffer(std::shared_ptr<const Framebuffer> framebuffer) {
@@ -25,14 +25,18 @@ class CommandBufferResourceRetention {
         m_resource_sets.push_back(std::move(resource_set));
     }
 
+    void retain_buffer(std::shared_ptr<const Buffer> buffer) {
+        m_buffers.push_back(std::move(buffer));
+    }
+
     void retain_transient_buffer(std::shared_ptr<const Buffer> buffer) {
-        m_transient_buffers.push_back(std::move(buffer));
+        retain_buffer(std::move(buffer));
     }
 
     void clear() {
         m_framebuffers.clear();
         m_resource_sets.clear();
-        m_transient_buffers.clear();
+        m_buffers.clear();
     }
 };
 

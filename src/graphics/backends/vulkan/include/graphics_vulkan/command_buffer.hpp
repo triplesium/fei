@@ -47,8 +47,14 @@ class CommandBufferVulkan : public CommandBuffer {
         m_bound_compute_resource_sets;
     bool m_logical_render_pass_active {false};
     bool m_native_render_pass_active {false};
+    std::int32_t m_viewport_x {0};
+    std::int32_t m_viewport_y {0};
+    std::uint32_t m_viewport_width {0};
+    std::uint32_t m_viewport_height {0};
+    bool m_viewport_set {false};
 
   public:
+    using CommandBuffer::draw_indexed;
     using CommandBuffer::update_buffer;
 
     explicit CommandBufferVulkan(std::shared_ptr<VulkanDeviceState> state);
@@ -71,6 +77,12 @@ class CommandBufferVulkan : public CommandBuffer {
         std::uint32_t w,
         std::uint32_t h
     ) override;
+    void set_scissor(
+        std::int32_t x,
+        std::int32_t y,
+        std::uint32_t w,
+        std::uint32_t h
+    ) override;
     void set_vertex_buffer(std::shared_ptr<const Buffer> buffer) override;
     void set_resource_set(
         uint32 slot,
@@ -84,7 +96,11 @@ class CommandBufferVulkan : public CommandBuffer {
         std::size_t size
     ) override;
     void draw(std::size_t start, std::size_t count) override;
-    void draw_indexed(std::size_t count) override;
+    void draw_indexed(
+        std::size_t count,
+        uint32 first_index,
+        std::int32_t vertex_offset
+    ) override;
     void dispatch(
         std::size_t group_x,
         std::size_t group_y,

@@ -25,6 +25,12 @@ struct SetViewport {
     std::uint32_t w;
     std::uint32_t h;
 };
+struct SetScissor {
+    std::int32_t x;
+    std::int32_t y;
+    std::uint32_t w;
+    std::uint32_t h;
+};
 struct SetRenderPipeline {
     std::shared_ptr<const Pipeline> pipeline;
 };
@@ -55,6 +61,8 @@ struct Draw {
 };
 struct DrawIndexed {
     std::size_t count;
+    uint32 first_index;
+    std::int32_t vertex_offset;
 };
 struct Dispatch {
     std::size_t group_x;
@@ -87,6 +95,7 @@ using Command = std::variant<
     BeginRenderPass,
     EndRenderPass,
     SetViewport,
+    SetScissor,
     SetRenderPipeline,
     SetComputePipeline,
     SetVertexBuffer,

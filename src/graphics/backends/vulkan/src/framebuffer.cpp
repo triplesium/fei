@@ -53,6 +53,9 @@ VkImageLayout final_layout(const AttachmentInfo& attachment) {
 }
 
 VkImageLayout initial_load_layout(const AttachmentInfo& attachment) {
+    if (!attachment.depth_stencil && !attachment.texture->owns_image()) {
+        return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    }
     const auto layout = attachment.texture->layout(attachment.mip_level);
     if (layout != VK_IMAGE_LAYOUT_UNDEFINED) {
         return layout;

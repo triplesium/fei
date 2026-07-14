@@ -53,6 +53,7 @@ class PipelineOpenGL : public Pipeline, public DeferredResourceOpenGL {
     RasterizerStateDescription m_rasterizer_state;
     RenderPrimitive m_render_primitive;
     std::vector<std::shared_ptr<const ResourceLayout>> m_resource_layouts;
+    std::size_t m_color_attachment_count {0};
 
     mutable std::vector<std::vector<ResourceBindingInfo>> m_resource_bindings;
 
@@ -68,6 +69,9 @@ class PipelineOpenGL : public Pipeline, public DeferredResourceOpenGL {
     const auto& rasterizer_state() const { return m_rasterizer_state; }
     const auto& render_primitive() const { return m_render_primitive; }
     const auto& resource_layouts() const { return m_resource_layouts; }
+    std::size_t color_attachment_count() const {
+        return m_color_attachment_count;
+    }
     GLuint program() const { return m_program; }
 
     Optional<const ResourceBindingInfo&>

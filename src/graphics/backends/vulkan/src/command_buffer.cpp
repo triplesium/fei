@@ -1062,6 +1062,7 @@ void CommandBufferVulkan::begin() {
     m_bound_compute_resource_sets.clear();
     m_logical_render_pass_active = false;
     m_native_render_pass_active = false;
+    m_viewport_set = false;
 
     std::scoped_lock lock(m_state->immediate_mutex());
     check_vk(vkResetCommandBuffer(m_command_buffer, 0), "vkResetCommandBuffer");
@@ -1219,6 +1220,28 @@ void CommandBufferVulkan::set_viewport(
     };
     vkCmdSetViewport(m_command_buffer, 0, 1, &viewport);
     vkCmdSetScissor(m_command_buffer, 0, 1, &scissor);
+    m_viewport_x = x;
+    m_viewport_y = y;
+    m_viewport_width = w;
+    m_viewport_height = h;
+    m_viewport_set = true;
+}
+
+void CommandBufferVulkan::set_scissor(
+    std::int32_t x,
+    std::int32_t y,
+    std::uint32_t w,
+    std::uint32_t h
+) {
+    ensure_recording("set_scissor");
+    if (!m_viewport_set) {
+        fatal("CommandBufferVulkan::set_scissor called before set_viewport");
+    }
+    VkRect2D scissor {
+        .offset = VkOffset2D {.x = m_viewport_x + x, .y = m_viewport_y + y},
+        .extent = VkExtent2D {.width = w, .height = h},
+    };
+    vkCmdSetScissor(m_command_buffer, 0, 1, &scissor);
 }
 
 void CommandBufferVulkan::set_vertex_buffer(
@@ -1232,6 +1255,7 @@ void CommandBufferVulkan::set_vertex_buffer(
     const VkBuffer raw_buffer = buffer_vk->handle();
     constexpr VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(m_command_buffer, 0, 1, &raw_buffer, &offset);
+    m_resource_retention.retain_buffer(std::move(buffer_vk));
 }
 
 void CommandBufferVulkan::set_resource_set(
@@ -1394,7 +1418,11 @@ void CommandBufferVulkan::draw(std::size_t start, std::size_t count) {
     );
 }
 
-void CommandBufferVulkan::draw_indexed(std::size_t count) {
+void CommandBufferVulkan::draw_indexed(
+    std::size_t count,
+    uint32 first_index,
+    std::int32_t vertex_offset
+) {
     ensure_recording("draw_indexed");
     if (!m_logical_render_pass_active) {
         fatal("CommandBufferVulkan::draw_indexed called outside render pass");
@@ -1408,8 +1436,8 @@ void CommandBufferVulkan::draw_indexed(std::size_t count) {
         m_command_buffer,
         checked_u32(count, "draw indexed count"),
         1,
-        0,
-        0,
+        first_index,
+        vertex_offset,
         0
     );
 }
@@ -1529,6 +1557,7 @@ void CommandBufferVulkan::set_index_buffer_impl(
         offset,
         to_vk_index_type(format)
     );
+    m_resource_retention.retain_buffer(std::move(buffer_vk));
 }
 
 void CommandBufferVulkan::generate_mipmaps_impl(

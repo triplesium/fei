@@ -27,7 +27,7 @@ namespace fei {
 
 namespace {
 
-constexpr std::size_t max_frames_in_flight = 3;
+constexpr std::size_t vulkan_max_frames_in_flight = 3;
 
 VkAccessFlags buffer_access_flags(BitFlags<BufferUsages> usages) {
     VkAccessFlags flags = 0;
@@ -863,7 +863,7 @@ void GraphicsDeviceVulkan::wait_for_submission_capacity() const {
         {
             std::scoped_lock lock(m_submissions->mutex);
             if (m_submissions->submitted_command_buffers.size() <
-                max_frames_in_flight) {
+                vulkan_max_frames_in_flight) {
                 return;
             }
             fence = m_submissions->submitted_command_buffers.front().fence;

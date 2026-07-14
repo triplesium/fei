@@ -69,7 +69,12 @@ class CommandBufferExecutorOpenGL {
     );
     void
     execute_draw(ExecutionState& state, std::size_t start, std::size_t count);
-    void execute_draw_indexed(ExecutionState& state, std::size_t count);
+    void execute_draw_indexed(
+        ExecutionState& state,
+        std::size_t count,
+        uint32 first_index,
+        std::int32_t vertex_offset
+    );
     void execute_dispatch(
         std::size_t group_x,
         std::size_t group_y,

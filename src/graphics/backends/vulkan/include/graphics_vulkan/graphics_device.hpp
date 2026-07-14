@@ -41,6 +41,9 @@ class GraphicsDeviceVulkan : public GraphicsDevice {
     }
 
     [[nodiscard]] Matrix4x4 clip_space_transform() const override;
+    [[nodiscard]] std::size_t max_frames_in_flight() const override {
+        return 3;
+    }
 
     std::shared_ptr<ShaderModule>
     create_shader_module(const ShaderDescription& desc) const override;

@@ -29,6 +29,7 @@ class CommandBufferOpenGL : public CommandBuffer {
     const GraphicsDeviceOpenGL& m_device;
 
   public:
+    using CommandBuffer::draw_indexed;
     using CommandBuffer::update_buffer;
 
     CommandBufferOpenGL(const GraphicsDeviceOpenGL& device) :
@@ -40,6 +41,12 @@ class CommandBufferOpenGL : public CommandBuffer {
     void end_render_pass() override;
 
     void set_viewport(
+        std::int32_t x,
+        std::int32_t y,
+        std::uint32_t w,
+        std::uint32_t h
+    ) override;
+    void set_scissor(
         std::int32_t x,
         std::int32_t y,
         std::uint32_t w,
@@ -58,7 +65,11 @@ class CommandBufferOpenGL : public CommandBuffer {
         std::size_t size
     ) override;
     void draw(std::size_t start, std::size_t count) override;
-    void draw_indexed(std::size_t count) override;
+    void draw_indexed(
+        std::size_t count,
+        uint32 first_index,
+        std::int32_t vertex_offset
+    ) override;
     void dispatch(
         std::size_t group_x,
         std::size_t group_y,

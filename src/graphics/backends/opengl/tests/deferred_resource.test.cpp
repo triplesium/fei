@@ -151,6 +151,27 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "OpenGL queues ImGui texture uploads before overlay command submission",
+    "[graphics][opengl][imgui]"
+) {
+    OpenGLDeviceState state;
+    state.enqueue_operation(
+        OpenGLPendingTextureUpdate {
+            .data = {std::byte {0xff}},
+            .width = 1,
+            .height = 1,
+            .depth = 1,
+        }
+    );
+    state.enqueue_operation(OpenGLPendingCommandSubmit {});
+
+    auto operations = state.take_pending_operations();
+    REQUIRE(operations.size() == 2);
+    REQUIRE(std::holds_alternative<OpenGLPendingTextureUpdate>(operations[0]));
+    REQUIRE(std::holds_alternative<OpenGLPendingCommandSubmit>(operations[1]));
+}
+
+TEST_CASE(
     "OpenGL disposal queue ignores null resources and preserves order",
     "[graphics][opengl]"
 ) {

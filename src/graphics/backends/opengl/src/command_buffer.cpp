@@ -55,6 +55,18 @@ void CommandBufferOpenGL::set_viewport(
     );
 }
 
+void CommandBufferOpenGL::set_scissor(
+    std::int32_t x,
+    std::int32_t y,
+    std::uint32_t w,
+    std::uint32_t h
+) {
+    ensure_recording("set_scissor");
+    m_commands.emplace_back(
+        ogl_cmd::SetScissor {.x = x, .y = y, .w = w, .h = h}
+    );
+}
+
 void CommandBufferOpenGL::set_vertex_buffer(
     std::shared_ptr<const Buffer> buffer
 ) {
@@ -112,9 +124,19 @@ void CommandBufferOpenGL::draw(size_t start, size_t count) {
     m_commands.emplace_back(ogl_cmd::Draw {.start = start, .count = count});
 }
 
-void CommandBufferOpenGL::draw_indexed(size_t count) {
+void CommandBufferOpenGL::draw_indexed(
+    size_t count,
+    uint32 first_index,
+    std::int32_t vertex_offset
+) {
     ensure_recording("draw_indexed");
-    m_commands.emplace_back(ogl_cmd::DrawIndexed {.count = count});
+    m_commands.emplace_back(
+        ogl_cmd::DrawIndexed {
+            .count = count,
+            .first_index = first_index,
+            .vertex_offset = vertex_offset,
+        }
+    );
 }
 
 void CommandBufferOpenGL::dispatch(

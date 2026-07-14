@@ -28,7 +28,7 @@ option_end()
 
 add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json")
 add_requires("glfw", {configs = {shared = false}})
-add_requires("imgui", {configs = {glfw = true, opengl3 = true}})
+add_requires("imgui v1.92.7", {configs = {glfw = true, opengl3 = false}})
 if has_config("tracy") then
     add_requires(
         "tracy v0.13.0",

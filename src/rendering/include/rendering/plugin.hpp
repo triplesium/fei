@@ -17,6 +17,7 @@ struct RenderingSystems {
     struct Prepass : SystemSet<Prepass> {};
     struct MainPass : SystemSet<MainPass> {};
     struct PostProcess : SystemSet<PostProcess> {};
+    struct Overlay : SystemSet<Overlay> {};
     struct Submit : SystemSet<Submit> {};
 };
 

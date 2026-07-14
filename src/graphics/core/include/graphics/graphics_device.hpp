@@ -111,6 +111,8 @@ class GraphicsDevice {
 
     virtual void flush() const {}
 
+    [[nodiscard]] virtual std::size_t max_frames_in_flight() const { return 1; }
+
     virtual GraphicsResourceCacheStats resource_cache_stats() const {
         return {};
     }

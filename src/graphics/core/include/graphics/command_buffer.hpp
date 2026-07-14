@@ -35,6 +35,12 @@ class CommandBuffer {
         std::uint32_t w,
         std::uint32_t h
     ) = 0;
+    virtual void set_scissor(
+        std::int32_t x,
+        std::int32_t y,
+        std::uint32_t w,
+        std::uint32_t h
+    ) = 0;
     void set_render_pipeline(std::shared_ptr<const Pipeline> pipeline) {
         m_pipeline = pipeline;
         set_render_pipeline_impl(pipeline);
@@ -84,7 +90,12 @@ class CommandBuffer {
         std::size_t size
     ) = 0;
     virtual void draw(std::size_t start, std::size_t count) = 0;
-    virtual void draw_indexed(std::size_t count) = 0;
+    void draw_indexed(std::size_t count) { draw_indexed(count, 0, 0); }
+    virtual void draw_indexed(
+        std::size_t count,
+        uint32 first_index,
+        std::int32_t vertex_offset
+    ) = 0;
     virtual void
     dispatch(std::size_t group_x, std::size_t group_y, std::size_t group_z) = 0;
 

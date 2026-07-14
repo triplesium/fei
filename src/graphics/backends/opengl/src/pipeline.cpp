@@ -137,7 +137,8 @@ PipelineOpenGL::PipelineOpenGL(const RenderPipelineDescription& desc) :
     m_depth_stencil_state(desc.depth_stencil_state),
     m_rasterizer_state(desc.rasterizer_state),
     m_render_primitive(desc.render_primitive),
-    m_resource_layouts(desc.resource_layouts) {
+    m_resource_layouts(desc.resource_layouts),
+    m_color_attachment_count(desc.output_description.color_attachments.size()) {
     validate_shader_resource_layouts();
 }
 

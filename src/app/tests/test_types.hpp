@@ -3,6 +3,7 @@
 #include "app/app.hpp"
 #include "app/plugin.hpp"
 
+#include <stdexcept>
 #include <vector>
 
 namespace fei::app_test {
@@ -42,10 +43,12 @@ struct FromWorldResource {
 struct PluginTrace {
     static inline std::vector<int> setup_order {};
     static inline std::vector<int> finish_order {};
+    static inline std::vector<int> cleanup_order {};
 
     static void reset() {
         setup_order.clear();
         finish_order.clear();
+        cleanup_order.clear();
     }
 };
 
@@ -62,6 +65,9 @@ class OrderedPluginA : public Plugin {
     void finish(App& /*app*/) override {
         PluginTrace::finish_order.push_back(1);
     }
+    void cleanup(App& /*app*/) noexcept override {
+        PluginTrace::cleanup_order.push_back(1);
+    }
 };
 
 class OrderedPluginB : public Plugin {
@@ -69,6 +75,9 @@ class OrderedPluginB : public Plugin {
     void setup(App& /*app*/) override { PluginTrace::setup_order.push_back(2); }
     void finish(App& /*app*/) override {
         PluginTrace::finish_order.push_back(2);
+    }
+    void cleanup(App& /*app*/) noexcept override {
+        PluginTrace::cleanup_order.push_back(2);
     }
 };
 
@@ -106,11 +115,30 @@ class StopOnFinishPlugin : public Plugin {
   public:
     static inline int setup_count = 0;
     static inline int finish_count = 0;
+    static inline int cleanup_count = 0;
 
     void setup(App& /*app*/) override { ++setup_count; }
     void finish(App& app) override {
         ++finish_count;
         app.resource<AppStates>().should_stop = true;
+    }
+    void cleanup(App& /*app*/) noexcept override { ++cleanup_count; }
+};
+
+inline void throw_during_startup() {
+    throw std::runtime_error("startup failure");
+}
+
+class ThrowingPlugin : public Plugin {
+  public:
+    static inline int cleanup_count = 0;
+
+    void setup(App& app) override {
+        app.add_systems(StartUp, throw_during_startup);
+    }
+    void cleanup(App& /*app*/) noexcept override {
+        ++cleanup_count;
+        PluginTrace::cleanup_order.push_back(9);
     }
 };
 

@@ -9,6 +9,7 @@ class Plugin {
     virtual ~Plugin() = default;
     virtual void setup(App& app) = 0;
     virtual void finish(App& app) {}
+    virtual void cleanup(App& app) noexcept {}
 };
 
 } // namespace fei

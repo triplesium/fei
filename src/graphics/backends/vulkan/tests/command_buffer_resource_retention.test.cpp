@@ -45,10 +45,12 @@ TEST_CASE(
     auto sampled_texture = std::make_shared<TestTexture>();
     auto target = std::make_shared<TestTexture>();
     auto staging = std::make_shared<TestBuffer>();
+    auto vertex = std::make_shared<TestBuffer>();
     std::weak_ptr<const Buffer> weak_uniform = uniform;
     std::weak_ptr<const Texture> weak_sampled_texture = sampled_texture;
     std::weak_ptr<const Texture> weak_target = target;
     std::weak_ptr<const Buffer> weak_staging = staging;
+    std::weak_ptr<const Buffer> weak_vertex = vertex;
 
     auto layout =
         std::make_shared<ResourceLayout>(ResourceLayoutDescription {});
@@ -66,11 +68,13 @@ TEST_CASE(
     retention.retain_resource_set(resource_set);
     retention.retain_framebuffer(framebuffer);
     retention.retain_transient_buffer(staging);
+    retention.retain_buffer(vertex);
 
     uniform.reset();
     sampled_texture.reset();
     target.reset();
     staging.reset();
+    vertex.reset();
     resource_set.reset();
     framebuffer.reset();
     layout.reset();
@@ -79,6 +83,7 @@ TEST_CASE(
     CHECK_FALSE(weak_sampled_texture.expired());
     CHECK_FALSE(weak_target.expired());
     CHECK_FALSE(weak_staging.expired());
+    CHECK_FALSE(weak_vertex.expired());
     CHECK_FALSE(weak_layout.expired());
 
     retention.clear();
@@ -87,6 +92,7 @@ TEST_CASE(
     CHECK(weak_sampled_texture.expired());
     CHECK(weak_target.expired());
     CHECK(weak_staging.expired());
+    CHECK(weak_vertex.expired());
     CHECK(weak_layout.expired());
 }
 
