@@ -219,13 +219,13 @@ void CommandBufferExecutorOpenGL::execute_command(
             using CommandT = std::decay_t<decltype(cmd)>;
             if constexpr (std::is_same_v<CommandT, ogl_cmd::BeginRenderPass>) {
                 execute_begin_render_pass(state, cmd.desc);
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::EndRenderPass>
-            ) {
+            } else if constexpr (std::is_same_v<
+                                     CommandT,
+                                     ogl_cmd::EndRenderPass>) {
                 FEI_GL_CALL(glBindFramebuffer(GL_FRAMEBUFFER, 0));
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::SetViewport>
-            ) {
+            } else if constexpr (std::is_same_v<
+                                     CommandT,
+                                     ogl_cmd::SetViewport>) {
                 FEI_GL_CALL(glViewport(
                     cmd.x,
                     cmd.y,
@@ -243,9 +243,8 @@ void CommandBufferExecutorOpenGL::execute_command(
                 state.viewport_width = cmd.w;
                 state.viewport_height = cmd.h;
                 state.viewport_set = true;
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::SetScissor>
-            ) {
+            } else if constexpr (std::
+                                     is_same_v<CommandT, ogl_cmd::SetScissor>) {
                 if (!state.viewport_set) {
                     fatal(
                         "CommandBufferOpenGL::set_scissor executed before "
@@ -262,21 +261,21 @@ void CommandBufferExecutorOpenGL::execute_command(
                     to_gl_sizei(cmd.w),
                     to_gl_sizei(cmd.h)
                 ));
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::SetRenderPipeline>
-            ) {
+            } else if constexpr (std::is_same_v<
+                                     CommandT,
+                                     ogl_cmd::SetRenderPipeline>) {
                 execute_set_render_pipeline(state, cmd.pipeline);
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::SetComputePipeline>
-            ) {
+            } else if constexpr (std::is_same_v<
+                                     CommandT,
+                                     ogl_cmd::SetComputePipeline>) {
                 execute_set_compute_pipeline(state, cmd.pipeline);
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::SetVertexBuffer>
-            ) {
+            } else if constexpr (std::is_same_v<
+                                     CommandT,
+                                     ogl_cmd::SetVertexBuffer>) {
                 execute_set_vertex_buffer(state, cmd.buffer);
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::SetIndexBuffer>
-            ) {
+            } else if constexpr (std::is_same_v<
+                                     CommandT,
+                                     ogl_cmd::SetIndexBuffer>) {
                 auto buffer_gl =
                     std::static_pointer_cast<const BufferOpenGL>(cmd.buffer);
                 buffer_gl->ensure_created();
@@ -286,24 +285,24 @@ void CommandBufferExecutorOpenGL::execute_command(
 
                 state.draw_elements_type = to_gl_draw_elements_type(cmd.format);
                 state.index_buffer_offset = cmd.offset;
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::SetResourceSet>
-            ) {
+            } else if constexpr (std::is_same_v<
+                                     CommandT,
+                                     ogl_cmd::SetResourceSet>) {
                 execute_set_resource_set(
                     state,
                     cmd.slot,
                     cmd.resource_set,
                     cmd.dynamic_offsets
                 );
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::UpdateBuffer>
-            ) {
+            } else if constexpr (std::is_same_v<
+                                     CommandT,
+                                     ogl_cmd::UpdateBuffer>) {
                 execute_update_buffer(cmd.buffer, cmd.offset, cmd.data);
             } else if constexpr (std::is_same_v<CommandT, ogl_cmd::Draw>) {
                 execute_draw(state, cmd.start, cmd.count);
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::DrawIndexed>
-            ) {
+            } else if constexpr (std::is_same_v<
+                                     CommandT,
+                                     ogl_cmd::DrawIndexed>) {
                 execute_draw_indexed(
                     state,
                     cmd.count,
@@ -312,13 +311,13 @@ void CommandBufferExecutorOpenGL::execute_command(
                 );
             } else if constexpr (std::is_same_v<CommandT, ogl_cmd::Dispatch>) {
                 execute_dispatch(cmd.group_x, cmd.group_y, cmd.group_z);
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::GenerateMipmaps>
-            ) {
+            } else if constexpr (std::is_same_v<
+                                     CommandT,
+                                     ogl_cmd::GenerateMipmaps>) {
                 execute_generate_mipmaps(cmd.texture);
-            } else if constexpr (
-                std::is_same_v<CommandT, ogl_cmd::CopyTexture>
-            ) {
+            } else if constexpr (std::is_same_v<
+                                     CommandT,
+                                     ogl_cmd::CopyTexture>) {
                 execute_copy_texture(cmd);
             } else {
                 static_assert(always_false_v<CommandT>);

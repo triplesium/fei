@@ -29,9 +29,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL validation_callback(
             "";
     if ((severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0) {
         error("Vulkan validation: {}", message);
-    } else if (
-        (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) != 0
-    ) {
+    } else if ((severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) !=
+               0) {
         warn("Vulkan validation: {}", message);
     } else {
         debug("Vulkan validation: {}", message);
@@ -206,9 +205,8 @@ uint32 rate_physical_device(
     uint32 score = 1;
     if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
         score += 1000;
-    } else if (
-        properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU
-    ) {
+    } else if (properties.deviceType ==
+               VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) {
         score += 500;
     }
     score += properties.limits.maxImageDimension2D;

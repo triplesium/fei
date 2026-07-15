@@ -122,9 +122,8 @@ class GraphicsDevice {
         if (auto texture_view =
                 std::dynamic_pointer_cast<const TextureView>(texture)) {
             return texture_view;
-        } else if (
-            auto tex = std::dynamic_pointer_cast<const Texture>(texture)
-        ) {
+        } else if (auto tex =
+                       std::dynamic_pointer_cast<const Texture>(texture)) {
             return tex->full_view(*this);
         } else {
             fatal(

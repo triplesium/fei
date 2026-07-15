@@ -618,9 +618,8 @@ MappedResource GraphicsDeviceOpenGL::map(
             map_mode,
             std::span<std::byte>(data, total_size)
         );
-    } else if (
-        auto buffer_gl = std::dynamic_pointer_cast<BufferOpenGL>(resource)
-    ) {
+    } else if (auto buffer_gl =
+                   std::dynamic_pointer_cast<BufferOpenGL>(resource)) {
         buffer_gl->ensure_created();
         void* ptr = FEI_GL_CALL(glMapNamedBuffer(
             buffer_gl->id(),
@@ -655,9 +654,8 @@ void GraphicsDeviceOpenGL::unmap(
             m_state->m_mapped_resources.erase(it);
         }
         return;
-    } else if (
-        auto buffer_gl = std::dynamic_pointer_cast<BufferOpenGL>(resource)
-    ) {
+    } else if (auto buffer_gl =
+                   std::dynamic_pointer_cast<BufferOpenGL>(resource)) {
         buffer_gl->ensure_created();
         FEI_GL_CALL(glUnmapNamedBuffer(buffer_gl->id()));
         return;
@@ -707,22 +705,22 @@ void GraphicsDeviceOpenGL::execute_operation(
     std::visit(
         [this](const auto& op) {
             using OperationT = std::decay_t<decltype(op)>;
-            if constexpr (
-                std::is_same_v<OperationT, OpenGLPendingCommandSubmit>
-            ) {
+            if constexpr (std::is_same_v<
+                              OperationT,
+                              OpenGLPendingCommandSubmit>) {
                 CommandBufferExecutorOpenGL executor(*this);
                 executor.execute(op.commands);
-            } else if constexpr (
-                std::is_same_v<OperationT, OpenGLPendingBufferUpdate>
-            ) {
+            } else if constexpr (std::is_same_v<
+                                     OperationT,
+                                     OpenGLPendingBufferUpdate>) {
                 execute_update_buffer(op);
-            } else if constexpr (
-                std::is_same_v<OperationT, OpenGLPendingTextureUpdate>
-            ) {
+            } else if constexpr (std::is_same_v<
+                                     OperationT,
+                                     OpenGLPendingTextureUpdate>) {
                 execute_update_texture(op);
-            } else if constexpr (
-                std::is_same_v<OperationT, OpenGLPendingTextureReadback>
-            ) {
+            } else if constexpr (std::is_same_v<
+                                     OperationT,
+                                     OpenGLPendingTextureReadback>) {
                 execute_texture_readback(op);
             } else {
                 static_assert(always_false_v<OperationT>);

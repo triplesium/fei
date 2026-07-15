@@ -116,7 +116,8 @@ class ConstructorImpl : public Constructor {
                 }
                 score += score_of(rank);
             }(),
-            ...);
+            ...
+        );
         if (!matched) {
             return std::nullopt;
         }
@@ -141,7 +142,8 @@ class ConstructorImpl : public Constructor {
                         ArgumentAdapter<Args>::describe_mismatch(args[ArgIdx]);
                 }
             }(),
-            ...);
+            ...
+        );
         return message;
     }
 };

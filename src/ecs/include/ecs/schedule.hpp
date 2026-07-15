@@ -87,7 +87,8 @@ class Schedule {
                 auto added_ids = add_systems(std::move(config));
                 ids.insert(ids.end(), added_ids.begin(), added_ids.end());
             }(),
-            ...);
+            ...
+        );
         return ids;
     }
 
@@ -235,7 +236,8 @@ class Schedules {
                     );
                 }
             }(),
-            ...);
+            ...
+        );
         return handles;
     }
 

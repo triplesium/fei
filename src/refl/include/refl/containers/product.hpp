@@ -194,7 +194,8 @@ class TupleLikeContainerAdapter final : public IndexedContainerAdapter {
                 );
                 keep_visiting = static_cast<bool>(status);
             }(),
-            ...);
+            ...
+        );
         return status;
     }
 

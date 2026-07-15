@@ -59,16 +59,14 @@ struct ArgumentAdapter {
             return (std::is_const_v<NoPtr> || !ref.is_const()) ?
                        ConversionRank::Exact :
                        ConversionRank::None;
-        } else if constexpr (
-            std::is_lvalue_reference_v<T> && !std::is_const_v<NoRef>
-        ) {
+        } else if constexpr (std::is_lvalue_reference_v<T> &&
+                             !std::is_const_v<NoRef>) {
             return (ref.type_id() == fei::type_id<Base>() && !ref.is_const()) ?
                        ConversionRank::Exact :
                        ConversionRank::None;
-        } else if constexpr (
-            std::is_rvalue_reference_v<T> ||
-            (!std::is_reference_v<T> && !std::is_copy_constructible_v<Base>)
-        ) {
+        } else if constexpr (std::is_rvalue_reference_v<T> ||
+                             (!std::is_reference_v<T> &&
+                              !std::is_copy_constructible_v<Base>)) {
             if constexpr (std::is_enum_v<Base>) {
                 return Conversion<Base>::match(ref);
             } else {
@@ -103,17 +101,15 @@ struct ArgumentAdapter {
             } else {
                 return ref.try_get<NoPtr>();
             }
-        } else if constexpr (
-            std::is_lvalue_reference_v<T> && !std::is_const_v<NoRef>
-        ) {
+        } else if constexpr (std::is_lvalue_reference_v<T> &&
+                             !std::is_const_v<NoRef>) {
             return ref.get<Base>();
         } else if constexpr (std::is_enum_v<Base>) {
             return Conversion<Base>::get(ref);
         } else if constexpr (std::is_lvalue_reference_v<T>) {
             return ref.get_const<Base>();
-        } else if constexpr (
-            std::is_rvalue_reference_v<T> || !std::is_copy_constructible_v<Base>
-        ) {
+        } else if constexpr (std::is_rvalue_reference_v<T> ||
+                             !std::is_copy_constructible_v<Base>) {
             return ref.get_rref<Base>();
         } else {
             return Conversion<Base>::get(ref);
