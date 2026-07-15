@@ -16,7 +16,7 @@ jobs:
   xmake:
     name: xmake / Windows
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -26,9 +26,17 @@ jobs:
         uses: xmake-io/github-action-setup-xmake@3a1a5dddfc7fa625d9a698738334bf55655a861a # v1
         with:
           xmake-version: '3.0.9'
+          package-cache: true
+          project-path: '.'
 
       - name: Show xmake version
         run: xmake --version
 
       - name: Parse project
         run: xmake show -l targets
+
+      - name: Configure debug build
+        run: xmake f -m debug -y
+
+      - name: Run base tests
+        run: xmake test -y fei-base-tests/default
