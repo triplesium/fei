@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  CLANG_FORMAT_VERSION: '22.1.7'
+
 concurrency:
   group: smoke-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -22,10 +25,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Set up clang-format
+        uses: aminya/setup-cpp@1f17f92d6a52bfcb1a25348e2c526c2e5cbb1134 # v1.8.0
+        with:
+          clang-format: ${{ env.CLANG_FORMAT_VERSION }}
+
       - name: Set up xmake
         uses: xmake-io/github-action-setup-xmake@3a1a5dddfc7fa625d9a698738334bf55655a861a # v1
         with:
           xmake-version: '3.0.9'
+
+      - name: Show clang-format version
+        run: clang-format --version
 
       - name: Check formatting
         run: xmake format --check
@@ -46,7 +57,7 @@ jobs:
         with:
           xmake-version: '3.0.9'
           package-cache: true
-          package-cache-key: 'windows-vs2026-vulkan-1.4.350.0'
+          package-cache-key: windows-vs2026-vulkan-${{ env.VULKAN_SDK_VERSION }}-${{ hashFiles('**/xmake.lua', '.github/workflows/smoke.yml') }}
           project-path: '.'
 
       - name: Install Vulkan SDK
@@ -65,6 +76,9 @@ jobs:
 
       - name: Configure debug build
         run: xmake f -m debug -y
+
+      - name: Build reflection generator
+        run: xmake build -y -vD fei-reflgen
 
       - name: Run all tests
         run: xmake test -y
