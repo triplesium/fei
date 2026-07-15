@@ -16,7 +16,10 @@ jobs:
   xmake:
     name: xmake / Windows
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+    env:
+      VULKAN_SDK_VERSION: '1.4.350.0'
+      VULKAN_SDK_SHA256: 855b27ba05d2d8119c5114c5d4ff870ca38f2c632b11e1bb9923b9b7e6ecfe7b
 
     steps:
       - name: Checkout repository
@@ -27,7 +30,52 @@ jobs:
         with:
           xmake-version: '3.0.9'
           package-cache: true
+          package-cache-key: 'windows-vs2026-vulkan-1.4.350.0'
           project-path: '.'
+
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $installer = Join-Path $env:RUNNER_TEMP 'vulkan-sdk.exe'
+          $sdkRoot = Join-Path $env:RUNNER_TEMP "VulkanSDK/$env:VULKAN_SDK_VERSION"
+          $downloadUrl = "https://sdk.lunarg.com/sdk/download/$env:VULKAN_SDK_VERSION/windows/vulkan_sdk.exe"
+
+          & curl.exe --fail --location --retry 3 --output $installer $downloadUrl
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to download Vulkan SDK installer (exit code $LASTEXITCODE)"
+          }
+
+          $actualHash = (Get-FileHash -Algorithm SHA256 $installer).Hash
+          if ($actualHash -ine $env:VULKAN_SDK_SHA256) {
+            throw "Vulkan SDK checksum mismatch: expected $env:VULKAN_SDK_SHA256, got $actualHash"
+          }
+
+          New-Item -ItemType Directory -Force -Path $sdkRoot | Out-Null
+          & $installer --root $sdkRoot --accept-licenses --default-answer --confirm-command install copy_only=1
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to install Vulkan SDK (exit code $LASTEXITCODE)"
+          }
+
+          $requiredFiles = @(
+            'Include/slang/slang.h',
+            'Include/spirv_cross/spirv_cross_c.h',
+            'Lib/vulkan-1.lib',
+            'Lib/slang.lib',
+            'Lib/spirv-cross-c-shared.lib',
+            'Bin/slang.dll',
+            'Bin/spirv-cross-c-shared.dll'
+          )
+          foreach ($relativePath in $requiredFiles) {
+            $fullPath = Join-Path $sdkRoot $relativePath
+            if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+              throw "Vulkan SDK is missing required file: $relativePath"
+            }
+          }
+
+          "VULKAN_SDK=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          (Join-Path $sdkRoot 'Bin') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Show xmake version
         run: xmake --version
