@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  CLANG_FORMAT_VERSION: '22.1.7'
+  CLANG_FORMAT_VERSION: '21.1.8'
 
 concurrency:
   group: smoke-${{ github.workflow }}-${{ github.ref }}
