@@ -711,20 +711,42 @@ function collectionElementType(schema) {
   return schema.element_type ?? schema.key_type ?? "";
 }
 
+function tableColumnClass(typeName) {
+  let schema = getType(typeName);
+  while (schema?.kind === "optional") {
+    schema = getType(schema.element_type);
+  }
+  if (["signed_integer", "unsigned_integer", "floating"].includes(schema?.kind)) {
+    return "data-table-column data-table-column-number";
+  }
+  if (schema?.kind === "string") {
+    return "data-table-column data-table-column-text";
+  }
+  if (["bool", "enum"].includes(schema?.kind)) {
+    return "data-table-column data-table-column-compact";
+  }
+  return "data-table-column";
+}
+
 function renderFlatTable(values, elementType) {
   const schema = getType(elementType);
   const properties = schema.properties ?? [];
   const table = createElement("table", { className: "data-table" });
   const header = createElement("tr");
   for (const property of properties) {
-    header.append(createElement("th", { text: displayLabel(property.name) }));
+    header.append(
+      createElement("th", {
+        className: tableColumnClass(property.type),
+        text: displayLabel(property.name),
+      }),
+    );
   }
   table.append(createElement("thead", {}, header));
   const body = createElement("tbody");
   for (const value of values.slice(0, maximumCollectionRows)) {
     const row = createElement("tr");
     for (const property of properties) {
-      const cell = createElement("td");
+      const cell = createElement("td", { className: tableColumnClass(property.type) });
       cell.append(renderAuto(value?.[property.name], property.type, 1));
       row.append(cell);
     }
@@ -796,8 +818,11 @@ function renderMap(value, schema, depth) {
       createElement(
         "tr",
         {},
-        createElement("th", { text: "Key" }),
-        createElement("th", { text: "Value" }),
+        createElement("th", { className: tableColumnClass(schema.key_type), text: "Key" }),
+        createElement("th", {
+          className: tableColumnClass(schema.mapped_type),
+          text: "Value",
+        }),
       ),
     ),
   );
@@ -807,8 +832,16 @@ function renderMap(value, schema, depth) {
       createElement(
         "tr",
         {},
-        createElement("td", {}, renderAuto(entry?.key, schema.key_type, depth + 1)),
-        createElement("td", {}, renderAuto(entry?.value, schema.mapped_type, depth + 1)),
+        createElement(
+          "td",
+          { className: tableColumnClass(schema.key_type) },
+          renderAuto(entry?.key, schema.key_type, depth + 1),
+        ),
+        createElement(
+          "td",
+          { className: tableColumnClass(schema.mapped_type) },
+          renderAuto(entry?.value, schema.mapped_type, depth + 1),
+        ),
       ),
     );
   }

@@ -775,7 +775,7 @@ a {
 
 .field-row {
   display: grid;
-  grid-template-columns: minmax(150px, 28%) minmax(0, 1fr);
+  grid-template-columns: clamp(140px, 20%, 220px) minmax(0, 1fr);
   align-items: center;
   gap: 14px;
   min-height: 36px;
@@ -786,8 +786,19 @@ a {
 .field-row:has(> .field-value > .field-grid),
 .field-row:has(> .field-value > .json-tree),
 .field-row:has(> .field-value > details[open]),
-.field-row:has(> .field-value > .data-table-wrap) {
+.field-row:has(> .field-value > .data-table-wrap),
+.field-row:has(
+  > .field-value > .collection-disclosure[open] > .data-table-wrap
+) {
   align-items: start;
+}
+
+.field-row:has(> .field-value > .field-grid),
+.field-row:has(> .field-value > .data-table-wrap),
+.field-row:has(
+  > .field-value > .collection-disclosure[open] > .data-table-wrap
+) {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .field-row:last-child {
@@ -845,12 +856,14 @@ a {
 .data-table-wrap {
   max-width: 100%;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-small);
 }
 
 .data-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: 12px;
 }
@@ -869,6 +882,25 @@ a {
   font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.data-table-column-number,
+.data-table-column-compact {
+  white-space: nowrap;
+}
+
+.data-table-column-number {
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table-column-text {
+  min-width: 12rem;
+  max-width: 24rem;
+}
+
+.data-table td.data-table-column-text {
+  overflow-wrap: anywhere;
 }
 
 .data-table tr:last-child td {

@@ -280,6 +280,22 @@ TEST_CASE("DevTools embeds its schema-driven web UI", "[devtools][ui]") {
     REQUIRE(
         styles->content.find(".sidebar-filter-button") != std::string_view::npos
     );
+    REQUIRE(
+        styles->content.find("clamp(140px, 20%, 220px)") !=
+        std::string_view::npos
+    );
+    REQUIRE(
+        styles->content.find("width: max-content") != std::string_view::npos
+    );
+    REQUIRE(
+        styles->content.find(".data-table-column-text") !=
+        std::string_view::npos
+    );
+    REQUIRE(
+        styles->content.find(
+            ".collection-disclosure[open] > .data-table-wrap"
+        ) != std::string_view::npos
+    );
 
     auto script = find_ui_asset("/ui/app.js");
     REQUIRE(script);
@@ -298,6 +314,7 @@ TEST_CASE("DevTools embeds its schema-driven web UI", "[devtools][ui]") {
         script->content.find("snapshotAutoLoadAttempted") !=
         std::string_view::npos
     );
+    REQUIRE(script->content.find("tableColumnClass") != std::string_view::npos);
     REQUIRE(
         script->content.find("ensureBlobUrl(capabilityState)") !=
         std::string_view::npos
