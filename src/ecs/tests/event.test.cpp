@@ -91,7 +91,9 @@ TEST_CASE("ECS events can be sent, read, and aged", "[ecs][event]") {
         REQUIRE(reader2_count == 1);
     }
 
-    SECTION("Event reader skips expired cursor and continues with live events") {
+    SECTION(
+        "Event reader skips expired cursor and continues with live events"
+    ) {
         auto& events = world.resource<Events<GameEvent>>();
         std::size_t cursor = 0;
         EventReader<GameEvent> reader(events, cursor);

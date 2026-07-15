@@ -1,12 +1,16 @@
-#include "ecs/commands.hpp"
 #include "ecs/hierarchy.hpp"
+
+#include "ecs/commands.hpp"
 #include "ecs/world.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 using namespace fei;
 
-TEST_CASE("ECS hierarchy tracks parent and children components", "[ecs][hierarchy]") {
+TEST_CASE(
+    "ECS hierarchy tracks parent and children components",
+    "[ecs][hierarchy]"
+) {
     World world;
     Entity parent = world.entity();
     Entity child = world.entity();
@@ -63,7 +67,10 @@ TEST_CASE("ECS hierarchy removes parent relationships", "[ecs][hierarchy]") {
     REQUIRE(!world.has_parent(child));
 }
 
-TEST_CASE("ECS hierarchy component APIs stay synchronized", "[ecs][hierarchy]") {
+TEST_CASE(
+    "ECS hierarchy component APIs stay synchronized",
+    "[ecs][hierarchy]"
+) {
     World world;
     Entity parent = world.entity();
     Entity child = world.entity();
@@ -83,7 +90,10 @@ TEST_CASE("ECS hierarchy component APIs stay synchronized", "[ecs][hierarchy]") 
     REQUIRE(!world.has_component<Children>(parent));
 }
 
-TEST_CASE("ECS hierarchy despawns descendants recursively", "[ecs][hierarchy]") {
+TEST_CASE(
+    "ECS hierarchy despawns descendants recursively",
+    "[ecs][hierarchy]"
+) {
     World world;
     Entity root = world.entity();
     Entity child = world.entity();
@@ -101,7 +111,10 @@ TEST_CASE("ECS hierarchy despawns descendants recursively", "[ecs][hierarchy]") 
     REQUIRE(world.has_entity(sibling));
 }
 
-TEST_CASE("ECS hierarchy despawning a child updates the parent", "[ecs][hierarchy]") {
+TEST_CASE(
+    "ECS hierarchy despawning a child updates the parent",
+    "[ecs][hierarchy]"
+) {
     World world;
     Entity parent = world.entity();
     Entity child_a = world.entity();
@@ -124,7 +137,10 @@ TEST_CASE("ECS hierarchy despawning a child updates the parent", "[ecs][hierarch
     REQUIRE(!world.has_component<Children>(parent));
 }
 
-TEST_CASE("ECS hierarchy commands apply after queue execution", "[ecs][hierarchy]") {
+TEST_CASE(
+    "ECS hierarchy commands apply after queue execution",
+    "[ecs][hierarchy]"
+) {
     World world;
     world.add_resource(CommandsQueue {});
     Entity parent = world.entity();
