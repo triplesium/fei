@@ -13,8 +13,6 @@ CMakeSettings.json
 # CLion
 .idea/
 
-.github/
-
 .cache/
 vulkaninfoSDK*.log
 
