@@ -60,7 +60,7 @@ jobs:
           build-cache: true
           build-cache-key: windows-vs2026-debug
           package-cache: true
-          package-cache-key: windows-vs2026-vulkan-${{ env.VULKAN_SDK_VERSION }}-${{ hashFiles('**/xmake.lua', '.github/workflows/smoke.yml') }}
+          package-cache-key: windows-vs2026-vulkan-${{ env.VULKAN_SDK_VERSION }}
           project-path: '.'
 
       - name: Install Vulkan SDK
