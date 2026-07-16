@@ -57,8 +57,6 @@ jobs:
         uses: xmake-io/github-action-setup-xmake@3a1a5dddfc7fa625d9a698738334bf55655a861a # v1
         with:
           xmake-version: '3.0.9'
-          build-cache: true
-          build-cache-key: windows-vs2026-debug
           package-cache: true
           package-cache-key: windows-vs2026-vulkan-${{ env.VULKAN_SDK_VERSION }}
           project-path: '.'
@@ -78,7 +76,7 @@ jobs:
         run: xmake show -l targets
 
       - name: Configure debug build
-        run: xmake f -m debug -y --policies=build.ccache:y
+        run: xmake f -m debug -y
 
       - name: Build reflection generator
         run: xmake build -y -vD fei-reflgen
