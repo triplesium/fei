@@ -1,22 +1,44 @@
+local function find_llvm_root(package, find_tool)
+    local function has_libclang(root)
+        return root and os.isfile(path.join(root, "include", "clang-c", "Index.h"))
+    end
+
+    local root = os.getenv("LLVM_ROOT")
+    if has_libclang(root) then
+        return root
+    end
+
+    local llvm = package:dep("llvm")
+    root = llvm and llvm:installdir()
+    if has_libclang(root) then
+        return root
+    end
+
+    local clang = find_tool("clang")
+    root = clang and path.directory(path.directory(clang.program))
+    if has_libclang(root) then
+        return root
+    end
+end
+
 package("llvm-libclang")
     set_kind("library")
-    add_deps("llvm 21.1.0")
+    add_deps("llvm >=20.1.8 <22.0.0")
     on_fetch(function(package)
-        local llvm = package:dep("llvm")
-        if llvm then
-            local installdir = llvm:installdir()
+        local root = find_llvm_root(package, import("lib.detect.find_tool"))
+        if root then
             return {
-                includedirs = path.join(installdir, "include"),
-                linkdirs = path.join(installdir, "lib"),
+                includedirs = path.join(root, "include"),
+                linkdirs = path.join(root, "lib"),
                 links = package:is_plat("windows") and "libclang" or "clang",
-                version = llvm:version()
+                version = package:dep("llvm"):version()
             }
         end
     end)
     on_load(function(package)
-        local llvm = package:dep("llvm")
-        if llvm then
-            package:addenv("PATH", path.join(llvm:installdir(), "bin"))
+        local root = find_llvm_root(package, import("lib.detect.find_tool"))
+        if root then
+            package:addenv("PATH", path.join(root, "bin"))
         end
     end)
 package_end()
