@@ -78,7 +78,7 @@ jobs:
         run: xmake show -l targets
 
       - name: Configure debug build
-        run: xmake f -m debug -y
+        run: xmake f -m debug -y --policies=build.ccache:y
 
       - name: Build reflection generator
         run: xmake build -y -vD fei-reflgen
