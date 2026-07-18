@@ -11,7 +11,7 @@ Entity World::entity() {
     auto entity = m_entities.alloc();
     auto archetype_id = m_archetypes.get_id_or_insert({});
     auto& archetype = m_archetypes.get(archetype_id);
-    auto row = archetype.alloc(entity);
+    auto row = archetype.alloc(entity, read_change_tick());
     m_entities.set_location(entity, {archetype_id, row});
     return entity;
 }
@@ -25,6 +25,7 @@ void World::add_component(Entity entity, Ref ref) {
 }
 
 void World::raw_add_component(Entity entity, Ref ref) {
+    auto change_tick = increment_change_tick();
     auto type_id = ref.type_id();
     auto old_location = m_entities.get_location(entity);
     auto old_components =
@@ -32,6 +33,9 @@ void World::raw_add_component(Entity entity, Ref ref) {
     if (has_component(entity, type_id)) {
         m_archetypes.get(old_location.archetype_id)
             .set_component(type_id, old_location.row, ref);
+        m_archetypes.get(old_location.archetype_id)
+            .component_ticks(type_id, old_location.row)
+            .mark_changed(change_tick);
         return;
     }
 
@@ -42,12 +46,13 @@ void World::raw_add_component(Entity entity, Ref ref) {
     auto& old_archetype = m_archetypes.get(old_location.archetype_id);
     auto& new_archetype = m_archetypes.get(new_archetype_id);
 
-    auto new_row = new_archetype.alloc(entity);
+    auto new_row = new_archetype.alloc(entity, change_tick);
     auto old_row = old_location.row;
     new_archetype.set_component(type_id, new_row, ref);
     for (auto type_id : old_components) {
         auto old_ref = old_archetype.get_component(type_id, old_row);
-        new_archetype.set_component(type_id, new_row, old_ref);
+        auto old_ticks = old_archetype.component_ticks(type_id, old_row);
+        new_archetype.set_component(type_id, new_row, old_ref, old_ticks);
     }
 
     if (auto moved_entity = old_archetype.remove_row(old_row)) {
@@ -68,6 +73,7 @@ void World::remove_component(Entity entity, TypeId type_id) {
 }
 
 void World::raw_remove_component(Entity entity, TypeId type_id) {
+    auto change_tick = increment_change_tick();
     auto old_location = m_entities.get_location(entity);
     auto old_components =
         m_archetypes.get(old_location.archetype_id).components();
@@ -85,14 +91,15 @@ void World::raw_remove_component(Entity entity, TypeId type_id) {
     auto& old_archetype = m_archetypes.get(old_location.archetype_id);
     auto& new_archetype = m_archetypes.get(new_archetype_id);
 
-    auto new_row = new_archetype.alloc(entity);
+    auto new_row = new_archetype.alloc(entity, change_tick);
     auto old_row = old_location.row;
     for (auto id : old_components) {
         if (id == type_id) {
             continue;
         }
         auto old_ref = old_archetype.get_component(id, old_row);
-        new_archetype.set_component(id, new_row, old_ref);
+        auto old_ticks = old_archetype.component_ticks(id, old_row);
+        new_archetype.set_component(id, new_row, old_ref, old_ticks);
     }
 
     if (auto moved_entity = old_archetype.remove_row(old_row)) {
@@ -114,7 +121,13 @@ bool World::has_component(Entity entity, TypeId type_id) const {
 Ref World::get_component(Entity entity, TypeId type_id) {
     auto location = m_entities.get_location(entity);
     auto& archetype = m_archetypes.get(location.archetype_id);
-    return archetype.get_component(type_id, location.row);
+    auto ref = archetype.get_component(type_id, location.row);
+    if (!ref) {
+        return nullptr;
+    }
+    archetype.component_ticks(type_id, location.row)
+        .mark_changed(increment_change_tick());
+    return ref;
 }
 
 Ref World::get_component(Entity entity, TypeId type_id) const {
@@ -199,9 +212,9 @@ void World::add_child(Entity parent, Entity child) {
         raw_add_component(parent, make_ref(children));
     }
 
-    auto& children = get_component<Children>(parent);
-    if (!children.contains(child)) {
-        children.m_entities.push_back(child);
+    auto children = get_component_rw<Children>(parent);
+    if (!children->contains(child)) {
+        children->m_entities.push_back(child);
     }
 }
 
@@ -210,8 +223,8 @@ void World::remove_child(Entity parent, Entity child) {
         return;
     }
 
-    auto& children = get_component<Children>(parent);
-    auto& entities = children.m_entities;
+    auto children = get_component_rw<Children>(parent);
+    auto& entities = children->m_entities;
     entities.erase(
         std::remove(entities.begin(), entities.end(), child),
         entities.end()

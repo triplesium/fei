@@ -44,7 +44,7 @@ void append_schema_root(std::vector<TypeId>& roots, TypeId id) {
 void import_devtools_requests(
     ResRW<Bridge> bridge,
     Commands commands,
-    Query<Entity, Subscription> subscriptions
+    Query<Entity, const Subscription> subscriptions
 ) {
     for (const auto& change : bridge->take_subscription_changes()) {
         if (change.start) {
@@ -195,7 +195,7 @@ void export_devtools_blob_responses(
 ) {
     auto& world = commands.world();
     for (auto [entity, response] : responses) {
-        auto out = std::move(response);
+        auto out = std::move(response.write());
         if (world.has_component<Request>(entity)) {
             const auto& request = world.get_component<Request>(entity);
             if (out.token == 0) {
@@ -217,7 +217,7 @@ void export_devtools_snapshot_responses(
 ) {
     auto& world = commands.world();
     for (auto [entity, response] : responses) {
-        auto out = std::move(response);
+        auto out = std::move(response.write());
         if (world.has_component<Request>(entity)) {
             const auto& request = world.get_component<Request>(entity);
             if (out.token == 0) {
@@ -239,7 +239,7 @@ void export_devtools_command_responses(
 ) {
     auto& world = commands.world();
     for (auto [entity, response] : responses) {
-        auto out = std::move(response);
+        auto out = std::move(response.write());
         if (world.has_component<Request>(entity)) {
             const auto& request = world.get_component<Request>(entity);
             if (out.token == 0) {
@@ -261,7 +261,7 @@ void export_devtools_error_responses(
 ) {
     auto& world = commands.world();
     for (auto [entity, response] : responses) {
-        auto out = std::move(response);
+        auto out = std::move(response.write());
         if (world.has_component<Request>(entity)) {
             const auto& request = world.get_component<Request>(entity);
             if (out.token == 0) {

@@ -123,7 +123,7 @@ void prepare_mesh_view_resource_set(
             env_map,
             view_uniform_buffer_component
         );
-        if (view_resource_set.key != next_key) {
+        if (view_resource_set.read().key != next_key) {
             view_resource_set = create_mesh_view_resource_set(
                 *device,
                 *mesh_view_layout,
@@ -132,7 +132,7 @@ void prepare_mesh_view_resource_set(
                 view_uniform_buffer_component
             );
         }
-        select_resource_set(view_resource_set);
+        select_resource_set(view_resource_set.read());
     }
 
     for (auto [entity, view_uniform_buffer_component] : query_new_cameras) {

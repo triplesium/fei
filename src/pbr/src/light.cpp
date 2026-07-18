@@ -245,8 +245,9 @@ void prepare_light_view_uniform_buffer(
             .clip_from_view = clip_space_transform * proj,
             .world_position = transform.position,
         };
-        view_uniform_buffer.uniform = uniform;
-        view_uniform_buffer.view = RenderView {
+        auto& view_uniform = view_uniform_buffer.write();
+        view_uniform.uniform = uniform;
+        view_uniform.view = RenderView {
             .kind = RenderViewKind::DirectionalShadow,
             .id = ViewId::from_source(entity),
             .clip_from_world = logical_clip_from_world,
@@ -256,9 +257,9 @@ void prepare_light_view_uniform_buffer(
             .frustum = extract_frustum(logical_clip_from_world),
         };
         render_queue->write_buffer(
-            view_uniform_buffer.buffer,
+            view_uniform.buffer,
             0,
-            &view_uniform_buffer.uniform,
+            &view_uniform.uniform,
             sizeof(ViewUniform)
         );
     }

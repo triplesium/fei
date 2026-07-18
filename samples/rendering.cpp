@@ -171,16 +171,20 @@ void handle_control(
     static Vector3 camera_rotation {0.0f, 0.0f, 0.0f};
     bool rotation_changed = false;
     if (key_input->pressed(KeyCode::W)) {
-        transform.position += transform.forward() * move_speed * time->delta();
+        transform->position +=
+            transform.read().forward() * move_speed * time->delta();
     }
     if (key_input->pressed(KeyCode::S)) {
-        transform.position -= transform.forward() * move_speed * time->delta();
+        transform->position -=
+            transform.read().forward() * move_speed * time->delta();
     }
     if (key_input->pressed(KeyCode::A)) {
-        transform.position -= transform.right() * move_speed * time->delta();
+        transform->position -=
+            transform.read().right() * move_speed * time->delta();
     }
     if (key_input->pressed(KeyCode::D)) {
-        transform.position += transform.right() * move_speed * time->delta();
+        transform->position +=
+            transform.read().right() * move_speed * time->delta();
     }
     if (key_input->pressed(KeyCode::Up)) {
         camera_rotation.x += rotate_speed * time->delta();
@@ -199,13 +203,13 @@ void handle_control(
         rotation_changed = true;
     }
     if (rotation_changed) {
-        transform.set_euler(camera_rotation);
+        transform->set_euler(camera_rotation);
     }
     if (key_input->pressed(KeyCode::Space)) {
-        transform.position.y += move_speed * time->delta();
+        transform->position.y += move_speed * time->delta();
     }
     if (key_input->pressed(KeyCode::LeftControl)) {
-        transform.position.y -= move_speed * time->delta();
+        transform->position.y -= move_speed * time->delta();
     }
     if (key_input->pressed(KeyCode::Escape)) {
         app_states->should_stop = true;
@@ -213,19 +217,20 @@ void handle_control(
 }
 
 void update_light_cube(
-    Query<LightCube, Transform3d> query_cube,
-    Query<DirectionalLight, Transform3d> query_light
+    Query<const LightCube, Transform3d> query_cube,
+    Query<const DirectionalLight, const Transform3d> query_light
 ) {
     auto [light_cube, cube_transform] = query_cube.first();
     auto [light, light_transform] = query_light.first();
-    cube_transform.position = light_transform.position;
-    cube_transform.rotation = light_transform.rotation;
+    cube_transform->position = light_transform.position;
+    cube_transform->rotation = light_transform.rotation;
 }
 
 void update_imgui(
-    Query<DirectionalLight, Transform3d> query_light,
-    Query<Floor, Transform3d> query_floor,
-    Query<MeshMaterial3d<StandardMaterial>>::Filter<With<Spot>> query_spot,
+    Query<const DirectionalLight, Transform3d> query_light,
+    Query<const Floor, Transform3d> query_floor,
+    Query<const MeshMaterial3d<StandardMaterial>>::Filter<With<Spot>>
+        query_spot,
     ResRW<Assets<StandardMaterial>> material_assets
 ) {
     auto [light, light_transform] = query_light.first();
@@ -240,7 +245,7 @@ void update_imgui(
         ImGui::Text("Directional Light");
         ImGui::SliderFloat3(
             "Position##Light",
-            light_transform.position.data(),
+            light_transform->position.data(),
             -10.0f,
             10.0f
         );
@@ -251,12 +256,12 @@ void update_imgui(
                 -180.0f,
                 180.0f
             )) {
-            light_transform.set_euler(light_rotation);
+            light_transform->set_euler(light_rotation);
         }
         ImGui::Text("Floor");
         ImGui::SliderFloat(
             "Position.Y##Floor",
-            &floor_transform.position.y,
+            &floor_transform->position.y,
             -1.0f,
             1.0f
         );

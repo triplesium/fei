@@ -48,11 +48,11 @@ class Archetype {
     ArchetypeId id() const { return m_id; }
     std::size_t size() const { return m_entities.size(); }
 
-    std::size_t alloc(Entity entity) {
+    std::size_t alloc(Entity entity, Tick tick) {
         m_entities.push_back(entity);
         for (auto& type : m_components) {
             auto& column = m_columns.at(type);
-            column.push_back(nullptr);
+            column.push_back(nullptr, ComponentTicks::added_at(tick));
         }
         return m_entities.size() - 1;
     }
@@ -105,6 +105,29 @@ class Archetype {
         m_columns.at(type_id).set(static_cast<uint32_t>(row), ref);
     }
 
+    void set_component(
+        TypeId type_id,
+        std::size_t row,
+        Ref ref,
+        ComponentTicks ticks
+    ) {
+        if (!m_columns.contains(type_id)) {
+            return;
+        }
+        m_columns.at(type_id).set(static_cast<uint32_t>(row), ref, ticks);
+    }
+
+    ComponentTicks& component_ticks(TypeId type_id, std::size_t row) {
+        FEI_ASSERT(m_columns.contains(type_id));
+        return m_columns.at(type_id).ticks(static_cast<uint32_t>(row));
+    }
+
+    const ComponentTicks&
+    component_ticks(TypeId type_id, std::size_t row) const {
+        FEI_ASSERT(m_columns.contains(type_id));
+        return m_columns.at(type_id).ticks(static_cast<uint32_t>(row));
+    }
+
     bool has_component(TypeId type_id) const {
         return m_columns.contains(type_id);
     }
@@ -114,6 +137,7 @@ class Archetype {
     const std::vector<Entity>& entities() const { return m_entities; }
     const std::vector<TypeId>& components() const { return m_components; }
     Column& column(TypeId type_id) { return m_columns.at(type_id); }
+    const Column& column(TypeId type_id) const { return m_columns.at(type_id); }
     Edges& edges() { return m_edges; }
 };
 
@@ -123,7 +147,13 @@ class Archetypes {
     std::unordered_map<std::size_t, ArchetypeId> m_hashes;
 
   public:
+    Archetypes() = default;
+    Archetypes(const Archetypes&) = delete;
+    Archetypes& operator=(const Archetypes&) = delete;
+    Archetypes(Archetypes&&) noexcept = default;
+    Archetypes& operator=(Archetypes&&) noexcept = default;
     ~Archetypes() = default;
+
     ArchetypeId get_id_or_insert(std::vector<TypeId> components) {
         auto hash = hash_type_ids(components);
         if (m_hashes.contains(hash)) {

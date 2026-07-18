@@ -49,8 +49,9 @@ void prepare_camera_view_uniform(
             .clip_from_view = clip_space_transform * projection,
             .world_position = transform.position,
         };
-        view_uniform_buffer_component.uniform = uniform;
-        view_uniform_buffer_component.view = RenderView {
+        auto& view_uniform_buffer = view_uniform_buffer_component.write();
+        view_uniform_buffer.uniform = uniform;
+        view_uniform_buffer.view = RenderView {
             .kind = RenderViewKind::Camera,
             .id = ViewId::from_source(entity),
             .clip_from_world = logical_clip_from_world,
@@ -60,9 +61,9 @@ void prepare_camera_view_uniform(
             .frustum = extract_frustum(logical_clip_from_world),
         };
         render_queue->write_buffer(
-            view_uniform_buffer_component.buffer,
+            view_uniform_buffer.buffer,
             0,
-            &view_uniform_buffer_component.uniform,
+            &view_uniform_buffer.uniform,
             sizeof(ViewUniform)
         );
     }

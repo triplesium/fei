@@ -35,6 +35,15 @@ class EventWriter;
 template<typename... Datas>
 class Query;
 
+template<typename T>
+struct Added;
+
+template<typename T>
+struct Changed;
+
+template<typename... Filters>
+struct Or;
+
 template<typename Q, typename... Filters>
     requires SpecializationOf<Q, Query>
 class FilteredQuery;
@@ -223,10 +232,39 @@ struct SystemParamAccess<Query<Datas...>> {
     }
 };
 
+template<typename Filter>
+struct QueryFilterAccess {
+    static void add(SystemAccess&) {}
+};
+
+template<typename T>
+struct QueryFilterAccess<Added<T>> {
+    static void add(SystemAccess& access) {
+        access.read_components.insert(type_id<T>());
+    }
+};
+
+template<typename T>
+struct QueryFilterAccess<Changed<T>> {
+    static void add(SystemAccess& access) {
+        access.read_components.insert(type_id<T>());
+    }
+};
+
+template<typename... Filters>
+struct QueryFilterAccess<Or<Filters...>> {
+    static void add(SystemAccess& access) {
+        (QueryFilterAccess<Filters>::add(access), ...);
+    }
+};
+
 template<typename Q, typename... Filters>
     requires SpecializationOf<Q, Query>
 struct SystemParamAccess<FilteredQuery<Q, Filters...>> {
-    static void add(SystemAccess& access) { SystemParamAccess<Q>::add(access); }
+    static void add(SystemAccess& access) {
+        SystemParamAccess<Q>::add(access);
+        (QueryFilterAccess<Filters>::add(access), ...);
+    }
 };
 
 template<typename Tuple>

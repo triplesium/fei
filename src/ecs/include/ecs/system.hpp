@@ -1,6 +1,7 @@
 #pragma once
 #include "base/log.hpp"
 #include "base/type_traits.hpp"
+#include "ecs/change_detection.hpp"
 #include "ecs/system_access.hpp"
 
 #include <concepts>
@@ -24,7 +25,9 @@ struct StatelessParamTraits {
 
     static State init_state(World&) { return {}; }
 
-    static T get_param(World& world, State&) { return T::get_param(world); }
+    static T get_param(World& world, State&, SystemTicks) {
+        return T::get_param(world);
+    }
 };
 
 template<typename T>
@@ -33,20 +36,25 @@ struct StatefulParamTraits {
 
     static State init_state(World& world) { return T::init_state(world); }
 
-    static T get_param(World& world, State& state) {
+    static T get_param(World& world, State& state, SystemTicks) {
         return T::get_param(world, state);
     }
 };
 
 template<typename T>
-concept SystemParam =
-    requires(World& world, typename SystemParamTraits<T>::State& state) {
-        typename SystemParamTraits<T>::State;
-        {
-            SystemParamTraits<T>::init_state(world)
-        } -> std::same_as<typename SystemParamTraits<T>::State>;
-        { SystemParamTraits<T>::get_param(world, state) } -> std::same_as<T>;
-    };
+concept SystemParam = requires(
+    World& world,
+    typename SystemParamTraits<T>::State& state,
+    SystemTicks system_ticks
+) {
+    typename SystemParamTraits<T>::State;
+    {
+        SystemParamTraits<T>::init_state(world)
+    } -> std::same_as<typename SystemParamTraits<T>::State>;
+    {
+        SystemParamTraits<T>::get_param(world, state, system_ticks)
+    } -> std::same_as<T>;
+};
 
 template<typename T>
 concept ConditionParam =
@@ -81,14 +89,20 @@ concept IntoCondition =
      }(std::type_identity<typename fei::FunctionTraits<T>::args_tuple>()));
 
 class System {
+  private:
+    Tick m_last_run {0};
+
   public:
     System() = default;
     virtual ~System() = default;
 
-    virtual void run(World& world) = 0;
+    void run(World& world);
     virtual const SystemAccess& access() const = 0;
     virtual bool has_profile_key() const { return false; }
     virtual std::size_t profile_key() const { return 0; }
+
+  protected:
+    virtual void execute(World& world, SystemTicks system_ticks) = 0;
 };
 
 template<typename Func>
@@ -120,8 +134,8 @@ class FunctionSystem : public System {
   public:
     explicit FunctionSystem(Func func) : m_func(func) {}
 
-    void run(World& world) override {
-        auto params = prepare_params<ParamTypes>(world);
+    void execute(World& world, SystemTicks system_ticks) override {
+        auto params = prepare_params<ParamTypes>(world, system_ticks);
         std::apply(m_func, params);
     }
 
@@ -139,38 +153,52 @@ class FunctionSystem : public System {
 
   private:
     template<typename Tuple>
-    Tuple prepare_params(World& world) {
+    Tuple prepare_params(World& world, SystemTicks system_ticks) {
         return prepare_params_impl<Tuple>(
             world,
+            system_ticks,
             std::make_index_sequence<std::tuple_size_v<Tuple>> {}
         );
     }
 
     template<typename Tuple, std::size_t... Is>
-    Tuple prepare_params_impl(World& world, std::index_sequence<Is...>) {
+    Tuple prepare_params_impl(
+        World& world,
+        SystemTicks system_ticks,
+        std::index_sequence<Is...>
+    ) {
         return std::forward_as_tuple(
-            prepare_param<std::tuple_element_t<Is, Tuple>, Is>(world)...
+            prepare_param<std::tuple_element_t<Is, Tuple>, Is>(
+                world,
+                system_ticks
+            )...
         );
     }
 
     template<typename T, size_t I>
-    T prepare_param(World& world) {
+    T prepare_param(World& world, SystemTicks system_ticks) {
         using Traits = SystemParamTraits<T>;
         auto& state = std::get<I>(m_states);
         if (!state) {
             state.emplace(Traits::init_state(world));
         }
-        return Traits::get_param(world, *state);
+        return Traits::get_param(world, *state, system_ticks);
     }
 };
 
 class Condition {
+  private:
+    Tick m_last_run {0};
+
   public:
     Condition() = default;
     virtual ~Condition() = default;
 
-    virtual bool run(World& world) = 0;
+    bool run(World& world);
     virtual const SystemAccess& access() const = 0;
+
+  protected:
+    virtual bool evaluate(World& world, SystemTicks system_ticks) = 0;
 };
 
 template<typename Func>
@@ -199,8 +227,8 @@ class FunctionCondition : public Condition {
   public:
     explicit FunctionCondition(Func func) : m_func(std::move(func)) {}
 
-    bool run(World& world) override {
-        auto params = prepare_params<ParamTypes>(world);
+    bool evaluate(World& world, SystemTicks system_ticks) override {
+        auto params = prepare_params<ParamTypes>(world, system_ticks);
         return std::apply(m_func, params);
     }
 
@@ -208,28 +236,36 @@ class FunctionCondition : public Condition {
 
   private:
     template<typename Tuple>
-    Tuple prepare_params(World& world) {
+    Tuple prepare_params(World& world, SystemTicks system_ticks) {
         return prepare_params_impl<Tuple>(
             world,
+            system_ticks,
             std::make_index_sequence<std::tuple_size_v<Tuple>> {}
         );
     }
 
     template<typename Tuple, std::size_t... Is>
-    Tuple prepare_params_impl(World& world, std::index_sequence<Is...>) {
+    Tuple prepare_params_impl(
+        World& world,
+        SystemTicks system_ticks,
+        std::index_sequence<Is...>
+    ) {
         return std::forward_as_tuple(
-            prepare_param<std::tuple_element_t<Is, Tuple>, Is>(world)...
+            prepare_param<std::tuple_element_t<Is, Tuple>, Is>(
+                world,
+                system_ticks
+            )...
         );
     }
 
     template<typename T, size_t I>
-    T prepare_param(World& world) {
+    T prepare_param(World& world, SystemTicks system_ticks) {
         using Traits = SystemParamTraits<T>;
         auto& state = std::get<I>(m_states);
         if (!state) {
             state.emplace(Traits::init_state(world));
         }
-        return Traits::get_param(world, *state);
+        return Traits::get_param(world, *state, system_ticks);
     }
 };
 

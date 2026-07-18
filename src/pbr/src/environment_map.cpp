@@ -128,7 +128,7 @@ void convert_equirect_to_cubemap(
         if (!environment_cubemap) {
             continue;
         }
-        gpu_env_map.environment_cubemap = *environment_cubemap;
+        gpu_env_map->environment_cubemap = *environment_cubemap;
     }
 }
 

@@ -239,9 +239,11 @@ void update_directional_light(
 ) {
     auto& aabb = voxelization->scene_aabb;
     for (auto [light, transform] : query_directional_lights) {
-        light.projection_size = aabb.extent().magnitude() * 2.0f;
-        transform.position =
-            aabb.center() - transform.forward() * aabb.extent().magnitude();
+        light->projection_size = aabb.extent().magnitude() * 2.0f;
+        auto& transform_value = transform.write();
+        transform_value.position =
+            aabb.center() -
+            transform_value.forward() * aabb.extent().magnitude();
     }
 }
 
@@ -259,7 +261,10 @@ void update_imgui(
     draw_graphics_cache_stats(*graphics_device);
     ImGui::End();
 
-    for (const auto& [light, transform] : query_directional_lights) {
+    for (auto [light_component, transform_component] :
+         query_directional_lights) {
+        auto& light = light_component.write();
+        auto& transform = transform_component.write();
         ImGui::Begin("Directional Light");
         ImGui::ColorEdit3("Color", reinterpret_cast<float*>(&light.color));
         ImGui::DragFloat("Intensity", &light.intensity, 0.1f, 0.0f, 100.0f);
@@ -274,7 +279,9 @@ void update_imgui(
         }
         ImGui::End();
     }
-    for (const auto& [light, transform] : query_point_lights) {
+    for (auto [light_component, transform_component] : query_point_lights) {
+        auto& light = light_component.write();
+        auto& transform = transform_component.write();
         ImGui::Begin("Point Light");
         ImGui::ColorEdit3("Color", reinterpret_cast<float*>(&light.color));
         ImGui::DragFloat("Intensity", &light.intensity, 0.1f, 0.0f, 100.0f);

@@ -1,10 +1,12 @@
 #pragma once
 
+#include "ecs/change_detection.hpp"
 #include "refl/ref.hpp"
 #include "refl/type.hpp"
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace fei {
 
@@ -17,6 +19,7 @@ class Column {
     std::size_t m_type_align;
     TypeId m_type_id;
     TypeOps m_type_ops;
+    std::vector<ComponentTicks> m_ticks;
 
     void* allocate_elements(uint32_t capacity) const;
     void deallocate_elements() const;
@@ -34,9 +37,12 @@ class Column {
     Column& operator=(Column&& other) noexcept;
 
     void set(uint32_t row, Ref ref);
-    void push_back(Ref ref);
+    void set(uint32_t row, Ref ref, ComponentTicks ticks);
+    void push_back(Ref ref, ComponentTicks ticks);
     Ref get(uint32_t row);
     Ref get(uint32_t row) const;
+    ComponentTicks& ticks(uint32_t row);
+    const ComponentTicks& ticks(uint32_t row) const;
     void swap_remove(uint32_t row);
     void clear();
 };

@@ -10,6 +10,8 @@ namespace fei {
 
 class DynamicResourceParam final : public DynamicSystemParam {
   public:
+    using DynamicSystemParam::prepare;
+
     std::string name;
     TypeId type;
     DynamicParamAccess param_access {DynamicParamAccess::Read};
@@ -23,7 +25,8 @@ class DynamicResourceParam final : public DynamicSystemParam {
     );
 
     SystemAccess access() const override;
-    Result<Ref, DynamicSystemError> prepare(World& world) override;
+    Result<Ref, DynamicSystemError>
+    prepare(World& world, SystemTicks system_ticks) override;
 };
 
 } // namespace fei

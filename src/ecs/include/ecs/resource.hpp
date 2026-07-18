@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/log.hpp"
+#include "ecs/change_detection.hpp"
 #include "refl/type.hpp"
 #include "refl/val.hpp"
 
@@ -16,6 +17,7 @@ class Resources {
         Val value;
         Ref (*ref)(Val&) {nullptr};
         Ref (*const_ref)(const Val&) {nullptr};
+        ComponentTicks ticks;
     };
 
     template<typename Exposed, typename Stored>
@@ -50,12 +52,12 @@ class Resources {
     }
 
     template<typename T>
-    void set(TypeId type_id, T&& val) {
+    void set(TypeId type_id, Tick tick, T&& val) {
         using U = std::remove_cvref_t<T>;
-        emplace<U, U>(type_id, std::forward<T>(val));
+        emplace<U, U>(type_id, tick, std::forward<T>(val));
     }
 
-    void set(TypeId type_id, Val val) {
+    void set(TypeId type_id, Tick tick, Val val) {
         if (!val) {
             fatal("Cannot store an empty Val as a resource");
         }
@@ -71,17 +73,25 @@ class Resources {
             .value = std::move(val),
             .ref = &make_val_ref,
             .const_ref = &make_val_const_ref,
+            .ticks = ComponentTicks::added_at(tick),
         };
+        if (auto it = m_resources.find(type_id); it != m_resources.end()) {
+            entry.ticks.added = it->second.ticks.added;
+        }
         m_resources.insert_or_assign(type_id, std::move(entry));
     }
 
     template<typename Exposed, typename Stored, typename... Args>
-    void emplace(TypeId type_id, Args&&... args) {
+    void emplace(TypeId type_id, Tick tick, Args&&... args) {
         ResourceEntry entry {
             .value = make_val<Stored>(std::forward<Args>(args)...),
             .ref = &make_resource_ref<Exposed, Stored>,
             .const_ref = &make_resource_const_ref<Exposed, Stored>,
+            .ticks = ComponentTicks::added_at(tick),
         };
+        if (auto it = m_resources.find(type_id); it != m_resources.end()) {
+            entry.ticks.added = it->second.ticks.added;
+        }
         m_resources.insert_or_assign(type_id, std::move(entry));
     }
 
@@ -107,6 +117,22 @@ class Resources {
             return it->second.ref(it->second.value);
         }
         return {};
+    }
+
+    ComponentTicks& ticks(TypeId type_id) {
+        auto it = m_resources.find(type_id);
+        if (it == m_resources.end()) {
+            fatal("Resource with type id {} not found", type_id.id());
+        }
+        return it->second.ticks;
+    }
+
+    const ComponentTicks& ticks(TypeId type_id) const {
+        auto it = m_resources.find(type_id);
+        if (it == m_resources.end()) {
+            fatal("Resource with type id {} not found", type_id.id());
+        }
+        return it->second.ticks;
     }
 };
 

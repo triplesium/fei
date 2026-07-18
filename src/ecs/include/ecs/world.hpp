@@ -10,6 +10,7 @@
 #include "ecs/system.hpp"
 #include "refl/ref_utils.hpp"
 
+#include <atomic>
 #include <concepts>
 #include <cstddef>
 #include <type_traits>
@@ -35,9 +36,33 @@ class World {
     Archetypes m_archetypes;
     Resources m_resources;
     Schedules m_schedules;
+    std::atomic<Tick> m_change_tick {0};
 
   public:
     World() = default;
+    World(const World&) = delete;
+    World& operator=(const World&) = delete;
+
+    World(World&& other) noexcept :
+        m_entities(std::move(other.m_entities)),
+        m_archetypes(std::move(other.m_archetypes)),
+        m_resources(std::move(other.m_resources)),
+        m_schedules(std::move(other.m_schedules)),
+        m_change_tick(other.read_change_tick()) {}
+
+    World& operator=(World&& other) noexcept {
+        if (this != &other) {
+            m_entities = std::move(other.m_entities);
+            m_archetypes = std::move(other.m_archetypes);
+            m_resources = std::move(other.m_resources);
+            m_schedules = std::move(other.m_schedules);
+            m_change_tick.store(
+                other.read_change_tick(),
+                std::memory_order_relaxed
+            );
+        }
+        return *this;
+    }
 
     Entity entity();
     void add_component(Entity entity, Ref ref);
@@ -67,15 +92,36 @@ class World {
     Ref get_component(Entity entity, TypeId type_id);
     Ref get_component(Entity entity, TypeId type_id) const;
     template<typename T>
-    T& get_component(Entity entity) {
-        return get_component(entity, type_id<T>()).template get<T>();
+    const T& get_component(Entity entity) {
+        return static_cast<const World&>(*this).get_component<T>(entity);
     }
     template<typename T>
     const T& get_component(Entity entity) const {
         return get_component(entity, type_id<T>()).template get_const<T>();
     }
 
+    template<typename T>
+    ComponentRW<std::remove_cvref_t<T>> get_component_rw(Entity entity) {
+        using U = std::remove_cvref_t<T>;
+        auto location = m_entities.get_location(entity);
+        auto& archetype = m_archetypes.get(location.archetype_id);
+        auto ref = archetype.get_component(type_id<U>(), location.row);
+        return ComponentRW<U>(
+            ref.template get<U>(),
+            archetype.component_ticks(type_id<U>(), location.row),
+            m_change_tick
+        );
+    }
+
     bool has_entity(Entity entity) const { return m_entities.contains(entity); }
+
+    Tick read_change_tick() const {
+        return m_change_tick.load(std::memory_order_relaxed);
+    }
+
+    Tick increment_change_tick() {
+        return m_change_tick.fetch_add(1, std::memory_order_relaxed) + 1;
+    }
 
     void set_parent(Entity child, Entity parent);
     void remove_parent(Entity child);
@@ -134,12 +180,13 @@ class World {
     template<typename T>
     std::remove_cvref_t<T>& add_resource(T&& val) {
         using U = std::remove_cvref_t<T>;
-        m_resources.set(type_id<U>(), std::forward<T>(val));
+        m_resources
+            .set(type_id<U>(), increment_change_tick(), std::forward<T>(val));
         return m_resources.get_mut(type_id<U>()).template get<U>();
     }
 
     Ref add_resource(TypeId type_id, Val val) {
-        m_resources.set(type_id, std::move(val));
+        m_resources.set(type_id, increment_change_tick(), std::move(val));
         return m_resources.get_mut(type_id);
     }
 
@@ -149,11 +196,13 @@ class World {
         if constexpr (std::derived_from<Stored, T>) {
             m_resources.template emplace<T, Stored>(
                 type_id<T>(),
+                increment_change_tick(),
                 std::forward<U>(val)
             );
         } else {
             m_resources.template emplace<T, T>(
                 type_id<T>(),
+                increment_change_tick(),
                 std::forward<U>(val)
             );
         }
@@ -182,10 +231,12 @@ class World {
 
     template<typename T>
     T& resource() {
-        auto ret = m_resources.get(type_id<T>());
+        auto type = type_id<T>();
+        auto ret = m_resources.get_mut(type);
         if (!ret) {
             fatal("Resource of type {} not found", type_name<T>());
         }
+        m_resources.ticks(type).mark_changed(increment_change_tick());
         return ret.template get<T>();
     }
 
@@ -199,10 +250,11 @@ class World {
     }
 
     Ref resource(TypeId type_id) {
-        auto ret = m_resources.get(type_id);
+        auto ret = m_resources.get_mut(type_id);
         if (!ret) {
             fatal("Resource with type id {} not found", type_id.id());
         }
+        m_resources.ticks(type_id).mark_changed(increment_change_tick());
         return ret;
     }
 
@@ -212,6 +264,22 @@ class World {
             fatal("Resource with type id {} not found", type_id.id());
         }
         return ret;
+    }
+
+    Ref resource_untracked(TypeId type_id) {
+        auto ret = m_resources.get_mut(type_id);
+        if (!ret) {
+            fatal("Resource with type id {} not found", type_id.id());
+        }
+        return ret;
+    }
+
+    ComponentTicks& resource_ticks(TypeId type_id) {
+        return m_resources.ticks(type_id);
+    }
+
+    const ComponentTicks& resource_ticks(TypeId type_id) const {
+        return m_resources.ticks(type_id);
     }
 
     template<typename F>

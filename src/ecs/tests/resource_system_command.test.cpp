@@ -116,12 +116,12 @@ TEST_CASE(
         bool system_executed = false;
 
         world.run_system_once(
-            [&system_executed](Query<Entity, Position, Velocity> query) {
+            [&system_executed](Query<Entity, Position, const Velocity> query) {
                 system_executed = true;
                 for (auto [entity, pos, vel] : query) {
                     (void)entity;
-                    pos.x += vel.dx;
-                    pos.y += vel.dy;
+                    pos->x += vel.dx;
+                    pos->y += vel.dy;
                 }
             }
         );
@@ -278,10 +278,10 @@ TEST_CASE(
     world.add_component(enemy1, Health(50));
     world.add_component(enemy1, Name("Enemy1"));
 
-    world.run_system_once([](Query<Position, Velocity> query) {
+    world.run_system_once([](Query<Position, const Velocity> query) {
         for (auto [pos, vel] : query) {
-            pos.x += vel.dx;
-            pos.y += vel.dy;
+            pos->x += vel.dx;
+            pos->y += vel.dy;
         }
     });
 

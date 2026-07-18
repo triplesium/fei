@@ -26,7 +26,9 @@ SystemAccess DynamicResourceParam::access() const {
     return result;
 }
 
-Result<Ref, DynamicSystemError> DynamicResourceParam::prepare(World& world) {
+Result<Ref, DynamicSystemError>
+DynamicResourceParam::prepare(World& world, SystemTicks system_ticks) {
+    (void)system_ticks;
     if (!world.has_resource(type)) {
         if (optional) {
             return Ref {};

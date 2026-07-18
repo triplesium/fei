@@ -50,8 +50,11 @@ class DynamicQuery final : public DynamicSystemParam {
     std::vector<DynamicQueryField> m_fields;
     std::vector<DynamicQueryFilter> m_filters;
     std::vector<ArchetypeId> m_matching_archetypes;
+    SystemTicks m_system_ticks;
 
   public:
+    using DynamicSystemParam::prepare;
+
     DynamicQuery(
         std::string name,
         std::vector<DynamicQueryField> fields,
@@ -59,7 +62,8 @@ class DynamicQuery final : public DynamicSystemParam {
     );
 
     SystemAccess access() const override;
-    Result<Ref, DynamicSystemError> prepare(World& world) override;
+    Result<Ref, DynamicSystemError>
+    prepare(World& world, SystemTicks system_ticks) override;
 
     bool next(DynamicQueryCursor& cursor, DynamicQueryRow& row) const;
     Ref field(const DynamicQueryRow& row, std::size_t field_index) const;

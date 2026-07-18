@@ -30,7 +30,9 @@ SystemAccess DynamicQuery::access() const {
     return result;
 }
 
-Result<Ref, DynamicSystemError> DynamicQuery::prepare(World& world) {
+Result<Ref, DynamicSystemError>
+DynamicQuery::prepare(World& world, SystemTicks system_ticks) {
+    m_system_ticks = system_ticks;
     refresh(world);
     return Ref(*this);
 }
@@ -89,6 +91,8 @@ Ref DynamicQuery::field(
 
     if (field.access == DynamicParamAccess::Write) {
         auto& archetype = m_world->archetypes().get(row.archetype);
+        archetype.component_ticks(field.type, row.row)
+            .mark_changed(m_system_ticks.this_run);
         return archetype.get_component(field.type, row.row);
     }
 
