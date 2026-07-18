@@ -1,5 +1,6 @@
 #include "pbr/vxgi.hpp"
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -15,6 +16,7 @@ struct VoxelDrawItem {
     uint32 vertex_count {};
     std::shared_ptr<const ResourceSet> mesh_set;
     std::shared_ptr<const ResourceSet> material_set;
+    uint32 mesh_uniform_dynamic_offset {};
     std::shared_ptr<Pipeline> pipeline;
 };
 
@@ -239,8 +241,10 @@ void render_vxgi_voxelization_pass(
                     gpu_mesh->index_buffer_size() / sizeof(std::uint32_t)
                 ),
                 .vertex_count = static_cast<uint32>(gpu_mesh->vertex_count()),
-                .mesh_set = mesh_uniform->second.resource_set,
+                .mesh_set = mesh_uniforms->resource_set,
                 .material_set = material->resource_set(),
+                .mesh_uniform_dynamic_offset =
+                    mesh_uniform->second.dynamic_offset,
                 .pipeline = std::move(pipeline),
             }
         );
@@ -299,7 +303,10 @@ void render_vxgi_voxelization_pass(
         );
         for (const auto& item : draw_items) {
             commands->set_render_pipeline(item.pipeline);
-            commands->set_resource_set(1, item.mesh_set);
+            const std::array dynamic_offsets {
+                item.mesh_uniform_dynamic_offset,
+            };
+            commands->set_resource_set(1, item.mesh_set, dynamic_offsets);
             commands->set_resource_set(2, item.material_set);
             commands->set_resource_set(3, volumes_set);
             commands->set_resource_set(4, voxelization_set);

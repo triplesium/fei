@@ -407,6 +407,14 @@ void OpenGLDeviceState::clear_resource_cache() {
 GraphicsDeviceOpenGL::GraphicsDeviceOpenGL() :
     m_state(std::make_shared<OpenGLDeviceState>()),
     m_context_thread(std::this_thread::get_id()) {
+    GLint uniform_buffer_offset_alignment = 1;
+    FEI_GL_CALL(glGetIntegerv(
+        GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT,
+        &uniform_buffer_offset_alignment
+    ));
+    m_uniform_buffer_offset_alignment =
+        static_cast<std::size_t>(uniform_buffer_offset_alignment);
+
     GLuint vao;
     FEI_GL_CALL(glGenVertexArrays(1, &vao));
     FEI_GL_CALL(glBindVertexArray(vao));

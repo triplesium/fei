@@ -102,10 +102,11 @@ void insert_mesh_uniform(
     FakeGraphicsDevice& device,
     Entity entity
 ) {
+    if (!mesh_uniforms.resource_set) {
+        mesh_uniforms.resource_set = create_resource_set(device);
+    }
     mesh_uniforms.entries[entity] = MeshUniforms::Entry {
-        .entity = entity,
-        .uniform_buffer = nullptr,
-        .resource_set = create_resource_set(device),
+        .dynamic_offset = static_cast<uint32>(entity) * 256,
     };
 }
 
@@ -232,7 +233,8 @@ TEST_CASE(
     REQUIRE(phase.items.size() == 1);
     CHECK(phase.items[0].entity == 1);
     CHECK(phase.items[0].view_set == view_set);
-    CHECK(phase.items[0].mesh_set == mesh_uniforms.entries.at(1).resource_set);
+    CHECK(phase.items[0].mesh_set == mesh_uniforms.resource_set);
+    CHECK(phase.items[0].mesh_uniform_dynamic_offset == 256);
     CHECK(phase.items[0].vertex_count == 3);
     CHECK(phase.items[0].index_buffer == nullptr);
     CHECK(device.render_pipeline_descriptions.empty());

@@ -23,6 +23,7 @@ struct ShadowMapDrawItem {
     std::shared_ptr<const ResourceSet> view_set;
     std::shared_ptr<const ResourceSet> mesh_set;
     std::shared_ptr<const ResourceSet> material_set;
+    uint32 mesh_uniform_dynamic_offset {};
     std::shared_ptr<const Buffer> vertex_buffer;
     std::shared_ptr<const Buffer> index_buffer;
     uint32 index_count {};
@@ -111,7 +112,8 @@ void draw_shadow_map_item(
 
     command_buffer.set_render_pipeline(item.pipeline);
     command_buffer.set_resource_set(0, item.view_set);
-    command_buffer.set_resource_set(1, item.mesh_set);
+    const std::array dynamic_offsets {item.mesh_uniform_dynamic_offset};
+    command_buffer.set_resource_set(1, item.mesh_set, dynamic_offsets);
     command_buffer.set_resource_set(2, item.material_set);
     command_buffer.set_vertex_buffer(item.vertex_buffer);
 
@@ -563,7 +565,8 @@ void queue_shadow_map_meshes(
                 entity,
                 pipeline_id,
                 view_resource_set.resource_set,
-                mesh_uniform_it->second.resource_set,
+                mesh_uniforms->resource_set,
+                mesh_uniform_it->second.dynamic_offset,
                 material.resource_set(),
                 gpu_mesh
             ));
@@ -618,6 +621,8 @@ void render_shadow_map_passes(
                     .view_set = item.view_set,
                     .mesh_set = item.mesh_set,
                     .material_set = item.material_set,
+                    .mesh_uniform_dynamic_offset =
+                        item.mesh_uniform_dynamic_offset,
                     .vertex_buffer = item.vertex_buffer,
                     .index_buffer = item.index_buffer,
                     .index_count = item.index_count,

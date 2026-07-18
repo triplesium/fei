@@ -101,6 +101,12 @@ class FakeGraphicsDevice : public GraphicsDevice {
     mutable std::vector<std::shared_ptr<CommandBuffer>> submitted_commands;
     bool fail_render_pipeline_creation {false};
     bool fail_compute_pipeline_creation {false};
+    std::size_t uniform_buffer_alignment {256};
+
+    [[nodiscard]] std::size_t
+    uniform_buffer_offset_alignment() const override {
+        return uniform_buffer_alignment;
+    }
 
     std::shared_ptr<ShaderModule>
     create_shader_module(const ShaderDescription& desc) const override {

@@ -44,6 +44,7 @@ class GraphicsDeviceVulkan : public GraphicsDevice {
     [[nodiscard]] std::size_t max_frames_in_flight() const override {
         return 3;
     }
+    [[nodiscard]] std::size_t uniform_buffer_offset_alignment() const override;
 
     std::shared_ptr<ShaderModule>
     create_shader_module(const ShaderDescription& desc) const override;

@@ -11,6 +11,7 @@
 
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 namespace fei {
 
@@ -20,12 +21,16 @@ struct alignas(16) MeshUniform {
 
 struct MeshUniforms {
     struct Entry {
-        Entity entity;
-        std::shared_ptr<Buffer> uniform_buffer;
-        std::shared_ptr<ResourceSet> resource_set;
+        uint32 dynamic_offset {};
     };
+
     std::shared_ptr<ResourceLayout> resource_layout;
+    std::shared_ptr<Buffer> uniform_buffer;
+    std::shared_ptr<ResourceSet> resource_set;
     std::unordered_map<Entity, Entry> entries;
+    std::vector<std::byte> upload_data;
+    std::size_t stride {};
+    std::size_t capacity {};
 };
 
 struct Mesh3d;

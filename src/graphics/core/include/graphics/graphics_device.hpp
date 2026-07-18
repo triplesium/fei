@@ -113,6 +113,10 @@ class GraphicsDevice {
 
     [[nodiscard]] virtual std::size_t max_frames_in_flight() const { return 1; }
 
+    [[nodiscard]] virtual std::size_t uniform_buffer_offset_alignment() const {
+        return 256;
+    }
+
     virtual GraphicsResourceCacheStats resource_cache_stats() const {
         return {};
     }
