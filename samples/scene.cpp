@@ -55,6 +55,10 @@ struct SceneArguments {
     bool show_help {false};
 };
 
+struct DirectionalLightUiState {
+    Vector3 rotation;
+};
+
 SceneGraphicsBackend default_scene_backend() {
     return SceneGraphicsBackend::OpenGL;
 }
@@ -133,7 +137,6 @@ float percent(uint64 value, uint64 total) {
 }
 
 void draw_render_schedule_stats(const Optional<ScheduleDebugInfo>& debug) {
-    ImGui::Separator();
     if (!debug) {
         ImGui::TextUnformatted("Render schedule unavailable");
         return;
@@ -163,6 +166,152 @@ void draw_graphics_cache_stats(const GraphicsDevice& device) {
         percent(stats.resource_set_hits, stats.resource_set_requests),
         stats.resource_set_cache_size
     );
+}
+
+using DirectionalLightQuery =
+    Query<Entity, DirectionalLight, Transform3d, DirectionalLightUiState>;
+using PointLightQuery = Query<Entity, PointLight, Transform3d>;
+using EnvironmentLightQuery = Query<Entity, EnvironmentMapLight>;
+
+void draw_lighting_controls(
+    DirectionalLightQuery& query_directional_lights,
+    PointLightQuery& query_point_lights
+) {
+    if (ImGui::CollapsingHeader(
+            "Directional Lights",
+            ImGuiTreeNodeFlags_DefaultOpen
+        )) {
+        if (query_directional_lights.empty()) {
+            ImGui::TextDisabled("No directional lights");
+        }
+        for (auto
+             [entity,
+              light_component,
+              transform_component,
+              ui_state_component] : query_directional_lights) {
+            ImGui::PushID(static_cast<int>(entity));
+            if (ImGui::TreeNodeEx(
+                    "Directional Light",
+                    ImGuiTreeNodeFlags_DefaultOpen
+                )) {
+                auto& light = light_component.write();
+                auto& transform = transform_component.write();
+                auto& ui_state = ui_state_component.write();
+                ImGui::ColorEdit3(
+                    "Color",
+                    reinterpret_cast<float*>(&light.color)
+                );
+                ImGui::DragFloat(
+                    "Intensity",
+                    &light.intensity,
+                    0.1f,
+                    0.0f,
+                    100.0f
+                );
+                if (ImGui::DragFloat3(
+                        "Rotation",
+                        ui_state.rotation.data(),
+                        0.1f
+                    )) {
+                    transform.set_euler(ui_state.rotation);
+                }
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Point Lights")) {
+        if (query_point_lights.empty()) {
+            ImGui::TextDisabled("No point lights");
+        }
+        for (auto [entity, light_component, transform_component] :
+             query_point_lights) {
+            ImGui::PushID(static_cast<int>(entity));
+            if (ImGui::TreeNode("Point Light")) {
+                auto& light = light_component.write();
+                auto& transform = transform_component.write();
+                ImGui::ColorEdit3(
+                    "Color",
+                    reinterpret_cast<float*>(&light.color)
+                );
+                ImGui::DragFloat(
+                    "Intensity",
+                    &light.intensity,
+                    0.1f,
+                    0.0f,
+                    100.0f
+                );
+                ImGui::DragFloat("Range", &light.range, 0.1f, 0.0f, 100.0f);
+                ImGui::DragFloat3(
+                    "Position",
+                    reinterpret_cast<float*>(&transform.position),
+                    0.1f
+                );
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
+    }
+}
+
+void draw_indirect_lighting_controls(
+    EnvironmentLightQuery& query_environment_lights,
+    VxgiVolumes& vxgi_volumes
+) {
+    if (ImGui::CollapsingHeader(
+            "Environment / IBL",
+            ImGuiTreeNodeFlags_DefaultOpen
+        )) {
+        if (query_environment_lights.empty()) {
+            ImGui::TextDisabled("No environment map lights");
+        }
+        for (auto [entity, light_component] : query_environment_lights) {
+            ImGui::PushID(static_cast<int>(entity));
+            auto& light = light_component.write();
+            ImGui::Checkbox("Enable IBL", &light.enabled);
+            ImGui::BeginDisabled(!light.enabled);
+            ImGui::DragFloat("Intensity", &light.intensity, 0.01f, 0.0f, 10.0f);
+            ImGui::EndDisabled();
+            ImGui::PopID();
+        }
+    }
+
+    if (ImGui::CollapsingHeader("VXGI", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::DragFloat(
+            "Bounce Strength",
+            &vxgi_volumes.config.bounce_strength,
+            0.01f,
+            0.0f,
+            2.0f
+        );
+        ImGui::DragFloat(
+            "Skylight Leaking",
+            &vxgi_volumes.config.skylight_leaking,
+            0.01f,
+            0.0f,
+            1.0f
+        );
+    }
+}
+
+void draw_diagnostics(const GraphicsDevice& device, World& world) {
+    if (ImGui::CollapsingHeader(
+            "Diagnostics",
+            ImGuiTreeNodeFlags_DefaultOpen
+        )) {
+        const auto frame_stats = profile_frame_stats();
+        ImGui::Text(
+            "FPS: %.2f    Frame Time: %.2f ms",
+            frame_stats.fps,
+            frame_stats.latest_frame_ms
+        );
+        draw_render_schedule_stats(world.schedule_debug_info(RenderUpdate));
+        if (ImGui::TreeNode("Graphics Cache")) {
+            draw_graphics_cache_stats(device);
+            ImGui::TreePop();
+        }
+    }
 }
 
 } // namespace
@@ -222,7 +371,10 @@ void setup(
             .intensity = 10.0f,
             .shadow_map_enabled = true,
         },
-        directional_light_transform
+        directional_light_transform,
+        DirectionalLightUiState {
+            .rotation = {-83.14f, 7.30f, 0.0f},
+        }
     );
     auto camera_script =
         asset_server->load<LuaScriptAsset>("camera_control.lua");
@@ -249,76 +401,37 @@ void update_directional_light(
 }
 
 void update_imgui(
-    Query<DirectionalLight, Transform3d> query_directional_lights,
-    Query<PointLight, Transform3d> query_point_lights,
-    Query<EnvironmentMapLight> query_environment_lights,
+    DirectionalLightQuery query_directional_lights,
+    PointLightQuery query_point_lights,
+    EnvironmentLightQuery query_environment_lights,
     ResRW<VxgiVolumes> vxgi_volumes,
     ResRO<GraphicsDevice> graphics_device,
     WorldRef world
 ) {
-    const auto frame_stats = profile_frame_stats();
-    ImGui::Begin("FPS");
-    ImGui::Text("FPS: %.2f", frame_stats.fps);
-    ImGui::Text("Frame Time: %.2f ms", frame_stats.latest_frame_ms);
-    draw_render_schedule_stats(world->schedule_debug_info(RenderUpdate));
-    draw_graphics_cache_stats(*graphics_device);
-    ImGui::End();
-
-    for (auto [light_component] : query_environment_lights) {
-        auto& light = light_component.write();
-        ImGui::Begin("Environment Map Light");
-        ImGui::Checkbox("Enable IBL", &light.enabled);
-        ImGui::DragFloat("Intensity", &light.intensity, 0.01f, 0.0f, 10.0f);
-        ImGui::End();
-    }
-    ImGui::Begin("VXGI");
-    ImGui::DragFloat(
-        "Bounce Strength",
-        &vxgi_volumes->config.bounce_strength,
-        0.01f,
-        0.0f,
-        2.0f
-    );
-    ImGui::DragFloat(
-        "Skylight Leaking",
-        &vxgi_volumes->config.skylight_leaking,
-        0.01f,
-        0.0f,
-        1.0f
-    );
-    ImGui::End();
-    for (auto [light_component, transform_component] :
-         query_directional_lights) {
-        auto& light = light_component.write();
-        auto& transform = transform_component.write();
-        ImGui::Begin("Directional Light");
-        ImGui::ColorEdit3("Color", reinterpret_cast<float*>(&light.color));
-        ImGui::DragFloat("Intensity", &light.intensity, 0.1f, 0.0f, 100.0f);
-        ImGui::DragFloat3(
-            "Position",
-            reinterpret_cast<float*>(&transform.position),
-            0.1f
-        );
-        static Vector3 rotation {-83.14f, 7.30f, 0.0f};
-        if (ImGui::DragFloat3("Rotation", rotation.data(), 0.1f)) {
-            transform.set_euler(rotation);
+    ImGui::SetNextWindowPos(ImVec2(20.0f, 20.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(420.0f, 520.0f), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Scene Controls")) {
+        draw_diagnostics(*graphics_device, *world);
+        ImGui::Separator();
+        if (ImGui::BeginTabBar("SceneControlsTabs")) {
+            if (ImGui::BeginTabItem("Lighting")) {
+                draw_lighting_controls(
+                    query_directional_lights,
+                    query_point_lights
+                );
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Indirect")) {
+                draw_indirect_lighting_controls(
+                    query_environment_lights,
+                    *vxgi_volumes
+                );
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
         }
-        ImGui::End();
     }
-    for (auto [light_component, transform_component] : query_point_lights) {
-        auto& light = light_component.write();
-        auto& transform = transform_component.write();
-        ImGui::Begin("Point Light");
-        ImGui::ColorEdit3("Color", reinterpret_cast<float*>(&light.color));
-        ImGui::DragFloat("Intensity", &light.intensity, 0.1f, 0.0f, 100.0f);
-        ImGui::DragFloat("Range", &light.range, 0.1f, 0.0f, 100.0f);
-        ImGui::DragFloat3(
-            "Position",
-            reinterpret_cast<float*>(&transform.position),
-            0.1f
-        );
-        ImGui::End();
-    }
+    ImGui::End();
 }
 
 int main(int argc, char** argv) {
