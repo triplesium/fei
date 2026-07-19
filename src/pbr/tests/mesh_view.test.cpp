@@ -91,42 +91,57 @@ TEST_CASE(
 
     world.run_system_once(init_mesh_view_layout);
     REQUIRE(device.sampler_descriptions.size() == 2);
-    REQUIRE(device.resource_layout_descriptions.size() == 1);
+    REQUIRE(device.resource_layout_descriptions.size() == 2);
     const auto& mesh_view_elements =
         device.resource_layout_descriptions.front().elements;
-    REQUIRE(mesh_view_elements.size() == 7);
-    CHECK(mesh_view_elements[4].name == "brdf_lut");
-    CHECK(mesh_view_elements[4].kind == ResourceKind::TextureReadOnly);
-    CHECK(mesh_view_elements[5].name == "brdf_sampler");
-    CHECK(mesh_view_elements[5].kind == ResourceKind::Sampler);
-    CHECK(mesh_view_elements[6].name == "EnvironmentMap");
-    CHECK(mesh_view_elements[6].kind == ResourceKind::UniformBuffer);
+    REQUIRE(mesh_view_elements.size() == 1);
+    CHECK(mesh_view_elements[0].name == "View");
+    CHECK(mesh_view_elements[0].kind == ResourceKind::UniformBuffer);
+    const auto& environment_elements =
+        device.resource_layout_descriptions[1].elements;
+    REQUIRE(environment_elements.size() == 6);
+    CHECK(environment_elements[0].name == "environment");
+    CHECK(environment_elements[0].kind == ResourceKind::UniformBuffer);
+    CHECK(environment_elements[4].name == "brdf_lut");
+    CHECK(environment_elements[4].kind == ResourceKind::TextureReadOnly);
+    CHECK(environment_elements[5].name == "brdf_sampler");
+    CHECK(environment_elements[5].kind == ResourceKind::Sampler);
 
     world.run_system_once(prepare_mesh_view_resource_set);
     world.resource<CommandsQueue>().execute(world);
 
     REQUIRE(world.has_component<MeshViewResourceSet>(camera));
     REQUIRE(world.has_component<MeshViewResourceSet>(shadow_view));
-    REQUIRE(device.resource_set_descriptions.size() == 2);
+    REQUIRE(device.resource_set_descriptions.size() == 4);
     const auto& mesh_view_layout = world.resource<MeshViewLayout>();
     for (const auto& resource_set : device.resource_set_descriptions) {
-        REQUIRE(resource_set.resources.size() == 7);
-        CHECK(
-            resource_set.resources[5].get() ==
-            mesh_view_layout.brdf_sampler.get()
-        );
+        if (resource_set.name == "mesh_view") {
+            REQUIRE(resource_set.resources.size() == 1);
+        } else {
+            CHECK(resource_set.name == "environment");
+            REQUIRE(resource_set.resources.size() == 6);
+            CHECK(
+                resource_set.resources[5].get() ==
+                mesh_view_layout.brdf_sampler.get()
+            );
+        }
     }
     REQUIRE(world.get_component<MeshViewResourceSet>(camera)
                 .environment_uniform_buffer);
+    REQUIRE(world.get_component<MeshViewResourceSet>(camera)
+                .environment_resource_set);
     REQUIRE(world.get_component<MeshViewResourceSet>(shadow_view)
                 .environment_uniform_buffer);
+    REQUIRE(world.get_component<MeshViewResourceSet>(shadow_view)
+                .environment_resource_set);
     REQUIRE(world.resource<RenderQueue>().pending_buffer_writes() == 2);
 
     world.run_system_once(prepare_mesh_view_resource_set);
     world.resource<CommandsQueue>().execute(world);
 
     CHECK(device.sampler_descriptions.size() == 2);
-    CHECK(device.resource_set_descriptions.size() == 2);
+    CHECK(device.resource_set_descriptions.size() == 4);
     CHECK(world.resource<RenderQueue>().pending_buffer_writes() == 4);
     CHECK(world.resource<MeshViewResourceSet>().resource_set);
+    CHECK(world.resource<MeshViewResourceSet>().environment_resource_set);
 }

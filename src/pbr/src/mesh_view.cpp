@@ -20,6 +20,7 @@ MeshViewResourceSet::Key mesh_view_resource_set_key(
 ) {
     return MeshViewResourceSet::Key {
         .layout = mesh_view_layout.layout.get(),
+        .environment_layout = mesh_view_layout.environment_layout.get(),
         .view_buffer = view_uniform_buffer.buffer.get(),
         .irradiance_map = env_map.irradiance_cubemap.texture().get(),
         .radiance_map = env_map.radiance_cubemap.texture().get(),
@@ -53,17 +54,23 @@ MeshViewResourceSet create_mesh_view_resource_set(
         .resource_set = device.create_resource_set(
             ResourceSetDescription {
                 .layout = mesh_view_layout.layout,
+                .resources = {view_uniform_buffer.buffer},
+                .name = "mesh_view",
+            }
+        ),
+        .environment_resource_set = device.create_resource_set(
+            ResourceSetDescription {
+                .layout = mesh_view_layout.environment_layout,
                 .resources =
                     {
-                        view_uniform_buffer.buffer,
+                        environment_uniform_buffer,
                         irradiance_map,
                         radiance_map,
                         mesh_view_layout.cubemap_sampler,
                         brdf_lut,
                         mesh_view_layout.brdf_sampler,
-                        environment_uniform_buffer,
                     },
-                .name = "mesh_view",
+                .name = "environment",
             }
         ),
         .environment_uniform_buffer = std::move(environment_uniform_buffer),
@@ -80,14 +87,19 @@ void init_mesh_view_layout(
     mesh_view_layout->layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Vertex, ShaderStages::Fragment},
+            {uniform_buffer("View")}
+        )
+    );
+    mesh_view_layout->environment_layout = device->create_resource_layout(
+        ResourceLayoutDescription::sequencial(
+            {ShaderStages::Fragment},
             {
-                uniform_buffer("View"),
+                uniform_buffer("environment"),
                 texture_read_only("irradiance_map"),
                 texture_read_only("radiance_map"),
                 sampler("cubemap_sampler"),
                 texture_read_only("brdf_lut"),
                 sampler("brdf_sampler"),
-                uniform_buffer("EnvironmentMap"),
             }
         )
     );
@@ -171,6 +183,7 @@ void prepare_mesh_view_resource_set(
                 radiance_mip_levels > 0 ?
                     static_cast<float>(radiance_mip_levels - 1) :
                     0.0f,
+            .enabled = environment_light.enabled ? 1U : 0U,
         };
         render_queue->write_buffer(
             view_resource_set.environment_uniform_buffer,

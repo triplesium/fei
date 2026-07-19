@@ -14,17 +14,12 @@ using namespace pbr.environment_map;
 using namespace pbr.vxgi;
 
 layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
-layout(set = 0, binding = 1) TextureCube<float4> irradiance_map;
-layout(set = 0, binding = 2) TextureCube<float4> radiance_map;
-layout(set = 0, binding = 3) SamplerState cubemap_sampler;
-layout(set = 0, binding = 4) Texture2D<float4> brdf_lut;
-layout(set = 0, binding = 5) SamplerState brdf_sampler;
-layout(set = 0, binding = 6) ConstantBuffer<EnvironmentMapUniform> EnvironmentMap;
 layout(set = 1) ParameterBlock<GBuffer> gbuffer;
 layout(set = 2, binding = 0) ConstantBuffer<VxgiUniform> Vxgi;
 layout(set = 2, binding = 2) Texture3D<float4> voxel_tex;
 layout(set = 2, binding = 3) Texture3D<float4> voxel_tex_mipmap[6];
 layout(set = 2, binding = 9) SamplerState voxel_sampler;
+layout(set = 3) ParameterBlock<EnvironmentMap> environment;
 
 static const float3 diffuse_cone_directions[6] = {
     float3(0.0, 1.0, 0.0),
@@ -196,20 +191,21 @@ float4 calculate_indirect_lighting(
                     sky_transmittance
                 ) :
                 1.0;
-            float3 cone_environment_radiance = sample_environment_radiance(
-                radiance_map,
-                cubemap_sampler,
-                EnvironmentMap,
-                cone_direction,
-                diffuse_cone_environment_roughness
-            );
             diffuse_radiance += trace.radiance * cone_weight;
-            environment_miss_radiance +=
-                environment_transmittance *
-                cone_environment_radiance *
-                cone_weight;
-            unoccluded_environment_radiance +=
-                cone_environment_radiance * cone_weight;
+            if (environment.enabled) {
+                float3 cone_environment_radiance =
+                    sample_environment_radiance(
+                        environment,
+                        cone_direction,
+                        diffuse_cone_environment_roughness
+                    );
+                environment_miss_radiance +=
+                    environment_transmittance *
+                    cone_environment_radiance *
+                    cone_weight;
+                unoccluded_environment_radiance +=
+                    cone_environment_radiance * cone_weight;
+            }
             weighted_local_occlusion +=
                 trace.local_occlusion * cone_weight;
             weighted_sky_transmittance +=
@@ -226,12 +222,7 @@ float4 calculate_indirect_lighting(
     environment_lighting.specular = float3(0.0);
     if (has_lighting_surface) {
         environment_lighting = evaluate_environment_map(
-            irradiance_map,
-            radiance_map,
-            cubemap_sampler,
-            brdf_lut,
-            brdf_sampler,
-            EnvironmentMap,
+            environment,
             point,
             material
         );
@@ -268,7 +259,7 @@ float4 calculate_indirect_lighting(
     }
     vxgi_diffuse = max(vxgi_diffuse, float3(0.0));
     float3 environment_visibility = float3(1.0);
-    if (has_lighting_surface) {
+    if (has_lighting_surface && environment.enabled) {
         if (!is_finite_indirect_color(environment_miss_radiance) ||
             !is_finite_indirect_color(unoccluded_environment_radiance)) {
             environment_miss_radiance = float3(0.0);

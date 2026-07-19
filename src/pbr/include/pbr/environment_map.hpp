@@ -1,5 +1,6 @@
 #pragma once
 #include "asset/handle.hpp"
+#include "base/types.hpp"
 #include "core/image.hpp"
 #include "ecs/query.hpp"
 #include "graphics/pipeline.hpp"
@@ -7,7 +8,6 @@
 #include "graphics/sampler.hpp"
 #include "math/matrix.hpp"
 #include "math/quaternion.hpp"
-#include "math/vector.hpp"
 #include "rendering/gpu_image.hpp"
 
 #include <memory>
@@ -34,13 +34,15 @@ struct GpuEnvironmentMap {
 struct EnvironmentMapLight {
     float intensity {1.0f};
     Quaternion rotation {Quaternion::Identity};
+    bool enabled {true};
 };
 
 struct alignas(16) EnvironmentMapUniform {
     Matrix4x4 environment_from_world;
     float intensity {1.0f};
     float max_specular_lod {0.0f};
-    Vector2 padding {};
+    uint32 enabled {1};
+    float padding {};
 };
 
 struct EnvironmentMapGenerationResources {

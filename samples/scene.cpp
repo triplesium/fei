@@ -267,6 +267,7 @@ void update_imgui(
     for (auto [light_component] : query_environment_lights) {
         auto& light = light_component.write();
         ImGui::Begin("Environment Map Light");
+        ImGui::Checkbox("Enable IBL", &light.enabled);
         ImGui::DragFloat("Intensity", &light.intensity, 0.01f, 0.0f, 10.0f);
         ImGui::End();
     }

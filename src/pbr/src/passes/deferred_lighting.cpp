@@ -232,7 +232,8 @@ void indirect_lighting_pass(
     auto pipeline = pipeline_cache->get_render_pipeline(
         pipelines->indirect_lighting_pipeline
     );
-    if (!gbuffer_set || !vxgi_set) {
+    if (!gbuffer_set || !vxgi_set ||
+        !mesh_view_resource_set.environment_resource_set) {
         pipeline.reset();
     }
     auto fullscreen_quad_data = make_fullscreen_quad_pass_data(
@@ -245,9 +246,13 @@ void indirect_lighting_pass(
         std::move(pipeline),
         targets->indirect,
         [gbuffer_set = std::move(gbuffer_set),
-         vxgi_set = std::move(vxgi_set)](CommandBuffer& commands) {
+         vxgi_set = std::move(vxgi_set),
+         environment_set = mesh_view_resource_set.environment_resource_set](
+            CommandBuffer& commands
+        ) {
             commands.set_resource_set(1, gbuffer_set);
             commands.set_resource_set(2, vxgi_set);
+            commands.set_resource_set(3, environment_set);
         }
     );
 }

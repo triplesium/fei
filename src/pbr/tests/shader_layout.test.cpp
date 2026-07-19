@@ -521,13 +521,13 @@ TEST_CASE(
         "forward.frag",
         {
             {"View", ResourceKind::UniformBuffer, 0, 0},
-            {"irradiance_map", ResourceKind::TextureReadOnly, 0, 1},
-            {"radiance_map", ResourceKind::TextureReadOnly, 0, 2},
-            {"cubemap_sampler", ResourceKind::Sampler, 0, 3},
-            {"brdf_lut", ResourceKind::TextureReadOnly, 0, 4},
-            {"brdf_sampler", ResourceKind::Sampler, 0, 5},
-            {"EnvironmentMap", ResourceKind::UniformBuffer, 0, 6},
             {"material", ResourceKind::UniformBuffer, 2, 0},
+            {"environment", ResourceKind::UniformBuffer, 3, 0},
+            {"irradiance_map", ResourceKind::TextureReadOnly, 3, 1},
+            {"radiance_map", ResourceKind::TextureReadOnly, 3, 2},
+            {"cubemap_sampler", ResourceKind::Sampler, 3, 3},
+            {"brdf_lut", ResourceKind::TextureReadOnly, 3, 4},
+            {"brdf_sampler", ResourceKind::Sampler, 3, 5},
         }
     );
 }
@@ -575,12 +575,6 @@ TEST_CASE(
         "deferred_gi_indirect.frag",
         {
             {"View", ResourceKind::UniformBuffer, 0, 0},
-            {"irradiance_map", ResourceKind::TextureReadOnly, 0, 1},
-            {"radiance_map", ResourceKind::TextureReadOnly, 0, 2},
-            {"cubemap_sampler", ResourceKind::Sampler, 0, 3},
-            {"brdf_lut", ResourceKind::TextureReadOnly, 0, 4},
-            {"brdf_sampler", ResourceKind::Sampler, 0, 5},
-            {"EnvironmentMap", ResourceKind::UniformBuffer, 0, 6},
             {"g_position_ao", ResourceKind::TextureReadOnly, 1, 0},
             {"g_normal_roughness", ResourceKind::TextureReadOnly, 1, 1},
             {"g_albedo_metallic", ResourceKind::TextureReadOnly, 1, 2},
@@ -590,6 +584,12 @@ TEST_CASE(
             {"voxel_tex", ResourceKind::TextureReadOnly, 2, 2},
             {"voxel_tex_mipmap", ResourceKind::TextureReadOnly, 2, 3, 6},
             {"voxel_sampler", ResourceKind::Sampler, 2, 9},
+            {"environment", ResourceKind::UniformBuffer, 3, 0},
+            {"irradiance_map", ResourceKind::TextureReadOnly, 3, 1},
+            {"radiance_map", ResourceKind::TextureReadOnly, 3, 2},
+            {"cubemap_sampler", ResourceKind::Sampler, 3, 3},
+            {"brdf_lut", ResourceKind::TextureReadOnly, 3, 4},
+            {"brdf_sampler", ResourceKind::Sampler, 3, 5},
         }
     );
 

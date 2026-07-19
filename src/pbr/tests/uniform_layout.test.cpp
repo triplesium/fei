@@ -69,6 +69,20 @@ TEST_CASE(
     CHECK(offsetof(EnvironmentMapUniform, environment_from_world) == 0);
     CHECK(offsetof(EnvironmentMapUniform, intensity) == 64);
     CHECK(offsetof(EnvironmentMapUniform, max_specular_lod) == 68);
+    CHECK(offsetof(EnvironmentMapUniform, enabled) == 72);
+    CHECK(offsetof(EnvironmentMapUniform, padding) == 76);
+}
+
+TEST_CASE(
+    "PBR environment map light can disable IBL",
+    "[pbr][environment_map]"
+) {
+    EnvironmentMapLight light {.intensity = 2.0f};
+    CHECK(light.enabled);
+
+    light.enabled = false;
+    CHECK_FALSE(light.enabled);
+    CHECK(light.intensity == 2.0f);
 }
 
 TEST_CASE("PBR lighting uniform keeps shader ABI layout", "[pbr][uniform]") {

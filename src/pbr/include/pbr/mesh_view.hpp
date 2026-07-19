@@ -15,6 +15,7 @@ namespace fei {
 
 struct MeshViewLayout {
     std::shared_ptr<ResourceLayout> layout;
+    std::shared_ptr<ResourceLayout> environment_layout;
     std::shared_ptr<Sampler> cubemap_sampler;
     std::shared_ptr<Sampler> brdf_sampler;
 };
@@ -26,9 +27,11 @@ void init_mesh_view_layout(
 
 struct MeshViewResourceSet {
     std::shared_ptr<ResourceSet> resource_set;
+    std::shared_ptr<ResourceSet> environment_resource_set;
     std::shared_ptr<Buffer> environment_uniform_buffer;
     struct Key {
         const ResourceLayout* layout {};
+        const ResourceLayout* environment_layout {};
         const Buffer* view_buffer {};
         const Texture* irradiance_map {};
         const Texture* radiance_map {};

@@ -12,14 +12,9 @@ using namespace pbr.environment_map;
 using namespace rendering.color;
 
 layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
-layout(set = 0, binding = 1) TextureCube<float4> irradiance_map;
-layout(set = 0, binding = 2) TextureCube<float4> radiance_map;
-layout(set = 0, binding = 3) SamplerState cubemap_sampler;
-layout(set = 0, binding = 4) Texture2D<float4> brdf_lut;
-layout(set = 0, binding = 5) SamplerState brdf_sampler;
-layout(set = 0, binding = 6) ConstantBuffer<EnvironmentMapUniform> EnvironmentMap;
 layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> Mesh;
 layout(set = 2) ParameterBlock<StandardMaterialResources> material;
+layout(set = 3) ParameterBlock<EnvironmentMap> environment;
 
 [shader("vertex")]
 VertexOutput vertex_main(MeshVertexInput input) {
@@ -59,12 +54,7 @@ FragmentOutput fragment_main(VertexOutput input) {
     float3 view = View.view_direction(input.position_ws);
     ShadingPoint point = ShadingPoint.from_world(input.position_ws, normal, view);
     EnvironmentMapLighting environment_lighting = evaluate_environment_map(
-        irradiance_map,
-        radiance_map,
-        cubemap_sampler,
-        brdf_lut,
-        brdf_sampler,
-        EnvironmentMap,
+        environment,
         point,
         surface_material
     );

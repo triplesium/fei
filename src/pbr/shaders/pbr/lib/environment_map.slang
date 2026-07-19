@@ -7,7 +7,23 @@ public struct EnvironmentMapUniform {
     public float4x4 environment_from_world;
     public float intensity;
     public float max_specular_lod;
-    public float2 padding;
+    public uint enabled;
+    public float padding;
+};
+
+public struct EnvironmentMap {
+    public EnvironmentMapUniform uniform;
+    public TextureCube<float4> irradiance_map;
+    public TextureCube<float4> radiance_map;
+    public SamplerState cubemap_sampler;
+    public Texture2D<float4> brdf_lut;
+    public SamplerState brdf_sampler;
+
+    public property bool enabled {
+        get {
+            return uniform.enabled != 0;
+        }
+    }
 };
 
 public struct EnvironmentMapLighting {
@@ -52,21 +68,26 @@ float3 sample_radiance_map(
 }
 
 public float3 sample_environment_radiance(
-    TextureCube<float4> radiance_map,
-    SamplerState environment_sampler,
-    EnvironmentMapUniform environment,
+    EnvironmentMap environment,
     float3 world_direction,
     float perceptual_roughness
 ) {
+    if (!environment.enabled) {
+        return float3(0.0);
+    }
     float3 direction = safe_normalize(
-        mul(environment.environment_from_world, float4(world_direction, 0.0)).xyz,
+        mul(
+            environment.uniform.environment_from_world,
+            float4(world_direction, 0.0)
+        ).xyz,
         float3(0.0, 1.0, 0.0)
     );
     return sample_radiance_map(
-        radiance_map,
-        environment_sampler,
+        environment.radiance_map,
+        environment.cubemap_sampler,
         direction,
-        saturate(perceptual_roughness) * environment.max_specular_lod
+        saturate(perceptual_roughness) *
+            environment.uniform.max_specular_lod
     );
 }
 
@@ -102,40 +123,48 @@ float3 radiance_sample_direction(
 }
 
 public EnvironmentMapLighting evaluate_environment_map(
-    TextureCube<float4> irradiance_map,
-    TextureCube<float4> radiance_map,
-    SamplerState environment_sampler,
-    Texture2D<float4> brdf_lut,
-    SamplerState brdf_sampler,
-    EnvironmentMapUniform environment,
+    EnvironmentMap environment,
     ShadingPoint point,
     StandardMaterial material
 ) {
+    EnvironmentMapLighting lighting;
+    lighting.diffuse = float3(0.0);
+    lighting.specular = float3(0.0);
+    if (!environment.enabled) {
+        return lighting;
+    }
+
     float3 normal = safe_normalize(
-        mul(environment.environment_from_world, float4(point.normal_ws, 0.0)).xyz,
+        mul(
+            environment.uniform.environment_from_world,
+            float4(point.normal_ws, 0.0)
+        ).xyz,
         float3(0.0, 1.0, 0.0)
     );
     float3 reflection = safe_normalize(
-        mul(environment.environment_from_world, float4(point.reflection_ws, 0.0)).xyz,
+        mul(
+            environment.uniform.environment_from_world,
+            float4(point.reflection_ws, 0.0)
+        ).xyz,
         normal
     );
     float normal_dot_view = point.normal_dot_view;
     float3 irradiance =
-        irradiance_map.Sample(environment_sampler, normal).rgb;
+        environment.irradiance_map.Sample(environment.cubemap_sampler, normal).rgb;
     float3 radiance_direction =
         radiance_sample_direction(normal, reflection, material.roughness);
     float3 radiance = sample_radiance_map(
-        radiance_map,
-        environment_sampler,
+        environment.radiance_map,
+        environment.cubemap_sampler,
         radiance_direction,
-        material.roughness * environment.max_specular_lod
+        material.roughness * environment.uniform.max_specular_lod
     );
     if (!is_finite_color(irradiance)) {
         irradiance = float3(0.0);
     }
     irradiance = max(irradiance, float3(0.0));
-    float2 brdf = brdf_lut.Sample(
-        brdf_sampler,
+    float2 brdf = environment.brdf_lut.Sample(
+        environment.brdf_sampler,
         // The embedded LUT stores roughness from 1 at the top to 0 at the
         // bottom, while sampled texture coordinates increase downwards.
         float2(normal_dot_view, 1.0 - material.roughness)
@@ -147,10 +176,10 @@ public EnvironmentMapLighting evaluate_environment_map(
         compute_multiscatter(material.f0, brdf);
     float3 diffuse_color =
         material.albedo * (1.0 - material.metallic);
-    EnvironmentMapLighting lighting;
-    lighting.diffuse = environment.intensity * irradiance * diffuse_color;
+    lighting.diffuse =
+        environment.uniform.intensity * irradiance * diffuse_color;
     lighting.specular =
-        environment.intensity *
+        environment.uniform.intensity *
         (radiance * multiscatter.single_scatter +
          irradiance * multiscatter.multi_scatter);
     if (!is_finite_color(lighting.specular)) {
