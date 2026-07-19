@@ -169,8 +169,7 @@ SystemSetConfigs all(std::convertible_to<SystemSetConfigs> auto&&... sets) {
                 configs.sets.end()
             );
         }(),
-        ...
-    );
+        ...);
     return SystemSetConfigs {std::move(system_set_configs)};
 }
 

@@ -30,8 +30,10 @@ constexpr bool allows_integral_widening() {
     static_assert(std::is_integral_v<Source>);
     static_assert(std::is_integral_v<Target>);
 
-    if constexpr (std::same_as<Source, bool> || std::same_as<Target, bool> ||
-                  std::same_as<Source, Target>) {
+    if constexpr (
+        std::same_as<Source, bool> || std::same_as<Target, bool> ||
+        std::same_as<Source, Target>
+    ) {
         return false;
     }
     if constexpr (std::is_signed_v<Source> == std::is_signed_v<Target>) {
@@ -77,11 +79,13 @@ template<class Source, class Target>
 constexpr bool allows_numeric_conversion() {
     if constexpr (std::is_integral_v<Source> && std::is_integral_v<Target>) {
         return allows_integral_widening<Source, Target>();
-    } else if constexpr (std::is_integral_v<Source> &&
-                         std::is_floating_point_v<Target>) {
+    } else if constexpr (
+        std::is_integral_v<Source> && std::is_floating_point_v<Target>
+    ) {
         return allows_integral_to_floating<Source, Target>();
-    } else if constexpr (std::is_floating_point_v<Source> &&
-                         std::is_floating_point_v<Target>) {
+    } else if constexpr (
+        std::is_floating_point_v<Source> && std::is_floating_point_v<Target>
+    ) {
         return allows_floating_widening<Source, Target>();
     } else {
         return false;

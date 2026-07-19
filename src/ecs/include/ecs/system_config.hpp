@@ -235,8 +235,7 @@ inline SystemConfigs all(std::convertible_to<SystemConfigs> auto&&... configs) {
                 std::make_move_iterator(config.systems.end())
             );
         }(),
-        ...
-    );
+        ...);
     return SystemConfigs {std::move(systems)};
 }
 

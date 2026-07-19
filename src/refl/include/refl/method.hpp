@@ -210,8 +210,7 @@ class MethodImpl : public Method {
                 }
                 score += score_of(rank);
             }(),
-            ...
-        );
+            ...);
         if (!matched) {
             return std::nullopt;
         }
@@ -339,8 +338,7 @@ class MethodImpl : public Method {
                         describe_invalid_param<Offset, ArgIdx>(args, kind);
                 }
             }(),
-            ...
-        );
+            ...);
         return message;
     }
 
