@@ -197,6 +197,9 @@ TEST_CASE("Val releases heap storage when construction fails", "[refl][val]") {
 
         REQUIRE_THROWS_AS(
             [&] {
+                // This copy is the operation under test and is expected to
+                // throw.
+                // NOLINTNEXTLINE(performance-unnecessary-copy-initialization)
                 Val copy = source;
                 (void)copy;
             }(),
@@ -299,6 +302,9 @@ TEST_CASE("Val handles non-copyable type capabilities", "[refl][val]") {
         REQUIRE(val1.get<MoveOnlyType>().value == 42);
         REQUIRE_THROWS_AS(
             [&] {
+                // This copy is the operation under test and is expected to
+                // throw.
+                // NOLINTNEXTLINE(performance-unnecessary-copy-initialization)
                 Val copied = val1;
                 (void)copied;
             }(),
@@ -343,6 +349,9 @@ TEST_CASE("Val handles non-copyable type capabilities", "[refl][val]") {
         REQUIRE(moved.get<NonCopyableNonMovableType>().value == 42);
         REQUIRE_THROWS_AS(
             [&] {
+                // This copy is the operation under test and is expected to
+                // throw.
+                // NOLINTNEXTLINE(performance-unnecessary-copy-initialization)
                 Val copied = moved;
                 (void)copied;
             }(),
@@ -364,6 +373,8 @@ TEST_CASE("Val safely takes ownership from Ref", "[refl][val]") {
     auto copied = Val::copy(Ref(source));
     REQUIRE(copied);
     REQUIRE(copied->get<int>() == 42);
+    // Mutating the source verifies that the copied value owns independent
+    // storage. NOLINTNEXTLINE(clang-analyzer-deadcode.DeadStores)
     source = 7;
     REQUIRE(copied->get<int>() == 42);
 

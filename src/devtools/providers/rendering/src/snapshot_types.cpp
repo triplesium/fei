@@ -1,7 +1,5 @@
 #include "snapshot_types.hpp"
 
-#include <utility>
-
 namespace fei::devtools::rendering {
 
 RenderScheduleSnapshot

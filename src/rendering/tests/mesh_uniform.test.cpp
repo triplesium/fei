@@ -43,7 +43,10 @@ TEST_CASE(
     REQUIRE(mesh_uniforms.stride == 128);
     REQUIRE(mesh_uniforms.capacity == 4);
     REQUIRE(mesh_uniforms.entries.size() == 3);
-    REQUIRE(mesh_uniforms.upload_data.size() == 3 * 128);
+    REQUIRE(
+        mesh_uniforms.upload_data.size() ==
+        entities.size() * mesh_uniforms.stride
+    );
     REQUIRE(world.resource<RenderQueue>().pending_buffer_writes() == 1);
 
     REQUIRE(device.resource_layout_descriptions.size() == 1);
@@ -53,10 +56,14 @@ TEST_CASE(
     ));
 
     REQUIRE(device.buffer_descriptions.size() == 1);
-    CHECK(device.buffer_descriptions[0].size == 4 * 128);
+    CHECK(
+        device.buffer_descriptions[0].size ==
+        mesh_uniforms.capacity * mesh_uniforms.stride
+    );
     CHECK(device.buffer_descriptions[0].usages == BufferUsages::Uniform);
 
     std::vector<uint32> offsets;
+    offsets.reserve(entities.size());
     for (const auto entity : entities) {
         offsets.push_back(mesh_uniforms.entries.at(entity).dynamic_offset);
     }

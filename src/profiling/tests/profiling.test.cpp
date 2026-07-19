@@ -5,13 +5,8 @@
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <chrono>
 #include <cstdint>
-#include <filesystem>
-#include <fstream>
-#include <sstream>
-#include <string>
-#include <thread>
+#include <utility>
 
 TEST_CASE(
     "frame profile accumulator reports deterministic rolling statistics",
@@ -83,7 +78,7 @@ TEST_CASE(
         samples.back().frame ==
         FrameProfileHistory::Capacity + extra_samples - 1
     );
-    REQUIRE(samples.front().duration_ns == extra_samples + 1);
+    REQUIRE(std::cmp_equal(samples.front().duration_ns, extra_samples + 1));
 
     history.clear();
     REQUIRE(history.samples().empty());

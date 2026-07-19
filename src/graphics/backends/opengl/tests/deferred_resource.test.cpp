@@ -1,7 +1,6 @@
 #include "graphics_opengl/deferred_resource.hpp"
 
 #include "graphics_opengl/buffer.hpp"
-#include "graphics_opengl/framebuffer.hpp"
 #include "graphics_opengl/graphics_device.hpp"
 #include "graphics_opengl/resource.hpp"
 #include "graphics_opengl/sampler.hpp"
