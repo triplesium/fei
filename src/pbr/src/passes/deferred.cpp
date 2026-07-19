@@ -35,7 +35,8 @@ void DeferredRenderPlugin::setup(App& app) {
             chain(
                 FEI_NAMED_SYSTEM(direct_lighting_pass),
                 FEI_NAMED_SYSTEM(indirect_lighting_pass),
-                FEI_NAMED_SYSTEM(composite_pass)
+                FEI_NAMED_SYSTEM(composite_pass),
+                FEI_NAMED_SYSTEM(render_skybox_pass)
             ) | in_set<RenderingSystems::MainPass>(),
             FEI_NAMED_SYSTEM(present_composite_pass) |
                 in_set<RenderingSystems::PostProcess>()

@@ -6,7 +6,7 @@ public struct OrthonormalBasis {
 
     public static OrthonormalBasis from_normal(float3 normal) {
         float3 guide = float3(0.0, 1.0, 0.0);
-        if (abs(dot(normal, guide)) == 1.0) {
+        if (abs(dot(normal, guide)) > 0.999) {
             guide = float3(0.0, 0.0, 1.0);
         }
 
@@ -17,7 +17,7 @@ public struct OrthonormalBasis {
     }
 
     public float3 cone_direction(float3 normal, float3 local_direction) {
-        float3 direction = normal;
+        float3 direction = local_direction.y * normal;
         direction += local_direction.x * right + local_direction.z * up;
         return normalize(direction);
     }

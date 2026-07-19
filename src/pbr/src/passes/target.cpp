@@ -113,7 +113,7 @@ void prepare_deferred_view_targets(
         render_texture_desc(width, height, PixelFormat::Rgba16Float)
     );
     targets->composite = device->create_texture(
-        render_texture_desc(width, height, PixelFormat::Rgba8Unorm)
+        render_texture_desc(width, height, PixelFormat::Rgba16Float)
     );
 }
 

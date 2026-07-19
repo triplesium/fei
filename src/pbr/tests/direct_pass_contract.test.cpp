@@ -2,6 +2,7 @@
 #include "pbr/light.hpp"
 #include "pbr/passes/deferred_internal.hpp"
 #include "pbr/passes/target.hpp"
+#include "pbr/skybox.hpp"
 #include "pbr/vxgi.hpp"
 #include "test_graphics_device.hpp"
 
@@ -37,6 +38,7 @@ class ContractCommandBuffer : public CommandBuffer {
     uint32 end_calls {0};
     uint32 end_render_pass_calls {0};
     uint32 draw_calls {0};
+    std::vector<std::pair<std::size_t, std::size_t>> draws;
 
     void begin() override { ++begin_calls; }
     void end() override { ++end_calls; }
@@ -62,7 +64,10 @@ class ContractCommandBuffer : public CommandBuffer {
         const void*,
         std::size_t
     ) override {}
-    void draw(std::size_t, std::size_t) override { ++draw_calls; }
+    void draw(std::size_t start, std::size_t count) override {
+        ++draw_calls;
+        draws.emplace_back(start, count);
+    }
     void draw_indexed(std::size_t, uint32, int32) override {}
     void dispatch(
         std::size_t group_x,
@@ -412,6 +417,77 @@ TEST_CASE(
     CHECK(test.commands->resource_sets[2].first == 0);
     CHECK(test.device->resource_set_descriptions.size() == 2);
     CHECK(test.world.resource<RenderResourceSetCache>().stats().hits == 1);
+}
+
+TEST_CASE(
+    "Skybox pass loads HDR scene color and camera depth",
+    "[pbr][pass][contract][skybox]"
+) {
+    PassTestWorld test;
+    test.world.add_resource(
+        Window {
+            .glfw_window = nullptr,
+            .width = 1280,
+            .height = 720,
+        }
+    );
+    test.world.add_resource(RenderTarget {});
+    test.world.add_resource(DeferredViewTargets {});
+    test.world.run_system_once(setup_render_target);
+    test.world.run_system_once(prepare_deferred_view_targets);
+
+    auto layout =
+        test.device->create_resource_layout(ResourceLayoutDescription {});
+    auto create_set = [&]() {
+        return test.device->create_resource_set(
+            ResourceSetDescription {
+                .layout = layout,
+                .resources = {},
+            }
+        );
+    };
+    auto skybox_view_uniform_set = create_set();
+    auto skybox_view_set = create_set();
+    auto pipeline = std::make_shared<FakePipeline>();
+    test.world.add_resource(SkyboxResource {.pipeline = pipeline});
+
+    const auto camera = test.world.entity();
+    test.world.add_component(camera, Camera3d {});
+    test.world.add_component(camera, Skybox {});
+    test.world.add_component(
+        camera,
+        SkyboxViewResourceSet {
+            .view_resource_set = skybox_view_uniform_set,
+            .resource_set = skybox_view_set,
+        }
+    );
+
+    test.world.run_system_once(render_skybox_pass);
+
+    REQUIRE(test.commands->render_passes.size() == 1);
+    const auto& pass = test.commands->render_passes.front();
+    const auto& targets = test.world.resource<DeferredViewTargets>();
+    const auto& target = test.world.resource<RenderTarget>();
+    REQUIRE(pass.color_attachments.size() == 1);
+    CHECK(pass.color_attachments[0].texture == targets.composite);
+    CHECK(pass.color_attachments[0].load_op == LoadOp::Load);
+    REQUIRE(pass.depth_stencil_attachment);
+    CHECK(pass.depth_stencil_attachment->texture == target.depth_texture);
+    CHECK(pass.depth_stencil_attachment->depth_load_op == LoadOp::Load);
+    REQUIRE(test.commands->viewports.size() == 1);
+    CHECK(test.commands->viewports[0].width == 1280);
+    CHECK(test.commands->viewports[0].height == 720);
+    REQUIRE(test.commands->render_pipelines.size() == 1);
+    CHECK(test.commands->render_pipelines[0] == pipeline);
+    REQUIRE(test.commands->resource_sets.size() == 2);
+    CHECK(
+        test.commands->resource_sets[0] ==
+        std::pair {0U, skybox_view_uniform_set}
+    );
+    CHECK(test.commands->resource_sets[1] == std::pair {1U, skybox_view_set});
+    REQUIRE(test.commands->draws.size() == 1);
+    CHECK(test.commands->draws[0] == std::pair {0ULL, 3ULL});
+    CHECK(test.commands->end_render_pass_calls == 1);
 }
 
 TEST_CASE(

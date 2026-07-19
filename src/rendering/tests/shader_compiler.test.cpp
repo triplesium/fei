@@ -253,6 +253,74 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID)
 }
 
 TEST_CASE(
+    "SlangLibraryShaderCompiler uses sanitized imported uniform block names",
+    "[rendering][shader-compiler][slang]"
+) {
+    auto root = std::filesystem::current_path() / "build" / "test" /
+                "slang-library-shader-compiler-uniform-buffer-names";
+    std::filesystem::remove_all(root);
+    auto source_path = root / "shader.slang";
+    auto module_path = root / "test" / "environment.slang";
+    write_text_file(
+        module_path,
+        R"(
+namespace test.environment {
+
+public struct EnvironmentUniform {
+    public float intensity;
+};
+
+}
+)"
+    );
+    write_text_file(
+        source_path,
+        R"(
+import test.environment;
+
+using namespace test.environment;
+
+layout(set = 0, binding = 0)
+ConstantBuffer<EnvironmentUniform> EnvironmentMap;
+
+[shader("fragment")]
+float4 fragment_main() : SV_Target0
+{
+    return float4(EnvironmentMap.intensity);
+}
+)"
+    );
+
+    ShaderCompileRequest request {
+        .source_path = source_path,
+        .source_root = root,
+        .logical_path = "shader.slang",
+        .stage = ShaderStages::Fragment,
+        .entry = "fragment_main",
+    };
+
+    SlangLibraryShaderCompiler compiler;
+    auto output = compiler.compile(request);
+
+    if (!output) {
+        INFO(output.error().message);
+        INFO(output.error().diagnostics);
+    }
+    REQUIRE(output.has_value());
+
+    const auto& environment =
+        require_resource(output->description, "EnvironmentMap");
+    CHECK(environment.kind == ResourceKind::UniformBuffer);
+    CHECK(environment.backend_name.find('.') == std::string::npos);
+    INFO(output->description.source);
+    CHECK(
+        output->description.source.find(
+            "uniform " + environment.backend_name
+        ) != std::string::npos
+    );
+}
+
+TEST_CASE(
     "SlangLibraryShaderCompiler tracks imported Slang modules",
     "[rendering][shader-compiler][slang]"
 ) {

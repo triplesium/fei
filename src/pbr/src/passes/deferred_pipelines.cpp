@@ -185,7 +185,7 @@ void setup_deferred_pipelines(
                         pipelines->composite_resource_layout,
                     },
                 .output_description =
-                    single_color_output(PixelFormat::Rgba8Unorm),
+                    single_color_output(PixelFormat::Rgba16Float),
             }
         );
 

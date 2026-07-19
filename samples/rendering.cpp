@@ -122,6 +122,10 @@ void setup(
         },
         GeneratedEquirectEnvironmentMap {
             .equirect_image = asset_server->load<Image>("autumn_field_4k.hdr"),
+        },
+        EnvironmentMapLight {},
+        Skybox {
+            .equirect_map = asset_server->load<Image>("autumn_field_4k.hdr"),
         }
     );
 
@@ -147,11 +151,6 @@ void setup(
         MeshMaterial3d {.material = color_only_material_handle},
         Transform3d {},
         LightCube {}
-    );
-    commands.spawn().add(
-        Skybox {
-            .equirect_map = asset_server->load<Image>("autumn_field_4k.hdr"),
-        }
     );
 }
 

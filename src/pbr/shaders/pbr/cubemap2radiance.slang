@@ -18,6 +18,10 @@ layout(set = 0, binding = 3) ConstantBuffer<FilteringConstants> Constants;
 
 static const uint SAMPLE_COUNT = 1024u;
 
+bool is_finite_color(float3 value) {
+    return all(value == value) && all(abs(value) < float3(1e20));
+}
+
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
@@ -38,6 +42,10 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
     if (Constants.roughness < 0.01) {
         float3 radiance =
             cubemap.SampleLevel(cubemap_sampler, reflection, 0.0).rgb;
+        if (!is_finite_color(radiance)) {
+            radiance = float3(0.0);
+        }
+        radiance = max(radiance, float3(0.0));
         output_texture[dispatch_thread_id] = float4(radiance, 1.0);
         return;
     }
@@ -57,11 +65,26 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
             float mip_level = calculate_env_map_lod(pdf, 1024.0, SAMPLE_COUNT);
             float3 sample_color =
                 cubemap.SampleLevel(cubemap_sampler, light, mip_level).rgb;
-            color += sample_color * n_dot_l;
-            total_weight += n_dot_l;
+            if (is_finite_color(sample_color)) {
+                sample_color = max(sample_color, float3(0.0));
+                color += sample_color * n_dot_l;
+                total_weight += n_dot_l;
+            }
         }
     }
 
-    color /= total_weight;
+    if (total_weight > 1e-5) {
+        color /= total_weight;
+    } else {
+        color = cubemap.SampleLevel(
+            cubemap_sampler,
+            reflection,
+            0.0
+        ).rgb;
+    }
+    if (!is_finite_color(color)) {
+        color = float3(0.0);
+    }
+    color = max(color, float3(0.0));
     output_texture[dispatch_thread_id] = float4(color, 1.0);
 }

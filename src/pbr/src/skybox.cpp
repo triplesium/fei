@@ -1,14 +1,16 @@
 #include "pbr/skybox.hpp"
 
 #include "asset/assets.hpp"
+#include "core/camera.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
+#include "graphics/render_pass.hpp"
 #include "pbr/cubemap.hpp"
-#include "pbr/mesh_view.hpp"
 #include "pbr/plugin.hpp"
-#include "rendering/mesh/mesh.hpp"
 #include "rendering/plugin.hpp"
+#include "rendering/render_queue.hpp"
 #include "rendering/shader_cache.hpp"
+#include "rendering/view.hpp"
 
 #include <memory>
 #include <utility>
@@ -23,7 +25,7 @@ OutputDescription render_target_output_description() {
         .color_attachments =
             {
                 OutputAttachmentDescription {
-                    .format = PixelFormat::Rgba8Unorm,
+                    .format = PixelFormat::Rgba16Float,
                 },
             },
         .depth_stencil_attachment =
@@ -38,30 +40,9 @@ OutputDescription render_target_output_description() {
 
 void setup_skybox_resources(
     ResRO<GraphicsDevice> device,
-    ResRW<Assets<Mesh>> meshes,
     ResRW<SkyboxResource> skybox_resource,
-    ResRW<ShaderCache> shader_cache,
-    ResRO<MeshViewLayout> mesh_view_layout
+    ResRW<ShaderCache> shader_cache
 ) {
-    auto mesh = std::make_unique<Mesh>(RenderPrimitive::Triangles);
-    std::vector<std::array<float, 3>> positions {
-        {-1.0f, 1.0f, -1.0f},  {-1.0f, -1.0f, -1.0f}, {1.0f, -1.0f, -1.0f},
-        {1.0f, -1.0f, -1.0f},  {1.0f, 1.0f, -1.0f},   {-1.0f, 1.0f, -1.0f},
-        {-1.0f, -1.0f, 1.0f},  {-1.0f, -1.0f, -1.0f}, {-1.0f, 1.0f, -1.0f},
-        {-1.0f, 1.0f, -1.0f},  {-1.0f, 1.0f, 1.0f},   {-1.0f, -1.0f, 1.0f},
-        {1.0f, -1.0f, -1.0f},  {1.0f, -1.0f, 1.0f},   {1.0f, 1.0f, 1.0f},
-        {1.0f, 1.0f, 1.0f},    {1.0f, 1.0f, -1.0f},   {1.0f, -1.0f, -1.0f},
-        {-1.0f, -1.0f, 1.0f},  {-1.0f, 1.0f, 1.0f},   {1.0f, 1.0f, 1.0f},
-        {1.0f, 1.0f, 1.0f},    {1.0f, -1.0f, 1.0f},   {-1.0f, -1.0f, 1.0f},
-        {-1.0f, 1.0f, -1.0f},  {1.0f, 1.0f, -1.0f},   {1.0f, 1.0f, 1.0f},
-        {1.0f, 1.0f, 1.0f},    {-1.0f, 1.0f, 1.0f},   {-1.0f, 1.0f, -1.0f},
-        {-1.0f, -1.0f, -1.0f}, {-1.0f, -1.0f, 1.0f},  {1.0f, -1.0f, -1.0f},
-        {1.0f, -1.0f, -1.0f},  {-1.0f, -1.0f, 1.0f},  {1.0f, -1.0f, 1.0f}
-    };
-    mesh->insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    auto vertex_layout =
-        mesh->vertex_buffer_layout().to_vertex_layout_description();
-    skybox_resource->mesh = meshes->add(std::move(mesh));
     skybox_resource->shader_modules = {
         shader_cache->get_or_compile(
             AssetPath("shader://pbr/skybox.slang"),
@@ -74,6 +55,13 @@ void setup_skybox_resources(
             {}
         ),
     };
+
+    skybox_resource->view_resource_layout = device->create_resource_layout(
+        ResourceLayoutDescription::sequencial(
+            ShaderStages::Vertex,
+            {uniform_buffer("View")}
+        )
+    );
 
     skybox_resource->resource_layout = device->create_resource_layout(
         ResourceLayoutDescription {
@@ -89,6 +77,12 @@ void setup_skybox_resources(
                     .name = "skybox_sampler",
                     .kind = ResourceKind::Sampler,
                     .stages = ShaderStages::Fragment,
+                },
+                {
+                    .binding = 2,
+                    .name = "Skybox",
+                    .kind = ResourceKind::UniformBuffer,
+                    .stages = {ShaderStages::Vertex, ShaderStages::Fragment},
                 }
             },
         }
@@ -103,17 +97,19 @@ void setup_skybox_resources(
     skybox_resource->pipeline = device->create_render_pipeline(
         RenderPipelineDescription {
             .depth_stencil_state =
-                DepthStencilStateDescription::DepthOnlyLessEqual,
-            .rasterizer_state = {},
+                DepthStencilStateDescription::DepthOnlyLessEqualRead,
+            .rasterizer_state =
+                RasterizerStateDescription {
+                    .cull_mode = CullMode::None,
+                },
             .render_primitive = RenderPrimitive::Triangles,
             .shader_program =
                 ShaderProgramDescription {
-                    .vertex_layouts = {std::move(vertex_layout)},
                     .shaders = skybox_resource->shader_modules,
                 },
             .resource_layouts =
                 {
-                    mesh_view_layout->layout,
+                    skybox_resource->view_resource_layout,
                     skybox_resource->resource_layout,
                 },
             .output_description = render_target_output_description(),
@@ -122,36 +118,146 @@ void setup_skybox_resources(
 }
 
 void prepare_skybox_resources(
-    Query<const Skybox> query,
-    ResRW<SkyboxResource> skybox_resource,
+    Query<
+        Entity,
+        const Skybox,
+        const ViewUniformBuffer,
+        SkyboxViewResourceSet>::Filter<With<Camera3d>> existing_views,
+    Query<Entity, const Skybox, const ViewUniformBuffer>::
+        Filter<With<Camera3d>, Without<SkyboxViewResourceSet>> new_views,
+    ResRO<SkyboxResource> skybox_resource,
     ResRW<EquirectToCubemap> equirect_to_cubemap,
     ResRO<GraphicsDevice> device,
-    ResRO<Assets<Image>> images
+    ResRO<Assets<Image>> images,
+    ResRO<RenderQueue> render_queue,
+    Commands commands
 ) {
-    for (auto [skybox] : query) {
+    auto prepare = [&](const Skybox& skybox,
+                       const ViewUniformBuffer& view_uniform_buffer,
+                       SkyboxViewResourceSet& view_resources) {
         auto cubemap = equirect_to_cubemap->prepare_cubemap(
             *device,
             *images,
             skybox.equirect_map
         );
-        if (!cubemap || !skybox_resource->resource_layout ||
-            !skybox_resource->sampler) {
-            continue;
-        }
-        if (skybox_resource->resource_set &&
-            skybox_resource->resource_set_image == skybox.equirect_map.id()) {
-            continue;
+        if (!cubemap || !skybox_resource->view_resource_layout ||
+            !skybox_resource->resource_layout || !skybox_resource->sampler) {
+            view_resources.resource_set.reset();
+            view_resources.texture = nullptr;
+            return false;
         }
 
-        skybox_resource->resource_set = device->create_resource_set(
-            ResourceSetDescription {
-                .layout = skybox_resource->resource_layout,
-                .resources = {*cubemap, skybox_resource->sampler},
-                .name = "skybox",
-            }
+        if (!view_resources.uniform_buffer) {
+            view_resources.uniform_buffer = device->create_buffer(
+                BufferDescription {
+                    .size = sizeof(SkyboxUniform),
+                    .usages = BufferUsages::Uniform,
+                }
+            );
+        }
+
+        auto uniform = SkyboxUniform {
+            .environment_from_world = skybox.rotation.inversed().to_matrix(),
+            .brightness = skybox.brightness,
+        };
+        render_queue->write_buffer(
+            view_resources.uniform_buffer,
+            0,
+            &uniform,
+            sizeof(uniform)
         );
-        skybox_resource->resource_set_image = skybox.equirect_map.id();
+
+        if (!view_resources.view_resource_set ||
+            view_resources.view_buffer != view_uniform_buffer.buffer.get()) {
+            view_resources.view_resource_set = device->create_resource_set(
+                ResourceSetDescription {
+                    .layout = skybox_resource->view_resource_layout,
+                    .resources = {view_uniform_buffer.buffer},
+                    .name = "skybox.view",
+                }
+            );
+            view_resources.view_buffer = view_uniform_buffer.buffer.get();
+        }
+
+        if (!view_resources.resource_set ||
+            view_resources.texture != cubemap->get()) {
+            view_resources.resource_set = device->create_resource_set(
+                ResourceSetDescription {
+                    .layout = skybox_resource->resource_layout,
+                    .resources =
+                        {*cubemap,
+                         skybox_resource->sampler,
+                         view_resources.uniform_buffer},
+                    .name = "skybox",
+                }
+            );
+            view_resources.texture = cubemap->get();
+        }
+        return true;
+    };
+
+    for (auto [entity, skybox, view_uniform_buffer, view_resources_component] :
+         existing_views) {
+        (void)entity;
+        prepare(skybox, view_uniform_buffer, view_resources_component.write());
     }
+
+    for (auto [entity, skybox, view_uniform_buffer] : new_views) {
+        SkyboxViewResourceSet view_resources;
+        if (prepare(skybox, view_uniform_buffer, view_resources)) {
+            commands.entity(entity).add(std::move(view_resources));
+        }
+    }
+}
+
+void render_skybox_pass(
+    Query<const Skybox, const SkyboxViewResourceSet>::Filter<With<Camera3d>>
+        query,
+    ResRW<RenderFrameContext> frame,
+    ResRO<RenderTarget> target,
+    ResRO<DeferredViewTargets> targets,
+    ResRO<SkyboxResource> skybox_resource
+) {
+    auto* command_buffer = frame->command_buffer();
+    if (!command_buffer || !target->valid() || !targets->valid() ||
+        !skybox_resource->pipeline || query.empty()) {
+        return;
+    }
+
+    auto [skybox, skybox_view_resources] = query.first();
+    (void)skybox;
+    if (!skybox_view_resources.resource_set ||
+        !skybox_view_resources.view_resource_set) {
+        return;
+    }
+
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments =
+                {
+                    RenderPassColorAttachment {
+                        .texture = targets->composite,
+                        .load_op = LoadOp::Load,
+                    },
+                },
+            .depth_stencil_attachment = RenderPassDepthStencilAttachment {
+                .texture = target->depth_texture,
+                .depth_load_op = LoadOp::Load,
+                .stencil_load_op = LoadOp::DontCare,
+                .depth_store_op = StoreOp::Store,
+                .stencil_store_op = StoreOp::DontCare,
+            },
+        }
+    );
+    command_buffer->set_viewport(0, 0, targets->width, targets->height);
+    command_buffer->set_render_pipeline(skybox_resource->pipeline);
+    command_buffer->set_resource_set(
+        0,
+        skybox_view_resources.view_resource_set
+    );
+    command_buffer->set_resource_set(1, skybox_view_resources.resource_set);
+    command_buffer->draw(0, 3);
+    command_buffer->end_render_pass();
 }
 
 void SkyboxPlugin::setup(App& app) {

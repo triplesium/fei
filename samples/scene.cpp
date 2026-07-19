@@ -202,6 +202,12 @@ void setup(
         camera_transform,
         GeneratedEquirectEnvironmentMap {
             .equirect_image = asset_server->load<Image>("autumn_field_4k.hdr"),
+        },
+        EnvironmentMapLight {
+            .intensity = 0.5f,
+        },
+        Skybox {
+            .equirect_map = asset_server->load<Image>("autumn_field_4k.hdr"),
         }
     );
 
@@ -218,19 +224,14 @@ void setup(
         },
         directional_light_transform
     );
-    commands.spawn().add(
-        Skybox {
-            .equirect_map = asset_server->load<Image>("autumn_field_4k.hdr"),
-        }
-    );
-
     auto camera_script =
         asset_server->load<LuaScriptAsset>("camera_control.lua");
     lua_scripts->queue_asset(camera_script);
 }
 
 void configure_vxgi(ResRW<VxgiVolumes> volumes) {
-    volumes->config.voxel_resolution = 64;
+    volumes->config.voxel_resolution = 128;
+    volumes->config.bounce_strength = 1.0f;
 }
 
 void update_directional_light(
@@ -250,6 +251,8 @@ void update_directional_light(
 void update_imgui(
     Query<DirectionalLight, Transform3d> query_directional_lights,
     Query<PointLight, Transform3d> query_point_lights,
+    Query<EnvironmentMapLight> query_environment_lights,
+    ResRW<VxgiVolumes> vxgi_volumes,
     ResRO<GraphicsDevice> graphics_device,
     WorldRef world
 ) {
@@ -261,6 +264,28 @@ void update_imgui(
     draw_graphics_cache_stats(*graphics_device);
     ImGui::End();
 
+    for (auto [light_component] : query_environment_lights) {
+        auto& light = light_component.write();
+        ImGui::Begin("Environment Map Light");
+        ImGui::DragFloat("Intensity", &light.intensity, 0.01f, 0.0f, 10.0f);
+        ImGui::End();
+    }
+    ImGui::Begin("VXGI");
+    ImGui::DragFloat(
+        "Bounce Strength",
+        &vxgi_volumes->config.bounce_strength,
+        0.01f,
+        0.0f,
+        2.0f
+    );
+    ImGui::DragFloat(
+        "Skylight Leaking",
+        &vxgi_volumes->config.skylight_leaking,
+        0.01f,
+        0.0f,
+        1.0f
+    );
+    ImGui::End();
     for (auto [light_component, transform_component] :
          query_directional_lights) {
         auto& light = light_component.write();

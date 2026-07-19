@@ -4,6 +4,7 @@
 #include "ecs/commands.hpp"
 #include "pbr/environment_map.hpp"
 #include "pbr/lut.hpp"
+#include "rendering/render_queue.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -34,7 +35,7 @@ GpuImage test_image(FakeGraphicsDevice& device, TextureType texture_type) {
 } // namespace
 
 TEST_CASE(
-    "prepare_mesh_view_resource_set reuses stable camera resource sets",
+    "prepare_mesh_view_resource_set covers camera and shadow views",
     "[pbr][mesh_view]"
 ) {
     World world;
@@ -44,6 +45,7 @@ TEST_CASE(
         dynamic_cast<FakeGraphicsDevice&>(world.resource<GraphicsDevice>());
 
     world.add_resource(MeshViewLayout {});
+    world.add_resource(RenderQueue {});
     world.add_resource(
         GpuLUTs {
             .brdf_lut = test_image(device, TextureType::Texture2D),
@@ -51,17 +53,17 @@ TEST_CASE(
     );
     world.add_resource(MeshViewResourceSet {});
 
-    const auto env_entity = world.entity();
+    const auto camera = world.entity();
+    world.add_component(camera, Camera3d {});
     world.add_component(
-        env_entity,
+        camera,
         GpuEnvironmentMap {
             .environment_cubemap = test_image(device, TextureType::Texture2D),
             .irradiance_cubemap = test_image(device, TextureType::Texture2D),
             .radiance_cubemap = test_image(device, TextureType::Texture2D),
         }
     );
-
-    const auto camera = world.entity();
+    world.add_component(camera, EnvironmentMapLight {});
     world.add_component(
         camera,
         ViewUniformBuffer {
@@ -74,19 +76,57 @@ TEST_CASE(
         }
     );
 
+    const auto shadow_view = world.entity();
+    world.add_component(
+        shadow_view,
+        ViewUniformBuffer {
+            .buffer = device.create_buffer(
+                BufferDescription {
+                    .size = sizeof(ViewUniform),
+                    .usages = BufferUsages::Uniform,
+                }
+            ),
+        }
+    );
+
     world.run_system_once(init_mesh_view_layout);
-    REQUIRE(device.sampler_descriptions.size() == 1);
+    REQUIRE(device.sampler_descriptions.size() == 2);
+    REQUIRE(device.resource_layout_descriptions.size() == 1);
+    const auto& mesh_view_elements =
+        device.resource_layout_descriptions.front().elements;
+    REQUIRE(mesh_view_elements.size() == 7);
+    CHECK(mesh_view_elements[4].name == "brdf_lut");
+    CHECK(mesh_view_elements[4].kind == ResourceKind::TextureReadOnly);
+    CHECK(mesh_view_elements[5].name == "brdf_sampler");
+    CHECK(mesh_view_elements[5].kind == ResourceKind::Sampler);
+    CHECK(mesh_view_elements[6].name == "EnvironmentMap");
+    CHECK(mesh_view_elements[6].kind == ResourceKind::UniformBuffer);
 
     world.run_system_once(prepare_mesh_view_resource_set);
     world.resource<CommandsQueue>().execute(world);
 
     REQUIRE(world.has_component<MeshViewResourceSet>(camera));
-    REQUIRE(device.resource_set_descriptions.size() == 1);
+    REQUIRE(world.has_component<MeshViewResourceSet>(shadow_view));
+    REQUIRE(device.resource_set_descriptions.size() == 2);
+    const auto& mesh_view_layout = world.resource<MeshViewLayout>();
+    for (const auto& resource_set : device.resource_set_descriptions) {
+        REQUIRE(resource_set.resources.size() == 7);
+        CHECK(
+            resource_set.resources[5].get() ==
+            mesh_view_layout.brdf_sampler.get()
+        );
+    }
+    REQUIRE(world.get_component<MeshViewResourceSet>(camera)
+                .environment_uniform_buffer);
+    REQUIRE(world.get_component<MeshViewResourceSet>(shadow_view)
+                .environment_uniform_buffer);
+    REQUIRE(world.resource<RenderQueue>().pending_buffer_writes() == 2);
 
     world.run_system_once(prepare_mesh_view_resource_set);
     world.resource<CommandsQueue>().execute(world);
 
-    CHECK(device.sampler_descriptions.size() == 1);
-    CHECK(device.resource_set_descriptions.size() == 1);
+    CHECK(device.sampler_descriptions.size() == 2);
+    CHECK(device.resource_set_descriptions.size() == 2);
+    CHECK(world.resource<RenderQueue>().pending_buffer_writes() == 4);
     CHECK(world.resource<MeshViewResourceSet>().resource_set);
 }

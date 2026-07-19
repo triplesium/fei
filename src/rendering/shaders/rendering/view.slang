@@ -2,6 +2,8 @@ public struct ViewUniform {
     public float4x4 clip_from_world;
     public float4x4 view_from_world;
     public float4x4 clip_from_view;
+    public float4x4 world_from_view;
+    public float4x4 view_from_clip;
     public float3 world_position;
 
     public float4 position_cs(float3 position_ws) {

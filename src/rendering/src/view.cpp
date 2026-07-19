@@ -47,6 +47,8 @@ void prepare_camera_view_uniform(
             .clip_from_world = clip_space_transform * logical_clip_from_world,
             .view_from_world = view,
             .clip_from_view = clip_space_transform * projection,
+            .world_from_view = view.inverse_affine(),
+            .view_from_clip = (clip_space_transform * projection).inverse(),
             .world_position = transform.position,
         };
         auto& view_uniform_buffer = view_uniform_buffer_component.write();

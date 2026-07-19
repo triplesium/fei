@@ -190,13 +190,13 @@ read_identifier(std::string_view source, size_t offset, size_t& end) {
 }
 
 std::vector<StorageBufferBlockDeclaration>
-find_storage_buffer_blocks(std::string_view source) {
+find_buffer_blocks(std::string_view source, std::string_view keyword) {
     std::vector<StorageBufferBlockDeclaration> declarations;
     size_t offset = 0;
-    while ((offset = source.find("buffer", offset)) != std::string_view::npos) {
+    while ((offset = source.find(keyword, offset)) != std::string_view::npos) {
         const auto previous_is_identifier =
             offset > 0 && is_identifier_char(source[offset - 1]);
-        const auto after_keyword = offset + std::string_view("buffer").size();
+        const auto after_keyword = offset + keyword.size();
         const auto next_is_identifier =
             after_keyword < source.size() &&
             is_identifier_char(source[after_keyword]);
@@ -278,7 +278,7 @@ void rewrite_opengl_storage_buffer_blocks(
     std::string& source,
     std::vector<ShaderResourceBinding>& bindings
 ) {
-    auto declarations = find_storage_buffer_blocks(source);
+    auto declarations = find_buffer_blocks(source, "buffer");
     std::vector<bool> used(declarations.size(), false);
     std::vector<SourceReplacement> replacements;
 
@@ -336,6 +336,53 @@ void rewrite_opengl_storage_buffer_blocks(
             replacement.length,
             replacement.value
         );
+    }
+}
+
+// Slang can preserve namespace qualification in a SPIR-V uniform block name
+// (for example, `pbr.environment_map.EnvironmentMapUniform_std140`), while
+// SPIRV-Cross sanitizes that name when it emits GLSL. glGetUniformBlockIndex
+// only accepts the final GLSL identifier, so reconcile artifact reflection
+// after code generation instead of assuming that the SPIR-V name is usable.
+// See docs/shader-compilation.md for the full pipeline and name mapping.
+void update_opengl_uniform_buffer_names(
+    std::string_view source,
+    std::vector<ShaderResourceBinding>& bindings
+) {
+    auto declarations = find_buffer_blocks(source, "uniform");
+    std::vector<bool> used(declarations.size(), false);
+
+    for (auto& binding : bindings) {
+        if (binding.kind != ResourceKind::UniformBuffer) {
+            continue;
+        }
+
+        auto declaration_index = declarations.size();
+        for (size_t i = 0; i < declarations.size(); ++i) {
+            if (!used[i] &&
+                resource_name_matches(declarations[i].instance_name, binding)) {
+                declaration_index = i;
+                break;
+            }
+        }
+        if (declaration_index == declarations.size()) {
+            for (size_t i = 0; i < declarations.size(); ++i) {
+                if (!used[i] && resource_name_matches(
+                                    declarations[i].block_name,
+                                    binding
+                                )) {
+                    declaration_index = i;
+                    break;
+                }
+            }
+        }
+        if (declaration_index == declarations.size()) {
+            continue;
+        }
+
+        used[declaration_index] = true;
+        binding.backend_name = declarations[declaration_index].block_name;
+        binding.backend_names = {binding.backend_name};
     }
 }
 
@@ -730,6 +777,7 @@ generate_shader_artifacts(const ShaderArtifactGenerationInput& input) {
     auto resources =
         make_resource_bindings(compiler, logical_names, opengl_names);
     auto glsl = compile_opengl_glsl(compiler);
+    update_opengl_uniform_buffer_names(glsl, resources);
     rewrite_opengl_storage_buffer_blocks(glsl, resources);
 
     return ShaderArtifactGenerationOutput {
@@ -739,7 +787,7 @@ generate_shader_artifacts(const ShaderArtifactGenerationInput& input) {
 }
 
 std::string shader_artifact_cache_identity() {
-    constexpr std::string_view artifact_version = "fei-shader-artifact-v1";
+    constexpr std::string_view artifact_version = "fei-shader-artifact-v2";
     auto* spirv_cross_version = spvc_get_commit_revision_and_timestamp();
     if (spirv_cross_version == nullptr) {
         return std::string(artifact_version);

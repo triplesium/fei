@@ -1,3 +1,4 @@
+#include "pbr/environment_map.hpp"
 #include "pbr/light.hpp"
 #include "pbr/material.hpp"
 #include "pbr/vxgi.hpp"
@@ -38,11 +39,13 @@ TEST_CASE(
     "PBR view and mesh uniforms keep shader ABI layout",
     "[pbr][uniform]"
 ) {
-    require_standard_uniform_layout<ViewUniform>(208);
+    require_standard_uniform_layout<ViewUniform>(336);
     CHECK(offsetof(ViewUniform, clip_from_world) == 0);
     CHECK(offsetof(ViewUniform, view_from_world) == 64);
     CHECK(offsetof(ViewUniform, clip_from_view) == 128);
-    CHECK(offsetof(ViewUniform, world_position) == 192);
+    CHECK(offsetof(ViewUniform, world_from_view) == 192);
+    CHECK(offsetof(ViewUniform, view_from_clip) == 256);
+    CHECK(offsetof(ViewUniform, world_position) == 320);
 
     require_standard_uniform_layout<MeshUniform>(64);
     CHECK(offsetof(MeshUniform, world_from_local) == 0);
@@ -56,6 +59,16 @@ TEST_CASE("PBR material uniform keeps shader ABI layout", "[pbr][uniform]") {
     CHECK(offsetof(StandardMaterialUniform, emissive) == 32);
     CHECK(offsetof(StandardMaterialUniform, specular) == 48);
     CHECK(offsetof(StandardMaterialUniform, flags) == 60);
+}
+
+TEST_CASE(
+    "PBR environment map uniform keeps shader ABI layout",
+    "[pbr][uniform]"
+) {
+    require_standard_uniform_layout<EnvironmentMapUniform>(80);
+    CHECK(offsetof(EnvironmentMapUniform, environment_from_world) == 0);
+    CHECK(offsetof(EnvironmentMapUniform, intensity) == 64);
+    CHECK(offsetof(EnvironmentMapUniform, max_specular_lod) == 68);
 }
 
 TEST_CASE("PBR lighting uniform keeps shader ABI layout", "[pbr][uniform]") {
@@ -127,4 +140,5 @@ TEST_CASE("PBR VXGI uniforms keep shader ABI layout", "[pbr][uniform]") {
     CHECK(offsetof(VxgiUniform, ao_alpha) == 60);
     CHECK(offsetof(VxgiUniform, sampling_factor) == 64);
     CHECK(offsetof(VxgiUniform, mode) == 68);
+    CHECK(offsetof(VxgiUniform, skylight_leaking) == 72);
 }

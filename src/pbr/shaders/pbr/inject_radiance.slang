@@ -73,7 +73,7 @@ float3 brdf(Light light, float3 normal, float3 albedo) {
         normal_dot_light = max(dot(normal, light.direction), 0.0);
     }
 
-    return light.diffuse * albedo * normal_dot_light;
+    return light.diffuse * albedo * normal_dot_light / PI;
 }
 
 float4 calculate_directional(
