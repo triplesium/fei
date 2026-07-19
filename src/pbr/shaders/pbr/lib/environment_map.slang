@@ -35,6 +35,41 @@ float3 safe_normalize(float3 value, float3 fallback) {
         fallback;
 }
 
+float3 sample_radiance_map(
+    TextureCube<float4> radiance_map,
+    SamplerState environment_sampler,
+    float3 direction,
+    float lod
+) {
+    float3 radiance = radiance_map.SampleLevel(
+        environment_sampler,
+        direction,
+        lod
+    ).rgb;
+    return is_finite_color(radiance) ?
+        max(radiance, float3(0.0)) :
+        float3(0.0);
+}
+
+public float3 sample_environment_radiance(
+    TextureCube<float4> radiance_map,
+    SamplerState environment_sampler,
+    EnvironmentMapUniform environment,
+    float3 world_direction,
+    float perceptual_roughness
+) {
+    float3 direction = safe_normalize(
+        mul(environment.environment_from_world, float4(world_direction, 0.0)).xyz,
+        float3(0.0, 1.0, 0.0)
+    );
+    return sample_radiance_map(
+        radiance_map,
+        environment_sampler,
+        direction,
+        saturate(perceptual_roughness) * environment.max_specular_lod
+    );
+}
+
 MultiscatterTerms compute_multiscatter(float3 f0, float2 f_ab) {
     float3 single_scatter = f0 * f_ab.x + f_ab.y;
     float3 average_fresnel = f0 + (float3(1.0) - f0) / 21.0;
@@ -89,19 +124,16 @@ public EnvironmentMapLighting evaluate_environment_map(
         irradiance_map.Sample(environment_sampler, normal).rgb;
     float3 radiance_direction =
         radiance_sample_direction(normal, reflection, material.roughness);
-    float3 radiance = radiance_map.SampleLevel(
+    float3 radiance = sample_radiance_map(
+        radiance_map,
         environment_sampler,
         radiance_direction,
         material.roughness * environment.max_specular_lod
-    ).rgb;
+    );
     if (!is_finite_color(irradiance)) {
         irradiance = float3(0.0);
     }
-    if (!is_finite_color(radiance)) {
-        radiance = float3(0.0);
-    }
     irradiance = max(irradiance, float3(0.0));
-    radiance = max(radiance, float3(0.0));
     float2 brdf = brdf_lut.Sample(
         brdf_sampler,
         // The embedded LUT stores roughness from 1 at the top to 0 at the

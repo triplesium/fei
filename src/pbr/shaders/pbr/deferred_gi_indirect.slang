@@ -44,6 +44,10 @@ static const float diffuse_cone_weights[6] = {
     3.0 * PI / 20.0,
 };
 
+// The diffuse cones have a 30-degree half angle. Match that solid angle to a
+// GGX-prefiltered environment mip (alpha ~= tan(15 degrees)).
+static const float diffuse_cone_environment_roughness = 0.517638;
+
 bool is_finite_indirect_color(float3 value) {
     return all(value == value) && all(abs(value) < float3(1e20));
 }
@@ -158,6 +162,8 @@ float4 calculate_indirect_lighting(
     bool ambient_occlusion
 ) {
     float3 diffuse_radiance = float3(0.0);
+    float3 environment_miss_radiance = float3(0.0);
+    float3 unoccluded_environment_radiance = float3(0.0);
     float weighted_local_occlusion = 0.0;
     float weighted_sky_transmittance = 0.0;
     float3 cone_direction = float3(0.0);
@@ -182,11 +188,32 @@ float4 calculate_indirect_lighting(
                 ambient_occlusion
             );
             float cone_weight = diffuse_cone_weights[i];
+            float sky_transmittance = saturate(1.0 - trace.sky_opacity);
+            float environment_transmittance = ambient_occlusion ?
+                lerp(
+                    saturate(Vxgi.skylight_leaking),
+                    1.0,
+                    sky_transmittance
+                ) :
+                1.0;
+            float3 cone_environment_radiance = sample_environment_radiance(
+                radiance_map,
+                cubemap_sampler,
+                EnvironmentMap,
+                cone_direction,
+                diffuse_cone_environment_roughness
+            );
             diffuse_radiance += trace.radiance * cone_weight;
+            environment_miss_radiance +=
+                environment_transmittance *
+                cone_environment_radiance *
+                cone_weight;
+            unoccluded_environment_radiance +=
+                cone_environment_radiance * cone_weight;
             weighted_local_occlusion +=
                 trace.local_occlusion * cone_weight;
             weighted_sky_transmittance +=
-                (1.0 - trace.sky_opacity) * cone_weight;
+                sky_transmittance * cone_weight;
         }
 
         float3 diffuse_color =
@@ -240,15 +267,35 @@ float4 calculate_indirect_lighting(
         vxgi_diffuse = float3(0.0);
     }
     vxgi_diffuse = max(vxgi_diffuse, float3(0.0));
+    float3 environment_visibility = float3(1.0);
+    if (has_lighting_surface) {
+        if (!is_finite_indirect_color(environment_miss_radiance) ||
+            !is_finite_indirect_color(unoccluded_environment_radiance)) {
+            environment_miss_radiance = float3(0.0);
+            unoccluded_environment_radiance = float3(0.0);
+        }
+        // Preserve the irradiance cubemap's diffuse energy while using the
+        // cone misses to make its visibility directional.
+        environment_visibility = saturate(
+            environment_miss_radiance /
+            max(unoccluded_environment_radiance, float3(1e-4))
+        );
+    }
+    float3 environment_diffuse =
+        environment_lighting.diffuse * environment_visibility;
     float3 result =
-        environment_lighting.diffuse * sky_visibility +
+        environment_diffuse +
         environment_lighting.specular * specular_visibility +
         vxgi_diffuse;
     if (!is_finite_indirect_color(result)) {
-        result = environment_lighting.diffuse * sky_visibility;
+        result = environment_diffuse;
     }
     result = max(result, float3(0.0));
-    return float4(result, sky_visibility);
+    float diffuse_sky_visibility = dot(
+        environment_visibility,
+        float3(0.2126, 0.7152, 0.0722)
+    );
+    return float4(result, saturate(diffuse_sky_visibility));
 }
 
 [shader("fragment")]
