@@ -5,6 +5,10 @@ local compile_commands_path = "build/compile_commands.json"
 local tooling = import("tasks.tooling", {
     rootdir = path.join(os.projectdir(), "tools")
 })
+local project_include_dirs = os.dirs(
+    path.join(os.projectdir(), "src", "**", "include")
+)
+table.sort(project_include_dirs)
 
 local function check_compile_commands()
     if not os.isfile(compile_commands_path) then
@@ -27,6 +31,11 @@ end
 
 local function make_clang_tidy_args(file, extra_args)
     local args = {"--quiet", "-p", "build"}
+    if file:find("[/\\]include[/\\]") then
+        for _, include_dir in ipairs(project_include_dirs) do
+            table.insert(args, "--extra-arg-before=-I" .. include_dir)
+        end
+    end
     table.join2(args, extra_args or {})
     table.insert(args, file)
     return args
