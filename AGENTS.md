@@ -64,10 +64,11 @@
   restating style rules here.
 - Keep names consistent with existing targets and files, such as `fei-*`,
   `sample-*`, and `*.test.cpp`.
-- After editing C++ files, run `xmake format --files=<pattern>` or
-  `xmake format --check` for verification.
-- Prefer `xmake tidy <target>` for focused static analysis after C++ changes;
-  run `xmake tidy` before broad cleanup changes.
+- After modifying C++ sources or headers, run `xmake format` on the affected
+  files and `xmake tidy <target>` on the affected targets before considering
+  the task complete.
+- For repository-wide or cross-module changes, finish by running
+  `xmake format --check` and `xmake tidy` across the entire repository.
 
 ## Testing Guidelines
 
