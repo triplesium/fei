@@ -99,8 +99,10 @@ TEST_CASE("ImGui draw offsets include prior command lists", "[imgui]") {
 }
 
 TEST_CASE("ImGui buffer ring uses power-of-two growth and rotates", "[imgui]") {
-    REQUIRE(imgui_buffer_capacity(1) == 64U * 1024U);
-    REQUIRE(imgui_buffer_capacity(64U * 1024U + 1U) == 128U * 1024U);
+    constexpr std::size_t initial_capacity = std::size_t {64} * 1024;
+    constexpr std::size_t grown_capacity = std::size_t {128} * 1024;
+    REQUIRE(imgui_buffer_capacity(1) == initial_capacity);
+    REQUIRE(imgui_buffer_capacity(initial_capacity + 1) == grown_capacity);
     REQUIRE(imgui_frame_slot(0, 3) == 0);
     REQUIRE(imgui_frame_slot(1, 3) == 1);
     REQUIRE(imgui_frame_slot(2, 3) == 2);
@@ -113,8 +115,8 @@ TEST_CASE("ImGui buffer ring uses power-of-two growth and rotates", "[imgui]") {
 
     REQUIRE(renderer.frame_slot_count() == 3);
     for (std::size_t slot = 0; slot < 3; ++slot) {
-        REQUIRE(renderer.vertex_capacity(slot) == 64U * 1024U);
-        REQUIRE(renderer.index_capacity(slot) == 64U * 1024U);
+        REQUIRE(renderer.vertex_capacity(slot) == initial_capacity);
+        REQUIRE(renderer.index_capacity(slot) == initial_capacity);
     }
 
     std::weak_ptr<Buffer> first_buffer = device.buffers.front();
@@ -196,7 +198,9 @@ TEST_CASE(
     std::vector<std::byte> expected;
     expected.reserve(16);
     for (int row = 0; row < 2; ++row) {
-        auto* source = pixels + (row * texture_data->Width + 1) * 4;
+        const auto source_offset =
+            (static_cast<std::ptrdiff_t>(row) * texture_data->Width + 1) * 4;
+        auto* source = pixels + source_offset;
         for (int byte = 0; byte < 8; ++byte) {
             source[byte] = static_cast<unsigned char>(row * 16 + byte);
             expected.push_back(static_cast<std::byte>(source[byte]));

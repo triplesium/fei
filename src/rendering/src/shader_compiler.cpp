@@ -584,16 +584,16 @@ struct SlangCompileOutput {
 class TrackingSlangFileSystem final : public ISlangFileSystemExt {
   public:
     SLANG_NO_THROW SlangResult SLANG_MCALL
-    queryInterface(SlangUUID const& uuid, void** outObject) override {
-        if (outObject == nullptr) {
+    queryInterface(SlangUUID const& uuid, void** out_object) override {
+        if (out_object == nullptr) {
             return SLANG_E_INVALID_ARG;
         }
-        if (auto* intf = getInterface(uuid)) {
+        if (auto* intf = get_interface(uuid)) {
             addRef();
-            *outObject = intf;
+            *out_object = intf;
             return SLANG_OK;
         }
-        *outObject = nullptr;
+        *out_object = nullptr;
         return SLANG_E_NO_INTERFACE;
     }
 
@@ -610,15 +610,15 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
     }
 
     SLANG_NO_THROW void* SLANG_MCALL castAs(const SlangUUID& guid) override {
-        return getInterface(guid);
+        return get_interface(guid);
     }
 
     SLANG_NO_THROW SlangResult SLANG_MCALL
-    loadFile(char const* path, ISlangBlob** outBlob) override {
-        if (path == nullptr || outBlob == nullptr) {
+    loadFile(char const* path, ISlangBlob** out_blob) override {
+        if (path == nullptr || out_blob == nullptr) {
             return SLANG_E_INVALID_ARG;
         }
-        *outBlob = nullptr;
+        *out_blob = nullptr;
 
         std::ifstream input(path, std::ios::binary);
         if (!input) {
@@ -628,8 +628,8 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
             std::istreambuf_iterator<char>(input),
             std::istreambuf_iterator<char>()
         };
-        *outBlob = slang_createBlob(contents.data(), contents.size());
-        if (*outBlob == nullptr) {
+        *out_blob = slang_createBlob(contents.data(), contents.size());
+        if (*out_blob == nullptr) {
             return SLANG_E_OUT_OF_MEMORY;
         }
 
@@ -646,43 +646,43 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
 
     SLANG_NO_THROW SlangResult SLANG_MCALL getFileUniqueIdentity(
         const char* path,
-        ISlangBlob** outUniqueIdentity
+        ISlangBlob** out_unique_identity
     ) override {
-        if (path == nullptr || outUniqueIdentity == nullptr) {
+        if (path == nullptr || out_unique_identity == nullptr) {
             return SLANG_E_INVALID_ARG;
         }
-        *outUniqueIdentity = nullptr;
+        *out_unique_identity = nullptr;
         return make_path_blob(
             canonical_path(std::filesystem::path(path)),
-            outUniqueIdentity
+            out_unique_identity
         );
     }
 
     SLANG_NO_THROW SlangResult SLANG_MCALL calcCombinedPath(
-        SlangPathType fromPathType,
-        const char* fromPath,
+        SlangPathType from_path_type,
+        const char* from_path,
         const char* path,
-        ISlangBlob** pathOut
+        ISlangBlob** path_out
     ) override {
-        if (fromPath == nullptr || path == nullptr || pathOut == nullptr) {
+        if (from_path == nullptr || path == nullptr || path_out == nullptr) {
             return SLANG_E_INVALID_ARG;
         }
-        *pathOut = nullptr;
+        *path_out = nullptr;
 
         auto dependency_path = std::filesystem::path(path);
         if (!dependency_path.is_absolute()) {
-            auto base = std::filesystem::path(fromPath);
-            if (fromPathType == SLANG_PATH_TYPE_FILE) {
+            auto base = std::filesystem::path(from_path);
+            if (from_path_type == SLANG_PATH_TYPE_FILE) {
                 base = base.parent_path();
             }
             dependency_path = base / dependency_path;
         }
-        return make_path_blob(dependency_path.lexically_normal(), pathOut);
+        return make_path_blob(dependency_path.lexically_normal(), path_out);
     }
 
     SLANG_NO_THROW SlangResult SLANG_MCALL
-    getPathType(const char* path, SlangPathType* pathTypeOut) override {
-        if (path == nullptr || pathTypeOut == nullptr) {
+    getPathType(const char* path, SlangPathType* path_type_out) override {
+        if (path == nullptr || path_type_out == nullptr) {
             return SLANG_E_INVALID_ARG;
         }
 
@@ -692,22 +692,22 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
             return SLANG_E_NOT_FOUND;
         }
         if (std::filesystem::is_directory(status)) {
-            *pathTypeOut = SLANG_PATH_TYPE_DIRECTORY;
+            *path_type_out = SLANG_PATH_TYPE_DIRECTORY;
             return SLANG_OK;
         }
         if (std::filesystem::is_regular_file(status)) {
-            *pathTypeOut = SLANG_PATH_TYPE_FILE;
+            *path_type_out = SLANG_PATH_TYPE_FILE;
             return SLANG_OK;
         }
         return SLANG_E_NOT_FOUND;
     }
 
     SLANG_NO_THROW SlangResult SLANG_MCALL
-    getPath(PathKind kind, const char* path, ISlangBlob** outPath) override {
-        if (path == nullptr || outPath == nullptr) {
+    getPath(PathKind kind, const char* path, ISlangBlob** out_path) override {
+        if (path == nullptr || out_path == nullptr) {
             return SLANG_E_INVALID_ARG;
         }
-        *outPath = nullptr;
+        *out_path = nullptr;
 
         auto result = std::filesystem::path(path);
         switch (kind) {
@@ -722,7 +722,7 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
             case PathKind::CountOf:
                 return SLANG_E_INVALID_ARG;
         }
-        return make_path_blob(result, outPath);
+        return make_path_blob(result, out_path);
     }
 
     SLANG_NO_THROW void SLANG_MCALL clearCache() override {}
@@ -750,7 +750,7 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
     }
 
   private:
-    ISlangUnknown* getInterface(const SlangUUID& uuid) {
+    ISlangUnknown* get_interface(const SlangUUID& uuid) {
         if (uuid == ISlangUnknown::getTypeGuid() ||
             uuid == ISlangCastable::getTypeGuid() ||
             uuid == ISlangFileSystem::getTypeGuid() ||
@@ -771,10 +771,10 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
     }
 
     static SlangResult
-    make_path_blob(const std::filesystem::path& path, ISlangBlob** outBlob) {
+    make_path_blob(const std::filesystem::path& path, ISlangBlob** out_blob) {
         auto string = path.lexically_normal().string();
-        *outBlob = slang_createBlob(string.c_str(), string.size() + 1);
-        return *outBlob == nullptr ? SLANG_E_OUT_OF_MEMORY : SLANG_OK;
+        *out_blob = slang_createBlob(string.c_str(), string.size() + 1);
+        return *out_blob == nullptr ? SLANG_E_OUT_OF_MEMORY : SLANG_OK;
     }
 
     std::atomic<uint32_t> m_ref_count {0};

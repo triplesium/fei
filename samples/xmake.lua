@@ -17,6 +17,7 @@ target("sample-scene")
         "fei-devtools-input",
         "fei-devtools-pbr",
         "fei-devtools-profiling",
+        "fei-devtools-reflection",
         "fei-devtools-rendering",
         "fei-graphics-opengl",
         "fei-graphics-opengl-glfw",

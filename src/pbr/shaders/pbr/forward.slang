@@ -1,4 +1,4 @@
-import pbr.lib.brdf;
+import pbr.lib.environment_map;
 import rendering.color;
 import rendering.view;
 import pbr.material.types;
@@ -8,16 +8,13 @@ import rendering.vertex_input;
 import pbr.forward.io;
 
 using namespace pbr.forward_io;
-using namespace pbr.brdf;
+using namespace pbr.environment_map;
 using namespace rendering.color;
 
 layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
-layout(set = 0, binding = 1) TextureCube<float4> irradiance_map;
-layout(set = 0, binding = 2) TextureCube<float4> radiance_map;
-layout(set = 0, binding = 3) SamplerState cubemap_sampler;
-layout(set = 0, binding = 4) Texture2D<float4> brdf_lut;
 layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> Mesh;
 layout(set = 2) ParameterBlock<StandardMaterialResources> material;
+layout(set = 3) ParameterBlock<EnvironmentMap> environment;
 
 [shader("vertex")]
 VertexOutput vertex_main(MeshVertexInput input) {
@@ -56,41 +53,13 @@ FragmentOutput fragment_main(VertexOutput input) {
 
     float3 view = View.view_direction(input.position_ws);
     ShadingPoint point = ShadingPoint.from_world(input.position_ws, normal, view);
-    float normal_dot_view = point.normal_dot_view;
-    float3 reflection = point.reflection_ws;
-
-    float3 fresnel = fresnel_schlick_roughness(
-        normal_dot_view,
-        surface_material.f0,
-        surface_material.roughness
+    EnvironmentMapLighting environment_lighting = evaluate_environment_map(
+        environment,
+        point,
+        surface_material
     );
 
-    float3 k_s = fresnel;
-    float3 k_d = (float3(1.0) - k_s) * (1.0 - surface_material.metallic);
-
-    float3 diffuse =
-        irradiance_map.Sample(cubemap_sampler, normal).rgb *
-        surface_material.albedo;
-
-    uint width;
-    uint height;
-    uint levels;
-    radiance_map.GetDimensions(0, width, height, levels);
-    float3 prefiltered_color =
-        radiance_map.SampleLevel(
-            cubemap_sampler,
-            reflection,
-            surface_material.roughness * float(levels)
-        ).rgb;
-    float2 brdf =
-        brdf_lut.Sample(
-            material.sampler,
-            float2(normal_dot_view, surface_material.roughness)
-        ).rg;
-    float3 specular = prefiltered_color * (fresnel * brdf.x + brdf.y);
-    float3 ambient = k_d * diffuse + specular;
-
-    float3 color = tonemap_reinhard_to_srgb(ambient);
+    float3 color = tonemap_reinhard_to_srgb(environment_lighting.combined());
     output.color = float4(color, 1.0);
     return output;
 }

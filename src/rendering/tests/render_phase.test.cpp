@@ -18,6 +18,7 @@ class RecordingCommandBuffer : public CommandBuffer {
     bool ended {false};
     std::shared_ptr<const Pipeline> render_pipeline;
     std::array<std::shared_ptr<const ResourceSet>, 3> resource_sets {};
+    std::array<std::vector<uint32>, 3> resource_set_dynamic_offsets {};
     std::shared_ptr<const Buffer> vertex_buffer;
     std::shared_ptr<const Buffer> index_buffer;
     IndexFormat index_format {IndexFormat::Uint32};
@@ -53,9 +54,13 @@ class RecordingCommandBuffer : public CommandBuffer {
     void set_resource_set(
         uint32 slot,
         std::shared_ptr<const ResourceSet> resource_set,
-        std::span<const uint32>
+        std::span<const uint32> dynamic_offsets
     ) override {
         resource_sets.at(slot) = std::move(resource_set);
+        resource_set_dynamic_offsets.at(slot).assign(
+            dynamic_offsets.begin(),
+            dynamic_offsets.end()
+        );
     }
 
     void update_buffer(
@@ -220,6 +225,7 @@ TEST_CASE(
         static_cast<CachedRenderPipelineId>(7),
         view_set,
         mesh_set,
+        768,
         material_set,
         gpu_mesh,
         3.5f
@@ -229,6 +235,7 @@ TEST_CASE(
     REQUIRE(item.pipeline == static_cast<CachedRenderPipelineId>(7));
     REQUIRE(item.view_set == view_set);
     REQUIRE(item.mesh_set == mesh_set);
+    REQUIRE(item.mesh_uniform_dynamic_offset == 768);
     REQUIRE(item.material_set == material_set);
     REQUIRE(item.vertex_buffer == vertex_buffer);
     REQUIRE(item.index_buffer == index_buffer);
@@ -261,6 +268,7 @@ TEST_CASE(
         .view_set = view_set,
         .mesh_set = mesh_set,
         .material_set = material_set,
+        .mesh_uniform_dynamic_offset = 512,
         .vertex_buffer = vertex_buffer,
         .index_buffer = index_buffer,
         .index_count = 3,
@@ -274,6 +282,10 @@ TEST_CASE(
     REQUIRE(command_buffer.resource_sets[0] == view_set);
     REQUIRE(command_buffer.resource_sets[1] == mesh_set);
     REQUIRE(command_buffer.resource_sets[2] == material_set);
+    REQUIRE(
+        command_buffer.resource_set_dynamic_offsets[1] ==
+        std::vector<uint32> {512}
+    );
     REQUIRE(command_buffer.vertex_buffer == vertex_buffer);
     REQUIRE(command_buffer.index_buffer == index_buffer);
     REQUIRE(command_buffer.index_format == IndexFormat::Uint32);

@@ -17,7 +17,7 @@ DynamicSystem::DynamicSystem(
     m_executor(std::move(executor)),
     m_access(dynamic_system_access_for_params(m_params)) {}
 
-void DynamicSystem::run(World& world) {
+void DynamicSystem::execute(World& world, SystemTicks system_ticks) {
     std::vector<Ref> args;
     args.reserve(m_params.size());
 
@@ -27,7 +27,7 @@ void DynamicSystem::run(World& world) {
             return;
         }
 
-        auto arg = param->prepare(world);
+        auto arg = param->prepare(world, system_ticks);
         if (!arg) {
             error(
                 "Dynamic system '{}' failed to prepare param: {}",

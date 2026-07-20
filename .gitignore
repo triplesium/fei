@@ -14,7 +14,8 @@ CMakeSettings.json
 .idea/
 
 .cache/
-vulkaninfoSDK*.log
+*.log
+imgui.ini
 
 assets/
 

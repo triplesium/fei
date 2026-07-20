@@ -34,6 +34,7 @@ TEST_CASE(
     REQUIRE(targets.width == 1280);
     REQUIRE(targets.height == 720);
     REQUIRE(device.texture_descriptions.size() == 8);
+    REQUIRE(targets.composite->format() == PixelFormat::Rgba16Float);
     auto first_composite = targets.composite;
 
     prepare();

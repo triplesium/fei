@@ -29,8 +29,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL validation_callback(
             "";
     if ((severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0) {
         error("Vulkan validation: {}", message);
-    } else if ((severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) !=
-               0) {
+    } else if (
+        (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) != 0
+    ) {
         warn("Vulkan validation: {}", message);
     } else {
         debug("Vulkan validation: {}", message);
@@ -205,8 +206,9 @@ uint32 rate_physical_device(
     uint32 score = 1;
     if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
         score += 1000;
-    } else if (properties.deviceType ==
-               VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) {
+    } else if (
+        properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU
+    ) {
         score += 500;
     }
     score += properties.limits.maxImageDimension2D;
@@ -481,11 +483,28 @@ void VulkanDeviceState::create_logical_device() {
     device_features.geometryShader = m_physical_device_features.geometryShader;
     device_features.fragmentStoresAndAtomics =
         m_physical_device_features.fragmentStoresAndAtomics;
+
+    VkPhysicalDeviceVulkan11Features supported_vulkan11_features {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+    };
+    VkPhysicalDeviceFeatures2 supported_features {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+        .pNext = &supported_vulkan11_features,
+    };
+    vkGetPhysicalDeviceFeatures2(m_physical_device, &supported_features);
+    if (supported_vulkan11_features.shaderDrawParameters != VK_TRUE) {
+        fatal("Vulkan device does not support shaderDrawParameters");
+    }
+
+    VkPhysicalDeviceVulkan11Features enabled_vulkan11_features {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+    };
+    enabled_vulkan11_features.shaderDrawParameters = VK_TRUE;
     auto enabled_device_extensions =
         extension_name_pointers(m_required_device_extensions);
     VkDeviceCreateInfo create_info {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = nullptr,
+        .pNext = &enabled_vulkan11_features,
         .flags = 0,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &queue_create_info,

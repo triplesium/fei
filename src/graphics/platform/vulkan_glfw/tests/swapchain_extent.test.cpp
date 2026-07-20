@@ -9,14 +9,16 @@ using namespace fei::vulkan_glfw_detail;
 namespace {
 
 VkSurfaceCapabilitiesKHR variable_extent_capabilities() {
-    VkSurfaceCapabilitiesKHR capabilities {};
-    capabilities.currentExtent = VkExtent2D {
-        .width = std::numeric_limits<uint32>::max(),
-        .height = std::numeric_limits<uint32>::max(),
+    return VkSurfaceCapabilitiesKHR {
+        .currentExtent =
+            VkExtent2D {
+                .width = std::numeric_limits<uint32>::max(),
+                .height = std::numeric_limits<uint32>::max(),
+            },
+        .minImageExtent = VkExtent2D {.width = 64, .height = 32},
+        .maxImageExtent = VkExtent2D {.width = 1920, .height = 1080},
+        .currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
     };
-    capabilities.minImageExtent = VkExtent2D {.width = 64, .height = 32};
-    capabilities.maxImageExtent = VkExtent2D {.width = 1920, .height = 1080};
-    return capabilities;
 }
 
 } // namespace
@@ -40,6 +42,7 @@ TEST_CASE(
 ) {
     VkSurfaceCapabilitiesKHR capabilities {
         .currentExtent = VkExtent2D {.width = 0, .height = 0},
+        .currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
     };
 
     const auto extent = choose_swapchain_extent(capabilities, 1280, 720);

@@ -693,6 +693,13 @@ Matrix4x4 GraphicsDeviceVulkan::clip_space_transform() const {
     return transform;
 }
 
+std::size_t GraphicsDeviceVulkan::uniform_buffer_offset_alignment() const {
+    return static_cast<std::size_t>(
+        m_state->physical_device_properties()
+            .limits.minUniformBufferOffsetAlignment
+    );
+}
+
 std::shared_ptr<ShaderModule> GraphicsDeviceVulkan::create_shader_module(
     const ShaderDescription& desc
 ) const {

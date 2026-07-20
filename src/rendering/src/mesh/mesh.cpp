@@ -274,9 +274,8 @@ void Mesh::generate_tangents() {
         const std::uint32_t idx =
             d->indices ? (*d->indices)[(face * 3) + vert] :
                          static_cast<std::uint32_t>((face * 3) + vert);
-        (
-            *d->tangents
-        )[idx] = {fv_tangent[0], fv_tangent[1], fv_tangent[2], f_sign};
+        (*d->tangents)[idx] =
+            {fv_tangent[0], fv_tangent[1], fv_tangent[2], f_sign};
     };
 
     SMikkTSpaceContext ctx {};

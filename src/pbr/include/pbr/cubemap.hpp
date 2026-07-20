@@ -33,6 +33,8 @@ class EquirectToCubemap {
     Optional<std::shared_ptr<Texture>>
     get_cubemap(Handle<Image> equirect_image_handle) const;
 
+    void invalidate(AssetId equirect_image_id);
+
     Optional<std::shared_ptr<Texture>> prepare_cubemap(
         const GraphicsDevice& device,
         const Assets<Image>& images,

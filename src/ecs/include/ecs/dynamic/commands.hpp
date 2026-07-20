@@ -14,10 +14,13 @@ class DynamicCommandsParam final : public DynamicSystemParam {
     std::optional<Commands> m_commands;
 
   public:
+    using DynamicSystemParam::prepare;
+
     explicit DynamicCommandsParam(std::string name);
 
     SystemAccess access() const override;
-    Result<Ref, DynamicSystemError> prepare(World& world) override;
+    Result<Ref, DynamicSystemError>
+    prepare(World& world, SystemTicks system_ticks) override;
 };
 
 } // namespace fei

@@ -146,7 +146,7 @@ bool parse_wait_params(
            parse_timeout_param(req, params, error_message);
 }
 
-bool parse_command_params(
+bool parse_post_params(
     const httplib::Request& req,
     RequestParams& params,
     std::string& error_message
@@ -231,37 +231,34 @@ void set_blob_response(httplib::Response& res, const BridgeBlob& blob) {
     );
 }
 
-Optional<ManifestEntry> validate_capability(
+Optional<ManifestEntry> validate_capability_endpoint(
     Bridge bridge,
     const std::string& capability,
-    std::string_view expected_kind,
+    std::string_view expected_rel,
     httplib::Response& res
 ) {
     auto entry = bridge.find_capability(capability);
     if (!entry) {
-        set_text(
-            res,
-            404,
-            error_json(
-                "Unknown capability",
-                404,
-                capability,
-                std::string(expected_kind)
-            )
-        );
+        set_text(res, 404, error_json("Unknown capability", 404, capability));
         return nullopt;
     }
 
-    if (entry->kind != expected_kind) {
+    bool found = false;
+    for (const auto& endpoint : entry->endpoints) {
+        if (endpoint.rel == expected_rel) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
         set_text(
             res,
-            409,
+            405,
             error_json(
-                "Capability kind mismatch: expected " +
-                    std::string(expected_kind) + ", got " + entry->kind,
-                409,
-                capability,
-                std::string(expected_kind)
+                "Capability does not expose the " + std::string(expected_rel) +
+                    " endpoint",
+                405,
+                capability
             )
         );
         return nullopt;
@@ -277,14 +274,14 @@ void serve_blob_request(
     httplib::Response& res
 ) {
     const auto capability_id = capability;
-    if (!validate_capability(bridge, capability, "blob", res)) {
+    if (!validate_capability_endpoint(bridge, capability, "read", res)) {
         return;
     }
 
     RequestParams params;
     std::string error_message;
     if (!parse_wait_params(req, params, error_message)) {
-        set_text(res, 400, error_json(error_message, 400, capability, "blob"));
+        set_text(res, 400, error_json(error_message, 400, capability));
         return;
     }
 
@@ -305,65 +302,14 @@ void serve_blob_request(
         set_text(
             res,
             504,
-            error_json("Timed out waiting for blob", 504, capability_id, "blob")
+            error_json("Timed out waiting for blob", 504, capability_id)
         );
         return;
     }
     set_bridge_response(res, *response);
 }
 
-void serve_snapshot_request(
-    Bridge bridge,
-    std::string capability,
-    const httplib::Request& req,
-    httplib::Response& res
-) {
-    const auto capability_id = capability;
-    if (!validate_capability(bridge, capability, "snapshot", res)) {
-        return;
-    }
-
-    RequestParams params;
-    std::string error_message;
-    if (!parse_wait_params(req, params, error_message)) {
-        set_text(
-            res,
-            400,
-            error_json(error_message, 400, capability, "snapshot")
-        );
-        return;
-    }
-
-    if (auto cached =
-            bridge.cached_snapshot(capability, params.after, params.fresh)) {
-        set_text(res, 200, snapshot_envelope_json(*cached));
-        return;
-    }
-
-    auto token = bridge.enqueue_snapshot_request(
-        std::move(capability),
-        params.after,
-        params.fresh,
-        params.timeout
-    );
-    auto response = bridge.wait_for_response(token, params.timeout);
-    if (!response) {
-        set_text(
-            res,
-            504,
-            error_json(
-                "Timed out waiting for snapshot",
-                504,
-                capability_id,
-                "snapshot"
-            )
-        );
-        return;
-    }
-    set_bridge_response(res, *response);
-}
-
-void serve_command_request(
+void serve_json_request(
     Bridge bridge,
     std::string capability,
     std::string body,
@@ -371,28 +317,52 @@ void serve_command_request(
     httplib::Response& res
 ) {
     const auto capability_id = capability;
-    if (!validate_capability(bridge, capability, "command", res)) {
+    auto entry =
+        validate_capability_endpoint(bridge, capability, "invoke", res);
+    if (!entry) {
         return;
     }
 
     RequestParams params;
     std::string error_message;
-    if (!parse_command_params(req, params, error_message)) {
-        set_text(
-            res,
-            400,
-            error_json(error_message, 400, capability, "command")
-        );
+    if (!parse_post_params(req, params, error_message)) {
+        set_text(res, 400, error_json(error_message, 400, capability));
         return;
     }
 
-    if (body.empty()) {
-        body = "{}";
+    Optional<std::string> request_body;
+    if (!entry->request_type) {
+        if (!body.empty()) {
+            set_text(
+                res,
+                400,
+                error_json(
+                    "Capability does not accept a request body",
+                    400,
+                    capability
+                )
+            );
+            return;
+        }
+    } else {
+        if (body.empty()) {
+            set_text(
+                res,
+                400,
+                error_json(
+                    "Capability requires a request body",
+                    400,
+                    capability
+                )
+            );
+            return;
+        }
+        request_body = std::move(body);
     }
 
-    auto token = bridge.enqueue_command_request(
+    auto token = bridge.enqueue_request(
         std::move(capability),
-        std::move(body),
+        std::move(request_body),
         params.timeout
     );
     auto response = bridge.wait_for_response(token, params.timeout);
@@ -401,10 +371,9 @@ void serve_command_request(
             res,
             504,
             error_json(
-                "Timed out waiting for command",
+                "Timed out waiting for capability response",
                 504,
-                capability_id,
-                "command"
+                capability_id
             )
         );
         return;
@@ -470,21 +439,22 @@ void install_routes(httplib::Server& server, Bridge bridge) {
     );
 
     server.Get(
-        R"(/api/v1/blobs/([^/]+)/stream)",
+        R"(/api/v1/capabilities/([^/]+)/stream)",
         [bridge](const httplib::Request& req, httplib::Response& res) mutable {
             const auto capability = req.matches[1].str();
-            if (!validate_capability(bridge, capability, "blob", res)) {
+            if (!validate_capability_endpoint(
+                    bridge,
+                    capability,
+                    "stream",
+                    res
+                )) {
                 return;
             }
 
             RequestParams params;
             std::string error_message;
             if (!parse_after_param(req, params, error_message)) {
-                set_text(
-                    res,
-                    400,
-                    error_json(error_message, 400, capability, "blob")
-                );
+                set_text(res, 400, error_json(error_message, 400, capability));
                 return;
             }
 
@@ -518,36 +488,22 @@ void install_routes(httplib::Server& server, Bridge bridge) {
     );
 
     server.Get(
-        R"(/api/v1/blobs/([^/]+))",
+        R"(/api/v1/capabilities/([^/]+))",
         [bridge](const httplib::Request& req, httplib::Response& res) mutable {
             serve_blob_request(bridge, req.matches[1].str(), req, res);
         }
     );
 
-    server.Get(
-        R"(/api/v1/snapshots/([^/]+))",
-        [bridge](const httplib::Request& req, httplib::Response& res) mutable {
-            serve_snapshot_request(bridge, req.matches[1].str(), req, res);
-        }
-    );
-
     server.Post(
-        R"(/api/v1/commands/([^/]+))",
+        R"(/api/v1/capabilities/([^/]+))",
         [bridge](const httplib::Request& req, httplib::Response& res) mutable {
-            serve_command_request(
+            serve_json_request(
                 bridge,
                 req.matches[1].str(),
                 req.body,
                 req,
                 res
             );
-        }
-    );
-
-    server.Post(
-        "/api/v1/shutdown",
-        [bridge](const httplib::Request& req, httplib::Response& res) mutable {
-            serve_command_request(bridge, "devtools.shutdown", "{}", req, res);
         }
     );
 }

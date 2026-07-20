@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/result.hpp"
+#include "ecs/change_detection.hpp"
 #include "ecs/system_access.hpp"
 #include "refl/ref.hpp"
 
@@ -21,7 +22,9 @@ class DynamicSystemParam {
     virtual ~DynamicSystemParam() = default;
 
     virtual SystemAccess access() const = 0;
-    virtual Result<Ref, DynamicSystemError> prepare(World& world) = 0;
+    Result<Ref, DynamicSystemError> prepare(World& world);
+    virtual Result<Ref, DynamicSystemError>
+    prepare(World& world, SystemTicks system_ticks) = 0;
 };
 
 using DynamicSystemParamPtr = std::unique_ptr<DynamicSystemParam>;

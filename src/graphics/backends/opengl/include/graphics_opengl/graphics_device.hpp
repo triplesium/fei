@@ -169,6 +169,7 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
   private:
     std::shared_ptr<OpenGLDeviceState> m_state;
     std::thread::id m_context_thread;
+    std::size_t m_uniform_buffer_offset_alignment {1};
 
   public:
     GraphicsDeviceOpenGL();
@@ -236,6 +237,9 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
 
     void present(const Swapchain& swapchain) const override;
     void flush() const override;
+    [[nodiscard]] std::size_t uniform_buffer_offset_alignment() const override {
+        return m_uniform_buffer_offset_alignment;
+    }
     OpenGLResourceCacheStats resource_cache_stats() const override;
 
     std::shared_ptr<OpenGLDeviceState> state() { return m_state; }

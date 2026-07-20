@@ -239,6 +239,7 @@ inline std::shared_ptr<const ShaderModule> resolve_material_shader(
 
 inline bool pbr_forward_color_pass(const PbrMeshPipelineKey& key) {
     return !key.flags.is_set(PbrMeshPipelineKeyFlags::DepthPrepass) &&
+           !key.flags.is_set(PbrMeshPipelineKeyFlags::DeferredPrepass) &&
            !key.flags.is_set(PbrMeshPipelineKeyFlags::ShadowPass) &&
            !key.flags.is_set(PbrMeshPipelineKeyFlags::VxgiVoxelization);
 }
@@ -322,6 +323,11 @@ struct PbrMaterialPipelineSpecializer {
                 material.resource_layout(),
             },
         };
+        if (pbr_forward_color_pass(key)) {
+            pipeline_desc.resource_layouts.push_back(
+                mesh_view_layout.environment_layout
+            );
+        }
         apply_material_pipeline_state(
             pipeline_desc,
             key,

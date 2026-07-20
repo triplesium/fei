@@ -21,6 +21,8 @@ inline constexpr const char* c_emissive_capability = "pbr.gbuffer.emissive";
 inline constexpr const char* c_depth_capability = "pbr.gbuffer.depth";
 inline constexpr const char* c_direct_capability = "pbr.lighting.direct";
 inline constexpr const char* c_indirect_capability = "pbr.lighting.indirect";
+inline constexpr const char* c_sky_visibility_capability =
+    "pbr.lighting.sky_visibility";
 
 enum class PreviewMode : uint8 {
     Color,

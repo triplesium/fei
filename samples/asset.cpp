@@ -30,7 +30,7 @@ void startup(
     );
 }
 
-void update(Query<Foo> query, ResRW<Assets<TextAsset>> assets) {
+void update(Query<const Foo> query, ResRW<Assets<TextAsset>> assets) {
     for (auto [foo] : query) {
         if (auto text = assets->modify(foo.handle)) {
             auto now = std::chrono::system_clock::now();

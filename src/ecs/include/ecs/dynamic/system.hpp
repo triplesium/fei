@@ -32,8 +32,10 @@ class DynamicSystem : public System {
         std::unique_ptr<DynamicSystemExecutor> executor
     );
 
-    void run(World& world) override;
     const SystemAccess& access() const override { return m_access; }
+
+  protected:
+    void execute(World& world, SystemTicks system_ticks) override;
 };
 
 } // namespace fei

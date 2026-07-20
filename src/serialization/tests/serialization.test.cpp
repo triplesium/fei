@@ -129,7 +129,7 @@ void require_optional_round_trip(const T& expected) {
 
     auto direct = deserialize(type_id<T>(), *node);
     REQUIRE(direct);
-    REQUIRE(direct->get<T>() == expected);
+    REQUIRE(direct->template get<T>() == expected);
 
     auto text = write_json(*node, 2);
     REQUIRE(text);
@@ -138,7 +138,7 @@ void require_optional_round_trip(const T& expected) {
 
     auto from_json = deserialize(type_id<T>(), *parsed);
     REQUIRE(from_json);
-    REQUIRE(from_json->get<T>() == expected);
+    REQUIRE(from_json->template get<T>() == expected);
 }
 
 } // namespace

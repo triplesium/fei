@@ -118,7 +118,7 @@ TEST_CASE(
     "RenderQueue copies writes and flushes after frame begin",
     "[rendering][frame][queue]"
 ) {
-    constexpr ScheduleId TestRenderSchedule = 78;
+    constexpr ScheduleId test_render_schedule = 78;
     App app;
     app.add_resource_as<GraphicsDevice>(FakeGraphicsDevice {});
     app.add_resource(RenderFrameContext {});
@@ -138,11 +138,11 @@ TEST_CASE(
     REQUIRE(app.resource<RenderQueue>().pending_buffer_writes() == 1);
 
     app.add_systems(
-        TestRenderSchedule,
+        test_render_schedule,
         chain(begin_render_frame, flush_render_queue)
     );
     app.world().sort_systems();
-    app.run_schedule(TestRenderSchedule);
+    app.run_schedule(test_render_schedule);
 
     REQUIRE(app.resource<RenderQueue>().pending_buffer_writes() == 0);
     REQUIRE(commands->buffer_updates.size() == 1);
@@ -184,6 +184,7 @@ TEST_CASE(
         BufferDescription {.size = 16, .usages = BufferUsages::Uniform}
     );
     std::vector<std::jthread> writers;
+    writers.reserve(4);
     for (uint32 writer = 0; writer < 4; ++writer) {
         writers.emplace_back([queue, buffer, writer] {
             for (uint32 write = 0; write < 25; ++write) {
@@ -213,7 +214,7 @@ TEST_CASE(
     "Render frame systems submit a finished command buffer only once",
     "[rendering][frame]"
 ) {
-    constexpr ScheduleId TestRenderSchedule = 77;
+    constexpr ScheduleId test_render_schedule = 77;
     App app;
     app.add_resource_as<GraphicsDevice>(FakeGraphicsDevice {});
     app.add_resource(RenderFrameContext {});
@@ -222,12 +223,12 @@ TEST_CASE(
     auto commands = std::make_shared<LifecycleCommandBuffer>();
     device.next_command_buffer = commands;
     app.add_systems(
-        TestRenderSchedule,
+        test_render_schedule,
         chain(begin_render_frame, submit_render_frame)
     );
 
     app.world().sort_systems();
-    app.run_schedule(TestRenderSchedule);
+    app.run_schedule(test_render_schedule);
     REQUIRE(device.submitted_commands.size() == 1);
     REQUIRE(device.submitted_commands[0] == commands);
     REQUIRE(commands->begin_calls == 1);

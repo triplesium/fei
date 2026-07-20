@@ -107,23 +107,16 @@ void equirect_to_cubemap(
         ShaderStages::Compute,
         {}
     );
+    auto sampler = device->create_sampler(SamplerDescription::Linear);
     auto resource_layout = device->create_resource_layout(
-        ResourceLayoutDescription {
-            .elements = {
-                {
-                    .binding = 0,
-                    .name = "input_texture",
-                    .kind = ResourceKind::TextureReadOnly,
-                    .stages = {ShaderStages::Compute},
-                },
-                {
-                    .binding = 1,
-                    .name = "output_texture",
-                    .kind = ResourceKind::TextureReadWrite,
-                    .stages = {ShaderStages::Compute},
-                }
-            },
-        }
+        ResourceLayoutDescription::sequencial(
+            ShaderStages::Compute,
+            {
+                texture_read_only("input_texture"),
+                fei::sampler("input_sampler"),
+                texture_read_write("output_texture"),
+            }
+        )
     );
     auto compute_pipeline = device->create_compute_pipeline(
         ComputePipelineDescription {
@@ -131,10 +124,16 @@ void equirect_to_cubemap(
             .resource_layouts = {resource_layout},
         }
     );
+    auto output_view = device->create_texture_view(
+        TextureViewDescription {
+            .target = cubemap_texture,
+            .view_type = TextureViewType::Texture2DArray,
+        }
+    );
     auto resource_set = device->create_resource_set(
         ResourceSetDescription {
             .layout = resource_layout,
-            .resources = {equirect_texture, cubemap_texture},
+            .resources = {equirect_texture, sampler, output_view},
         }
     );
     auto command_buffer = device->create_command_buffer();
@@ -142,8 +141,8 @@ void equirect_to_cubemap(
     command_buffer->set_compute_pipeline(compute_pipeline);
     command_buffer->set_resource_set(0, resource_set);
     command_buffer->dispatch(
-        equirect_texture->width() / 32,
-        equirect_texture->height() / 32,
+        cubemap_texture->width() / 32,
+        cubemap_texture->height() / 32,
         6
     );
     command_buffer->end();
@@ -204,23 +203,16 @@ void cubemap_to_irradiance_map(
         ShaderStages::Compute,
         {}
     );
+    auto sampler = device->create_sampler(SamplerDescription::Linear);
     auto resource_layout = device->create_resource_layout(
-        ResourceLayoutDescription {
-            .elements = {
-                {
-                    .binding = 0,
-                    .name = "cubemap",
-                    .kind = ResourceKind::TextureReadOnly,
-                    .stages = {ShaderStages::Compute},
-                },
-                {
-                    .binding = 1,
-                    .name = "output_texture",
-                    .kind = ResourceKind::TextureReadWrite,
-                    .stages = {ShaderStages::Compute},
-                }
-            },
-        }
+        ResourceLayoutDescription::sequencial(
+            ShaderStages::Compute,
+            {
+                texture_read_only("cubemap"),
+                fei::sampler("cubemap_sampler"),
+                texture_read_write("output_texture"),
+            }
+        )
     );
     auto compute_pipeline = device->create_compute_pipeline(
         ComputePipelineDescription {
@@ -228,10 +220,16 @@ void cubemap_to_irradiance_map(
             .resource_layouts = {resource_layout},
         }
     );
+    auto output_view = device->create_texture_view(
+        TextureViewDescription {
+            .target = irradiance_texture,
+            .view_type = TextureViewType::Texture2DArray,
+        }
+    );
     auto resource_set = device->create_resource_set(
         ResourceSetDescription {
             .layout = resource_layout,
-            .resources = {global->cubemap, irradiance_texture},
+            .resources = {global->cubemap, sampler, output_view},
         }
     );
     auto command_buffer = device->create_command_buffer();
@@ -239,8 +237,8 @@ void cubemap_to_irradiance_map(
     command_buffer->set_compute_pipeline(compute_pipeline);
     command_buffer->set_resource_set(0, resource_set);
     command_buffer->dispatch(
-        irradiance_texture->width() / 32,
-        irradiance_texture->height() / 32,
+        irradiance_texture->width() / 8,
+        irradiance_texture->height() / 8,
         6
     );
     command_buffer->end();

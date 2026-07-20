@@ -25,6 +25,11 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
     float phi = atan2(vector.z, vector.x);
     float theta = acos(vector.y);
     float4 color = input_texture.SampleLevel(
-        input_sampler, float2(phi / TWO_PI, theta / PI), 0.0);
-    output_texture[dispatch_thread_id] = color;
+        input_sampler, float2(phi / TWO_PI + 0.5, theta / PI), 0.0);
+    float3 radiance = color.rgb;
+    if (!all(radiance == radiance) || any(abs(radiance) >= float3(1e20))) {
+        radiance = float3(0.0);
+    }
+    output_texture[dispatch_thread_id] =
+        float4(max(radiance, float3(0.0)), 1.0);
 }

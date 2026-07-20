@@ -88,16 +88,18 @@ TEST_CASE(
         std::make_shared<TestTexture>(PixelFormat::Rgba8Unorm, 1280, 720);
     targets.specular =
         std::make_shared<TestTexture>(PixelFormat::Rgba8Unorm, 1280, 720);
+    targets.indirect =
+        std::make_shared<TestTexture>(PixelFormat::Rgba16Float, 640, 360);
     targets.composite =
-        std::make_shared<TestTexture>(PixelFormat::Rgba8Unorm, 1280, 720);
+        std::make_shared<TestTexture>(PixelFormat::Rgba16Float, 1280, 720);
 
     auto snapshot = make_render_targets_snapshot(targets);
 
     CHECK(snapshot.available);
     CHECK(snapshot.total_targets == 8);
-    CHECK(snapshot.available_targets == 4);
-    CHECK(snapshot.total_views == 11);
-    CHECK(snapshot.available_views == 5);
+    CHECK(snapshot.available_targets == 5);
+    CHECK(snapshot.total_views == 12);
+    CHECK(snapshot.available_views == 7);
     REQUIRE(snapshot.previews.size() == snapshot.available_views);
 
     CHECK(
@@ -129,6 +131,22 @@ TEST_CASE(
     CHECK(metallic_view.preview->capability == "pbr.gbuffer.metallic");
     CHECK(metallic_view.visualization == "scalar_alpha");
 
+    const auto& composite = find_target(snapshot, "pbr.deferred.composite");
+    CHECK(composite.available);
+    CHECK(composite.format == "Rgba16Float");
+    const auto& composite_view = find_view(composite, "composite");
+    CHECK(composite_view.visualization == "tone_mapped_color");
+
+    const auto& indirect = find_target(snapshot, "pbr.lighting.indirect");
+    CHECK(indirect.available);
+    CHECK(indirect.width == 640);
+    CHECK(indirect.height == 360);
+    REQUIRE(indirect.views.size() == 2);
+    const auto& sky_visibility = find_view(indirect, "sky_visibility");
+    REQUIRE(sky_visibility.preview);
+    CHECK(sky_visibility.preview->capability == "pbr.lighting.sky_visibility");
+    CHECK(sky_visibility.visualization == "scalar_alpha");
+
     const auto& normal = find_target(snapshot, "pbr.deferred.normal_roughness");
     CHECK_FALSE(normal.available);
     CHECK(normal.format == "Rgba16Float");
@@ -144,7 +162,7 @@ TEST_CASE(
     REQUIRE(json);
     CHECK(json->find(R"("previews":[)") < json->find(R"("targets":[)"));
     CHECK(json->find(R"("total_targets":8)") != std::string::npos);
-    CHECK(json->find(R"("total_views":11)") != std::string::npos);
+    CHECK(json->find(R"("total_views":12)") != std::string::npos);
     CHECK(
         json->find(
             R"("preview":{"$optional":{"capability":"pbr.gbuffer.specular"}})"

@@ -24,12 +24,21 @@ std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
             .texture_type = TextureType::Texture2D,
         }
     );
+    auto output_view = device.create_texture_view(
+        TextureViewDescription {
+            .target = cubemap_texture,
+            .base_mip_level = 0,
+            .mip_levels = 1,
+            .base_array_layer = 0,
+            .array_layers = 1,
+            .view_type = TextureViewType::Texture2DArray,
+        }
+    );
 
     auto resource_set = device.create_resource_set(
         ResourceSetDescription {
             .layout = m_equirect_to_cubemap_resource_layout,
-            .resources =
-                {equirect_texture, m_equirect_sampler, cubemap_texture},
+            .resources = {equirect_texture, m_equirect_sampler, output_view},
             .name = "cubemap.equirect_to_cubemap",
         }
     );
@@ -39,8 +48,8 @@ std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
     command_buffer->set_compute_pipeline(m_equirect_to_cubemap_pipeline);
     command_buffer->set_resource_set(0, resource_set);
     command_buffer->dispatch(
-        equirect_texture->width() / 32,
-        equirect_texture->height() / 32,
+        (cubemap_texture->width() + 31) / 32,
+        (cubemap_texture->height() + 31) / 32,
         6
     );
     command_buffer->generate_mipmaps(cubemap_texture);
@@ -57,6 +66,10 @@ EquirectToCubemap::get_cubemap(Handle<Image> equirect_image_handle) const {
         return it->second;
     }
     return nullopt;
+}
+
+void EquirectToCubemap::invalidate(AssetId equirect_image_id) {
+    m_cubemaps.erase(equirect_image_id);
 }
 
 Optional<std::shared_ptr<Texture>> EquirectToCubemap::prepare_cubemap(

@@ -113,6 +113,10 @@ class GraphicsDevice {
 
     [[nodiscard]] virtual std::size_t max_frames_in_flight() const { return 1; }
 
+    [[nodiscard]] virtual std::size_t uniform_buffer_offset_alignment() const {
+        return 256;
+    }
+
     virtual GraphicsResourceCacheStats resource_cache_stats() const {
         return {};
     }
@@ -122,8 +126,9 @@ class GraphicsDevice {
         if (auto texture_view =
                 std::dynamic_pointer_cast<const TextureView>(texture)) {
             return texture_view;
-        } else if (auto tex =
-                       std::dynamic_pointer_cast<const Texture>(texture)) {
+        } else if (
+            auto tex = std::dynamic_pointer_cast<const Texture>(texture)
+        ) {
             return tex->full_view(*this);
         } else {
             fatal(

@@ -138,6 +138,7 @@ void setup_deferred_pipelines(
                         mesh_view_layout->layout,
                         pipelines->gbuffer_resource_layout,
                         vxgi_resources->resource_layout,
+                        mesh_view_layout->environment_layout,
                     },
                 .output_description =
                     single_color_output(PixelFormat::Rgba16Float),
@@ -185,7 +186,7 @@ void setup_deferred_pipelines(
                         pipelines->composite_resource_layout,
                     },
                 .output_description =
-                    single_color_output(PixelFormat::Rgba8Unorm),
+                    single_color_output(PixelFormat::Rgba16Float),
             }
         );
 

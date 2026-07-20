@@ -75,8 +75,8 @@ void integrate_positions(Query<Position, const Velocity> query) {
     log("integrate_positions start");
 
     for (auto [position, velocity] : query) {
-        position.x += velocity.dx;
-        position.y += velocity.dy;
+        position->x += velocity.dx;
+        position->y += velocity.dy;
     }
 
     std::this_thread::sleep_for(80ms);

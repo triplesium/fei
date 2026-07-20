@@ -712,7 +712,10 @@ TEST_CASE(
     "[pbr][pipelines]"
 ) {
     FakeGraphicsDevice device;
-    MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
+    MeshViewLayout mesh_view_layout {
+        .layout = create_layout(device),
+        .environment_layout = create_layout(device),
+    };
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
@@ -746,6 +749,8 @@ TEST_CASE(
 
     CHECK(desc.rasterizer_state.cull_mode == CullMode::None);
     CHECK_FALSE(desc.depth_stencil_state.depth_write_enabled);
+    REQUIRE(desc.resource_layouts.size() == 4);
+    CHECK(desc.resource_layouts[3] == mesh_view_layout.environment_layout);
     REQUIRE(desc.blend_state.attachment_states.size() == 1);
     CHECK(desc.blend_state.attachment_states[0].enabled);
     CHECK(

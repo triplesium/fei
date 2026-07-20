@@ -85,7 +85,7 @@ std::string reflected_name(TypeId id) {
     return Registry::instance().try_get_type(id)->name();
 }
 
-const nlohmann::json&
+nlohmann::json
 find_property(const nlohmann::json& type, const std::string& name) {
     for (const auto& property : type.at("properties")) {
         if (property.at("name") == name) {
@@ -93,7 +93,7 @@ find_property(const nlohmann::json& type, const std::string& name) {
         }
     }
     FAIL("Missing schema property: " << name);
-    return type;
+    return {};
 }
 
 } // namespace

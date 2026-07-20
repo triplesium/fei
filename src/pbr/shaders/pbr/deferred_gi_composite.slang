@@ -1,8 +1,6 @@
 import pbr.deferred.gbuffer;
-import rendering.color;
 import rendering.fullscreen;
 
-using namespace rendering.color;
 using namespace pbr.deferred;
 
 layout(set = 1) ParameterBlock<GBuffer> gbuffer;
@@ -65,13 +63,10 @@ float4 fragment_main(FullscreenFragmentInput input) : SV_Target0 {
     float3 emissive = gbuffer.read_emissive(input.tex_coords);
     float3 direct_lighting_value =
         direct_lighting.Sample(composite_sampler, input.tex_coords).rgb;
-    float4 indirect_lighting_value =
-        upsample_indirect_bilateral(input.tex_coords);
+    float3 indirect_lighting_value =
+        upsample_indirect_bilateral(input.tex_coords).rgb;
     float3 composite_lighting =
-        (direct_lighting_value + indirect_lighting_value.rgb) *
-        indirect_lighting_value.a;
-    composite_lighting += emissive;
+        direct_lighting_value + indirect_lighting_value + emissive;
 
-    composite_lighting = tonemap_reinhard_to_srgb(composite_lighting);
     return float4(composite_lighting, 1.0);
 }

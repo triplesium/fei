@@ -266,8 +266,10 @@ Result<Type&, DeserializeError> resolve_runtime_schema_type(
     Optional<std::uint64_t> serialized_id;
     if (const auto* value = id_field->value.try_unsigned_integer()) {
         serialized_id = *value;
-    } else if (const auto* value = id_field->value.try_signed_integer();
-               value && *value >= 0) {
+    } else if (
+        const auto* value = id_field->value.try_signed_integer();
+        value && *value >= 0
+    ) {
         serialized_id = static_cast<std::uint64_t>(*value);
     }
     if (!serialized_id) {

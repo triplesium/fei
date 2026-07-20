@@ -41,6 +41,11 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
                 tangent_sample.z * normal;
             float3 sampled =
                 cubemap.SampleLevel(cubemap_sampler, sample_vector, 0.0).rgb;
+            if (!all(sampled == sampled) ||
+                any(abs(sampled) >= float3(1e20))) {
+                sampled = float3(0.0);
+            }
+            sampled = max(sampled, float3(0.0));
             float luminance = dot(sampled, float3(0.2126, 0.7152, 0.0722));
             if (luminance > 50.0) {
                 sampled *= 50.0 / luminance;
@@ -51,5 +56,6 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
     }
 
     irradiance = PI * irradiance * (1.0 / sample_count);
+    irradiance = max(irradiance, float3(0.0));
     output_texture[dispatch_thread_id] = float4(irradiance, 1.0);
 }

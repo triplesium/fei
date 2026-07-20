@@ -19,6 +19,8 @@ struct alignas(16) ViewUniform {
     Matrix4x4 clip_from_world;
     Matrix4x4 view_from_world;
     Matrix4x4 clip_from_view;
+    Matrix4x4 world_from_view;
+    Matrix4x4 view_from_clip;
     Vector3 world_position;
 };
 

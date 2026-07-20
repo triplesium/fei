@@ -11,7 +11,7 @@ using namespace fei::ecs_test;
 
 static_assert(std::is_same_v<
               decltype(std::declval<World&>().get_component<Position>(0)),
-              Position&>);
+              const Position&>);
 static_assert(std::is_same_v<
               decltype(std::declval<const World&>().get_component<Position>(0)),
               const Position&>);
@@ -120,9 +120,9 @@ TEST_CASE("ECS manages components on entities", "[ecs][component]") {
     SECTION("Component modification") {
         world.add_component(entity, Position(0.0f, 0.0f));
 
-        Position& component = world.get_component<Position>(entity);
-        component.x = 100.0f;
-        component.y = 200.0f;
+        auto component = world.get_component_rw<Position>(entity);
+        component->x = 100.0f;
+        component->y = 200.0f;
 
         REQUIRE(world.get_component<Position>(entity).x == 100.0f);
         REQUIRE(world.get_component<Position>(entity).y == 200.0f);

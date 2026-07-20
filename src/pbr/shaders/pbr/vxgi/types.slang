@@ -9,6 +9,7 @@ public struct VxgiUniform {
     public float ao_alpha;
     public float sampling_factor;
     public uint mode;
+    public float skylight_leaking;
 
     public property float inverse_voxel_scale {
         get {
@@ -32,13 +33,34 @@ public struct VxgiUniform {
         out float enter,
         out float leave
     ) {
-        float3 temp_min = (world_min_point - ray_origin) / ray_direction;
-        float3 temp_max = (world_max_point - ray_origin) / ray_direction;
-        float3 v3_max = max(temp_max, temp_min);
-        float3 v3_min = min(temp_max, temp_min);
-        leave = min(v3_max.x, min(v3_max.y, v3_max.z));
-        enter = max(max(v3_min.x, 0.0), max(v3_min.y, v3_min.z));
-        return leave > enter;
+        enter = 0.0;
+        leave = 1e20;
+        for (int axis = 0; axis < 3; ++axis) {
+            float direction = ray_direction[axis];
+            if (abs(direction) < 1e-6) {
+                if (ray_origin[axis] < world_min_point[axis] ||
+                    ray_origin[axis] > world_max_point[axis]) {
+                    return false;
+                }
+                continue;
+            }
+
+            float axis_enter =
+                (world_min_point[axis] - ray_origin[axis]) / direction;
+            float axis_leave =
+                (world_max_point[axis] - ray_origin[axis]) / direction;
+            if (axis_enter > axis_leave) {
+                float temporary = axis_enter;
+                axis_enter = axis_leave;
+                axis_leave = temporary;
+            }
+            enter = max(enter, axis_enter);
+            leave = min(leave, axis_leave);
+            if (leave <= enter) {
+                return false;
+            }
+        }
+        return leave > 0.0;
     }
 };
 

@@ -10,7 +10,6 @@
 #include <cstdlib>
 #include <exception>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -241,13 +240,13 @@ TEST_CASE(
     "The same system function can be registered in different schedules",
     "[ecs][schedule][debug][unique]"
 ) {
-    constexpr ScheduleId OtherSchedule = 92;
+    constexpr ScheduleId other_schedule = 92;
     World world;
     world.add_systems(DebugSchedule, FEI_NAMED_SYSTEM(shadow_debug_system));
-    world.add_systems(OtherSchedule, FEI_NAMED_SYSTEM(shadow_debug_system));
+    world.add_systems(other_schedule, FEI_NAMED_SYSTEM(shadow_debug_system));
 
     auto first = world.schedule_debug_info(DebugSchedule);
-    auto second = world.schedule_debug_info(OtherSchedule);
+    auto second = world.schedule_debug_info(other_schedule);
     REQUIRE(first);
     REQUIRE(second);
     REQUIRE(first->systems.size() == 1);

@@ -219,39 +219,8 @@ a {
 }
 
 .sidebar-view-controls {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
-}
-
-.sidebar-grouping {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 3px;
-  padding: 3px;
-  background: var(--bg-soft);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-small);
-}
-
-.sidebar-group-button {
-  min-height: 29px;
-  padding: 4px 8px;
-  color: var(--text-faint);
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 11px;
-}
-
-.sidebar-group-button:hover {
-  color: var(--text);
-}
-
-.sidebar-group-button.active {
-  color: var(--accent-strong);
-  background: var(--panel-hover);
+  display: flex;
+  justify-content: flex-end;
 }
 
 .sidebar-filter-button {
@@ -664,10 +633,6 @@ a {
 
 .section {
   margin-top: 22px;
-}
-
-.snapshot-section {
-  margin-top: 10px;
 }
 
 .section-header {

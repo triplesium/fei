@@ -96,13 +96,19 @@ const std::array<RenderTargetDescriptor, 8>& render_target_descriptors() {
             .mode = PreviewMode::ToneMappedColor,
             .geometry_mask = false,
         },
+        RenderTargetViewDescriptor {
+            .id = "sky_visibility",
+            .label = "Sky Visibility",
+            .blob_capability = c_sky_visibility_capability,
+            .mode = PreviewMode::ScalarAlpha,
+        },
     };
     static const std::array composite_views {
         RenderTargetViewDescriptor {
             .id = "composite",
             .label = "Rendered Frame",
             .blob_capability = c_composite_capability,
-            .mode = PreviewMode::Color,
+            .mode = PreviewMode::ToneMappedColor,
             .geometry_mask = false,
         },
     };
@@ -167,7 +173,7 @@ const std::array<RenderTargetDescriptor, 8>& render_target_descriptors() {
             .id = "pbr.deferred.composite",
             .label = "Composite",
             .capture_name = "deferred_view_targets.composite",
-            .expected_format = PixelFormat::Rgba8Unorm,
+            .expected_format = PixelFormat::Rgba16Float,
             .texture = &DeferredViewTargets::composite,
             .views = composite_views,
         },

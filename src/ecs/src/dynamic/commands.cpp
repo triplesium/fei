@@ -16,7 +16,9 @@ SystemAccess DynamicCommandsParam::access() const {
     return result;
 }
 
-Result<Ref, DynamicSystemError> DynamicCommandsParam::prepare(World& world) {
+Result<Ref, DynamicSystemError>
+DynamicCommandsParam::prepare(World& world, SystemTicks system_ticks) {
+    (void)system_ticks;
     if (!world.has_resource<CommandsQueue>()) {
         return failure(
             DynamicSystemError {

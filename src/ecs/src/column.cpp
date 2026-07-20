@@ -49,7 +49,8 @@ Column::~Column() {
 Column::Column(const Column& other) :
     m_count(other.m_count), m_capacity(other.m_capacity),
     m_type_size(other.m_type_size), m_type_align(other.m_type_align),
-    m_type_id(other.m_type_id), m_type_ops(other.m_type_ops) {
+    m_type_id(other.m_type_id), m_type_ops(other.m_type_ops),
+    m_ticks(other.m_ticks) {
     if (other.m_elements) {
         m_elements = allocate_elements(m_capacity);
         // std::memcpy(m_elements, other.m_elements, m_type_size * m_count);
@@ -72,6 +73,7 @@ Column& Column::operator=(const Column& other) {
         m_type_align = other.m_type_align;
         m_type_id = other.m_type_id;
         m_type_ops = other.m_type_ops;
+        m_ticks = other.m_ticks;
 
         if (other.m_elements) {
             m_elements = allocate_elements(m_capacity);
@@ -93,7 +95,7 @@ Column::Column(Column&& other) noexcept :
     m_elements(other.m_elements), m_count(other.m_count),
     m_capacity(other.m_capacity), m_type_size(other.m_type_size),
     m_type_align(other.m_type_align), m_type_id(other.m_type_id),
-    m_type_ops(std::move(other.m_type_ops)) {
+    m_type_ops(std::move(other.m_type_ops)), m_ticks(std::move(other.m_ticks)) {
     other.m_elements = nullptr;
     other.m_count = 0;
     other.m_capacity = 0;
@@ -110,6 +112,7 @@ Column& Column::operator=(Column&& other) noexcept {
         m_type_align = other.m_type_align;
         m_type_id = other.m_type_id;
         m_type_ops = std::move(other.m_type_ops);
+        m_ticks = std::move(other.m_ticks);
         other.m_elements = nullptr;
         other.m_count = 0;
         other.m_capacity = 0;
@@ -150,7 +153,12 @@ void Column::set(uint32_t row, Ref ref) {
     m_type_ops.copy_construct(m_type_ops.context, dest_ptr, ref.const_ptr());
 }
 
-void Column::push_back(Ref ref) {
+void Column::set(uint32_t row, Ref ref, ComponentTicks ticks) {
+    set(row, ref);
+    m_ticks[row] = ticks;
+}
+
+void Column::push_back(Ref ref, ComponentTicks ticks) {
     if (m_count == m_capacity) {
         const uint32_t new_capacity = m_capacity * 2;
         void* new_elements = ::operator new(
@@ -174,6 +182,7 @@ void Column::push_back(Ref ref) {
         m_capacity = new_capacity;
     }
     m_count++;
+    m_ticks.push_back(ticks);
     void* dest_ptr = element_at(m_elements, m_count - 1);
     if (ref) {
         if (ref.type_id() != m_type_id) {
@@ -202,6 +211,16 @@ Ref Column::get(uint32_t row) const {
     return result_ref;
 }
 
+ComponentTicks& Column::ticks(uint32_t row) {
+    FEI_ASSERT(row < m_count);
+    return m_ticks[row];
+}
+
+const ComponentTicks& Column::ticks(uint32_t row) const {
+    FEI_ASSERT(row < m_count);
+    return m_ticks[row];
+}
+
 void Column::swap_remove(uint32_t row) {
     FEI_ASSERT(row < m_count);
     if (row < m_count - 1) {
@@ -220,6 +239,10 @@ void Column::swap_remove(uint32_t row) {
         // Just delete the last element
         m_type_ops.destroy(m_type_ops.context, last_ptr);
     }
+    if (row < m_ticks.size() - 1) {
+        m_ticks[row] = m_ticks.back();
+    }
+    m_ticks.pop_back();
     m_count--;
 }
 
@@ -229,6 +252,7 @@ void Column::clear() {
         m_type_ops.destroy(m_type_ops.context, data_ptr);
     }
     m_count = 0;
+    m_ticks.clear();
 }
 
 } // namespace fei

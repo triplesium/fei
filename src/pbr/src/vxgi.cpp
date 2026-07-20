@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <format>
 #include <limits>
 #include <utility>
 
@@ -752,6 +751,8 @@ void prepare_vxgi_resources(
     uniform.world_max_point = cube_max_point;
     uniform.volume_dimension =
         static_cast<int>(volumes->config.voxel_resolution);
+    uniform.bounce_strength = volumes->config.bounce_strength;
+    uniform.skylight_leaking = volumes->config.skylight_leaking;
 
     render_queue
         ->write_buffer(vxgi->uniform_buffer, 0, &uniform, sizeof(VxgiUniform));

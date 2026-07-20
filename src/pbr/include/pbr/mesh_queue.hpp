@@ -54,7 +54,8 @@ void queue_mesh_draw_items(
             entity,
             pipeline_id,
             view_resource_set,
-            mesh_uniform_it->second.resource_set,
+            mesh_uniforms.resource_set,
+            mesh_uniform_it->second.dynamic_offset,
             material.resource_set(),
             gpu_mesh
         ));

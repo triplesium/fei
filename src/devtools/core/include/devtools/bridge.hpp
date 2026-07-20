@@ -11,17 +11,23 @@
 
 namespace fei::devtools {
 
+struct ManifestEndpoint {
+    std::string rel;
+    std::string method;
+    std::string path;
+    std::vector<std::string> params;
+};
+
 struct ManifestEntry {
     std::string id;
     std::string label;
-    std::string kind;
     std::string mime;
     std::string schema;
-    std::string data_type;
-    std::string request_type;
-    std::string response_type;
+    Optional<std::string> request_type;
+    Optional<std::string> response_type;
     PublishMode mode {PublishMode::Cached};
     bool waitable {false};
+    std::vector<ManifestEndpoint> endpoints;
 };
 
 struct BridgeBlob {
@@ -32,15 +38,6 @@ struct BridgeBlob {
     std::unordered_map<std::string, std::string> metadata;
 
     bool empty() const { return bytes.empty(); }
-};
-
-struct BridgeSnapshot {
-    std::string capability;
-    std::string json;
-    std::string schema;
-    uint64 version {0};
-
-    bool empty() const { return json.empty(); }
 };
 
 struct BridgeResponse {
@@ -54,11 +51,11 @@ struct BridgeResponse {
 
 struct PendingRequest {
     Token token {0};
-    RequestKind kind {RequestKind::Blob};
+    ProtocolKind protocol {ProtocolKind::Blob};
     std::string capability;
     uint64 after {0};
     bool fresh {false};
-    std::string body;
+    Optional<std::string> body;
     std::chrono::steady_clock::time_point deadline;
 };
 
@@ -78,15 +75,9 @@ class Bridge {
         bool fresh,
         std::chrono::milliseconds timeout
     );
-    Token enqueue_snapshot_request(
+    Token enqueue_request(
         std::string capability,
-        uint64 after,
-        bool fresh,
-        std::chrono::milliseconds timeout
-    );
-    Token enqueue_command_request(
-        std::string capability,
-        std::string body,
+        Optional<std::string> body,
         std::chrono::milliseconds timeout
     );
 
@@ -106,15 +97,8 @@ class Bridge {
 
     Optional<BridgeBlob>
     cached_blob(const std::string& capability, uint64 after, bool fresh) const;
-    Optional<BridgeSnapshot> cached_snapshot(
-        const std::string& capability,
-        uint64 after,
-        bool fresh
-    ) const;
-
     void publish_blob(BlobResponse response);
-    void publish_snapshot(SnapshotResponse response);
-    void complete_command(CommandResponse response);
+    void complete_response(JsonResponse response);
     void complete_error(ErrorResponse response);
 
     void update_manifest(std::vector<ManifestEntry> entries);
@@ -130,12 +114,7 @@ class Bridge {
 };
 
 std::string blob_metadata_json(const BridgeBlob& blob);
-std::string snapshot_envelope_json(const BridgeSnapshot& snapshot);
-std::string error_json(
-    std::string message,
-    int status,
-    std::string capability = {},
-    std::string kind = {}
-);
+std::string
+error_json(std::string message, int status, std::string capability = {});
 
 } // namespace fei::devtools
