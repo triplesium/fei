@@ -32,7 +32,7 @@ jobs:
           --disable-pip-version-check
           --no-deps
           --only-binary=:all:
-          clang-format==20.1.8
+          clang-format==22.1.8
 
       - name: Set up xmake
         uses: xmake-io/github-action-setup-xmake@3a1a5dddfc7fa625d9a698738334bf55655a861a # v1
