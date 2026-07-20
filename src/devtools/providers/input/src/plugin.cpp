@@ -2,14 +2,12 @@
 
 #include "app/app.hpp"
 #include "base/log.hpp"
-#include "devtools/bridge.hpp"
 #include "devtools/capability.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
 #include "input_types.hpp"
-#include "refl/registry.hpp"
 #include "window/input.hpp"
 
 #include <algorithm>
@@ -53,6 +51,7 @@ struct KeyboardKey {
     static constexpr std::string_view id {"input.key"};
     static constexpr std::string_view label {"Keyboard Key"};
     static constexpr std::string_view schema {"input.key.v1"};
+    static constexpr ScheduleId schedule {Update};
 
     static void
     run(Query<Entity, const Request, const JsonRequest> requests,
@@ -106,6 +105,7 @@ struct ClearInput {
     static constexpr std::string_view id {"input.clear"};
     static constexpr std::string_view label {"Clear Input"};
     static constexpr std::string_view schema {"input.clear.v1"};
+    static constexpr ScheduleId schedule {Update};
 
     static void
     run(Query<Entity, const Request, const JsonRequest> requests,
@@ -132,12 +132,6 @@ void apply_pressed_keys(ResRO<InputState> input_state, ResRW<KeyInput> input) {
 } // namespace
 
 void ProviderPlugin::setup(App& app) {
-    if (!app.has_resource<Bridge>()) {
-        fatal(
-            "devtools::input::ProviderPlugin requires devtools::CorePlugin. "
-            "Add devtools::CorePlugin before devtools::input::ProviderPlugin."
-        );
-    }
     if (!app.has_resource<KeyInput>()) {
         fatal(
             "devtools::input::ProviderPlugin requires InputPlugin. Add "
@@ -145,22 +139,9 @@ void ProviderPlugin::setup(App& app) {
         );
     }
 
-    auto& registry = Registry::instance();
-    if (!registry.has_enum(type_id<KeyCode>()) ||
-        !registry.try_get_cls(type_id<KeyInputRequest>()) ||
-        !registry.try_get_cls(type_id<KeyInputResponse>()) ||
-        !registry.try_get_cls(type_id<ClearInputResponse>())) {
-        fatal(
-            "devtools::input::ProviderPlugin requires ReflectionPlugin. Add "
-            "ReflectionPlugin before devtools::input::ProviderPlugin."
-        );
-    }
-
-    declare_capability<KeyboardKey>(app.world());
-    declare_capability<ClearInput>(app.world());
+    add_capabilities<KeyboardKey, ClearInput>(app);
 
     app.add_resource(InputState {});
-    app.add_systems(Update, KeyboardKey::run, ClearInput::run);
     app.configure_sets(
            PreUpdate,
            chain(InputSystems::Update {}, InputSystems::ApplyDevtools {})

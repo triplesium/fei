@@ -1,6 +1,10 @@
 #pragma once
 
+#include "app/app.hpp"
+#include "app/reflection_plugin.hpp"
+#include "base/log.hpp"
 #include "base/result.hpp"
+#include "devtools/bridge.hpp"
 #include "devtools/json.hpp"
 #include "devtools/types.hpp"
 #include "ecs/commands.hpp"
@@ -41,6 +45,11 @@ concept CapabilityDefinition = requires {
     { T::schema } -> std::convertible_to<std::string_view>;
 };
 
+template<class T>
+concept ExecutableCapability = CapabilityDefinition<T> && requires(App& app) {
+    app.add_systems(T::schedule, T::run);
+};
+
 template<CapabilityDefinition Definition>
 Entity declare_capability(World& world) {
     JsonProtocol protocol {.schema = std::string(Definition::schema)};
@@ -56,6 +65,39 @@ Entity declare_capability(World& world) {
         std::string(Definition::label),
         std::move(protocol)
     );
+}
+
+template<ExecutableCapability Definition>
+Entity add_capability(App& app) {
+    if (!app.has_resource<Bridge>()) {
+        fatal(
+            "DevTools capability '{}' requires devtools::CorePlugin. Add "
+            "devtools::CorePlugin before its provider.",
+            Definition::id
+        );
+    }
+
+    if constexpr (
+        !std::is_void_v<typename Definition::RequestBody> ||
+        !std::is_void_v<typename Definition::ResponseBody>
+    ) {
+        if (!app.has_plugin<ReflectionPlugin>()) {
+            fatal(
+                "DevTools capability '{}' requires ReflectionPlugin. Add "
+                "ReflectionPlugin before its provider.",
+                Definition::id
+            );
+        }
+    }
+
+    auto entity = declare_capability<Definition>(app.world());
+    app.add_systems(Definition::schedule, Definition::run);
+    return entity;
+}
+
+template<ExecutableCapability... Definitions>
+void add_capabilities(App& app) {
+    (add_capability<Definitions>(app), ...);
 }
 
 inline void respond_capability_error(

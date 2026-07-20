@@ -1,15 +1,12 @@
 #include "devtools_rendering/plugin.hpp"
 
 #include "app/app.hpp"
-#include "base/log.hpp"
-#include "devtools/bridge.hpp"
 #include "devtools/capability.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
 #include "ecs/world.hpp"
 #include "graphics/graphics_device.hpp"
-#include "refl/registry.hpp"
 #include "snapshot_types.hpp"
 
 #include <string_view>
@@ -25,6 +22,7 @@ struct RenderSchedule {
     static constexpr std::string_view id {"rendering.render_schedule"};
     static constexpr std::string_view label {"Render Schedule"};
     static constexpr std::string_view schema {"rendering.render_schedule.v1"};
+    static constexpr ScheduleId schedule {RenderEnd};
 
     static void
     run(Query<Entity, const Request, const JsonRequest> requests,
@@ -52,6 +50,7 @@ struct GraphicsCache {
     static constexpr std::string_view id {"graphics.cache"};
     static constexpr std::string_view label {"Graphics Cache"};
     static constexpr std::string_view schema {"graphics.cache.v2"};
+    static constexpr ScheduleId schedule {RenderEnd};
 
     static void
     run(ResRO<GraphicsDevice> graphics_device,
@@ -74,30 +73,7 @@ struct GraphicsCache {
 } // namespace
 
 void ProviderPlugin::setup(App& app) {
-    if (!app.has_resource<Bridge>()) {
-        fatal(
-            "devtools::rendering::ProviderPlugin requires "
-            "devtools::CorePlugin. Add devtools::CorePlugin before "
-            "devtools::rendering::ProviderPlugin."
-        );
-    }
-
-    auto& registry = Registry::instance();
-    if (!registry.try_get_cls(type_id<RenderSystemSnapshot>()) ||
-        !registry.try_get_cls(type_id<RenderScheduleSnapshot>()) ||
-        !registry.try_get_cls(type_id<ResourceSetSourceSnapshot>()) ||
-        !registry.try_get_cls(type_id<GraphicsCacheSnapshot>())) {
-        fatal(
-            "devtools::rendering::ProviderPlugin requires ReflectionPlugin. "
-            "Add ReflectionPlugin before "
-            "devtools::rendering::ProviderPlugin."
-        );
-    }
-
-    declare_capability<RenderSchedule>(app.world());
-    declare_capability<GraphicsCache>(app.world());
-
-    app.add_systems(RenderEnd, RenderSchedule::run, GraphicsCache::run);
+    add_capabilities<RenderSchedule, GraphicsCache>(app);
 }
 
 void ProviderPlugin::finish(App&) {}

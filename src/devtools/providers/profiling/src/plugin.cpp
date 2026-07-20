@@ -1,13 +1,10 @@
 #include "devtools_profiling/plugin.hpp"
 
 #include "app/app.hpp"
-#include "base/log.hpp"
-#include "devtools/bridge.hpp"
 #include "devtools/capability.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "profiling/profiling.hpp"
-#include "refl/registry.hpp"
 #include "snapshot_types.hpp"
 
 #include <string_view>
@@ -23,6 +20,7 @@ struct FrameStats {
     static constexpr std::string_view id {"profiling.frame_stats"};
     static constexpr std::string_view label {"Frame Statistics"};
     static constexpr std::string_view schema {"profiling.frame_stats.v1"};
+    static constexpr ScheduleId schedule {PostUpdate};
 
     static void
     run(Query<Entity, const Request, const JsonRequest> requests,
@@ -47,6 +45,7 @@ struct ProfilingSummary {
     static constexpr std::string_view id {"profiling.summary"};
     static constexpr std::string_view label {"Profiling Summary"};
     static constexpr std::string_view schema {"profiling.summary.v1"};
+    static constexpr ScheduleId schedule {PostUpdate};
 
     static void
     run(Query<Entity, const Request, const JsonRequest> requests,
@@ -71,6 +70,7 @@ struct FrameHistory {
     static constexpr std::string_view id {"profiling.frame_history"};
     static constexpr std::string_view label {"Frame History"};
     static constexpr std::string_view schema {"profiling.frame_history.v1"};
+    static constexpr ScheduleId schedule {PostUpdate};
 
     static void
     run(Query<Entity, const Request, const JsonRequest> requests,
@@ -91,35 +91,7 @@ struct FrameHistory {
 } // namespace
 
 void ProviderPlugin::setup(App& app) {
-    if (!app.has_resource<Bridge>()) {
-        fatal(
-            "devtools::profiling::ProviderPlugin requires "
-            "devtools::CorePlugin. Add devtools::CorePlugin before "
-            "devtools::profiling::ProviderPlugin."
-        );
-    }
-    auto& registry = Registry::instance();
-    if (!registry.try_get_cls(type_id<FrameStatsSnapshot>()) ||
-        !registry.try_get_cls(type_id<SummaryEntrySnapshot>()) ||
-        !registry.try_get_cls(type_id<SummarySnapshot>()) ||
-        !registry.try_get_cls(type_id<FrameHistorySampleSnapshot>()) ||
-        !registry.try_get_cls(type_id<FrameHistorySnapshot>())) {
-        fatal(
-            "devtools::profiling::ProviderPlugin requires ReflectionPlugin. "
-            "Add ReflectionPlugin before "
-            "devtools::profiling::ProviderPlugin."
-        );
-    }
-
-    declare_capability<FrameStats>(app.world());
-    declare_capability<ProfilingSummary>(app.world());
-    declare_capability<FrameHistory>(app.world());
-    app.add_systems(
-        PostUpdate,
-        FrameStats::run,
-        ProfilingSummary::run,
-        FrameHistory::run
-    );
+    add_capabilities<FrameStats, ProfilingSummary, FrameHistory>(app);
 }
 
 void ProviderPlugin::finish(App&) {}

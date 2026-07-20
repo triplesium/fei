@@ -3,7 +3,6 @@
 #include "app/app.hpp"
 #include "asset/assets.hpp"
 #include "base/log.hpp"
-#include "devtools/bridge.hpp"
 #include "devtools/capability.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
@@ -14,7 +13,6 @@
 #include "pbr/passes/target.hpp"
 #include "pbr/pipeline_specializer.hpp"
 #include "pbr/postprocess.hpp"
-#include "refl/registry.hpp"
 #include "render_targets.hpp"
 #include "rendering/mesh/mesh.hpp"
 #include "rendering/pipeline_cache.hpp"
@@ -475,6 +473,7 @@ struct RenderTargets {
     static constexpr std::string_view id {c_render_targets_capability};
     static constexpr std::string_view label {"PBR Render Targets"};
     static constexpr std::string_view schema {"pbr.render_targets.v4"};
+    static constexpr ScheduleId schedule {RenderEnd};
 
     static void
     run(ResRO<DeferredViewTargets> targets,
@@ -578,29 +577,13 @@ void declare_frame_capability(App& app, const char* id, const char* label) {
 ProviderPlugin::ProviderPlugin(Config config) : m_config(config) {}
 
 void ProviderPlugin::setup(App& app) {
-    if (!app.has_resource<Bridge>()) {
-        fatal(
-            "devtools::pbr::ProviderPlugin requires devtools::CorePlugin. "
-            "Add devtools::CorePlugin before devtools::pbr::ProviderPlugin."
-        );
-    }
     if (!app.has_resource<DeferredViewTargets>()) {
         fatal(
             "devtools::pbr::ProviderPlugin requires DeferredRenderPlugin. "
             "Add PbrPlugin before devtools::pbr::ProviderPlugin."
         );
     }
-    auto& registry = Registry::instance();
-    if (!registry.try_get_cls(type_id<RenderTargetViewSnapshot>()) ||
-        !registry.try_get_cls(type_id<RenderTargetSnapshot>()) ||
-        !registry.try_get_cls(type_id<RenderTargetsSnapshot>())) {
-        fatal(
-            "devtools::pbr::ProviderPlugin requires ReflectionPlugin. Add "
-            "ReflectionPlugin before devtools::pbr::ProviderPlugin."
-        );
-    }
-
-    declare_capability<RenderTargets>(app.world());
+    add_capability<RenderTargets>(app);
     for (const auto& target : render_target_descriptors()) {
         for (const auto& view : target.views) {
             declare_frame_capability(app, view.blob_capability, view.label);
@@ -620,7 +603,6 @@ void ProviderPlugin::setup(App& app) {
         RenderUpdate,
         render_target_preview | in_set<RenderingSystems::PostProcess>()
     );
-    app.add_systems(RenderEnd, RenderTargets::run);
     app.add_systems(RenderEnd, publish_and_enqueue_frame_capture);
 }
 

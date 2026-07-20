@@ -1,5 +1,6 @@
 #include "devtools/capability.hpp"
 
+#include "devtools/bridge.hpp"
 #include "ecs/world.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -37,9 +38,39 @@ struct NoResponseCapability {
     static constexpr std::string_view schema {"fixture.no_response.v1"};
 };
 
+struct CapabilityRunState {
+    int value {0};
+};
+
+struct UpdateCapability {
+    using RequestBody = void;
+    using ResponseBody = void;
+
+    static constexpr std::string_view id {"fixture.update"};
+    static constexpr std::string_view label {"Update Fixture"};
+    static constexpr std::string_view schema {"fixture.update.v1"};
+    static constexpr ScheduleId schedule {Update};
+
+    static void run(ResRW<CapabilityRunState> state) { state->value += 1; }
+};
+
+struct PostUpdateCapability {
+    using RequestBody = void;
+    using ResponseBody = void;
+
+    static constexpr std::string_view id {"fixture.post_update"};
+    static constexpr std::string_view label {"Post Update Fixture"};
+    static constexpr std::string_view schema {"fixture.post_update.v1"};
+    static constexpr ScheduleId schedule {PostUpdate};
+
+    static void run(ResRW<CapabilityRunState> state) { state->value += 10; }
+};
+
 static_assert(CapabilityDefinition<ParameterlessCapability>);
 static_assert(CapabilityDefinition<ParameterizedCapability>);
 static_assert(CapabilityDefinition<NoResponseCapability>);
+static_assert(ExecutableCapability<UpdateCapability>);
+static_assert(ExecutableCapability<PostUpdateCapability>);
 
 } // namespace
 
@@ -85,4 +116,21 @@ TEST_CASE(
         world.get_component<JsonProtocol>(no_response);
     REQUIRE_FALSE(no_response_protocol.request_type);
     REQUIRE_FALSE(no_response_protocol.response_type);
+}
+
+TEST_CASE(
+    "Executable capabilities install their systems in class-defined schedules",
+    "[devtools][capability]"
+) {
+    App app;
+    app.add_resource(Bridge {});
+    app.add_resource(CapabilityRunState {});
+
+    add_capabilities<UpdateCapability, PostUpdateCapability>(app);
+
+    app.run_schedule(Update);
+    REQUIRE(app.resource<CapabilityRunState>().value == 1);
+
+    app.run_schedule(PostUpdate);
+    REQUIRE(app.resource<CapabilityRunState>().value == 11);
 }

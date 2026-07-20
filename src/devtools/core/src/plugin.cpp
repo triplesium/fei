@@ -276,6 +276,7 @@ struct Shutdown {
     static constexpr std::string_view id {"devtools.shutdown"};
     static constexpr std::string_view label {"Shutdown"};
     static constexpr std::string_view schema {"devtools.shutdown.v1"};
+    static constexpr ScheduleId schedule {Update};
 
     static void
     run(Query<Entity, const Request, const JsonRequest> requests,
@@ -307,7 +308,7 @@ void CorePlugin::setup(App& app) {
     app.add_resource(Bridge {});
     app.add_resource(SchemaSyncState {});
 
-    declare_capability<Shutdown>(app.world());
+    add_capability<Shutdown>(app);
 
     auto bridge = app.resource<Bridge>();
     app.add_resource(Server(m_config, bridge));
@@ -315,7 +316,6 @@ void CorePlugin::setup(App& app) {
 
     app.add_systems(First, import_devtools_requests);
     app.add_systems(RenderFirst, import_devtools_requests);
-    app.add_systems(Update, Shutdown::run);
     app.add_systems(RenderEnd, Shutdown::run);
     app.add_systems(
         Last,
