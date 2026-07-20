@@ -19,37 +19,40 @@ sample exposes the same capabilities.
    during cleanup.
 3. Request `/` for service discovery, then request the returned manifest and
    schemas endpoints.
-4. Select capabilities from the manifest by `id` and follow their declared
-   endpoints. Do not guess endpoints that the manifest does not advertise.
+4. Select capabilities from the manifest by `id` and follow its declared
+   `endpoints` array. Select an endpoint by `rel`, then use its `method`, `path`,
+   and optional `params`. Do not guess endpoints that the manifest does not
+   advertise.
 5. Capture the minimum evidence needed, perform any authorized command, then
    capture fresh evidence for comparison.
 
-## Read Capabilities
+## Inspect Status and Blobs
 
 - Read `/api/v1/status` to confirm readiness, pending requests, cached data, and
   active subscriptions.
-- For a snapshot, call the capability's `get` endpoint. Use `fresh=true` only
-  when current state is required; snapshots are generated on demand, so do not
-  continuously poll fresh snapshots.
-- Snapshot responses contain `id`, `schema`, `version`, and `data`. Use the
-  capability's `data_type` with the schemas endpoint when field meaning is
-  unclear.
-- For a frame, prefer the blob capability's one-shot `get` endpoint with
+- For a frame, prefer the blob capability's one-shot `read` endpoint with
   `fresh=true`. Save the binary response to a temporary image and inspect it.
-  Use the stream endpoint only when continuous monitoring is necessary.
+  Use its `stream` endpoint only when continuous monitoring is necessary.
 
-## Send Commands
+## Invoke JSON Capabilities
 
-1. Read the command capability's `request_type` and `response_type`.
-2. Resolve `request_type` through the schemas endpoint and construct the exact
-   JSON object. Object fields are strict, and enum inputs use reflected names
-   rather than numeric values.
-3. POST JSON to the manifest's command endpoint with
-   `Content-Type: application/json`.
-4. Treat commands as state-changing. After simulated key presses, send matching
-   releases or call `input.clear` before cleanup.
-5. Call `devtools.shutdown` only when the task explicitly requires stopping the
-   target and the process is in scope; the command also requires agent mode.
+1. Select the capability's `invoke` endpoint. Read its optional `request_type`
+   and `response_type` from the manifest.
+2. If `request_type` is present, resolve it through the schemas endpoint,
+   construct the exact JSON object, and invoke the declared endpoint with
+   `Content-Type: application/json`. Object fields are strict, and enum inputs
+   use reflected names rather than numeric values.
+3. If `request_type` is absent, invoke the endpoint without a request body. Do
+   not send an artificial empty JSON object.
+4. Responses directly contain the `response_type` JSON value when one is
+   declared; there is no snapshot envelope, cache version, or freshness
+   parameter.
+5. Capability metadata does not classify side effects. Infer intent from the
+   selected capability and task: reflection and profiling capabilities inspect
+   state, while input capabilities modify it. After simulated key presses,
+   send matching releases or invoke `input.clear` before cleanup.
+6. Invoke `devtools.shutdown` only when the task explicitly requires stopping
+   the target and the process is in scope.
 
 ## Diagnose Failures
 
@@ -64,5 +67,6 @@ sample exposes the same capabilities.
 
 ## Report Results
 
-Report the capability and version used, summarize the observed state, and keep
-captured artifacts only when useful to the task or explicitly requested.
+Report the capability and schema used, summarize the observed state, and report
+blob versions when relevant. Keep captured artifacts only when useful to the
+task or explicitly requested.
