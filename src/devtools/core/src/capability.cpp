@@ -30,13 +30,13 @@ Entity declare_capability(
     World& world,
     std::string id,
     std::string label,
-    BlobCapability desc
+    BlobProtocol protocol
 ) {
     return declare_capability_impl(
         world,
         std::move(id),
         std::move(label),
-        std::move(desc)
+        std::move(protocol)
     );
 }
 
@@ -44,27 +44,13 @@ Entity declare_capability(
     World& world,
     std::string id,
     std::string label,
-    SnapshotCapability desc
+    JsonProtocol protocol
 ) {
     return declare_capability_impl(
         world,
         std::move(id),
         std::move(label),
-        std::move(desc)
-    );
-}
-
-Entity declare_capability(
-    World& world,
-    std::string id,
-    std::string label,
-    CommandCapability desc
-) {
-    return declare_capability_impl(
-        world,
-        std::move(id),
-        std::move(label),
-        std::move(desc)
+        std::move(protocol)
     );
 }
 

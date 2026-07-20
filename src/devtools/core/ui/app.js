@@ -10,7 +10,6 @@ const elements = {
   serviceName: document.querySelector("#service-name"),
   sidebar: document.querySelector("#sidebar"),
   sidebarBlobToggle: document.querySelector("#toggle-blobs"),
-  sidebarGrouping: document.querySelector("#sidebar-grouping"),
   sidebarToggle: document.querySelector("#sidebar-toggle"),
   statusSummary: document.querySelector("#status-summary"),
   toastRegion: document.querySelector("#toast-region"),
@@ -18,41 +17,20 @@ const elements = {
 
 const state = {
   capabilityState: new Map(),
-  collapsedSidebarGroups: {
-    kind: new Set(),
-    namespace: new Set(),
-  },
+  collapsedSidebarGroups: new Set(),
   discovery: null,
   inlineBlobIds: new Set(),
   manifest: null,
   schemas: null,
   selectedId: null,
-  sidebarGrouping: loadSidebarGrouping(),
   showSidebarBlobs: loadShowSidebarBlobs(),
   status: null,
-};
-
-const groupLabels = {
-  snapshot: "Snapshots",
-  command: "Commands",
-  blob: "Blobs",
-  other: "Other",
 };
 
 const supportedProtocolVersion = 1;
 const maximumCollectionRows = 200;
 const maximumPreviewBytes = 2 * 1024 * 1024;
-const sidebarGroupingStorageKey = "fei-devtools-sidebar-grouping";
 const sidebarShowBlobsStorageKey = "fei-devtools-sidebar-show-blobs";
-
-function loadSidebarGrouping() {
-  try {
-    const stored = window.localStorage.getItem("fei-devtools-sidebar-grouping");
-    return stored === "kind" || stored === "namespace" ? stored : "namespace";
-  } catch {
-    return "namespace";
-  }
-}
 
 function loadShowSidebarBlobs() {
   try {
@@ -68,7 +46,6 @@ class DevToolsError extends Error {
     this.name = "DevToolsError";
     this.status = details.status ?? null;
     this.capability = details.capability ?? "";
-    this.kind = details.kind ?? "";
     this.payload = details.payload ?? null;
   }
 }
@@ -174,7 +151,6 @@ async function readErrorResponse(response) {
     {
       status: response.status,
       capability: payload?.capability,
-      kind: payload?.kind,
       payload,
     },
   );
@@ -233,9 +209,14 @@ function validateManifest(manifest) {
       !capability ||
       typeof capability.id !== "string" ||
       !capability.id ||
-      typeof capability.kind !== "string" ||
-      !capability.endpoints ||
-      typeof capability.endpoints !== "object"
+      !Array.isArray(capability.endpoints) ||
+      capability.endpoints.some(
+        (endpoint) =>
+          !endpoint ||
+          typeof endpoint.rel !== "string" ||
+          typeof endpoint.method !== "string" ||
+          typeof endpoint.path !== "string",
+      )
     ) {
       throw new DevToolsError("Manifest contains an invalid capability entry");
     }
@@ -268,10 +249,7 @@ function getCapabilityState(id) {
       loading: false,
       payload: undefined,
       responseType: "",
-      schema: "",
-      snapshotAutoLoadAttempted: false,
       updatedAt: null,
-      version: null,
       viewMode: "auto",
       blob: null,
       blobUrl: null,
@@ -334,6 +312,14 @@ function capabilityById(id) {
   return state.manifest?.capabilities.find((item) => item.id === id) ?? null;
 }
 
+function endpointByRel(capability, rel) {
+  return capability?.endpoints?.find((endpoint) => endpoint.rel === rel) ?? null;
+}
+
+function isBlobCapability(capability) {
+  return endpointByRel(capability, "read") !== null;
+}
+
 function updateStatusSummary() {
   if (!state.status) {
     elements.statusSummary.textContent = "";
@@ -355,11 +341,6 @@ function capabilityNamespace(id) {
 }
 
 function updateSidebarGroupingControls() {
-  for (const button of elements.sidebarGrouping.querySelectorAll("[data-grouping]")) {
-    const active = button.dataset.grouping === state.sidebarGrouping;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-pressed", String(active));
-  }
   elements.sidebarBlobToggle.classList.toggle("active", state.showSidebarBlobs);
   elements.sidebarBlobToggle.setAttribute(
     "aria-pressed",
@@ -368,19 +349,6 @@ function updateSidebarGroupingControls() {
   elements.sidebarBlobToggle.title = state.showSidebarBlobs
     ? "Hide blob capabilities"
     : "Show blob capabilities";
-}
-
-function setSidebarGrouping(grouping) {
-  if (grouping !== "kind" && grouping !== "namespace") {
-    return;
-  }
-  state.sidebarGrouping = grouping;
-  try {
-    window.localStorage.setItem(sidebarGroupingStorageKey, grouping);
-  } catch {
-    // The grouping preference remains available for the current page session.
-  }
-  renderSidebar();
 }
 
 function setShowSidebarBlobs(show) {
@@ -398,28 +366,15 @@ function renderSidebar() {
   const capabilities = state.manifest?.capabilities ?? [];
   const sidebarCapabilities = state.showSidebarBlobs
     ? capabilities
-    : capabilities.filter((capability) => capability.kind !== "blob");
-  const grouped =
-    state.sidebarGrouping === "kind"
-      ? new Map([
-          ["snapshot", []],
-          ["command", []],
-          ["blob", []],
-          ["other", []],
-        ])
-      : new Map();
+    : capabilities.filter((capability) => !isBlobCapability(capability));
+  const grouped = new Map();
 
   for (const capability of sidebarCapabilities) {
     const searchable = `${capability.label ?? ""} ${capability.id}`.toLowerCase();
     if (query && !searchable.includes(query)) {
       continue;
     }
-    const group =
-      state.sidebarGrouping === "kind"
-        ? grouped.has(capability.kind)
-          ? capability.kind
-          : "other"
-        : capabilityNamespace(capability.id);
+    const group = capabilityNamespace(capability.id);
     if (!grouped.has(group)) {
       grouped.set(group, []);
     }
@@ -428,17 +383,15 @@ function renderSidebar() {
 
   const groups = [];
   const groupedEntries = [...grouped.entries()];
-  if (state.sidebarGrouping === "namespace") {
-    groupedEntries.sort(([left], [right]) => {
-      if (left === "other") {
-        return 1;
-      }
-      if (right === "other") {
-        return -1;
-      }
-      return left.localeCompare(right);
-    });
-  }
+  groupedEntries.sort(([left], [right]) => {
+    if (left === "other") {
+      return 1;
+    }
+    if (right === "other") {
+      return -1;
+    }
+    return left.localeCompare(right);
+  });
   for (const [groupName, items] of groupedEntries) {
     if (!items.length) {
       continue;
@@ -446,17 +399,13 @@ function renderSidebar() {
     items.sort((left, right) =>
       (left.label || left.id).localeCompare(right.label || right.id),
     );
-    const collapsedGroups = state.collapsedSidebarGroups[state.sidebarGrouping];
+    const collapsedGroups = state.collapsedSidebarGroups;
     const group = createElement("details", {
       className: "nav-group",
       attributes: collapsedGroups.has(groupName) && !query ? {} : { open: "" },
     });
     const groupLabel =
-      state.sidebarGrouping === "kind"
-        ? groupLabels[groupName] ?? displayLabel(groupName)
-        : groupName === "other"
-          ? "Other"
-          : displayLabel(groupName);
+      groupName === "other" ? "Other" : displayLabel(groupName);
     const title = createElement(
       "summary",
       { className: "nav-group-title" },
@@ -543,7 +492,6 @@ function capabilityHeader(capability) {
           "div",
           { className: "capability-heading" },
           createElement("h1", { text: capability.label || displayLabel(capability.id) }),
-          chip(capability.kind),
         ),
         createElement("code", { className: "capability-id", text: capability.id }),
       ),
@@ -554,7 +502,6 @@ function capabilityHeader(capability) {
   const detailRows = [
     ["Mode", capability.mode],
     ["Schema", capability.schema],
-    ["Data type", capability.data_type],
     ["Request type", capability.request_type],
     ["Response type", capability.response_type],
     ["MIME", capability.mime],
@@ -598,7 +545,6 @@ function requestError(error, retry = null) {
   for (const [label, value] of [
     ["Status", error?.status],
     ["Capability", error?.capability],
-    ["Kind", error?.kind],
   ]) {
     if (value !== null && value !== undefined && value !== "") {
       details.push(createElement("dt", { text: label }), createElement("dd", { text: value }));
@@ -1122,115 +1068,6 @@ function renderDataPanel(container, value, typeName, capabilityState) {
   replaceChildren(container, toolbar, rendered, emptyState);
 }
 
-function renderSnapshot(capability, body, header) {
-  const capabilityState = getCapabilityState(capability.id);
-  const section = createElement("section", { className: "section snapshot-section" });
-  const actionButton = createElement("button", {
-    className: "button primary",
-    type: "button",
-    text: "Load snapshot",
-  });
-  const supportsFresh = (capability.params ?? []).includes("fresh");
-  header.actions.append(actionButton);
-
-  const content = createElement("div", { className: "data-panel" });
-  const update = () => {
-    actionButton.disabled = capabilityState.loading;
-    actionButton.textContent = capabilityState.loading
-      ? "Loading…"
-      : capabilityState.error
-        ? "Retry"
-        : capabilityState.payload === undefined
-          ? "Load snapshot"
-          : "Refresh";
-    if (capabilityState.loading) {
-      replaceChildren(content, loadingInline("Waiting for snapshot"));
-    } else if (capabilityState.error) {
-      replaceChildren(content, requestError(capabilityState.error));
-    } else if (capabilityState.payload === undefined) {
-      replaceChildren(
-        content,
-        createElement("div", {
-          className: "empty-state",
-          text: "Snapshots are loaded only when requested.",
-        }),
-      );
-    } else {
-      renderDataPanel(content, capabilityState.payload, capability.data_type, capabilityState);
-    }
-    header.status.textContent = capabilityState.loading
-      ? "Loading…"
-      : capabilityState.error
-        ? "Request failed"
-        : capabilityState.updatedAt
-          ? `Version ${capabilityState.version ?? "—"} · ${timestampLabel(capabilityState.updatedAt)}`
-          : "Not loaded";
-  };
-
-  const request = async (fresh) => {
-    if (capabilityState.loading) {
-      return;
-    }
-    const endpoint = capability.endpoints?.get;
-    if (!endpoint) {
-      capabilityState.error = new DevToolsError("Manifest does not provide a snapshot GET endpoint", {
-        capability: capability.id,
-        kind: capability.kind,
-      });
-      update();
-      return;
-    }
-    capabilityState.loading = true;
-    capabilityState.error = null;
-    update();
-    try {
-      const params = {};
-      if ((capability.params ?? []).includes("timeout_ms")) {
-        params.timeout_ms = 5000;
-      }
-      if (fresh && supportsFresh) {
-        params.fresh = true;
-      }
-      const envelope = await fetchJson(endpoint, { params });
-      if (!envelope || typeof envelope !== "object" || !("data" in envelope)) {
-        throw new DevToolsError("Snapshot response is missing its data envelope", {
-          capability: capability.id,
-          kind: capability.kind,
-        });
-      }
-      capabilityState.payload = envelope.data;
-      capabilityState.version = envelope.version ?? null;
-      capabilityState.schema = envelope.schema ?? capability.schema ?? "";
-      capabilityState.updatedAt = new Date();
-    } catch (error) {
-      capabilityState.error = normalizeError(error, capability);
-    } finally {
-      capabilityState.loading = false;
-      if (state.selectedId === capability.id && !content.isConnected) {
-        renderCapability(capability);
-      } else {
-        update();
-      }
-    }
-  };
-
-  actionButton.addEventListener("click", () => {
-    void request(capabilityState.payload !== undefined);
-  });
-  section.append(content);
-  body.append(section);
-  update();
-  if (
-    capability.mode === "cached" &&
-    capabilityState.payload === undefined &&
-    !capabilityState.loading &&
-    !capabilityState.snapshotAutoLoadAttempted
-  ) {
-    capabilityState.snapshotAutoLoadAttempted = true;
-    void request(false);
-  }
-}
-
 function pathLabel(path) {
   return path.length ? displayLabel(path.at(-1)) : "Request body";
 }
@@ -1515,25 +1352,27 @@ function buildFormControl(typeName, path = []) {
   }
 }
 
-async function postCommand(capability, payload) {
-  const endpoint = capability.endpoints?.post;
+async function postRequest(capability, payload) {
+  const endpoint = endpointByRel(capability, "invoke");
   if (!endpoint) {
-    throw new DevToolsError("Manifest does not provide a command POST endpoint", {
+    throw new DevToolsError("Manifest does not provide an invoke endpoint", {
       capability: capability.id,
-      kind: capability.kind,
     });
   }
   const params = {};
-  if ((capability.params ?? []).includes("timeout_ms")) {
+  if ((endpoint.params ?? []).includes("timeout_ms")) {
     params.timeout_ms = 5000;
   }
-  const response = await fetch(sameOriginUrl(endpoint, params), {
+  const options = {
     method: "POST",
     cache: "no-store",
     redirect: "error",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  };
+  if (payload !== undefined) {
+    options.headers = { "Content-Type": "application/json" };
+    options.body = JSON.stringify(payload);
+  }
+  const response = await fetch(sameOriginUrl(endpoint.path, params), options);
   if (!response.ok) {
     throw await readErrorResponse(response);
   }
@@ -1548,10 +1387,10 @@ async function postCommand(capability, payload) {
   }
 }
 
-function renderCommand(capability, body, header) {
+function renderRequest(capability, body, header) {
   const capabilityState = getCapabilityState(capability.id);
   const section = createElement("section", { className: "section" });
-  const formId = `command-form-${capability.id.replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
+  const formId = `capability-form-${capability.id.replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
   const form = createElement("form", {
     className: "schema-form",
     attributes: { id: formId },
@@ -1559,8 +1398,11 @@ function renderCommand(capability, body, header) {
   const requestControl = capability.request_type
     ? buildFormControl(capability.request_type)
     : {
-        element: createElement("div", { className: "muted", text: "This command has an empty request body." }),
-        read: () => ({}),
+        element: createElement("div", {
+          className: "muted",
+          text: "This capability does not accept a request body.",
+        }),
+        read: () => undefined,
       };
   const validation = createElement("div", { className: "validation-error", attributes: { role: "alert" } });
   const submit = createElement("button", {
@@ -1582,13 +1424,16 @@ function renderCommand(capability, body, header) {
           ? `Last response ${timestampLabel(capabilityState.updatedAt)}`
           : "No request sent";
     if (capabilityState.loading) {
-      replaceChildren(response, loadingInline("Waiting for command response"));
+      replaceChildren(response, loadingInline("Waiting for response"));
     } else if (capabilityState.error) {
       replaceChildren(response, requestError(capabilityState.error));
     } else if (capabilityState.payload === undefined) {
       replaceChildren(
         response,
-        createElement("span", { className: "muted", text: "No command sent in this session." }),
+        createElement("span", {
+          className: "muted",
+          text: "This capability has not been invoked in this session.",
+        }),
       );
     } else {
       renderDataPanel(
@@ -1618,10 +1463,10 @@ function renderCommand(capability, body, header) {
     submit.disabled = true;
     renderResponse();
     try {
-      capabilityState.payload = await postCommand(capability, payload);
+      capabilityState.payload = await postRequest(capability, payload);
       capabilityState.responseType = capability.response_type ?? "";
       capabilityState.updatedAt = new Date();
-      showToast("Command completed");
+      showToast("Capability completed");
     } catch (error) {
       capabilityState.error = normalizeError(error, capability);
     } finally {
@@ -1732,13 +1577,12 @@ async function requestBlobCapability(
   if (capabilityState.loading) {
     return;
   }
-  const endpoint = capability.endpoints?.get;
+  const endpoint = endpointByRel(capability, "read");
   if (!endpoint) {
     capabilityState.error = new DevToolsError(
       "Manifest does not provide a blob GET endpoint",
       {
         capability: capability.id,
-        kind: capability.kind,
       },
     );
     await onChange();
@@ -1750,13 +1594,13 @@ async function requestBlobCapability(
   await onChange();
   try {
     const params = {};
-    if ((capability.params ?? []).includes("timeout_ms")) {
+    if ((endpoint.params ?? []).includes("timeout_ms")) {
       params.timeout_ms = 5000;
     }
-    if (forceFresh && (capability.params ?? []).includes("fresh")) {
+    if (forceFresh && (endpoint.params ?? []).includes("fresh")) {
       params.fresh = true;
     }
-    const response = await fetch(sameOriginUrl(endpoint, params), {
+    const response = await fetch(sameOriginUrl(endpoint.path, params), {
       cache: "no-store",
       redirect: "error",
     });
@@ -1804,7 +1648,7 @@ function renderBlobReference(value) {
       `Blob capability '${value.capability}' is not in the manifest`,
     );
   }
-  if (capability.kind !== "blob") {
+  if (!isBlobCapability(capability)) {
     return blobReferenceError(`Capability '${value.capability}' is not a blob`);
   }
 
@@ -1943,14 +1787,10 @@ function normalizeError(error, capability = null) {
     if (!error.capability && capability) {
       error.capability = capability.id;
     }
-    if (!error.kind && capability) {
-      error.kind = capability.kind;
-    }
     return error;
   }
   return new DevToolsError(error?.message || String(error), {
     capability: capability?.id,
-    kind: capability?.kind,
   });
 }
 
@@ -1959,9 +1799,9 @@ function renderUnsupported(capability, body) {
     createElement(
       "div",
       { className: "empty-state" },
-      createElement("h2", { text: "Unsupported capability kind" }),
+      createElement("h2", { text: "Unsupported capability" }),
       createElement("p", {
-        text: `This UI does not know how to handle manifest kind '${capability.kind}'.`,
+        text: "This capability does not expose a supported endpoint.",
       }),
     ),
   );
@@ -1973,11 +1813,9 @@ function renderCapability(capability) {
   const body = createElement("div");
   const header = capabilityHeader(capability);
   body.append(header.element);
-  if (capability.kind === "snapshot") {
-    renderSnapshot(capability, body, header);
-  } else if (capability.kind === "command") {
-    renderCommand(capability, body, header);
-  } else if (capability.kind === "blob") {
+  if (endpointByRel(capability, "invoke")) {
+    renderRequest(capability, body, header);
+  } else if (isBlobCapability(capability)) {
     renderBlob(capability, body, header);
   } else {
     renderUnsupported(capability, body);
@@ -2003,7 +1841,7 @@ function renderHome() {
         createElement("span", { className: "eyebrow", text: "Service overview" }),
         createElement("h1", { text: state.discovery?.name || "FEI DevTools" }),
         createElement("p", {
-          text: "Select a capability to inspect data or construct a command from its schema.",
+          text: "Select a capability to inspect data or construct a request from its schema.",
         }),
       ),
     ),
@@ -2178,12 +2016,6 @@ async function boot() {
 }
 
 elements.search.addEventListener("input", renderSidebar);
-elements.sidebarGrouping.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-grouping]");
-  if (button) {
-    setSidebarGrouping(button.dataset.grouping);
-  }
-});
 elements.sidebarBlobToggle.addEventListener("click", () => {
   setShowSidebarBlobs(!state.showSidebarBlobs);
 });

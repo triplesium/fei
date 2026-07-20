@@ -1,5 +1,6 @@
 #pragma once
 
+#include "base/optional.hpp"
 #include "base/types.hpp"
 #include "refl/reflect.hpp"
 #include "refl/type.hpp"
@@ -19,10 +20,9 @@ enum class PublishMode : uint8 {
     Streaming,
 };
 
-enum class RequestKind : uint8 {
+enum class ProtocolKind : uint8 {
     Blob,
-    Snapshot,
-    Command,
+    Json,
 };
 
 struct Config {
@@ -40,22 +40,16 @@ struct FEI_REFLECT BlobRef {
     std::string capability;
 };
 
-struct BlobCapability {
+struct BlobProtocol {
     std::string mime;
     PublishMode mode {PublishMode::OnDemand};
     bool waitable {true};
 };
 
-struct SnapshotCapability {
+struct JsonProtocol {
     std::string schema;
-    TypeId data_type;
-    PublishMode mode {PublishMode::Cached};
-};
-
-struct CommandCapability {
-    std::string schema;
-    TypeId request_type;
-    TypeId response_type;
+    Optional<TypeId> request_type;
+    Optional<TypeId> response_type;
 };
 
 struct Request {
@@ -69,12 +63,8 @@ struct BlobRequest {
     uint64 after {0};
 };
 
-struct SnapshotRequest {
-    uint64 after {0};
-};
-
-struct CommandRequest {
-    std::string body;
+struct JsonRequest {
+    Optional<std::string> body;
 };
 
 struct Subscription {
@@ -91,15 +81,7 @@ struct BlobResponse {
     std::unordered_map<std::string, std::string> metadata;
 };
 
-struct SnapshotResponse {
-    Token token {0};
-    std::string capability;
-    std::string json;
-    std::string schema;
-    uint64 version {0};
-};
-
-struct CommandResponse {
+struct JsonResponse {
     Token token {0};
     std::string capability;
     std::string json {"{}"};

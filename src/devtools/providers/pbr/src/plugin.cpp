@@ -5,7 +5,6 @@
 #include "base/log.hpp"
 #include "devtools/bridge.hpp"
 #include "devtools/capability.hpp"
-#include "devtools/json.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
@@ -30,6 +29,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -37,12 +37,6 @@
 namespace fei::devtools::pbr {
 
 namespace {
-
-constexpr const char* c_render_targets_schema = "pbr.render_targets.v4";
-
-struct SnapshotPublishState {
-    uint64 render_targets_version {0};
-};
 
 enum class PreviewPipelineVariant : std::size_t {
     Color,
@@ -474,73 +468,29 @@ void publish_completed_frame(
     }
 }
 
-void publish_render_targets_snapshot(
-    ResRO<DeferredViewTargets> targets,
-    ResRW<SnapshotPublishState> state,
-    Query<Entity, const Request, const SnapshotRequest> requests,
-    Commands commands
-) {
-    bool requested = false;
-    for (auto [entity, request, snapshot_request] : requests) {
-        (void)entity;
-        (void)snapshot_request;
-        if (request.capability == c_render_targets_capability) {
-            requested = true;
-            break;
-        }
-    }
-    if (!requested) {
-        return;
-    }
+struct RenderTargets {
+    using RequestBody = void;
+    using ResponseBody = RenderTargetsSnapshot;
 
-    auto snapshot = make_render_targets_snapshot(*targets);
-    auto json = encode_json(Ref(snapshot));
-    const auto version = ++state->render_targets_version;
-    if (json) {
-        commands.spawn().add(
-            SnapshotResponse {
-                .capability = c_render_targets_capability,
-                .json = *json,
-                .schema = c_render_targets_schema,
-                .version = version,
+    static constexpr std::string_view id {c_render_targets_capability};
+    static constexpr std::string_view label {"PBR Render Targets"};
+    static constexpr std::string_view schema {"pbr.render_targets.v4"};
+
+    static void
+    run(ResRO<DeferredViewTargets> targets,
+        Query<Entity, const Request, const JsonRequest> requests,
+        Commands commands) {
+        for (auto [entity, request, json] : requests) {
+            (void)json;
+            if (request.capability != id) {
+                continue;
             }
-        );
-    } else {
-        error(
-            "Failed to encode DevTools snapshot {}: {}",
-            c_render_targets_capability,
-            json.error()
-        );
-    }
 
-    for (auto [entity, request, snapshot_request] : requests) {
-        (void)snapshot_request;
-        if (request.capability != c_render_targets_capability) {
-            continue;
+            auto response = make_render_targets_snapshot(*targets);
+            respond_capability(commands, entity, request, response);
         }
-        if (json) {
-            commands.spawn().add(
-                SnapshotResponse {
-                    .token = request.token,
-                    .capability = c_render_targets_capability,
-                    .json = *json,
-                    .schema = c_render_targets_schema,
-                    .version = version,
-                }
-            );
-        } else {
-            commands.spawn().add(
-                ErrorResponse {
-                    .token = request.token,
-                    .capability = c_render_targets_capability,
-                    .status = 500,
-                    .message = json.error(),
-                }
-            );
-        }
-        commands.entity(entity).despawn();
     }
-}
+};
 
 void publish_and_enqueue_frame_capture(
     ResRW<FrameCaptureState> state,
@@ -615,7 +565,7 @@ void declare_frame_capability(App& app, const char* id, const char* label) {
         app.world(),
         id,
         label,
-        BlobCapability {
+        BlobProtocol {
             .mime = "image/jpeg",
             .mode = PublishMode::OnDemand,
             .waitable = true,
@@ -650,16 +600,7 @@ void ProviderPlugin::setup(App& app) {
         );
     }
 
-    declare_capability(
-        app.world(),
-        c_render_targets_capability,
-        "PBR Render Targets",
-        SnapshotCapability {
-            .schema = c_render_targets_schema,
-            .data_type = type_id<RenderTargetsSnapshot>(),
-            .mode = PublishMode::Cached,
-        }
-    );
+    declare_capability<RenderTargets>(app.world());
     for (const auto& target : render_target_descriptors()) {
         for (const auto& view : target.views) {
             declare_frame_capability(app, view.blob_capability, view.label);
@@ -667,7 +608,6 @@ void ProviderPlugin::setup(App& app) {
     }
 
     app.add_resource(Config {m_config});
-    app.add_resource(SnapshotPublishState {});
     app.add_resource(RenderTargetPreviewResources {});
     app.add_resource(
         FrameCaptureState {
@@ -680,7 +620,7 @@ void ProviderPlugin::setup(App& app) {
         RenderUpdate,
         render_target_preview | in_set<RenderingSystems::PostProcess>()
     );
-    app.add_systems(RenderEnd, publish_render_targets_snapshot);
+    app.add_systems(RenderEnd, RenderTargets::run);
     app.add_systems(RenderEnd, publish_and_enqueue_frame_capture);
 }
 

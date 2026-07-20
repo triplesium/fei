@@ -59,35 +59,16 @@ BridgeResponse blob_response(const BridgeBlob& blob) {
     };
 }
 
-Json endpoints_for(const ManifestEntry& entry) {
-    auto id = entry.id;
-    if (entry.kind == "blob") {
-        return Json {
-            {"get", "/api/v1/blobs/" + id},
-            {"stream", "/api/v1/blobs/" + id + "/stream"},
-        };
+Json endpoint_to_json(const ManifestEndpoint& endpoint) {
+    Json value {
+        {"rel", endpoint.rel},
+        {"method", endpoint.method},
+        {"path", endpoint.path},
+    };
+    if (!endpoint.params.empty()) {
+        value["params"] = endpoint.params;
     }
-    if (entry.kind == "snapshot") {
-        return Json {
-            {"get", "/api/v1/snapshots/" + id},
-        };
-    }
-    if (entry.kind == "command") {
-        return Json {
-            {"post", "/api/v1/commands/" + id},
-        };
-    }
-    return Json::object();
-}
-
-Json params_for(const ManifestEntry& entry) {
-    if (entry.kind == "blob" || entry.kind == "snapshot") {
-        return Json::array({"after", "fresh", "timeout_ms"});
-    }
-    if (entry.kind == "command") {
-        return Json::array({"timeout_ms"});
-    }
-    return Json::array();
+    return value;
 }
 
 } // namespace
@@ -102,7 +83,6 @@ struct Bridge::State {
     std::unordered_map<Token, std::string> active_subscriptions;
     std::unordered_map<Token, BridgeResponse> responses;
     std::unordered_map<std::string, BridgeBlob> blobs;
-    std::unordered_map<std::string, BridgeSnapshot> snapshots;
     std::vector<ManifestEntry> manifest;
     std::string schema_json {R"({"version":1,"roots":[],"types":{}})"};
 };
@@ -120,7 +100,7 @@ Token Bridge::enqueue_blob_request(
     m_state->pending_requests.push_back(
         PendingRequest {
             .token = token,
-            .kind = RequestKind::Blob,
+            .protocol = ProtocolKind::Blob,
             .capability = std::move(capability),
             .after = after,
             .fresh = fresh,
@@ -130,10 +110,9 @@ Token Bridge::enqueue_blob_request(
     return token;
 }
 
-Token Bridge::enqueue_snapshot_request(
+Token Bridge::enqueue_request(
     std::string capability,
-    uint64 after,
-    bool fresh,
+    Optional<std::string> body,
     std::chrono::milliseconds timeout
 ) {
     std::scoped_lock lock(m_state->mutex);
@@ -141,27 +120,7 @@ Token Bridge::enqueue_snapshot_request(
     m_state->pending_requests.push_back(
         PendingRequest {
             .token = token,
-            .kind = RequestKind::Snapshot,
-            .capability = std::move(capability),
-            .after = after,
-            .fresh = fresh,
-            .deadline = std::chrono::steady_clock::now() + timeout,
-        }
-    );
-    return token;
-}
-
-Token Bridge::enqueue_command_request(
-    std::string capability,
-    std::string body,
-    std::chrono::milliseconds timeout
-) {
-    std::scoped_lock lock(m_state->mutex);
-    const auto token = m_state->next_token++;
-    m_state->pending_requests.push_back(
-        PendingRequest {
-            .token = token,
-            .kind = RequestKind::Command,
+            .protocol = ProtocolKind::Json,
             .capability = std::move(capability),
             .body = std::move(body),
             .deadline = std::chrono::steady_clock::now() + timeout,
@@ -261,23 +220,6 @@ Optional<BridgeBlob> Bridge::cached_blob(
     return iter->second;
 }
 
-Optional<BridgeSnapshot> Bridge::cached_snapshot(
-    const std::string& capability,
-    uint64 after,
-    bool fresh
-) const {
-    if (fresh) {
-        return nullopt;
-    }
-
-    std::scoped_lock lock(m_state->mutex);
-    auto iter = m_state->snapshots.find(capability);
-    if (iter == m_state->snapshots.end() || iter->second.version <= after) {
-        return nullopt;
-    }
-    return iter->second;
-}
-
 void Bridge::publish_blob(BlobResponse response) {
     std::scoped_lock lock(m_state->mutex);
     auto& cached = m_state->blobs[response.capability];
@@ -300,31 +242,7 @@ void Bridge::publish_blob(BlobResponse response) {
     m_state->blob_available.notify_all();
 }
 
-void Bridge::publish_snapshot(SnapshotResponse response) {
-    std::scoped_lock lock(m_state->mutex);
-    auto& cached = m_state->snapshots[response.capability];
-    auto version = response.version;
-    if (version == 0) {
-        version = cached.version + 1;
-    }
-    cached = BridgeSnapshot {
-        .capability = response.capability,
-        .json = std::move(response.json),
-        .schema = std::move(response.schema),
-        .version = version,
-    };
-
-    if (response.token != 0) {
-        m_state->responses[response.token] = text_response(
-            200,
-            "application/json",
-            snapshot_envelope_json(cached)
-        );
-    }
-    m_state->response_available.notify_all();
-}
-
-void Bridge::complete_command(CommandResponse response) {
+void Bridge::complete_response(JsonResponse response) {
     std::scoped_lock lock(m_state->mutex);
     if (response.token != 0) {
         m_state->responses[response.token] =
@@ -373,14 +291,16 @@ std::string Bridge::manifest_json() const {
     std::scoped_lock lock(m_state->mutex);
     Json entries = Json::array();
     for (const auto& entry : m_state->manifest) {
+        Json endpoints = Json::array();
+        for (const auto& endpoint : entry.endpoints) {
+            endpoints.push_back(endpoint_to_json(endpoint));
+        }
         Json value {
             {"id", entry.id},
             {"label", entry.label},
-            {"kind", entry.kind},
             {"mode", publish_mode_name(entry.mode)},
             {"waitable", entry.waitable},
-            {"endpoints", endpoints_for(entry)},
-            {"params", params_for(entry)},
+            {"endpoints", std::move(endpoints)},
         };
         if (!entry.mime.empty()) {
             value["mime"] = entry.mime;
@@ -388,14 +308,11 @@ std::string Bridge::manifest_json() const {
         if (!entry.schema.empty()) {
             value["schema"] = entry.schema;
         }
-        if (!entry.data_type.empty()) {
-            value["data_type"] = entry.data_type;
+        if (entry.request_type) {
+            value["request_type"] = *entry.request_type;
         }
-        if (!entry.request_type.empty()) {
-            value["request_type"] = entry.request_type;
-        }
-        if (!entry.response_type.empty()) {
-            value["response_type"] = entry.response_type;
+        if (entry.response_type) {
+            value["response_type"] = *entry.response_type;
         }
         entries.push_back(std::move(value));
     }
@@ -425,15 +342,6 @@ std::string Bridge::status_json() const {
         };
     }
 
-    Json snapshots = Json::object();
-    for (const auto& [id, snapshot] : m_state->snapshots) {
-        snapshots[id] = Json {
-            {"version", snapshot.version},
-            {"schema", snapshot.schema},
-            {"bytes", snapshot.json.size()},
-        };
-    }
-
     Json subscriptions = Json::object();
     for (const auto& [token, capability] : m_state->active_subscriptions) {
         (void)token;
@@ -447,7 +355,6 @@ std::string Bridge::status_json() const {
         {"capabilities", m_state->manifest.size()},
         {"subscriptions", std::move(subscriptions)},
         {"blobs", std::move(blobs)},
-        {"snapshots", std::move(snapshots)},
     }
         .dump();
 }
@@ -463,35 +370,14 @@ std::string blob_metadata_json(const BridgeBlob& blob) {
         .dump();
 }
 
-std::string snapshot_envelope_json(const BridgeSnapshot& snapshot) {
-    auto data = Json::parse(snapshot.json, nullptr, false);
-    if (data.is_discarded()) {
-        data = snapshot.json;
-    }
-    return Json {
-        {"id", snapshot.capability},
-        {"schema", snapshot.schema},
-        {"version", snapshot.version},
-        {"data", std::move(data)},
-    }
-        .dump();
-}
-
-std::string error_json(
-    std::string message,
-    int status,
-    std::string capability,
-    std::string kind
-) {
+std::string
+error_json(std::string message, int status, std::string capability) {
     Json result {
         {"error", std::move(message)},
         {"status", status},
     };
     if (!capability.empty()) {
         result["capability"] = std::move(capability);
-    }
-    if (!kind.empty()) {
-        result["kind"] = std::move(kind);
     }
     return result.dump();
 }

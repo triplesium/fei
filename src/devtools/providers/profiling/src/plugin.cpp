@@ -4,146 +4,89 @@
 #include "base/log.hpp"
 #include "devtools/bridge.hpp"
 #include "devtools/capability.hpp"
-#include "devtools/json.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
-#include "ecs/system_params.hpp"
 #include "profiling/profiling.hpp"
 #include "refl/registry.hpp"
-#include "snapshot_demand.hpp"
 #include "snapshot_types.hpp"
 
-#include <optional>
-#include <string>
+#include <string_view>
 
 namespace fei::devtools::profiling {
 
 namespace {
 
-constexpr const char* c_frame_stats_schema = "profiling.frame_stats.v1";
-constexpr const char* c_summary_schema = "profiling.summary.v1";
-constexpr const char* c_frame_history_schema = "profiling.frame_history.v1";
+struct FrameStats {
+    using RequestBody = void;
+    using ResponseBody = FrameStatsSnapshot;
 
-struct PublishState {
-    uint64 frame_stats_version {0};
-    uint64 summary_version {0};
-    uint64 frame_history_version {0};
-};
+    static constexpr std::string_view id {"profiling.frame_stats"};
+    static constexpr std::string_view label {"Frame Statistics"};
+    static constexpr std::string_view schema {"profiling.frame_stats.v1"};
 
-void publish_snapshot_result(
-    Query<Entity, const Request, const SnapshotRequest> requests,
-    Commands commands,
-    const std::string& capability,
-    const std::string& schema,
-    Result<std::string, std::string> json,
-    uint64 version
-) {
-    if (!json) {
-        error(
-            "Failed to encode DevTools snapshot {}: {}",
-            capability,
-            json.error()
-        );
-        for (auto [entity, request, snapshot_request] : requests) {
-            (void)snapshot_request;
-            if (request.capability != capability) {
+    static void
+    run(Query<Entity, const Request, const JsonRequest> requests,
+        Commands commands) {
+        for (auto [entity, request, json] : requests) {
+            (void)json;
+            if (request.capability != id) {
                 continue;
             }
-            commands.spawn().add(
-                ErrorResponse {
-                    .token = request.token,
-                    .capability = capability,
-                    .status = 500,
-                    .message = json.error(),
-                }
-            );
-            commands.entity(entity).despawn();
-        }
-        return;
-    }
 
-    commands.spawn().add(
-        SnapshotResponse {
-            .capability = capability,
-            .json = *json,
-            .schema = schema,
-            .version = version,
+            auto response =
+                make_frame_stats_snapshot(fei::profile_frame_stats());
+            respond_capability(commands, entity, request, response);
         }
-    );
-    for (auto [entity, request, snapshot_request] : requests) {
-        (void)snapshot_request;
-        if (request.capability != capability) {
-            continue;
-        }
-        commands.spawn().add(
-            SnapshotResponse {
-                .token = request.token,
-                .capability = capability,
-                .json = *json,
-                .schema = schema,
-                .version = version,
+    }
+};
+
+struct ProfilingSummary {
+    using RequestBody = void;
+    using ResponseBody = SummarySnapshot;
+
+    static constexpr std::string_view id {"profiling.summary"};
+    static constexpr std::string_view label {"Profiling Summary"};
+    static constexpr std::string_view schema {"profiling.summary.v1"};
+
+    static void
+    run(Query<Entity, const Request, const JsonRequest> requests,
+        Commands commands) {
+        for (auto [entity, request, json] : requests) {
+            (void)json;
+            if (request.capability != id) {
+                continue;
             }
-        );
-        commands.entity(entity).despawn();
-    }
-}
 
-void publish_profiling_snapshots(
-    ResRW<PublishState> state,
-    Query<Entity, const Request, const SnapshotRequest> requests,
-    Commands commands
-) {
-    SnapshotDemand demand;
-    for (auto [entity, request, snapshot_request] : requests) {
-        (void)entity;
-        (void)snapshot_request;
-        demand.include(request.capability);
+            auto source = fei::profile_summary_snapshot();
+            auto response = make_summary_snapshot(source);
+            respond_capability(commands, entity, request, response);
+        }
     }
-    if (!demand.any()) {
-        return;
-    }
+};
 
-    std::optional<fei::ProfileSummarySnapshot> detailed;
-    if (demand.detailed()) {
-        detailed.emplace(fei::profile_summary_snapshot());
-    }
+struct FrameHistory {
+    using RequestBody = void;
+    using ResponseBody = FrameHistorySnapshot;
 
-    if (demand.frame_stats) {
-        const auto stats =
-            detailed ? detailed->frame_stats : fei::profile_frame_stats();
-        auto snapshot = make_frame_stats_snapshot(stats);
-        publish_snapshot_result(
-            requests,
-            commands,
-            c_frame_stats_capability,
-            c_frame_stats_schema,
-            encode_json(Ref(snapshot)),
-            ++state->frame_stats_version
-        );
+    static constexpr std::string_view id {"profiling.frame_history"};
+    static constexpr std::string_view label {"Frame History"};
+    static constexpr std::string_view schema {"profiling.frame_history.v1"};
+
+    static void
+    run(Query<Entity, const Request, const JsonRequest> requests,
+        Commands commands) {
+        for (auto [entity, request, json] : requests) {
+            (void)json;
+            if (request.capability != id) {
+                continue;
+            }
+
+            auto source = fei::profile_summary_snapshot();
+            auto response = make_frame_history_snapshot(source);
+            respond_capability(commands, entity, request, response);
+        }
     }
-    if (demand.summary) {
-        auto snapshot = make_summary_snapshot(*detailed);
-        publish_snapshot_result(
-            requests,
-            commands,
-            c_summary_capability,
-            c_summary_schema,
-            encode_json(Ref(snapshot)),
-            ++state->summary_version
-        );
-    }
-    if (demand.frame_history) {
-        auto snapshot = make_frame_history_snapshot(*detailed);
-        publish_snapshot_result(
-            requests,
-            commands,
-            c_frame_history_capability,
-            c_frame_history_schema,
-            encode_json(Ref(snapshot)),
-            ++state->frame_history_version
-        );
-    }
-}
+};
 
 } // namespace
 
@@ -168,38 +111,15 @@ void ProviderPlugin::setup(App& app) {
         );
     }
 
-    declare_capability(
-        app.world(),
-        c_frame_stats_capability,
-        "Frame Statistics",
-        SnapshotCapability {
-            .schema = c_frame_stats_schema,
-            .data_type = type_id<FrameStatsSnapshot>(),
-            .mode = PublishMode::Cached,
-        }
+    declare_capability<FrameStats>(app.world());
+    declare_capability<ProfilingSummary>(app.world());
+    declare_capability<FrameHistory>(app.world());
+    app.add_systems(
+        PostUpdate,
+        FrameStats::run,
+        ProfilingSummary::run,
+        FrameHistory::run
     );
-    declare_capability(
-        app.world(),
-        c_summary_capability,
-        "Profiling Summary",
-        SnapshotCapability {
-            .schema = c_summary_schema,
-            .data_type = type_id<SummarySnapshot>(),
-            .mode = c_summary_mode,
-        }
-    );
-    declare_capability(
-        app.world(),
-        c_frame_history_capability,
-        "Frame History",
-        SnapshotCapability {
-            .schema = c_frame_history_schema,
-            .data_type = type_id<FrameHistorySnapshot>(),
-            .mode = c_frame_history_mode,
-        }
-    );
-    app.add_resource(PublishState {});
-    app.add_systems(PostUpdate, publish_profiling_snapshots);
 }
 
 void ProviderPlugin::finish(App&) {}
