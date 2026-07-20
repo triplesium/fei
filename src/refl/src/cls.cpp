@@ -416,6 +416,15 @@ Cls::get_constructor_for_args(const std::vector<Ref>& args) {
     );
 }
 
+std::vector<Constructor*> Cls::get_constructors() const {
+    std::vector<Constructor*> constructors;
+    constructors.reserve(m_constructors.size());
+    for (const auto& constructor : m_constructors) {
+        constructors.push_back(constructor.get());
+    }
+    return constructors;
+}
+
 Cls& Cls::set_to_string(ToStringFunc func) {
     m_to_string_func = func;
     return *this;

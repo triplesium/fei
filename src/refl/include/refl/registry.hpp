@@ -367,6 +367,7 @@ class Registry {
         return *result;
     }
 
+    const auto& types() const { return m_types; }
     const auto& clses() const { return m_classes; }
     const auto& enums() const { return m_enums; }
     const auto& generic_types() const { return m_generic_types; }

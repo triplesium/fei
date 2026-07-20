@@ -13,6 +13,7 @@
 #include "devtools_input/plugin.hpp"
 #include "devtools_pbr/plugin.hpp"
 #include "devtools_profiling/plugin.hpp"
+#include "devtools_reflection/plugin.hpp"
 #include "devtools_rendering/plugin.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
@@ -476,6 +477,7 @@ int main(int argc, char** argv) {
         }}
     );
     app.add_plugin(devtools::profiling::ProviderPlugin {});
+    app.add_plugin(devtools::reflection::ProviderPlugin {});
     app.add_plugin(devtools::input::ProviderPlugin {});
 
     app.run();

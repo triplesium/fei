@@ -126,6 +126,8 @@ class Cls {
     Result<Constructor&, InvokeFailure>
     get_constructor_for_args(const std::vector<Ref>& args);
 
+    std::vector<Constructor*> get_constructors() const;
+
     Cls& set_to_string(ToStringFunc func);
 
     std::string to_string(Ref ref) const;
