@@ -77,6 +77,19 @@ The response is dynamic JSON without a declared `response_type`. It reports
 Treat it as one live snapshot: `truncated` means the query should be narrowed or
 the one-shot limit increased. Do not attempt to page it across frames.
 
+## Inspect an ECS Entity
+
+When the manifest advertises `ecs.entity.inspect`, invoke it with its reflected
+request containing the required `entity` id. The dynamic JSON response reports
+`observed_tick`, `entity`, `archetype_id`, `component_count`, and every component
+on the entity.
+
+Each component entry reports its hexadecimal type `id`, reflected `name`,
+`added_tick`, `changed_tick`, `serialized`, `value`, and `error`. Serialization
+is isolated per component: an unsupported component has `serialized=false`, a
+null `value`, and a diagnostic `error`, while the other component values remain
+available. A stale or nonexistent entity returns HTTP 404.
+
 ## Diagnose Failures
 
 - Connection refused: confirm the process, configured host and port, and that

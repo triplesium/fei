@@ -8,10 +8,12 @@
 #include "devtools_ecs/plugin.hpp"
 #include "ecs/query.hpp"
 #include "ecs/world.hpp"
+#include "entity_inspect.hpp"
 #include "refl/cls.hpp"
 #include "refl/generated.hpp"
 #include "refl/registry.hpp"
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -188,7 +190,59 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "ECS provider declares and serves its manifest-driven capability",
+    "ECS entity inspection reports every component independently",
+    "[devtools][ecs][inspect]"
+) {
+    using namespace ecs_query_test;
+    register_query_test_types();
+
+    World world;
+    const auto entity = world.entity();
+    world.add_component(entity, Position {.x = 2, .y = 4});
+    world.add_component(entity, Opaque {.value = 7});
+
+    const auto expected_tick = world.read_change_tick();
+    auto response =
+        inspect_entity(world, EntityInspectRequest {.entity = entity});
+    REQUIRE(response);
+
+    auto json = nlohmann::json::parse(*response);
+    REQUIRE(json.at("observed_tick") == expected_tick);
+    REQUIRE(json.at("entity") == entity);
+    REQUIRE(json.at("archetype_id") > 0);
+    REQUIRE(json.at("component_count") == 2);
+
+    const auto& components = json.at("components");
+    auto find_component = [&components](const std::string& name) {
+        return std::ranges::find_if(components, [&name](const auto& component) {
+            return component.at("name") == name;
+        });
+    };
+
+    auto position = find_component(reflected_name<Position>());
+    REQUIRE(position != components.end());
+    REQUIRE(position->at("serialized") == true);
+    REQUIRE(position->at("error").is_null());
+    REQUIRE(position->at("value").at("x") == 2);
+    REQUIRE(position->at("value").at("y") == 4);
+    REQUIRE(position->at("added_tick") <= expected_tick);
+    REQUIRE(position->at("changed_tick") <= expected_tick);
+
+    auto opaque = find_component(reflected_name<Opaque>());
+    REQUIRE(opaque != components.end());
+    REQUIRE(opaque->at("serialized") == false);
+    REQUIRE(opaque->at("value").is_null());
+    REQUIRE(opaque->at("error").is_string());
+
+    world.despawn(entity);
+    auto missing =
+        inspect_entity(world, EntityInspectRequest {.entity = entity});
+    REQUIRE_FALSE(missing);
+    REQUIRE(missing.error().status == 404);
+}
+
+TEST_CASE(
+    "ECS provider declares and serves its manifest-driven capabilities",
     "[devtools][ecs][capability]"
 ) {
     using namespace ecs_query_test;
@@ -199,22 +253,34 @@ TEST_CASE(
     app.add_resource(Bridge {});
     app.add_plugin<ProviderPlugin>();
 
-    bool declared = false;
+    bool query_declared = false;
+    bool inspect_declared = false;
     app.world().run_system_once(
-        [&declared](Query<const Capability, const JsonProtocol> capabilities) {
+        [&query_declared, &inspect_declared](
+            Query<const Capability, const JsonProtocol> capabilities
+        ) {
             for (auto [capability, protocol] : capabilities) {
-                if (capability.id != "ecs.query") {
-                    continue;
+                if (capability.id == "ecs.query") {
+                    query_declared = true;
+                    REQUIRE(protocol.schema == "ecs.query.v1");
+                    REQUIRE(protocol.request_type);
+                    REQUIRE(*protocol.request_type == type_id<QueryRequest>());
+                    REQUIRE_FALSE(protocol.response_type);
+                } else if (capability.id == "ecs.entity.inspect") {
+                    inspect_declared = true;
+                    REQUIRE(protocol.schema == "ecs.entity.inspect.v1");
+                    REQUIRE(protocol.request_type);
+                    REQUIRE(
+                        *protocol.request_type ==
+                        type_id<EntityInspectRequest>()
+                    );
+                    REQUIRE_FALSE(protocol.response_type);
                 }
-                declared = true;
-                REQUIRE(protocol.schema == "ecs.query.v1");
-                REQUIRE(protocol.request_type);
-                REQUIRE(*protocol.request_type == type_id<QueryRequest>());
-                REQUIRE_FALSE(protocol.response_type);
             }
         }
     );
-    REQUIRE(declared);
+    REQUIRE(query_declared);
+    REQUIRE(inspect_declared);
 
     const auto user = app.world().entity();
     app.world().add_component(user, Position {.x = 2, .y = 4});
@@ -245,4 +311,28 @@ TEST_CASE(
     auto json = nlohmann::json::parse(response.json);
     REQUIRE(json.at("matched") == 1);
     REQUIRE(json.at("rows").at(0).at("entity") == user);
+
+    EntityInspectRequest inspect_body {.entity = user};
+    auto inspect_json = encode_json(Ref(inspect_body));
+    REQUIRE(inspect_json);
+    const auto inspect_request_entity = app.world().entity();
+    app.world().add_component(
+        inspect_request_entity,
+        Request {.token = 43, .capability = "ecs.entity.inspect"}
+    );
+    app.world().add_component(
+        inspect_request_entity,
+        JsonRequest {.body = std::move(*inspect_json)}
+    );
+
+    app.run_schedule(PostUpdate);
+    REQUIRE(app.world().has_component<JsonResponse>(inspect_request_entity));
+    const auto& inspect_response =
+        app.world().get_component<JsonResponse>(inspect_request_entity);
+    REQUIRE(inspect_response.token == 43);
+    REQUIRE(inspect_response.capability == "ecs.entity.inspect");
+    auto inspected = nlohmann::json::parse(inspect_response.json);
+    REQUIRE(inspected.at("entity") == user);
+    REQUIRE(inspected.at("component_count") == 1);
+    REQUIRE(inspected.at("components").at(0).at("serialized") == true);
 }

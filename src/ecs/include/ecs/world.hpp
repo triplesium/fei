@@ -115,6 +115,13 @@ class World {
 
     bool has_entity(Entity entity) const { return m_entities.contains(entity); }
 
+    Optional<EntityLocation> entity_location(Entity entity) const {
+        if (!has_entity(entity)) {
+            return nullopt;
+        }
+        return m_entities.get_location(entity);
+    }
+
     Tick read_change_tick() const {
         return m_change_tick.load(std::memory_order_relaxed);
     }
