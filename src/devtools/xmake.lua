@@ -1,4 +1,5 @@
 includes("core")
+includes("providers/ecs")
 includes("providers/input")
 includes("providers/pbr")
 includes("providers/profiling")

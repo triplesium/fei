@@ -12,9 +12,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <charconv>
-#include <iomanip>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -203,47 +200,7 @@ ContainerDescriptor make_container_descriptor(TypeId id) {
     return result;
 }
 
-Result<Type&, ReflectionError> resolve_type(std::string_view selector) {
-    auto& registry = Registry::instance();
-    if (selector.starts_with("0x") || selector.starts_with("0X")) {
-        uint64 id {};
-        auto digits = selector.substr(2);
-        auto [end, error] = std::from_chars(
-            digits.data(),
-            digits.data() + digits.size(),
-            id,
-            16
-        );
-        if (digits.empty() || error != std::errc {} ||
-            end != digits.data() + digits.size()) {
-            return failure(
-                ReflectionError {400, "Invalid hexadecimal type id"}
-            );
-        }
-        auto type = registry.try_get_type(TypeId {id});
-        if (!type) {
-            return failure(ReflectionError {404, type.error().message});
-        }
-        return *type;
-    }
-
-    auto type = registry.try_get_type(selector);
-    if (!type) {
-        auto status =
-            type.error().kind == RegistryError::Kind::AmbiguousTypeName ? 409 :
-                                                                          404;
-        return failure(ReflectionError {status, type.error().message});
-    }
-    return *type;
-}
-
 } // namespace
-
-std::string format_type_id(TypeId id) {
-    std::ostringstream stream;
-    stream << "0x" << std::hex << std::setfill('0') << std::setw(16) << id.id();
-    return stream.str();
-}
 
 Result<SearchResponse, ReflectionError>
 search_types(const SearchRequest& request) {
@@ -292,9 +249,14 @@ describe_type(const DescribeRequest& request) {
             ReflectionError {400, "Type selector must not be empty"}
         );
     }
-    auto resolved = resolve_type(request.type);
+    auto resolved = resolve_type_selector(request.type);
     if (!resolved) {
-        return failure(std::move(resolved.error()));
+        return failure(
+            ReflectionError {
+                resolved.error().status,
+                std::move(resolved.error().message),
+            }
+        );
     }
 
     auto& type = *resolved;

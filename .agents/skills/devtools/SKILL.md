@@ -54,6 +54,29 @@ sample exposes the same capabilities.
 6. Invoke `devtools.shutdown` only when the task explicitly requires stopping
    the target and the process is in scope.
 
+## Query ECS State
+
+When the manifest advertises `ecs.query`, use it for a bounded, read-only ECS
+snapshot. Its reflected request contains all of these required fields:
+
+- `components`: component type selectors whose values should be returned;
+  these components are also required for a match.
+- `with`: additional required component type selectors whose values are not
+  returned.
+- `without`: excluded component type selectors.
+- `limit`: maximum returned entities, from 1 through 200.
+
+Type selectors accept a reflected full name, an unambiguous short name, or a
+hexadecimal type id. Use `reflection.search` first when the component's exact
+reflected name is unknown. `components` may be empty to return only entity ids.
+The query includes every matching entity, including DevTools-owned entities;
+use `without` when a narrower view is desired.
+
+The response is dynamic JSON without a declared `response_type`. It reports
+`observed_tick`, `matched`, `returned`, `truncated`, `columns`, and `rows`.
+Treat it as one live snapshot: `truncated` means the query should be narrowed or
+the one-shot limit increased. Do not attempt to page it across frames.
+
 ## Diagnose Failures
 
 - Connection refused: confirm the process, configured host and port, and that

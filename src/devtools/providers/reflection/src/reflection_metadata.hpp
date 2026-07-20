@@ -2,8 +2,8 @@
 
 #include "base/result.hpp"
 #include "base/types.hpp"
+#include "devtools/type_selector.hpp"
 #include "refl/reflect.hpp"
-#include "refl/type.hpp"
 
 #include <string>
 #include <vector>
@@ -130,6 +130,6 @@ search_types(const SearchRequest& request);
 Result<TypeDescriptor, ReflectionError>
 describe_type(const DescribeRequest& request);
 
-std::string format_type_id(TypeId id);
+using ::fei::devtools::format_type_id;
 
 } // namespace fei::devtools::reflection

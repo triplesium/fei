@@ -10,6 +10,7 @@
 #include "core/time.hpp"
 #include "core/transform.hpp"
 #include "devtools/plugin.hpp"
+#include "devtools_ecs/plugin.hpp"
 #include "devtools_input/plugin.hpp"
 #include "devtools_pbr/plugin.hpp"
 #include "devtools_profiling/plugin.hpp"
@@ -470,6 +471,7 @@ int main(int argc, char** argv) {
             .port = 8080,
         }}
     );
+    app.add_plugin(devtools::ecs::ProviderPlugin {});
     app.add_plugin(devtools::rendering::ProviderPlugin {});
     app.add_plugin(
         devtools::pbr::ProviderPlugin {devtools::pbr::Config {
