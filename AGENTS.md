@@ -64,11 +64,14 @@
   restating style rules here.
 - Keep names consistent with existing targets and files, such as `fei-*`,
   `sample-*`, and `*.test.cpp`.
-- After modifying C++ sources or headers, run `xmake format` on the affected
-  files and `xmake tidy <target>` on the affected targets before considering
-  the task complete.
-- For repository-wide or cross-module changes, finish by running
-  `xmake format --check` and `xmake tidy` across the entire repository.
+- After modifying C++ sources or headers, format the affected files, run
+  `xmake tidy <target>` for directly affected targets, and run the relevant
+  tests before considering the task complete.
+- For cross-module changes, tidy the directly affected targets and build or
+  test representative dependents.
+- Run repository-wide `xmake format --check` and `xmake tidy` only for
+  repository-wide edits, static-analysis or build-rule changes, or when
+  explicitly preparing a final integration or release check.
 
 ## Testing Guidelines
 
