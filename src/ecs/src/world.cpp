@@ -53,7 +53,7 @@ World::run_registered_system(RegisteredSystemId id) {
 Status<RegisteredSystemError> World::run_system(RegisteredSystemId id) {
     auto status = run_registered_system(id);
     if (status) {
-        flush_registered_system_commands();
+        flush_system_commands();
     }
     return status;
 }
@@ -70,7 +70,7 @@ Status<RegisteredSystemError> World::unregister_system(RegisteredSystemId id) {
     return {};
 }
 
-void World::flush_registered_system_commands() {
+void World::flush_system_commands() {
     if (m_registered_system_execution_depth != 0 ||
         !has_resource<CommandsQueue>()) {
         return;

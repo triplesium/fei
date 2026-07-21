@@ -138,7 +138,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "ECS hierarchy commands apply after queue execution",
+    "ECS one-shot systems apply deferred hierarchy commands after running",
     "[ecs][hierarchy]"
 ) {
     World world;
@@ -148,11 +148,8 @@ TEST_CASE(
 
     world.run_system_once([parent, child](Commands commands) {
         commands.entity(child).set_parent(parent);
+        REQUIRE(!commands.world().has_parent(child));
     });
-
-    REQUIRE(!world.has_parent(child));
-
-    world.resource<CommandsQueue>().execute(world);
 
     REQUIRE(world.has_parent(child));
     auto parent_entity = world.parent(child);
@@ -163,7 +160,6 @@ TEST_CASE(
     world.run_system_once([child](Commands commands) {
         commands.entity(child).remove_parent();
     });
-    world.resource<CommandsQueue>().execute(world);
 
     REQUIRE(!world.has_parent(child));
     REQUIRE(!world.has_component<Children>(parent));
@@ -180,7 +176,6 @@ TEST_CASE("ECS hierarchy commands despawn recursively", "[ecs][hierarchy]") {
     world.run_system_once([root](Commands commands) {
         commands.entity(root).despawn_recursive();
     });
-    world.resource<CommandsQueue>().execute(world);
 
     REQUIRE(!world.has_entity(root));
     REQUIRE(!world.has_entity(child));

@@ -328,6 +328,7 @@ class World {
     template<typename F>
     void run_system_once(F&& func) {
         FunctionSystem(std::forward<F>(func)).run(*this);
+        flush_system_commands();
     }
 
     Archetypes& archetypes() { return m_archetypes; }
@@ -335,7 +336,7 @@ class World {
 
   private:
     Status<RegisteredSystemError> run_registered_system(RegisteredSystemId id);
-    void flush_registered_system_commands();
+    void flush_system_commands();
 
     void raw_add_component(Entity entity, Ref ref);
     void raw_remove_component(Entity entity, TypeId type_id);

@@ -284,7 +284,6 @@ TEST_CASE(
         commands.add_system(TestSchedule, SystemConfig(scheduled_first));
     });
 
-    world.resource<CommandsQueue>().execute_after_batch(world);
     world.run_schedule(TestSchedule);
     REQUIRE(world.resource<ScheduleTrace>().entries.empty());
 

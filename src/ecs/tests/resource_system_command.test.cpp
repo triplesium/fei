@@ -192,7 +192,10 @@ TEST_CASE("ECS optional resource params can be absent", "[ecs][resource]") {
     );
 }
 
-TEST_CASE("ECS commands defer entity and component edits", "[ecs][commands]") {
+TEST_CASE(
+    "ECS systems apply deferred entity and component commands after running",
+    "[ecs][commands]"
+) {
     Registry::instance().register_type<Position>();
     Registry::instance().register_type<Name>();
     Registry::instance().register_type<CommandsQueue>();
@@ -210,8 +213,6 @@ TEST_CASE("ECS commands defer entity and component edits", "[ecs][commands]") {
                                  .add(Name("TestEntity"))
                                  .id();
         });
-
-        world.resource<CommandsQueue>().execute(world);
 
         REQUIRE(world.has_entity(spawned_entity));
         REQUIRE(world.has_component<Position>(spawned_entity));
@@ -232,8 +233,6 @@ TEST_CASE("ECS commands defer entity and component edits", "[ecs][commands]") {
         world.run_system_once([entity](Commands commands) {
             commands.entity(entity).add(Name("AddedLater"));
         });
-
-        world.resource<CommandsQueue>().execute(world);
 
         REQUIRE(world.has_component<Name>(entity));
         REQUIRE(world.get_component<Name>(entity).value == "AddedLater");
@@ -293,8 +292,6 @@ TEST_CASE(
             .add(Health(25))
             .add(Name("Enemy2"));
     });
-
-    world.resource<CommandsQueue>().execute(world);
 
     REQUIRE(world.get_component<Position>(player) == Position(0.0f, 0.0f));
     REQUIRE(world.get_component<Position>(enemy1) == Position(9.0f, 10.0f));
