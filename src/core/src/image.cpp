@@ -5,7 +5,9 @@
 #include "graphics/texture.hpp"
 
 #include <cstring>
+#include <limits>
 #include <memory>
+#include <span>
 #include <string>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -87,9 +89,11 @@ image_load_error(const LoadContext& context, std::string message) {
 Image::Image(
     std::unique_ptr<unsigned char[]> data,
     TextureDescription texture_description,
-    std::uint32_t channels
+    std::uint32_t channels,
+    SamplerDescription sampler_description
 ) :
     m_data(std::move(data)), m_texture_description(texture_description),
+    m_sampler_description(sampler_description),
     m_channels(
         channels ? channels :
                    pixel_format_channels(texture_description.texture_format)
@@ -127,62 +131,72 @@ std::unique_ptr<Image> Image::create_empty(
 
 AssetLoadResult<Image>
 ImageLoader::load(Reader& reader, const LoadContext& context) {
+    const auto extension = context.asset_path().path().extension();
+    auto image = decode_image(
+        std::span(reader.data(), reader.size()),
+        ImageDecodeOptions {
+            .flip_vertically = extension != ".hdr",
+            .hdr = extension == ".hdr",
+        }
+    );
+    if (!image) {
+        return failure(image_load_error(context, std::move(image.error())));
+    }
+    return std::move(*image);
+}
+
+Result<std::unique_ptr<Image>, std::string>
+decode_image(std::span<const std::byte> bytes, ImageDecodeOptions options) {
+    if (bytes.size() >
+        static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+        return failure(std::string("Image data is too large for stb_image"));
+    }
+
     int width = 0;
     int height = 0;
     int channels = 0;
     if (!stbi_info_from_memory(
-            reinterpret_cast<const stbi_uc*>(reader.data()),
-            static_cast<int>(reader.size()),
+            reinterpret_cast<const stbi_uc*>(bytes.data()),
+            static_cast<int>(bytes.size()),
             &width,
             &height,
             &channels
         )) {
-        return failure(image_load_error(
-            context,
-            stbi_error_message("Failed to read image info")
-        ));
+        return failure(stbi_error_message("Failed to read image info"));
     }
 
     PixelFormat format;
     void* data = nullptr;
     std::uint32_t loaded_channels = 0;
-    auto extension = context.asset_path().path().extension();
-    if (extension == ".hdr") {
-        stbi_set_flip_vertically_on_load(false);
+    stbi_set_flip_vertically_on_load_thread(options.flip_vertically);
+    if (options.hdr) {
         int req_comp = 4; // Force load as RGBA for HDR
         data = stbi_loadf_from_memory(
-            reinterpret_cast<const stbi_uc*>(reader.data()),
-            static_cast<int>(reader.size()),
+            reinterpret_cast<const stbi_uc*>(bytes.data()),
+            static_cast<int>(bytes.size()),
             &width,
             &height,
             &channels,
             req_comp
         );
         if (!data) {
-            return failure(image_load_error(
-                context,
-                stbi_error_message("Failed to load HDR image")
-            ));
+            return failure(stbi_error_message("Failed to load HDR image"));
         }
         format = PixelFormat::Rgba32Float;
         loaded_channels = static_cast<std::uint32_t>(req_comp);
     } else {
-        stbi_set_flip_vertically_on_load(true);
         // For RGB images, load as RGBA, then ignore alpha channel
         int req_comp = channels == 3 ? 4 : channels;
         data = stbi_load_from_memory(
-            reinterpret_cast<const stbi_uc*>(reader.data()),
-            static_cast<int>(reader.size()),
+            reinterpret_cast<const stbi_uc*>(bytes.data()),
+            static_cast<int>(bytes.size()),
             &width,
             &height,
             &channels,
             req_comp
         );
         if (!data) {
-            return failure(image_load_error(
-                context,
-                stbi_error_message("Failed to load image")
-            ));
+            return failure(stbi_error_message("Failed to load image"));
         }
         switch (channels) {
             case 1:
@@ -195,16 +209,16 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
                 break;
             case 3:
             case 4:
-                format = PixelFormat::Rgba8Unorm;
+                format = options.srgb ? PixelFormat::Rgba8UnormSrgb :
+                                        PixelFormat::Rgba8Unorm;
                 loaded_channels = static_cast<std::uint32_t>(req_comp);
                 break;
             default:
                 stbi_image_free(data);
-                return failure(image_load_error(
-                    context,
+                return failure(
                     "Unsupported image channel count: " +
-                        std::to_string(channels)
-                ));
+                    std::to_string(channels)
+                );
         }
     }
     TextureDescription texture_description = TextureDescription {
@@ -229,7 +243,8 @@ ImageLoader::load(Reader& reader, const LoadContext& context) {
     return std::make_unique<Image>(
         std::move(image_data),
         texture_description,
-        loaded_channels
+        loaded_channels,
+        options.sampler
     );
 }
 

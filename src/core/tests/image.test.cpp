@@ -187,3 +187,15 @@ TEST_CASE("Core ImageLoader rejects invalid image data", "[core][image]") {
     REQUIRE(image.error().path.as_string() == "invalid.png");
     REQUIRE(image.error().message.contains("Failed to read image info"));
 }
+
+TEST_CASE(
+    "Core decodes image bytes without an asset context",
+    "[core][image]"
+) {
+    auto image = decode_image(rgba_png);
+
+    REQUIRE(image);
+    require_1x1_image(**image, 4, PixelFormat::Rgba8Unorm);
+    CHECK((*image)->data()[0] == 0x10);
+    CHECK((*image)->data()[3] == 0x40);
+}

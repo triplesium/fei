@@ -17,6 +17,9 @@ static_assert(std::is_same_v<
 static_assert(std::is_same_v<
               decltype(std::declval<const GpuImage&>().texture()),
               std::shared_ptr<const Texture>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<GpuImage&>().sampler()),
+              std::shared_ptr<Sampler>>);
 
 TEST_CASE("GpuImage stores the prepared texture", "[rendering][gpu-image]") {
     auto texture = std::make_shared<FakeTexture>(TextureDescription {
@@ -30,9 +33,11 @@ TEST_CASE("GpuImage stores the prepared texture", "[rendering][gpu-image]") {
         .texture_type = TextureType::Texture2D,
     });
 
-    GpuImage image(texture);
+    auto sampler = std::make_shared<Sampler>();
+    GpuImage image(texture, sampler);
 
     REQUIRE(image.texture() == texture);
+    REQUIRE(image.sampler() == sampler);
 }
 
 TEST_CASE(
@@ -64,6 +69,9 @@ TEST_CASE(
 
     REQUIRE(prepared.has_value());
     REQUIRE(prepared->texture() == device.textures[0]);
+    REQUIRE(prepared->sampler() != nullptr);
+    REQUIRE(device.sampler_descriptions.size() == 1);
+    REQUIRE(device.sampler_descriptions[0].mag_filter == SamplerFilter::Linear);
     REQUIRE(device.texture_descriptions.size() == 1);
     REQUIRE(device.texture_descriptions[0].width == 2);
     REQUIRE(device.texture_descriptions[0].height == 3);

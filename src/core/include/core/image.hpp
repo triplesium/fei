@@ -4,11 +4,16 @@
 #include "asset/loader.hpp"
 #include "asset/plugin.hpp"
 #include "base/bitflags.hpp"
+#include "base/result.hpp"
 #include "graphics/enums.hpp"
+#include "graphics/sampler.hpp"
 #include "graphics/texture.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
+#include <string>
 
 namespace fei {
 
@@ -16,13 +21,15 @@ class Image {
   private:
     std::unique_ptr<unsigned char[]> m_data;
     TextureDescription m_texture_description;
+    SamplerDescription m_sampler_description;
     std::uint32_t m_channels;
 
   public:
     Image(
         std::unique_ptr<unsigned char[]> data,
         TextureDescription texture_description,
-        std::uint32_t channels = 0
+        std::uint32_t channels = 0,
+        SamplerDescription sampler_description = SamplerDescription::Linear
     );
 
     static std::unique_ptr<Image> create_empty(
@@ -46,7 +53,21 @@ class Image {
         return m_texture_description;
     }
     TextureDescription& texture_description() { return m_texture_description; }
+    const SamplerDescription& sampler_description() const {
+        return m_sampler_description;
+    }
+    SamplerDescription& sampler_description() { return m_sampler_description; }
 };
+
+struct ImageDecodeOptions {
+    bool flip_vertically = false;
+    bool hdr = false;
+    bool srgb = false;
+    SamplerDescription sampler = SamplerDescription::Linear;
+};
+
+Result<std::unique_ptr<Image>, std::string>
+decode_image(std::span<const std::byte> bytes, ImageDecodeOptions options = {});
 
 class ImageLoader : public AssetLoader<Image> {
   public:
