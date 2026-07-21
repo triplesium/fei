@@ -2,6 +2,7 @@
 
 #include "asset/assets.hpp"
 #include "asset/handle.hpp"
+#include "asset/id.hpp"
 #include "asset/server.hpp" // NOLINT(misc-include-cleaner)
 #include "base/hash.hpp"
 #include "base/log.hpp"
@@ -13,9 +14,11 @@
 
 #include <filesystem>
 #include <memory>
+#include <string>
 #include <tiny_obj_loader.h>
 #include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -168,13 +171,35 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
                 material_id = shape_material_id;
             }
         }
-        scene->objects.push_back(
-            Scene::Object {
+        if (scene->nodes.size() >=
+            static_cast<std::size_t>(invalid_scene_node_id)) {
+            return failure(AssetLoadError(
+                context.asset_path(),
+                "OBJ scene contains more shapes than SceneNodeId can address"
+            ));
+        }
+
+        auto scene_mesh = std::make_unique<SceneMesh>();
+        scene_mesh->name = shape.name;
+        scene_mesh->primitives.push_back(
+            ScenePrimitive {
                 .mesh = mesh_handle,
                 .material = material_handles[material_id],
-                .transform = {},
             }
         );
+        auto scene_mesh_handle =
+            context.add_asset<SceneMesh>(std::move(scene_mesh));
+
+        auto node_id = static_cast<SceneNodeId>(scene->nodes.size());
+        scene->nodes.push_back(
+            SceneNode {
+                .name = shape.name,
+                .local_transform = {},
+                .mesh = std::move(scene_mesh_handle),
+                .children = {},
+            }
+        );
+        scene->roots.push_back(node_id);
     }
     fei::info(
         "Loaded scene '{}' with {} vertices and {} triangles",
@@ -183,13 +208,135 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
         total_triangles
     );
 
+    auto validation = scene->validate();
+    if (!validation) {
+        return failure(AssetLoadError(
+            context.asset_path(),
+            std::move(validation.error().message)
+        ));
+    }
+
     return scene;
 }
 
+namespace {
+
+Optional<std::string> validate_scene_for_spawning(
+    const Scene& scene,
+    const Assets<SceneMesh>& scene_meshes
+) {
+    auto scene_status = scene.validate();
+    if (!scene_status) {
+        return scene_status.error().message;
+    }
+
+    std::unordered_set<AssetId> validated_meshes;
+    for (std::size_t node_index = 0; node_index < scene.nodes.size();
+         ++node_index) {
+        const auto& node = scene.nodes[node_index];
+        if (!node.mesh) {
+            continue;
+        }
+
+        auto scene_mesh = scene_meshes.get(*node.mesh);
+        if (!scene_mesh) {
+            return "Scene node " + std::to_string(node_index) +
+                   " references unavailable SceneMesh asset " +
+                   std::to_string(node.mesh->id());
+        }
+        if (!validated_meshes.emplace(node.mesh->id()).second) {
+            continue;
+        }
+        auto mesh_status = scene_mesh->validate();
+        if (!mesh_status) {
+            return "Scene node " + std::to_string(node_index) + ": " +
+                   mesh_status.error().message;
+        }
+    }
+
+    return nullopt;
+}
+
+SceneInstance instantiate_scene(
+    Entity owner,
+    const Handle<Scene>& scene_handle,
+    const Scene& scene,
+    const SceneSpawnOptions& options,
+    const Assets<SceneMesh>& scene_meshes,
+    Commands& commands
+) {
+    auto root_commands = commands.spawn();
+    const auto instance_root = root_commands.id();
+    root_commands
+        .add(
+            SceneInstanceRoot {.owner = owner},
+            Transform3d {.scale = options.scale}
+        )
+        .set_parent(owner);
+
+    std::vector<Entity> node_entities;
+    node_entities.reserve(scene.nodes.size());
+    for (std::size_t index = 0; index < scene.nodes.size(); ++index) {
+        const auto& node = scene.nodes[index];
+        auto node_commands = commands.spawn();
+        node_entities.push_back(node_commands.id());
+        node_commands.add(
+            node.local_transform,
+            SceneNodeName {.value = node.name},
+            SceneNodeInstance {.node = static_cast<SceneNodeId>(index)}
+        );
+    }
+
+    for (auto root : scene.roots) {
+        commands.entity(node_entities[static_cast<std::size_t>(root)])
+            .set_parent(instance_root);
+    }
+    for (std::size_t parent_index = 0; parent_index < scene.nodes.size();
+         ++parent_index) {
+        const auto parent = node_entities[parent_index];
+        for (auto child : scene.nodes[parent_index].children) {
+            commands.entity(node_entities[static_cast<std::size_t>(child)])
+                .set_parent(parent);
+        }
+    }
+
+    for (std::size_t index = 0; index < scene.nodes.size(); ++index) {
+        const auto& node = scene.nodes[index];
+        if (!node.mesh) {
+            continue;
+        }
+        auto scene_mesh = scene_meshes.get(*node.mesh);
+        if (!scene_mesh) {
+            continue;
+        }
+        for (const auto& primitive : scene_mesh->primitives) {
+            commands.spawn()
+                .add(
+                    Mesh3d {.mesh = primitive.mesh},
+                    MeshMaterial3d<StandardMaterial> {
+                        .material = primitive.material,
+                    },
+                    Transform3d {}
+                )
+                .set_parent(node_entities[index]);
+        }
+    }
+
+    return SceneInstance {
+        .scene = scene_handle,
+        .root = instance_root,
+        .node_entities = std::move(node_entities),
+    };
+}
+
+} // namespace
+
 void spawn_scene(
     Query<Entity, const SceneSpawner> scene_query,
+    Query<Entity, const SceneInstance> instance_query,
     ResRO<AssetServer> asset_server,
     ResRO<Assets<Scene>> scenes,
+    ResRO<Assets<SceneMesh>> scene_meshes,
     EventWriter<SceneSpawnedEvent> spawned_events,
     EventWriter<SceneSpawnFailedEvent> spawn_failed_events,
     Commands commands
@@ -242,31 +389,68 @@ void spawn_scene(
             continue;
         }
 
-        std::vector<Entity> spawned_entities;
-        for (const auto& object : scene->objects) {
-            auto transform = object.transform;
-            transform.scale *= spawner.options.scale;
-            auto spawned_entity = commands.spawn();
-            spawned_entities.push_back(spawned_entity.id());
-            spawned_entity.add(
-                Mesh3d {.mesh = object.mesh},
-                MeshMaterial3d<StandardMaterial> {.material = object.material},
-                transform
+        if (auto validation_error =
+                validate_scene_for_spawning(*scene, *scene_meshes)) {
+            spawn_failed_events.send(
+                SceneSpawnFailedEvent {
+                    .entity = entity,
+                    .scene = spawner.scene,
+                    .asset = AssetServer::asset_key(spawner.scene),
+                    .error = AssetLoadError(
+                        AssetPath("<in-memory-scene>"),
+                        std::move(*validation_error)
+                    ),
+                }
             );
+            commands.entity(entity).despawn_recursive();
+            continue;
         }
-        commands.entity(entity).remove<SceneSpawner>().add(
-            SceneInstance {
-                .scene = spawner.scene,
-                .entities = spawned_entities,
+
+        if (auto old_instance = instance_query.get(entity)) {
+            const auto old_root = std::get<1>(*old_instance).root;
+            if (commands.world().has_entity(old_root)) {
+                commands.entity(old_root).despawn_recursive();
             }
+        }
+
+        auto instance = instantiate_scene(
+            entity,
+            spawner.scene,
+            *scene,
+            spawner.options,
+            *scene_meshes,
+            commands
         );
+        const auto instance_root = instance.root;
+        commands.entity(entity).remove<SceneSpawner>().add(std::move(instance));
         spawned_events.send(
             SceneSpawnedEvent {
                 .entity = entity,
                 .scene = spawner.scene,
-                .spawned_entities = std::move(spawned_entities),
+                .instance_root = instance_root,
             }
         );
+    }
+}
+
+void cleanup_scene_instances(
+    Query<Entity, const SceneInstanceRoot> root_query,
+    Query<Entity, const SceneInstance> instance_query,
+    Commands commands
+) {
+    for (const auto& [root_entity, root] : root_query) {
+        auto owner_instance = instance_query.get(root.owner);
+        if (!owner_instance ||
+            std::get<1>(*owner_instance).root != root_entity) {
+            commands.entity(root_entity).despawn_recursive();
+        }
+    }
+
+    for (const auto& [owner, instance] : instance_query) {
+        auto root = root_query.get(instance.root);
+        if (!root || std::get<1>(*root).owner != owner) {
+            commands.entity(owner).remove<SceneInstance>();
+        }
     }
 }
 
