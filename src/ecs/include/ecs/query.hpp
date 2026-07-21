@@ -1,5 +1,6 @@
 #pragma once
 #include "base/concepts.hpp"
+#include "base/optional.hpp"
 #include "ecs/archetype.hpp"
 #include "ecs/change_detection.hpp"
 #include "ecs/fwd.hpp"
@@ -244,6 +245,7 @@ template<typename... Datas>
 class Query : public QueryBase {
   public:
     using Iterator = QueryIter<Datas...>;
+    using Item = typename Iterator::value_type;
 
     template<typename... Filters>
     using Filter = FilteredQuery<Query<Datas...>, Filters...>;
@@ -275,7 +277,30 @@ class Query : public QueryBase {
         return count;
     }
 
-    Iterator::value_type first() const {
+    // Access a matching entity directly without scanning the query.
+    Optional<Item> get(Entity entity) const {
+        if (!m_world->has_entity(entity)) {
+            return nullopt;
+        }
+
+        auto location = m_world->entity_location(entity);
+        if (!location) {
+            return nullopt;
+        }
+
+        auto& archetype = m_world->archetypes().get(location->archetype_id);
+        if (!match_archetype(archetype) ||
+            !matches_row(archetype, location->row)) {
+            return nullopt;
+        }
+
+        return Optional<Item>(
+            in_place,
+            QueryData<Datas>::get(archetype, location->row, m_system_ticks)...
+        );
+    }
+
+    Item first() const {
         if (empty()) {
             throw std::runtime_error("Query is empty");
         }

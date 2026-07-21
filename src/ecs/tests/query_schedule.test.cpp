@@ -144,6 +144,49 @@ TEST_CASE("ECS queries select matching component sets", "[ecs][query]") {
     }
 }
 
+TEST_CASE("ECS queries access matching entities by id", "[ecs][query]") {
+    register_components();
+    World world;
+
+    Entity matching = world.entity();
+    world.add_component(matching, Position(1.0f, 2.0f));
+    world.add_component(matching, Velocity(3.0f, 4.0f));
+    world.add_component(matching, Health(50));
+
+    Entity filtered_out = world.entity();
+    world.add_component(filtered_out, Position(3.0f, 4.0f));
+    world.add_component(filtered_out, Velocity(5.0f, 6.0f));
+
+    Entity missing_velocity = world.entity();
+    world.add_component(missing_velocity, Position(5.0f, 6.0f));
+
+    Entity despawned = world.entity();
+    world.add_component(despawned, Position(7.0f, 8.0f));
+    world.add_component(despawned, Velocity(9.0f, 10.0f));
+    world.despawn(despawned);
+
+    world.run_system_once(
+        [&](
+            Query<Entity, Position, const Velocity>::Filter<With<Health>> query
+        ) {
+            auto item = query.get(matching);
+            REQUIRE(item);
+            auto [entity, position, velocity] = *item;
+            CHECK(entity == matching);
+            CHECK(position->x == 1.0f);
+            CHECK(velocity.dx == 3.0f);
+
+            position->x = 11.0f;
+
+            CHECK_FALSE(query.get(filtered_out));
+            CHECK_FALSE(query.get(missing_velocity));
+            CHECK_FALSE(query.get(despawned));
+        }
+    );
+
+    CHECK(world.get_component<Position>(matching).x == 11.0f);
+}
+
 TEST_CASE("ECS schedule ordering respects configured sets", "[ecs][schedule]") {
     Registry::instance().register_type<CommandsQueue>();
     Registry::instance().register_type<ScheduleTrace>();
