@@ -26,17 +26,18 @@ struct ReplaceScheduleSystemCommand {
     SystemConfig config;
 };
 
-// Schedule commands carry SystemConfig, which owns unique_ptr<System> and
-// unique_ptr<Condition> values. That makes the command move-only, so storing it
-// in std::function<void(World&)> would require a copyable lambda that cannot
-// capture SystemConfig by move. Keep these as explicit variants instead.
+// Schedule graph changes apply after the entire schedule rather than after an
+// individual system batch. Keep them in a separate queue with explicit command
+// types so their move-only SystemConfig values retain that timing.
 using ScheduleCommand = std::variant<
     AddScheduleSystemCommand,
     RemoveScheduleSystemCommand,
     ReplaceScheduleSystemCommand>;
 
 struct CommandsQueue {
-    std::queue<std::function<void(World&)>> after_batch_commands;
+    using BatchCommand = std::move_only_function<void(World&)>;
+
+    std::queue<BatchCommand> after_batch_commands;
     std::vector<ScheduleCommand> after_schedule_commands;
     bool executing_after_batch {false};
 
@@ -46,7 +47,7 @@ struct CommandsQueue {
     CommandsQueue(CommandsQueue&&) noexcept = default;
     CommandsQueue& operator=(CommandsQueue&&) noexcept = default;
 
-    void add_command(std::function<void(World&)> command) {
+    void add_command(BatchCommand command) {
         after_batch_commands.push(std::move(command));
     }
 
@@ -92,7 +93,7 @@ struct CommandsQueue {
     }
 
     void clear() {
-        std::queue<std::function<void(World&)>>().swap(after_batch_commands);
+        std::queue<BatchCommand>().swap(after_batch_commands);
         after_schedule_commands.clear();
         executing_after_batch = false;
     }
@@ -196,7 +197,7 @@ class Commands {
         return Commands(world.resource<CommandsQueue>(), world);
     }
 
-    void add_command(std::function<void(World&)> command) {
+    void add_command(CommandsQueue::BatchCommand command) {
         m_commands_queue.add_command(std::move(command));
     }
 
@@ -250,6 +251,17 @@ class Commands {
                 );
             }
         });
+    }
+
+    template<typename F>
+        requires IntoSystem<std::decay_t<F>>
+    void run_system_once(F&& system) {
+        using Func = std::decay_t<F>;
+        m_commands_queue.add_command(
+            [system = Func(std::forward<F>(system))](World& world) mutable {
+                world.run_system_once(std::move(system));
+            }
+        );
     }
 
     void unregister_system(RegisteredSystemId id) {

@@ -4,10 +4,12 @@
 #include "test_types.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 using namespace fei;
 using namespace fei::ecs_test;
@@ -251,6 +253,38 @@ TEST_CASE(
         std::vector<std::string> expected = {"count:1"};
         REQUIRE(world.resource<ScheduleTrace>().entries == expected);
     }
+}
+
+TEST_CASE(
+    "ECS commands run unregistered systems once after a batch",
+    "[ecs][commands][system]"
+) {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<EventQueue>();
+    Registry::instance().register_type<GameConfig>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(EventQueue {});
+
+    world.run_system_once([](Commands commands) {
+        commands.run_system_once([message = std::make_unique<std::string>(
+                                      "one-shot"
+                                  )](Commands nested_commands,
+                                     ResRW<EventQueue> events) {
+            events->push(*message);
+
+            GameConfig config;
+            config.max_entities = 42;
+            nested_commands.add_resource(config);
+        });
+    });
+
+    REQUIRE(
+        world.resource<EventQueue>().events ==
+        std::vector<std::string> {"one-shot"}
+    );
+    REQUIRE(world.resource<GameConfig>().max_entities == 42);
 }
 
 TEST_CASE(
