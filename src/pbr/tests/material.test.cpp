@@ -43,12 +43,12 @@ TEST_CASE(
     CHECK(material.shader_defs(MaterialShaderType::Fragment).empty());
     CHECK(material.shader_defs(MaterialShaderType::PrepassFragment).empty());
 
-    material.albedo_map = make_image_handle(images);
-    material.normal_map = make_image_handle(images);
-    material.metallic_map = make_image_handle(images);
-    material.roughness_map = make_image_handle(images);
-    material.emissive_map = make_image_handle(images);
-    material.specular_map = make_image_handle(images);
+    material.albedo_texture = make_image_handle(images);
+    material.normal_texture = make_image_handle(images);
+    material.metallic_roughness_texture = make_image_handle(images);
+    material.occlusion_texture = make_image_handle(images);
+    material.emissive_texture = make_image_handle(images);
+    material.specular_texture = make_image_handle(images);
 
     CHECK(material.shader_defs(MaterialShaderType::Vertex).empty());
     CHECK(material.shader_defs(MaterialShaderType::PrepassVertex).empty());
@@ -58,8 +58,10 @@ TEST_CASE(
     const auto uniform = material.create_uniform();
     CHECK(has_uniform_flag(uniform, StandardMaterialFlags::AlbedoMap));
     CHECK(has_uniform_flag(uniform, StandardMaterialFlags::NormalMap));
-    CHECK(has_uniform_flag(uniform, StandardMaterialFlags::MetallicMap));
-    CHECK(has_uniform_flag(uniform, StandardMaterialFlags::RoughnessMap));
+    CHECK(
+        has_uniform_flag(uniform, StandardMaterialFlags::MetallicRoughnessMap)
+    );
+    CHECK(has_uniform_flag(uniform, StandardMaterialFlags::OcclusionMap));
     CHECK(has_uniform_flag(uniform, StandardMaterialFlags::EmissiveMap));
     CHECK(has_uniform_flag(uniform, StandardMaterialFlags::SpecularMap));
 }

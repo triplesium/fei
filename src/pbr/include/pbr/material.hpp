@@ -23,8 +23,8 @@ enum class StandardMaterialFlags : uint32 {
     None = 0u,
     AlbedoMap = 1u << 0u,
     NormalMap = 1u << 1u,
-    MetallicMap = 1u << 2u,
-    RoughnessMap = 1u << 3u,
+    MetallicRoughnessMap = 1u << 2u,
+    OcclusionMap = 1u << 3u,
     EmissiveMap = 1u << 4u,
     SpecularMap = 1u << 5u,
 };
@@ -36,21 +36,36 @@ struct alignas(16) StandardMaterialUniform {
     alignas(16) Color3F emissive {0.0f, 0.0f, 0.0f};
     alignas(16) Color3F specular {0.0f, 0.0f, 0.0f};
     uint32 flags {0};
+    float normal_scale {1.0f};
+    float occlusion_strength {1.0f};
+};
+
+enum class UvChannel : uint8 {
+    Uv0,
+    Uv1,
 };
 
 class StandardMaterial : public Material {
   public:
     Color3F albedo {1.0f, 1.0f, 1.0f};
-    Optional<Handle<Image>> albedo_map;
-    Optional<Handle<Image>> normal_map;
+    Optional<Handle<Image>> albedo_texture;
+    UvChannel albedo_channel = UvChannel::Uv0;
+    Optional<Handle<Image>> normal_texture;
+    UvChannel normal_channel = UvChannel::Uv0;
+    float normal_scale = 1.0f;
     float metallic = 0.0f;
-    Optional<Handle<Image>> metallic_map;
     float roughness = 0.5f;
-    Optional<Handle<Image>> roughness_map;
+    Optional<Handle<Image>> metallic_roughness_texture;
+    UvChannel metallic_roughness_channel = UvChannel::Uv0;
+    Optional<Handle<Image>> occlusion_texture;
+    UvChannel occlusion_channel = UvChannel::Uv0;
+    float occlusion_strength = 1.0f;
     Color3F emissive {0.0f, 0.0f, 0.0f};
-    Optional<Handle<Image>> emissive_map;
+    Optional<Handle<Image>> emissive_texture;
+    UvChannel emissive_channel = UvChannel::Uv0;
     Color3F specular {0.0f, 0.0f, 0.0f};
-    Optional<Handle<Image>> specular_map;
+    Optional<Handle<Image>> specular_texture;
+    UvChannel specular_channel = UvChannel::Uv0;
     MaterialAlphaMode alpha_mode {MaterialAlphaMode::Opaque};
     CullMode cull_mode {CullMode::Back};
     bool depth_write {true};
@@ -100,37 +115,67 @@ class StandardMaterial : public Material {
             },
             {
                 .binding = 2,
+                .name = "albedo_sampler",
+                .kind = ResourceKind::Sampler,
+                .stages = ShaderStages::Fragment,
+            },
+            {
+                .binding = 3,
                 .name = "normal_map",
                 .kind = ResourceKind::TextureReadOnly,
                 .stages = ShaderStages::Fragment,
             },
             {
-                .binding = 3,
-                .name = "metallic_map",
-                .kind = ResourceKind::TextureReadOnly,
-                .stages = ShaderStages::Fragment,
-            },
-            {
                 .binding = 4,
-                .name = "roughness_map",
-                .kind = ResourceKind::TextureReadOnly,
+                .name = "normal_sampler",
+                .kind = ResourceKind::Sampler,
                 .stages = ShaderStages::Fragment,
             },
             {
                 .binding = 5,
-                .name = "emissive_map",
+                .name = "metallic_roughness_map",
                 .kind = ResourceKind::TextureReadOnly,
                 .stages = ShaderStages::Fragment,
             },
             {
                 .binding = 6,
+                .name = "metallic_roughness_sampler",
+                .kind = ResourceKind::Sampler,
+                .stages = ShaderStages::Fragment,
+            },
+            {
+                .binding = 7,
+                .name = "occlusion_map",
+                .kind = ResourceKind::TextureReadOnly,
+                .stages = ShaderStages::Fragment,
+            },
+            {
+                .binding = 8,
+                .name = "occlusion_sampler",
+                .kind = ResourceKind::Sampler,
+                .stages = ShaderStages::Fragment,
+            },
+            {
+                .binding = 9,
+                .name = "emissive_map",
+                .kind = ResourceKind::TextureReadOnly,
+                .stages = ShaderStages::Fragment,
+            },
+            {
+                .binding = 10,
+                .name = "emissive_sampler",
+                .kind = ResourceKind::Sampler,
+                .stages = ShaderStages::Fragment,
+            },
+            {
+                .binding = 11,
                 .name = "specular_map",
                 .kind = ResourceKind::TextureReadOnly,
                 .stages = ShaderStages::Fragment,
             },
             {
-                .binding = 7,
-                .name = "sampler",
+                .binding = 12,
+                .name = "specular_sampler",
                 .kind = ResourceKind::Sampler,
                 .stages = ShaderStages::Fragment,
             },
@@ -140,28 +185,27 @@ class StandardMaterial : public Material {
     StandardMaterialUniform
     create_uniform(const RenderAssets<GpuImage>* gpu_images = nullptr) const {
         BitFlags<StandardMaterialFlags> flags = StandardMaterialFlags::None;
-        auto image_ready = [&](const Optional<Handle<Image>>& image_handle) {
-            return image_handle &&
-                   (!gpu_images ||
-                    gpu_images->get(image_handle->id()).has_value());
+        auto image_ready = [&](const Optional<Handle<Image>>& image) {
+            return image &&
+                   (!gpu_images || gpu_images->get(image->id()).has_value());
         };
 
-        if (image_ready(albedo_map)) {
+        if (image_ready(albedo_texture)) {
             flags |= StandardMaterialFlags::AlbedoMap;
         }
-        if (image_ready(normal_map)) {
+        if (image_ready(normal_texture)) {
             flags |= StandardMaterialFlags::NormalMap;
         }
-        if (image_ready(metallic_map)) {
-            flags |= StandardMaterialFlags::MetallicMap;
+        if (image_ready(metallic_roughness_texture)) {
+            flags |= StandardMaterialFlags::MetallicRoughnessMap;
         }
-        if (image_ready(roughness_map)) {
-            flags |= StandardMaterialFlags::RoughnessMap;
+        if (image_ready(occlusion_texture)) {
+            flags |= StandardMaterialFlags::OcclusionMap;
         }
-        if (image_ready(emissive_map)) {
+        if (image_ready(emissive_texture)) {
             flags |= StandardMaterialFlags::EmissiveMap;
         }
-        if (image_ready(specular_map)) {
+        if (image_ready(specular_texture)) {
             flags |= StandardMaterialFlags::SpecularMap;
         }
         return StandardMaterialUniform {
@@ -171,6 +215,8 @@ class StandardMaterial : public Material {
             .emissive = emissive,
             .specular = specular,
             .flags = flags.to_raw(),
+            .normal_scale = normal_scale,
+            .occlusion_strength = occlusion_strength,
         };
     }
 
@@ -196,37 +242,46 @@ class StandardMaterial : public Material {
         );
         resources.push_back(uniform_buffer);
 
-        auto push_image = [&](const Optional<Handle<Image>>& image_handle) {
-            if (image_handle) {
-                if (auto gpu_image = gpu_images.get(image_handle->id())) {
+        auto push_image = [&](const Optional<Handle<Image>>& image) {
+            if (image) {
+                if (auto gpu_image = gpu_images.get(image->id())) {
                     resources.push_back(gpu_image->texture());
+                    if (auto sampler = gpu_image->sampler()) {
+                        resources.push_back(std::move(sampler));
+                    } else {
+                        resources.push_back(
+                            device.create_sampler(SamplerDescription::Linear)
+                        );
+                    }
                     return;
                 }
             }
             resources.push_back(defaults.default_texture);
+            resources.push_back(
+                device.create_sampler(SamplerDescription::Linear)
+            );
         };
 
-        push_image(albedo_map);
-        push_image(normal_map);
-        push_image(metallic_map);
-        push_image(roughness_map);
-        push_image(emissive_map);
-        push_image(specular_map);
-        resources.push_back(device.create_sampler(SamplerDescription::Linear));
+        push_image(albedo_texture);
+        push_image(normal_texture);
+        push_image(metallic_roughness_texture);
+        push_image(occlusion_texture);
+        push_image(emissive_texture);
+        push_image(specular_texture);
 
         return resources;
     }
 
     bool
     resources_ready(const RenderAssets<GpuImage>& gpu_images) const override {
-        auto image_ready = [&](const Optional<Handle<Image>>& image_handle) {
-            return !image_handle ||
-                   gpu_images.get(image_handle->id()).has_value();
+        auto image_ready = [&](const Optional<Handle<Image>>& image) {
+            return !image || gpu_images.get(image->id()).has_value();
         };
 
-        return image_ready(albedo_map) && image_ready(normal_map) &&
-               image_ready(metallic_map) && image_ready(roughness_map) &&
-               image_ready(emissive_map) && image_ready(specular_map);
+        return image_ready(albedo_texture) && image_ready(normal_texture) &&
+               image_ready(metallic_roughness_texture) &&
+               image_ready(occlusion_texture) &&
+               image_ready(emissive_texture) && image_ready(specular_texture);
     }
 
     std::size_t hash() const override { return type_id<StandardMaterial>(); }

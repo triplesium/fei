@@ -42,7 +42,8 @@ FragmentOutput fragment_main(VertexOutput input, float4 frag_coord : SV_Position
     tangent_ws = input.tangent_ws;
 #endif
 
-    output.position_ao = float4(input.position_ws, 1.0);
+    output.position_ao =
+        float4(input.position_ws, material.sample_occlusion(tex_coords));
 
     output.normal_roughness.rgb = material.sample_normal_from_tangent_frame(
         tex_coords,

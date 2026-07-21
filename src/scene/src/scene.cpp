@@ -67,7 +67,7 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
             auto image = context.load<Image>(
                 obj_path.parent_path() / material.diffuse_texname
             );
-            standard_material->albedo_map = std::move(image);
+            standard_material->albedo_texture = std::move(image);
         }
         material_handles.push_back(
             context.add_asset<StandardMaterial>(std::move(standard_material))

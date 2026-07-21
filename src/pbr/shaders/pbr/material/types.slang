@@ -9,12 +9,14 @@ public struct StandardMaterialUniform {
     public float3 emissive;
     public float3 specular;
     public int flags;
+    public float normal_scale;
+    public float occlusion_strength;
 };
 
 public static const int STANDARD_MATERIAL_FLAG_ALBEDO_MAP = 1 << 0;
 public static const int STANDARD_MATERIAL_FLAG_NORMAL_MAP = 1 << 1;
-public static const int STANDARD_MATERIAL_FLAG_METALLIC_MAP = 1 << 2;
-public static const int STANDARD_MATERIAL_FLAG_ROUGHNESS_MAP = 1 << 3;
+public static const int STANDARD_MATERIAL_FLAG_METALLIC_ROUGHNESS_MAP = 1 << 2;
+public static const int STANDARD_MATERIAL_FLAG_OCCLUSION_MAP = 1 << 3;
 public static const int STANDARD_MATERIAL_FLAG_EMISSIVE_MAP = 1 << 4;
 public static const int STANDARD_MATERIAL_FLAG_SPECULAR_MAP = 1 << 5;
 
@@ -65,12 +67,17 @@ public struct StandardMaterial {
 public struct StandardMaterialResources {
     public StandardMaterialUniform material;
     public Texture2D<float4> albedo_map;
+    public SamplerState albedo_sampler;
     public Texture2D<float4> normal_map;
-    public Texture2D<float4> metallic_map;
-    public Texture2D<float4> roughness_map;
+    public SamplerState normal_sampler;
+    public Texture2D<float4> metallic_roughness_map;
+    public SamplerState metallic_roughness_sampler;
+    public Texture2D<float4> occlusion_map;
+    public SamplerState occlusion_sampler;
     public Texture2D<float4> emissive_map;
+    public SamplerState emissive_sampler;
     public Texture2D<float4> specular_map;
-    public SamplerState sampler;
+    public SamplerState specular_sampler;
 
     public property float3 albedo {
         get {
@@ -124,15 +131,15 @@ public struct StandardMaterialResources {
         }
     }
 
-    public property bool has_metallic_map {
+    public property bool has_metallic_roughness_map {
         get {
-            return has_flag(STANDARD_MATERIAL_FLAG_METALLIC_MAP);
+            return has_flag(STANDARD_MATERIAL_FLAG_METALLIC_ROUGHNESS_MAP);
         }
     }
 
-    public property bool has_roughness_map {
+    public property bool has_occlusion_map {
         get {
-            return has_flag(STANDARD_MATERIAL_FLAG_ROUGHNESS_MAP);
+            return has_flag(STANDARD_MATERIAL_FLAG_OCCLUSION_MAP);
         }
     }
 
@@ -149,21 +156,24 @@ public struct StandardMaterialResources {
     }
 
     public float4 sample_albedo_texture(float2 tex_coords) {
-        return albedo_map.Sample(sampler, tex_coords);
+        return albedo_map.Sample(albedo_sampler, tex_coords);
     }
 
     public float4 sample_emissive_texture(float2 tex_coords) {
-        return emissive_map.Sample(sampler, tex_coords);
+        return emissive_map.Sample(emissive_sampler, tex_coords);
     }
 
     public float3 sample_tangent_normal(float2 tex_coords) {
-        return normal_map.Sample(sampler, tex_coords).xyz * 2.0 - 1.0;
+        float3 normal =
+            normal_map.Sample(normal_sampler, tex_coords).xyz * 2.0 - 1.0;
+        normal.xy *= material.normal_scale;
+        return normal;
     }
 
     public float3 sample_albedo(float2 tex_coords) {
 #if defined(VERTEX_UVS)
         if (has_albedo_map) {
-            return sample_albedo_texture(tex_coords).rgb;
+            return albedo * sample_albedo_texture(tex_coords).rgb;
         }
 #endif
         return albedo;
@@ -171,8 +181,10 @@ public struct StandardMaterialResources {
 
     public float sample_metallic(float2 tex_coords) {
 #if defined(VERTEX_UVS)
-        if (has_metallic_map) {
-            return metallic_map.Sample(sampler, tex_coords).r;
+        if (has_metallic_roughness_map) {
+            return metallic * metallic_roughness_map
+                .Sample(metallic_roughness_sampler, tex_coords)
+                .b;
         }
 #endif
         return metallic;
@@ -180,8 +192,10 @@ public struct StandardMaterialResources {
 
     public float sample_roughness(float2 tex_coords) {
 #if defined(VERTEX_UVS)
-        if (has_roughness_map) {
-            return roughness_map.Sample(sampler, tex_coords).r;
+        if (has_metallic_roughness_map) {
+            return roughness * metallic_roughness_map
+                .Sample(metallic_roughness_sampler, tex_coords)
+                .g;
         }
 #endif
         return roughness;
@@ -190,7 +204,7 @@ public struct StandardMaterialResources {
     public float3 sample_emissive(float2 tex_coords) {
 #if defined(VERTEX_UVS)
         if (has_emissive_map) {
-            return sample_emissive_texture(tex_coords).rgb;
+            return emissive * sample_emissive_texture(tex_coords).rgb;
         }
 #endif
         return emissive;
@@ -199,10 +213,22 @@ public struct StandardMaterialResources {
     public float3 sample_specular(float2 tex_coords) {
 #if defined(VERTEX_UVS)
         if (has_specular_map) {
-            return specular_map.Sample(sampler, tex_coords).rgb;
+            return specular *
+                   specular_map.Sample(specular_sampler, tex_coords).rgb;
         }
 #endif
         return specular;
+    }
+
+    public float sample_occlusion(float2 tex_coords) {
+#if defined(VERTEX_UVS)
+        if (has_occlusion_map) {
+            float occlusion =
+                occlusion_map.Sample(occlusion_sampler, tex_coords).r;
+            return lerp(1.0, occlusion, material.occlusion_strength);
+        }
+#endif
+        return 1.0;
     }
 
     public StandardMaterial sample(float2 tex_coords) {

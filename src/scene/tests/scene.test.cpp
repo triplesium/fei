@@ -85,7 +85,7 @@ class DependentSceneLoader : public AssetLoader<Scene> {
         );
 
         auto material = std::make_unique<StandardMaterial>();
-        material->albedo_map = std::move(image);
+        material->albedo_texture = std::move(image);
         auto material_handle =
             context.add_asset<StandardMaterial>(std::move(material));
         auto scene_mesh = std::make_unique<SceneMesh>();
@@ -551,8 +551,8 @@ TEST_CASE(
         scene_mesh->primitives[0].material
     );
     REQUIRE(material.has_value());
-    REQUIRE(material->albedo_map.has_value());
-    auto dependency_id = material->albedo_map->id();
+    REQUIRE(material->albedo_texture.has_value());
+    auto dependency_id = material->albedo_texture->id();
 
     run_post_update_until(app, [&]() {
         return asset_server.recursive_dependency_load_state(scene_handle) ==

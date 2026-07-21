@@ -55,15 +55,13 @@ void setup(
 ) {
     auto spot_material = std::make_unique<StandardMaterial>();
     spot_material->albedo = {1.0f, 1.0f, 1.0f};
-    // spot_material->albedo_map =
+    // spot_material->albedo_texture =
     //     asset_server->load<Image>("rustediron2_basecolor.png");
     spot_material->metallic = 0.0f;
-    // spot_material->metallic_map =
-    //     asset_server->load<Image>("rustediron2_metallic.png");
     spot_material->roughness = 0.2f;
-    // spot_material->roughness_map =
-    //     asset_server->load<Image>("rustediron2_roughness.png");
-    // spot_material->normal_map =
+    // spot_material->metallic_roughness_texture =
+    //     asset_server->load<Image>("rustediron2_metallic_roughness.png");
+    // spot_material->normal_texture =
     //     asset_server->load<Image>("rustediron2_normal.png");
 
     auto default_material = std::make_unique<StandardMaterial>();

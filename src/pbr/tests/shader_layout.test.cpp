@@ -542,12 +542,17 @@ TEST_CASE(
         {
             {"material", ResourceKind::UniformBuffer, 2, 0},
             {"albedo_map", ResourceKind::TextureReadOnly, 2, 1},
-            {"normal_map", ResourceKind::TextureReadOnly, 2, 2},
-            {"metallic_map", ResourceKind::TextureReadOnly, 2, 3},
-            {"roughness_map", ResourceKind::TextureReadOnly, 2, 4},
-            {"emissive_map", ResourceKind::TextureReadOnly, 2, 5},
-            {"specular_map", ResourceKind::TextureReadOnly, 2, 6},
-            {"sampler", ResourceKind::Sampler, 2, 7},
+            {"albedo_sampler", ResourceKind::Sampler, 2, 2},
+            {"normal_map", ResourceKind::TextureReadOnly, 2, 3},
+            {"normal_sampler", ResourceKind::Sampler, 2, 4},
+            {"metallic_roughness_map", ResourceKind::TextureReadOnly, 2, 5},
+            {"metallic_roughness_sampler", ResourceKind::Sampler, 2, 6},
+            {"occlusion_map", ResourceKind::TextureReadOnly, 2, 7},
+            {"occlusion_sampler", ResourceKind::Sampler, 2, 8},
+            {"emissive_map", ResourceKind::TextureReadOnly, 2, 9},
+            {"emissive_sampler", ResourceKind::Sampler, 2, 10},
+            {"specular_map", ResourceKind::TextureReadOnly, 2, 11},
+            {"specular_sampler", ResourceKind::Sampler, 2, 12},
         }
     );
 }
@@ -624,8 +629,9 @@ TEST_CASE(
         {
             {"material", ResourceKind::UniformBuffer, 2, 0},
             {"albedo_map", ResourceKind::TextureReadOnly, 2, 1},
-            {"emissive_map", ResourceKind::TextureReadOnly, 2, 5},
-            {"sampler", ResourceKind::Sampler, 2, 7},
+            {"albedo_sampler", ResourceKind::Sampler, 2, 2},
+            {"emissive_map", ResourceKind::TextureReadOnly, 2, 9},
+            {"emissive_sampler", ResourceKind::Sampler, 2, 10},
             {"static_voxel_flag", ResourceKind::TextureReadWrite, 3, 4},
             {"vxgi_voxelization", ResourceKind::UniformBuffer, 4, 0},
             {"voxel_albedo_accum", ResourceKind::StorageBufferReadWrite, 5, 0},
