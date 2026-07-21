@@ -26,6 +26,16 @@ target("sample-scene")
         "fei-graphics-vulkan",
         "fei-graphics-vulkan-glfw"
     )
+add_sample("gltf")
+target("sample-gltf")
+    add_deps(
+        "fei-devtools",
+        "fei-devtools-ecs",
+        "fei-devtools-pbr",
+        "fei-gltf",
+        "fei-graphics-vulkan",
+        "fei-graphics-vulkan-glfw"
+    )
 add_sample("compute_shader")
 add_sample("schedule")
 add_sample("registered_system")
