@@ -59,7 +59,7 @@ void setup_skybox_resources(
     skybox_resource->view_resource_layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
             ShaderStages::Vertex,
-            {uniform_buffer("View")}
+            {uniform_buffer("view")}
         )
     );
 
@@ -80,7 +80,7 @@ void setup_skybox_resources(
                 },
                 {
                     .binding = 2,
-                    .name = "Skybox",
+                    .name = "skybox_uniform",
                     .kind = ResourceKind::UniformBuffer,
                     .stages = {ShaderStages::Vertex, ShaderStages::Fragment},
                 }

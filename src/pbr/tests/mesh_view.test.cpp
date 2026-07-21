@@ -95,7 +95,7 @@ TEST_CASE(
     const auto& mesh_view_elements =
         device.resource_layout_descriptions.front().elements;
     REQUIRE(mesh_view_elements.size() == 1);
-    CHECK(mesh_view_elements[0].name == "View");
+    CHECK(mesh_view_elements[0].name == "view");
     CHECK(mesh_view_elements[0].kind == ResourceKind::UniformBuffer);
     const auto& environment_elements =
         device.resource_layout_descriptions[1].elements;

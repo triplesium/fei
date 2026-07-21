@@ -87,7 +87,7 @@ void init_mesh_view_layout(
     mesh_view_layout->layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Vertex, ShaderStages::Fragment},
-            {uniform_buffer("View")}
+            {uniform_buffer("view")}
         )
     );
     mesh_view_layout->environment_layout = device->create_resource_layout(

@@ -181,7 +181,7 @@ void setup_environment_map_generation_resources(
                 texture_read_only("cubemap"),
                 sampler("cubemap_sampler"),
                 texture_read_write("output_texture"),
-                uniform_buffer("Constants"),
+                uniform_buffer("constants"),
             }
         )
     );

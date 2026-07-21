@@ -171,7 +171,7 @@ void setup_vxgi(
              ShaderStages::Geometry,
              ShaderStages::Fragment,
              ShaderStages::Compute},
-            {uniform_buffer("VxgiVoxelization")}
+            {uniform_buffer("vxgi_voxelization")}
         )
     );
     auto accumulation_resource_layout = device->create_resource_layout(
@@ -409,7 +409,7 @@ void setup_vxgi_generate_mipmap_base(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Compute},
             {
-                uniform_buffer("VxgiGenerateMipmapBase"),
+                uniform_buffer("vxgi_generate_mipmap_base"),
                 texture_read_only("voxel_base"),
                 texture_read_write("voxel_mipmap[0]"),
                 texture_read_write("voxel_mipmap[1]"),
@@ -475,7 +475,7 @@ void setup_vxgi_generate_mipmap_volume(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Compute},
             {
-                uniform_buffer("VxgiGenerateMipmapVolume"),
+                uniform_buffer("vxgi_generate_mipmap_volume"),
                 texture_read_write("voxel_mipmap_dst[0]"),
                 texture_read_write("voxel_mipmap_dst[1]"),
                 texture_read_write("voxel_mipmap_dst[2]"),
@@ -579,7 +579,7 @@ void setup_inject_radiance(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Compute},
             {
-                uniform_buffer("VxgiInjectRadiance"),
+                uniform_buffer("vxgi_inject_radiance"),
             }
         )
     );
@@ -639,7 +639,7 @@ void setup_inject_propagation(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Compute},
             {
-                uniform_buffer("VxgiInjectPropagation"),
+                uniform_buffer("vxgi_inject_propagation"),
                 texture_read_write("voxel_composite"),
                 texture_read_only("voxel_albedo"),
                 texture_read_only("voxel_normal"),
@@ -697,7 +697,7 @@ void setup_vxgi_resources(ResRO<GraphicsDevice> device, Commands commands) {
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Fragment},
             {
-                uniform_buffer("Vxgi"),
+                uniform_buffer("vxgi"),
                 texture_read_only("voxel_visibility"),
                 texture_read_only("voxel_tex"),
                 texture_read_only("voxel_tex_mipmap[0]"),

@@ -43,7 +43,7 @@ struct VxgiInjectPropagationUniform {
     }
 };
 
-layout(set = 0, binding = 0) ConstantBuffer<VxgiInjectPropagationUniform> VxgiInjectPropagation;
+layout(set = 0, binding = 0) ConstantBuffer<VxgiInjectPropagationUniform> vxgi_inject_propagation;
 layout(set = 0, binding = 1, rgba8) RWTexture3D<float4> voxel_composite;
 layout(set = 0, binding = 2) Texture3D<float4> voxel_albedo;
 layout(set = 0, binding = 3) Texture3D<float4> voxel_normal;
@@ -65,24 +65,24 @@ static const float diffuse_cone_weights[4] = {
 };
 
 float4 trace_cone(float3 position, float3 direction, float aperture) {
-    float aniso_dimension = VxgiInjectPropagation.aniso_dimension;
+    float aniso_dimension = vxgi_inject_propagation.aniso_dimension;
     uint3 visible_face = visible_aniso_faces(direction);
     float3 weight = direction * direction;
-    float voxel_size = VxgiInjectPropagation.voxel_size;
+    float voxel_size = vxgi_inject_propagation.voxel_size;
     float dst = voxel_size;
     float diameter = aperture * dst;
     float3 sample_position = position + direction * dst;
     float mip_level = 0.0;
     float4 cone_sample = float4(0.0);
 
-    if (VxgiInjectPropagation.outside_unit_volume(sample_position)) {
+    if (vxgi_inject_propagation.outside_unit_volume(sample_position)) {
         return cone_sample;
     }
 
     while (cone_sample.a <= 1.0 &&
-           dst <= VxgiInjectPropagation.max_tracing_distance_global) {
-        if (VxgiInjectPropagation.check_boundaries > 0 &&
-            VxgiInjectPropagation.outside_unit_volume(sample_position)) {
+           dst <= vxgi_inject_propagation.max_tracing_distance_global) {
+        if (vxgi_inject_propagation.check_boundaries > 0 &&
+            vxgi_inject_propagation.outside_unit_volume(sample_position)) {
             break;
         }
 
@@ -114,7 +114,7 @@ float4 trace_cone(float3 position, float3 direction, float aperture) {
 }
 
 float4 calculate_indirect_lighting(float3 position, float3 normal) {
-    position = position + normal * VxgiInjectPropagation.voxel_size;
+    position = position + normal * vxgi_inject_propagation.voxel_size;
     float4 diffuse_trace = float4(0.0);
     const float aperture = 1.0;
     OrthonormalBasis basis = OrthonormalBasis.from_normal(normal);
@@ -131,7 +131,7 @@ float4 calculate_indirect_lighting(float3 position, float3 normal) {
 [shader("compute")]
 [numthreads(8, 8, 8)]
 void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
-    if (!VxgiInjectPropagation.contains(dispatch_thread_id)) {
+    if (!vxgi_inject_propagation.contains(dispatch_thread_id)) {
         return;
     }
 
@@ -144,7 +144,7 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
     float4 direct_light = voxel_composite[write_pos];
     float3 normal = voxel_normal.Load(int4(write_pos, 0)).xyz;
     normal = normalize(decode(normal));
-    float3 position = VxgiInjectPropagation.voxel_position(write_pos);
+    float3 position = vxgi_inject_propagation.voxel_position(write_pos);
     float4 indirect_lighting = calculate_indirect_lighting(position, normal);
     indirect_lighting *= albedo;
 

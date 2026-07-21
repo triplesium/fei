@@ -7,14 +7,14 @@ layout(set = 0, binding = 0, rgba8) RWTexture3D<float4> voxel_albedo;
 layout(set = 0, binding = 1, rgba8) RWTexture3D<float4> voxel_normal;
 layout(set = 0, binding = 2, rgba8) RWTexture3D<float4> voxel_emissive;
 layout(set = 0, binding = 4, r8) RWTexture3D<float4> static_voxel_flag;
-layout(set = 1, binding = 0) ConstantBuffer<VxgiVoxelizationUniform> VxgiVoxelization;
+layout(set = 1, binding = 0) ConstantBuffer<VxgiVoxelizationUniform> vxgi_voxelization;
 layout(set = 2, binding = 0) StructuredBuffer<uint> voxel_albedo_accum;
 layout(set = 2, binding = 1) StructuredBuffer<uint> voxel_normal_accum;
 layout(set = 2, binding = 2) StructuredBuffer<uint> voxel_emissive_accum;
 layout(set = 2, binding = 3) StructuredBuffer<uint> voxel_count_accum;
 
 uint voxel_linear_index(uint3 position) {
-    uint dimension = VxgiVoxelization.volume_dimension;
+    uint dimension = vxgi_voxelization.volume_dimension;
     return position.x + position.y * dimension + position.z * dimension * dimension;
 }
 
@@ -43,7 +43,7 @@ float3 accumulated_normal(uint offset, float count) {
 [shader("compute")]
 [numthreads(8, 8, 8)]
 void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
-    if (!VxgiVoxelization.contains(dispatch_thread_id)) {
+    if (!vxgi_voxelization.contains(dispatch_thread_id)) {
         return;
     }
 
@@ -72,5 +72,5 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
     voxel_normal[position] = float4(encode(normal), 1.0);
     voxel_emissive[position] = saturate(emissive);
     static_voxel_flag[position] =
-        VxgiVoxelization.flag_static_voxels == 1 ? float4(1.0) : float4(0.0);
+        vxgi_voxelization.flag_static_voxels == 1 ? float4(1.0) : float4(0.0);
 }

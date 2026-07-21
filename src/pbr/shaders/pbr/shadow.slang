@@ -15,15 +15,15 @@ struct VertexOutput {
     [vk::location(0)] float2 tex_coords : TEXCOORD0;
 };
 
-layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
-layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> Mesh;
+layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> view;
+layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> mesh;
 layout(set = 2) ParameterBlock<StandardMaterialResources> material;
 
 [shader("vertex")]
 VertexOutput vertex_main(VertexInput input) {
     VertexOutput output;
-    float4 position_ws = Mesh.position_ws4(input.position);
-    output.position = View.position_cs(position_ws);
+    float4 position_ws = mesh.position_ws4(input.position);
+    output.position = view.position_cs(position_ws);
     output.tex_coords = input.uv;
     return output;
 }

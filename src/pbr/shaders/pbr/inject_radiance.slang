@@ -12,8 +12,8 @@ layout(set = 0, binding = 0, rgba8) RWTexture3D<float4> voxel_albedo;
 layout(set = 0, binding = 1, rgba8) RWTexture3D<float4> voxel_normal;
 layout(set = 0, binding = 2, rgba8) RWTexture3D<float4> voxel_emissive;
 layout(set = 0, binding = 3, rgba8) RWTexture3D<float4> voxel_radiance;
-layout(set = 1, binding = 0) ConstantBuffer<VxgiVoxelizationUniform> VxgiVoxelization;
-layout(set = 2, binding = 0) ConstantBuffer<LightingUniform> Lighting;
+layout(set = 1, binding = 0) ConstantBuffer<VxgiVoxelizationUniform> vxgi_voxelization;
+layout(set = 2, binding = 0) ConstantBuffer<LightingUniform> lighting;
 layout(set = 2, binding = 1) Texture2D<float4> shadow_map;
 layout(set = 2, binding = 2) SamplerState shadow_map_sampler;
 
@@ -22,12 +22,12 @@ struct VxgiInjectRadianceUniform {
     float trace_shadow_hit;
 };
 
-layout(set = 3, binding = 0) ConstantBuffer<VxgiInjectRadianceUniform> VxgiInjectRadiance;
+layout(set = 3, binding = 0) ConstantBuffer<VxgiInjectRadianceUniform> vxgi_inject_radiance;
 
 float trace_shadow(float3 position, float3 direction, float max_tracing_distance) {
-    float k = VxgiInjectRadiance.trace_shadow_hit *
-        VxgiInjectRadiance.trace_shadow_hit;
-    float voxel_tex_size = VxgiVoxelization.voxel_texel_size;
+    float k = vxgi_inject_radiance.trace_shadow_hit *
+        vxgi_inject_radiance.trace_shadow_hit;
+    float voxel_tex_size = vxgi_voxelization.voxel_texel_size;
     float dst = voxel_tex_size * 2.0;
     float3 sample_position = direction * dst + position;
     float visibility = 0.0;
@@ -43,7 +43,7 @@ float trace_shadow(float3 position, float3 direction, float max_tracing_distance
         }
 
         float trace_sample =
-            ceil(voxel_albedo[VxgiVoxelization.voxel_index(sample_position)].a) *
+            ceil(voxel_albedo[vxgi_voxelization.voxel_index(sample_position)].a) *
             k;
         if (trace_sample > 1.0 - EPSILON) {
             return 0.0;
@@ -59,7 +59,7 @@ float trace_shadow(float3 position, float3 direction, float max_tracing_distance
 
 float3 brdf(Light light, float3 normal, float3 albedo) {
     float normal_dot_light = 0.0;
-    if (VxgiInjectRadiance.normal_weighted_lambert == 1) {
+    if (vxgi_inject_radiance.normal_weighted_lambert == 1) {
         float3 weight = normal * normal;
         float r_dot_l = dot(float3(1.0, 0.0, 0.0), light.direction);
         float u_dot_l = dot(float3(0.0, 1.0, 0.0), light.direction);
@@ -87,11 +87,11 @@ float4 calculate_directional(
         light_visibility = visibility_level(
             shadow_map,
             shadow_map_sampler,
-            Lighting.light_view_projection,
+            lighting.light_view_projection,
             position
         );
     } else if (light.shadowing_method == 2) {
-        float3 voxel_position = VxgiVoxelization.world_to_voxel(position);
+        float3 voxel_position = vxgi_voxelization.world_to_voxel(position);
         light_visibility = trace_shadow(voxel_position, light.direction, 1.0);
     }
 
@@ -113,8 +113,8 @@ float4 calculate_point(Light light, float3 normal, float3 position, float3 albed
 
     float light_visibility = 1.0;
     if (light.shadowing_method == 2) {
-        float3 voxel_position = VxgiVoxelization.world_to_voxel(position);
-        float3 light_position = VxgiVoxelization.world_to_voxel(light.position);
+        float3 voxel_position = vxgi_voxelization.world_to_voxel(position);
+        float3 light_position = vxgi_voxelization.world_to_voxel(light.position);
         float3 light_dir = light_position - voxel_position;
         float trace_distance = length(light_dir);
         light_dir = normalize(light_dir);
@@ -152,8 +152,8 @@ float4 calculate_spot(Light light, float3 normal, float3 position, float3 albedo
 
     float light_visibility = 1.0;
     if (light.shadowing_method == 2) {
-        float3 voxel_position = VxgiVoxelization.world_to_voxel(position);
-        float3 light_position = VxgiVoxelization.world_to_voxel(light.position);
+        float3 voxel_position = vxgi_voxelization.world_to_voxel(position);
+        float3 light_position = vxgi_voxelization.world_to_voxel(light.position);
         float3 light_dir = light_position - voxel_position;
         float trace_distance = length(light_dir);
         light_dir = normalize(light_dir);
@@ -172,16 +172,16 @@ float4 calculate_spot(Light light, float3 normal, float3 position, float3 albedo
 
 float4 calculate_direct_lighting(float3 position, float3 normal, float3 albedo) {
     normal = normalize(normal);
-    float voxel_world_size = VxgiVoxelization.voxel_world_size;
+    float voxel_world_size = vxgi_voxelization.voxel_world_size;
     float4 direct_lighting = float4(0.0);
     float4 current = float4(0.0);
     uint count = 0;
 
     position = position + normal * voxel_world_size * 0.5;
 
-    for (uint i = 0; i < Lighting.num_directional_lights; ++i) {
+    for (uint i = 0; i < lighting.num_directional_lights; ++i) {
         current = calculate_directional(
-            Lighting.directional_lights[i],
+            lighting.directional_lights[i],
             normal,
             position,
             albedo
@@ -191,15 +191,15 @@ float4 calculate_direct_lighting(float3 position, float3 normal, float3 albedo) 
         count++;
     }
 
-    for (uint i = 0; i < Lighting.num_point_lights; ++i) {
-        current = calculate_point(Lighting.point_lights[i], normal, position, albedo);
+    for (uint i = 0; i < lighting.num_point_lights; ++i) {
+        current = calculate_point(lighting.point_lights[i], normal, position, albedo);
         direct_lighting.rgb += current.rgb;
         direct_lighting.a += current.a;
         count++;
     }
 
-    for (uint i = 0; i < Lighting.num_spot_lights; ++i) {
-        current = calculate_spot(Lighting.spot_lights[i], normal, position, albedo);
+    for (uint i = 0; i < lighting.num_spot_lights; ++i) {
+        current = calculate_spot(lighting.spot_lights[i], normal, position, albedo);
         direct_lighting.rgb += current.rgb;
         direct_lighting.a += current.a;
         count++;
@@ -215,7 +215,7 @@ float4 calculate_direct_lighting(float3 position, float3 normal, float3 albedo) 
 [shader("compute")]
 [numthreads(8, 8, 8)]
 void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
-    if (!VxgiVoxelization.contains(dispatch_thread_id)) {
+    if (!vxgi_voxelization.contains(dispatch_thread_id)) {
         return;
     }
 
@@ -231,7 +231,7 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
     float3 emissive = voxel_emissive[write_pos].rgb;
 
     if (albedo.r > 0.0 || albedo.g > 0.0 || albedo.b > 0.0) {
-        float3 world_position = VxgiVoxelization.voxel_to_world(write_pos);
+        float3 world_position = vxgi_voxelization.voxel_to_world(write_pos);
         albedo = calculate_direct_lighting(world_position, normal, albedo.rgb);
     }
 

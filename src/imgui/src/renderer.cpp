@@ -310,7 +310,7 @@ void ImGuiRenderer::initialize(
     m_impl->frame_layout = device.create_resource_layout(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Vertex},
-            {uniform_buffer("Frame")}
+            {uniform_buffer("frame")}
         )
     );
     m_impl->texture_layout = device.create_resource_layout(

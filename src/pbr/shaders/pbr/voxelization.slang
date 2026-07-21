@@ -28,13 +28,13 @@ struct GeometryOutput {
     [vk::location(4)] nointerpolation float4 triangle_aabb : TEXCOORD1;
 };
 
-layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> Mesh;
+layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> mesh;
 layout(set = 2) ParameterBlock<StandardMaterialResources> material;
 layout(set = 3, binding = 0, rgba8) RWTexture3D<float4> voxel_albedo;
 layout(set = 3, binding = 1, rgba8) RWTexture3D<float4> voxel_normal;
 layout(set = 3, binding = 2, rgba8) RWTexture3D<float4> voxel_emissive;
 layout(set = 3, binding = 4, r8) RWTexture3D<float4> static_voxel_flag;
-layout(set = 4, binding = 0) ConstantBuffer<VxgiVoxelizationUniform> VxgiVoxelization;
+layout(set = 4, binding = 0) ConstantBuffer<VxgiVoxelizationUniform> vxgi_voxelization;
 layout(set = 5, binding = 0) RWStructuredBuffer<uint> voxel_albedo_accum;
 layout(set = 5, binding = 1) RWStructuredBuffer<uint> voxel_normal_accum;
 layout(set = 5, binding = 2) RWStructuredBuffer<uint> voxel_emissive_accum;
@@ -67,7 +67,7 @@ float4 axis_aligned_bounding_box(float4 positions[3], float2 pixel_diagonal) {
 }
 
 uint voxel_linear_index(int3 position) {
-    uint dimension = VxgiVoxelization.volume_dimension;
+    uint dimension = vxgi_voxelization.volume_dimension;
     uint3 voxel = uint3(position);
     return voxel.x + voxel.y * dimension + voxel.z * dimension * dimension;
 }
@@ -83,8 +83,8 @@ uint normal_channel(float value) {
 [shader("vertex")]
 VertexOutput vertex_main(VertexInput input) {
     VertexOutput output;
-    output.position = Mesh.position_ws4(input.position);
-    output.normal = Mesh.normal_ws(input.normal);
+    output.position = mesh.position_ws4(input.position);
+    output.normal = mesh.normal_ws(input.normal);
     output.tex_coords = input.uv;
     return output;
 }
@@ -94,7 +94,7 @@ VertexOutput vertex_main(VertexInput input) {
 void geometry_main(triangle VertexOutput input[3], inout TriangleStream<GeometryOutput> stream) {
     float2 tex_coords[3];
     int selected_index = calculate_axis(input);
-    float4x4 view_projection = VxgiVoxelization.view_projection(selected_index);
+    float4x4 view_projection = vxgi_voxelization.view_projection(selected_index);
 
     for (int i = 0; i < 3; i++) {
         tex_coords[i] = input[i].tex_coords;
@@ -129,7 +129,7 @@ void geometry_main(triangle VertexOutput input[3], inout TriangleStream<Geometry
         indices[1] = index_temp;
     }
 
-    float2 half_pixel = VxgiVoxelization.half_pixel;
+    float2 half_pixel = vxgi_voxelization.half_pixel;
     if (triangle_plane.z == 0.0) {
         return;
     }
@@ -176,7 +176,7 @@ void geometry_main(triangle VertexOutput input[3], inout TriangleStream<Geometry
         output.normal = input[indices[i]].normal;
         output.tex_coords = tex_coords[i];
         output.ws_position =
-            VxgiVoxelization.world_to_voxel_index(input[indices[i]].position.xyz);
+            vxgi_voxelization.world_to_voxel_index(input[indices[i]].position.xyz);
         output.triangle_aabb = triangle_aabb;
         stream.Append(output);
     }
@@ -193,12 +193,12 @@ float4 fragment_main(GeometryOutput input) : SV_Target0 {
         discard;
     }
 
-    int3 volume_max = int3(int(VxgiVoxelization.volume_dimension) - 1);
+    int3 volume_max = int3(int(vxgi_voxelization.volume_dimension) - 1);
     int3 position = clamp(int3(input.ws_position), int3(0), volume_max);
     float4 albedo = material.sample_albedo_texture(input.tex_coords);
     float opacity = albedo.a;
 
-    if (VxgiVoxelization.flag_static_voxels == 0) {
+    if (vxgi_voxelization.flag_static_voxels == 0) {
         bool is_static = static_voxel_flag[position].r > 0.0;
         if (is_static) {
             opacity = 0.0;

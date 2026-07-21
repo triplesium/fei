@@ -11,17 +11,17 @@ using namespace pbr.forward_io;
 using namespace pbr.environment_map;
 using namespace rendering.color;
 
-layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
-layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> Mesh;
+layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> view;
+layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> mesh;
 layout(set = 2) ParameterBlock<StandardMaterialResources> material;
 layout(set = 3) ParameterBlock<EnvironmentMap> environment;
 
 [shader("vertex")]
 VertexOutput vertex_main(MeshVertexInput input) {
     VertexOutput output;
-    output.position_ws = Mesh.position_ws(input.position);
+    output.position_ws = mesh.position_ws(input.position);
 #ifdef VERTEX_NORMALS
-    output.normal_ws = Mesh.normal_ws(input.normal);
+    output.normal_ws = mesh.normal_ws(input.normal);
 #else
     output.normal_ws = float3(0.0, 1.0, 0.0);
 #endif
@@ -29,9 +29,9 @@ VertexOutput vertex_main(MeshVertexInput input) {
     output.tex_coords = input.uv;
 #endif
 #ifdef VERTEX_TANGENTS
-    output.tangent_ws = Mesh.tangent_ws(input.tangent);
+    output.tangent_ws = mesh.tangent_ws(input.tangent);
 #endif
-    output.position = View.position_cs(output.position_ws);
+    output.position = view.position_cs(output.position_ws);
     return output;
 }
 
@@ -51,8 +51,9 @@ FragmentOutput fragment_main(VertexOutput input) {
         input.normal_ws
     );
 
-    float3 view = View.view_direction(input.position_ws);
-    ShadingPoint point = ShadingPoint.from_world(input.position_ws, normal, view);
+    float3 view_direction = view.view_direction(input.position_ws);
+    ShadingPoint point =
+        ShadingPoint.from_world(input.position_ws, normal, view_direction);
     EnvironmentMapLighting environment_lighting = evaluate_environment_map(
         environment,
         point,

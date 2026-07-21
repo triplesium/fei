@@ -6,7 +6,7 @@ struct VxgiGenerateMipmapBaseUniform {
     int mip_dimension;
 };
 
-layout(set = 0, binding = 0) ConstantBuffer<VxgiGenerateMipmapBaseUniform> VxgiGenerateMipmapBase;
+layout(set = 0, binding = 0) ConstantBuffer<VxgiGenerateMipmapBaseUniform> vxgi_generate_mipmap_base;
 layout(set = 0, binding = 1) Texture3D<float4> voxel_base;
 layout(set = 0, binding = 2, rgba8) RWTexture3D<float4> voxel_mipmap[6];
 
@@ -19,9 +19,9 @@ void fetch_texels(int3 position, inout float4 values[8]) {
 [shader("compute")]
 [numthreads(8, 8, 8)]
 void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
-    if (dispatch_thread_id.x >= VxgiGenerateMipmapBase.mip_dimension ||
-        dispatch_thread_id.y >= VxgiGenerateMipmapBase.mip_dimension ||
-        dispatch_thread_id.z >= VxgiGenerateMipmapBase.mip_dimension) {
+    if (dispatch_thread_id.x >= vxgi_generate_mipmap_base.mip_dimension ||
+        dispatch_thread_id.y >= vxgi_generate_mipmap_base.mip_dimension ||
+        dispatch_thread_id.z >= vxgi_generate_mipmap_base.mip_dimension) {
         return;
     }
 

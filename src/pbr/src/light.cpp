@@ -272,7 +272,7 @@ void setup_lighting(ResRO<GraphicsDevice> device, Commands commands) {
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Fragment, ShaderStages::Compute},
             {
-                uniform_buffer("Lighting"),
+                uniform_buffer("lighting"),
                 texture_read_only("shadow_map"),
                 sampler("shadow_map_sampler"),
             }
@@ -410,7 +410,7 @@ void setup_shadow_mapping(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Vertex, ShaderStages::Fragment},
             {
-                uniform_buffer("Blur"),
+                uniform_buffer("blur"),
                 texture_read_only("source"),
                 sampler("sampler"),
             }

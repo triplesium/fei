@@ -15,7 +15,7 @@ struct ImGuiFragmentInput {
     [vk::location(1)] float4 color : COLOR0;
 };
 
-layout(set = 0, binding = 0) ConstantBuffer<ImGuiFrame> Frame;
+layout(set = 0, binding = 0) ConstantBuffer<ImGuiFrame> frame;
 layout(set = 1, binding = 0) Texture2D<float4> image;
 layout(set = 1, binding = 1) SamplerState image_sampler;
 
@@ -23,7 +23,7 @@ layout(set = 1, binding = 1) SamplerState image_sampler;
 ImGuiFragmentInput vertex_main(ImGuiVertexInput input) {
     ImGuiFragmentInput output;
     output.position = float4(
-        input.position * Frame.scale + Frame.translate,
+        input.position * frame.scale + frame.translate,
         0.0,
         1.0
     );

@@ -14,7 +14,7 @@ struct FilteringConstants {
     float roughness;
 };
 
-layout(set = 0, binding = 3) ConstantBuffer<FilteringConstants> Constants;
+layout(set = 0, binding = 3) ConstantBuffer<FilteringConstants> constants;
 
 static const uint SAMPLE_COUNT = 1024u;
 
@@ -39,7 +39,7 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
     float3 reflection = normal;
     float3 view = reflection;
 
-    if (Constants.roughness < 0.01) {
+    if (constants.roughness < 0.01) {
         float3 radiance =
             cubemap.SampleLevel(cubemap_sampler, reflection, 0.0).rgb;
         if (!is_finite_color(radiance)) {
@@ -54,11 +54,11 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
     float total_weight = 0.0;
     for (uint i = 0u; i < SAMPLE_COUNT; i++) {
         float2 xi = hammersley(i, SAMPLE_COUNT);
-        float3 half_vector = importance_sample_ggx(xi, normal, Constants.roughness);
+        float3 half_vector = importance_sample_ggx(xi, normal, constants.roughness);
         float3 light = normalize(2.0 * dot(view, half_vector) * half_vector - view);
         float n_dot_l = max(dot(normal, light), 0.0);
         if (n_dot_l > 0.0) {
-            float d = distribution_ggx(normal, half_vector, Constants.roughness);
+            float d = distribution_ggx(normal, half_vector, constants.roughness);
             float n_dot_h = max(dot(normal, half_vector), 0.0);
             float h_dot_v = max(dot(half_vector, view), 0.0);
             float pdf = d * n_dot_h / (4.0 * h_dot_v) + 0.00001;

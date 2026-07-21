@@ -5,7 +5,7 @@ struct BlurUniform {
     int type;
 };
 
-layout(set = 0, binding = 0) ConstantBuffer<BlurUniform> Blur;
+layout(set = 0, binding = 0) ConstantBuffer<BlurUniform> blur;
 layout(set = 0, binding = 1) Texture2D<float4> source;
 layout(set = 0, binding = 2) SamplerState sampler;
 
@@ -47,14 +47,14 @@ float4 blur9(Texture2D<float4> image, float2 uv, float2 direction) {
 
 [shader("fragment")]
 float4 fragment_main(FullscreenFragmentInput input) : SV_Target0 {
-    if (Blur.type == 1) {
-        return blur5(source, input.tex_coords, Blur.direction);
+    if (blur.type == 1) {
+        return blur5(source, input.tex_coords, blur.direction);
     }
-    if (Blur.type == 2) {
-        return blur9(source, input.tex_coords, Blur.direction);
+    if (blur.type == 2) {
+        return blur9(source, input.tex_coords, blur.direction);
     }
-    if (Blur.type == 3) {
-        return blur13(source, input.tex_coords, Blur.direction);
+    if (blur.type == 3) {
+        return blur13(source, input.tex_coords, blur.direction);
     }
-    return blur5(source, input.tex_coords, Blur.direction);
+    return blur5(source, input.tex_coords, blur.direction);
 }

@@ -7,14 +7,14 @@ struct VxgiGenerateMipmapVolumeUniform {
     int mip_level;
 };
 
-layout(set = 0, binding = 0) ConstantBuffer<VxgiGenerateMipmapVolumeUniform> VxgiGenerateMipmapVolume;
+layout(set = 0, binding = 0) ConstantBuffer<VxgiGenerateMipmapVolumeUniform> vxgi_generate_mipmap_volume;
 layout(set = 0, binding = 1, rgba8) RWTexture3D<float4> voxel_mipmap_dst[6];
 layout(set = 0, binding = 7) Texture3D<float4> voxel_mipmap_src[6];
 
 void fetch_texels(int3 position, int direction, inout float4 values[8]) {
     for (int i = 0; i < 8; i++) {
         values[i] = voxel_mipmap_src[direction].Load(
-            int4(position + OFFSETS[i], VxgiGenerateMipmapVolume.mip_level)
+            int4(position + OFFSETS[i], vxgi_generate_mipmap_volume.mip_level)
         );
     }
 }
@@ -22,9 +22,9 @@ void fetch_texels(int3 position, int direction, inout float4 values[8]) {
 [shader("compute")]
 [numthreads(8, 8, 8)]
 void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
-    if (dispatch_thread_id.x >= VxgiGenerateMipmapVolume.mip_dimension.x ||
-        dispatch_thread_id.y >= VxgiGenerateMipmapVolume.mip_dimension.y ||
-        dispatch_thread_id.z >= VxgiGenerateMipmapVolume.mip_dimension.z) {
+    if (dispatch_thread_id.x >= vxgi_generate_mipmap_volume.mip_dimension.x ||
+        dispatch_thread_id.y >= vxgi_generate_mipmap_volume.mip_dimension.y ||
+        dispatch_thread_id.z >= vxgi_generate_mipmap_volume.mip_dimension.z) {
         return;
     }
 

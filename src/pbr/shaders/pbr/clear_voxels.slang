@@ -5,7 +5,7 @@ layout(set = 0, binding = 1, rgba8) RWTexture3D<float4> voxel_normal;
 layout(set = 0, binding = 2, rgba8) RWTexture3D<float4> voxel_emissive;
 layout(set = 0, binding = 3, rgba8) RWTexture3D<float4> voxel_radiance;
 layout(set = 0, binding = 4, r8) RWTexture3D<float4> static_voxel_flag;
-layout(set = 1, binding = 0) ConstantBuffer<VxgiVoxelizationUniform> VxgiVoxelization;
+layout(set = 1, binding = 0) ConstantBuffer<VxgiVoxelizationUniform> vxgi_voxelization;
 layout(set = 2, binding = 0) RWStructuredBuffer<uint> voxel_albedo_accum;
 layout(set = 2, binding = 1) RWStructuredBuffer<uint> voxel_normal_accum;
 layout(set = 2, binding = 2) RWStructuredBuffer<uint> voxel_emissive_accum;
@@ -14,7 +14,7 @@ layout(set = 2, binding = 3) RWStructuredBuffer<uint> voxel_count_accum;
 [shader("compute")]
 [numthreads(8, 8, 8)]
 void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
-    if (!VxgiVoxelization.contains(dispatch_thread_id)) {
+    if (!vxgi_voxelization.contains(dispatch_thread_id)) {
         return;
     }
 
@@ -25,7 +25,7 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
     voxel_radiance[position] = float4(0.0);
     static_voxel_flag[position] = float4(0.0);
 
-    uint dimension = VxgiVoxelization.volume_dimension;
+    uint dimension = vxgi_voxelization.volume_dimension;
     uint linear_index = dispatch_thread_id.x +
         dispatch_thread_id.y * dimension +
         dispatch_thread_id.z * dimension * dimension;

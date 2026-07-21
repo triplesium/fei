@@ -13,9 +13,9 @@ using namespace pbr.deferred;
 using namespace pbr.environment_map;
 using namespace pbr.vxgi;
 
-layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
+layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> view;
 layout(set = 1) ParameterBlock<GBuffer> gbuffer;
-layout(set = 2, binding = 0) ConstantBuffer<VxgiUniform> Vxgi;
+layout(set = 2, binding = 0) ConstantBuffer<VxgiUniform> vxgi;
 layout(set = 2, binding = 2) Texture3D<float4> voxel_tex;
 layout(set = 2, binding = 3) Texture3D<float4> voxel_tex_mipmap[6];
 layout(set = 2, binding = 9) SamplerState voxel_sampler;
@@ -86,20 +86,20 @@ ConeTraceResult trace_cone(
 
     uint3 visible_face = visible_aniso_faces(direction);
     trace_local_occlusion =
-        trace_local_occlusion && Vxgi.ao_alpha < 1.0;
+        trace_local_occlusion && vxgi.ao_alpha < 1.0;
 
-    float voxel_world_size = Vxgi.cone_trace_voxel_world_size;
+    float voxel_world_size = vxgi.cone_trace_voxel_world_size;
     float3 weight = direction * direction;
     float dst = voxel_world_size;
     float3 start_position = position + normal * dst;
     float radiance_opacity = 0.0;
     float radiance_max_distance =
-        Vxgi.max_tracing_distance_global * Vxgi.inverse_voxel_scale;
-    float falloff = 0.5 * Vxgi.ao_falloff * Vxgi.voxel_scale;
+        vxgi.max_tracing_distance_global * vxgi.inverse_voxel_scale;
+    float falloff = 0.5 * vxgi.ao_falloff * vxgi.voxel_scale;
     float enter = 0.0;
     float leave = 0.0;
 
-    if (!Vxgi.intersect_world_aabb(start_position, direction, enter, leave)) {
+    if (!vxgi.intersect_world_aabb(start_position, direction, enter, leave)) {
         return result;
     }
     dst = max(dst, enter);
@@ -111,7 +111,7 @@ ConeTraceResult trace_cone(
         float3 cone_position = start_position + direction * dst;
         float diameter = 2.0 * aperture * dst;
         float mip_level = log2(diameter / voxel_world_size);
-        float3 coord = Vxgi.world_to_voxel(cone_position);
+        float3 coord = vxgi.world_to_voxel(cone_position);
         float4 aniso_sample = anisotropic_sample(coord, weight, visible_face, mip_level);
         float sample_opacity = is_finite_value(aniso_sample.a) ?
             saturate(aniso_sample.a) :
@@ -132,7 +132,7 @@ ConeTraceResult trace_cone(
         result.sky_opacity +=
             (1.0 - result.sky_opacity) * sample_opacity;
 
-        dst += diameter * Vxgi.sampling_factor;
+        dst += diameter * vxgi.sampling_factor;
     }
 
     result.local_occlusion = saturate(result.local_occlusion);
@@ -162,7 +162,7 @@ float4 calculate_indirect_lighting(
     float weighted_local_occlusion = 0.0;
     float weighted_sky_transmittance = 0.0;
     float3 cone_direction = float3(0.0);
-    float3 view_direction = View.view_direction(surface.position);
+    float3 view_direction = view.view_direction(surface.position);
     ShadingPoint point = surface.shading_point(view_direction);
     StandardMaterial material = surface.material;
     bool has_lighting_surface =
@@ -186,7 +186,7 @@ float4 calculate_indirect_lighting(
             float sky_transmittance = saturate(1.0 - trace.sky_opacity);
             float environment_transmittance = ambient_occlusion ?
                 lerp(
-                    saturate(Vxgi.skylight_leaking),
+                    saturate(vxgi.skylight_leaking),
                     1.0,
                     sky_transmittance
                 ) :
@@ -241,7 +241,7 @@ float4 calculate_indirect_lighting(
         local_visibility =
             1.0 - saturate(weighted_local_occlusion / PI);
         sky_visibility = lerp(
-            saturate(Vxgi.skylight_leaking),
+            saturate(vxgi.skylight_leaking),
             1.0,
             sky_visibility
         );
@@ -253,7 +253,7 @@ float4 calculate_indirect_lighting(
         material.roughness
     );
 
-    float3 vxgi_diffuse = Vxgi.bounce_strength * diffuse_radiance;
+    float3 vxgi_diffuse = vxgi.bounce_strength * diffuse_radiance;
     if (!is_finite_indirect_color(vxgi_diffuse)) {
         vxgi_diffuse = float3(0.0);
     }

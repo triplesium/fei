@@ -67,7 +67,7 @@ void prepare_mesh_uniforms(
     ResRW<MeshUniforms> mesh_uniforms
 ) {
     if (!mesh_uniforms->resource_layout) {
-        auto mesh_binding = uniform_buffer("Mesh");
+        auto mesh_binding = uniform_buffer("mesh");
         mesh_binding.options.set(ResourceLayoutElementOptions::DynamicBinding);
         mesh_uniforms->resource_layout = device->create_resource_layout(
             ResourceLayoutDescription::sequencial(

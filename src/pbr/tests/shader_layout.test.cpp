@@ -520,7 +520,7 @@ TEST_CASE(
     require_shader_resources(
         "forward.frag",
         {
-            {"View", ResourceKind::UniformBuffer, 0, 0},
+            {"view", ResourceKind::UniformBuffer, 0, 0},
             {"material", ResourceKind::UniformBuffer, 2, 0},
             {"environment", ResourceKind::UniformBuffer, 3, 0},
             {"irradiance_map", ResourceKind::TextureReadOnly, 3, 1},
@@ -559,13 +559,13 @@ TEST_CASE(
     require_shader_resources(
         "deferred_gi_direct.frag",
         {
-            {"View", ResourceKind::UniformBuffer, 0, 0},
+            {"view", ResourceKind::UniformBuffer, 0, 0},
             {"g_position_ao", ResourceKind::TextureReadOnly, 1, 0},
             {"g_normal_roughness", ResourceKind::TextureReadOnly, 1, 1},
             {"g_albedo_metallic", ResourceKind::TextureReadOnly, 1, 2},
             {"g_specular", ResourceKind::TextureReadOnly, 1, 3},
             {"g_buffer_sampler", ResourceKind::Sampler, 1, 5},
-            {"Lighting", ResourceKind::UniformBuffer, 2, 0},
+            {"lighting", ResourceKind::UniformBuffer, 2, 0},
             {"shadow_map", ResourceKind::TextureReadOnly, 2, 1},
             {"shadow_map_sampler", ResourceKind::Sampler, 2, 2},
         }
@@ -574,13 +574,13 @@ TEST_CASE(
     require_shader_resources(
         "deferred_gi_indirect.frag",
         {
-            {"View", ResourceKind::UniformBuffer, 0, 0},
+            {"view", ResourceKind::UniformBuffer, 0, 0},
             {"g_position_ao", ResourceKind::TextureReadOnly, 1, 0},
             {"g_normal_roughness", ResourceKind::TextureReadOnly, 1, 1},
             {"g_albedo_metallic", ResourceKind::TextureReadOnly, 1, 2},
             {"g_specular", ResourceKind::TextureReadOnly, 1, 3},
             {"g_buffer_sampler", ResourceKind::Sampler, 1, 5},
-            {"Vxgi", ResourceKind::UniformBuffer, 2, 0},
+            {"vxgi", ResourceKind::UniformBuffer, 2, 0},
             {"voxel_tex", ResourceKind::TextureReadOnly, 2, 2},
             {"voxel_tex_mipmap", ResourceKind::TextureReadOnly, 2, 3, 6},
             {"voxel_sampler", ResourceKind::Sampler, 2, 9},
@@ -627,7 +627,7 @@ TEST_CASE(
             {"emissive_map", ResourceKind::TextureReadOnly, 2, 5},
             {"sampler", ResourceKind::Sampler, 2, 7},
             {"static_voxel_flag", ResourceKind::TextureReadWrite, 3, 4},
-            {"VxgiVoxelization", ResourceKind::UniformBuffer, 4, 0},
+            {"vxgi_voxelization", ResourceKind::UniformBuffer, 4, 0},
             {"voxel_albedo_accum", ResourceKind::StorageBufferReadWrite, 5, 0},
             {"voxel_normal_accum", ResourceKind::StorageBufferReadWrite, 5, 1},
             {"voxel_emissive_accum",
@@ -646,7 +646,7 @@ TEST_CASE(
             {"voxel_emissive", ResourceKind::TextureReadWrite, 0, 2},
             {"voxel_radiance", ResourceKind::TextureReadWrite, 0, 3},
             {"static_voxel_flag", ResourceKind::TextureReadWrite, 0, 4},
-            {"VxgiVoxelization", ResourceKind::UniformBuffer, 1, 0},
+            {"vxgi_voxelization", ResourceKind::UniformBuffer, 1, 0},
             {"voxel_albedo_accum", ResourceKind::StorageBufferReadWrite, 2, 0},
             {"voxel_normal_accum", ResourceKind::StorageBufferReadWrite, 2, 1},
             {"voxel_emissive_accum",
@@ -664,7 +664,7 @@ TEST_CASE(
             {"voxel_normal", ResourceKind::TextureReadWrite, 0, 1},
             {"voxel_emissive", ResourceKind::TextureReadWrite, 0, 2},
             {"static_voxel_flag", ResourceKind::TextureReadWrite, 0, 4},
-            {"VxgiVoxelization", ResourceKind::UniformBuffer, 1, 0},
+            {"vxgi_voxelization", ResourceKind::UniformBuffer, 1, 0},
             {"voxel_albedo_accum", ResourceKind::StorageBufferReadWrite, 2, 0},
             {"voxel_normal_accum", ResourceKind::StorageBufferReadWrite, 2, 1},
             {"voxel_emissive_accum",
@@ -678,7 +678,7 @@ TEST_CASE(
     require_shader_resources(
         "aniso_mipmapbase.comp",
         {
-            {"VxgiGenerateMipmapBase", ResourceKind::UniformBuffer, 0, 0},
+            {"vxgi_generate_mipmap_base", ResourceKind::UniformBuffer, 0, 0},
             {"voxel_base", ResourceKind::TextureReadOnly, 0, 1},
             {"voxel_mipmap", ResourceKind::TextureReadWrite, 0, 2, 6},
         }
@@ -687,7 +687,7 @@ TEST_CASE(
     require_shader_resources(
         "aniso_mipmapvolume.comp",
         {
-            {"VxgiGenerateMipmapVolume", ResourceKind::UniformBuffer, 0, 0},
+            {"vxgi_generate_mipmap_volume", ResourceKind::UniformBuffer, 0, 0},
             {"voxel_mipmap_dst", ResourceKind::TextureReadWrite, 0, 1, 6},
             {"voxel_mipmap_src", ResourceKind::TextureReadOnly, 0, 7, 6},
         }
@@ -700,18 +700,18 @@ TEST_CASE(
             {"voxel_normal", ResourceKind::TextureReadWrite, 0, 1},
             {"voxel_emissive", ResourceKind::TextureReadWrite, 0, 2},
             {"voxel_radiance", ResourceKind::TextureReadWrite, 0, 3},
-            {"VxgiVoxelization", ResourceKind::UniformBuffer, 1, 0},
-            {"Lighting", ResourceKind::UniformBuffer, 2, 0},
+            {"vxgi_voxelization", ResourceKind::UniformBuffer, 1, 0},
+            {"lighting", ResourceKind::UniformBuffer, 2, 0},
             {"shadow_map", ResourceKind::TextureReadOnly, 2, 1},
             {"shadow_map_sampler", ResourceKind::Sampler, 2, 2},
-            {"VxgiInjectRadiance", ResourceKind::UniformBuffer, 3, 0},
+            {"vxgi_inject_radiance", ResourceKind::UniformBuffer, 3, 0},
         }
     );
 
     require_shader_resources(
         "inject_propagation.comp",
         {
-            {"VxgiInjectPropagation", ResourceKind::UniformBuffer, 0, 0},
+            {"vxgi_inject_propagation", ResourceKind::UniformBuffer, 0, 0},
             {"voxel_composite", ResourceKind::TextureReadWrite, 0, 1},
             {"voxel_albedo", ResourceKind::TextureReadOnly, 0, 2},
             {"voxel_normal", ResourceKind::TextureReadOnly, 0, 3},

@@ -11,9 +11,9 @@ using namespace pbr.brdf;
 using namespace pbr.deferred;
 using namespace pbr.lighting.evsm;
 
-layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> View;
+layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> view;
 layout(set = 1) ParameterBlock<GBuffer> gbuffer;
-layout(set = 2, binding = 0) ConstantBuffer<LightingUniform> Lighting;
+layout(set = 2, binding = 0) ConstantBuffer<LightingUniform> lighting;
 layout(set = 2, binding = 1) Texture2D<float4> shadow_map;
 layout(set = 2, binding = 2) SamplerState shadow_map_sampler;
 
@@ -26,7 +26,7 @@ float3 calculate_directional(
         visibility(
             shadow_map,
             shadow_map_sampler,
-            Lighting.light_view_projection,
+            lighting.light_view_projection,
             point.position_ws
         );
     if (light_visibility <= 0.0) {
@@ -98,29 +98,29 @@ float3 calculate_spot(
 
 float3 calculate_direct_lighting(GBufferSurface surface) {
     float3 direct_lighting = float3(0.0);
-    float3 view_dir = View.view_direction(surface.position);
+    float3 view_dir = view.view_direction(surface.position);
     ShadingPoint point = surface.shading_point(view_dir);
     StandardMaterial material = surface.material;
 
-    for (uint i = 0; i < Lighting.num_directional_lights; ++i) {
+    for (uint i = 0; i < lighting.num_directional_lights; ++i) {
         direct_lighting += calculate_directional(
-            Lighting.directional_lights[i],
+            lighting.directional_lights[i],
             point,
             material
         );
     }
 
-    for (uint i = 0; i < Lighting.num_point_lights; ++i) {
+    for (uint i = 0; i < lighting.num_point_lights; ++i) {
         direct_lighting += calculate_point(
-            Lighting.point_lights[i],
+            lighting.point_lights[i],
             point,
             material
         );
     }
 
-    for (uint i = 0; i < Lighting.num_spot_lights; ++i) {
+    for (uint i = 0; i < lighting.num_spot_lights; ++i) {
         direct_lighting += calculate_spot(
-            Lighting.spot_lights[i],
+            lighting.spot_lights[i],
             point,
             material
         );
