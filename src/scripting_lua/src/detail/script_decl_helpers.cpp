@@ -431,6 +431,15 @@ function commands(...)
     }
 end
 
+function world(...)
+    if select("#", ...) ~= 0 then
+        error("world expects no arguments; name it with params key", 2)
+    end
+    return {
+        kind = "world",
+    }
+end
+
 local function component(type_ref, access)
     return {
         kind = "component",

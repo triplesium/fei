@@ -77,6 +77,9 @@ struct DynamicQueryParamDecl final
 struct DynamicCommandsParamDecl final
     : DynamicSystemParamDeclBase<DynamicCommandsParamDecl> {};
 
+struct DynamicWorldParamDecl final
+    : DynamicSystemParamDeclBase<DynamicWorldParamDecl> {};
+
 struct DynamicSystemDecl {
     std::string name;
     std::vector<DynamicSystemParamDeclPtr> params;

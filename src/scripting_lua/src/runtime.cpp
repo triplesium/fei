@@ -9,6 +9,7 @@
 #include "scripting_lua/detail/enum_binding.hpp"
 #include "scripting_lua/detail/query_binding.hpp"
 #include "scripting_lua/detail/utils.hpp"
+#include "scripting_lua/detail/world_binding.hpp"
 
 #include <lua.hpp>
 #include <string>
@@ -21,6 +22,7 @@ LuaRuntime::LuaRuntime() : m_state(luaL_newstate()) {
     Registry::instance().register_type<Entity>();
     bind_type(register_lua_commands_type());
     bind_type(register_lua_dynamic_query_type());
+    bind_type(register_lua_dynamic_world_type());
     detail::register_lua_enum(m_state, detail::register_main_schedules_enum());
 }
 

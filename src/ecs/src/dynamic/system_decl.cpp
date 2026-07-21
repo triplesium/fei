@@ -3,6 +3,7 @@
 #include "ecs/dynamic/commands.hpp"
 #include "ecs/dynamic/query.hpp"
 #include "ecs/dynamic/resource.hpp"
+#include "ecs/dynamic/world.hpp"
 #include "ecs/fwd.hpp"
 #include "refl/registry.hpp"
 
@@ -168,12 +169,25 @@ compile_dynamic_commands_param(const DynamicCommandsParamDecl& decl) {
     return std::move(result);
 }
 
+Result<DynamicSystemParamPtr, DynamicSystemError>
+compile_dynamic_world_param(const DynamicWorldParamDecl& decl) {
+    if (decl.name.empty()) {
+        return failure(
+            DynamicSystemError {"World dynamic system param missing name"}
+        );
+    }
+
+    DynamicSystemParamPtr result = std::make_unique<DynamicWorld>(decl.name);
+    return std::move(result);
+}
+
 void register_builtin_dynamic_system_param_compilers(
     DynamicSystemParamCompilerRegistry& registry
 ) {
     registry.add<DynamicResourceParamDecl>(&compile_dynamic_resource_param);
     registry.add<DynamicQueryParamDecl>(&compile_dynamic_query_param);
     registry.add<DynamicCommandsParamDecl>(&compile_dynamic_commands_param);
+    registry.add<DynamicWorldParamDecl>(&compile_dynamic_world_param);
 }
 
 } // namespace

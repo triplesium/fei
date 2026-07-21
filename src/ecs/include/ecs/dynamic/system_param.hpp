@@ -25,6 +25,7 @@ class DynamicSystemParam {
     Result<Ref, DynamicSystemError> prepare(World& world);
     virtual Result<Ref, DynamicSystemError>
     prepare(World& world, SystemTicks system_ticks) = 0;
+    virtual void finish() {}
 };
 
 using DynamicSystemParamPtr = std::unique_ptr<DynamicSystemParam>;

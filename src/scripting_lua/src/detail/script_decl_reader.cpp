@@ -24,6 +24,7 @@ enum class LuaScriptSystemParamKind {
     Resource,
     Query,
     Commands,
+    World,
 };
 
 enum class LuaScriptQueryParamKind {
@@ -497,6 +498,9 @@ script_system_param_kind_from_string(const std::string& value) {
     if (value == "commands" || value == "Commands") {
         return LuaScriptSystemParamKind::Commands;
     }
+    if (value == "world" || value == "World") {
+        return LuaScriptSystemParamKind::World;
+    }
     return failure(lua_decl_error("unknown system param kind '" + value + "'"));
 }
 
@@ -706,6 +710,12 @@ lua_read_script_system_param(lua_State* L, int param_index) {
     auto param_name = name->value_or(std::string {});
     if (kind == LuaScriptSystemParamKind::Commands) {
         auto decl = std::make_unique<DynamicCommandsParamDecl>();
+        decl->name = std::move(param_name);
+        return DynamicSystemParamDeclPtr {std::move(decl)};
+    }
+
+    if (kind == LuaScriptSystemParamKind::World) {
+        auto decl = std::make_unique<DynamicWorldParamDecl>();
         decl->name = std::move(param_name);
         return DynamicSystemParamDeclPtr {std::move(decl)};
     }

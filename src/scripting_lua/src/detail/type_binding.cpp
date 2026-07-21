@@ -9,6 +9,7 @@
 #include "scripting_lua/detail/operator.hpp"
 #include "scripting_lua/detail/query_binding.hpp"
 #include "scripting_lua/detail/utils.hpp"
+#include "scripting_lua/detail/world_binding.hpp"
 #include "scripting_lua/runtime.hpp"
 
 #include <algorithm>
@@ -517,6 +518,9 @@ int dispatch_index(lua_State* L) {
     }
     if (lua_is_commands(type_id)) {
         return lua_dispatch_commands_index(L, key);
+    }
+    if (lua_is_dynamic_world(type_id)) {
+        return lua_dispatch_dynamic_world_index(L, key);
     }
 
     auto cls = Registry::instance().try_get_cls(type_id);
