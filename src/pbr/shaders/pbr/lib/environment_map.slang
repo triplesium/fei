@@ -91,7 +91,10 @@ public float3 sample_environment_radiance(
     );
 }
 
-MultiscatterTerms compute_multiscatter(float3 f0, float2 f_ab) {
+MultiscatterTerms compute_multiscatter(
+    float3 f0,
+    float2 f_ab
+) {
     float3 single_scatter = f0 * f_ab.x + f_ab.y;
     float3 average_fresnel = f0 + (float3(1.0) - f0) / 21.0;
     float missing_energy = saturate(1.0 - (f_ab.x + f_ab.y));
@@ -174,8 +177,13 @@ public EnvironmentMapLighting evaluate_environment_map(
     }
     MultiscatterTerms multiscatter =
         compute_multiscatter(material.f0, brdf);
+    float3 specular_reflectance = saturate(
+        multiscatter.single_scatter + multiscatter.multi_scatter
+    );
     float3 diffuse_color =
-        material.albedo * (1.0 - material.metallic);
+        material.albedo *
+        (float3(1.0) - specular_reflectance) *
+        (1.0 - material.metallic);
     lighting.diffuse =
         environment.uniform.intensity * irradiance * diffuse_color;
     lighting.specular =
