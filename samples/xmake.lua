@@ -20,6 +20,7 @@ target("sample-scene")
         "fei-devtools-profiling",
         "fei-devtools-reflection",
         "fei-devtools-rendering",
+        "fei-devtools-scripting-lua",
         "fei-graphics-opengl",
         "fei-graphics-opengl-glfw",
         "fei-graphics-vulkan",

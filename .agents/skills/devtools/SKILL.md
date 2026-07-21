@@ -90,6 +90,64 @@ is isolated per component: an unsupported component has `serialized=false`, a
 null `value`, and a diagnostic `error`, while the other component values remain
 available. A stale or nonexistent entity returns HTTP 404.
 
+## Evaluate Lua
+
+When the manifest advertises `lua.eval`, use it for bounded Lua evaluation
+against the live ECS world. Prefer `ecs.query` or `ecs.entity.inspect` when
+their read-only snapshots are sufficient.
+
+Resolve the capability's reflected request and response types through the
+schemas endpoint. Invoke it with the required `source` field:
+
+```json
+{
+  "source": "print(world:resource(AppStates).should_stop)"
+}
+```
+
+The script receives a request-scoped `world` global with exclusive ECS access.
+It exposes the same API as a Lua script system's `world()` parameter:
+
+- `world:has_entity(id)`, `world:entity(id)`, and `world:spawn(...)`
+- entity `id`, `has`, `get`, `add`, `remove`, `despawn`, and hierarchy methods
+- `world:has_resource(type)`, `world:resource(type)`, and
+  `world:set_resource(value)`
+- `world:query { ... }` with `iter`, `first`, `size`, and `empty`
+- `world:commands()` for deferred ECS commands
+
+Query descriptors such as `query.entity()`, `query.with(type)`, and
+`query.without(type)` are available. For example:
+
+```lua
+local entities = world:query {
+    entity = query.entity(),
+    transform = Transform3d,
+    query.with(Camera3d),
+}
+
+print("matched", entities:size())
+for row in entities:iter() do
+    print(row.entity, row.transform.position)
+end
+```
+
+Lua `print(...)` calls are captured in the response's `output` array. Interpret
+the response as follows:
+
+- `ok=true`: the script completed successfully.
+- `ok=false`: report both `error` and any output produced before the failure.
+- `truncated=true`: the configured output limit was reached.
+
+Each invocation uses an isolated environment. Globals assigned by one request
+are not retained by the next request. Filesystem, process, module-loading,
+debug, coroutine, and protected-call globals are unavailable. Source size,
+output size, instruction count, and execution time are bounded.
+
+Treat `lua.eval` as potentially mutating even when used for inspection.
+Evaluation is not transactional: entity, component, resource, or queued-command
+changes made before an error or limit failure remain applied. Do not invoke
+mutating scripts unless the task authorizes those changes.
+
 ## Diagnose Failures
 
 - Connection refused: confirm the process, configured host and port, and that

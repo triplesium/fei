@@ -7,14 +7,105 @@
 #include "refl/registry.hpp"
 #include "scripting_lua/runtime.hpp"
 
+#include <array>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
 
 using namespace fei;
+
+TEST_CASE(
+    "LuaRuntime evaluates isolated scripts and captures output",
+    "[scripting][lua][eval]"
+) {
+    auto runtime = make_test_runtime();
+    ScriptTestReceiver receiver(3);
+    std::array globals {
+        LuaEvalGlobal {
+            .name = "receiver",
+            .value = Ref(receiver),
+        },
+    };
+
+    auto result = runtime.eval_script(
+        LuaScriptSource {
+            .name = "eval_capture.lua",
+            .content = R"(
+                print("value", receiver.value)
+                receiver.value = 7
+                leaked = 42
+            )",
+        },
+        globals
+    );
+
+    REQUIRE(result.ok);
+    REQUIRE(result.error.empty());
+    REQUIRE(result.output == std::vector<std::string> {"value\t3"});
+    REQUIRE_FALSE(result.truncated);
+    REQUIRE(receiver.value == 7);
+
+    auto isolated = runtime.eval_script(
+        LuaScriptSource {
+            .name = "eval_isolation.lua",
+            .content = "print(type(leaked), type(os), type(pcall))",
+        },
+        {}
+    );
+    REQUIRE(isolated.ok);
+    REQUIRE(isolated.output == std::vector<std::string> {"nil\tnil\tnil"});
+}
+
+TEST_CASE(
+    "LuaRuntime eval preserves output on errors and enforces limits",
+    "[scripting][lua][eval]"
+) {
+    auto runtime = make_test_runtime();
+    auto failed = runtime.eval_script(
+        LuaScriptSource {
+            .name = "eval_error.lua",
+            .content = "print('before')\nerror('boom')",
+        },
+        {}
+    );
+    REQUIRE_FALSE(failed.ok);
+    REQUIRE(failed.output == std::vector<std::string> {"before"});
+    REQUIRE(failed.error.find("boom") != std::string::npos);
+
+    auto truncated = runtime.eval_script(
+        LuaScriptSource {
+            .name = "eval_output_limit.lua",
+            .content = "print('abcdef')",
+        },
+        {},
+        LuaEvalOptions {
+            .max_output_bytes = 5,
+        }
+    );
+    REQUIRE(truncated.ok);
+    REQUIRE(truncated.output == std::vector<std::string> {"abcde"});
+    REQUIRE(truncated.truncated);
+
+    auto limited = runtime.eval_script(
+        LuaScriptSource {
+            .name = "eval_instruction_limit.lua",
+            .content = "while true do end",
+        },
+        {},
+        LuaEvalOptions {
+            .instruction_limit = 1'000,
+            .time_limit = std::chrono::seconds {1},
+        }
+    );
+    REQUIRE_FALSE(limited.ok);
+    REQUIRE(
+        limited.error.find("instruction limit exceeded") != std::string::npos
+    );
+}
 
 TEST_CASE(
     "LuaRuntime invokes reflected indexed container methods",

@@ -3,8 +3,12 @@
 #include "refl/val.hpp"
 #include "scripting_lua/module_decl.hpp"
 
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -26,6 +30,24 @@ inline constexpr LuaScriptModuleId invalid_lua_script_module_id =
 struct LuaScriptSource {
     std::string name;
     std::string content;
+};
+
+struct LuaEvalGlobal {
+    std::string_view name;
+    Ref value;
+};
+
+struct LuaEvalOptions {
+    std::size_t max_output_bytes {std::size_t {64} * 1024};
+    std::uint64_t instruction_limit {1'000'000};
+    std::chrono::milliseconds time_limit {100};
+};
+
+struct LuaEvalResult {
+    bool ok {false};
+    std::vector<std::string> output;
+    std::string error;
+    bool truncated {false};
 };
 
 class LuaRuntime {
@@ -73,6 +95,11 @@ class LuaRuntime {
     void unset_global(const std::string& name);
 
     Status<LuaScriptError> run_script(const std::string& script);
+    LuaEvalResult eval_script(
+        const LuaScriptSource& source,
+        std::span<const LuaEvalGlobal> globals,
+        const LuaEvalOptions& options = {}
+    );
     Status<LuaScriptError>
     call_function(const std::string& func_name, const std::vector<Ref>& args);
     Result<LuaScriptModuleId, LuaScriptError>
