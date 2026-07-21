@@ -202,7 +202,7 @@ void ShadowMapPipelineSpecializer::specialize(
 }
 
 void init_light_view_uniform_buffer(
-    Query<Entity, const DirectionalLight, const Transform3d>::Filter<
+    Query<Entity, const DirectionalLight, const GlobalTransform3d>::Filter<
         Without<ViewUniformBuffer>> query_light,
     ResRO<GraphicsDevice> device,
     Commands commands
@@ -219,16 +219,20 @@ void init_light_view_uniform_buffer(
 }
 
 void prepare_light_view_uniform_buffer(
-    Query<Entity, const DirectionalLight, const Transform3d, ViewUniformBuffer>
-        query_light,
+    Query<
+        Entity,
+        const DirectionalLight,
+        const GlobalTransform3d,
+        ViewUniformBuffer> query_light,
     ResRO<GraphicsDevice> device,
     ResRO<RenderQueue> render_queue
 ) {
     for (auto [entity, light, transform, view_uniform_buffer] : query_light) {
+        auto world_position = transform.translation();
         auto view = look_at(
-            transform.position,
-            transform.position + transform.forward(),
-            Vector3 {0.0f, 1.0f, 0.0f}
+            world_position,
+            world_position + transform.forward(),
+            transform.up()
         );
         const float proj_size = light.projection_size;
         auto proj = orthographic(
@@ -245,7 +249,7 @@ void prepare_light_view_uniform_buffer(
             .clip_from_world = clip_space_transform * logical_clip_from_world,
             .view_from_world = view,
             .clip_from_view = clip_space_transform * proj,
-            .world_position = transform.position,
+            .world_position = world_position,
         };
         auto& view_uniform = view_uniform_buffer.write();
         view_uniform.uniform = uniform;
@@ -303,10 +307,10 @@ void setup_lighting(ResRO<GraphicsDevice> device, Commands commands) {
 void prepare_lighting(
     Query<
         const DirectionalLight,
-        const Transform3d,
+        const GlobalTransform3d,
         const ViewUniformBuffer,
         const ShadowMap> query_directional_lights,
-    Query<const PointLight, const Transform3d> query_point_lights,
+    Query<const PointLight, const GlobalTransform3d> query_point_lights,
     ResRW<LightingResources> lighting,
     ResRO<RenderQueue> render_queue
 ) {
@@ -322,7 +326,7 @@ void prepare_lighting(
         auto& dir_light = uniform.directional_lights[dir_light_count];
         dir_light.diffuse = light.color.to_vector3() * light.intensity;
         dir_light.specular = dir_light.diffuse;
-        dir_light.position = transform.position;
+        dir_light.position = transform.translation();
         dir_light.ambient = Vector3 {0.0f};
         dir_light.direction = -transform.forward();
         dir_light.shadowing_method = 1;
@@ -340,7 +344,7 @@ void prepare_lighting(
         auto& point_light = uniform.point_lights[point_light_count];
         point_light.diffuse = light.color.to_vector3() * light.intensity;
         point_light.specular = point_light.diffuse;
-        point_light.position = transform.position;
+        point_light.position = transform.translation();
         point_light.shadowing_method = 2;
         ++point_light_count;
     }
@@ -466,7 +470,7 @@ void setup_shadow_mapping(
 }
 
 void setup_shadow_map(
-    Query<Entity, const DirectionalLight, const Transform3d>::Filter<
+    Query<Entity, const DirectionalLight, const GlobalTransform3d>::Filter<
         Without<ShadowMap>> query_light,
     ResRO<GraphicsDevice> device,
     Commands commands
@@ -506,14 +510,14 @@ void queue_shadow_map_meshes(
     Query<
         Entity,
         const DirectionalLight,
-        const Transform3d,
+        const GlobalTransform3d,
         const MeshViewResourceSet,
         const ShadowMap> query_light,
     Query<
         Entity,
         const Mesh3d,
         const MeshMaterial3d<StandardMaterial>,
-        const Transform3d> query_meshes,
+        const GlobalTransform3d> query_meshes,
     ResRO<RenderAssets<PreparedMaterial>> materials,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<MeshUniforms> mesh_uniforms,

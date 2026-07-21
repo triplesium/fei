@@ -150,15 +150,18 @@ struct LightingResources {
 };
 
 void init_light_view_uniform_buffer(
-    Query<Entity, const DirectionalLight, const Transform3d>::Filter<
+    Query<Entity, const DirectionalLight, const GlobalTransform3d>::Filter<
         Without<ViewUniformBuffer>> query_light,
     ResRO<GraphicsDevice> device,
     Commands commands
 );
 
 void prepare_light_view_uniform_buffer(
-    Query<Entity, const DirectionalLight, const Transform3d, ViewUniformBuffer>
-        query_light,
+    Query<
+        Entity,
+        const DirectionalLight,
+        const GlobalTransform3d,
+        ViewUniformBuffer> query_light,
     ResRO<GraphicsDevice> device,
     ResRO<RenderQueue> render_queue
 );
@@ -168,10 +171,10 @@ void setup_lighting(ResRO<GraphicsDevice> device, Commands commands);
 void prepare_lighting(
     Query<
         const DirectionalLight,
-        const Transform3d,
+        const GlobalTransform3d,
         const ViewUniformBuffer,
         const ShadowMap> query_directional_lights,
-    Query<const PointLight, const Transform3d> query_point_lights,
+    Query<const PointLight, const GlobalTransform3d> query_point_lights,
     ResRW<LightingResources> lighting,
     ResRO<RenderQueue> render_queue
 );
@@ -185,7 +188,7 @@ void setup_shadow_mapping(
 );
 
 void setup_shadow_map(
-    Query<Entity, const DirectionalLight, const Transform3d>::Filter<
+    Query<Entity, const DirectionalLight, const GlobalTransform3d>::Filter<
         Without<ShadowMap>> query_light,
     ResRO<GraphicsDevice> device,
     Commands commands
@@ -195,14 +198,14 @@ void queue_shadow_map_meshes(
     Query<
         Entity,
         const DirectionalLight,
-        const Transform3d,
+        const GlobalTransform3d,
         const MeshViewResourceSet,
         const ShadowMap> query_light,
     Query<
         Entity,
         const Mesh3d,
         const MeshMaterial3d<StandardMaterial>,
-        const Transform3d> query_meshes,
+        const GlobalTransform3d> query_meshes,
     ResRO<RenderAssets<PreparedMaterial>> materials,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
     ResRO<MeshUniforms> mesh_uniforms,

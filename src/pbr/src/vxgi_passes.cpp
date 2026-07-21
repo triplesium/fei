@@ -192,7 +192,7 @@ void render_vxgi_voxelization_pass(
         Entity,
         const Mesh3d,
         const MeshMaterial3d<StandardMaterial>,
-        const Transform3d> query_meshes,
+        const GlobalTransform3d> query_meshes,
     ResRW<VxgiVoxelization> voxelization,
     ResRW<VxgiVolumes> volumes,
     ResRW<MeshMaterialPipelines> pipelines,

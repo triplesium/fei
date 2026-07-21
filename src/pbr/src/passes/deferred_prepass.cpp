@@ -109,7 +109,7 @@ void queue_deferred_prepass_meshes(
         Entity,
         const Mesh3d,
         const MeshMaterial3d<StandardMaterial>,
-        const Transform3d> query_meshes,
+        const GlobalTransform3d> query_meshes,
     Query<Entity, const MeshViewResourceSet>::Filter<With<Camera3d>>
         query_cameras,
     ResRW<DeferredPrepassPhase> phase,
@@ -146,7 +146,7 @@ void queue_deferred_prepass_meshes(
             Entity entity,
             const Mesh3d&,
             const MeshMaterial3d<StandardMaterial>&,
-            const Transform3d&
+            const GlobalTransform3d&
         ) {
             return visible_meshes->contains(entity);
         }

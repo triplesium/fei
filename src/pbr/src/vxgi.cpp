@@ -266,7 +266,7 @@ void setup_vxgi(
 
 void compute_scene_aabb(
     ResRW<VxgiVoxelization> voxelization,
-    Query<const Transform3d, const Aabb>::Filter<With<Mesh3d>> query
+    Query<const GlobalTransform3d, const Aabb>::Filter<With<Mesh3d>> query
 ) {
     if (query.empty()) {
         voxelization->scene_aabb = Aabb {
@@ -367,7 +367,7 @@ void queue_vxgi_voxelization_pipelines(
         Entity,
         const Mesh3d,
         const MeshMaterial3d<StandardMaterial>,
-        const Transform3d> query_meshes,
+        const GlobalTransform3d> query_meshes,
     ResRW<VxgiVoxelization> voxelization,
     ResRW<MeshMaterialPipelines> pipelines,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
