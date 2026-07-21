@@ -1,5 +1,8 @@
 #include "core/transform.hpp"
 
+#include "app/app.hpp"
+#include "core/transform_plugin.hpp"
+#include "ecs/system.hpp"
 #include "math/common.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -109,4 +112,158 @@ TEST_CASE(
         transform.rotation.rotate(Vector3::Right)
     );
     require_vector_near(transform.up(), transform.rotation.rotate(Vector3::Up));
+}
+
+TEST_CASE(
+    "GlobalTransform3d propagates through entity hierarchies",
+    "[core][transform][hierarchy]"
+) {
+    App app;
+    app.add_plugin<TransformPlugin>();
+
+    auto root = app.world().entity();
+    auto new_root = app.world().entity();
+    auto child = app.world().entity();
+    auto grandchild = app.world().entity();
+
+    Transform3d root_transform {
+        .position = {2.0f, 3.0f, 4.0f},
+        .scale = {2.0f, 3.0f, 4.0f},
+    };
+    root_transform.set_euler({0.0f, 45.0f, 0.0f});
+    Transform3d child_transform {.position = {1.0f, 0.0f, 0.0f}};
+    Transform3d grandchild_transform {.position = {0.0f, 2.0f, 0.0f}};
+    Transform3d new_root_transform {.position = {-4.0f, 1.0f, 0.0f}};
+    grandchild_transform.set_euler({0.0f, 0.0f, 30.0f});
+
+    app.world().add_component(root, root_transform);
+    app.world().add_component(new_root, new_root_transform);
+    app.world().add_component(child, child_transform);
+    app.world().add_component(grandchild, grandchild_transform);
+    app.world().set_parent(child, root);
+    app.world().set_parent(grandchild, child);
+
+    app.world().sort_systems();
+    app.run_schedule(PostUpdate);
+
+    REQUIRE(app.world().has_component<GlobalTransform3d>(root));
+    REQUIRE(app.world().has_component<GlobalTransform3d>(child));
+    REQUIRE(app.world().has_component<GlobalTransform3d>(grandchild));
+    require_matrix_near(
+        app.world().get_component<GlobalTransform3d>(root).to_matrix(),
+        root_transform.to_matrix()
+    );
+    require_matrix_near(
+        app.world().get_component<GlobalTransform3d>(child).to_matrix(),
+        root_transform.to_matrix() * child_transform.to_matrix()
+    );
+    require_matrix_near(
+        app.world().get_component<GlobalTransform3d>(grandchild).to_matrix(),
+        root_transform.to_matrix() * child_transform.to_matrix() *
+            grandchild_transform.to_matrix()
+    );
+
+    app.world().get_component_rw<Transform3d>(root)->position.x = 6.0f;
+    app.run_schedule(PostUpdate);
+
+    const auto& updated_root = app.world().get_component<Transform3d>(root);
+    require_matrix_near(
+        app.world().get_component<GlobalTransform3d>(grandchild).to_matrix(),
+        updated_root.to_matrix() * child_transform.to_matrix() *
+            grandchild_transform.to_matrix()
+    );
+
+    app.world().set_parent(child, new_root);
+    app.run_schedule(PostUpdate);
+
+    require_matrix_near(
+        app.world().get_component<GlobalTransform3d>(grandchild).to_matrix(),
+        new_root_transform.to_matrix() * child_transform.to_matrix() *
+            grandchild_transform.to_matrix()
+    );
+
+    app.world().remove_parent(child);
+    app.run_schedule(PostUpdate);
+
+    require_matrix_near(
+        app.world().get_component<GlobalTransform3d>(grandchild).to_matrix(),
+        child_transform.to_matrix() * grandchild_transform.to_matrix()
+    );
+}
+
+TEST_CASE(
+    "GlobalTransform3d crosses transformless hierarchy nodes",
+    "[core][transform][hierarchy]"
+) {
+    App app;
+    app.add_plugin<TransformPlugin>();
+
+    auto root = app.world().entity();
+    auto intermediary = app.world().entity();
+    auto child = app.world().entity();
+    Transform3d root_transform {.position = {3.0f, 0.0f, 0.0f}};
+    Transform3d child_transform {.position = {0.0f, 4.0f, 0.0f}};
+
+    app.world().add_component(root, root_transform);
+    app.world().add_component(child, child_transform);
+    app.world().set_parent(intermediary, root);
+    app.world().set_parent(child, intermediary);
+
+    app.world().sort_systems();
+    app.run_schedule(PostUpdate);
+
+    REQUIRE(!app.world().has_component<GlobalTransform3d>(intermediary));
+    require_matrix_near(
+        app.world().get_component<GlobalTransform3d>(child).to_matrix(),
+        root_transform.to_matrix() * child_transform.to_matrix()
+    );
+}
+
+TEST_CASE(
+    "GlobalTransform3d can be an explicitly managed hierarchy boundary",
+    "[core][transform][hierarchy]"
+) {
+    App app;
+    app.add_plugin<TransformPlugin>();
+
+    auto parent = app.world().entity();
+    auto child = app.world().entity();
+    auto parent_matrix = translate(5.0f, 0.0f, 0.0f);
+    Transform3d child_transform {.position = {1.0f, 2.0f, 3.0f}};
+
+    app.world().add_component(parent, GlobalTransform3d(parent_matrix));
+    app.world().add_component(child, child_transform);
+    app.world().set_parent(child, parent);
+
+    app.world().sort_systems();
+    app.run_schedule(PostUpdate);
+
+    require_matrix_near(
+        app.world().get_component<GlobalTransform3d>(child).to_matrix(),
+        parent_matrix * child_transform.to_matrix()
+    );
+}
+
+TEST_CASE(
+    "transform propagation declares precise ECS access",
+    "[core][transform][system]"
+) {
+    FunctionSystem<decltype(sync_global_transforms)*> sync(
+        sync_global_transforms
+    );
+    FunctionSystem<decltype(propagate_transforms)*> propagate(
+        propagate_transforms
+    );
+
+    CHECK_FALSE(sync.access().world_exclusive);
+    CHECK(sync.access().commands);
+    CHECK(sync.access().read_components.contains(type_id<Transform3d>()));
+
+    CHECK_FALSE(propagate.access().world_exclusive);
+    CHECK_FALSE(propagate.access().commands);
+    CHECK(propagate.access().read_components.contains(type_id<Transform3d>()));
+    CHECK(propagate.access().read_components.contains(type_id<ChildOf>()));
+    CHECK(propagate.access().write_components.contains(
+        type_id<GlobalTransform3d>()
+    ));
 }
