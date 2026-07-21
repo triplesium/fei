@@ -106,6 +106,12 @@ class App {
         return *this;
     }
 
+    template<typename F>
+        requires IntoSystem<std::decay_t<F>>
+    RegisteredSystemId register_system(F&& system) {
+        return m_world.register_system(std::forward<F>(system));
+    }
+
     App& configure_sets(
         ScheduleId schedule,
         std::convertible_to<SystemSetConfigs> auto&&... config

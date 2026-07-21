@@ -1,11 +1,84 @@
 #include "ecs/world.hpp"
 
 #include "base/debug.hpp"
+#include "ecs/commands.hpp"
 
 #include <algorithm>
 #include <vector>
 
 namespace fei {
+
+RegisteredSystemId World::register_system(std::unique_ptr<System> system) {
+    if (!system) {
+        fatal("Cannot register a null system");
+    }
+
+    const auto id = m_next_registered_system_id++;
+    auto [_, inserted] = m_registered_systems.emplace(
+        id,
+        RegisteredSystem {.system = std::move(system)}
+    );
+    if (!inserted) {
+        fatal("Registered system id {} is already in use", id);
+    }
+    return RegisteredSystemId {.value = id};
+}
+
+Status<RegisteredSystemError>
+World::run_registered_system(RegisteredSystemId id) {
+    auto it = m_registered_systems.find(id.value);
+    if (it == m_registered_systems.end()) {
+        return failure(RegisteredSystemError::NotFound);
+    }
+
+    auto& registered = it->second;
+    if (registered.running) {
+        return failure(RegisteredSystemError::AlreadyRunning);
+    }
+
+    registered.running = true;
+    ++m_registered_system_execution_depth;
+    try {
+        registered.system->run(*this);
+    } catch (...) {
+        --m_registered_system_execution_depth;
+        registered.running = false;
+        throw;
+    }
+    --m_registered_system_execution_depth;
+    registered.running = false;
+    return {};
+}
+
+Status<RegisteredSystemError> World::run_system(RegisteredSystemId id) {
+    auto status = run_registered_system(id);
+    if (status) {
+        flush_registered_system_commands();
+    }
+    return status;
+}
+
+Status<RegisteredSystemError> World::unregister_system(RegisteredSystemId id) {
+    auto it = m_registered_systems.find(id.value);
+    if (it == m_registered_systems.end()) {
+        return failure(RegisteredSystemError::NotFound);
+    }
+    if (it->second.running) {
+        return failure(RegisteredSystemError::AlreadyRunning);
+    }
+    m_registered_systems.erase(it);
+    return {};
+}
+
+void World::flush_registered_system_commands() {
+    if (m_registered_system_execution_depth != 0 ||
+        !has_resource<CommandsQueue>()) {
+        return;
+    }
+    resource_untracked(type_id<CommandsQueue>())
+        .get<CommandsQueue>()
+        .execute_after_batch(*this);
+}
 
 Entity World::entity() {
     auto entity = m_entities.alloc();

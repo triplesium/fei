@@ -38,6 +38,7 @@ using ScheduleCommand = std::variant<
 struct CommandsQueue {
     std::queue<std::function<void(World&)>> after_batch_commands;
     std::vector<ScheduleCommand> after_schedule_commands;
+    bool executing_after_batch {false};
 
     CommandsQueue() = default;
     CommandsQueue(const CommandsQueue&) = delete;
@@ -54,11 +55,22 @@ struct CommandsQueue {
     }
 
     void execute_after_batch(World& world) {
-        while (!after_batch_commands.empty()) {
-            auto command = std::move(after_batch_commands.front());
-            after_batch_commands.pop();
-            command(world);
+        if (executing_after_batch) {
+            return;
         }
+
+        executing_after_batch = true;
+        try {
+            while (!after_batch_commands.empty()) {
+                auto command = std::move(after_batch_commands.front());
+                after_batch_commands.pop();
+                command(world);
+            }
+        } catch (...) {
+            executing_after_batch = false;
+            throw;
+        }
+        executing_after_batch = false;
     }
 
     void execute_after_schedule(World& world) {
@@ -82,6 +94,7 @@ struct CommandsQueue {
     void clear() {
         std::queue<std::function<void(World&)>>().swap(after_batch_commands);
         after_schedule_commands.clear();
+        executing_after_batch = false;
     }
 
   private:
@@ -220,6 +233,40 @@ class Commands {
                 .config = std::move(config)
             }
         );
+    }
+
+    void run_system(RegisteredSystemId id) {
+        m_commands_queue.add_command([id](World& world) {
+            auto status = world.run_system(id);
+            if (!status) {
+                const auto* reason =
+                    status.error() == RegisteredSystemError::NotFound ?
+                        "not found" :
+                        "already running";
+                error(
+                    "Failed to run registered system {}: {}",
+                    id.value,
+                    reason
+                );
+            }
+        });
+    }
+
+    void unregister_system(RegisteredSystemId id) {
+        m_commands_queue.add_command([id](World& world) {
+            auto status = world.unregister_system(id);
+            if (!status) {
+                const auto* reason =
+                    status.error() == RegisteredSystemError::NotFound ?
+                        "not found" :
+                        "already running";
+                error(
+                    "Failed to unregister registered system {}: {}",
+                    id.value,
+                    reason
+                );
+            }
+        });
     }
 
     EntityCommands entity(Entity entity) {

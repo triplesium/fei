@@ -20,3 +20,16 @@ TEST_CASE("App initializes and registers resources", "[app][resource]") {
     app.init_resource<FromWorldResource>();
     REQUIRE(app.resource<FromWorldResource>().had_app_states);
 }
+
+TEST_CASE("App registers systems for on-demand execution", "[app][system]") {
+    App app;
+    app.add_resource(AppTestResource {});
+
+    auto id = app.register_system([](ResRW<AppTestResource> resource) {
+        ++resource->value;
+    });
+
+    REQUIRE(app.world().run_system(id));
+    REQUIRE(app.world().run_system(id));
+    REQUIRE(app.resource<AppTestResource>().value == 2);
+}

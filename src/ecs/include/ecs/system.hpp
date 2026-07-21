@@ -132,7 +132,7 @@ class FunctionSystem : public System {
     StateTuple m_states;
 
   public:
-    explicit FunctionSystem(Func func) : m_func(func) {}
+    explicit FunctionSystem(Func func) : m_func(std::move(func)) {}
 
     void execute(World& world, SystemTicks system_ticks) override {
         auto params = prepare_params<ParamTypes>(world, system_ticks);

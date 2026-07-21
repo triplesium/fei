@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/optional.hpp"
+#include "base/result.hpp"
 #include "ecs/archetype.hpp"
 #include "ecs/entity.hpp"
 #include "ecs/fwd.hpp"
@@ -13,7 +14,9 @@
 #include <atomic>
 #include <concepts>
 #include <cstddef>
+#include <memory>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -30,12 +33,25 @@ class NextState;
 template<typename T>
 concept FromWorld = std::constructible_from<T, World&>;
 
+enum class RegisteredSystemError {
+    NotFound,
+    AlreadyRunning,
+};
+
 class World {
   private:
+    struct RegisteredSystem {
+        std::unique_ptr<System> system;
+        bool running {false};
+    };
+
     Entities m_entities;
     Archetypes m_archetypes;
     Resources m_resources;
     Schedules m_schedules;
+    std::unordered_map<SystemId, RegisteredSystem> m_registered_systems;
+    SystemId m_next_registered_system_id {0};
+    std::size_t m_registered_system_execution_depth {0};
     std::atomic<Tick> m_change_tick {0};
 
   public:
@@ -48,6 +64,8 @@ class World {
         m_archetypes(std::move(other.m_archetypes)),
         m_resources(std::move(other.m_resources)),
         m_schedules(std::move(other.m_schedules)),
+        m_registered_systems(std::move(other.m_registered_systems)),
+        m_next_registered_system_id(other.m_next_registered_system_id),
         m_change_tick(other.read_change_tick()) {}
 
     World& operator=(World&& other) noexcept {
@@ -56,6 +74,9 @@ class World {
             m_archetypes = std::move(other.m_archetypes);
             m_resources = std::move(other.m_resources);
             m_schedules = std::move(other.m_schedules);
+            m_registered_systems = std::move(other.m_registered_systems);
+            m_next_registered_system_id = other.m_next_registered_system_id;
+            m_registered_system_execution_depth = 0;
             m_change_tick.store(
                 other.read_change_tick(),
                 std::memory_order_relaxed
@@ -173,6 +194,21 @@ class World {
     }
 
     std::size_t worker_threads() const { return m_schedules.worker_threads(); }
+
+    RegisteredSystemId register_system(std::unique_ptr<System> system);
+
+    template<typename F>
+        requires IntoSystem<std::decay_t<F>>
+    RegisteredSystemId register_system(F&& func) {
+        using Func = std::decay_t<F>;
+        return register_system(
+            std::make_unique<FunctionSystem<Func>>(std::forward<F>(func))
+        );
+    }
+
+    Status<RegisteredSystemError> run_system(RegisteredSystemId id);
+
+    Status<RegisteredSystemError> unregister_system(RegisteredSystemId id);
 
     void configure_sets(
         ScheduleId schedule,
@@ -298,6 +334,9 @@ class World {
     const Archetypes& archetypes() const { return m_archetypes; }
 
   private:
+    Status<RegisteredSystemError> run_registered_system(RegisteredSystemId id);
+    void flush_registered_system_commands();
+
     void raw_add_component(Entity entity, Ref ref);
     void raw_remove_component(Entity entity, TypeId type_id);
     void raw_despawn(Entity entity);
