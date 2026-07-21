@@ -26,7 +26,7 @@ option("shader_spirv_cross_sdk")
     set_description("Path to a Vulkan/SPIRV-Cross SDK used by shader artifact generation")
 option_end()
 
-add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json")
+add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "fastgltf v0.9.0")
 add_requires("glfw", {configs = {shared = false}})
 add_requires("imgui v1.92.7", {configs = {glfw = true, opengl3 = false}})
 if has_config("tracy") then
