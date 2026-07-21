@@ -36,7 +36,7 @@ struct MeshUniforms {
 struct Mesh3d;
 
 void prepare_mesh_uniforms(
-    Query<Entity, const Mesh3d, const Transform3d> query,
+    Query<Entity, const Mesh3d, const GlobalTransform3d> query,
     ResRO<GraphicsDevice> device,
     ResRO<RenderQueue> render_queue,
     ResRW<MeshUniforms> mesh_uniforms

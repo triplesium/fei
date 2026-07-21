@@ -1,5 +1,7 @@
 #include "rendering/mesh/mesh_uniform.hpp"
 
+#include "core/transform_plugin.hpp"
+#include "ecs/commands.hpp"
 #include "ecs/world.hpp"
 #include "rendering/components.hpp"
 #include "test_graphics_device.hpp"
@@ -22,6 +24,7 @@ TEST_CASE(
     device.uniform_buffer_alignment = 128;
     world.add_resource(RenderQueue {});
     world.add_resource(MeshUniforms {});
+    world.add_resource(CommandsQueue {});
 
     std::vector<Entity> entities;
     for (uint32 index = 0; index < 3; ++index) {
@@ -34,6 +37,8 @@ TEST_CASE(
         entities.push_back(entity);
     }
 
+    world.run_system_once(sync_global_transforms);
+    world.run_system_once(propagate_transforms);
     world.run_system_once(prepare_mesh_uniforms);
 
     const auto& mesh_uniforms = world.resource<MeshUniforms>();

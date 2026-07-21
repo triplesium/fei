@@ -61,7 +61,7 @@ void ensure_mesh_uniform_buffer(
 } // namespace
 
 void prepare_mesh_uniforms(
-    Query<Entity, const Mesh3d, const Transform3d> query,
+    Query<Entity, const Mesh3d, const GlobalTransform3d> query,
     ResRO<GraphicsDevice> device,
     ResRO<RenderQueue> render_queue,
     ResRW<MeshUniforms> mesh_uniforms
@@ -89,10 +89,10 @@ void prepare_mesh_uniforms(
     mesh_uniforms->upload_data.resize(query.size() * mesh_uniforms->stride);
 
     std::size_t index = 0;
-    for (const auto& [entity, mesh3d, transform3d] : query) {
+    for (const auto& [entity, mesh3d, global_transform] : query) {
         (void)mesh3d;
         MeshUniform uniform {
-            .world_from_local = transform3d.to_matrix(),
+            .world_from_local = global_transform.to_matrix(),
         };
 
         const auto offset = index++ * mesh_uniforms->stride;

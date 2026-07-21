@@ -2,6 +2,7 @@
 
 #include "app/app.hpp"
 #include "asset/plugin.hpp"
+#include "core/transform_plugin.hpp"
 #include "test_graphics_device.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -17,6 +18,8 @@ TEST_CASE(
     app.add_plugin<AssetsPlugin>()
         .add_resource_as<GraphicsDevice>(FakeGraphicsDevice {})
         .add_plugin<RenderingPlugin>();
+
+    REQUIRE(app.has_plugin<TransformPlugin>());
 
     auto& device =
         dynamic_cast<FakeGraphicsDevice&>(app.resource<GraphicsDevice>());

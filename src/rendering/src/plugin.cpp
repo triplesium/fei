@@ -3,6 +3,7 @@
 #include "app/app.hpp"
 #include "asset/plugin.hpp"
 #include "base/log.hpp"
+#include "core/transform_plugin.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
 #include "ecs/system_profile.hpp"
@@ -67,6 +68,10 @@ void present_main_swapchain(
 }
 
 void RenderingPlugin::setup(App& app) {
+    if (!app.has_plugin<TransformPlugin>()) {
+        app.add_plugin<TransformPlugin>();
+    }
+
     app.resource<AssetServer>().emplace_source<ShaderAssetSource>();
     app.add_resource(SlangLibraryShaderCompiler {});
     app.add_resource(ShaderVariantCompiler(

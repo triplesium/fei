@@ -99,7 +99,8 @@ Frustum extract_frustum(const Matrix4x4& clip_from_world);
 
 void check_mesh_visibility(
     Query<Entity, const ViewUniformBuffer> query_views,
-    Query<Entity, const Mesh3d, const Transform3d, const Aabb> query_meshes,
+    Query<Entity, const Mesh3d, const GlobalTransform3d, const Aabb>
+        query_meshes,
     ResRW<ViewVisibleEntities> visible_entities
 );
 

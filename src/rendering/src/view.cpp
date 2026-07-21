@@ -7,7 +7,7 @@
 namespace fei {
 
 void init_camera_view_uniform(
-    Query<Entity, const Camera3d, const Transform3d>::Filter<
+    Query<Entity, const Camera3d, const GlobalTransform3d>::Filter<
         Without<ViewUniformBuffer>> query,
     ResRO<GraphicsDevice> device,
     Commands commands
@@ -24,16 +24,18 @@ void init_camera_view_uniform(
 }
 
 void prepare_camera_view_uniform(
-    Query<Entity, const Camera3d, const Transform3d, ViewUniformBuffer> query,
+    Query<Entity, const Camera3d, const GlobalTransform3d, ViewUniformBuffer>
+        query,
     ResRO<GraphicsDevice> device,
     ResRO<RenderQueue> render_queue
 ) {
     for (auto [entity, camera, transform, view_uniform_buffer_component] :
          query) {
+        auto world_position = transform.translation();
         auto view = look_at(
-            transform.position,
-            transform.position + transform.forward(),
-            Vector3 {0.0f, 1.0f, 0.0f}
+            world_position,
+            world_position + transform.forward(),
+            transform.up()
         );
         auto projection = perspective(
             camera.fov_y * DEG2RAD,
@@ -49,7 +51,7 @@ void prepare_camera_view_uniform(
             .clip_from_view = clip_space_transform * projection,
             .world_from_view = view.inverse_affine(),
             .view_from_clip = (clip_space_transform * projection).inverse(),
-            .world_position = transform.position,
+            .world_position = world_position,
         };
         auto& view_uniform_buffer = view_uniform_buffer_component.write();
         view_uniform_buffer.uniform = uniform;
