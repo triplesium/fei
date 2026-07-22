@@ -21,6 +21,7 @@ target("sample-scene")
         "fei-devtools-reflection",
         "fei-devtools-rendering",
         "fei-devtools-scripting-lua",
+        "fei-gltf",
         "fei-graphics-opengl",
         "fei-graphics-opengl-glfw",
         "fei-graphics-vulkan",

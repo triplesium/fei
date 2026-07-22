@@ -20,6 +20,8 @@
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
+#include "gltf/gltf.hpp"
+#include "gltf/plugin.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics_opengl_glfw/plugin.hpp"
 #include "graphics_vulkan_glfw/plugin.hpp"
@@ -60,6 +62,10 @@ struct SceneArguments {
 
 struct DirectionalLightUiState {
     Vector3 rotation;
+};
+
+struct PendingGltfScene {
+    Handle<Gltf> gltf;
 };
 
 SceneGraphicsBackend default_scene_backend() {
@@ -334,10 +340,10 @@ void setup(
     Commands commands
 ) {
     commands.spawn().add(
-        SceneSpawner {
-            .scene = asset_server->load<Scene>("sponza/sponza.obj"),
-            .options = {.scale = Vector3 {0.01f}}
-        }
+        PendingGltfScene {
+            .gltf = asset_server->load<Gltf>("sponza-gltf/glTF/Sponza.gltf"),
+        },
+        Transform3d {}
     );
 
     Transform3d camera_transform {
@@ -356,7 +362,7 @@ void setup(
             .equirect_image = asset_server->load<Image>("autumn_field_4k.hdr"),
         },
         EnvironmentMapLight {
-            .intensity = 0.5f,
+            .intensity = 0.25f,
         },
         Skybox {
             .equirect_map = asset_server->load<Image>("autumn_field_4k.hdr"),
@@ -382,6 +388,56 @@ void setup(
     auto camera_script =
         asset_server->load<LuaScriptAsset>("camera_control.lua");
     lua_scripts->queue_asset(camera_script);
+}
+
+void spawn_default_gltf_scene(
+    Query<Entity, const PendingGltfScene> pending_scenes,
+    ResRO<AssetServer> asset_server,
+    ResRO<Assets<Gltf>> gltf_assets,
+    Commands commands
+) {
+    for (const auto& [entity, pending] : pending_scenes) {
+        const auto state = asset_server->load_state(pending.gltf);
+        if (!state || *state == AssetLoadState::Loading) {
+            continue;
+        }
+        if (*state == AssetLoadState::Failed) {
+            const auto error = asset_server->load_error(pending.gltf);
+            if (error) {
+                fei::error(
+                    "Failed to load '{}': {}",
+                    error->path.as_string(),
+                    error->message
+                );
+            } else {
+                fei::error("Failed to load Sponza.gltf");
+            }
+            commands.entity(entity).despawn();
+            continue;
+        }
+
+        const auto gltf = gltf_assets->get(pending.gltf);
+        if (!gltf) {
+            continue;
+        }
+        if (!gltf->default_scene) {
+            fei::error("Sponza.gltf does not define a default scene");
+            commands.entity(entity).despawn();
+            continue;
+        }
+        if (*gltf->default_scene >= gltf->scenes.size()) {
+            fei::error("Sponza.gltf has an invalid default scene index");
+            commands.entity(entity).despawn();
+            continue;
+        }
+
+        commands.entity(entity).remove<PendingGltfScene>().add(
+            SceneSpawner {
+                .scene = gltf->scenes[*gltf->default_scene],
+                .options = {},
+            }
+        );
+    }
 }
 
 void configure_vxgi(ResRW<VxgiVolumes> volumes) {
@@ -455,10 +511,12 @@ int main(int argc, char** argv) {
         .add_plugin<TimePlugin>()
         .add_plugin<EnvironmentMapPlugin>()
         .add_plugin<ScenePlugin>()
+        .add_plugin<GltfPlugin>()
         .add_plugin<ReflectionPlugin>()
         .add_plugin<LuaScriptingPlugin>()
         .add_systems(PreStartUp, configure_vxgi)
         .add_systems(PreStartUp, setup)
+        .add_systems(Update, spawn_default_gltf_scene)
         .add_systems(Update, update_directional_light);
 
     app.add_plugin<ImGuiPlugin>().add_systems(
