@@ -158,6 +158,24 @@ class DependentServerLoader : public AssetLoader<ServerAsset> {
     }
 };
 
+class RawDependentServerLoader : public AssetLoader<ServerAsset> {
+  public:
+    AssetLoadResult<ServerAsset>
+    load(Reader&, const LoadContext& context) override {
+        auto dependency_path =
+            context.asset_path().resolve_embed_str("dependency.bin");
+        auto bytes = context.read_asset_bytes(dependency_path);
+        if (!bytes) {
+            return failure(bytes.error());
+        }
+
+        return std::make_unique<ServerAsset>(ServerAsset {
+            .byte_count = static_cast<int>(bytes->size()),
+            .path = dependency_path.as_string(),
+        });
+    }
+};
+
 class FailingServerLoader : public AssetLoader<ServerAsset> {
   public:
     AssetLoadResult<ServerAsset>
@@ -280,6 +298,32 @@ TEST_CASE(
         AssetLoadState::Loaded
     );
     REQUIRE(server_resource.is_loaded_with_dependencies(handle));
+}
+
+TEST_CASE(
+    "AssetServer reads and records sync raw asset dependencies",
+    "[asset][server]"
+) {
+    App app;
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>()
+        .add_loader<ServerAsset, RawDependentServerLoader>();
+
+    auto handle = app.resource<AssetServer>().load<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+    auto& assets = app.resource<Assets<ServerAsset>>();
+    auto asset = assets.get(handle);
+
+    REQUIRE(asset.has_value());
+    REQUIRE(asset->byte_count == 2);
+    REQUIRE(asset->path == "memory://dependency.bin");
+    auto dependencies = assets.loader_dependencies(handle);
+    REQUIRE(dependencies.has_value());
+    REQUIRE(dependencies->size() == 1);
+    REQUIRE((*dependencies)[0] == AssetPath("memory://dependency.bin"));
 }
 
 TEST_CASE("AssetServer load stores missing source errors", "[asset][server]") {
@@ -467,6 +511,36 @@ TEST_CASE(
         AssetLoadState::Loaded
     );
     REQUIRE(app.resource<AssetServer>().is_loaded_with_dependencies(handle));
+}
+
+TEST_CASE(
+    "AssetServer reads and records async raw asset dependencies",
+    "[asset][server][async]"
+) {
+    App app;
+    app.add_plugin<AssetsPlugin>();
+    auto& server = app.resource<AssetServer>();
+    server.emplace_source<MemorySource>();
+    server.add_loader<ServerAsset, RawDependentServerLoader>();
+    app.world().sort_systems();
+
+    auto handle = app.resource<AssetServer>().load_async<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+    auto& assets = app.resource<Assets<ServerAsset>>();
+
+    run_post_update_until(app, [&]() {
+        return assets.get(handle).has_value();
+    });
+
+    auto asset = assets.get(handle);
+    REQUIRE(asset.has_value());
+    REQUIRE(asset->byte_count == 2);
+    REQUIRE(asset->path == "memory://dependency.bin");
+    auto dependencies = assets.loader_dependencies(handle);
+    REQUIRE(dependencies.has_value());
+    REQUIRE(dependencies->size() == 1);
+    REQUIRE((*dependencies)[0] == AssetPath("memory://dependency.bin"));
 }
 
 TEST_CASE(

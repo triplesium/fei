@@ -31,10 +31,13 @@ class LoadContext {
   private:
     AssetPath m_asset_path;
     mutable std::vector<AssetKey> m_dependencies;
+    mutable std::vector<AssetPath> m_loader_dependencies;
 
     void add_dependency(AssetKey dependency) const {
         m_dependencies.push_back(dependency);
     }
+
+    void add_loader_dependency(const AssetPath& dependency) const;
 
   public:
     explicit LoadContext(AssetPath asset_path) :
@@ -43,6 +46,12 @@ class LoadContext {
 
     const AssetPath& asset_path() const { return m_asset_path; }
     const std::vector<AssetKey>& dependencies() const { return m_dependencies; }
+    const std::vector<AssetPath>& loader_dependencies() const {
+        return m_loader_dependencies;
+    }
+
+    Result<std::vector<std::byte>, AssetLoadError>
+    read_asset_bytes(const AssetPath& path) const;
 
     // Requests a dependency asset and returns its handle.
     //
@@ -73,6 +82,9 @@ class SyncLoadContext : public LoadContext {
 
     template<typename T>
     Handle<T> add_asset(std::unique_ptr<T> asset) const;
+
+    Result<std::vector<std::byte>, AssetLoadError>
+    read_asset_bytes_sync(const AssetPath& path) const;
 };
 
 class AsyncLoadContext : public LoadContext {
@@ -90,6 +102,9 @@ class AsyncLoadContext : public LoadContext {
 
     template<typename T>
     Handle<T> add_asset(std::unique_ptr<T> asset) const;
+
+    Result<std::vector<std::byte>, AssetLoadError>
+    read_asset_bytes_async(const AssetPath& path) const;
 };
 
 template<typename T>

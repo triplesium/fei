@@ -3,6 +3,8 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
+#include <utility>
 
 namespace fei {
 
@@ -10,6 +12,17 @@ class AssetPath {
   private:
     std::filesystem::path m_path;
     Optional<std::string> m_source;
+
+    AssetPath(std::filesystem::path path, Optional<std::string> source) :
+        m_path(std::move(path)), m_source(std::move(source)) {}
+
+    static std::filesystem::path normalize(std::filesystem::path path) {
+        if (path.empty()) {
+            return {};
+        }
+        auto normalized = path.lexically_normal();
+        return normalized == "." ? std::filesystem::path {} : normalized;
+    }
 
   public:
     AssetPath(const std::string& path) {
@@ -30,6 +43,46 @@ class AssetPath {
     const Optional<std::string>& source() const { return m_source; }
 
     const std::filesystem::path& path() const { return m_path; }
+
+    AssetPath resolve(const AssetPath& path) const {
+        if (path.source()) {
+            return AssetPath(normalize(path.path()), path.source());
+        }
+
+        const auto& relative = path.path();
+        if (relative.has_root_directory()) {
+            return AssetPath(normalize(relative.relative_path()), m_source);
+        }
+        return AssetPath(normalize(m_path / relative), m_source);
+    }
+
+    AssetPath resolve_str(std::string_view path) const {
+        return resolve(AssetPath(std::string(path)));
+    }
+
+    AssetPath resolve_embed(const AssetPath& path) const {
+        if (path.source() || path.path().has_root_directory()) {
+            return resolve(path);
+        }
+
+        auto base = m_path;
+        if (base.has_filename()) {
+            base = base.parent_path();
+        }
+        return AssetPath(normalize(base / path.path()), m_source);
+    }
+
+    AssetPath resolve_embed_str(std::string_view path) const {
+        return resolve_embed(AssetPath(std::string(path)));
+    }
+
+    bool is_unapproved() const {
+        if (m_path.is_absolute()) {
+            return true;
+        }
+        const auto normalized = normalize(m_path);
+        return !normalized.empty() && *normalized.begin() == "..";
+    }
 
     std::string as_string() const {
         if (m_source) {

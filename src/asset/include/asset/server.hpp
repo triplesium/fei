@@ -9,8 +9,10 @@
 #include "ecs/system_config.hpp"
 #include "task/plugin.hpp"
 
+#include <algorithm>
 #include <concepts>
 #include <condition_variable>
+#include <cstddef>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -107,6 +109,12 @@ class AssetServer {
                 "AssetLoader not set for " + path.as_string()
             ));
         }
+        if (path.is_unapproved()) {
+            return assets.add_failed(AssetLoadError(
+                path,
+                "Asset path escapes its source root: " + path.as_string()
+            ));
+        }
         auto source_name = path.source().value_or("default");
         if (!m_sources.contains(source_name)) {
             return assets.add_failed(AssetLoadError(
@@ -152,6 +160,12 @@ class AssetServer {
                 "AssetLoader not set for " + path.as_string()
             ));
         }
+        if (path.is_unapproved()) {
+            return assets.add_failed(AssetLoadError(
+                path,
+                "Asset path escapes its source root: " + path.as_string()
+            ));
+        }
 
         if (!m_app->has_resource<Tasks>()) {
             return assets.add_failed(AssetLoadError(
@@ -185,6 +199,7 @@ class AssetServer {
         struct LoadTaskResult {
             AssetLoadResult<T> result;
             std::vector<AssetKey> dependencies;
+            std::vector<AssetPath> loader_dependencies;
         };
         m_app->resource<Tasks>().general().submit(
             [source, loader, source_name, path, load_requests]() mutable
@@ -198,6 +213,7 @@ class AssetServer {
                                 "': " + reader.error()
                         )),
                         .dependencies = {},
+                        .loader_dependencies = {},
                     };
                 }
 
@@ -205,18 +221,22 @@ class AssetServer {
                     AsyncLoadContext context(std::move(load_requests), path);
                     auto result = loader->load(*reader, context);
                     auto dependencies = context.dependencies();
+                    auto loader_dependencies = context.loader_dependencies();
                     return {
                         .result = std::move(result),
                         .dependencies = std::move(dependencies),
+                        .loader_dependencies = std::move(loader_dependencies),
                     };
                 }
 
                 LoadContext context(path);
                 auto result = loader->load(*reader, context);
                 auto dependencies = context.dependencies();
+                auto loader_dependencies = context.loader_dependencies();
                 return {
                     .result = std::move(result),
                     .dependencies = std::move(dependencies),
+                    .loader_dependencies = std::move(loader_dependencies),
                 };
             },
             [assets_state,
@@ -232,7 +252,8 @@ class AssetServer {
                     assets.enqueue_async_load_result(
                         id,
                         std::move(load_result.result),
-                        std::move(load_result.dependencies)
+                        std::move(load_result.dependencies),
+                        std::move(load_result.loader_dependencies)
                     );
                 } catch (const std::exception& error) {
                     assets.enqueue_async_load_result(
@@ -252,6 +273,42 @@ class AssetServer {
         );
 
         return std::move(handle);
+    }
+
+    Result<std::vector<std::byte>, AssetLoadError>
+    read_asset_bytes(const AssetPath& path) const {
+        if (path.is_unapproved()) {
+            return failure(AssetLoadError(
+                path,
+                "Asset path escapes its source root: " + path.as_string()
+            ));
+        }
+        const auto source_name = path.source().value_or("default");
+        const auto source = m_sources.find(source_name);
+        if (source == m_sources.end()) {
+            return failure(AssetLoadError(
+                path,
+                "No asset source found with name: " + source_name
+            ));
+        }
+        if (!source->second->exists(path.path())) {
+            return failure(AssetLoadError(
+                path,
+                "Asset not found at path: " + path.path().string() +
+                    " in source: " + source_name
+            ));
+        }
+        auto reader = source->second->try_get_reader(path.path());
+        if (!reader) {
+            return failure(AssetLoadError(
+                path,
+                "Failed to read asset from source '" + source_name +
+                    "': " + reader.error()
+            ));
+        }
+        std::vector<std::byte> bytes(reader->size());
+        std::copy_n(reader->data(), reader->size(), bytes.data());
+        return bytes;
     }
 
     template<typename T>
@@ -530,6 +587,37 @@ Handle<T> LoadContext::load(const AssetPath& path) const {
     return handle;
 }
 
+inline void
+LoadContext::add_loader_dependency(const AssetPath& dependency) const {
+    if (std::find(
+            m_loader_dependencies.begin(),
+            m_loader_dependencies.end(),
+            dependency
+        ) == m_loader_dependencies.end()) {
+        m_loader_dependencies.push_back(dependency);
+    }
+}
+
+inline Result<std::vector<std::byte>, AssetLoadError>
+LoadContext::read_asset_bytes(const AssetPath& path) const {
+    Result<std::vector<std::byte>, AssetLoadError> result =
+        failure(AssetLoadError(
+            path,
+            "LoadContext does not support raw asset dependency loading"
+        ));
+    if (const auto* context = dynamic_cast<const SyncLoadContext*>(this)) {
+        result = context->read_asset_bytes_sync(path);
+    } else if (
+        const auto* context = dynamic_cast<const AsyncLoadContext*>(this)
+    ) {
+        result = context->read_asset_bytes_async(path);
+    }
+    if (result) {
+        add_loader_dependency(path);
+    }
+    return result;
+}
+
 template<typename T>
 Handle<T> LoadContext::add_asset(std::unique_ptr<T> asset) const {
     Handle<T> handle;
@@ -554,6 +642,11 @@ Handle<T> SyncLoadContext::add_asset(std::unique_ptr<T> asset) const {
     return m_asset_server.template add_asset<T>(std::move(asset));
 }
 
+inline Result<std::vector<std::byte>, AssetLoadError>
+SyncLoadContext::read_asset_bytes_sync(const AssetPath& path) const {
+    return m_asset_server.read_asset_bytes(path);
+}
+
 template<typename T>
 Handle<T> AsyncLoadContext::load(const AssetPath& path) const {
     if (!m_requests) {
@@ -572,6 +665,17 @@ Handle<T> AsyncLoadContext::add_asset(std::unique_ptr<T> asset) const {
         );
     }
     return m_requests->template add_asset<T>(std::move(asset));
+}
+
+inline Result<std::vector<std::byte>, AssetLoadError>
+AsyncLoadContext::read_asset_bytes_async(const AssetPath& path) const {
+    if (!m_requests) {
+        return failure(AssetLoadError(
+            path,
+            "Asset dependency request sender is not available"
+        ));
+    }
+    return m_requests->read_asset_bytes(path);
 }
 
 template<typename T>
@@ -675,6 +779,65 @@ Handle<T> AssetLoadRequestSender::add_asset(std::unique_ptr<T> asset) {
         throw std::runtime_error(pending->error);
     }
     return pending->result;
+}
+
+inline Result<std::vector<std::byte>, AssetLoadError>
+AssetLoadRequestSender::read_asset_bytes(const AssetPath& path) {
+    struct Pending {
+        std::mutex mutex;
+        std::condition_variable completed;
+        bool ready {false};
+        std::vector<std::byte> bytes;
+        Optional<AssetLoadError> error;
+    };
+
+    auto pending = std::make_shared<Pending>();
+    auto enqueued = enqueue(
+        Request {
+            .process =
+                [pending, path](AssetServer& server) mutable {
+                    auto result = server.read_asset_bytes(path);
+                    {
+                        std::scoped_lock state_lock(pending->mutex);
+                        if (result) {
+                            pending->bytes = std::move(*result);
+                        } else {
+                            pending->error = std::move(result.error());
+                        }
+                        pending->ready = true;
+                    }
+                    pending->completed.notify_one();
+                },
+            .cancel =
+                [pending, path]() mutable {
+                    {
+                        std::scoped_lock state_lock(pending->mutex);
+                        pending->error = AssetLoadError(
+                            path,
+                            "Asset dependency request queue is closed for " +
+                                path.as_string()
+                        );
+                        pending->ready = true;
+                    }
+                    pending->completed.notify_one();
+                },
+        }
+    );
+    if (!enqueued) {
+        return failure(AssetLoadError(
+            path,
+            "Asset dependency request queue is closed for " + path.as_string()
+        ));
+    }
+
+    std::unique_lock lock(pending->mutex);
+    pending->completed.wait(lock, [&]() {
+        return pending->ready;
+    });
+    if (pending->error) {
+        return failure(std::move(*pending->error));
+    }
+    return std::move(pending->bytes);
 }
 
 template<typename T>

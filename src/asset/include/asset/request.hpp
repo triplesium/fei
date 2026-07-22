@@ -40,6 +40,9 @@ class AssetLoadRequestSender {
     template<typename T>
     Handle<T> add_asset(std::unique_ptr<T> asset);
 
+    Result<std::vector<std::byte>, AssetLoadError>
+    read_asset_bytes(const AssetPath& path);
+
   private:
     friend class AssetLoadRequests;
 

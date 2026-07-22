@@ -44,12 +44,14 @@ class Assets {
         AssetLoadState state;
         Optional<AssetLoadError> error;
         std::vector<AssetKey> dependencies;
+        std::vector<AssetPath> loader_dependencies;
     };
 
     struct AsyncLoadResult {
         AssetId id;
         AssetLoadResult<T> result;
         std::vector<AssetKey> dependencies;
+        std::vector<AssetPath> loader_dependencies;
     };
 
   private:
@@ -130,7 +132,8 @@ class Assets {
         auto handle = add_loaded(
             std::move(*asset),
             context.asset_path(),
-            context.dependencies()
+            context.dependencies(),
+            context.loader_dependencies()
         );
         return std::move(handle);
     }
@@ -153,6 +156,7 @@ class Assets {
             .state = AssetLoadState::Failed,
             .error = std::move(error),
             .dependencies = {},
+            .loader_dependencies = {},
         };
         m_event_queue.push_back(
             AssetEvent<T> {
@@ -180,6 +184,7 @@ class Assets {
             .state = AssetLoadState::Loading,
             .error = nullopt,
             .dependencies = {},
+            .loader_dependencies = {},
         };
         m_cache[path] = id;
         return handle;
@@ -188,7 +193,8 @@ class Assets {
     bool finish_loading(
         AssetId id,
         std::unique_ptr<T> asset,
-        std::vector<AssetKey> dependencies = {}
+        std::vector<AssetKey> dependencies = {},
+        std::vector<AssetPath> loader_dependencies = {}
     ) {
         auto entry = get_entry(id);
         if (!entry || entry->state != AssetLoadState::Loading) {
@@ -203,6 +209,7 @@ class Assets {
         entry->state = AssetLoadState::Loaded;
         entry->error = nullopt;
         entry->dependencies = std::move(dependencies);
+        entry->loader_dependencies = std::move(loader_dependencies);
         if (entry->path) {
             m_cache[*entry->path] = id;
         }
@@ -230,6 +237,7 @@ class Assets {
         entry->state = AssetLoadState::Failed;
         entry->error = std::move(error);
         entry->dependencies.clear();
+        entry->loader_dependencies.clear();
         m_event_queue.push_back(
             AssetEvent<T> {
                 .type = AssetEventType::Failed,
@@ -242,13 +250,15 @@ class Assets {
     void enqueue_async_load_result(
         AssetId id,
         AssetLoadResult<T> result,
-        std::vector<AssetKey> dependencies = {}
+        std::vector<AssetKey> dependencies = {},
+        std::vector<AssetPath> loader_dependencies = {}
     ) {
         m_pending_async_results.push_back(
             AsyncLoadResult {
                 .id = id,
                 .result = std::move(result),
                 .dependencies = std::move(dependencies),
+                .loader_dependencies = std::move(loader_dependencies),
             }
         );
     }
@@ -362,6 +372,20 @@ class Assets {
         return dependencies(handle.id());
     }
 
+    Optional<const std::vector<AssetPath>&>
+    loader_dependencies(AssetId id) const {
+        auto entry = get_entry(id);
+        if (!entry) {
+            return nullopt;
+        }
+        return entry->loader_dependencies;
+    }
+
+    Optional<const std::vector<AssetPath>&>
+    loader_dependencies(const Handle<T>& handle) const {
+        return loader_dependencies(handle.id());
+    }
+
     Optional<const AssetLoadError&> load_error(AssetId id) const {
         auto entry = get_entry(id);
         if (!entry || !entry->error) {
@@ -410,7 +434,8 @@ class Assets {
             assets->finish_loading(
                 result.id,
                 std::move(result.result).value(),
-                std::move(result.dependencies)
+                std::move(result.dependencies),
+                std::move(result.loader_dependencies)
             );
         }
     }
@@ -431,7 +456,8 @@ class Assets {
     Handle<T> add_loaded(
         std::unique_ptr<T> asset,
         Optional<AssetPath> path,
-        std::vector<AssetKey> dependencies = {}
+        std::vector<AssetKey> dependencies = {},
+        std::vector<AssetPath> loader_dependencies = {}
     ) {
         AssetId id = m_next_id++;
         auto handle_state = std::make_shared<AssetHandleState>(id);
@@ -445,6 +471,7 @@ class Assets {
             .state = AssetLoadState::Loaded,
             .error = nullopt,
             .dependencies = std::move(dependencies),
+            .loader_dependencies = std::move(loader_dependencies),
         };
         auto& entry = m_assets.at(id);
         if (entry.path) {

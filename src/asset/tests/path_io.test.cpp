@@ -29,6 +29,59 @@ TEST_CASE(
     REQUIRE(values[AssetPath("embeded://shaders/forward.frag")] == 7);
 }
 
+TEST_CASE("AssetPath resolves virtual asset paths", "[asset][path]") {
+    const AssetPath directory("package://models/robot");
+
+    CHECK(
+        directory.resolve_str("textures/./base.png") ==
+        AssetPath("package://models/robot/textures/base.png")
+    );
+    CHECK(
+        directory.resolve_str("../shared/base.png") ==
+        AssetPath("package://models/shared/base.png")
+    );
+    CHECK(
+        directory.resolve_str("/shared/base.png") ==
+        AssetPath("package://shared/base.png")
+    );
+    CHECK(
+        directory.resolve_str("other://shared/base.png") ==
+        AssetPath("other://shared/base.png")
+    );
+}
+
+TEST_CASE(
+    "AssetPath resolves references embedded in asset files",
+    "[asset][path]"
+) {
+    const AssetPath document("package://models/robot/scene.gltf");
+
+    CHECK(
+        document.resolve_embed_str("textures/base.png") ==
+        AssetPath("package://models/robot/textures/base.png")
+    );
+    CHECK(
+        document.resolve_embed_str("../shared/model.bin") ==
+        AssetPath("package://models/shared/model.bin")
+    );
+    CHECK(
+        document.resolve_embed_str("/shared/model.bin") ==
+        AssetPath("package://shared/model.bin")
+    );
+}
+
+TEST_CASE("AssetPath identifies unapproved paths", "[asset][path]") {
+    CHECK_FALSE(AssetPath("models/robot.bin").is_unapproved());
+    CHECK_FALSE(
+        AssetPath("models/robot/scene.gltf")
+            .resolve_embed_str("../../shared/model.bin")
+            .is_unapproved()
+    );
+    CHECK(AssetPath("../secret.bin").is_unapproved());
+    CHECK(AssetPath("models/../../secret.bin").is_unapproved());
+    CHECK(AssetPath("C:/secret.bin").is_unapproved());
+}
+
 TEST_CASE("Reader exposes memory as bytes and strings", "[asset][io]") {
     static constexpr std::array<std::byte, 5> bytes = {
         std::byte {'h'},
