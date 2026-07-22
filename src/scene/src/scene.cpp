@@ -65,7 +65,7 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
         standard_material->roughness = 1.0f;
         if (!material.diffuse_texname.empty()) {
             auto image = context.load<Image>(
-                obj_path.parent_path() / material.diffuse_texname
+                context.asset_path().resolve_embed_str(material.diffuse_texname)
             );
             standard_material->albedo_texture = std::move(image);
         }
