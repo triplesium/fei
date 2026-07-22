@@ -1,6 +1,7 @@
 #include "pbr/environment_map.hpp"
 #include "pbr/light.hpp"
 #include "pbr/material.hpp"
+#include "pbr/passes/deferred.hpp"
 #include "pbr/vxgi.hpp"
 #include "rendering/mesh/mesh_uniform.hpp"
 #include "rendering/view.hpp"
@@ -173,4 +174,13 @@ TEST_CASE(
 ) {
     const VxgiConfig config;
     CHECK(config.skylight_leaking == 0.0f);
+}
+
+TEST_CASE("PBR present uniform keeps shader ABI layout", "[pbr][uniform]") {
+    require_standard_uniform_layout<DeferredPresentUniform>(32);
+    CHECK(offsetof(DeferredPresentUniform, visualization) == 0);
+    CHECK(offsetof(DeferredPresentUniform, exposure) == 4);
+    CHECK(offsetof(DeferredPresentUniform, scalar_scale) == 8);
+    CHECK(offsetof(DeferredPresentUniform, scalar_bias) == 12);
+    CHECK(offsetof(DeferredPresentUniform, flags) == 16);
 }

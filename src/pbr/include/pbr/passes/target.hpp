@@ -38,6 +38,30 @@ struct DeferredViewTargets {
     }
 };
 
+enum class DeferredPresentView : uint32 {
+    Final,
+    Position,
+    MaterialAo,
+    Normal,
+    Roughness,
+    Albedo,
+    Metallic,
+    Specular,
+    Emissive,
+    Depth,
+    DirectLighting,
+    IndirectLighting,
+    SkyVisibility,
+    Count,
+};
+
+struct DeferredPresentSettings {
+    DeferredPresentView view {DeferredPresentView::Final};
+    float exposure {1.0f};
+    float scalar_scale {1.0f};
+    float scalar_bias {0.0f};
+};
+
 void setup_render_target(
     ResRO<GraphicsDevice> device,
     ResRO<Window> window,

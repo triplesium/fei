@@ -664,8 +664,10 @@ TEST_CASE(
     require_shader_resources(
         "deferred_present.frag",
         {
-            {"composite", ResourceKind::TextureReadOnly, 0, 0},
-            {"composite_sampler", ResourceKind::Sampler, 0, 1},
+            {"source", ResourceKind::TextureReadOnly, 0, 0},
+            {"geometry_mask", ResourceKind::TextureReadOnly, 0, 1},
+            {"source_sampler", ResourceKind::Sampler, 0, 2},
+            {"settings", ResourceKind::UniformBuffer, 0, 3},
         }
     );
 }

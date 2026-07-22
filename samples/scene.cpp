@@ -30,6 +30,7 @@
 #include "pbr/environment_map.hpp"
 #include "pbr/light.hpp"
 #include "pbr/material.hpp"
+#include "pbr/passes/target.hpp"
 #include "pbr/plugin.hpp"
 #include "pbr/skybox.hpp"
 #include "pbr/vxgi.hpp"
@@ -44,6 +45,7 @@
 
 #include <cstdio>
 #include <imgui.h>
+#include <iterator>
 #include <string_view>
 
 using namespace fei;
@@ -304,6 +306,74 @@ void draw_indirect_lighting_controls(
     }
 }
 
+void draw_debug_view_controls(DeferredPresentSettings& present_settings) {
+    static constexpr const char* c_present_view_names[] {
+        "Final",
+        "Position",
+        "Material AO",
+        "Normal",
+        "Roughness",
+        "Albedo",
+        "Metallic",
+        "Specular",
+        "Emissive",
+        "Depth",
+        "Direct Lighting",
+        "Indirect Lighting",
+        "Sky Visibility",
+    };
+    static_assert(
+        std::size(c_present_view_names) ==
+        static_cast<std::size_t>(DeferredPresentView::Count)
+    );
+
+    auto selected_view = static_cast<int>(present_settings.view);
+    if (ImGui::Combo(
+            "View",
+            &selected_view,
+            c_present_view_names,
+            IM_ARRAYSIZE(c_present_view_names)
+        )) {
+        present_settings.view = static_cast<DeferredPresentView>(selected_view);
+    }
+
+    const bool scalar_view =
+        present_settings.view == DeferredPresentView::MaterialAo ||
+        present_settings.view == DeferredPresentView::Roughness ||
+        present_settings.view == DeferredPresentView::Metallic ||
+        present_settings.view == DeferredPresentView::SkyVisibility;
+    const bool hdr_view =
+        present_settings.view == DeferredPresentView::Final ||
+        present_settings.view == DeferredPresentView::Emissive ||
+        present_settings.view == DeferredPresentView::DirectLighting ||
+        present_settings.view == DeferredPresentView::IndirectLighting;
+    if (hdr_view) {
+        ImGui::DragFloat(
+            "Exposure",
+            &present_settings.exposure,
+            0.01f,
+            0.0f,
+            10.0f
+        );
+    }
+    if (scalar_view) {
+        ImGui::DragFloat(
+            "Scalar Scale",
+            &present_settings.scalar_scale,
+            0.01f,
+            -10.0f,
+            10.0f
+        );
+        ImGui::DragFloat(
+            "Scalar Bias",
+            &present_settings.scalar_bias,
+            0.01f,
+            -1.0f,
+            1.0f
+        );
+    }
+}
+
 void draw_diagnostics(const GraphicsDevice& device, World& world) {
     if (ImGui::CollapsingHeader(
             "Diagnostics",
@@ -464,6 +534,7 @@ void update_imgui(
     PointLightQuery query_point_lights,
     EnvironmentLightQuery query_environment_lights,
     ResRW<VxgiVolumes> vxgi_volumes,
+    ResRW<DeferredPresentSettings> present_settings,
     ResRO<GraphicsDevice> graphics_device,
     WorldRef world
 ) {
@@ -485,6 +556,10 @@ void update_imgui(
                     query_environment_lights,
                     *vxgi_volumes
                 );
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Debug")) {
+                draw_debug_view_controls(*present_settings);
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();

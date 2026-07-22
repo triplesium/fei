@@ -138,6 +138,7 @@ void present_composite_pass(
     ResRW<RenderResourceSetCache> resource_sets,
     ResRO<GraphicsDevice> device,
     ResRO<DeferredViewTargets> targets,
+    ResRO<DeferredPresentSettings> present_settings,
     Optional<ResRO<DeferredRenderPipelines>> pipelines,
     Optional<ResRO<PipelineCache>> pipeline_cache,
     Optional<ResRO<FullscreenQuad>> fullscreen_quad,

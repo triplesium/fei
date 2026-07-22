@@ -17,6 +17,102 @@ struct FullscreenQuadPassData {
     uint32 vertex_count {};
 };
 
+enum class PresentVisualization : uint32 {
+    HdrColor,
+    LinearColor,
+    ScalarAlpha,
+    Normal,
+    Position,
+    Depth,
+};
+
+enum PresentFlags : uint32 {
+    PresentFlagNone = 0,
+    PresentFlagGeometryMask = 1 << 0,
+};
+
+struct ResolvedPresentView {
+    std::shared_ptr<Texture> source;
+    PresentVisualization visualization {PresentVisualization::HdrColor};
+    uint32 flags {PresentFlagNone};
+};
+
+ResolvedPresentView resolve_present_view(
+    const DeferredViewTargets& targets,
+    DeferredPresentView view
+) {
+    switch (view) {
+        case DeferredPresentView::Position:
+            return {
+                targets.position_ao,
+                PresentVisualization::Position,
+                PresentFlagGeometryMask,
+            };
+        case DeferredPresentView::MaterialAo:
+            return {
+                targets.position_ao,
+                PresentVisualization::ScalarAlpha,
+                PresentFlagGeometryMask,
+            };
+        case DeferredPresentView::Normal:
+            return {
+                targets.normal_roughness,
+                PresentVisualization::Normal,
+                PresentFlagGeometryMask,
+            };
+        case DeferredPresentView::Roughness:
+            return {
+                targets.normal_roughness,
+                PresentVisualization::ScalarAlpha,
+                PresentFlagGeometryMask,
+            };
+        case DeferredPresentView::Albedo:
+            return {
+                targets.albedo_metallic,
+                PresentVisualization::LinearColor,
+                PresentFlagGeometryMask,
+            };
+        case DeferredPresentView::Metallic:
+            return {
+                targets.albedo_metallic,
+                PresentVisualization::ScalarAlpha,
+                PresentFlagGeometryMask,
+            };
+        case DeferredPresentView::Specular:
+            return {
+                targets.specular,
+                PresentVisualization::LinearColor,
+                PresentFlagGeometryMask,
+            };
+        case DeferredPresentView::Emissive:
+            return {
+                targets.emissive_depth,
+                PresentVisualization::HdrColor,
+                PresentFlagGeometryMask,
+            };
+        case DeferredPresentView::Depth:
+            return {
+                targets.emissive_depth,
+                PresentVisualization::Depth,
+                PresentFlagGeometryMask,
+            };
+        case DeferredPresentView::DirectLighting:
+            return {targets.direct, PresentVisualization::HdrColor};
+        case DeferredPresentView::IndirectLighting:
+            return {targets.indirect, PresentVisualization::HdrColor};
+        case DeferredPresentView::SkyVisibility:
+            return {
+                targets.indirect,
+                PresentVisualization::ScalarAlpha,
+                PresentFlagGeometryMask,
+            };
+        case DeferredPresentView::Final:
+        case DeferredPresentView::Count:
+            return {targets.composite, PresentVisualization::HdrColor};
+    }
+    return {targets.composite, PresentVisualization::HdrColor};
+}
+
 FullscreenQuadPassData make_fullscreen_quad_pass_data(
     std::shared_ptr<const ResourceSet> view_set,
     const GpuMesh& mesh
@@ -319,6 +415,7 @@ void present_composite_pass(
     ResRW<RenderResourceSetCache> resource_sets,
     ResRO<GraphicsDevice> device,
     ResRO<DeferredViewTargets> targets,
+    ResRO<DeferredPresentSettings> present_settings,
     Optional<ResRO<DeferredRenderPipelines>> pipelines,
     Optional<ResRO<PipelineCache>> pipeline_cache,
     Optional<ResRO<FullscreenQuad>> fullscreen_quad,
@@ -338,6 +435,8 @@ void present_composite_pass(
     if (!gpu_mesh) {
         return;
     }
+    const auto present_view =
+        resolve_present_view(*targets, present_settings->view);
     auto pipeline = (*pipelines)->present_composite_pipeline_requested ?
                         (*pipeline_cache)
                             ->get_render_pipeline(
@@ -348,7 +447,12 @@ void present_composite_pass(
         *device,
         "deferred.present",
         (*pipelines)->present_resource_layout,
-        {targets->composite, (*pipelines)->point_sampler}
+        {
+            present_view.source,
+            targets->normal_roughness,
+            (*pipelines)->point_sampler,
+            (*pipelines)->present_uniform_buffer,
+        }
     );
     auto fullscreen_quad_data =
         make_fullscreen_quad_pass_data(nullptr, gpu_mesh.value());
@@ -358,6 +462,22 @@ void present_composite_pass(
     }
     const auto target_width = (*main_swapchain)->swapchain->width();
     const auto target_height = (*main_swapchain)->swapchain->height();
+
+    const DeferredPresentUniform present_uniform {
+        .visualization = static_cast<uint32>(present_view.visualization),
+        .exposure = present_settings->exposure,
+        .scalar_scale = present_settings->scalar_scale,
+        .scalar_bias = present_settings->scalar_bias,
+        .flags = present_view.flags,
+    };
+    if ((*pipelines)->present_uniform_buffer) {
+        command_buffer->update_buffer(
+            (*pipelines)->present_uniform_buffer,
+            0,
+            &present_uniform,
+            sizeof(present_uniform)
+        );
+    }
 
     command_buffer->begin_render_pass(
         RenderPassDescription {

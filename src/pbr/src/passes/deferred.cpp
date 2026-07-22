@@ -16,6 +16,7 @@ void DeferredRenderPlugin::setup(App& app) {
         .add_resource(DeferredRenderPipelines {})
         .add_resource(RenderTarget {})
         .add_resource(DeferredViewTargets {})
+        .add_resource(DeferredPresentSettings {})
         .add_resource<DeferredPrepassPhase>()
         .add_resource<TransparentPhase>()
         .add_systems(

@@ -241,12 +241,20 @@ setup_present_resources(PassTestWorld& test) {
     auto present_layout =
         test.device->create_resource_layout(ResourceLayoutDescription {});
     auto point_sampler = test.device->create_sampler(SamplerDescription {});
+    auto present_uniform_buffer = test.device->create_buffer(
+        BufferDescription {
+            .size = sizeof(DeferredPresentUniform),
+            .usages = BufferUsages::Uniform,
+        }
+    );
     test.world.add_resource(
         DeferredRenderPipelines {
             .present_resource_layout = std::move(present_layout),
             .point_sampler = std::move(point_sampler),
+            .present_uniform_buffer = std::move(present_uniform_buffer),
         }
     );
+    test.world.add_resource(DeferredPresentSettings {});
     test.world.add_resource(PipelineCache(*test.device));
     auto& pipelines = test.world.resource<DeferredRenderPipelines>();
     pipelines.present_composite_pipeline =
@@ -636,4 +644,38 @@ TEST_CASE(
     CHECK(test.commands->render_pipelines.empty());
     CHECK(test.commands->draw_calls == 0);
     CHECK(test.commands->end_render_pass_calls == 1);
+}
+
+TEST_CASE(
+    "Present pass resolves sky visibility from indirect alpha",
+    "[pbr][pass][contract][present]"
+) {
+    PassTestWorld test;
+    auto swapchain = setup_present_resources(test);
+    auto swapchain_texture = make_texture(
+        *test.device,
+        1280,
+        720,
+        PixelFormat::Bgra8Unorm,
+        TextureUsage::RenderTarget
+    );
+    swapchain->current_framebuffer = test.device->create_framebuffer(
+        FramebufferDescription {
+            .color_targets = {
+                FramebufferAttachment {.texture = swapchain_texture},
+            },
+        }
+    );
+    test.world.resource<DeferredPresentSettings>().view =
+        DeferredPresentView::SkyVisibility;
+
+    test.world.run_system_once(present_composite_pass);
+
+    REQUIRE_FALSE(test.device->resource_set_descriptions.empty());
+    const auto& present_set = test.device->resource_set_descriptions.back();
+    REQUIRE(present_set.resources.size() == 4);
+    const auto& targets = test.world.resource<DeferredViewTargets>();
+    CHECK(present_set.resources[0].get() == targets.indirect.get());
+    CHECK(present_set.resources[1].get() == targets.normal_roughness.get());
+    CHECK(test.commands->draw_calls == 1);
 }

@@ -159,10 +159,18 @@ void setup_deferred_pipelines(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Fragment},
             {
-                texture_read_only("composite"),
-                sampler("composite_sampler"),
+                texture_read_only("source"),
+                texture_read_only("geometry_mask"),
+                sampler("source_sampler"),
+                uniform_buffer("settings"),
             }
         )
+    );
+    pipelines->present_uniform_buffer = device->create_buffer(
+        BufferDescription {
+            .size = sizeof(DeferredPresentUniform),
+            .usages = BufferUsages::Uniform,
+        }
     );
     pipelines->composite_lighting_pipeline =
         pipeline_cache->request_render_pipeline(
