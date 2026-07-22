@@ -12,6 +12,7 @@
 #include <limits>
 #include <memory>
 #include <numeric>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -20,10 +21,354 @@
 namespace fei::gltf_detail {
 namespace {
 
+constexpr std::size_t max_decoded_accessor_bytes =
+    std::size_t {256} * 1024U * 1024U;
+
 std::string
 primitive_label(std::size_t mesh_index, std::size_t primitive_index) {
     return "glTF mesh " + std::to_string(mesh_index) + " primitive " +
            std::to_string(primitive_index);
+}
+
+bool checked_multiply(
+    std::size_t left,
+    std::size_t right,
+    std::size_t& result
+) {
+    if (left != 0 && right > std::numeric_limits<std::size_t>::max() / left) {
+        return false;
+    }
+    result = left * right;
+    return true;
+}
+
+bool checked_add(std::size_t left, std::size_t right, std::size_t& result) {
+    if (right > std::numeric_limits<std::size_t>::max() - left) {
+        return false;
+    }
+    result = left + right;
+    return true;
+}
+
+Result<std::span<const std::byte>, std::string> buffer_bytes(
+    const fastgltf::Asset& asset,
+    std::size_t buffer_index,
+    const std::string& label
+) {
+    if (buffer_index >= asset.buffers.size()) {
+        return failure(
+            label + " references invalid buffer " + std::to_string(buffer_index)
+        );
+    }
+
+    const auto& source = asset.buffers[buffer_index].data;
+    std::span<const std::byte> bytes;
+    if (const auto* array = std::get_if<fastgltf::sources::Array>(&source)) {
+        bytes = std::span(array->bytes.data(), array->bytes.size());
+    } else if (
+        const auto* vector = std::get_if<fastgltf::sources::Vector>(&source)
+    ) {
+        bytes = std::span(vector->bytes.data(), vector->bytes.size());
+    } else if (
+        const auto* view = std::get_if<fastgltf::sources::ByteView>(&source)
+    ) {
+        bytes = view->bytes;
+    } else {
+        return failure(
+            label + " references unloaded buffer " +
+            std::to_string(buffer_index)
+        );
+    }
+
+    if (asset.buffers[buffer_index].byteLength > bytes.size()) {
+        return failure(
+            label + " buffer " + std::to_string(buffer_index) +
+            " is shorter than its declared byteLength"
+        );
+    }
+    return bytes.first(asset.buffers[buffer_index].byteLength);
+}
+
+Result<std::span<const std::byte>, std::string> buffer_view_bytes(
+    const fastgltf::Asset& asset,
+    std::size_t buffer_view_index,
+    const std::string& label
+) {
+    if (buffer_view_index >= asset.bufferViews.size()) {
+        return failure(
+            label + " references invalid bufferView " +
+            std::to_string(buffer_view_index)
+        );
+    }
+    const auto& view = asset.bufferViews[buffer_view_index];
+    auto bytes = buffer_bytes(asset, view.bufferIndex, label);
+    if (!bytes) {
+        return failure(std::move(bytes.error()));
+    }
+    if (view.byteOffset > bytes->size() ||
+        view.byteLength > bytes->size() - view.byteOffset) {
+        return failure(
+            label + " bufferView " + std::to_string(buffer_view_index) +
+            " exceeds buffer " + std::to_string(view.bufferIndex) + " bounds"
+        );
+    }
+    return bytes->subspan(view.byteOffset, view.byteLength);
+}
+
+Status<std::string> validate_range(
+    std::size_t offset,
+    std::size_t count,
+    std::size_t stride,
+    std::size_t element_size,
+    std::size_t available,
+    const std::string& label
+) {
+    if (offset > available) {
+        return failure(label + " byteOffset exceeds its bufferView");
+    }
+    if (count == 0) {
+        return {};
+    }
+
+    std::size_t last_offset = 0;
+    std::size_t required = 0;
+    if (!checked_multiply(count - 1, stride, last_offset) ||
+        !checked_add(last_offset, element_size, required)) {
+        return failure(label + " byte range overflows size_t");
+    }
+    if (required > available - offset) {
+        return failure(label + " data exceeds its bufferView");
+    }
+    return {};
+}
+
+Status<std::string> validate_decoded_size(
+    const fastgltf::Accessor& accessor,
+    std::size_t decoded_element_size,
+    const std::string& label
+) {
+    std::size_t decoded_size = 0;
+    if (!checked_multiply(accessor.count, decoded_element_size, decoded_size) ||
+        decoded_size > max_decoded_accessor_bytes) {
+        return failure(label + " decoded data exceeds the 256 MiB limit");
+    }
+    return {};
+}
+
+std::uint32_t read_sparse_index(
+    std::span<const std::byte> bytes,
+    std::size_t offset,
+    fastgltf::ComponentType component_type
+) {
+    auto value = std::to_integer<std::uint32_t>(bytes[offset]);
+    if (component_type == fastgltf::ComponentType::UnsignedByte) {
+        return value;
+    }
+    value |= std::to_integer<std::uint32_t>(bytes[offset + 1]) << 8U;
+    if (component_type == fastgltf::ComponentType::UnsignedShort) {
+        return value;
+    }
+    value |= std::to_integer<std::uint32_t>(bytes[offset + 2]) << 16U;
+    value |= std::to_integer<std::uint32_t>(bytes[offset + 3]) << 24U;
+    return value;
+}
+
+Status<std::string> validate_accessor_storage(
+    const fastgltf::Asset& asset,
+    const fastgltf::Accessor& accessor,
+    std::size_t accessor_index,
+    std::size_t decoded_element_size,
+    bool vertex_attribute,
+    const std::string& label
+) {
+    const auto accessor_label =
+        label + " accessor " + std::to_string(accessor_index);
+    const auto component_size =
+        fastgltf::getComponentByteSize(accessor.componentType);
+    const auto element_size =
+        fastgltf::getElementByteSize(accessor.type, accessor.componentType);
+    if (component_size == 0 || element_size == 0) {
+        return failure(accessor_label + " has an invalid format");
+    }
+    auto decoded =
+        validate_decoded_size(accessor, decoded_element_size, accessor_label);
+    if (!decoded) {
+        return decoded;
+    }
+
+    if (accessor.bufferViewIndex) {
+        const auto view_index = *accessor.bufferViewIndex;
+        auto bytes = buffer_view_bytes(asset, view_index, accessor_label);
+        if (!bytes) {
+            return failure(std::move(bytes.error()));
+        }
+        const auto& view = asset.bufferViews[view_index];
+        const auto stride = view.byteStride.value_or(element_size);
+        if (stride < element_size || stride % component_size != 0) {
+            return failure(
+                accessor_label + " bufferView " + std::to_string(view_index) +
+                " has an invalid byteStride"
+            );
+        }
+        if (vertex_attribute && view.byteStride &&
+            (*view.byteStride < 4 || *view.byteStride > 252 ||
+             *view.byteStride % 4 != 0)) {
+            return failure(
+                accessor_label + " bufferView " + std::to_string(view_index) +
+                " has an invalid vertex byteStride"
+            );
+        }
+        if (!vertex_attribute && view.byteStride) {
+            return failure(
+                accessor_label + " bufferView " + std::to_string(view_index) +
+                " must not define byteStride for indices"
+            );
+        }
+        if (accessor.byteOffset % component_size != 0 ||
+            view.byteOffset % component_size != 0) {
+            return failure(accessor_label + " is not component-aligned");
+        }
+        auto range = validate_range(
+            accessor.byteOffset,
+            accessor.count,
+            stride,
+            element_size,
+            bytes->size(),
+            accessor_label
+        );
+        if (!range) {
+            return range;
+        }
+    } else if (accessor.byteOffset != 0) {
+        return failure(accessor_label + " has byteOffset without a bufferView");
+    }
+
+    if (!accessor.sparse) {
+        return {};
+    }
+    const auto& sparse = *accessor.sparse;
+    if (sparse.count > accessor.count) {
+        return failure(accessor_label + " sparse count exceeds accessor count");
+    }
+    if (sparse.indexComponentType != fastgltf::ComponentType::UnsignedByte &&
+        sparse.indexComponentType != fastgltf::ComponentType::UnsignedShort &&
+        sparse.indexComponentType != fastgltf::ComponentType::UnsignedInt) {
+        return failure(
+            accessor_label + " sparse indices have an invalid component type"
+        );
+    }
+
+    auto index_bytes = buffer_view_bytes(
+        asset,
+        sparse.indicesBufferView,
+        accessor_label + " sparse indices"
+    );
+    if (!index_bytes) {
+        return failure(std::move(index_bytes.error()));
+    }
+    auto value_bytes = buffer_view_bytes(
+        asset,
+        sparse.valuesBufferView,
+        accessor_label + " sparse values"
+    );
+    if (!value_bytes) {
+        return failure(std::move(value_bytes.error()));
+    }
+    const auto& sparse_index_view = asset.bufferViews[sparse.indicesBufferView];
+    const auto& sparse_value_view = asset.bufferViews[sparse.valuesBufferView];
+    if (sparse_index_view.byteStride || sparse_index_view.target ||
+        sparse_value_view.byteStride || sparse_value_view.target) {
+        return failure(
+            accessor_label +
+            " sparse bufferViews must not define byteStride or target"
+        );
+    }
+
+    const auto index_size =
+        fastgltf::getComponentByteSize(sparse.indexComponentType);
+    if (sparse_index_view.byteOffset % index_size != 0 ||
+        sparse.indicesByteOffset % index_size != 0 ||
+        sparse_value_view.byteOffset % component_size != 0 ||
+        sparse.valuesByteOffset % component_size != 0) {
+        return failure(
+            accessor_label + " sparse data is not component-aligned"
+        );
+    }
+    auto index_range = validate_range(
+        sparse.indicesByteOffset,
+        sparse.count,
+        index_size,
+        index_size,
+        index_bytes->size(),
+        accessor_label + " sparse indices"
+    );
+    if (!index_range) {
+        return index_range;
+    }
+    auto value_range = validate_range(
+        sparse.valuesByteOffset,
+        sparse.count,
+        element_size,
+        element_size,
+        value_bytes->size(),
+        accessor_label + " sparse values"
+    );
+    if (!value_range) {
+        return value_range;
+    }
+
+    bool first = true;
+    std::uint32_t previous = 0;
+    for (std::size_t sparse_index = 0; sparse_index < sparse.count;
+         ++sparse_index) {
+        const auto index = read_sparse_index(
+            *index_bytes,
+            sparse.indicesByteOffset + sparse_index * index_size,
+            sparse.indexComponentType
+        );
+        if (index >= accessor.count) {
+            return failure(
+                accessor_label + " contains an out-of-range sparse index"
+            );
+        }
+        if (!first && index <= previous) {
+            return failure(
+                accessor_label + " sparse indices are not strictly increasing"
+            );
+        }
+        first = false;
+        previous = index;
+    }
+    return {};
+}
+
+enum class AttributeFormat {
+    Float,
+    TexCoord,
+};
+
+Status<std::string> validate_attribute_format(
+    const fastgltf::Accessor& accessor,
+    AttributeFormat format,
+    const std::string& label
+) {
+    const bool float_format =
+        accessor.componentType == fastgltf::ComponentType::Float &&
+        !accessor.normalized;
+    if (format == AttributeFormat::Float && !float_format) {
+        return failure(label + " must use non-normalized float components");
+    }
+    const bool normalized_integer =
+        (accessor.componentType == fastgltf::ComponentType::UnsignedByte ||
+         accessor.componentType == fastgltf::ComponentType::UnsignedShort) &&
+        accessor.normalized;
+    if (format == AttributeFormat::TexCoord && !float_format &&
+        !normalized_integer) {
+        return failure(
+            label + " must use float or normalized unsigned integer components"
+        );
+    }
+    return {};
 }
 
 template<std::size_t Size, typename Element>
@@ -31,14 +376,40 @@ Result<std::vector<std::array<float, Size>>, std::string> read_float_attribute(
     const fastgltf::Asset& asset,
     std::size_t accessor_index,
     fastgltf::AccessorType expected_type,
+    AttributeFormat expected_format,
     const std::string& label
 ) {
     if (accessor_index >= asset.accessors.size()) {
-        return failure(label + " references an invalid accessor");
+        return failure(
+            label + " references invalid accessor " +
+            std::to_string(accessor_index)
+        );
     }
     const auto& accessor = asset.accessors[accessor_index];
     if (accessor.type != expected_type) {
-        return failure(label + " has an incompatible accessor type");
+        return failure(
+            label + " accessor " + std::to_string(accessor_index) +
+            " has an incompatible accessor type"
+        );
+    }
+    auto format = validate_attribute_format(
+        accessor,
+        expected_format,
+        label + " accessor " + std::to_string(accessor_index)
+    );
+    if (!format) {
+        return failure(std::move(format.error()));
+    }
+    auto storage = validate_accessor_storage(
+        asset,
+        accessor,
+        accessor_index,
+        sizeof(std::array<float, Size>),
+        true,
+        label
+    );
+    if (!storage) {
+        return failure(std::move(storage.error()));
     }
 
     std::vector<std::array<float, Size>> values;
@@ -71,18 +442,42 @@ Result<std::vector<std::uint32_t>, std::string> read_indices(
 
     const auto accessor_index = *primitive.indicesAccessor;
     if (accessor_index >= asset.accessors.size()) {
-        return failure(label + " references an invalid index accessor");
+        return failure(
+            label + " references invalid index accessor " +
+            std::to_string(accessor_index)
+        );
     }
     const auto& accessor = asset.accessors[accessor_index];
     if (accessor.type != fastgltf::AccessorType::Scalar) {
-        return failure(label + " index accessor is not scalar");
+        return failure(
+            label + " index accessor " + std::to_string(accessor_index) +
+            " is not scalar"
+        );
     }
     if (accessor.componentType != fastgltf::ComponentType::UnsignedByte &&
         accessor.componentType != fastgltf::ComponentType::UnsignedShort &&
         accessor.componentType != fastgltf::ComponentType::UnsignedInt) {
         return failure(
-            label + " index accessor has an unsupported component type"
+            label + " index accessor " + std::to_string(accessor_index) +
+            " has an unsupported component type"
         );
+    }
+    if (accessor.normalized) {
+        return failure(
+            label + " index accessor " + std::to_string(accessor_index) +
+            " must not be normalized"
+        );
+    }
+    auto storage = validate_accessor_storage(
+        asset,
+        accessor,
+        accessor_index,
+        sizeof(std::uint32_t),
+        false,
+        label + " index"
+    );
+    if (!storage) {
+        return failure(std::move(storage.error()));
     }
 
     indices.reserve(accessor.count);
@@ -107,12 +502,18 @@ Result<std::vector<std::array<float, 4>>, std::string> read_color_attribute(
     const std::string& label
 ) {
     if (accessor_index >= asset.accessors.size()) {
-        return failure(label + " references an invalid accessor");
+        return failure(
+            label + " references invalid accessor " +
+            std::to_string(accessor_index)
+        );
     }
     const auto& accessor = asset.accessors[accessor_index];
     if (accessor.type != fastgltf::AccessorType::Vec3 &&
         accessor.type != fastgltf::AccessorType::Vec4) {
-        return failure(label + " has an incompatible accessor type");
+        return failure(
+            label + " accessor " + std::to_string(accessor_index) +
+            " has an incompatible accessor type"
+        );
     }
     const bool is_float =
         accessor.componentType == fastgltf::ComponentType::Float &&
@@ -122,7 +523,21 @@ Result<std::vector<std::array<float, 4>>, std::string> read_color_attribute(
          accessor.componentType == fastgltf::ComponentType::UnsignedShort) &&
         accessor.normalized;
     if (!is_float && !is_normalized_integer) {
-        return failure(label + " has an unsupported component type");
+        return failure(
+            label + " accessor " + std::to_string(accessor_index) +
+            " has an unsupported component type"
+        );
+    }
+    auto storage = validate_accessor_storage(
+        asset,
+        accessor,
+        accessor_index,
+        sizeof(std::array<float, 4>),
+        true,
+        label
+    );
+    if (!storage) {
+        return failure(std::move(storage.error()));
     }
 
     std::vector<std::array<float, 4>> values;
@@ -201,6 +616,7 @@ Result<ConvertedPrimitive, std::string> convert_primitive(
         asset,
         position->accessorIndex,
         fastgltf::AccessorType::Vec3,
+        AttributeFormat::Float,
         label + " POSITION"
     );
     if (!positions) {
@@ -217,6 +633,7 @@ Result<ConvertedPrimitive, std::string> convert_primitive(
             asset,
             normal->accessorIndex,
             fastgltf::AccessorType::Vec3,
+            AttributeFormat::Float,
             label + " NORMAL"
         );
         if (!normals) {
@@ -234,6 +651,7 @@ Result<ConvertedPrimitive, std::string> convert_primitive(
             asset,
             tangent->accessorIndex,
             fastgltf::AccessorType::Vec4,
+            AttributeFormat::Float,
             label + " TANGENT"
         );
         if (!tangents) {
@@ -251,6 +669,7 @@ Result<ConvertedPrimitive, std::string> convert_primitive(
             asset,
             texcoord->accessorIndex,
             fastgltf::AccessorType::Vec2,
+            AttributeFormat::TexCoord,
             label + " TEXCOORD_0"
         );
         if (!texcoords) {
@@ -268,6 +687,7 @@ Result<ConvertedPrimitive, std::string> convert_primitive(
             asset,
             texcoord_1->accessorIndex,
             fastgltf::AccessorType::Vec2,
+            AttributeFormat::TexCoord,
             label + " TEXCOORD_1"
         );
         if (!texcoords) {

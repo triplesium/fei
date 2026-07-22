@@ -126,6 +126,15 @@ make_glb(std::string_view json, std::span<const std::byte> binary = {}) {
     return bytes;
 }
 
+AssetLoadResult<Gltf>
+load_glb(std::string_view json, std::span<const std::byte> binary = {}) {
+    auto bytes = make_glb(json, binary);
+    Reader reader(bytes.data(), bytes.size());
+    LoadContext context("model.glb");
+    GltfLoader loader;
+    return loader.load(reader, context);
+}
+
 std::string encode_base64(std::span<const std::byte> bytes) {
     static constexpr std::string_view alphabet =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -968,6 +977,224 @@ TEST_CASE("GltfLoader rejects primitives without positions", "[gltf][loader]") {
     CHECK(
         result.error().message == "glTF mesh 0 primitive 0 is missing POSITION"
     );
+}
+
+TEST_CASE(
+    "GltfLoader validates accessor storage before decoding",
+    "[gltf][loader][accessor]"
+) {
+    SECTION("bufferView stays inside its declared buffer") {
+        constexpr std::array<std::byte, 16> binary {};
+        auto result = load_glb(
+            R"({
+                "asset":{"version":"2.0"},
+                "buffers":[{"byteLength":16}],
+                "bufferViews":[{"buffer":0,"byteOffset":8,"byteLength":12}],
+                "accessors":[{"bufferView":0,"componentType":5126,"count":1,"type":"VEC3"}],
+                "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}]
+            })",
+            binary
+        );
+
+        REQUIRE_FALSE(result);
+        CHECK(result.error().path == AssetPath("model.glb"));
+        CHECK(
+            result.error().message ==
+            "glTF mesh 0 primitive 0 POSITION accessor 0 bufferView 0 "
+            "exceeds buffer 0 bounds"
+        );
+    }
+
+    SECTION("accessor range stays inside its bufferView") {
+        constexpr std::array<std::byte, 32> binary {};
+        auto result = load_glb(
+            R"({
+                "asset":{"version":"2.0"},
+                "buffers":[{"byteLength":32}],
+                "bufferViews":[{"buffer":0,"byteLength":32}],
+                "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"}],
+                "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}]
+            })",
+            binary
+        );
+
+        REQUIRE_FALSE(result);
+        CHECK(
+            result.error().message ==
+            "glTF mesh 0 primitive 0 POSITION accessor 0 data exceeds its "
+            "bufferView"
+        );
+    }
+
+    SECTION("vertex stride cannot be smaller than an element") {
+        constexpr std::array<std::byte, 36> binary {};
+        auto result = load_glb(
+            R"({
+                "asset":{"version":"2.0"},
+                "buffers":[{"byteLength":36}],
+                "bufferViews":[{"buffer":0,"byteLength":36,"byteStride":8}],
+                "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"}],
+                "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}]
+            })",
+            binary
+        );
+
+        REQUIRE_FALSE(result);
+        CHECK(
+            result.error().message ==
+            "glTF mesh 0 primitive 0 POSITION accessor 0 bufferView 0 has an "
+            "invalid byteStride"
+        );
+    }
+
+    SECTION("decoded allocation is bounded") {
+        auto result = load_glb(R"({
+            "asset":{"version":"2.0"},
+            "accessors":[{"componentType":5126,"count":30000000,"type":"VEC3"}],
+            "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}]
+        })");
+
+        REQUIRE_FALSE(result);
+        CHECK(
+            result.error().message ==
+            "glTF mesh 0 primitive 0 POSITION accessor 0 decoded data exceeds "
+            "the 256 MiB limit"
+        );
+    }
+}
+
+TEST_CASE(
+    "GltfLoader validates accessor formats and indices",
+    "[gltf][loader][accessor]"
+) {
+    SECTION("POSITION requires float components") {
+        constexpr std::array<std::byte, 18> binary {};
+        auto result = load_glb(
+            R"({
+                "asset":{"version":"2.0"},
+                "buffers":[{"byteLength":18}],
+                "bufferViews":[{"buffer":0,"byteLength":18}],
+                "accessors":[{"bufferView":0,"componentType":5123,"normalized":true,"count":3,"type":"VEC3"}],
+                "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}]
+            })",
+            binary
+        );
+
+        REQUIRE_FALSE(result);
+        CHECK(
+            result.error().message ==
+            "glTF mesh 0 primitive 0 POSITION accessor 0 must use "
+            "non-normalized float components"
+        );
+    }
+
+    SECTION("indices stay inside the vertex range") {
+        std::vector<std::byte> binary(36);
+        binary.push_back(std::byte {0});
+        binary.push_back(std::byte {1});
+        binary.push_back(std::byte {3});
+        binary.push_back(std::byte {0});
+        auto result = load_glb(
+            R"({
+                "asset":{"version":"2.0"},
+                "buffers":[{"byteLength":40}],
+                "bufferViews":[
+                    {"buffer":0,"byteLength":36},
+                    {"buffer":0,"byteOffset":36,"byteLength":3}
+                ],
+                "accessors":[
+                    {"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},
+                    {"bufferView":1,"componentType":5121,"count":3,"type":"SCALAR"}
+                ],
+                "meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1}]}]
+            })",
+            binary
+        );
+
+        REQUIRE_FALSE(result);
+        CHECK(
+            result.error().message ==
+            "glTF mesh 0 primitive 0 contains an out-of-range index"
+        );
+    }
+
+    SECTION("sparse indices stay inside the accessor range") {
+        std::vector<std::byte> binary {
+            std::byte {3},
+            std::byte {0},
+            std::byte {0},
+            std::byte {0},
+        };
+        binary.resize(16);
+        auto result = load_glb(
+            R"({
+                "asset":{"version":"2.0"},
+                "buffers":[{"byteLength":16}],
+                "bufferViews":[
+                    {"buffer":0,"byteLength":1},
+                    {"buffer":0,"byteOffset":4,"byteLength":12}
+                ],
+                "accessors":[{
+                    "componentType":5126,
+                    "count":3,
+                    "type":"VEC3",
+                    "sparse":{
+                        "count":1,
+                        "indices":{"bufferView":0,"componentType":5121},
+                        "values":{"bufferView":1}
+                    }
+                }],
+                "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}]
+            })",
+            binary
+        );
+
+        REQUIRE_FALSE(result);
+        CHECK(
+            result.error().message ==
+            "glTF mesh 0 primitive 0 POSITION accessor 0 contains an "
+            "out-of-range sparse index"
+        );
+    }
+
+    SECTION("sparse indices are strictly increasing") {
+        std::vector<std::byte> binary {
+            std::byte {1},
+            std::byte {1},
+            std::byte {0},
+            std::byte {0},
+        };
+        binary.resize(28);
+        auto result = load_glb(
+            R"({
+                "asset":{"version":"2.0"},
+                "buffers":[{"byteLength":28}],
+                "bufferViews":[
+                    {"buffer":0,"byteLength":2},
+                    {"buffer":0,"byteOffset":4,"byteLength":24}
+                ],
+                "accessors":[{
+                    "componentType":5126,
+                    "count":3,
+                    "type":"VEC3",
+                    "sparse":{
+                        "count":2,
+                        "indices":{"bufferView":0,"componentType":5121},
+                        "values":{"bufferView":1}
+                    }
+                }],
+                "meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}]
+            })",
+            binary
+        );
+
+        REQUIRE_FALSE(result);
+        CHECK(
+            result.error().message ==
+            "glTF mesh 0 primitive 0 POSITION accessor 0 sparse indices are "
+            "not strictly increasing"
+        );
+    }
 }
 
 TEST_CASE(
