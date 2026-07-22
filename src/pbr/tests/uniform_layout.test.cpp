@@ -166,3 +166,11 @@ TEST_CASE("PBR VXGI uniforms keep shader ABI layout", "[pbr][uniform]") {
     CHECK(offsetof(VxgiUniform, mode) == 68);
     CHECK(offsetof(VxgiUniform, skylight_leaking) == 72);
 }
+
+TEST_CASE(
+    "PBR VXGI fully occludes blocked skylight by default",
+    "[pbr][vxgi]"
+) {
+    const VxgiConfig config;
+    CHECK(config.skylight_leaking == 0.0f);
+}

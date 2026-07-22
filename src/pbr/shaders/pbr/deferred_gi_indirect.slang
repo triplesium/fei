@@ -152,6 +152,16 @@ float compute_specular_visibility(
     );
 }
 
+float specular_cone_aperture(float perceptual_roughness) {
+    // For GGX, alpha is the square of perceptual roughness. Using alpha as
+    // tan(theta) gives a cone that contains approximately half of the NDF
+    // energy. Keep a small minimum angle so cone marching makes forward
+    // progress for mirror-like materials.
+    float roughness = saturate(perceptual_roughness);
+    float alpha = roughness * roughness;
+    return clamp(alpha, 0.0874887, 1.0);
+}
+
 float4 calculate_indirect_lighting(
     GBufferSurface surface,
     bool ambient_occlusion
@@ -160,7 +170,6 @@ float4 calculate_indirect_lighting(
     float3 environment_miss_radiance = float3(0.0);
     float3 unoccluded_environment_radiance = float3(0.0);
     float weighted_local_occlusion = 0.0;
-    float weighted_sky_transmittance = 0.0;
     float3 cone_direction = float3(0.0);
     float3 view_direction = view.view_direction(surface.position);
     ShadingPoint point = surface.shading_point(view_direction);
@@ -208,8 +217,6 @@ float4 calculate_indirect_lighting(
             }
             weighted_local_occlusion +=
                 trace.local_occlusion * cone_weight;
-            weighted_sky_transmittance +=
-                sky_transmittance * cone_weight;
         }
 
         float3 diffuse_color =
@@ -228,32 +235,38 @@ float4 calculate_indirect_lighting(
         );
     }
 
-    float sky_visibility = 1.0;
     float local_visibility = 1.0;
+    float specular_sky_visibility = 1.0;
     if (ambient_occlusion && has_lighting_surface) {
-        if (!is_finite_value(weighted_sky_transmittance)) {
-            weighted_sky_transmittance = PI;
-        }
         if (!is_finite_value(weighted_local_occlusion)) {
             weighted_local_occlusion = 0.0;
         }
-        sky_visibility = saturate(weighted_sky_transmittance / PI);
         local_visibility =
             1.0 - saturate(weighted_local_occlusion / PI);
-        sky_visibility = lerp(
+
+        ConeTraceResult specular_trace = trace_cone(
+            surface.position,
+            surface.normal,
+            point.reflection_ws,
+            specular_cone_aperture(material.roughness),
+            false
+        );
+        specular_sky_visibility = lerp(
             saturate(vxgi.skylight_leaking),
             1.0,
-            sky_visibility
+            saturate(1.0 - specular_trace.sky_opacity)
         );
     }
 
+    float material_visibility = saturate(surface.occlusion);
     float specular_visibility = compute_specular_visibility(
         point.normal_dot_view,
-        min(sky_visibility, local_visibility),
+        min(local_visibility, material_visibility),
         material.roughness
-    );
+    ) * specular_sky_visibility;
 
-    float3 vxgi_diffuse = vxgi.bounce_strength * diffuse_radiance;
+    float3 vxgi_diffuse =
+        vxgi.bounce_strength * diffuse_radiance * material_visibility;
     if (!is_finite_indirect_color(vxgi_diffuse)) {
         vxgi_diffuse = float3(0.0);
     }
@@ -273,7 +286,8 @@ float4 calculate_indirect_lighting(
         );
     }
     float3 environment_diffuse =
-        environment_lighting.diffuse * environment_visibility;
+        environment_lighting.diffuse * environment_visibility *
+        material_visibility;
     float3 result =
         environment_diffuse +
         environment_lighting.specular * specular_visibility +

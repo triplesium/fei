@@ -38,7 +38,7 @@ struct SceneSpawnedEvent;
 struct VxgiConfig {
     uint32 voxel_resolution {256};
     float bounce_strength {1.0f};
-    float skylight_leaking {0.1f};
+    float skylight_leaking {0.0f};
 };
 
 struct VxgiVolumes {

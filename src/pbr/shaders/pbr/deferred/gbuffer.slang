@@ -5,6 +5,7 @@ namespace pbr.deferred {
 
 public struct GBufferSurface {
     public float3 position;
+    public float occlusion;
     public float3 normal;
     public float roughness;
     public float3 base_color;
@@ -65,6 +66,12 @@ public struct GBuffer {
         return g_position_ao.Sample(g_buffer_sampler, tex_coords).rgb;
     }
 
+    public float read_occlusion(float2 tex_coords) {
+        return saturate(
+            g_position_ao.Sample(g_buffer_sampler, tex_coords).a
+        );
+    }
+
     public float3 read_normal(float2 tex_coords) {
         return normalize(g_normal_roughness.Sample(g_buffer_sampler, tex_coords).xyz);
     }
@@ -107,6 +114,7 @@ public struct GBuffer {
 
         GBufferSurface surface;
         surface.position = read_position(tex_coords);
+        surface.occlusion = read_occlusion(tex_coords);
         surface.normal = normalize(normal_roughness.xyz);
         surface.roughness = clamp(normal_roughness.a, 0.045, 1.0);
         surface.base_color = albedo_metallic.rgb;
