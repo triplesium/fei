@@ -28,6 +28,8 @@ enum class StandardMaterialFlags : uint32 {
     EmissiveMap = 1u << 4u,
     SpecularMap = 1u << 5u,
     AlphaBlend = 1u << 6u,
+    AlbedoSampleLinear = 1u << 7u,
+    EmissiveSampleLinear = 1u << 8u,
 };
 
 struct alignas(16) StandardMaterialUniform {
@@ -200,9 +202,35 @@ class StandardMaterial : public Material {
             return image &&
                    (!gpu_images || gpu_images->get(image->id()).has_value());
         };
+        auto sample_is_linear = [&](const Optional<Handle<Image>>& image) {
+            if (!gpu_images || !image) {
+                return false;
+            }
+            const auto gpu_image = gpu_images->get(image->id());
+            if (!gpu_image) {
+                return false;
+            }
+            switch (gpu_image->texture()->format()) {
+                case PixelFormat::Rgba8UnormSrgb:
+                case PixelFormat::Bgra8UnormSrgb:
+                case PixelFormat::Bc1RgbaUnormSrgb:
+                case PixelFormat::Bc2RgbaUnormSrgb:
+                case PixelFormat::Bc3RgbaUnormSrgb:
+                case PixelFormat::Bc7RgbaUnormSrgb:
+                case PixelFormat::Etc2Rgb8UnormSrgb:
+                case PixelFormat::Etc2Rgb8A1UnormSrgb:
+                case PixelFormat::Etc2Rgba8UnormSrgb:
+                    return true;
+                default:
+                    return false;
+            }
+        };
 
         if (image_ready(albedo_texture)) {
             flags |= StandardMaterialFlags::AlbedoMap;
+            if (sample_is_linear(albedo_texture)) {
+                flags |= StandardMaterialFlags::AlbedoSampleLinear;
+            }
         }
         if (image_ready(normal_texture)) {
             flags |= StandardMaterialFlags::NormalMap;
@@ -215,6 +243,9 @@ class StandardMaterial : public Material {
         }
         if (image_ready(emissive_texture)) {
             flags |= StandardMaterialFlags::EmissiveMap;
+            if (sample_is_linear(emissive_texture)) {
+                flags |= StandardMaterialFlags::EmissiveSampleLinear;
+            }
         }
         if (image_ready(specular_texture)) {
             flags |= StandardMaterialFlags::SpecularMap;

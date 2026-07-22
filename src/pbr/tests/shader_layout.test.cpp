@@ -445,8 +445,10 @@ TEST_CASE(
         {
             "pbr/forward.slang",
             "pbr/forward/io.slang",
+            "pbr/lib/direct_lighting.slang",
             "pbr/lib/environment_map.slang",
             "pbr/shading/types.slang",
+            "rendering/color.slang",
             "rendering/normal.slang",
             "rendering/view.slang",
             "pbr/material/types.slang",
@@ -461,6 +463,7 @@ TEST_CASE(
             "pbr/deferred_gi_direct.slang",
             "pbr/deferred/gbuffer.slang",
             "pbr/lib/brdf.slang",
+            "pbr/lib/direct_lighting.slang",
             "rendering/color.slang",
             "rendering/constants.slang",
             "rendering/fullscreen.slang",
@@ -529,6 +532,9 @@ TEST_CASE(
             {"cubemap_sampler", ResourceKind::Sampler, 3, 3},
             {"brdf_lut", ResourceKind::TextureReadOnly, 3, 4},
             {"brdf_sampler", ResourceKind::Sampler, 3, 5},
+            {"lighting", ResourceKind::UniformBuffer, 4, 0},
+            {"shadow_map", ResourceKind::TextureReadOnly, 4, 1},
+            {"shadow_map_sampler", ResourceKind::Sampler, 4, 2},
         }
     );
 }

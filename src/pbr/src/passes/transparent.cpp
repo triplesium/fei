@@ -3,18 +3,31 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
+#include <utility>
 
 namespace fei {
 
 namespace {
 
 class TransparentPipelineSpecializer : public PipelineSpecializer {
+    std::shared_ptr<ResourceLayout> m_lighting_layout;
+
   public:
+    explicit TransparentPipelineSpecializer(
+        std::shared_ptr<ResourceLayout> lighting_layout
+    ) : m_lighting_layout(std::move(lighting_layout)) {}
+
+    std::size_t cache_key() const override {
+        return std::hash<const ResourceLayout*> {}(m_lighting_layout.get());
+    }
+
     void specialize(
         RenderPipelineDescription& desc,
         const GpuMesh&,
         const PreparedMaterial&
     ) const override {
+        desc.resource_layouts.push_back(m_lighting_layout);
         desc.output_description = OutputDescription {
             .color_attachments =
                 {
@@ -35,6 +48,7 @@ void draw_transparent_item(
     CommandBuffer& commands,
     const PipelineCache& pipeline_cache,
     const std::shared_ptr<const ResourceSet>& environment_set,
+    const std::shared_ptr<const ResourceSet>& lighting_set,
     const MeshDrawItem& item
 ) {
     auto pipeline = pipeline_cache.get_render_pipeline(item.pipeline);
@@ -48,6 +62,7 @@ void draw_transparent_item(
     commands.set_resource_set(1, item.mesh_set, dynamic_offsets);
     commands.set_resource_set(2, item.material_set);
     commands.set_resource_set(3, environment_set);
+    commands.set_resource_set(4, lighting_set);
     commands.set_vertex_buffer(item.vertex_buffer);
 
     if (item.index_buffer) {
@@ -74,10 +89,16 @@ void queue_transparent_meshes(
     ResRW<MeshMaterialPipelines> mesh_material_pipelines,
     ResRO<RenderAssets<PreparedMaterial>> materials,
     ResRO<ViewVisibleEntities> visible_entities,
+    Query<const ShadowMap> query_shadow_maps,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device,
+    ResRO<LightingResources> lighting_resources,
+    ResRO<RenderingDefaults> rendering_defaults,
     ResRW<PipelineCache>
 ) {
     phase->clear();
     phase->environment_set.reset();
+    phase->lighting_set.reset();
     if (query_cameras.empty()) {
         return;
     }
@@ -90,8 +111,30 @@ void queue_transparent_meshes(
         return;
     }
     phase->environment_set = camera_resources.environment_resource_set;
+    std::shared_ptr<Texture> shadow_map;
+    for (auto [candidate] : query_shadow_maps) {
+        if (candidate.texture) {
+            shadow_map = candidate.texture;
+            break;
+        }
+    }
+    phase->lighting_set = resource_sets->get_or_create(
+        *device,
+        "lighting",
+        lighting_resources->resource_layout,
+        {
+            lighting_resources->uniform_buffer,
+            shadow_map ? shadow_map : rendering_defaults->default_texture,
+            lighting_resources->shadow_map_sampler,
+        }
+    );
+    if (!phase->lighting_set) {
+        return;
+    }
     const auto camera_position = camera_transform.translation();
-    const TransparentPipelineSpecializer specializer;
+    const TransparentPipelineSpecializer specializer {
+        lighting_resources->resource_layout
+    };
 
     for (auto [entity, mesh, material_handle, transform] : query_meshes) {
         if (!visible_meshes->contains(entity)) {
@@ -143,7 +186,8 @@ void transparent_pass(
 ) {
     auto* commands = frame->command_buffer();
     if (!commands || !target->valid() || !targets->valid() ||
-        !phase->environment_set || phase->items.empty()) {
+        !phase->environment_set || !phase->lighting_set ||
+        phase->items.empty()) {
         return;
     }
 
@@ -171,6 +215,7 @@ void transparent_pass(
             *commands,
             *pipeline_cache,
             phase->environment_set,
+            phase->lighting_set,
             item
         );
     }

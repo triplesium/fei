@@ -1,5 +1,7 @@
 import rendering.normal;
+import rendering.color;
 
+using namespace rendering.color;
 using namespace rendering.normal;
 
 public struct StandardMaterialUniform {
@@ -52,6 +54,8 @@ public static const int STANDARD_MATERIAL_FLAG_OCCLUSION_MAP = 1 << 3;
 public static const int STANDARD_MATERIAL_FLAG_EMISSIVE_MAP = 1 << 4;
 public static const int STANDARD_MATERIAL_FLAG_SPECULAR_MAP = 1 << 5;
 public static const int STANDARD_MATERIAL_FLAG_ALPHA_BLEND = 1 << 6;
+public static const int STANDARD_MATERIAL_FLAG_ALBEDO_SAMPLE_LINEAR = 1 << 7;
+public static const int STANDARD_MATERIAL_FLAG_EMISSIVE_SAMPLE_LINEAR = 1 << 8;
 
 public struct StandardMaterial {
     public float3 albedo;
@@ -207,17 +211,25 @@ public struct StandardMaterialResources {
     }
 
     public float4 sample_albedo_texture(StandardMaterialTexCoords tex_coords) {
-        return albedo_map.Sample(
+        float4 sampled = albedo_map.Sample(
             albedo_sampler,
             tex_coords.get(material.albedo_channel)
         );
+        if (!has_flag(STANDARD_MATERIAL_FLAG_ALBEDO_SAMPLE_LINEAR)) {
+            sampled.rgb = srgb_to_linear(sampled.rgb);
+        }
+        return sampled;
     }
 
     public float4 sample_emissive_texture(StandardMaterialTexCoords tex_coords) {
-        return emissive_map.Sample(
+        float4 sampled = emissive_map.Sample(
             emissive_sampler,
             tex_coords.get(material.emissive_channel)
         );
+        if (!has_flag(STANDARD_MATERIAL_FLAG_EMISSIVE_SAMPLE_LINEAR)) {
+            sampled.rgb = srgb_to_linear(sampled.rgb);
+        }
+        return sampled;
     }
 
     public float3 sample_tangent_normal(StandardMaterialTexCoords tex_coords) {

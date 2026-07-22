@@ -1,10 +1,8 @@
-import rendering.color;
 import rendering.normal;
 import pbr.material.types;
 import rendering.mesh;
 import pbr.vxgi.types;
 
-using namespace rendering.color;
 using namespace rendering.normal;
 
 struct VertexInput {
@@ -289,7 +287,6 @@ float4 fragment_main(GeometryOutput input) : SV_Target0 {
 
     if (opacity > 0.0) {
         float4 albedo = float4(material.sample_albedo(tex_coords), 1.0);
-        albedo.rgb = srgb_to_linear(albedo.rgb);
 #ifdef VERTEX_COLORS
         albedo.rgb *= input.color.rgb;
 #endif
@@ -297,7 +294,6 @@ float4 fragment_main(GeometryOutput input) : SV_Target0 {
         albedo.a = 1.0;
 
         float4 emissive = float4(material.sample_emissive(tex_coords), 1.0);
-        emissive.rgb = srgb_to_linear(emissive.rgb);
         emissive.a = 1.0;
 
         uint linear_index = voxel_linear_index(position);

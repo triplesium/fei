@@ -342,6 +342,7 @@ TEST_CASE(
 
     TransparentPhase phase;
     phase.environment_set = create_set();
+    phase.lighting_set = create_set();
     phase.items.push_back(
         MeshDrawItem {
             .entity = 1,
@@ -376,7 +377,7 @@ TEST_CASE(
     CHECK(test.commands->viewports[0].width == 1280);
     CHECK(test.commands->viewports[0].height == 720);
     CHECK(test.commands->render_pipelines.size() == 1);
-    CHECK(test.commands->resource_sets.size() == 4);
+    CHECK(test.commands->resource_sets.size() == 5);
     REQUIRE(test.commands->draws.size() == 1);
     CHECK(test.commands->draws[0] == std::pair {0ULL, 3ULL});
     CHECK(test.commands->end_render_pass_calls == 1);

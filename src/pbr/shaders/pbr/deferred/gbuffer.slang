@@ -1,10 +1,7 @@
 import pbr.material.types;
 import pbr.shading.types;
-import rendering.color;
 
 namespace pbr.deferred {
-
-using namespace rendering.color;
 
 public struct GBufferSurface {
     public float3 position;
@@ -81,9 +78,9 @@ public struct GBuffer {
     }
 
     public float3 read_linear_albedo(float2 tex_coords) {
-        float3 base_color =
-            g_albedo_metallic.Sample(g_buffer_sampler, tex_coords).rgb;
-        return srgb_to_linear(base_color);
+        // Material color textures are sampled in linear space before the
+        // prepass writes them into the GBuffer.
+        return g_albedo_metallic.Sample(g_buffer_sampler, tex_coords).rgb;
     }
 
     public float read_metallic(float2 tex_coords) {
@@ -99,9 +96,7 @@ public struct GBuffer {
     }
 
     public float3 read_emissive(float2 tex_coords) {
-        return srgb_to_linear(
-            g_emissive_depth.Sample(g_buffer_sampler, tex_coords).rgb
-        );
+        return g_emissive_depth.Sample(g_buffer_sampler, tex_coords).rgb;
     }
 
     public GBufferSurface read_lighting_surface(float2 tex_coords) {
@@ -115,7 +110,7 @@ public struct GBuffer {
         surface.normal = normalize(normal_roughness.xyz);
         surface.roughness = clamp(normal_roughness.a, 0.045, 1.0);
         surface.base_color = albedo_metallic.rgb;
-        surface.albedo = srgb_to_linear(surface.base_color);
+        surface.albedo = surface.base_color;
         surface.metallic = clamp(albedo_metallic.a, 0.0, 1.0);
         float4 specular_value = g_specular.Sample(g_buffer_sampler, tex_coords);
         surface.specular = specular_value.rgb;
@@ -129,7 +124,7 @@ public struct GBuffer {
         GBufferSurface surface = read_lighting_surface(tex_coords);
         float4 emissive_depth =
             g_emissive_depth.Sample(g_buffer_sampler, tex_coords);
-        surface.emissive = srgb_to_linear(emissive_depth.rgb);
+        surface.emissive = emissive_depth.rgb;
         surface.depth = emissive_depth.a;
         return surface;
     }

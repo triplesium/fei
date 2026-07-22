@@ -75,6 +75,11 @@ void queue_transparent_meshes(
     ResRW<MeshMaterialPipelines> mesh_material_pipelines,
     ResRO<RenderAssets<PreparedMaterial>> materials,
     ResRO<ViewVisibleEntities> visible_entities,
+    Query<const ShadowMap> query_shadow_maps,
+    ResRW<RenderResourceSetCache> resource_sets,
+    ResRO<GraphicsDevice> device,
+    ResRO<LightingResources> lighting_resources,
+    ResRO<RenderingDefaults> rendering_defaults,
     ResRW<PipelineCache>
 );
 

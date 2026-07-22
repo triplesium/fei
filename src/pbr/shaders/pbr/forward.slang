@@ -1,4 +1,5 @@
 import pbr.lib.environment_map;
+import pbr.lib.direct_lighting;
 import rendering.view;
 import pbr.material.types;
 import pbr.shading.types;
@@ -7,12 +8,14 @@ import rendering.vertex_input;
 import pbr.forward.io;
 
 using namespace pbr.forward_io;
+using namespace pbr.direct_lighting;
 using namespace pbr.environment_map;
 
 layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> view;
 layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> mesh;
 layout(set = 2) ParameterBlock<StandardMaterialResources> material;
 layout(set = 3) ParameterBlock<EnvironmentMap> environment;
+layout(set = 4) ParameterBlock<DirectLighting> lighting;
 
 [shader("vertex")]
 VertexOutput vertex_main(MeshVertexInput input) {
@@ -79,7 +82,9 @@ FragmentOutput fragment_main(VertexOutput input) {
         surface_material
     );
 
-    float3 color = environment_lighting.combined();
+    float3 color = environment_lighting.combined() +
+                   lighting.evaluate(point, surface_material) +
+                   surface_material.emissive;
     output.color = float4(color, material.alpha_blend ? alpha : 1.0);
     return output;
 }

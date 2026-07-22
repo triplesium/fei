@@ -2,10 +2,12 @@
 
 #include "asset/assets.hpp"
 #include "core/image.hpp"
+#include "test_graphics_device.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 using namespace fei;
+using namespace fei::rendering_test;
 
 namespace {
 
@@ -19,6 +21,20 @@ Handle<Image> make_image_handle(Assets<Image>& images) {
             TextureUsage::Sampled,
             TextureType::Texture2D
         )
+    );
+}
+
+std::shared_ptr<Texture>
+make_texture(FakeGraphicsDevice& device, PixelFormat format) {
+    return device.create_texture(
+        TextureDescription {
+            .width = 1,
+            .height = 1,
+            .depth = 1,
+            .texture_format = format,
+            .texture_usage = TextureUsage::Sampled,
+            .texture_type = TextureType::Texture2D,
+        }
     );
 }
 
@@ -85,4 +101,35 @@ TEST_CASE(
     CHECK(uniform.occlusion_channel == static_cast<uint32>(UvChannel::Uv0));
     CHECK(uniform.emissive_channel == static_cast<uint32>(UvChannel::Uv1));
     CHECK(uniform.specular_channel == static_cast<uint32>(UvChannel::Uv0));
+}
+
+TEST_CASE(
+    "StandardMaterial records hardware-decoded color samples",
+    "[pbr][material][color]"
+) {
+    Assets<Image> images(nullptr);
+    StandardMaterial material;
+    material.albedo_texture = make_image_handle(images);
+    material.emissive_texture = make_image_handle(images);
+
+    FakeGraphicsDevice device;
+    RenderAssets<GpuImage> gpu_images;
+    gpu_images.insert(
+        material.albedo_texture->id(),
+        std::make_unique<GpuImage>(
+            make_texture(device, PixelFormat::Rgba8UnormSrgb)
+        )
+    );
+    gpu_images.insert(
+        material.emissive_texture->id(),
+        std::make_unique<GpuImage>(
+            make_texture(device, PixelFormat::Rgba8Unorm)
+        )
+    );
+
+    const auto uniform = material.create_uniform(&gpu_images);
+    CHECK(has_uniform_flag(uniform, StandardMaterialFlags::AlbedoSampleLinear));
+    CHECK_FALSE(
+        has_uniform_flag(uniform, StandardMaterialFlags::EmissiveSampleLinear)
+    );
 }

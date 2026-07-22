@@ -13,6 +13,7 @@ struct DeferredPrepassPhase : RenderPhase<MeshDrawItem> {};
 
 struct TransparentPhase : RenderPhase<MeshDrawItem> {
     std::shared_ptr<const ResourceSet> environment_set;
+    std::shared_ptr<const ResourceSet> lighting_set;
 };
 
 struct DeferredRenderPipelines {
