@@ -169,6 +169,103 @@ Result<ConvertedScene, std::string> convert_scene(
     return converted;
 }
 
+Status<AssetLoadError>
+load_external_buffers(fastgltf::Asset& asset, const LoadContext& context) {
+    for (std::size_t buffer_index = 0; buffer_index < asset.buffers.size();
+         ++buffer_index) {
+        auto& buffer = asset.buffers[buffer_index];
+        const auto* source = std::get_if<fastgltf::sources::URI>(&buffer.data);
+        if (source == nullptr) {
+            continue;
+        }
+        if (!source->uri.isLocalPath()) {
+            return failure(AssetLoadError(
+                context.asset_path(),
+                "glTF buffer " + std::to_string(buffer_index) +
+                    " uses a non-local URI"
+            ));
+        }
+
+        auto dependency_path =
+            context.asset_path().resolve_embed(AssetPath(source->uri.fspath()));
+        auto bytes = context.read_asset_bytes(dependency_path);
+        if (!bytes) {
+            return failure(std::move(bytes.error()));
+        }
+        if (source->fileByteOffset > bytes->size() ||
+            buffer.byteLength > bytes->size() - source->fileByteOffset) {
+            return failure(AssetLoadError(
+                dependency_path,
+                "glTF buffer " + std::to_string(buffer_index) +
+                    " is shorter than its declared byteLength"
+            ));
+        }
+
+        const auto begin = bytes->begin() +
+                           static_cast<std::ptrdiff_t>(source->fileByteOffset);
+        std::vector<std::byte> buffer_bytes(
+            begin,
+            begin + static_cast<std::ptrdiff_t>(buffer.byteLength)
+        );
+        buffer.data = fastgltf::sources::Vector {
+            .bytes = std::move(buffer_bytes),
+        };
+    }
+    return {};
+}
+
+Status<AssetLoadError>
+load_external_images(fastgltf::Asset& asset, const LoadContext& context) {
+    std::vector<std::uint8_t> loaded(asset.images.size());
+    for (const auto& texture : asset.textures) {
+        if (!texture.imageIndex || *texture.imageIndex >= asset.images.size()) {
+            continue;
+        }
+        const auto image_index = *texture.imageIndex;
+        if (loaded[image_index] != 0) {
+            continue;
+        }
+        loaded[image_index] = 1;
+
+        auto& image = asset.images[image_index];
+        const auto* source = std::get_if<fastgltf::sources::URI>(&image.data);
+        if (source == nullptr) {
+            continue;
+        }
+        if (!source->uri.isLocalPath()) {
+            return failure(AssetLoadError(
+                context.asset_path(),
+                "glTF image " + std::to_string(image_index) +
+                    " uses a non-local URI"
+            ));
+        }
+
+        auto dependency_path =
+            context.asset_path().resolve_embed(AssetPath(source->uri.fspath()));
+        auto bytes = context.read_asset_bytes(dependency_path);
+        if (!bytes) {
+            return failure(std::move(bytes.error()));
+        }
+        if (source->fileByteOffset > bytes->size()) {
+            return failure(AssetLoadError(
+                dependency_path,
+                "glTF image " + std::to_string(image_index) +
+                    " byte offset is out of bounds"
+            ));
+        }
+
+        const auto begin = bytes->begin() +
+                           static_cast<std::ptrdiff_t>(source->fileByteOffset);
+        std::vector<std::byte> image_bytes(begin, bytes->end());
+        const auto mime_type = source->mimeType;
+        image.data = fastgltf::sources::Vector {
+            .bytes = std::move(image_bytes),
+            .mimeType = mime_type,
+        };
+    }
+    return {};
+}
+
 } // namespace
 
 AssetLoadResult<Gltf>
@@ -178,19 +275,15 @@ GltfLoader::load(Reader& reader, const LoadContext& context) {
     if (data.error() != fastgltf::Error::None) {
         return failure(AssetLoadError(
             context.asset_path(),
-            "Failed to prepare GLB data: " +
+            "Failed to prepare glTF data: " +
                 std::string(fastgltf::getErrorMessage(data.error()))
         ));
     }
 
-    auto directory = context.asset_path().path().parent_path();
-    if (directory.empty()) {
-        directory = std::filesystem::path(".");
-    }
     fastgltf::Parser parser;
-    auto asset = parser.loadGltfBinary(
+    auto asset = parser.loadGltf(
         data.get(),
-        directory,
+        std::filesystem::path("."),
         fastgltf::Options::DecomposeNodeMatrices
     );
     if (asset.error() != fastgltf::Error::None) {
@@ -199,6 +292,14 @@ GltfLoader::load(Reader& reader, const LoadContext& context) {
             "Failed to parse glTF asset: " +
                 std::string(fastgltf::getErrorMessage(asset.error()))
         ));
+    }
+    auto buffers = load_external_buffers(asset.get(), context);
+    if (!buffers) {
+        return failure(std::move(buffers.error()));
+    }
+    auto images = load_external_images(asset.get(), context);
+    if (!images) {
+        return failure(std::move(images.error()));
     }
 
     if (asset->defaultScene && *asset->defaultScene >= asset->scenes.size()) {

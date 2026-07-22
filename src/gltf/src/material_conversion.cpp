@@ -27,15 +27,18 @@ Result<PendingMaterialTexture, std::string> convert_texture(
     if (info.transform) {
         return failure(label + " uses unsupported KHR_texture_transform");
     }
-    if (info.texCoordIndex != 0) {
-        return failure(label + " uses TEXCOORD_1, which is not supported yet");
+    if (info.texCoordIndex > 1) {
+        return failure(
+            label + " uses unsupported TEXCOORD_" +
+            std::to_string(info.texCoordIndex)
+        );
     }
     if (info.textureIndex >= asset.textures.size()) {
         return failure(label + " references an invalid texture");
     }
     return PendingMaterialTexture {
         .texture_index = info.textureIndex,
-        .channel = UvChannel::Uv0,
+        .channel = info.texCoordIndex == 0 ? UvChannel::Uv0 : UvChannel::Uv1,
         .srgb = srgb,
     };
 }

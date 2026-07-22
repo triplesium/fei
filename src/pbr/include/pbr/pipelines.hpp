@@ -32,7 +32,9 @@ struct PbrMeshShaderDefaults {
 inline constexpr const char* VERTEX_POSITIONS_SHADER_DEF = "VERTEX_POSITIONS";
 inline constexpr const char* VERTEX_NORMALS_SHADER_DEF = "VERTEX_NORMALS";
 inline constexpr const char* VERTEX_UVS_SHADER_DEF = "VERTEX_UVS";
+inline constexpr const char* VERTEX_UVS_1_SHADER_DEF = "VERTEX_UVS_1";
 inline constexpr const char* VERTEX_TANGENTS_SHADER_DEF = "VERTEX_TANGENTS";
+inline constexpr const char* VERTEX_COLORS_SHADER_DEF = "VERTEX_COLORS";
 inline constexpr const char* MESH_PIPELINE_SHADER_DEF = "MESH_PIPELINE";
 inline constexpr const char* DEPTH_PREPASS_SHADER_DEF = "DEPTH_PREPASS";
 inline constexpr const char* DEFERRED_PREPASS_SHADER_DEF = "DEFERRED_PREPASS";
@@ -74,14 +76,17 @@ inline ShaderDefs pbr_mesh_shader_defs(const GpuMesh& mesh) {
     add_def(Mesh::ATTRIBUTE_POSITION.id, VERTEX_POSITIONS_SHADER_DEF);
     add_def(Mesh::ATTRIBUTE_NORMAL.id, VERTEX_NORMALS_SHADER_DEF);
     add_def(Mesh::ATTRIBUTE_UV_0.id, VERTEX_UVS_SHADER_DEF);
+    add_def(Mesh::ATTRIBUTE_UV_1.id, VERTEX_UVS_1_SHADER_DEF);
     add_def(Mesh::ATTRIBUTE_TANGENT.id, VERTEX_TANGENTS_SHADER_DEF);
+    add_def(Mesh::ATTRIBUTE_COLOR.id, VERTEX_COLORS_SHADER_DEF);
     return normalized_shader_defs(std::move(defs));
 }
 
 inline bool pbr_shader_uses_vertex_attribute(MeshVertexAttributeId id) {
     return id == Mesh::ATTRIBUTE_POSITION.id ||
            id == Mesh::ATTRIBUTE_NORMAL.id || id == Mesh::ATTRIBUTE_UV_0.id ||
-           id == Mesh::ATTRIBUTE_TANGENT.id;
+           id == Mesh::ATTRIBUTE_UV_1.id || id == Mesh::ATTRIBUTE_TANGENT.id ||
+           id == Mesh::ATTRIBUTE_COLOR.id;
 }
 
 inline VertexLayoutDescription

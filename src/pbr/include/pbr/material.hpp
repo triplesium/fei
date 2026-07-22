@@ -38,6 +38,12 @@ struct alignas(16) StandardMaterialUniform {
     uint32 flags {0};
     float normal_scale {1.0f};
     float occlusion_strength {1.0f};
+    uint32 albedo_channel {0};
+    uint32 normal_channel {0};
+    uint32 metallic_roughness_channel {0};
+    uint32 occlusion_channel {0};
+    uint32 emissive_channel {0};
+    uint32 specular_channel {0};
 };
 
 enum class UvChannel : uint8 {
@@ -217,6 +223,13 @@ class StandardMaterial : public Material {
             .flags = flags.to_raw(),
             .normal_scale = normal_scale,
             .occlusion_strength = occlusion_strength,
+            .albedo_channel = static_cast<uint32>(albedo_channel),
+            .normal_channel = static_cast<uint32>(normal_channel),
+            .metallic_roughness_channel =
+                static_cast<uint32>(metallic_roughness_channel),
+            .occlusion_channel = static_cast<uint32>(occlusion_channel),
+            .emissive_channel = static_cast<uint32>(emissive_channel),
+            .specular_channel = static_cast<uint32>(specular_channel),
         };
     }
 

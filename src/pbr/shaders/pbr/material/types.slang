@@ -11,6 +11,36 @@ public struct StandardMaterialUniform {
     public int flags;
     public float normal_scale;
     public float occlusion_strength;
+    public int albedo_channel;
+    public int normal_channel;
+    public int metallic_roughness_channel;
+    public int occlusion_channel;
+    public int emissive_channel;
+    public int specular_channel;
+};
+
+public struct StandardMaterialTexCoords {
+    public float2 uv0;
+    public float2 uv1;
+
+    public float2 get(int channel) {
+        return channel == 1 ? uv1 : uv0;
+    }
+
+    public bool has(int channel) {
+        if (channel == 1) {
+#if defined(VERTEX_UVS_1)
+            return true;
+#else
+            return false;
+#endif
+        }
+#if defined(VERTEX_UVS)
+        return true;
+#else
+        return false;
+#endif
+    }
 };
 
 public static const int STANDARD_MATERIAL_FLAG_ALBEDO_MAP = 1 << 0;
@@ -155,83 +185,110 @@ public struct StandardMaterialResources {
         }
     }
 
-    public float4 sample_albedo_texture(float2 tex_coords) {
-        return albedo_map.Sample(albedo_sampler, tex_coords);
+    public float4 sample_albedo_texture(StandardMaterialTexCoords tex_coords) {
+        return albedo_map.Sample(
+            albedo_sampler,
+            tex_coords.get(material.albedo_channel)
+        );
     }
 
-    public float4 sample_emissive_texture(float2 tex_coords) {
-        return emissive_map.Sample(emissive_sampler, tex_coords);
+    public float4 sample_emissive_texture(StandardMaterialTexCoords tex_coords) {
+        return emissive_map.Sample(
+            emissive_sampler,
+            tex_coords.get(material.emissive_channel)
+        );
     }
 
-    public float3 sample_tangent_normal(float2 tex_coords) {
-        float3 normal =
-            normal_map.Sample(normal_sampler, tex_coords).xyz * 2.0 - 1.0;
+    public float3 sample_tangent_normal(StandardMaterialTexCoords tex_coords) {
+        float3 normal = normal_map
+                            .Sample(
+                                normal_sampler,
+                                tex_coords.get(material.normal_channel)
+                            )
+                            .xyz *
+            2.0 - 1.0;
         normal.xy *= material.normal_scale;
         return normal;
     }
 
-    public float3 sample_albedo(float2 tex_coords) {
-#if defined(VERTEX_UVS)
-        if (has_albedo_map) {
+    public float3 sample_albedo(StandardMaterialTexCoords tex_coords) {
+#if defined(VERTEX_UVS) || defined(VERTEX_UVS_1)
+        if (has_albedo_map && tex_coords.has(material.albedo_channel)) {
             return albedo * sample_albedo_texture(tex_coords).rgb;
         }
 #endif
         return albedo;
     }
 
-    public float sample_metallic(float2 tex_coords) {
-#if defined(VERTEX_UVS)
-        if (has_metallic_roughness_map) {
+    public float sample_metallic(StandardMaterialTexCoords tex_coords) {
+#if defined(VERTEX_UVS) || defined(VERTEX_UVS_1)
+        if (has_metallic_roughness_map &&
+            tex_coords.has(material.metallic_roughness_channel)) {
             return metallic * metallic_roughness_map
-                .Sample(metallic_roughness_sampler, tex_coords)
+                .Sample(
+                    metallic_roughness_sampler,
+                    tex_coords.get(material.metallic_roughness_channel)
+                )
                 .b;
         }
 #endif
         return metallic;
     }
 
-    public float sample_roughness(float2 tex_coords) {
-#if defined(VERTEX_UVS)
-        if (has_metallic_roughness_map) {
+    public float sample_roughness(StandardMaterialTexCoords tex_coords) {
+#if defined(VERTEX_UVS) || defined(VERTEX_UVS_1)
+        if (has_metallic_roughness_map &&
+            tex_coords.has(material.metallic_roughness_channel)) {
             return roughness * metallic_roughness_map
-                .Sample(metallic_roughness_sampler, tex_coords)
+                .Sample(
+                    metallic_roughness_sampler,
+                    tex_coords.get(material.metallic_roughness_channel)
+                )
                 .g;
         }
 #endif
         return roughness;
     }
 
-    public float3 sample_emissive(float2 tex_coords) {
-#if defined(VERTEX_UVS)
-        if (has_emissive_map) {
+    public float3 sample_emissive(StandardMaterialTexCoords tex_coords) {
+#if defined(VERTEX_UVS) || defined(VERTEX_UVS_1)
+        if (has_emissive_map && tex_coords.has(material.emissive_channel)) {
             return emissive * sample_emissive_texture(tex_coords).rgb;
         }
 #endif
         return emissive;
     }
 
-    public float3 sample_specular(float2 tex_coords) {
-#if defined(VERTEX_UVS)
-        if (has_specular_map) {
-            return specular *
-                   specular_map.Sample(specular_sampler, tex_coords).rgb;
+    public float3 sample_specular(StandardMaterialTexCoords tex_coords) {
+#if defined(VERTEX_UVS) || defined(VERTEX_UVS_1)
+        if (has_specular_map && tex_coords.has(material.specular_channel)) {
+            return specular * specular_map
+                                  .Sample(
+                                      specular_sampler,
+                                      tex_coords.get(material.specular_channel)
+                                  )
+                                  .rgb;
         }
 #endif
         return specular;
     }
 
-    public float sample_occlusion(float2 tex_coords) {
-#if defined(VERTEX_UVS)
-        if (has_occlusion_map) {
-            float occlusion =
-                occlusion_map.Sample(occlusion_sampler, tex_coords).r;
+    public float sample_occlusion(StandardMaterialTexCoords tex_coords) {
+#if defined(VERTEX_UVS) || defined(VERTEX_UVS_1)
+        if (has_occlusion_map && tex_coords.has(material.occlusion_channel)) {
+            float occlusion = occlusion_map
+                                  .Sample(
+                                      occlusion_sampler,
+                                      tex_coords.get(material.occlusion_channel)
+                                  )
+                                  .r;
             return lerp(1.0, occlusion, material.occlusion_strength);
         }
 #endif
         return 1.0;
     }
 
-    public StandardMaterial sample(float2 tex_coords) {
+    public StandardMaterial sample(StandardMaterialTexCoords tex_coords) {
         return StandardMaterial.from_values(
             sample_albedo(tex_coords),
             sample_metallic(tex_coords),
@@ -242,17 +299,19 @@ public struct StandardMaterialResources {
     }
 
     public float3 sample_normal_from_derivatives(
-        float2 tex_coords,
+        StandardMaterialTexCoords tex_coords,
         float3 position_ws,
         float3 normal_ws
     ) {
-#if defined(VERTEX_UVS)
-        if (has_normal_map) {
+#if defined(VERTEX_UVS) || defined(VERTEX_UVS_1)
+        if (has_normal_map && tex_coords.has(material.normal_channel)) {
+            float2 normal_tex_coords =
+                tex_coords.get(material.normal_channel);
             return from_derivatives(
                 sample_tangent_normal(tex_coords),
                 position_ws,
                 normal_ws,
-                tex_coords
+                normal_tex_coords
             );
         }
 #endif
@@ -260,12 +319,12 @@ public struct StandardMaterialResources {
     }
 
     public float3 sample_normal_from_tangent_frame(
-        float2 tex_coords,
+        StandardMaterialTexCoords tex_coords,
         float3 normal_ws,
         float3 tangent_ws
     ) {
-#if defined(VERTEX_UVS) && defined(VERTEX_TANGENTS)
-        if (has_normal_map) {
+#if (defined(VERTEX_UVS) || defined(VERTEX_UVS_1)) && defined(VERTEX_TANGENTS)
+        if (has_normal_map && tex_coords.has(material.normal_channel)) {
             return from_tangent_frame(
                 sample_tangent_normal(tex_coords),
                 normal_ws,

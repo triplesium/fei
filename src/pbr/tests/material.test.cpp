@@ -49,6 +49,12 @@ TEST_CASE(
     material.occlusion_texture = make_image_handle(images);
     material.emissive_texture = make_image_handle(images);
     material.specular_texture = make_image_handle(images);
+    material.albedo_channel = UvChannel::Uv1;
+    material.normal_channel = UvChannel::Uv0;
+    material.metallic_roughness_channel = UvChannel::Uv1;
+    material.occlusion_channel = UvChannel::Uv0;
+    material.emissive_channel = UvChannel::Uv1;
+    material.specular_channel = UvChannel::Uv0;
 
     CHECK(material.shader_defs(MaterialShaderType::Vertex).empty());
     CHECK(material.shader_defs(MaterialShaderType::PrepassVertex).empty());
@@ -64,4 +70,13 @@ TEST_CASE(
     CHECK(has_uniform_flag(uniform, StandardMaterialFlags::OcclusionMap));
     CHECK(has_uniform_flag(uniform, StandardMaterialFlags::EmissiveMap));
     CHECK(has_uniform_flag(uniform, StandardMaterialFlags::SpecularMap));
+    CHECK(uniform.albedo_channel == static_cast<uint32>(UvChannel::Uv1));
+    CHECK(uniform.normal_channel == static_cast<uint32>(UvChannel::Uv0));
+    CHECK(
+        uniform.metallic_roughness_channel ==
+        static_cast<uint32>(UvChannel::Uv1)
+    );
+    CHECK(uniform.occlusion_channel == static_cast<uint32>(UvChannel::Uv0));
+    CHECK(uniform.emissive_channel == static_cast<uint32>(UvChannel::Uv1));
+    CHECK(uniform.specular_channel == static_cast<uint32>(UvChannel::Uv0));
 }

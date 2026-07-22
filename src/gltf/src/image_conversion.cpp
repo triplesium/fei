@@ -44,13 +44,18 @@ Result<std::span<const std::byte>, std::string> image_bytes(
     std::size_t image_index
 ) {
     const auto label = "glTF image " + std::to_string(image_index);
+    if (const auto* source =
+            std::get_if<fastgltf::sources::Array>(&image.data)) {
+        return std::span(source->bytes.data(), source->bytes.size());
+    }
+    if (const auto* source =
+            std::get_if<fastgltf::sources::Vector>(&image.data)) {
+        return std::span(source->bytes.data(), source->bytes.size());
+    }
     const auto* source =
         std::get_if<fastgltf::sources::BufferView>(&image.data);
     if (source == nullptr) {
-        return failure(
-            label + " is not embedded in a GLB buffer view; external and "
-                    "data URI images are not supported yet"
-        );
+        return failure(label + " data has not been loaded");
     }
     if (source->bufferViewIndex >= asset.bufferViews.size()) {
         return failure(label + " references an invalid buffer view");

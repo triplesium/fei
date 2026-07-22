@@ -254,7 +254,9 @@ compile_pbr_shader_with_defs(std::string_view shader_name, ShaderDefs defs) {
 ShaderDefs full_standard_material_shader_defs() {
     return normalized_shader_defs({
         ShaderDefVal::bool_def("VERTEX_UVS"),
+        ShaderDefVal::bool_def("VERTEX_UVS_1"),
         ShaderDefVal::bool_def("VERTEX_TANGENTS"),
+        ShaderDefVal::bool_def("VERTEX_COLORS"),
     });
 }
 
@@ -555,6 +557,28 @@ TEST_CASE(
             {"specular_sampler", ResourceKind::Sampler, 2, 12},
         }
     );
+}
+
+TEST_CASE("PBR material shaders support UV1 without UV0", "[pbr][shader]") {
+    for (const std::string_view shader_name : {
+             "forward.vert",
+             "forward.frag",
+             "deferred_prepass.vert",
+             "deferred_prepass.frag",
+             "voxelization.vert",
+             "voxelization.geom",
+             "voxelization.frag",
+         }) {
+        CAPTURE(shader_name);
+        const auto shader = compile_pbr_shader_with_defs(
+            shader_name,
+            normalized_shader_defs({
+                ShaderDefVal::bool_def("VERTEX_UVS_1"),
+                ShaderDefVal::bool_def("VERTEX_TANGENTS"),
+            })
+        );
+        CHECK_FALSE(shader.spirv.empty());
+    }
 }
 
 TEST_CASE(

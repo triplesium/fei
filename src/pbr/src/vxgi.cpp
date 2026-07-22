@@ -48,18 +48,15 @@ OutputDescription single_color_output_description(PixelFormat format) {
 } // namespace
 
 VxgiVoxelizationSpecializer::VxgiVoxelizationSpecializer(
-    std::vector<std::shared_ptr<const ShaderModule>> shader_modules,
+    ShaderCache& shader_cache,
     std::shared_ptr<const ResourceLayout> volumes_layout,
     std::shared_ptr<const ResourceLayout> voxelization_layout,
     std::shared_ptr<const ResourceLayout> accumulation_layout
 ) :
-    m_shader_modules(std::move(shader_modules)),
-    m_volumes_layout(std::move(volumes_layout)),
+    m_shader_cache(&shader_cache), m_volumes_layout(std::move(volumes_layout)),
     m_voxelization_layout(std::move(voxelization_layout)),
     m_accumulation_layout(std::move(accumulation_layout)) {
-    for (const auto& shader_module : m_shader_modules) {
-        hash_combine(m_cache_key, shader_module.get());
-    }
+    hash_combine(m_cache_key, &shader_cache);
     hash_combine(m_cache_key, m_volumes_layout.get());
     hash_combine(m_cache_key, m_voxelization_layout.get());
     hash_combine(m_cache_key, m_accumulation_layout.get());
@@ -67,10 +64,27 @@ VxgiVoxelizationSpecializer::VxgiVoxelizationSpecializer(
 
 void VxgiVoxelizationSpecializer::specialize(
     RenderPipelineDescription& desc,
-    const GpuMesh& /*mesh*/,
+    const GpuMesh& mesh,
     const PreparedMaterial& /*material*/
 ) const {
-    desc.shader_program.shaders = m_shader_modules;
+    auto defs = pbr_mesh_shader_defs(mesh);
+    const AssetPath path("shader://pbr/voxelization.slang");
+    desc.shader_program.shaders = {
+        m_shader_cache
+            ->get_or_compile(path, ShaderStages::Vertex, "vertex_main", defs),
+        m_shader_cache->get_or_compile(
+            path,
+            ShaderStages::Geometry,
+            "geometry_main",
+            defs
+        ),
+        m_shader_cache->get_or_compile(
+            path,
+            ShaderStages::Fragment,
+            "fragment_main",
+            std::move(defs)
+        ),
+    };
     remove_vertex_input_attribute(desc, Mesh::ATTRIBUTE_TANGENT.id);
     desc.depth_stencil_state = DepthStencilStateDescription::Disabled;
     desc.rasterizer_state.cull_mode = CullMode::None;
@@ -146,24 +160,6 @@ void setup_vxgi(
             }
         )
     );
-
-    std::vector<std::shared_ptr<const ShaderModule>> shader_modules {
-        shader_cache->get_or_compile(
-            AssetPath("shader://pbr/voxelization.slang"),
-            ShaderStages::Vertex,
-            {}
-        ),
-        shader_cache->get_or_compile(
-            AssetPath("shader://pbr/voxelization.slang"),
-            ShaderStages::Geometry,
-            {}
-        ),
-        shader_cache->get_or_compile(
-            AssetPath("shader://pbr/voxelization.slang"),
-            ShaderStages::Fragment,
-            {}
-        ),
-    };
 
     auto voxelization_resource_layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
@@ -255,7 +251,7 @@ void setup_vxgi(
             .clear_pipeline = clear_pipeline,
             .resolve_pipeline = resolve_pipeline,
             .pipeline_specializer = VxgiVoxelizationSpecializer(
-                shader_modules,
+                *shader_cache,
                 volumes->resource_layout,
                 voxelization_resource_layout,
                 accumulation_resource_layout

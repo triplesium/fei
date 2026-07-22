@@ -10,6 +10,12 @@ public struct VertexOutput {
 #ifdef VERTEX_TANGENTS
     public [vk::location(3)] float3 tangent_ws : TANGENT_WS;
 #endif
+#ifdef VERTEX_UVS_1
+    public [vk::location(4)] float2 tex_coords_1 : TEXCOORD1;
+#endif
+#ifdef VERTEX_COLORS
+    public [vk::location(5)] float4 color : COLOR0;
+#endif
 };
 
 public struct FragmentOutput {

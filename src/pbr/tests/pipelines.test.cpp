@@ -576,6 +576,7 @@ TEST_CASE(
             Mesh::ATTRIBUTE_POSITION,
             Mesh::ATTRIBUTE_NORMAL,
             Mesh::ATTRIBUTE_UV_0,
+            Mesh::ATTRIBUTE_UV_1,
             Mesh::ATTRIBUTE_TANGENT,
             Mesh::ATTRIBUTE_COLOR,
         }
@@ -586,15 +587,18 @@ TEST_CASE(
     CHECK(has_shader_def(defs, VERTEX_POSITIONS_SHADER_DEF));
     CHECK(has_shader_def(defs, VERTEX_NORMALS_SHADER_DEF));
     CHECK(has_shader_def(defs, VERTEX_UVS_SHADER_DEF));
+    CHECK(has_shader_def(defs, VERTEX_UVS_1_SHADER_DEF));
     CHECK(has_shader_def(defs, VERTEX_TANGENTS_SHADER_DEF));
+    CHECK(has_shader_def(defs, VERTEX_COLORS_SHADER_DEF));
 
     auto vertex_layout = pbr_vertex_layout_description(mesh);
 
     CHECK(has_vertex_attribute(vertex_layout, Mesh::ATTRIBUTE_POSITION.id));
     CHECK(has_vertex_attribute(vertex_layout, Mesh::ATTRIBUTE_NORMAL.id));
     CHECK(has_vertex_attribute(vertex_layout, Mesh::ATTRIBUTE_UV_0.id));
+    CHECK(has_vertex_attribute(vertex_layout, Mesh::ATTRIBUTE_UV_1.id));
     CHECK(has_vertex_attribute(vertex_layout, Mesh::ATTRIBUTE_TANGENT.id));
-    CHECK_FALSE(has_vertex_attribute(vertex_layout, Mesh::ATTRIBUTE_COLOR.id));
+    CHECK(has_vertex_attribute(vertex_layout, Mesh::ATTRIBUTE_COLOR.id));
 }
 
 TEST_CASE(
@@ -684,7 +688,7 @@ TEST_CASE(
     const auto& vertex_layout = desc.shader_program.vertex_layouts[0];
     CHECK(has_vertex_attribute(vertex_layout, Mesh::ATTRIBUTE_POSITION.id));
     CHECK(has_vertex_attribute(vertex_layout, Mesh::ATTRIBUTE_NORMAL.id));
-    CHECK_FALSE(has_vertex_attribute(vertex_layout, Mesh::ATTRIBUTE_COLOR.id));
+    CHECK(has_vertex_attribute(vertex_layout, Mesh::ATTRIBUTE_COLOR.id));
     REQUIRE(desc.resource_layouts.size() == 3);
     CHECK(desc.resource_layouts[0] == mesh_view_layout.layout);
     CHECK(desc.resource_layouts[1] == mesh_uniforms.resource_layout);
@@ -697,6 +701,7 @@ TEST_CASE(
     CHECK(has_shader_def(vertex_shader_desc.defs, DEFERRED_PREPASS_SHADER_DEF));
     CHECK(has_shader_def(vertex_shader_desc.defs, MAY_DISCARD_SHADER_DEF));
     CHECK(has_shader_def(vertex_shader_desc.defs, VERTEX_NORMALS_SHADER_DEF));
+    CHECK(has_shader_def(vertex_shader_desc.defs, VERTEX_COLORS_SHADER_DEF));
     CHECK_FALSE(has_shader_def(vertex_shader_desc.defs, "TEST_VARIANT"));
     CHECK(has_shader_def(fragment_shader_desc.defs, MESH_PIPELINE_SHADER_DEF));
     CHECK(
@@ -704,6 +709,7 @@ TEST_CASE(
     );
     CHECK(has_shader_def(fragment_shader_desc.defs, MAY_DISCARD_SHADER_DEF));
     CHECK(has_shader_def(fragment_shader_desc.defs, VERTEX_NORMALS_SHADER_DEF));
+    CHECK(has_shader_def(fragment_shader_desc.defs, VERTEX_COLORS_SHADER_DEF));
     CHECK(has_shader_def(fragment_shader_desc.defs, "TEST_VARIANT"));
 }
 

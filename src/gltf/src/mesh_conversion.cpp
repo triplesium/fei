@@ -101,6 +101,52 @@ Result<std::vector<std::uint32_t>, std::string> read_indices(
     return indices;
 }
 
+Result<std::vector<std::array<float, 4>>, std::string> read_color_attribute(
+    const fastgltf::Asset& asset,
+    std::size_t accessor_index,
+    const std::string& label
+) {
+    if (accessor_index >= asset.accessors.size()) {
+        return failure(label + " references an invalid accessor");
+    }
+    const auto& accessor = asset.accessors[accessor_index];
+    if (accessor.type != fastgltf::AccessorType::Vec3 &&
+        accessor.type != fastgltf::AccessorType::Vec4) {
+        return failure(label + " has an incompatible accessor type");
+    }
+    const bool is_float =
+        accessor.componentType == fastgltf::ComponentType::Float &&
+        !accessor.normalized;
+    const bool is_normalized_integer =
+        (accessor.componentType == fastgltf::ComponentType::UnsignedByte ||
+         accessor.componentType == fastgltf::ComponentType::UnsignedShort) &&
+        accessor.normalized;
+    if (!is_float && !is_normalized_integer) {
+        return failure(label + " has an unsupported component type");
+    }
+
+    std::vector<std::array<float, 4>> values;
+    values.reserve(accessor.count);
+    if (accessor.type == fastgltf::AccessorType::Vec3) {
+        fastgltf::iterateAccessor<fastgltf::math::fvec3>(
+            asset,
+            accessor,
+            [&](const auto& value) {
+                values.push_back({value[0], value[1], value[2], 1.0f});
+            }
+        );
+    } else {
+        fastgltf::iterateAccessor<fastgltf::math::fvec4>(
+            asset,
+            accessor,
+            [&](const auto& value) {
+                values.push_back({value[0], value[1], value[2], value[3]});
+            }
+        );
+    }
+    return values;
+}
+
 Status<std::string> validate_attributes(
     const fastgltf::Primitive& primitive,
     const std::string& label
@@ -111,7 +157,8 @@ Status<std::string> validate_attributes(
             attribute.name.size()
         );
         if (name == "POSITION" || name == "NORMAL" || name == "TANGENT" ||
-            name == "TEXCOORD_0" || name.starts_with('_')) {
+            name == "TEXCOORD_0" || name == "TEXCOORD_1" || name == "COLOR_0" ||
+            name.starts_with('_')) {
             continue;
         }
         return failure(
@@ -213,6 +260,39 @@ Result<ConvertedPrimitive, std::string> convert_primitive(
             return failure(label + " TEXCOORD_0 count does not match POSITION");
         }
         mesh->insert_attribute(Mesh::ATTRIBUTE_UV_0, std::move(*texcoords));
+    }
+
+    const auto texcoord_1 = primitive.findAttribute("TEXCOORD_1");
+    if (texcoord_1 != primitive.attributes.end()) {
+        auto texcoords = read_float_attribute<2, fastgltf::math::fvec2>(
+            asset,
+            texcoord_1->accessorIndex,
+            fastgltf::AccessorType::Vec2,
+            label + " TEXCOORD_1"
+        );
+        if (!texcoords) {
+            return failure(std::move(texcoords.error()));
+        }
+        if (texcoords->size() != vertex_count) {
+            return failure(label + " TEXCOORD_1 count does not match POSITION");
+        }
+        mesh->insert_attribute(Mesh::ATTRIBUTE_UV_1, std::move(*texcoords));
+    }
+
+    const auto color = primitive.findAttribute("COLOR_0");
+    if (color != primitive.attributes.end()) {
+        auto colors = read_color_attribute(
+            asset,
+            color->accessorIndex,
+            label + " COLOR_0"
+        );
+        if (!colors) {
+            return failure(std::move(colors.error()));
+        }
+        if (colors->size() != vertex_count) {
+            return failure(label + " COLOR_0 count does not match POSITION");
+        }
+        mesh->insert_attribute(Mesh::ATTRIBUTE_COLOR, std::move(*colors));
     }
 
     auto indices = read_indices(asset, primitive, vertex_count, label);

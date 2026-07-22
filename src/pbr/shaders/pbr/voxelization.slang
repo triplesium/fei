@@ -10,13 +10,29 @@ using namespace rendering.normal;
 struct VertexInput {
     [vk::location(0)] float3 position : POSITION;
     [vk::location(1)] float3 normal : NORMAL;
+#ifdef VERTEX_UVS
     [vk::location(2)] float2 uv : TEXCOORD0;
+#endif
+#ifdef VERTEX_UVS_1
+    [vk::location(3)] float2 uv1 : TEXCOORD1;
+#endif
+#ifdef VERTEX_COLORS
+    [vk::location(5)] float4 color : COLOR0;
+#endif
 };
 
 struct VertexOutput {
     float4 position : SV_Position;
+#ifdef VERTEX_UVS
     [vk::location(0)] float2 tex_coords : TEXCOORD0;
+#endif
     [vk::location(1)] float3 normal : NORMAL_WS;
+#ifdef VERTEX_UVS_1
+    [vk::location(2)] float2 tex_coords_1 : TEXCOORD1;
+#endif
+#ifdef VERTEX_COLORS
+    [vk::location(3)] float4 color : COLOR0;
+#endif
 };
 
 struct GeometryOutput {
@@ -24,8 +40,16 @@ struct GeometryOutput {
     [vk::location(0)] float3 ws_position : POSITION_WS;
     [vk::location(1)] float3 position : POSITION;
     [vk::location(2)] float3 normal : NORMAL_WS;
+#ifdef VERTEX_UVS
     [vk::location(3)] float2 tex_coords : TEXCOORD0;
-    [vk::location(4)] nointerpolation float4 triangle_aabb : TEXCOORD1;
+#endif
+#ifdef VERTEX_UVS_1
+    [vk::location(4)] float2 tex_coords_1 : TEXCOORD1;
+#endif
+    [vk::location(5)] nointerpolation float4 triangle_aabb : TEXCOORD2;
+#ifdef VERTEX_COLORS
+    [vk::location(6)] float4 color : COLOR0;
+#endif
 };
 
 layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> mesh;
@@ -85,19 +109,37 @@ VertexOutput vertex_main(VertexInput input) {
     VertexOutput output;
     output.position = mesh.position_ws4(input.position);
     output.normal = mesh.normal_ws(input.normal);
+#ifdef VERTEX_UVS
     output.tex_coords = input.uv;
+#endif
+#ifdef VERTEX_UVS_1
+    output.tex_coords_1 = input.uv1;
+#endif
+#ifdef VERTEX_COLORS
+    output.color = input.color;
+#endif
     return output;
 }
 
 [shader("geometry")]
 [maxvertexcount(3)]
 void geometry_main(triangle VertexOutput input[3], inout TriangleStream<GeometryOutput> stream) {
+#ifdef VERTEX_UVS
     float2 tex_coords[3];
+#endif
+#ifdef VERTEX_UVS_1
+    float2 tex_coords_1[3];
+#endif
     int selected_index = calculate_axis(input);
     float4x4 view_projection = vxgi_voxelization.view_projection(selected_index);
 
     for (int i = 0; i < 3; i++) {
+#ifdef VERTEX_UVS
         tex_coords[i] = input[i].tex_coords;
+#endif
+#ifdef VERTEX_UVS_1
+        tex_coords_1[i] = input[i].tex_coords_1;
+#endif
     }
 
     float4 positions[3] = {
@@ -117,15 +159,30 @@ void geometry_main(triangle VertexOutput input[3], inout TriangleStream<Geometry
     int indices[3] = {0, 1, 2};
     if (dot(triangle_plane.xyz, float3(0.0, 0.0, 1.0)) < 0.0) {
         float4 vertex_temp = positions[2];
+#ifdef VERTEX_UVS
         float2 tex_coord_temp = tex_coords[2];
+#endif
+#ifdef VERTEX_UVS_1
+        float2 tex_coord_1_temp = tex_coords_1[2];
+#endif
         int index_temp = indices[2];
 
         positions[2] = positions[1];
+#ifdef VERTEX_UVS
         tex_coords[2] = tex_coords[1];
+#endif
+#ifdef VERTEX_UVS_1
+        tex_coords_1[2] = tex_coords_1[1];
+#endif
         indices[2] = indices[1];
 
         positions[1] = vertex_temp;
+#ifdef VERTEX_UVS
         tex_coords[1] = tex_coord_temp;
+#endif
+#ifdef VERTEX_UVS_1
+        tex_coords_1[1] = tex_coord_1_temp;
+#endif
         indices[1] = index_temp;
     }
 
@@ -174,7 +231,15 @@ void geometry_main(triangle VertexOutput input[3], inout TriangleStream<Geometry
         output.clip_position = positions[i];
         output.position = positions[i].xyz;
         output.normal = input[indices[i]].normal;
+#ifdef VERTEX_UVS
         output.tex_coords = tex_coords[i];
+#endif
+#ifdef VERTEX_UVS_1
+        output.tex_coords_1 = tex_coords_1[i];
+#endif
+#ifdef VERTEX_COLORS
+        output.color = input[indices[i]].color;
+#endif
         output.ws_position =
             vxgi_voxelization.world_to_voxel_index(input[indices[i]].position.xyz);
         output.triangle_aabb = triangle_aabb;
@@ -195,7 +260,16 @@ float4 fragment_main(GeometryOutput input) : SV_Target0 {
 
     int3 volume_max = int3(int(vxgi_voxelization.volume_dimension) - 1);
     int3 position = clamp(int3(input.ws_position), int3(0), volume_max);
-    float4 albedo = material.sample_albedo_texture(input.tex_coords);
+    StandardMaterialTexCoords tex_coords;
+    tex_coords.uv0 = float2(0.0);
+    tex_coords.uv1 = float2(0.0);
+#ifdef VERTEX_UVS
+    tex_coords.uv0 = input.tex_coords;
+#endif
+#ifdef VERTEX_UVS_1
+    tex_coords.uv1 = input.tex_coords_1;
+#endif
+    float4 albedo = material.sample_albedo_texture(tex_coords);
     float opacity = albedo.a;
 
     if (vxgi_voxelization.flag_static_voxels == 0) {
@@ -207,10 +281,13 @@ float4 fragment_main(GeometryOutput input) : SV_Target0 {
 
     if (opacity > 0.0) {
         albedo.rgb = srgb_to_linear(material.albedo) * srgb_to_linear(albedo.rgb);
+#ifdef VERTEX_COLORS
+        albedo.rgb *= input.color.rgb;
+#endif
         albedo.rgb *= opacity;
         albedo.a = 1.0;
 
-        float4 emissive = material.sample_emissive_texture(input.tex_coords);
+        float4 emissive = material.sample_emissive_texture(tex_coords);
         emissive.rgb = srgb_to_linear(emissive.rgb) * srgb_to_linear(material.emissive);
         emissive.a = 1.0;
 

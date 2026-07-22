@@ -116,6 +116,31 @@ make_glb(std::string_view json, std::span<const std::byte> binary = {}) {
     return bytes;
 }
 
+std::string encode_base64(std::span<const std::byte> bytes) {
+    static constexpr std::string_view alphabet =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string encoded;
+    encoded.reserve(((bytes.size() + 2) / 3) * 4);
+    for (std::size_t offset = 0; offset < bytes.size(); offset += 3) {
+        const auto remaining = bytes.size() - offset;
+        const auto first = std::to_integer<std::uint32_t>(bytes[offset]);
+        const auto second =
+            remaining > 1 ? std::to_integer<std::uint32_t>(bytes[offset + 1]) :
+                            0;
+        const auto third =
+            remaining > 2 ? std::to_integer<std::uint32_t>(bytes[offset + 2]) :
+                            0;
+        const auto value = (first << 16U) | (second << 8U) | third;
+        encoded.push_back(alphabet[(value >> 18U) & 0x3FU]);
+        encoded.push_back(alphabet[(value >> 12U) & 0x3FU]);
+        encoded.push_back(
+            remaining > 1 ? alphabet[(value >> 6U) & 0x3FU] : '='
+        );
+        encoded.push_back(remaining > 2 ? alphabet[value & 0x3FU] : '=');
+    }
+    return encoded;
+}
+
 class GltfMemorySource : public AssetSource {
   private:
     std::vector<std::byte> m_bytes;
@@ -136,6 +161,49 @@ class GltfMemorySource : public AssetSource {
             return failure("memory asset not found: " + path.generic_string());
         }
         return Reader(m_bytes.data(), m_bytes.size());
+    }
+};
+
+class ExternalGltfMemorySource : public AssetSource {
+  private:
+    std::vector<std::byte> m_json;
+    std::vector<std::byte> m_buffer;
+    std::vector<std::byte> m_image;
+
+  public:
+    ExternalGltfMemorySource(
+        std::string_view json,
+        std::vector<std::byte> buffer,
+        std::vector<std::byte> image = {}
+    ) : m_buffer(std::move(buffer)), m_image(std::move(image)) {
+        m_json.reserve(json.size());
+        for (const auto character : json) {
+            m_json.push_back(static_cast<std::byte>(character));
+        }
+    }
+
+    std::string name() const override { return "external"; }
+
+    bool exists(const std::filesystem::path& path) const override {
+        const auto asset_path = path.generic_string();
+        return asset_path == "models/model.gltf" ||
+               asset_path == "models/data/triangle mesh.bin" ||
+               (asset_path == "models/textures/pixel.png" && !m_image.empty());
+    }
+
+    Result<Reader, std::string>
+    try_get_reader(const std::filesystem::path& path) const override {
+        const auto asset_path = path.generic_string();
+        if (asset_path == "models/model.gltf") {
+            return Reader(m_json.data(), m_json.size());
+        }
+        if (asset_path == "models/data/triangle mesh.bin") {
+            return Reader(m_buffer.data(), m_buffer.size());
+        }
+        if (asset_path == "models/textures/pixel.png" && !m_image.empty()) {
+            return Reader(m_image.data(), m_image.size());
+        }
+        return failure("memory asset not found: " + asset_path);
     }
 };
 
@@ -373,10 +441,29 @@ TEST_CASE(
             )
         );
     }
+    for (const float value : texcoords) {
+        append_value(binary, 1.0f - value);
+    }
+    for (const auto value : {
+             std::uint8_t {255},
+             std::uint8_t {0},
+             std::uint8_t {0},
+             std::uint8_t {255},
+             std::uint8_t {0},
+             std::uint8_t {255},
+             std::uint8_t {0},
+             std::uint8_t {0},
+             std::uint8_t {0},
+             std::uint8_t {0},
+             std::uint8_t {255},
+             std::uint8_t {255},
+         }) {
+        append_value(binary, value);
+    }
     append_value(binary, std::uint16_t {0});
     append_value(binary, std::uint16_t {1});
     append_value(binary, std::uint16_t {2});
-    REQUIRE(binary.size() == 138);
+    REQUIRE(binary.size() == 174);
 
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
@@ -389,19 +476,23 @@ TEST_CASE(
             "scene":0,
             "scenes":[{"nodes":[0]}],
             "nodes":[{"name":"triangle-node","mesh":0}],
-            "buffers":[{"byteLength":138}],
+            "buffers":[{"byteLength":174}],
             "bufferViews":[
                 {"buffer":0,"byteOffset":0,"byteLength":72,"byteStride":24},
                 {"buffer":0,"byteOffset":72,"byteLength":48},
                 {"buffer":0,"byteOffset":120,"byteLength":12},
-                {"buffer":0,"byteOffset":132,"byteLength":6}
+                {"buffer":0,"byteOffset":132,"byteLength":24},
+                {"buffer":0,"byteOffset":156,"byteLength":12},
+                {"buffer":0,"byteOffset":168,"byteLength":6}
             ],
             "accessors":[
                 {"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"},
                 {"bufferView":0,"byteOffset":12,"componentType":5126,"count":3,"type":"VEC3"},
                 {"bufferView":1,"componentType":5126,"count":3,"type":"VEC4"},
                 {"bufferView":2,"componentType":5123,"normalized":true,"count":3,"type":"VEC2"},
-                {"bufferView":3,"componentType":5123,"count":3,"type":"SCALAR"}
+                {"bufferView":3,"componentType":5126,"count":3,"type":"VEC2"},
+                {"bufferView":4,"componentType":5121,"normalized":true,"count":3,"type":"VEC4"},
+                {"bufferView":5,"componentType":5123,"count":3,"type":"SCALAR"}
             ],
             "materials":[{
                 "pbrMetallicRoughness":{
@@ -415,8 +506,8 @@ TEST_CASE(
             "meshes":[{
                 "name":"triangle",
                 "primitives":[{
-                    "attributes":{"POSITION":0,"NORMAL":1,"TANGENT":2,"TEXCOORD_0":3},
-                    "indices":4,
+                    "attributes":{"POSITION":0,"NORMAL":1,"TANGENT":2,"TEXCOORD_0":3,"TEXCOORD_1":4,"COLOR_0":5},
+                    "indices":6,
                     "material":0
                 }]
             }]
@@ -462,6 +553,8 @@ TEST_CASE(
     CHECK(mesh->has_attribute(Mesh::ATTRIBUTE_NORMAL.id));
     CHECK(mesh->has_attribute(Mesh::ATTRIBUTE_TANGENT.id));
     CHECK(mesh->has_attribute(Mesh::ATTRIBUTE_UV_0.id));
+    CHECK(mesh->has_attribute(Mesh::ATTRIBUTE_UV_1.id));
+    CHECK(mesh->has_attribute(Mesh::ATTRIBUTE_COLOR.id));
     auto loaded_positions =
         mesh->get_attribute(Mesh::ATTRIBUTE_POSITION.id).as_float3();
     REQUIRE(loaded_positions);
@@ -471,12 +564,229 @@ TEST_CASE(
     );
     CHECK(loaded_texcoords[2] == 1.0f);
     CHECK(loaded_texcoords[5] == 1.0f);
+    const auto* loaded_texcoords_1 = static_cast<const float*>(
+        mesh->get_attribute(Mesh::ATTRIBUTE_UV_1.id).data()
+    );
+    CHECK(loaded_texcoords_1[0] == 1.0f);
+    CHECK(loaded_texcoords_1[5] == 0.0f);
+    const auto* loaded_colors = static_cast<const float*>(
+        mesh->get_attribute(Mesh::ATTRIBUTE_COLOR.id).data()
+    );
+    CHECK(loaded_colors[0] == 1.0f);
+    CHECK(loaded_colors[1] == 0.0f);
+    CHECK(loaded_colors[7] == 0.0f);
+    CHECK(loaded_colors[10] == 1.0f);
 
     auto scene = app.resource<Assets<Scene>>().get(gltf->scenes[0]);
     REQUIRE(scene);
     REQUIRE(scene->nodes.size() == 1);
     REQUIRE(scene->nodes[0].mesh);
     CHECK(scene->nodes[0].mesh->id() == gltf->meshes[0].id());
+}
+
+TEST_CASE(
+    "GltfLoader reads external buffers and images relative to the glTF asset",
+    "[gltf][loader]"
+) {
+    std::vector<std::byte> binary;
+    for (const float value : {
+             0.0f,
+             0.0f,
+             0.0f,
+             1.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             1.0f,
+             0.0f,
+         }) {
+        append_value(binary, value);
+    }
+
+    App app;
+    app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    auto& asset_server = app.resource<AssetServer>();
+    asset_server.add_without_loader<Mesh>();
+    asset_server.add_without_loader<StandardMaterial>();
+    asset_server.emplace_source<ExternalGltfMemorySource>(
+        R"({
+            "asset":{"version":"2.0"},
+            "scene":0,
+            "scenes":[{"nodes":[0]}],
+            "nodes":[{"mesh":0}],
+            "buffers":[{
+                "uri":"data/triangle%20mesh.bin",
+                "byteLength":36
+            }],
+            "bufferViews":[{"buffer":0,"byteLength":36}],
+            "accessors":[{
+                "bufferView":0,
+                "componentType":5126,
+                "count":3,
+                "type":"VEC3"
+            }],
+            "images":[{"uri":"textures/pixel.png"}],
+            "textures":[{"source":0}],
+            "materials":[{"pbrMetallicRoughness":{
+                "baseColorTexture":{"index":0}
+            }}],
+            "meshes":[{"primitives":[{
+                "attributes":{"POSITION":0},
+                "material":0
+            }]}]
+        })",
+        std::move(binary),
+        std::vector<std::byte>(rgba_png.begin(), rgba_png.end())
+    );
+
+    auto handle = asset_server.load<Gltf>("external://models/model.gltf");
+
+    REQUIRE(asset_server.load_state(handle));
+    CHECK(*asset_server.load_state(handle) == AssetLoadState::Loaded);
+    auto& gltf_assets = app.resource<Assets<Gltf>>();
+    auto gltf = gltf_assets.get(handle);
+    REQUIRE(gltf);
+    REQUIRE(gltf->meshes.size() == 1);
+    REQUIRE(gltf->textures.size() == 1);
+    auto scene_mesh = app.resource<Assets<SceneMesh>>().get(gltf->meshes[0]);
+    REQUIRE(scene_mesh);
+    REQUIRE(scene_mesh->primitives.size() == 1);
+    auto mesh =
+        app.resource<Assets<Mesh>>().get(scene_mesh->primitives[0].mesh);
+    REQUIRE(mesh);
+    CHECK(mesh->vertex_count() == 3);
+    auto image = app.resource<Assets<Image>>().get(gltf->textures[0]);
+    REQUIRE(image);
+    CHECK(image->width() == 1);
+    CHECK(image->height() == 1);
+    CHECK(
+        image->texture_description().texture_format ==
+        PixelFormat::Rgba8UnormSrgb
+    );
+    CHECK(image->data()[0] == 0x10);
+    CHECK(image->data()[1] == 0x20);
+    CHECK(image->data()[2] == 0x30);
+    CHECK(image->data()[3] == 0x40);
+
+    auto dependencies = gltf_assets.loader_dependencies(handle);
+    REQUIRE(dependencies);
+    REQUIRE(dependencies->size() == 2);
+    CHECK(
+        (*dependencies)[0] ==
+        AssetPath("external://models/data/triangle mesh.bin")
+    );
+    CHECK(
+        (*dependencies)[1] == AssetPath("external://models/textures/pixel.png")
+    );
+}
+
+TEST_CASE("GltfLoader decodes data URI buffers and images", "[gltf][loader]") {
+    std::vector<std::byte> binary;
+    for (const float value : {
+             0.0f,
+             0.0f,
+             0.0f,
+             1.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             1.0f,
+             0.0f,
+         }) {
+        append_value(binary, value);
+    }
+    const auto buffer_uri =
+        "data:application/octet-stream;base64," + encode_base64(binary);
+    const auto image_uri =
+        "data:image/png;base64," + encode_base64(std::span(rgba_png));
+    const auto json = std::string(R"({
+            "asset":{"version":"2.0"},
+            "scene":0,
+            "scenes":[{"nodes":[0]}],
+            "nodes":[{"mesh":0}],
+            "buffers":[{"uri":")") +
+                      buffer_uri + R"(","byteLength":36}],
+            "bufferViews":[{"buffer":0,"byteLength":36}],
+            "accessors":[{
+                "bufferView":0,
+                "componentType":5126,
+                "count":3,
+                "type":"VEC3"
+            }],
+            "images":[{"uri":")" +
+                      image_uri + R"("}],
+            "textures":[{"source":0}],
+            "materials":[{"pbrMetallicRoughness":{
+                "baseColorTexture":{"index":0}
+            }}],
+            "meshes":[{"primitives":[{
+                "attributes":{"POSITION":0},
+                "material":0
+            }]}]
+        })";
+
+    App app;
+    app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    auto& asset_server = app.resource<AssetServer>();
+    asset_server.add_without_loader<Mesh>();
+    asset_server.add_without_loader<StandardMaterial>();
+    asset_server.emplace_source<ExternalGltfMemorySource>(
+        json,
+        std::vector<std::byte> {}
+    );
+
+    auto handle = asset_server.load<Gltf>("external://models/model.gltf");
+
+    REQUIRE(asset_server.load_state(handle));
+    CHECK(*asset_server.load_state(handle) == AssetLoadState::Loaded);
+    auto& gltf_assets = app.resource<Assets<Gltf>>();
+    auto gltf = gltf_assets.get(handle);
+    REQUIRE(gltf);
+    REQUIRE(gltf->meshes.size() == 1);
+    REQUIRE(gltf->textures.size() == 1);
+    auto scene_mesh = app.resource<Assets<SceneMesh>>().get(gltf->meshes[0]);
+    REQUIRE(scene_mesh);
+    REQUIRE(scene_mesh->primitives.size() == 1);
+    auto mesh =
+        app.resource<Assets<Mesh>>().get(scene_mesh->primitives[0].mesh);
+    REQUIRE(mesh);
+    CHECK(mesh->vertex_count() == 3);
+    auto image = app.resource<Assets<Image>>().get(gltf->textures[0]);
+    REQUIRE(image);
+    CHECK(image->width() == 1);
+    CHECK(image->height() == 1);
+    CHECK(
+        image->texture_description().texture_format ==
+        PixelFormat::Rgba8UnormSrgb
+    );
+    auto dependencies = gltf_assets.loader_dependencies(handle);
+    REQUIRE(dependencies);
+    CHECK(dependencies->empty());
+}
+
+TEST_CASE(
+    "GltfLoader rejects data URIs with invalid image data",
+    "[gltf][loader]"
+) {
+    App app;
+    app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    auto& asset_server = app.resource<AssetServer>();
+    asset_server.emplace_source<ExternalGltfMemorySource>(
+        R"({
+            "asset":{"version":"2.0"},
+            "images":[{"uri":"data:image/png;base64,AAAA"}],
+            "textures":[{"source":0}]
+        })",
+        std::vector<std::byte> {}
+    );
+
+    auto handle = asset_server.load<Gltf>("external://models/model.gltf");
+
+    REQUIRE(asset_server.load_state(handle));
+    CHECK(*asset_server.load_state(handle) == AssetLoadState::Failed);
+    auto error = asset_server.load_error(handle);
+    REQUIRE(error);
+    CHECK(error->path == AssetPath("external://models/model.gltf"));
 }
 
 TEST_CASE("GltfLoader applies sparse position accessors", "[gltf][loader]") {
@@ -573,7 +883,8 @@ TEST_CASE("GltfLoader rejects malformed GLB data", "[gltf][loader]") {
     REQUIRE_FALSE(result);
     CHECK(
         result.error().message ==
-        "Failed to parse glTF asset: The GLB container is invalid."
+        "Failed to parse glTF asset: The file data is invalid, or the file "
+        "type could not be determined."
     );
 }
 
@@ -635,12 +946,12 @@ TEST_CASE(
             ],
             "materials":[{
                 "pbrMetallicRoughness":{
-                    "baseColorTexture":{"index":0},
-                    "metallicRoughnessTexture":{"index":1}
+                    "baseColorTexture":{"index":0,"texCoord":1},
+                    "metallicRoughnessTexture":{"index":1,"texCoord":0}
                 },
-                "normalTexture":{"index":1,"scale":0.5},
-                "occlusionTexture":{"index":1,"strength":0.25},
-                "emissiveTexture":{"index":0}
+                "normalTexture":{"index":1,"texCoord":1,"scale":0.5},
+                "occlusionTexture":{"index":1,"texCoord":0,"strength":0.25},
+                "emissiveTexture":{"index":0,"texCoord":1}
             }]
         })",
         rgba_png
@@ -666,6 +977,11 @@ TEST_CASE(
     CHECK(material->normal_texture->id() == gltf->textures[1].id());
     CHECK(material->normal_scale == 0.5f);
     CHECK(material->occlusion_strength == 0.25f);
+    CHECK(material->albedo_channel == UvChannel::Uv1);
+    CHECK(material->normal_channel == UvChannel::Uv1);
+    CHECK(material->metallic_roughness_channel == UvChannel::Uv0);
+    CHECK(material->occlusion_channel == UvChannel::Uv0);
+    CHECK(material->emissive_channel == UvChannel::Uv1);
     auto albedo_image =
         app.resource<Assets<Image>>().get(*material->albedo_texture);
     REQUIRE(albedo_image);

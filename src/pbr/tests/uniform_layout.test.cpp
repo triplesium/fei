@@ -52,7 +52,7 @@ TEST_CASE(
 }
 
 TEST_CASE("PBR material uniform keeps shader ABI layout", "[pbr][uniform]") {
-    require_standard_uniform_layout<StandardMaterialUniform>(80);
+    require_standard_uniform_layout<StandardMaterialUniform>(96);
     CHECK(offsetof(StandardMaterialUniform, albedo) == 0);
     CHECK(offsetof(StandardMaterialUniform, metallic) == 12);
     CHECK(offsetof(StandardMaterialUniform, roughness) == 16);
@@ -61,6 +61,12 @@ TEST_CASE("PBR material uniform keeps shader ABI layout", "[pbr][uniform]") {
     CHECK(offsetof(StandardMaterialUniform, flags) == 60);
     CHECK(offsetof(StandardMaterialUniform, normal_scale) == 64);
     CHECK(offsetof(StandardMaterialUniform, occlusion_strength) == 68);
+    CHECK(offsetof(StandardMaterialUniform, albedo_channel) == 72);
+    CHECK(offsetof(StandardMaterialUniform, normal_channel) == 76);
+    CHECK(offsetof(StandardMaterialUniform, metallic_roughness_channel) == 80);
+    CHECK(offsetof(StandardMaterialUniform, occlusion_channel) == 84);
+    CHECK(offsetof(StandardMaterialUniform, emissive_channel) == 88);
+    CHECK(offsetof(StandardMaterialUniform, specular_channel) == 92);
 }
 
 TEST_CASE(

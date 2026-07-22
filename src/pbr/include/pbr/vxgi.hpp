@@ -10,7 +10,6 @@
 #include "graphics/graphics_device.hpp"
 #include "graphics/pipeline.hpp"
 #include "graphics/resource.hpp"
-#include "graphics/shader_module.hpp"
 #include "graphics/texture.hpp"
 #include "math/matrix.hpp"
 #include "math/primitives.hpp"
@@ -66,7 +65,7 @@ struct alignas(16) VxgiVoxelizationUniform {
 
 class VxgiVoxelizationSpecializer : public PipelineSpecializer {
   private:
-    std::vector<std::shared_ptr<const ShaderModule>> m_shader_modules;
+    ShaderCache* m_shader_cache {nullptr};
     std::shared_ptr<const ResourceLayout> m_volumes_layout;
     std::shared_ptr<const ResourceLayout> m_voxelization_layout;
     std::shared_ptr<const ResourceLayout> m_accumulation_layout;
@@ -74,7 +73,7 @@ class VxgiVoxelizationSpecializer : public PipelineSpecializer {
 
   public:
     VxgiVoxelizationSpecializer(
-        std::vector<std::shared_ptr<const ShaderModule>> shader_modules,
+        ShaderCache& shader_cache,
         std::shared_ptr<const ResourceLayout> volumes_layout,
         std::shared_ptr<const ResourceLayout> voxelization_layout,
         std::shared_ptr<const ResourceLayout> accumulation_layout
