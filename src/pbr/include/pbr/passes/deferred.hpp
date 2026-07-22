@@ -11,6 +11,10 @@ namespace fei {
 
 struct DeferredPrepassPhase : RenderPhase<MeshDrawItem> {};
 
+struct TransparentPhase : RenderPhase<MeshDrawItem> {
+    std::shared_ptr<const ResourceSet> environment_set;
+};
+
 struct DeferredRenderPipelines {
     std::shared_ptr<ResourceLayout> gbuffer_resource_layout;
     std::shared_ptr<ResourceLayout> composite_resource_layout;

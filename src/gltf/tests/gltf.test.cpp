@@ -69,6 +69,16 @@ constexpr auto rgba_png = bytes_from_hex(
     "0000000049454e44ae426082"
 );
 
+constexpr auto two_row_rgba_png = bytes_from_hex(
+    "89504e470d0a1a0a"
+    "0000000d49484452000000010000000208060000009981b627"
+    "000000017352474200aece1ce9"
+    "0000000467414d410000b18f0bfc6105"
+    "000000097048597300000ec300000ec301c76fa864"
+    "00000012494441541857631050307060084828680000082a0241b90d5f78"
+    "0000000049454e44ae426082"
+);
+
 template<typename T>
 void append_value(std::vector<std::byte>& bytes, T value) {
     const auto encoded = std::bit_cast<std::array<std::byte, sizeof(T)>>(value);
@@ -263,6 +273,46 @@ TEST_CASE("GltfLoader decodes images embedded in GLB", "[gltf][loader]") {
     CHECK(image->data()[1] == 0x20);
     CHECK(image->data()[2] == 0x30);
     CHECK(image->data()[3] == 0x40);
+}
+
+TEST_CASE(
+    "GltfLoader preserves glTF image row order",
+    "[gltf][loader][image]"
+) {
+    App app;
+    app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    auto& asset_server = app.resource<AssetServer>();
+    asset_server.emplace_source<GltfMemorySource>(make_glb(
+        R"({
+            "asset":{"version":"2.0"},
+            "buffers":[{"byteLength":125}],
+            "bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":125}],
+            "images":[{"bufferView":0,"mimeType":"image/png"}],
+            "textures":[{"source":0}]
+        })",
+        two_row_rgba_png
+    ));
+
+    auto handle = asset_server.load<Gltf>("memory://model.glb");
+
+    REQUIRE(asset_server.load_state(handle));
+    CHECK(*asset_server.load_state(handle) == AssetLoadState::Loaded);
+    auto gltf = app.resource<Assets<Gltf>>().get(handle);
+    REQUIRE(gltf);
+    REQUIRE(gltf->textures.size() == 1);
+    auto image = app.resource<Assets<Image>>().get(gltf->textures[0]);
+    REQUIRE(image);
+    REQUIRE(image->width() == 1);
+    REQUIRE(image->height() == 2);
+    REQUIRE(image->channels() == 4);
+    CHECK(image->data()[0] == 0x10);
+    CHECK(image->data()[1] == 0x20);
+    CHECK(image->data()[2] == 0x30);
+    CHECK(image->data()[3] == 0x40);
+    CHECK(image->data()[4] == 0x50);
+    CHECK(image->data()[5] == 0x60);
+    CHECK(image->data()[6] == 0x70);
+    CHECK(image->data()[7] == 0x80);
 }
 
 TEST_CASE("GltfLoader converts scenes and node transforms", "[gltf][loader]") {
@@ -995,4 +1045,48 @@ TEST_CASE(
     CHECK(sampler.mipmap_filter == SamplerFilter::Linear);
     CHECK(sampler.address_mode_u == SamplerAddressMode::ClampToEdge);
     CHECK(sampler.address_mode_v == SamplerAddressMode::MirrorRepeat);
+}
+
+TEST_CASE("GltfLoader maps alpha material modes", "[gltf][loader]") {
+    App app;
+    app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    auto& asset_server = app.resource<AssetServer>();
+    asset_server.add_without_loader<StandardMaterial>();
+    asset_server.emplace_source<GltfMemorySource>(make_glb(R"({
+        "asset":{"version":"2.0"},
+        "materials":[
+            {
+                "alphaMode":"MASK",
+                "alphaCutoff":0.25,
+                "pbrMetallicRoughness":{
+                    "baseColorFactor":[1.0,0.5,0.25,0.75]
+                }
+            },
+            {
+                "alphaMode":"BLEND",
+                "pbrMetallicRoughness":{
+                    "baseColorFactor":[0.25,0.5,1.0,0.4]
+                }
+            }
+        ]
+    })"));
+
+    auto handle = asset_server.load<Gltf>("memory://model.glb");
+
+    REQUIRE(asset_server.load_state(handle));
+    CHECK(*asset_server.load_state(handle) == AssetLoadState::Loaded);
+    auto gltf = app.resource<Assets<Gltf>>().get(handle);
+    REQUIRE(gltf);
+    REQUIRE(gltf->materials.size() == 2);
+    auto mask =
+        app.resource<Assets<StandardMaterial>>().get(gltf->materials[0]);
+    auto blend =
+        app.resource<Assets<StandardMaterial>>().get(gltf->materials[1]);
+    REQUIRE(mask);
+    REQUIRE(blend);
+    CHECK(mask->alpha_mode == MaterialAlphaMode::Mask);
+    CHECK(mask->albedo_alpha == 0.75f);
+    CHECK(mask->alpha_cutoff == 0.25f);
+    CHECK(blend->alpha_mode == MaterialAlphaMode::Blend);
+    CHECK(blend->albedo_alpha == 0.4f);
 }

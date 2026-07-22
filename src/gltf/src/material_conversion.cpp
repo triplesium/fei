@@ -53,10 +53,6 @@ Result<ConvertedMaterial, std::string> convert_material(
         source.packedOcclusionRoughnessMetallicTextures) {
         return failure(label + " uses unsupported packed texture extensions");
     }
-    if (source.alphaMode != fastgltf::AlphaMode::Opaque ||
-        source.pbrData.baseColorFactor[3] != 1.0f) {
-        return failure(label + " uses unsupported transparency");
-    }
     if (source.unlit) {
         return failure(label + " uses an unsupported unlit model");
     }
@@ -75,6 +71,8 @@ Result<ConvertedMaterial, std::string> convert_material(
         source.pbrData.baseColorFactor[1],
         source.pbrData.baseColorFactor[2],
     };
+    material->albedo_alpha = source.pbrData.baseColorFactor[3];
+    material->alpha_cutoff = source.alphaCutoff;
     material->metallic = source.pbrData.metallicFactor;
     material->roughness = source.pbrData.roughnessFactor;
     material->emissive = Color3F {
@@ -82,7 +80,17 @@ Result<ConvertedMaterial, std::string> convert_material(
         source.emissiveFactor[1] * source.emissiveStrength,
         source.emissiveFactor[2] * source.emissiveStrength,
     };
-    material->alpha_mode = MaterialAlphaMode::Opaque;
+    switch (source.alphaMode) {
+        case fastgltf::AlphaMode::Opaque:
+            material->alpha_mode = MaterialAlphaMode::Opaque;
+            break;
+        case fastgltf::AlphaMode::Mask:
+            material->alpha_mode = MaterialAlphaMode::Mask;
+            break;
+        case fastgltf::AlphaMode::Blend:
+            material->alpha_mode = MaterialAlphaMode::Blend;
+            break;
+    }
     material->cull_mode = source.doubleSided ? CullMode::None : CullMode::Back;
     material->normal_scale =
         source.normalTexture ? source.normalTexture->scale : 1.0f;

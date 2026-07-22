@@ -61,6 +61,31 @@ void deferred_prepass(
     ResRO<PipelineCache> pipeline_cache
 );
 
+void queue_transparent_meshes(
+    Query<
+        Entity,
+        const Mesh3d,
+        const MeshMaterial3d<StandardMaterial>,
+        const GlobalTransform3d> query_meshes,
+    Query<Entity, const MeshViewResourceSet, const GlobalTransform3d>::Filter<
+        With<Camera3d>> query_cameras,
+    ResRW<TransparentPhase> phase,
+    ResRO<RenderAssets<GpuMesh>> gpu_meshes,
+    ResRO<MeshUniforms> mesh_uniforms,
+    ResRW<MeshMaterialPipelines> mesh_material_pipelines,
+    ResRO<RenderAssets<PreparedMaterial>> materials,
+    ResRO<ViewVisibleEntities> visible_entities,
+    ResRW<PipelineCache>
+);
+
+void transparent_pass(
+    ResRW<RenderFrameContext> frame,
+    ResRO<TransparentPhase> phase,
+    ResRO<RenderTarget> target,
+    ResRO<DeferredViewTargets> targets,
+    ResRO<PipelineCache> pipeline_cache
+);
+
 void direct_lighting_pass(
     Query<const MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     Query<const ShadowMap> query_shadow_maps,

@@ -269,8 +269,16 @@ float4 fragment_main(GeometryOutput input) : SV_Target0 {
 #ifdef VERTEX_UVS_1
     tex_coords.uv1 = input.tex_coords_1;
 #endif
-    float4 albedo = material.sample_albedo_texture(tex_coords);
-    float opacity = albedo.a;
+    float opacity = material.sample_alpha(tex_coords);
+#ifdef VERTEX_COLORS
+    opacity *= input.color.a;
+#endif
+#ifdef MAY_DISCARD
+    if (opacity < material.alpha_cutoff) {
+        discard;
+    }
+#endif
+    opacity = 1.0;
 
     if (vxgi_voxelization.flag_static_voxels == 0) {
         bool is_static = static_voxel_flag[position].r > 0.0;
@@ -280,15 +288,16 @@ float4 fragment_main(GeometryOutput input) : SV_Target0 {
     }
 
     if (opacity > 0.0) {
-        albedo.rgb = srgb_to_linear(material.albedo) * srgb_to_linear(albedo.rgb);
+        float4 albedo = float4(material.sample_albedo(tex_coords), 1.0);
+        albedo.rgb = srgb_to_linear(albedo.rgb);
 #ifdef VERTEX_COLORS
         albedo.rgb *= input.color.rgb;
 #endif
         albedo.rgb *= opacity;
         albedo.a = 1.0;
 
-        float4 emissive = material.sample_emissive_texture(tex_coords);
-        emissive.rgb = srgb_to_linear(emissive.rgb) * srgb_to_linear(material.emissive);
+        float4 emissive = float4(material.sample_emissive(tex_coords), 1.0);
+        emissive.rgb = srgb_to_linear(emissive.rgb);
         emissive.a = 1.0;
 
         uint linear_index = voxel_linear_index(position);

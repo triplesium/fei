@@ -6,6 +6,8 @@ public struct StandardMaterialUniform {
     public float3 albedo;
     public float metallic;
     public float roughness;
+    public float albedo_alpha;
+    public float alpha_cutoff;
     public float3 emissive;
     public float3 specular;
     public int flags;
@@ -49,6 +51,7 @@ public static const int STANDARD_MATERIAL_FLAG_METALLIC_ROUGHNESS_MAP = 1 << 2;
 public static const int STANDARD_MATERIAL_FLAG_OCCLUSION_MAP = 1 << 3;
 public static const int STANDARD_MATERIAL_FLAG_EMISSIVE_MAP = 1 << 4;
 public static const int STANDARD_MATERIAL_FLAG_SPECULAR_MAP = 1 << 5;
+public static const int STANDARD_MATERIAL_FLAG_ALPHA_BLEND = 1 << 6;
 
 public struct StandardMaterial {
     public float3 albedo;
@@ -121,6 +124,18 @@ public struct StandardMaterialResources {
         }
     }
 
+    public property float alpha {
+        get {
+            return material.albedo_alpha;
+        }
+    }
+
+    public property float alpha_cutoff {
+        get {
+            return material.alpha_cutoff;
+        }
+    }
+
     public property float roughness {
         get {
             return material.roughness;
@@ -185,6 +200,12 @@ public struct StandardMaterialResources {
         }
     }
 
+    public property bool alpha_blend {
+        get {
+            return has_flag(STANDARD_MATERIAL_FLAG_ALPHA_BLEND);
+        }
+    }
+
     public float4 sample_albedo_texture(StandardMaterialTexCoords tex_coords) {
         return albedo_map.Sample(
             albedo_sampler,
@@ -218,6 +239,15 @@ public struct StandardMaterialResources {
         }
 #endif
         return albedo;
+    }
+
+    public float sample_alpha(StandardMaterialTexCoords tex_coords) {
+#if defined(VERTEX_UVS) || defined(VERTEX_UVS_1)
+        if (has_albedo_map && tex_coords.has(material.albedo_channel)) {
+            return alpha * sample_albedo_texture(tex_coords).a;
+        }
+#endif
+        return alpha;
     }
 
     public float sample_metallic(StandardMaterialTexCoords tex_coords) {

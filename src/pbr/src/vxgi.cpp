@@ -65,9 +65,13 @@ VxgiVoxelizationSpecializer::VxgiVoxelizationSpecializer(
 void VxgiVoxelizationSpecializer::specialize(
     RenderPipelineDescription& desc,
     const GpuMesh& mesh,
-    const PreparedMaterial& /*material*/
+    const PreparedMaterial& material
 ) const {
     auto defs = pbr_mesh_shader_defs(mesh);
+    if (material_alpha_mode_may_discard(material.pipeline_state().alpha_mode)) {
+        defs.push_back(ShaderDefVal::bool_def(MAY_DISCARD_SHADER_DEF));
+        defs = normalized_shader_defs(std::move(defs));
+    }
     const AssetPath path("shader://pbr/voxelization.slang");
     desc.shader_program.shaders = {
         m_shader_cache
@@ -378,6 +382,11 @@ void queue_vxgi_voxelization_pipelines(
         auto gpu_mesh_opt = gpu_meshes->get(mesh3d.mesh);
         auto material_opt = materials->get(mesh_material3d.material);
         if (!gpu_mesh_opt || !material_opt) {
+            continue;
+        }
+        if (material_alpha_mode_uses_blend(
+                material_opt->pipeline_state().alpha_mode
+            )) {
             continue;
         }
 

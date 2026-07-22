@@ -9,7 +9,6 @@
 #include "graphics/pipeline.hpp"
 #include "graphics/resource.hpp"
 #include "graphics/sampler.hpp"
-#include "graphics/shader_module.hpp"
 #include "graphics/texture.hpp"
 #include "math/color.hpp"
 #include "math/common.hpp"
@@ -88,13 +87,12 @@ struct alignas(16) LightingUniform {
 };
 
 class ShadowMapPipelineSpecializer : public PipelineSpecializer {
-    std::vector<std::shared_ptr<const ShaderModule>> m_shader_modules;
+    ShaderCache* m_shader_cache {nullptr};
     std::size_t m_cache_key {0};
 
   public:
-    explicit ShadowMapPipelineSpecializer(
-        std::vector<std::shared_ptr<const ShaderModule>> shader_modules
-    );
+    ShadowMapPipelineSpecializer() = default;
+    explicit ShadowMapPipelineSpecializer(ShaderCache& shader_cache);
 
     std::size_t cache_key() const override;
 

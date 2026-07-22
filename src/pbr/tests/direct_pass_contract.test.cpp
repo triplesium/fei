@@ -308,6 +308,81 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Transparent pass loads composite color and camera depth",
+    "[pbr][pass][contract][transparent]"
+) {
+    PassTestWorld test;
+    test.world.add_resource(
+        Window {
+            .glfw_window = nullptr,
+            .width = 1280,
+            .height = 720,
+        }
+    );
+    test.world.add_resource(RenderTarget {});
+    test.world.add_resource(DeferredViewTargets {});
+    test.world.run_system_once(setup_render_target);
+    test.world.run_system_once(prepare_deferred_view_targets);
+
+    auto layout =
+        test.device->create_resource_layout(ResourceLayoutDescription {});
+    auto create_set = [&]() {
+        return test.device->create_resource_set(
+            ResourceSetDescription {
+                .layout = layout,
+                .resources = {},
+            }
+        );
+    };
+    PipelineCache pipeline_cache(*test.device);
+    const auto pipeline =
+        pipeline_cache.request_render_pipeline(RenderPipelineDescription {});
+    pipeline_cache.process_queued_pipelines();
+    test.world.add_resource(std::move(pipeline_cache));
+
+    TransparentPhase phase;
+    phase.environment_set = create_set();
+    phase.items.push_back(
+        MeshDrawItem {
+            .entity = 1,
+            .pipeline = pipeline,
+            .view_set = create_set(),
+            .mesh_set = create_set(),
+            .material_set = create_set(),
+            .vertex_buffer = test.device->create_buffer(
+                BufferDescription {
+                    .size = 64,
+                    .usages = BufferUsages::Vertex,
+                }
+            ),
+            .vertex_count = 3,
+        }
+    );
+    test.world.add_resource(std::move(phase));
+
+    test.world.run_system_once(transparent_pass);
+
+    REQUIRE(test.commands->render_passes.size() == 1);
+    const auto& pass = test.commands->render_passes.front();
+    const auto& targets = test.world.resource<DeferredViewTargets>();
+    const auto& target = test.world.resource<RenderTarget>();
+    REQUIRE(pass.color_attachments.size() == 1);
+    CHECK(pass.color_attachments[0].texture == targets.composite);
+    CHECK(pass.color_attachments[0].load_op == LoadOp::Load);
+    REQUIRE(pass.depth_stencil_attachment);
+    CHECK(pass.depth_stencil_attachment->texture == target.depth_texture);
+    CHECK(pass.depth_stencil_attachment->depth_load_op == LoadOp::Load);
+    REQUIRE(test.commands->viewports.size() == 1);
+    CHECK(test.commands->viewports[0].width == 1280);
+    CHECK(test.commands->viewports[0].height == 720);
+    CHECK(test.commands->render_pipelines.size() == 1);
+    CHECK(test.commands->resource_sets.size() == 4);
+    REQUIRE(test.commands->draws.size() == 1);
+    CHECK(test.commands->draws[0] == std::pair {0ULL, 3ULL});
+    CHECK(test.commands->end_render_pass_calls == 1);
+}
+
+TEST_CASE(
     "Shadow pass records physical color and depth attachments",
     "[pbr][pass][contract]"
 ) {

@@ -142,13 +142,17 @@ void queue_deferred_prepass_meshes(
         *mesh_uniforms,
         *mesh_material_pipelines,
         DeferredPipelineSpecializer {*shader_defaults},
-        [visible_meshes](
+        [visible_meshes, prepared_materials = &*materials](
             Entity entity,
             const Mesh3d&,
-            const MeshMaterial3d<StandardMaterial>&,
+            const MeshMaterial3d<StandardMaterial>& material,
             const GlobalTransform3d&
         ) {
-            return visible_meshes->contains(entity);
+            auto prepared = prepared_materials->get(material.material.id());
+            return visible_meshes->contains(entity) && prepared &&
+                   !material_alpha_mode_uses_blend(
+                       prepared->pipeline_state().alpha_mode
+                   );
         }
     );
 }

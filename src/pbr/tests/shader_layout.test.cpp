@@ -447,7 +447,6 @@ TEST_CASE(
             "pbr/forward/io.slang",
             "pbr/lib/environment_map.slang",
             "pbr/shading/types.slang",
-            "rendering/color.slang",
             "rendering/normal.slang",
             "rendering/view.slang",
             "pbr/material/types.slang",
@@ -581,6 +580,27 @@ TEST_CASE("PBR material shaders support UV1 without UV0", "[pbr][shader]") {
     }
 }
 
+TEST_CASE("PBR alpha mask shader variants compile", "[pbr][shader]") {
+    for (const std::string_view shader_name : {
+             "forward.frag",
+             "deferred_prepass.frag",
+             "shadow.frag",
+             "voxelization.frag",
+         }) {
+        CAPTURE(shader_name);
+        const auto shader = compile_pbr_shader_with_defs(
+            shader_name,
+            normalized_shader_defs({
+                ShaderDefVal::bool_def("VERTEX_UVS"),
+                ShaderDefVal::bool_def("VERTEX_UVS_1"),
+                ShaderDefVal::bool_def("VERTEX_COLORS"),
+                ShaderDefVal::bool_def("MAY_DISCARD"),
+            })
+        );
+        CHECK_FALSE(shader.spirv.empty());
+    }
+}
+
 TEST_CASE(
     "PBR deferred shader resources match explicit set and binding layout",
     "[pbr][shader]"
@@ -652,10 +672,6 @@ TEST_CASE(
         "voxelization.frag",
         {
             {"material", ResourceKind::UniformBuffer, 2, 0},
-            {"albedo_map", ResourceKind::TextureReadOnly, 2, 1},
-            {"albedo_sampler", ResourceKind::Sampler, 2, 2},
-            {"emissive_map", ResourceKind::TextureReadOnly, 2, 9},
-            {"emissive_sampler", ResourceKind::Sampler, 2, 10},
             {"static_voxel_flag", ResourceKind::TextureReadWrite, 3, 4},
             {"vxgi_voxelization", ResourceKind::UniformBuffer, 4, 0},
             {"voxel_albedo_accum", ResourceKind::StorageBufferReadWrite, 5, 0},

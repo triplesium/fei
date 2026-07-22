@@ -27,12 +27,15 @@ enum class StandardMaterialFlags : uint32 {
     OcclusionMap = 1u << 3u,
     EmissiveMap = 1u << 4u,
     SpecularMap = 1u << 5u,
+    AlphaBlend = 1u << 6u,
 };
 
 struct alignas(16) StandardMaterialUniform {
     Color3F albedo {1.0f, 1.0f, 1.0f};
     float metallic {0.0f};
     float roughness {0.5f};
+    float albedo_alpha {1.0f};
+    float alpha_cutoff {0.5f};
     alignas(16) Color3F emissive {0.0f, 0.0f, 0.0f};
     alignas(16) Color3F specular {0.0f, 0.0f, 0.0f};
     uint32 flags {0};
@@ -54,6 +57,8 @@ enum class UvChannel : uint8 {
 class StandardMaterial : public Material {
   public:
     Color3F albedo {1.0f, 1.0f, 1.0f};
+    float albedo_alpha {1.0f};
+    float alpha_cutoff {0.5f};
     Optional<Handle<Image>> albedo_texture;
     UvChannel albedo_channel = UvChannel::Uv0;
     Optional<Handle<Image>> normal_texture;
@@ -214,10 +219,15 @@ class StandardMaterial : public Material {
         if (image_ready(specular_texture)) {
             flags |= StandardMaterialFlags::SpecularMap;
         }
+        if (alpha_mode == MaterialAlphaMode::Blend) {
+            flags |= StandardMaterialFlags::AlphaBlend;
+        }
         return StandardMaterialUniform {
             .albedo = albedo,
             .metallic = metallic,
             .roughness = roughness,
+            .albedo_alpha = albedo_alpha,
+            .alpha_cutoff = alpha_cutoff,
             .emissive = emissive,
             .specular = specular,
             .flags = flags.to_raw(),

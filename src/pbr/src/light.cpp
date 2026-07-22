@@ -175,11 +175,9 @@ void execute_shadow_blur_pass(
 } // namespace
 
 ShadowMapPipelineSpecializer::ShadowMapPipelineSpecializer(
-    std::vector<std::shared_ptr<const ShaderModule>> shader_modules
-) : m_shader_modules(std::move(shader_modules)) {
-    for (const auto& shader_module : m_shader_modules) {
-        hash_combine(m_cache_key, shader_module.get());
-    }
+    ShaderCache& shader_cache
+) : m_shader_cache(&shader_cache) {
+    hash_combine(m_cache_key, &shader_cache);
 }
 
 std::size_t ShadowMapPipelineSpecializer::cache_key() const {
@@ -188,10 +186,25 @@ std::size_t ShadowMapPipelineSpecializer::cache_key() const {
 
 void ShadowMapPipelineSpecializer::specialize(
     RenderPipelineDescription& desc,
-    const GpuMesh&,
-    const PreparedMaterial&
+    const GpuMesh& mesh,
+    const PreparedMaterial& material
 ) const {
-    desc.shader_program.shaders = m_shader_modules;
+    auto defs = pbr_mesh_shader_defs(mesh);
+    if (material_alpha_mode_may_discard(material.pipeline_state().alpha_mode)) {
+        defs.push_back(ShaderDefVal::bool_def(MAY_DISCARD_SHADER_DEF));
+        defs = normalized_shader_defs(std::move(defs));
+    }
+    const AssetPath path("shader://pbr/shadow.slang");
+    desc.shader_program.shaders = {
+        m_shader_cache
+            ->get_or_compile(path, ShaderStages::Vertex, "vertex_main", defs),
+        m_shader_cache->get_or_compile(
+            path,
+            ShaderStages::Fragment,
+            "fragment_main",
+            std::move(defs)
+        ),
+    };
     remove_vertex_input_attribute(desc, Mesh::ATTRIBUTE_NORMAL.id);
     remove_vertex_input_attribute(desc, Mesh::ATTRIBUTE_TANGENT.id);
     desc.depth_stencil_state = DepthStencilStateDescription::DepthOnlyLessEqual;
@@ -365,23 +378,10 @@ void setup_shadow_mapping(
     ResRO<FullscreenQuad> fs_quad,
     Commands commands
 ) {
-    std::vector<std::shared_ptr<const ShaderModule>> shadow_shader_modules {
-        shader_cache->get_or_compile(
-            AssetPath("shader://pbr/shadow.slang"),
-            ShaderStages::Vertex,
-            {}
-        ),
-        shader_cache->get_or_compile(
-            AssetPath("shader://pbr/shadow.slang"),
-            ShaderStages::Fragment,
-            {}
-        ),
-    };
-
     commands.add_resource(
         ShadowMappingResources {
             .pipeline_specializer =
-                ShadowMapPipelineSpecializer {shadow_shader_modules},
+                ShadowMapPipelineSpecializer {*shader_cache},
             .temp_depth_texture = device->create_texture(
                 TextureDescription {
                     .width = 1024,
@@ -559,6 +559,11 @@ void queue_shadow_map_meshes(
 
             auto& gpu_mesh = *gpu_mesh_opt;
             auto& material = *material_opt;
+            if (material_alpha_mode_uses_blend(
+                    material.pipeline_state().alpha_mode
+                )) {
+                continue;
+            }
             auto pipeline_id = mesh_material_pipelines->request(
                 entity,
                 material,

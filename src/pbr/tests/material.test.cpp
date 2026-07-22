@@ -55,6 +55,9 @@ TEST_CASE(
     material.occlusion_channel = UvChannel::Uv0;
     material.emissive_channel = UvChannel::Uv1;
     material.specular_channel = UvChannel::Uv0;
+    material.albedo_alpha = 0.4f;
+    material.alpha_cutoff = 0.3f;
+    material.alpha_mode = MaterialAlphaMode::Blend;
 
     CHECK(material.shader_defs(MaterialShaderType::Vertex).empty());
     CHECK(material.shader_defs(MaterialShaderType::PrepassVertex).empty());
@@ -70,6 +73,9 @@ TEST_CASE(
     CHECK(has_uniform_flag(uniform, StandardMaterialFlags::OcclusionMap));
     CHECK(has_uniform_flag(uniform, StandardMaterialFlags::EmissiveMap));
     CHECK(has_uniform_flag(uniform, StandardMaterialFlags::SpecularMap));
+    CHECK(has_uniform_flag(uniform, StandardMaterialFlags::AlphaBlend));
+    CHECK(uniform.albedo_alpha == 0.4f);
+    CHECK(uniform.alpha_cutoff == 0.3f);
     CHECK(uniform.albedo_channel == static_cast<uint32>(UvChannel::Uv1));
     CHECK(uniform.normal_channel == static_cast<uint32>(UvChannel::Uv0));
     CHECK(

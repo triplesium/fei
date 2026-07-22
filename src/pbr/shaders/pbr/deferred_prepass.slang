@@ -48,6 +48,16 @@ FragmentOutput fragment_main(VertexOutput input, float4 frag_coord : SV_Position
     tex_coords.uv1 = input.tex_coords_1;
 #endif
 
+#ifdef MAY_DISCARD
+    float alpha = material.sample_alpha(tex_coords);
+#ifdef VERTEX_COLORS
+    alpha *= input.color.a;
+#endif
+    if (alpha < material.alpha_cutoff) {
+        discard;
+    }
+#endif
+
     float3 tangent_ws = float3(1.0, 0.0, 0.0);
 #ifdef VERTEX_TANGENTS
     tangent_ws = input.tangent_ws;

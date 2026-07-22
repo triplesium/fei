@@ -1,5 +1,4 @@
 import pbr.lib.environment_map;
-import rendering.color;
 import rendering.view;
 import pbr.material.types;
 import pbr.shading.types;
@@ -9,7 +8,6 @@ import pbr.forward.io;
 
 using namespace pbr.forward_io;
 using namespace pbr.environment_map;
-using namespace rendering.color;
 
 layout(set = 0, binding = 0) ConstantBuffer<ViewUniform> view;
 layout(set = 1, binding = 0) ConstantBuffer<MeshUniform> mesh;
@@ -55,8 +53,15 @@ FragmentOutput fragment_main(VertexOutput input) {
 #endif
 
     StandardMaterial surface_material = material.sample(tex_coords);
+    float alpha = material.sample_alpha(tex_coords);
 #ifdef VERTEX_COLORS
     surface_material.albedo *= input.color.rgb;
+    alpha *= input.color.a;
+#endif
+#ifdef MAY_DISCARD
+    if (alpha < material.alpha_cutoff) {
+        discard;
+    }
 #endif
 
     float3 normal = material.sample_normal_from_derivatives(
@@ -74,7 +79,7 @@ FragmentOutput fragment_main(VertexOutput input) {
         surface_material
     );
 
-    float3 color = tonemap_reinhard_to_srgb(environment_lighting.combined());
-    output.color = float4(color, 1.0);
+    float3 color = environment_lighting.combined();
+    output.color = float4(color, material.alpha_blend ? alpha : 1.0);
     return output;
 }

@@ -219,6 +219,11 @@ void render_vxgi_voxelization_pass(
             mesh_uniform == mesh_uniforms->entries.end()) {
             return;
         }
+        if (material_alpha_mode_uses_blend(
+                material->pipeline_state().alpha_mode
+            )) {
+            continue;
+        }
         auto pipeline_id = pipelines->find(
             entity,
             *material,

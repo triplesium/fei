@@ -17,6 +17,7 @@ void DeferredRenderPlugin::setup(App& app) {
         .add_resource(RenderTarget {})
         .add_resource(DeferredViewTargets {})
         .add_resource<DeferredPrepassPhase>()
+        .add_resource<TransparentPhase>()
         .add_systems(
             StartUp,
             setup_deferred_pipelines | in_set<PbrSystems::StartupDeferred>()
@@ -25,7 +26,8 @@ void DeferredRenderPlugin::setup(App& app) {
             RenderUpdate,
             chain(setup_render_target, prepare_deferred_view_targets) |
                 in_set<RenderingSystems::PrepareResources>(),
-            queue_deferred_prepass_meshes | in_set<RenderingSystems::Queue>()
+            queue_deferred_prepass_meshes | in_set<RenderingSystems::Queue>(),
+            queue_transparent_meshes | in_set<RenderingSystems::Queue>()
         )
         .add_systems(
             RenderUpdate,
@@ -36,7 +38,8 @@ void DeferredRenderPlugin::setup(App& app) {
                 FEI_NAMED_SYSTEM(direct_lighting_pass),
                 FEI_NAMED_SYSTEM(indirect_lighting_pass),
                 FEI_NAMED_SYSTEM(composite_pass),
-                FEI_NAMED_SYSTEM(render_skybox_pass)
+                FEI_NAMED_SYSTEM(render_skybox_pass),
+                FEI_NAMED_SYSTEM(transparent_pass)
             ) | in_set<RenderingSystems::MainPass>(),
             FEI_NAMED_SYSTEM(present_composite_pass) |
                 in_set<RenderingSystems::PostProcess>()

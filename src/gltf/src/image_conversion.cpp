@@ -180,7 +180,7 @@ Result<std::vector<std::unique_ptr<Image>>, std::string> convert_textures(
         auto image = decode_image(
             *bytes,
             ImageDecodeOptions {
-                .flip_vertically = true,
+                .flip_vertically = false,
                 .srgb = srgb_textures[texture_index] != 0,
                 .sampler = *sampler,
             }
