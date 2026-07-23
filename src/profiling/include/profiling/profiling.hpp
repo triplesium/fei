@@ -53,6 +53,21 @@ struct ProfileSummarySnapshot {
     std::vector<ProfileFrameSample> frames;
 };
 
+struct GpuProfileEntrySnapshot {
+    std::string name;
+    std::uint64_t count {0};
+    double latest_ms {0.0};
+    double total_ms {0.0};
+    double mean_ms {0.0};
+    double min_ms {0.0};
+    double max_ms {0.0};
+};
+
+struct GpuProfileSummarySnapshot {
+    bool available {false};
+    std::vector<GpuProfileEntrySnapshot> entries;
+};
+
 void register_profile_schedule_name(
     std::uint64_t schedule_id,
     std::string_view name
@@ -67,6 +82,12 @@ void clear_profile_frame_stats();
 void flush_profile_summary();
 void clear_profile_summary();
 void set_profile_summary_output_directory(std::string path);
+void record_gpu_profile_duration(
+    std::string_view name,
+    std::uint64_t duration_ns
+);
+GpuProfileSummarySnapshot gpu_profile_summary_snapshot();
+void clear_gpu_profile_summary();
 
 #if defined(FEI_ENABLE_TRACY)
 

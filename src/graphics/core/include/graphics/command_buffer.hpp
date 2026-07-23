@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <string_view>
 #include <utility>
 
 namespace fei {
@@ -98,6 +99,11 @@ class CommandBuffer {
     ) = 0;
     virtual void
     dispatch(std::size_t group_x, std::size_t group_y, std::size_t group_z) = 0;
+
+    void begin_gpu_profile_zone(std::string_view name) {
+        begin_gpu_profile_zone_impl(name);
+    }
+    void end_gpu_profile_zone() { end_gpu_profile_zone_impl(); }
 
     void generate_mipmaps(std::shared_ptr<const Texture> texture) {
         if (!texture->usage().is_set(TextureUsage::GenerateMipmaps)) {
@@ -214,6 +220,8 @@ class CommandBuffer {
     ) = 0;
     virtual void
     generate_mipmaps_impl(std::shared_ptr<const Texture> texture) = 0;
+    virtual void begin_gpu_profile_zone_impl(std::string_view) {}
+    virtual void end_gpu_profile_zone_impl() {}
 
     virtual void copy_texture_impl(
         std::shared_ptr<const Texture> src,
@@ -233,6 +241,23 @@ class CommandBuffer {
         uint32 depth,
         uint32 layer_count
     ) = 0;
+};
+
+class ScopedGpuProfileZone {
+  private:
+    CommandBuffer* m_commands;
+
+  public:
+    ScopedGpuProfileZone(CommandBuffer& commands, std::string_view name) :
+        m_commands(&commands) {
+        m_commands->begin_gpu_profile_zone(name);
+    }
+    ~ScopedGpuProfileZone() { m_commands->end_gpu_profile_zone(); }
+
+    ScopedGpuProfileZone(const ScopedGpuProfileZone&) = delete;
+    ScopedGpuProfileZone& operator=(const ScopedGpuProfileZone&) = delete;
+    ScopedGpuProfileZone(ScopedGpuProfileZone&&) = delete;
+    ScopedGpuProfileZone& operator=(ScopedGpuProfileZone&&) = delete;
 };
 
 } // namespace fei

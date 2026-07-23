@@ -88,10 +88,37 @@ struct FrameHistory {
     }
 };
 
+struct GpuSummary {
+    using RequestBody = void;
+    using ResponseBody = GpuSummarySnapshot;
+
+    static constexpr std::string_view id {"profiling.gpu_summary"};
+    static constexpr std::string_view label {"GPU Profiling Summary"};
+    static constexpr std::string_view schema {"profiling.gpu_summary.v1"};
+    static constexpr ScheduleId schedule {PostUpdate};
+
+    static void
+    run(Query<Entity, const Request, const JsonRequest> requests,
+        Commands commands) {
+        for (auto [entity, request, json] : requests) {
+            (void)json;
+            if (request.capability != id) {
+                continue;
+            }
+
+            auto response =
+                make_gpu_summary_snapshot(fei::gpu_profile_summary_snapshot());
+            respond_capability(commands, entity, request, response);
+        }
+    }
+};
+
 } // namespace
 
 void ProviderPlugin::setup(App& app) {
-    add_capabilities<FrameStats, ProfilingSummary, FrameHistory>(app);
+    add_capabilities<FrameStats, ProfilingSummary, FrameHistory, GpuSummary>(
+        app
+    );
 }
 
 void ProviderPlugin::finish(App&) {}

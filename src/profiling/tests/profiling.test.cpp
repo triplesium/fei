@@ -58,6 +58,30 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "GPU profile summary aggregates timestamp durations by name",
+    "[base][profiling][gpu]"
+) {
+    fei::clear_gpu_profile_summary();
+    fei::record_gpu_profile_duration("Pass/Z", 1'000'000);
+    fei::record_gpu_profile_duration("Pass/A", 2'000'000);
+    fei::record_gpu_profile_duration("Pass/A", 4'000'000);
+
+    const auto snapshot = fei::gpu_profile_summary_snapshot();
+    REQUIRE(snapshot.available);
+    REQUIRE(snapshot.entries.size() == 2);
+    CHECK(snapshot.entries[0].name == "Pass/A");
+    CHECK(snapshot.entries[0].count == 2);
+    CHECK(snapshot.entries[0].latest_ms == Catch::Approx(4.0));
+    CHECK(snapshot.entries[0].total_ms == Catch::Approx(6.0));
+    CHECK(snapshot.entries[0].mean_ms == Catch::Approx(3.0));
+    CHECK(snapshot.entries[0].min_ms == Catch::Approx(2.0));
+    CHECK(snapshot.entries[0].max_ms == Catch::Approx(4.0));
+
+    fei::clear_gpu_profile_summary();
+    CHECK_FALSE(fei::gpu_profile_summary_snapshot().available);
+}
+
+TEST_CASE(
     "frame profile history evicts old samples and preserves frame numbers",
     "[base][profiling]"
 ) {

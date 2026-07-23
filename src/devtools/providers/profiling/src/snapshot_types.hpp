@@ -50,10 +50,27 @@ struct FEI_REFLECT FrameHistorySnapshot {
     std::vector<FrameHistorySampleSnapshot> frames;
 };
 
+struct FEI_REFLECT GpuSummaryEntrySnapshot {
+    std::string name;
+    std::uint64_t count {0};
+    double latest_ms {0.0};
+    double total_ms {0.0};
+    double mean_ms {0.0};
+    double min_ms {0.0};
+    double max_ms {0.0};
+};
+
+struct FEI_REFLECT GpuSummarySnapshot {
+    bool available {false};
+    std::vector<GpuSummaryEntrySnapshot> entries;
+};
+
 FrameStatsSnapshot make_frame_stats_snapshot(const FrameProfileStats& stats);
 SummarySnapshot
 make_summary_snapshot(const fei::ProfileSummarySnapshot& source);
 FrameHistorySnapshot
 make_frame_history_snapshot(const fei::ProfileSummarySnapshot& source);
+GpuSummarySnapshot
+make_gpu_summary_snapshot(const fei::GpuProfileSummarySnapshot& source);
 
 } // namespace fei::devtools::profiling

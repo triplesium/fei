@@ -17,6 +17,7 @@
 #include <cassert>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <type_traits>
 #include <utility>
 
@@ -181,6 +182,11 @@ void bind_buffer_resource(
 } // namespace
 
 struct CommandBufferExecutorOpenGL::ExecutionState {
+    struct ActiveGpuProfileZone {
+        std::string name;
+        GLuint begin_query {0};
+    };
+
     std::shared_ptr<const Framebuffer> framebuffer;
     std::shared_ptr<const Pipeline> pipeline;
     std::vector<std::shared_ptr<const ResourceSetOpenGL>> bound_resource_sets;
@@ -191,6 +197,7 @@ struct CommandBufferExecutorOpenGL::ExecutionState {
     std::uint32_t viewport_width {0};
     std::uint32_t viewport_height {0};
     bool viewport_set {false};
+    std::vector<ActiveGpuProfileZone> active_gpu_profile_zones;
 };
 
 void CommandBufferExecutorOpenGL::execute(CommandBufferOpenGL& command_buffer) {
@@ -312,6 +319,34 @@ void CommandBufferExecutorOpenGL::execute_command(
                 );
             } else if constexpr (std::is_same_v<CommandT, ogl_cmd::Dispatch>) {
                 execute_dispatch(cmd.group_x, cmd.group_y, cmd.group_z);
+            } else if constexpr (
+                std::is_same_v<CommandT, ogl_cmd::BeginGpuProfileZone>
+            ) {
+                GLuint query = 0;
+                FEI_GL_CALL(glGenQueries(1, &query));
+                FEI_GL_CALL(glQueryCounter(query, GL_TIMESTAMP));
+                state.active_gpu_profile_zones.push_back(
+                    ExecutionState::ActiveGpuProfileZone {
+                        .name = cmd.name,
+                        .begin_query = query,
+                    }
+                );
+            } else if constexpr (
+                std::is_same_v<CommandT, ogl_cmd::EndGpuProfileZone>
+            ) {
+                if (state.active_gpu_profile_zones.empty()) {
+                    fatal("OpenGL GPU profile zone ended without a begin");
+                }
+                auto active = std::move(state.active_gpu_profile_zones.back());
+                state.active_gpu_profile_zones.pop_back();
+                GLuint query = 0;
+                FEI_GL_CALL(glGenQueries(1, &query));
+                FEI_GL_CALL(glQueryCounter(query, GL_TIMESTAMP));
+                m_device.enqueue_gpu_profile_query(
+                    std::move(active.name),
+                    active.begin_query,
+                    query
+                );
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::GenerateMipmaps>
             ) {

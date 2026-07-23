@@ -88,6 +88,8 @@ class CommandBufferOpenGL : public CommandBuffer {
         uint32 offset
     ) override;
     void generate_mipmaps_impl(std::shared_ptr<const Texture> texture) override;
+    void begin_gpu_profile_zone_impl(std::string_view name) override;
+    void end_gpu_profile_zone_impl() override;
     void copy_texture_impl(
         std::shared_ptr<const Texture> src,
         uint32 src_x,

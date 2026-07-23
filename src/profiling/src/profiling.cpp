@@ -6,19 +6,19 @@
 #    include "frame_profile_history.hpp"
 #endif
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <limits>
 #include <mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 
 #if defined(FEI_ENABLE_PROFILE_SUMMARY)
-#    include <algorithm>
 #    include <cstdlib>
 #    include <filesystem>
 #    include <fstream>
-#    include <limits>
 #    include <utility>
 #    include <vector>
 #endif
@@ -58,9 +58,19 @@ struct ProfileRecord {
 #endif
 
 struct ProfileState {
+    struct GpuRecord {
+        std::string name;
+        std::uint64_t count {0};
+        std::uint64_t latest_ns {0};
+        std::uint64_t total_ns {0};
+        std::uint64_t min_ns {std::numeric_limits<std::uint64_t>::max()};
+        std::uint64_t max_ns {0};
+    };
+
     std::mutex mutex;
     std::unordered_map<std::uint64_t, std::string> schedule_names;
     profiling_detail::FrameProfileAccumulator frame_stats;
+    std::unordered_map<std::string, GpuRecord> gpu_records;
 #if defined(FEI_ENABLE_PROFILE_SUMMARY)
     std::unordered_map<std::string, ProfileRecord> records;
     profiling_detail::FrameProfileHistory frame_history;
@@ -419,6 +429,65 @@ void set_profile_summary_output_directory(std::string path) {
 #else
     (void)path;
 #endif
+}
+
+void record_gpu_profile_duration(
+    std::string_view name,
+    std::uint64_t duration_ns
+) {
+    auto& state = profile_state();
+    std::scoped_lock lock(state.mutex);
+    auto [it, inserted] = state.gpu_records.try_emplace(std::string(name));
+    auto& record = it->second;
+    if (inserted) {
+        record.name = std::string(name);
+    }
+    ++record.count;
+    record.latest_ns = duration_ns;
+    record.total_ns += duration_ns;
+    record.min_ns = std::min(record.min_ns, duration_ns);
+    record.max_ns = std::max(record.max_ns, duration_ns);
+}
+
+GpuProfileSummarySnapshot gpu_profile_summary_snapshot() {
+    GpuProfileSummarySnapshot snapshot;
+    auto& state = profile_state();
+    std::scoped_lock lock(state.mutex);
+    snapshot.available = !state.gpu_records.empty();
+    snapshot.entries.reserve(state.gpu_records.size());
+    for (const auto& [_, record] : state.gpu_records) {
+        if (record.count == 0) {
+            continue;
+        }
+        constexpr double nanoseconds_per_millisecond = 1'000'000.0;
+        snapshot.entries.push_back(
+            GpuProfileEntrySnapshot {
+                .name = record.name,
+                .count = record.count,
+                .latest_ms = static_cast<double>(record.latest_ns) /
+                             nanoseconds_per_millisecond,
+                .total_ms = static_cast<double>(record.total_ns) /
+                            nanoseconds_per_millisecond,
+                .mean_ms = static_cast<double>(record.total_ns) /
+                           static_cast<double>(record.count) /
+                           nanoseconds_per_millisecond,
+                .min_ms = static_cast<double>(record.min_ns) /
+                          nanoseconds_per_millisecond,
+                .max_ms = static_cast<double>(record.max_ns) /
+                          nanoseconds_per_millisecond,
+            }
+        );
+    }
+    std::ranges::sort(snapshot.entries, [](const auto& lhs, const auto& rhs) {
+        return lhs.name < rhs.name;
+    });
+    return snapshot;
+}
+
+void clear_gpu_profile_summary() {
+    auto& state = profile_state();
+    std::scoped_lock lock(state.mutex);
+    state.gpu_records.clear();
 }
 
 #if defined(FEI_ENABLE_PROFILE_SUMMARY)

@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <variant>
 #include <vector>
 
@@ -90,6 +91,10 @@ struct CopyTexture {
     uint32 depth;
     uint32 layer_count;
 };
+struct BeginGpuProfileZone {
+    std::string name;
+};
+struct EndGpuProfileZone {};
 
 using Command = std::variant<
     BeginRenderPass,
@@ -105,6 +110,8 @@ using Command = std::variant<
     Draw,
     DrawIndexed,
     Dispatch,
+    BeginGpuProfileZone,
+    EndGpuProfileZone,
     GenerateMipmaps,
     CopyTexture>;
 

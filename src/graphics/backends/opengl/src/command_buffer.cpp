@@ -43,6 +43,18 @@ void CommandBufferOpenGL::end_render_pass() {
     m_commands.emplace_back(ogl_cmd::EndRenderPass {});
 }
 
+void CommandBufferOpenGL::begin_gpu_profile_zone_impl(std::string_view name) {
+    ensure_recording("begin_gpu_profile_zone");
+    m_commands.emplace_back(
+        ogl_cmd::BeginGpuProfileZone {.name = std::string(name)}
+    );
+}
+
+void CommandBufferOpenGL::end_gpu_profile_zone_impl() {
+    ensure_recording("end_gpu_profile_zone");
+    m_commands.emplace_back(ogl_cmd::EndGpuProfileZone {});
+}
+
 void CommandBufferOpenGL::set_viewport(
     std::int32_t x,
     std::int32_t y,

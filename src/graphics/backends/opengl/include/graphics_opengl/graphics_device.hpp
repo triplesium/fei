@@ -167,9 +167,18 @@ class OpenGLDeviceState {
 
 class GraphicsDeviceOpenGL : public GraphicsDevice {
   private:
+    friend class CommandBufferExecutorOpenGL;
+
+    struct GpuProfileQuery {
+        std::string name;
+        std::uint32_t begin_query {0};
+        std::uint32_t end_query {0};
+    };
+
     std::shared_ptr<OpenGLDeviceState> m_state;
     std::thread::id m_context_thread;
     std::size_t m_uniform_buffer_offset_alignment {1};
+    mutable std::vector<GpuProfileQuery> m_gpu_profile_queries;
 
   public:
     GraphicsDeviceOpenGL();
@@ -254,6 +263,13 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
         const OpenGLPendingTextureReadback& readback
     ) const;
     void collect_texture_readbacks() const;
+    void enqueue_gpu_profile_query(
+        std::string name,
+        std::uint32_t begin_query,
+        std::uint32_t end_query
+    ) const;
+    void collect_gpu_profile_queries() const;
+    void clear_gpu_profile_queries() const;
     void flush_disposals() const;
     void assert_context_thread(const char* operation) const;
 };

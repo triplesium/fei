@@ -8,6 +8,7 @@
 #include "graphics_vulkan/resource.hpp"
 #include "graphics_vulkan/texture.hpp"
 #include "graphics_vulkan/utils.hpp"
+#include "profiling/profiling.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -1023,9 +1024,38 @@ CommandBufferVulkan::CommandBufferVulkan(
         ),
         "vkAllocateCommandBuffers"
     );
+
+    if (m_state->physical_device_properties()
+            .limits.timestampComputeAndGraphics == VK_TRUE) {
+        VkQueryPoolCreateInfo query_pool_info {
+            .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .queryType = VK_QUERY_TYPE_TIMESTAMP,
+            .queryCount = MaxGpuTimestampQueries,
+            .pipelineStatistics = 0,
+        };
+        check_vk(
+            vkCreateQueryPool(
+                m_state->device(),
+                &query_pool_info,
+                nullptr,
+                &m_gpu_timestamp_query_pool
+            ),
+            "vkCreateQueryPool"
+        );
+    }
 }
 
 CommandBufferVulkan::~CommandBufferVulkan() {
+    if (m_state && m_gpu_timestamp_query_pool != VK_NULL_HANDLE) {
+        vkDestroyQueryPool(
+            m_state->device(),
+            m_gpu_timestamp_query_pool,
+            nullptr
+        );
+        m_gpu_timestamp_query_pool = VK_NULL_HANDLE;
+    }
     if (m_state && m_command_pool != VK_NULL_HANDLE) {
         vkDestroyCommandPool(m_state->device(), m_command_pool, nullptr);
         m_command_pool = VK_NULL_HANDLE;
@@ -1063,6 +1093,9 @@ void CommandBufferVulkan::begin() {
     m_logical_render_pass_active = false;
     m_native_render_pass_active = false;
     m_viewport_set = false;
+    m_gpu_profile_zones.clear();
+    m_active_gpu_profile_zones.clear();
+    m_next_gpu_timestamp_query = 0;
 
     std::scoped_lock lock(m_state->immediate_mutex());
     check_vk(vkResetCommandBuffer(m_command_buffer, 0), "vkResetCommandBuffer");
@@ -1076,6 +1109,14 @@ void CommandBufferVulkan::begin() {
         vkBeginCommandBuffer(m_command_buffer, &begin_info),
         "vkBeginCommandBuffer"
     );
+    if (m_gpu_timestamp_query_pool != VK_NULL_HANDLE) {
+        vkCmdResetQueryPool(
+            m_command_buffer,
+            m_gpu_timestamp_query_pool,
+            0,
+            MaxGpuTimestampQueries
+        );
+    }
     m_state_value = State::Recording;
 }
 
@@ -1086,6 +1127,52 @@ void CommandBufferVulkan::end() {
     }
     check_vk(vkEndCommandBuffer(m_command_buffer), "vkEndCommandBuffer");
     m_state_value = State::Executable;
+}
+
+void CommandBufferVulkan::begin_gpu_profile_zone_impl(std::string_view name) {
+    ensure_recording("begin_gpu_profile_zone");
+    if (m_gpu_timestamp_query_pool == VK_NULL_HANDLE ||
+        m_next_gpu_timestamp_query + 2 > MaxGpuTimestampQueries) {
+        m_active_gpu_profile_zones.emplace_back(std::string(name), UINT32_MAX);
+        return;
+    }
+
+    const auto query = m_next_gpu_timestamp_query++;
+    vkCmdWriteTimestamp(
+        m_command_buffer,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        m_gpu_timestamp_query_pool,
+        query
+    );
+    m_active_gpu_profile_zones.emplace_back(std::string(name), query);
+}
+
+void CommandBufferVulkan::end_gpu_profile_zone_impl() {
+    ensure_recording("end_gpu_profile_zone");
+    if (m_active_gpu_profile_zones.empty()) {
+        fatal("Vulkan GPU profile zone ended without a begin");
+    }
+
+    auto active = std::move(m_active_gpu_profile_zones.back());
+    m_active_gpu_profile_zones.pop_back();
+    if (active.second == UINT32_MAX) {
+        return;
+    }
+
+    const auto query = m_next_gpu_timestamp_query++;
+    vkCmdWriteTimestamp(
+        m_command_buffer,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        m_gpu_timestamp_query_pool,
+        query
+    );
+    m_gpu_profile_zones.push_back(
+        GpuProfileZone {
+            .name = std::move(active.first),
+            .begin_query = active.second,
+            .end_query = query,
+        }
+    );
 }
 
 void CommandBufferVulkan::begin_render_pass(const RenderPassDescription& desc) {
@@ -1797,6 +1884,37 @@ void CommandBufferVulkan::mark_submitted() {
 }
 
 void CommandBufferVulkan::mark_completed() {
+    if (m_gpu_timestamp_query_pool != VK_NULL_HANDLE &&
+        m_next_gpu_timestamp_query > 0 && !m_gpu_profile_zones.empty()) {
+        std::vector<std::uint64_t> timestamps(m_next_gpu_timestamp_query);
+        const auto result = vkGetQueryPoolResults(
+            m_state->device(),
+            m_gpu_timestamp_query_pool,
+            0,
+            m_next_gpu_timestamp_query,
+            timestamps.size() * sizeof(std::uint64_t),
+            timestamps.data(),
+            sizeof(std::uint64_t),
+            VK_QUERY_RESULT_64_BIT
+        );
+        if (result == VK_SUCCESS) {
+            const double timestamp_period =
+                m_state->physical_device_properties().limits.timestampPeriod;
+            for (const auto& zone : m_gpu_profile_zones) {
+                const auto begin = timestamps[zone.begin_query];
+                const auto end = timestamps[zone.end_query];
+                if (end < begin) {
+                    continue;
+                }
+                const auto duration_ns = static_cast<std::uint64_t>(
+                    static_cast<double>(end - begin) * timestamp_period
+                );
+                record_gpu_profile_duration(zone.name, duration_ns);
+            }
+        } else if (result != VK_NOT_READY) {
+            check_vk(result, "vkGetQueryPoolResults");
+        }
+    }
     m_resource_retention.clear();
     m_bound_graphics_resource_sets.clear();
     m_bound_compute_resource_sets.clear();

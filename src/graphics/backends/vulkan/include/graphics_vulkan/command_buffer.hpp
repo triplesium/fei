@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <string>
+#include <utility>
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
@@ -52,6 +54,17 @@ class CommandBufferVulkan : public CommandBuffer {
     std::uint32_t m_viewport_width {0};
     std::uint32_t m_viewport_height {0};
     bool m_viewport_set {false};
+    struct GpuProfileZone {
+        std::string name;
+        std::uint32_t begin_query {0};
+        std::uint32_t end_query {0};
+    };
+    static constexpr std::uint32_t MaxGpuTimestampQueries = 128;
+    VkQueryPool m_gpu_timestamp_query_pool {VK_NULL_HANDLE};
+    std::vector<GpuProfileZone> m_gpu_profile_zones;
+    std::vector<std::pair<std::string, std::uint32_t>>
+        m_active_gpu_profile_zones;
+    std::uint32_t m_next_gpu_timestamp_query {0};
 
   public:
     using CommandBuffer::draw_indexed;
@@ -119,6 +132,8 @@ class CommandBufferVulkan : public CommandBuffer {
         uint32 offset
     ) override;
     void generate_mipmaps_impl(std::shared_ptr<const Texture> texture) override;
+    void begin_gpu_profile_zone_impl(std::string_view name) override;
+    void end_gpu_profile_zone_impl() override;
     void copy_texture_impl(
         std::shared_ptr<const Texture> src,
         uint32 src_x,

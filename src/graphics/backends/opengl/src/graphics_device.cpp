@@ -17,6 +17,7 @@
 #include "profiling/profiling.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <deque>
 #include <functional>
@@ -433,6 +434,9 @@ GraphicsDeviceOpenGL::~GraphicsDeviceOpenGL() {
     flush_pending_work();
     m_state->clear_resource_cache();
     flush_pending_work();
+    FEI_GL_CALL(glFinish());
+    collect_gpu_profile_queries();
+    clear_gpu_profile_queries();
 }
 
 std::shared_ptr<ShaderModule> GraphicsDeviceOpenGL::create_shader_module(
@@ -705,8 +709,75 @@ void GraphicsDeviceOpenGL::flush_pending_work() const {
     operations.clear();
 
     collect_texture_readbacks();
+    collect_gpu_profile_queries();
     m_state->collect_resource_cache();
     flush_disposals();
+}
+
+void GraphicsDeviceOpenGL::enqueue_gpu_profile_query(
+    std::string name,
+    std::uint32_t begin_query,
+    std::uint32_t end_query
+) const {
+    m_gpu_profile_queries.push_back(
+        GpuProfileQuery {
+            .name = std::move(name),
+            .begin_query = begin_query,
+            .end_query = end_query,
+        }
+    );
+}
+
+void GraphicsDeviceOpenGL::collect_gpu_profile_queries() const {
+    for (auto query = m_gpu_profile_queries.begin();
+         query != m_gpu_profile_queries.end();) {
+        GLint available = GL_FALSE;
+        FEI_GL_CALL(glGetQueryObjectiv(
+            query->end_query,
+            GL_QUERY_RESULT_AVAILABLE,
+            &available
+        ));
+        if (available == GL_FALSE) {
+            ++query;
+            continue;
+        }
+
+        GLuint64 begin_timestamp = 0;
+        GLuint64 end_timestamp = 0;
+        FEI_GL_CALL(glGetQueryObjectui64v(
+            query->begin_query,
+            GL_QUERY_RESULT,
+            &begin_timestamp
+        ));
+        FEI_GL_CALL(glGetQueryObjectui64v(
+            query->end_query,
+            GL_QUERY_RESULT,
+            &end_timestamp
+        ));
+        const std::array queries {query->begin_query, query->end_query};
+        FEI_GL_CALL(glDeleteQueries(
+            static_cast<GLsizei>(queries.size()),
+            queries.data()
+        ));
+        if (end_timestamp >= begin_timestamp) {
+            record_gpu_profile_duration(
+                query->name,
+                end_timestamp - begin_timestamp
+            );
+        }
+        query = m_gpu_profile_queries.erase(query);
+    }
+}
+
+void GraphicsDeviceOpenGL::clear_gpu_profile_queries() const {
+    for (const auto& query : m_gpu_profile_queries) {
+        const std::array queries {query.begin_query, query.end_query};
+        FEI_GL_CALL(glDeleteQueries(
+            static_cast<GLsizei>(queries.size()),
+            queries.data()
+        ));
+    }
+    m_gpu_profile_queries.clear();
 }
 
 void GraphicsDeviceOpenGL::execute_operation(

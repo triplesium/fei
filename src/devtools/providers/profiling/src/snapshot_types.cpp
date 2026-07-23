@@ -68,4 +68,24 @@ make_frame_history_snapshot(const fei::ProfileSummarySnapshot& source) {
     return snapshot;
 }
 
+GpuSummarySnapshot
+make_gpu_summary_snapshot(const fei::GpuProfileSummarySnapshot& source) {
+    GpuSummarySnapshot snapshot {.available = source.available};
+    snapshot.entries.reserve(source.entries.size());
+    for (const auto& entry : source.entries) {
+        snapshot.entries.push_back(
+            GpuSummaryEntrySnapshot {
+                .name = entry.name,
+                .count = entry.count,
+                .latest_ms = entry.latest_ms,
+                .total_ms = entry.total_ms,
+                .mean_ms = entry.mean_ms,
+                .min_ms = entry.min_ms,
+                .max_ms = entry.max_ms,
+            }
+        );
+    }
+    return snapshot;
+}
+
 } // namespace fei::devtools::profiling

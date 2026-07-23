@@ -6,7 +6,7 @@ target("fei-graphics-vulkan")
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
-    add_deps("fei-graphics")
+    add_deps("fei-graphics", "fei-profiling")
     add_packages("vulkansdk", {public = true})
     add_packages("vulkan-validationlayers", {public = true})
 
