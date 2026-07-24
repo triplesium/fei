@@ -1484,6 +1484,7 @@ void CommandBufferVulkan::update_buffer(
         static_cast<VkDeviceSize>(size)
     );
     m_resource_retention.retain_transient_buffer(std::move(staging));
+    m_resource_retention.retain_buffer(std::move(buffer_vk));
 }
 
 void CommandBufferVulkan::draw(std::size_t start, std::size_t count) {
@@ -1591,6 +1592,7 @@ void CommandBufferVulkan::set_render_pipeline_impl(
         VK_PIPELINE_BIND_POINT_GRAPHICS,
         pipeline_vk->handle()
     );
+    m_resource_retention.retain_pipeline(pipeline_vk);
     m_graphics_pipeline = std::move(pipeline_vk);
     m_compute_pipeline.reset();
 }
@@ -1624,6 +1626,7 @@ void CommandBufferVulkan::set_compute_pipeline_impl(
         VK_PIPELINE_BIND_POINT_COMPUTE,
         pipeline_vk->handle()
     );
+    m_resource_retention.retain_pipeline(pipeline_vk);
     m_compute_pipeline = std::move(pipeline_vk);
     m_graphics_pipeline.reset();
 }
