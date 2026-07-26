@@ -757,6 +757,31 @@ void record_buffer_copy(
         .dstOffset = dst_offset,
         .size = size,
     };
+
+    VkBufferMemoryBarrier before_copy {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .pNext = nullptr,
+        .srcAccessMask =
+            buffer_access_flags(dst.usages()) | VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .buffer = dst.handle(),
+        .offset = dst_offset,
+        .size = size,
+    };
+    vkCmdPipelineBarrier(
+        command_buffer,
+        buffer_pipeline_stages(dst.usages()) | VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,
+        0,
+        nullptr,
+        1,
+        &before_copy,
+        0,
+        nullptr
+    );
     vkCmdCopyBuffer(command_buffer, src.handle(), dst.handle(), 1, &copy);
 
     VkBufferMemoryBarrier barrier {
