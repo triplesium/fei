@@ -23,6 +23,7 @@ struct ShadowMapDrawItem {
     std::shared_ptr<const ResourceSet> view_set;
     std::shared_ptr<const ResourceSet> mesh_set;
     std::shared_ptr<const ResourceSet> material_set;
+    uint32 view_uniform_dynamic_offset {};
     uint32 mesh_uniform_dynamic_offset {};
     std::shared_ptr<const Buffer> vertex_buffer;
     std::shared_ptr<const Buffer> index_buffer;
@@ -111,7 +112,10 @@ void draw_shadow_map_item(
     }
 
     command_buffer.set_render_pipeline(item.pipeline);
-    command_buffer.set_resource_set(0, item.view_set);
+    const std::array view_dynamic_offsets {
+        item.view_uniform_dynamic_offset,
+    };
+    command_buffer.set_resource_set(0, item.view_set, view_dynamic_offsets);
     const std::array dynamic_offsets {item.mesh_uniform_dynamic_offset};
     command_buffer.set_resource_set(1, item.mesh_set, dynamic_offsets);
     command_buffer.set_resource_set(2, item.material_set);
@@ -214,33 +218,25 @@ void ShadowMapPipelineSpecializer::specialize(
     desc.output_description = shadow_map_output_description();
 }
 
-void init_light_view_uniform_buffer(
+void init_light_view_uniform(
     Query<Entity, const DirectionalLight, const GlobalTransform3d>::Filter<
-        Without<ViewUniformBuffer>> query_light,
-    ResRO<GraphicsDevice> device,
+        Without<PreparedView>> query_light,
     Commands commands
 ) {
     for (auto [entity, light, transform] : query_light) {
-        auto buffer = device->create_buffer(
-            BufferDescription {
-                .size = sizeof(ViewUniform),
-                .usages = BufferUsages::Uniform,
-            }
-        );
-        commands.entity(entity).add(ViewUniformBuffer {.buffer = buffer});
+        (void)light;
+        (void)transform;
+        commands.entity(entity).add(PreparedView {});
     }
 }
 
-void prepare_light_view_uniform_buffer(
-    Query<
-        Entity,
-        const DirectionalLight,
-        const GlobalTransform3d,
-        ViewUniformBuffer> query_light,
-    ResRO<GraphicsDevice> device,
-    ResRO<RenderQueue> render_queue
+void prepare_light_view_uniform(
+    Query<Entity, const DirectionalLight, const GlobalTransform3d, PreparedView>
+        query_light,
+    ResRO<GraphicsDevice> device
 ) {
-    for (auto [entity, light, transform, view_uniform_buffer] : query_light) {
+    for (auto [entity, light, transform, prepared_view_component] :
+         query_light) {
         auto world_position = transform.translation();
         auto view = look_at(
             world_position,
@@ -264,9 +260,9 @@ void prepare_light_view_uniform_buffer(
             .clip_from_view = clip_space_transform * proj,
             .world_position = world_position,
         };
-        auto& view_uniform = view_uniform_buffer.write();
-        view_uniform.uniform = uniform;
-        view_uniform.view = RenderView {
+        auto& prepared_view = prepared_view_component.write();
+        prepared_view.uniform = uniform;
+        prepared_view.view = RenderView {
             .kind = RenderViewKind::DirectionalShadow,
             .id = ViewId::from_source(entity),
             .clip_from_world = logical_clip_from_world,
@@ -275,12 +271,6 @@ void prepare_light_view_uniform_buffer(
             .world_position = uniform.world_position,
             .frustum = extract_frustum(logical_clip_from_world),
         };
-        render_queue->write_buffer(
-            view_uniform.buffer,
-            0,
-            &view_uniform.uniform,
-            sizeof(ViewUniform)
-        );
     }
 }
 
@@ -321,7 +311,7 @@ void prepare_lighting(
     Query<
         const DirectionalLight,
         const GlobalTransform3d,
-        const ViewUniformBuffer,
+        const PreparedView,
         const ShadowMap> query_directional_lights,
     Query<const PointLight, const GlobalTransform3d> query_point_lights,
     ResRW<LightingResources> lighting,
@@ -330,7 +320,7 @@ void prepare_lighting(
     LightingUniform uniform {};
 
     std::size_t dir_light_count = 0;
-    for (const auto& [light, transform, view_uniform_buffer, shadow_map] :
+    for (const auto& [light, transform, prepared_view, shadow_map] :
          query_directional_lights) {
         (void)shadow_map;
         if (dir_light_count >= uniform.directional_lights.size()) {
@@ -343,8 +333,7 @@ void prepare_lighting(
         dir_light.ambient = Vector3 {0.0f};
         dir_light.direction = -transform.forward();
         dir_light.shadowing_method = 1;
-        uniform.light_view_projection =
-            view_uniform_buffer.view.clip_from_world;
+        uniform.light_view_projection = prepared_view.view.clip_from_world;
         ++dir_light_count;
     }
     uniform.num_directional_lights = static_cast<uint32>(dir_light_count);
@@ -574,6 +563,7 @@ void queue_shadow_map_meshes(
                 entity,
                 pipeline_id,
                 view_resource_set.resource_set,
+                view_resource_set.view_uniform_dynamic_offset,
                 mesh_uniforms->resource_set,
                 mesh_uniform_it->second.dynamic_offset,
                 material.resource_set(),
@@ -630,6 +620,8 @@ void render_shadow_map_passes(
                     .view_set = item.view_set,
                     .mesh_set = item.mesh_set,
                     .material_set = item.material_set,
+                    .view_uniform_dynamic_offset =
+                        item.view_uniform_dynamic_offset,
                     .mesh_uniform_dynamic_offset =
                         item.mesh_uniform_dynamic_offset,
                     .vertex_buffer = item.vertex_buffer,

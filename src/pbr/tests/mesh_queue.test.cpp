@@ -217,6 +217,7 @@ TEST_CASE(
         query,
         phase,
         view_set,
+        128,
         gpu_meshes,
         prepared_materials,
         mesh_uniforms,
@@ -233,6 +234,7 @@ TEST_CASE(
     REQUIRE(phase.items.size() == 1);
     CHECK(phase.items[0].entity == 1);
     CHECK(phase.items[0].view_set == view_set);
+    CHECK(phase.items[0].view_uniform_dynamic_offset == 128);
     CHECK(phase.items[0].mesh_set == mesh_uniforms.resource_set);
     CHECK(phase.items[0].mesh_uniform_dynamic_offset == 256);
     CHECK(phase.items[0].vertex_count == 3);

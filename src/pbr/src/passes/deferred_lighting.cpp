@@ -1,5 +1,6 @@
 #include "pbr/passes/deferred_internal.hpp"
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <utility>
@@ -11,6 +12,7 @@ namespace {
 
 struct FullscreenQuadPassData {
     std::shared_ptr<const ResourceSet> view_set;
+    uint32 view_uniform_dynamic_offset {};
     std::shared_ptr<const Buffer> vertex_buffer;
     std::shared_ptr<const Buffer> index_buffer;
     uint32 index_count {};
@@ -115,11 +117,13 @@ ResolvedPresentView resolve_present_view(
 
 FullscreenQuadPassData make_fullscreen_quad_pass_data(
     std::shared_ptr<const ResourceSet> view_set,
+    uint32 view_uniform_dynamic_offset,
     const GpuMesh& mesh
 ) {
     auto index_buffer = mesh.index_buffer();
     return FullscreenQuadPassData {
         .view_set = std::move(view_set),
+        .view_uniform_dynamic_offset = view_uniform_dynamic_offset,
         .vertex_buffer = mesh.vertex_buffer(),
         .index_buffer = index_buffer ? *index_buffer : nullptr,
         .index_count = static_cast<uint32>(
@@ -167,7 +171,14 @@ void execute_fullscreen_lighting_pass(
     command_buffer.set_viewport(0, 0, target->width(), target->height());
     if (pipeline) {
         command_buffer.set_render_pipeline(std::move(pipeline));
-        command_buffer.set_resource_set(0, fullscreen_quad.view_set);
+        const std::array view_dynamic_offsets {
+            fullscreen_quad.view_uniform_dynamic_offset,
+        };
+        command_buffer.set_resource_set(
+            0,
+            fullscreen_quad.view_set,
+            view_dynamic_offsets
+        );
         std::forward<Draw>(draw)(command_buffer);
         draw_fullscreen_quad(command_buffer, fullscreen_quad);
     }
@@ -275,6 +286,7 @@ void direct_lighting_pass(
     }
     auto fullscreen_quad_data = make_fullscreen_quad_pass_data(
         mesh_view_resource_set.resource_set,
+        mesh_view_resource_set.view_uniform_dynamic_offset,
         gpu_mesh.value()
     );
     execute_fullscreen_lighting_pass(
@@ -334,6 +346,7 @@ void indirect_lighting_pass(
     }
     auto fullscreen_quad_data = make_fullscreen_quad_pass_data(
         mesh_view_resource_set.resource_set,
+        mesh_view_resource_set.view_uniform_dynamic_offset,
         gpu_mesh.value()
     );
     execute_fullscreen_lighting_pass(
@@ -394,6 +407,7 @@ void composite_pass(
     }
     auto fullscreen_quad_data = make_fullscreen_quad_pass_data(
         mesh_view_resource_set.resource_set,
+        mesh_view_resource_set.view_uniform_dynamic_offset,
         gpu_mesh.value()
     );
     execute_fullscreen_lighting_pass(
@@ -455,7 +469,7 @@ void present_composite_pass(
         }
     );
     auto fullscreen_quad_data =
-        make_fullscreen_quad_pass_data(nullptr, gpu_mesh.value());
+        make_fullscreen_quad_pass_data(nullptr, 0, gpu_mesh.value());
     auto target_framebuffer = (*main_swapchain)->swapchain->framebuffer();
     if (!target_framebuffer) {
         return;

@@ -14,6 +14,7 @@
 #include "math/vector.hpp"
 #include "pbr/passes/target.hpp"
 #include "rendering/render_frame.hpp"
+#include "rendering/view.hpp"
 
 #include <memory>
 #include <vector>
@@ -23,9 +24,11 @@ namespace fei {
 struct SkyboxResource {
     std::vector<std::shared_ptr<const ShaderModule>> shader_modules;
     std::shared_ptr<ResourceLayout> view_resource_layout;
+    std::shared_ptr<ResourceSet> view_resource_set;
     std::shared_ptr<ResourceLayout> resource_layout;
     std::shared_ptr<Sampler> sampler;
     std::shared_ptr<Pipeline> pipeline;
+    uint64 view_buffer_revision {0};
 };
 
 struct alignas(16) SkyboxUniform {
@@ -36,9 +39,7 @@ struct alignas(16) SkyboxUniform {
 
 struct SkyboxViewResourceSet {
     std::shared_ptr<Buffer> uniform_buffer;
-    std::shared_ptr<ResourceSet> view_resource_set;
     std::shared_ptr<ResourceSet> resource_set;
-    const Buffer* view_buffer {};
     const Texture* texture {};
 };
 
@@ -49,8 +50,8 @@ struct Skybox {
 };
 
 void render_skybox_pass(
-    Query<const Skybox, const SkyboxViewResourceSet>::Filter<With<Camera3d>>
-        query,
+    Query<const Skybox, const PreparedView, const SkyboxViewResourceSet>::
+        Filter<With<Camera3d>> query,
     ResRW<RenderFrameContext> frame,
     ResRO<RenderTarget> target,
     ResRO<DeferredViewTargets> targets,

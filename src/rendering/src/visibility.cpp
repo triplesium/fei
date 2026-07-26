@@ -114,28 +114,27 @@ Frustum extract_frustum(const Matrix4x4& clip_from_world) {
 }
 
 void check_mesh_visibility(
-    Query<Entity, const ViewUniformBuffer> query_views,
+    Query<Entity, const PreparedView> query_views,
     Query<Entity, const Mesh3d, const GlobalTransform3d, const Aabb>
         query_meshes,
     ResRW<ViewVisibleEntities> visible_entities
 ) {
     visible_entities->clear();
 
-    for (const auto& [view_entity, view_uniform_buffer] : query_views) {
-        auto view_id = view_uniform_buffer.view.id;
+    for (const auto& [view_entity, prepared_view] : query_views) {
+        auto view_id = prepared_view.view.id;
         if (view_id.source == InvalidViewEntity) {
             view_id = ViewId::from_source(view_entity);
         }
 
         auto& visible_meshes = visible_entities->get_or_insert(view_id);
         for (const auto& [mesh_entity, mesh, transform, aabb] : query_meshes) {
-            if (view_uniform_buffer.view.kind ==
-                    RenderViewKind::DirectionalShadow &&
+            if (prepared_view.view.kind == RenderViewKind::DirectionalShadow &&
                 !mesh.cast_shadow) {
                 continue;
             }
 
-            if (view_uniform_buffer.view.frustum
+            if (prepared_view.view.frustum
                     .intersects(aabb, transform.to_matrix())) {
                 visible_meshes.add(mesh_entity);
             }

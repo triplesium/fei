@@ -4,33 +4,27 @@
 #include "ecs/query.hpp"
 #include "math/matrix.hpp"
 
+#include <vector>
+
 namespace fei {
 
 void init_camera_view_uniform(
     Query<Entity, const Camera3d, const GlobalTransform3d>::Filter<
-        Without<ViewUniformBuffer>> query,
-    ResRO<GraphicsDevice> device,
+        Without<PreparedView>> query,
     Commands commands
 ) {
     for (auto [entity, camera, transform] : query) {
-        auto buffer = device->create_buffer(
-            BufferDescription {
-                .size = sizeof(ViewUniform),
-                .usages = BufferUsages::Uniform,
-            }
-        );
-        commands.entity(entity).add(ViewUniformBuffer {.buffer = buffer});
+        (void)camera;
+        (void)transform;
+        commands.entity(entity).add(PreparedView {});
     }
 }
 
 void prepare_camera_view_uniform(
-    Query<Entity, const Camera3d, const GlobalTransform3d, ViewUniformBuffer>
-        query,
-    ResRO<GraphicsDevice> device,
-    ResRO<RenderQueue> render_queue
+    Query<Entity, const Camera3d, const GlobalTransform3d, PreparedView> query,
+    ResRO<GraphicsDevice> device
 ) {
-    for (auto [entity, camera, transform, view_uniform_buffer_component] :
-         query) {
+    for (auto [entity, camera, transform, prepared_view_component] : query) {
         auto world_position = transform.translation();
         auto view = look_at(
             world_position,
@@ -53,9 +47,9 @@ void prepare_camera_view_uniform(
             .view_from_clip = (clip_space_transform * projection).inverse(),
             .world_position = world_position,
         };
-        auto& view_uniform_buffer = view_uniform_buffer_component.write();
-        view_uniform_buffer.uniform = uniform;
-        view_uniform_buffer.view = RenderView {
+        auto& prepared_view = prepared_view_component.write();
+        prepared_view.uniform = uniform;
+        prepared_view.view = RenderView {
             .kind = RenderViewKind::Camera,
             .id = ViewId::from_source(entity),
             .clip_from_world = logical_clip_from_world,
@@ -64,13 +58,33 @@ void prepare_camera_view_uniform(
             .world_position = uniform.world_position,
             .frustum = extract_frustum(logical_clip_from_world),
         };
-        render_queue->write_buffer(
-            view_uniform_buffer.buffer,
-            0,
-            &view_uniform_buffer.uniform,
-            sizeof(ViewUniform)
+    }
+}
+
+void upload_view_uniforms(
+    Query<PreparedView> query,
+    ResRO<GraphicsDevice> device,
+    ResRO<RenderQueue> render_queue,
+    ResRW<ViewUniforms> uniforms
+) {
+    uniforms->buffer.initialize(*device);
+    uniforms->buffer.clear();
+
+    std::vector<PreparedView*> prepared_views;
+    std::vector<ViewUniform> values;
+    for (auto [prepared_view_component] : query) {
+        auto& prepared_view = prepared_view_component.write();
+        prepared_views.push_back(&prepared_view);
+        values.push_back(prepared_view.uniform);
+    }
+
+    const auto first_offset = uniforms->buffer.append(values);
+    for (std::size_t index = 0; index < prepared_views.size(); ++index) {
+        prepared_views[index]->dynamic_offset = static_cast<uint32>(
+            first_offset + index * uniforms->buffer.stride()
         );
     }
+    uniforms->buffer.upload(*device, *render_queue);
 }
 
 } // namespace fei

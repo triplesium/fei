@@ -12,6 +12,7 @@
 #include "rendering/shader_cache.hpp"
 #include "rendering/view.hpp"
 
+#include <array>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -56,10 +57,12 @@ void setup_skybox_resources(
         ),
     };
 
+    auto view_binding = uniform_buffer("view");
+    view_binding.options.set(ResourceLayoutElementOptions::DynamicBinding);
     skybox_resource->view_resource_layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
             ShaderStages::Vertex,
-            {uniform_buffer("view")}
+            {std::move(view_binding)}
         )
     );
 
@@ -118,29 +121,43 @@ void setup_skybox_resources(
 }
 
 void prepare_skybox_resources(
-    Query<
-        Entity,
-        const Skybox,
-        const ViewUniformBuffer,
-        SkyboxViewResourceSet>::Filter<With<Camera3d>> existing_views,
-    Query<Entity, const Skybox, const ViewUniformBuffer>::
+    Query<Entity, const Skybox, const PreparedView, SkyboxViewResourceSet>::
+        Filter<With<Camera3d>> existing_views,
+    Query<Entity, const Skybox, const PreparedView>::
         Filter<With<Camera3d>, Without<SkyboxViewResourceSet>> new_views,
-    ResRO<SkyboxResource> skybox_resource,
+    ResRW<SkyboxResource> skybox_resource,
+    ResRO<ViewUniforms> view_uniforms,
     ResRW<EquirectToCubemap> equirect_to_cubemap,
     ResRO<GraphicsDevice> device,
     ResRO<Assets<Image>> images,
     ResRO<RenderQueue> render_queue,
     Commands commands
 ) {
+    if (view_uniforms->buffer.buffer() &&
+        (!skybox_resource->view_resource_set ||
+         skybox_resource->view_buffer_revision !=
+             view_uniforms->buffer.buffer_revision())) {
+        skybox_resource->view_resource_set = device->create_resource_set(
+            ResourceSetDescription {
+                .layout = skybox_resource->view_resource_layout,
+                .resources = {view_uniforms->buffer.binding()},
+                .name = "skybox.view",
+            }
+        );
+        skybox_resource->view_buffer_revision =
+            view_uniforms->buffer.buffer_revision();
+    }
+
     auto prepare = [&](const Skybox& skybox,
-                       const ViewUniformBuffer& view_uniform_buffer,
+                       const PreparedView& prepared_view,
                        SkyboxViewResourceSet& view_resources) {
+        (void)prepared_view;
         auto cubemap = equirect_to_cubemap->prepare_cubemap(
             *device,
             *images,
             skybox.equirect_map
         );
-        if (!cubemap || !skybox_resource->view_resource_layout ||
+        if (!cubemap || !skybox_resource->view_resource_set ||
             !skybox_resource->resource_layout || !skybox_resource->sampler) {
             view_resources.resource_set.reset();
             view_resources.texture = nullptr;
@@ -167,18 +184,6 @@ void prepare_skybox_resources(
             sizeof(uniform)
         );
 
-        if (!view_resources.view_resource_set ||
-            view_resources.view_buffer != view_uniform_buffer.buffer.get()) {
-            view_resources.view_resource_set = device->create_resource_set(
-                ResourceSetDescription {
-                    .layout = skybox_resource->view_resource_layout,
-                    .resources = {view_uniform_buffer.buffer},
-                    .name = "skybox.view",
-                }
-            );
-            view_resources.view_buffer = view_uniform_buffer.buffer.get();
-        }
-
         if (!view_resources.resource_set ||
             view_resources.texture != cubemap->get()) {
             view_resources.resource_set = device->create_resource_set(
@@ -196,23 +201,23 @@ void prepare_skybox_resources(
         return true;
     };
 
-    for (auto [entity, skybox, view_uniform_buffer, view_resources_component] :
+    for (auto [entity, skybox, prepared_view, view_resources_component] :
          existing_views) {
         (void)entity;
-        prepare(skybox, view_uniform_buffer, view_resources_component.write());
+        prepare(skybox, prepared_view, view_resources_component.write());
     }
 
-    for (auto [entity, skybox, view_uniform_buffer] : new_views) {
+    for (auto [entity, skybox, prepared_view] : new_views) {
         SkyboxViewResourceSet view_resources;
-        if (prepare(skybox, view_uniform_buffer, view_resources)) {
+        if (prepare(skybox, prepared_view, view_resources)) {
             commands.entity(entity).add(std::move(view_resources));
         }
     }
 }
 
 void render_skybox_pass(
-    Query<const Skybox, const SkyboxViewResourceSet>::Filter<With<Camera3d>>
-        query,
+    Query<const Skybox, const PreparedView, const SkyboxViewResourceSet>::
+        Filter<With<Camera3d>> query,
     ResRW<RenderFrameContext> frame,
     ResRO<RenderTarget> target,
     ResRO<DeferredViewTargets> targets,
@@ -224,10 +229,10 @@ void render_skybox_pass(
         return;
     }
 
-    auto [skybox, skybox_view_resources] = query.first();
+    auto [skybox, prepared_view, skybox_view_resources] = query.first();
     (void)skybox;
     if (!skybox_view_resources.resource_set ||
-        !skybox_view_resources.view_resource_set) {
+        !skybox_resource->view_resource_set) {
         return;
     }
 
@@ -251,9 +256,11 @@ void render_skybox_pass(
     );
     command_buffer->set_viewport(0, 0, targets->width, targets->height);
     command_buffer->set_render_pipeline(skybox_resource->pipeline);
+    const std::array view_dynamic_offsets {prepared_view.dynamic_offset};
     command_buffer->set_resource_set(
         0,
-        skybox_view_resources.view_resource_set
+        skybox_resource->view_resource_set,
+        view_dynamic_offsets
     );
     command_buffer->set_resource_set(1, skybox_view_resources.resource_set);
     command_buffer->draw(0, 3);
@@ -269,7 +276,8 @@ void SkyboxPlugin::setup(App& app) {
         .add_systems(
             RenderUpdate,
             prepare_skybox_resources |
-                in_set<RenderingSystems::PrepareResources>()
+                in_set<RenderingSystems::PrepareResources>() |
+                in_set<PbrSystems::PrepareLighting>()
         );
 }
 

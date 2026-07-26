@@ -19,7 +19,7 @@
 
 namespace fei {
 
-struct ViewUniformBuffer;
+struct PreparedView;
 
 struct Plane {
     Vector3 normal;
@@ -98,7 +98,7 @@ struct ViewVisibleEntities {
 Frustum extract_frustum(const Matrix4x4& clip_from_world);
 
 void check_mesh_visibility(
-    Query<Entity, const ViewUniformBuffer> query_views,
+    Query<Entity, const PreparedView> query_views,
     Query<Entity, const Mesh3d, const GlobalTransform3d, const Aabb>
         query_meshes,
     ResRW<ViewVisibleEntities> visible_entities

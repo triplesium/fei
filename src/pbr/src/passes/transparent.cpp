@@ -57,7 +57,10 @@ void draw_transparent_item(
     }
 
     commands.set_render_pipeline(pipeline);
-    commands.set_resource_set(0, item.view_set);
+    const std::array view_dynamic_offsets {
+        item.view_uniform_dynamic_offset,
+    };
+    commands.set_resource_set(0, item.view_set, view_dynamic_offsets);
     const std::array dynamic_offsets {item.mesh_uniform_dynamic_offset};
     commands.set_resource_set(1, item.mesh_set, dynamic_offsets);
     commands.set_resource_set(2, item.material_set);
@@ -160,6 +163,7 @@ void queue_transparent_meshes(
             entity,
             pipeline,
             camera_resources.resource_set,
+            camera_resources.view_uniform_dynamic_offset,
             mesh_uniforms->resource_set,
             mesh_uniform->second.dynamic_offset,
             material->resource_set(),

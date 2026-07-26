@@ -15,13 +15,11 @@ MeshViewResourceSet::Key mesh_view_resource_set_key(
     const MeshViewLayout& mesh_view_layout,
     const GpuLUTs& luts,
     const GpuEnvironmentMap& env_map,
-    const ViewUniformBuffer& view_uniform_buffer,
     const Buffer& environment_uniform_buffer
 ) {
     return MeshViewResourceSet::Key {
         .layout = mesh_view_layout.layout.get(),
         .environment_layout = mesh_view_layout.environment_layout.get(),
-        .view_buffer = view_uniform_buffer.buffer.get(),
         .irradiance_map = env_map.irradiance_cubemap.texture().get(),
         .radiance_map = env_map.radiance_cubemap.texture().get(),
         .cubemap_sampler = mesh_view_layout.cubemap_sampler.get(),
@@ -36,7 +34,7 @@ MeshViewResourceSet create_mesh_view_resource_set(
     const MeshViewLayout& mesh_view_layout,
     const GpuLUTs& luts,
     const GpuEnvironmentMap& env_map,
-    const ViewUniformBuffer& view_uniform_buffer,
+    const PreparedView& prepared_view,
     std::shared_ptr<Buffer> environment_uniform_buffer
 ) {
     auto irradiance_map = env_map.irradiance_cubemap.texture();
@@ -46,18 +44,11 @@ MeshViewResourceSet create_mesh_view_resource_set(
         mesh_view_layout,
         luts,
         env_map,
-        view_uniform_buffer,
         *environment_uniform_buffer
     );
 
     return MeshViewResourceSet {
-        .resource_set = device.create_resource_set(
-            ResourceSetDescription {
-                .layout = mesh_view_layout.layout,
-                .resources = {view_uniform_buffer.buffer},
-                .name = "mesh_view",
-            }
-        ),
+        .resource_set = mesh_view_layout.view_resource_set,
         .environment_resource_set = device.create_resource_set(
             ResourceSetDescription {
                 .layout = mesh_view_layout.environment_layout,
@@ -74,6 +65,7 @@ MeshViewResourceSet create_mesh_view_resource_set(
             }
         ),
         .environment_uniform_buffer = std::move(environment_uniform_buffer),
+        .view_uniform_dynamic_offset = prepared_view.dynamic_offset,
         .key = key,
     };
 }
@@ -84,10 +76,12 @@ void init_mesh_view_layout(
     ResRO<GraphicsDevice> device,
     ResRW<MeshViewLayout> mesh_view_layout
 ) {
+    auto view_binding = uniform_buffer("view");
+    view_binding.options.set(ResourceLayoutElementOptions::DynamicBinding);
     mesh_view_layout->layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
             {ShaderStages::Vertex, ShaderStages::Fragment},
-            {uniform_buffer("view")}
+            {std::move(view_binding)}
         )
     );
     mesh_view_layout->environment_layout = device->create_resource_layout(
@@ -127,28 +121,44 @@ void init_mesh_view_layout(
 
 void prepare_mesh_view_resource_set(
     ResRO<GraphicsDevice> device,
-    ResRO<MeshViewLayout> mesh_view_layout,
+    ResRW<MeshViewLayout> mesh_view_layout,
+    ResRO<ViewUniforms> view_uniforms,
     ResRO<GpuLUTs> luts,
     ResRO<RenderQueue> render_queue,
     Query<
         Entity,
-        const ViewUniformBuffer,
+        const PreparedView,
         const GpuEnvironmentMap,
         const EnvironmentMapLight,
         MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     Query<
         Entity,
-        const ViewUniformBuffer,
+        const PreparedView,
         const GpuEnvironmentMap,
         const EnvironmentMapLight>::
         Filter<With<Camera3d>, Without<MeshViewResourceSet>> query_new_cameras,
-    Query<Entity, const ViewUniformBuffer, MeshViewResourceSet>::Filter<
+    Query<Entity, const PreparedView, MeshViewResourceSet>::Filter<
         Without<Camera3d>> query_views,
-    Query<Entity, const ViewUniformBuffer>::
+    Query<Entity, const PreparedView>::
         Filter<Without<Camera3d>, Without<MeshViewResourceSet>> query_new_views,
     ResRW<MeshViewResourceSet> mesh_view_resource_set,
     Commands commands
 ) {
+    if (view_uniforms->buffer.buffer() &&
+        (!mesh_view_layout->view_resource_set ||
+         mesh_view_layout->view_buffer_revision !=
+             view_uniforms->buffer.buffer_revision())) {
+        mesh_view_layout->view_resource_set = device->create_resource_set(
+            ResourceSetDescription {
+                .layout = mesh_view_layout->layout,
+                .resources = {view_uniforms->buffer.binding()},
+                .name = "mesh_view",
+            }
+        );
+        mesh_view_layout->view_buffer_revision =
+            view_uniforms->buffer.buffer_revision();
+    }
+
     bool selected_resource_set = false;
     const GpuEnvironmentMap* fallback_env_map = nullptr;
     const EnvironmentMapLight* fallback_environment_light = nullptr;
@@ -159,7 +169,7 @@ void prepare_mesh_view_resource_set(
         }
     };
 
-    auto prepare = [&](const ViewUniformBuffer& view_uniform_buffer,
+    auto prepare = [&](const PreparedView& prepared_view,
                        const GpuEnvironmentMap& env_map,
                        const EnvironmentMapLight& environment_light,
                        MeshViewResourceSet& view_resource_set) {
@@ -196,7 +206,6 @@ void prepare_mesh_view_resource_set(
             *mesh_view_layout,
             *luts,
             env_map,
-            view_uniform_buffer,
             *view_resource_set.environment_uniform_buffer
         );
         if (view_resource_set.key != next_key) {
@@ -205,16 +214,21 @@ void prepare_mesh_view_resource_set(
                 *mesh_view_layout,
                 *luts,
                 env_map,
-                view_uniform_buffer,
+                prepared_view,
                 view_resource_set.environment_uniform_buffer
             );
+        } else {
+            view_resource_set.resource_set =
+                mesh_view_layout->view_resource_set;
+            view_resource_set.view_uniform_dynamic_offset =
+                prepared_view.dynamic_offset;
         }
         select_resource_set(view_resource_set);
     };
 
     for (auto
          [entity,
-          view_uniform_buffer,
+          prepared_view,
           env_map,
           environment_light,
           view_resource_set] : query_cameras) {
@@ -224,45 +238,39 @@ void prepare_mesh_view_resource_set(
             fallback_environment_light = &environment_light;
         }
         prepare(
-            view_uniform_buffer,
+            prepared_view,
             env_map,
             environment_light,
             view_resource_set.write()
         );
     }
 
-    for (auto [entity, view_uniform_buffer, env_map, environment_light] :
+    for (auto [entity, prepared_view, env_map, environment_light] :
          query_new_cameras) {
         if (!fallback_env_map) {
             fallback_env_map = &env_map;
             fallback_environment_light = &environment_light;
         }
         MeshViewResourceSet view_resource_set;
-        prepare(
-            view_uniform_buffer,
-            env_map,
-            environment_light,
-            view_resource_set
-        );
+        prepare(prepared_view, env_map, environment_light, view_resource_set);
         commands.entity(entity).add(std::move(view_resource_set));
     }
 
     if (fallback_env_map && fallback_environment_light) {
-        for (auto [entity, view_uniform_buffer, view_resource_set] :
-             query_views) {
+        for (auto [entity, prepared_view, view_resource_set] : query_views) {
             (void)entity;
             prepare(
-                view_uniform_buffer,
+                prepared_view,
                 *fallback_env_map,
                 *fallback_environment_light,
                 view_resource_set.write()
             );
         }
 
-        for (auto [entity, view_uniform_buffer] : query_new_views) {
+        for (auto [entity, prepared_view] : query_new_views) {
             MeshViewResourceSet view_resource_set;
             prepare(
-                view_uniform_buffer,
+                prepared_view,
                 *fallback_env_map,
                 *fallback_environment_light,
                 view_resource_set

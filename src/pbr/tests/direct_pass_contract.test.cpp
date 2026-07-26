@@ -33,6 +33,7 @@ class ContractCommandBuffer : public CommandBuffer {
     std::vector<std::shared_ptr<const Pipeline>> compute_pipelines;
     std::vector<std::pair<uint32, std::shared_ptr<const ResourceSet>>>
         resource_sets;
+    std::vector<std::vector<uint32>> resource_set_dynamic_offsets;
     std::vector<std::tuple<std::size_t, std::size_t, std::size_t>> dispatches;
     uint32 begin_calls {0};
     uint32 end_calls {0};
@@ -54,9 +55,13 @@ class ContractCommandBuffer : public CommandBuffer {
     void set_resource_set(
         uint32 slot,
         std::shared_ptr<const ResourceSet> resource_set,
-        std::span<const uint32>
+        std::span<const uint32> dynamic_offsets
     ) override {
         resource_sets.emplace_back(slot, std::move(resource_set));
+        resource_set_dynamic_offsets.emplace_back(
+            dynamic_offsets.begin(),
+            dynamic_offsets.end()
+        );
     }
     void update_buffer(
         std::shared_ptr<Buffer>,
@@ -358,6 +363,8 @@ TEST_CASE(
             .view_set = create_set(),
             .mesh_set = create_set(),
             .material_set = create_set(),
+            .view_uniform_dynamic_offset = 128,
+            .mesh_uniform_dynamic_offset = 256,
             .vertex_buffer = test.device->create_buffer(
                 BufferDescription {
                     .size = 64,
@@ -386,6 +393,14 @@ TEST_CASE(
     CHECK(test.commands->viewports[0].height == 720);
     CHECK(test.commands->render_pipelines.size() == 1);
     CHECK(test.commands->resource_sets.size() == 5);
+    CHECK(
+        test.commands->resource_set_dynamic_offsets[0] ==
+        std::vector<uint32> {128}
+    );
+    CHECK(
+        test.commands->resource_set_dynamic_offsets[1] ==
+        std::vector<uint32> {256}
+    );
     REQUIRE(test.commands->draws.size() == 1);
     CHECK(test.commands->draws[0] == std::pair {0ULL, 3ULL});
     CHECK(test.commands->end_render_pass_calls == 1);
@@ -533,15 +548,20 @@ TEST_CASE(
     auto skybox_view_uniform_set = create_set();
     auto skybox_view_set = create_set();
     auto pipeline = std::make_shared<FakePipeline>();
-    test.world.add_resource(SkyboxResource {.pipeline = pipeline});
+    test.world.add_resource(
+        SkyboxResource {
+            .view_resource_set = skybox_view_uniform_set,
+            .pipeline = pipeline,
+        }
+    );
 
     const auto camera = test.world.entity();
     test.world.add_component(camera, Camera3d {});
     test.world.add_component(camera, Skybox {});
+    test.world.add_component(camera, PreparedView {.dynamic_offset = 384});
     test.world.add_component(
         camera,
         SkyboxViewResourceSet {
-            .view_resource_set = skybox_view_uniform_set,
             .resource_set = skybox_view_set,
         }
     );
@@ -569,6 +589,10 @@ TEST_CASE(
         std::pair {0U, skybox_view_uniform_set}
     );
     CHECK(test.commands->resource_sets[1] == std::pair {1U, skybox_view_set});
+    CHECK(
+        test.commands->resource_set_dynamic_offsets[0] ==
+        std::vector<uint32> {384}
+    );
     REQUIRE(test.commands->draws.size() == 1);
     CHECK(test.commands->draws[0] == std::pair {0ULL, 3ULL});
     CHECK(test.commands->end_render_pass_calls == 1);

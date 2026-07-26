@@ -224,6 +224,7 @@ TEST_CASE(
         42,
         static_cast<CachedRenderPipelineId>(7),
         view_set,
+        256,
         mesh_set,
         768,
         material_set,
@@ -234,6 +235,7 @@ TEST_CASE(
     REQUIRE(item.entity == 42);
     REQUIRE(item.pipeline == static_cast<CachedRenderPipelineId>(7));
     REQUIRE(item.view_set == view_set);
+    REQUIRE(item.view_uniform_dynamic_offset == 256);
     REQUIRE(item.mesh_set == mesh_set);
     REQUIRE(item.mesh_uniform_dynamic_offset == 768);
     REQUIRE(item.material_set == material_set);
@@ -268,6 +270,7 @@ TEST_CASE(
         .view_set = view_set,
         .mesh_set = mesh_set,
         .material_set = material_set,
+        .view_uniform_dynamic_offset = 256,
         .mesh_uniform_dynamic_offset = 512,
         .vertex_buffer = vertex_buffer,
         .index_buffer = index_buffer,
@@ -282,6 +285,10 @@ TEST_CASE(
     REQUIRE(command_buffer.resource_sets[0] == view_set);
     REQUIRE(command_buffer.resource_sets[1] == mesh_set);
     REQUIRE(command_buffer.resource_sets[2] == material_set);
+    REQUIRE(
+        command_buffer.resource_set_dynamic_offsets[0] ==
+        std::vector<uint32> {256}
+    );
     REQUIRE(
         command_buffer.resource_set_dynamic_offsets[1] ==
         std::vector<uint32> {512}

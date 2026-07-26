@@ -9,6 +9,7 @@ struct RenderingSystems {
     struct PrepareAssets : SystemSet<PrepareAssets> {};
     struct PrepareResources : SystemSet<PrepareResources> {};
     struct PrepareView : SystemSet<PrepareView> {};
+    struct UploadViewUniforms : SystemSet<UploadViewUniforms> {};
     struct CheckVisibility : SystemSet<CheckVisibility> {};
     struct Queue : SystemSet<Queue> {};
     struct PreparePipelines : SystemSet<PreparePipelines> {};

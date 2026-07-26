@@ -4,14 +4,12 @@
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
-#include "graphics/buffer.hpp"
 #include "graphics/graphics_device.hpp"
 #include "math/matrix.hpp"
 #include "math/vector.hpp"
+#include "rendering/dynamic_uniform_buffer.hpp"
 #include "rendering/render_queue.hpp"
 #include "rendering/visibility.hpp"
-
-#include <memory>
 
 namespace fei {
 
@@ -24,24 +22,32 @@ struct alignas(16) ViewUniform {
     Vector3 world_position;
 };
 
-struct ViewUniformBuffer {
-    ViewUniform uniform;
-    std::shared_ptr<Buffer> buffer;
+struct PreparedView {
+    ViewUniform uniform {};
     RenderView view;
+    uint32 dynamic_offset {};
+};
+
+struct ViewUniforms {
+    DynamicUniformBuffer<ViewUniform> buffer;
 };
 
 void init_camera_view_uniform(
     Query<Entity, const Camera3d, const GlobalTransform3d>::Filter<
-        Without<ViewUniformBuffer>> query,
-    ResRO<GraphicsDevice> device,
+        Without<PreparedView>> query,
     Commands commands
 );
 
 void prepare_camera_view_uniform(
-    Query<Entity, const Camera3d, const GlobalTransform3d, ViewUniformBuffer>
-        query,
+    Query<Entity, const Camera3d, const GlobalTransform3d, PreparedView> query,
+    ResRO<GraphicsDevice> device
+);
+
+void upload_view_uniforms(
+    Query<PreparedView> query,
     ResRO<GraphicsDevice> device,
-    ResRO<RenderQueue> render_queue
+    ResRO<RenderQueue> render_queue,
+    ResRW<ViewUniforms> uniforms
 );
 
 } // namespace fei

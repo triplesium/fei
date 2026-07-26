@@ -147,21 +147,16 @@ struct LightingResources {
     std::shared_ptr<Sampler> shadow_map_sampler;
 };
 
-void init_light_view_uniform_buffer(
+void init_light_view_uniform(
     Query<Entity, const DirectionalLight, const GlobalTransform3d>::Filter<
-        Without<ViewUniformBuffer>> query_light,
-    ResRO<GraphicsDevice> device,
+        Without<PreparedView>> query_light,
     Commands commands
 );
 
-void prepare_light_view_uniform_buffer(
-    Query<
-        Entity,
-        const DirectionalLight,
-        const GlobalTransform3d,
-        ViewUniformBuffer> query_light,
-    ResRO<GraphicsDevice> device,
-    ResRO<RenderQueue> render_queue
+void prepare_light_view_uniform(
+    Query<Entity, const DirectionalLight, const GlobalTransform3d, PreparedView>
+        query_light,
+    ResRO<GraphicsDevice> device
 );
 
 void setup_lighting(ResRO<GraphicsDevice> device, Commands commands);
@@ -170,7 +165,7 @@ void prepare_lighting(
     Query<
         const DirectionalLight,
         const GlobalTransform3d,
-        const ViewUniformBuffer,
+        const PreparedView,
         const ShadowMap> query_directional_lights,
     Query<const PointLight, const GlobalTransform3d> query_point_lights,
     ResRW<LightingResources> lighting,

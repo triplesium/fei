@@ -66,7 +66,7 @@ void PbrPlugin::setup(App& app) {
         .configure_sets(
             RenderUpdate,
             chain(
-                all(RenderingSystems::PrepareView {},
+                all(RenderingSystems::UploadViewUniforms {},
                     PbrSystems::PrepareEnvironmentMaps {}),
                 PbrSystems::PrepareLighting {},
                 PbrSystems::PrepareVxgi {}
@@ -104,9 +104,10 @@ void PbrPlugin::setup(App& app) {
         )
         .add_systems(
             RenderUpdate,
+            chain(init_light_view_uniform, prepare_light_view_uniform) |
+                in_set<RenderingSystems::PrepareResources>() |
+                in_set<RenderingSystems::PrepareView>(),
             chain(
-                init_light_view_uniform_buffer,
-                prepare_light_view_uniform_buffer,
                 prepare_mesh_view_resource_set,
                 setup_shadow_map,
                 prepare_lighting

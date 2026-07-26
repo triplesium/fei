@@ -72,6 +72,7 @@ struct DeferredPrepassDrawItem {
     std::shared_ptr<const ResourceSet> view_set;
     std::shared_ptr<const ResourceSet> mesh_set;
     std::shared_ptr<const ResourceSet> material_set;
+    uint32 view_uniform_dynamic_offset {};
     uint32 mesh_uniform_dynamic_offset {};
     std::shared_ptr<const Buffer> vertex_buffer;
     std::shared_ptr<const Buffer> index_buffer;
@@ -88,7 +89,10 @@ void draw_deferred_prepass_item(
     }
 
     command_buffer.set_render_pipeline(item.pipeline);
-    command_buffer.set_resource_set(0, item.view_set);
+    const std::array view_dynamic_offsets {
+        item.view_uniform_dynamic_offset,
+    };
+    command_buffer.set_resource_set(0, item.view_set, view_dynamic_offsets);
     const std::array dynamic_offsets {item.mesh_uniform_dynamic_offset};
     command_buffer.set_resource_set(1, item.mesh_set, dynamic_offsets);
     command_buffer.set_resource_set(2, item.material_set);
@@ -137,6 +141,7 @@ void queue_deferred_prepass_meshes(
         query_meshes,
         *phase,
         mesh_view_resource_set.resource_set,
+        mesh_view_resource_set.view_uniform_dynamic_offset,
         *gpu_meshes,
         *materials,
         *mesh_uniforms,
@@ -207,6 +212,7 @@ void deferred_prepass(
                 .view_set = item.view_set,
                 .mesh_set = item.mesh_set,
                 .material_set = item.material_set,
+                .view_uniform_dynamic_offset = item.view_uniform_dynamic_offset,
                 .mesh_uniform_dynamic_offset = item.mesh_uniform_dynamic_offset,
                 .vertex_buffer = item.vertex_buffer,
                 .index_buffer = item.index_buffer,

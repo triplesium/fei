@@ -98,6 +98,15 @@ void RenderingPlugin::setup(App& app) {
                RenderingSystems::Submit()
            )
     )
+        .configure_sets(
+            RenderUpdate,
+            chain(
+                RenderingSystems::PrepareView {}
+                    .in_set<RenderingSystems::PrepareResources>(),
+                RenderingSystems::UploadViewUniforms {}
+                    .in_set<RenderingSystems::PrepareResources>()
+            )
+        )
         .add_plugins(
             AssetPlugin<Shader, ShaderLoader> {},
             AssetPlugin<Mesh, MeshLoader> {},
@@ -108,7 +117,8 @@ void RenderingPlugin::setup(App& app) {
         .add_resource(PipelineCache(app.resource<GraphicsDevice>()))
         .add_resource<RenderFrameContext>()
         .add_resource(RenderQueue {})
-        .add_resource<RenderResourceSetCache>();
+        .add_resource<RenderResourceSetCache>()
+        .add_resource<ViewUniforms>();
 
     app.add_resource(ShaderCache(
         app.resource<AssetServer>(),
@@ -120,12 +130,14 @@ void RenderingPlugin::setup(App& app) {
     app.add_systems(PostUpdate, compute_mesh_aabb)
         .add_systems(
             RenderUpdate,
-            chain(
-                init_camera_view_uniform,
-                prepare_mesh_uniforms,
-                prepare_camera_view_uniform
-            ) | in_set<RenderingSystems::PrepareResources>() |
-                in_set<RenderingSystems::PrepareView>()
+            chain(init_camera_view_uniform, prepare_camera_view_uniform) |
+                in_set<RenderingSystems::PrepareResources>() |
+                in_set<RenderingSystems::PrepareView>(),
+            prepare_mesh_uniforms |
+                in_set<RenderingSystems::PrepareResources>(),
+            upload_view_uniforms |
+                in_set<RenderingSystems::PrepareResources>() |
+                in_set<RenderingSystems::UploadViewUniforms>()
         )
         .add_resource<MeshUniforms>()
         .add_systems(

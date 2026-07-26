@@ -29,6 +29,7 @@ struct MeshDrawItem {
     std::shared_ptr<const ResourceSet> view_set;
     std::shared_ptr<const ResourceSet> mesh_set;
     std::shared_ptr<const ResourceSet> material_set;
+    uint32 view_uniform_dynamic_offset {};
     uint32 mesh_uniform_dynamic_offset {};
 
     std::shared_ptr<const Buffer> vertex_buffer;
@@ -43,6 +44,7 @@ inline MeshDrawItem make_mesh_draw_item(
     Entity entity,
     CachedRenderPipelineId pipeline,
     std::shared_ptr<const ResourceSet> view_set,
+    uint32 view_uniform_dynamic_offset,
     std::shared_ptr<const ResourceSet> mesh_set,
     uint32 mesh_uniform_dynamic_offset,
     std::shared_ptr<const ResourceSet> material_set,
@@ -56,6 +58,7 @@ inline MeshDrawItem make_mesh_draw_item(
         .view_set = std::move(view_set),
         .mesh_set = std::move(mesh_set),
         .material_set = std::move(material_set),
+        .view_uniform_dynamic_offset = view_uniform_dynamic_offset,
         .mesh_uniform_dynamic_offset = mesh_uniform_dynamic_offset,
         .vertex_buffer = gpu_mesh.vertex_buffer(),
         .index_buffer = index_buffer ? *index_buffer : nullptr,
@@ -89,7 +92,10 @@ inline void draw_mesh_item(
     }
 
     command_buffer.set_render_pipeline(pipeline);
-    command_buffer.set_resource_set(0, item.view_set);
+    const std::array view_dynamic_offsets {
+        item.view_uniform_dynamic_offset,
+    };
+    command_buffer.set_resource_set(0, item.view_set, view_dynamic_offsets);
     const std::array dynamic_offsets {item.mesh_uniform_dynamic_offset};
     command_buffer.set_resource_set(1, item.mesh_set, dynamic_offsets);
     command_buffer.set_resource_set(2, item.material_set);
