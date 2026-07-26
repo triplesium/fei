@@ -177,12 +177,14 @@ SystemSetConfigs chain(std::convertible_to<SystemSetConfigs> auto&&... sets) {
     std::vector<SystemSetConfigs> configs {
         SystemSetConfigs(std::forward<decltype(sets)>(sets))...
     };
-    for (std::size_t i = 1; i < configs.size(); ++i) {
-        auto& former = configs[i - 1];
-        auto& latter = configs[i];
-        for (auto& former_set : former.sets) {
-            for (auto& latter_set : latter.sets) {
-                former_set.before(latter_set.set_id);
+    for (std::size_t i = 0; i < configs.size(); ++i) {
+        for (std::size_t j = i + 1; j < configs.size(); ++j) {
+            auto& former = configs[i];
+            auto& latter = configs[j];
+            for (auto& former_set : former.sets) {
+                for (auto& latter_set : latter.sets) {
+                    former_set.before(latter_set.set_id);
+                }
             }
         }
     }

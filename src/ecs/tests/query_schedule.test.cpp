@@ -583,3 +583,29 @@ TEST_CASE("ECS schedule merges repeated set configuration", "[ecs][schedule]") {
     REQUIRE(schedule.execution_batches()[1].size() == 1);
     REQUIRE(schedule.execution_batches()[2].size() == 1);
 }
+
+TEST_CASE(
+    "ECS chained sets preserve order across empty sets",
+    "[ecs][schedule]"
+) {
+    Schedule schedule;
+
+    schedule.configure_sets(chain(
+        ScheduleMergeFirstSet {},
+        ScheduleMergeSecondSet {},
+        ScheduleMergeThirdSet {}
+    ));
+    const auto systems = schedule.add_systems(
+        schedule_merge_first | in_set<ScheduleMergeFirstSet>(),
+        schedule_merge_third | in_set<ScheduleMergeThirdSet>()
+    );
+    schedule.sort_systems();
+
+    REQUIRE(schedule.execution_batches().size() == 2);
+    REQUIRE(
+        schedule.execution_batches()[0] == std::vector<SystemId> {systems[0]}
+    );
+    REQUIRE(
+        schedule.execution_batches()[1] == std::vector<SystemId> {systems[1]}
+    );
+}
