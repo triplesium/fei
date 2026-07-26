@@ -43,14 +43,14 @@ TEST_CASE(
 
     const auto& mesh_uniforms = world.resource<MeshUniforms>();
     REQUIRE(mesh_uniforms.resource_layout);
-    REQUIRE(mesh_uniforms.uniform_buffer);
+    REQUIRE(mesh_uniforms.uniforms.buffer());
     REQUIRE(mesh_uniforms.resource_set);
-    REQUIRE(mesh_uniforms.stride == 128);
-    REQUIRE(mesh_uniforms.capacity == 4);
+    REQUIRE(mesh_uniforms.uniforms.stride() == 128);
+    REQUIRE(mesh_uniforms.uniforms.capacity() == 4);
     REQUIRE(mesh_uniforms.entries.size() == 3);
     REQUIRE(
-        mesh_uniforms.upload_data.size() ==
-        entities.size() * mesh_uniforms.stride
+        mesh_uniforms.uniforms.bytes().size() ==
+        entities.size() * mesh_uniforms.uniforms.stride()
     );
     REQUIRE(world.resource<RenderQueue>().pending_buffer_writes() == 1);
 
@@ -63,7 +63,7 @@ TEST_CASE(
     REQUIRE(device.buffer_descriptions.size() == 1);
     CHECK(
         device.buffer_descriptions[0].size ==
-        mesh_uniforms.capacity * mesh_uniforms.stride
+        mesh_uniforms.uniforms.capacity() * mesh_uniforms.uniforms.stride()
     );
     CHECK(device.buffer_descriptions[0].usages == BufferUsages::Uniform);
 
@@ -81,7 +81,35 @@ TEST_CASE(
         device.resource_set_descriptions[0].resources[0]
     );
     REQUIRE(range);
-    CHECK(range->buffer() == mesh_uniforms.uniform_buffer);
+    CHECK(range->buffer() == mesh_uniforms.uniforms.buffer());
     CHECK(range->offset() == 0);
     CHECK(range->size() == sizeof(MeshUniform));
+    CHECK(
+        mesh_uniforms.resource_set_buffer_revision ==
+        mesh_uniforms.uniforms.buffer_revision()
+    );
+
+    const auto first_resource_set = mesh_uniforms.resource_set;
+    world.run_system_once(prepare_mesh_uniforms);
+    CHECK(world.resource<MeshUniforms>().resource_set == first_resource_set);
+    CHECK(device.resource_set_descriptions.size() == 1);
+
+    for (uint32 index = 3; index < 5; ++index) {
+        const auto entity = world.entity();
+        world.add_component(entity, Mesh3d {});
+        world.add_component(
+            entity,
+            Transform3d {.position = {static_cast<float>(index), 0.0f, 0.0f}}
+        );
+    }
+
+    world.run_system_once(sync_global_transforms);
+    world.run_system_once(propagate_transforms);
+    world.run_system_once(prepare_mesh_uniforms);
+
+    const auto& grown_uniforms = world.resource<MeshUniforms>();
+    CHECK(grown_uniforms.entries.size() == 5);
+    CHECK(grown_uniforms.uniforms.capacity() == 8);
+    CHECK(grown_uniforms.resource_set != first_resource_set);
+    CHECK(device.resource_set_descriptions.size() == 2);
 }

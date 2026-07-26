@@ -3,15 +3,14 @@
 #include "ecs/fwd.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
-#include "graphics/buffer.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics/resource.hpp"
 #include "math/matrix.hpp"
+#include "rendering/dynamic_uniform_buffer.hpp"
 #include "rendering/render_queue.hpp"
 
 #include <memory>
 #include <unordered_map>
-#include <vector>
 
 namespace fei {
 
@@ -25,12 +24,10 @@ struct MeshUniforms {
     };
 
     std::shared_ptr<ResourceLayout> resource_layout;
-    std::shared_ptr<Buffer> uniform_buffer;
     std::shared_ptr<ResourceSet> resource_set;
     std::unordered_map<Entity, Entry> entries;
-    std::vector<std::byte> upload_data;
-    std::size_t stride {};
-    std::size_t capacity {};
+    DynamicUniformBuffer<MeshUniform> uniforms;
+    uint64 resource_set_buffer_revision {0};
 };
 
 struct Mesh3d;
