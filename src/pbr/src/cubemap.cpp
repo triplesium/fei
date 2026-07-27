@@ -34,23 +34,40 @@ std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
             .view_type = TextureViewType::Texture2DArray,
         }
     );
+    auto constants_buffer = device.create_buffer(
+        BufferDescription {
+            .size = sizeof(EquirectToCubemapUniform),
+            .usages = BufferUsages::Uniform,
+        }
+    );
+    const EquirectToCubemapUniform constants {
+        .width = cubemap_texture->width(),
+        .height = cubemap_texture->height(),
+        .layers = cubemap_texture->depth(),
+    };
 
     auto resource_set = device.create_resource_set(
         ResourceSetDescription {
             .layout = m_equirect_to_cubemap_resource_layout,
-            .resources = {equirect_texture, m_equirect_sampler, output_view},
+            .resources =
+                {equirect_texture,
+                 m_equirect_sampler,
+                 output_view,
+                 constants_buffer},
             .name = "cubemap.equirect_to_cubemap",
         }
     );
 
     auto command_buffer = device.create_command_buffer();
     command_buffer->begin();
+    command_buffer
+        ->update_buffer(constants_buffer, &constants, sizeof(constants));
     command_buffer->set_compute_pipeline(m_equirect_to_cubemap_pipeline);
     command_buffer->set_resource_set(0, resource_set);
     command_buffer->dispatch(
-        (cubemap_texture->width() + 31) / 32,
-        (cubemap_texture->height() + 31) / 32,
-        6
+        (cubemap_texture->width() + 15) / 16,
+        (cubemap_texture->height() + 15) / 16,
+        constants.layers
     );
     command_buffer->generate_mipmaps(cubemap_texture);
     command_buffer->end();
@@ -139,6 +156,12 @@ void EquirectToCubemap::setup(
                     .binding = 2,
                     .name = "output_texture",
                     .kind = ResourceKind::TextureReadWrite,
+                    .stages = {ShaderStages::Compute},
+                },
+                {
+                    .binding = 3,
+                    .name = "constants",
+                    .kind = ResourceKind::UniformBuffer,
                     .stages = {ShaderStages::Compute},
                 }
             },

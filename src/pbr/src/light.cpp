@@ -194,10 +194,14 @@ void ShadowMapPipelineSpecializer::specialize(
     const PreparedMaterial& material
 ) const {
     auto defs = pbr_mesh_shader_defs(mesh);
+    std::erase_if(defs, [](const ShaderDefVal& def) {
+        return def.name == VERTEX_NORMALS_SHADER_DEF ||
+               def.name == VERTEX_TANGENTS_SHADER_DEF;
+    });
     if (material_alpha_mode_may_discard(material.pipeline_state().alpha_mode)) {
         defs.push_back(ShaderDefVal::bool_def(MAY_DISCARD_SHADER_DEF));
-        defs = normalized_shader_defs(std::move(defs));
     }
+    defs = normalized_shader_defs(std::move(defs));
     const AssetPath path("shader://pbr/shadow.slang");
     desc.shader_program.shaders = {
         m_shader_cache

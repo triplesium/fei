@@ -213,6 +213,7 @@ compile_pbr_shader_output(std::string_view shader_name) {
     if (!compiled) {
         INFO(compiled.error().message);
         INFO(compiled.error().diagnostics);
+        REQUIRE(compiled.has_value());
     }
     REQUIRE(compiled.has_value());
 
@@ -246,6 +247,7 @@ compile_pbr_shader_with_defs(std::string_view shader_name, ShaderDefs defs) {
     if (!compiled) {
         INFO(compiled.error().message);
         INFO(compiled.error().diagnostics);
+        REQUIRE(compiled.has_value());
     }
     REQUIRE(compiled.has_value());
     return std::move(compiled).value().description;
@@ -668,6 +670,21 @@ TEST_CASE(
             {"geometry_mask", ResourceKind::TextureReadOnly, 0, 1},
             {"source_sampler", ResourceKind::Sampler, 0, 2},
             {"settings", ResourceKind::UniformBuffer, 0, 3},
+        }
+    );
+}
+
+TEST_CASE(
+    "PBR equirectangular conversion resources include output dimensions",
+    "[pbr][shader]"
+) {
+    require_shader_resources(
+        "equirect2cube.comp",
+        {
+            {"input_texture", ResourceKind::TextureReadOnly, 0, 0},
+            {"input_sampler", ResourceKind::Sampler, 0, 1},
+            {"output_texture", ResourceKind::TextureReadWrite, 0, 2},
+            {"constants", ResourceKind::UniformBuffer, 0, 3},
         }
     );
 }

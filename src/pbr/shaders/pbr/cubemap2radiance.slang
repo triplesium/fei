@@ -12,6 +12,8 @@ layout(set = 0, binding = 2, rgba32f) RWTexture2DArray<float4> output_texture;
 
 struct FilteringConstants {
     float roughness;
+    uint size;
+    uint2 padding;
 };
 
 layout(set = 0, binding = 3) ConstantBuffer<FilteringConstants> constants;
@@ -25,10 +27,9 @@ bool is_finite_color(float3 value) {
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID) {
-    uint width;
-    uint height;
-    uint layers;
-    output_texture.GetDimensions(width, height, layers);
+    uint width = constants.size;
+    uint height = constants.size;
+    const uint layers = 6;
     if (dispatch_thread_id.x >= width ||
         dispatch_thread_id.y >= height ||
         dispatch_thread_id.z >= layers) {

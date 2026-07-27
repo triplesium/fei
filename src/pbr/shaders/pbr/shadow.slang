@@ -15,7 +15,7 @@ struct VertexOutput {
     [vk::location(1)] float2 tex_coords_1 : TEXCOORD1;
 #endif
 #ifdef VERTEX_COLORS
-    [vk::location(2)] float4 color : COLOR0;
+    [vk::location(2)] float4 color : COLOR2;
 #endif
 };
 
@@ -41,7 +41,7 @@ VertexOutput vertex_main(MeshVertexInput input) {
 }
 
 [shader("fragment")]
-float4 fragment_main(VertexOutput input, float4 frag_coord : SV_Position) : SV_Target0 {
+float4 fragment_main(VertexOutput input) : SV_Target0 {
 #ifdef MAY_DISCARD
     StandardMaterialTexCoords tex_coords;
     tex_coords.uv0 = float2(0.0);
@@ -60,5 +60,5 @@ float4 fragment_main(VertexOutput input, float4 frag_coord : SV_Position) : SV_T
         discard;
     }
 #endif
-    return depth_to_moments(frag_coord.z);
+    return depth_to_moments(input.position.z);
 }

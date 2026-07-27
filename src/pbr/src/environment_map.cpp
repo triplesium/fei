@@ -23,6 +23,8 @@ namespace fei {
 
 struct FilteringConstants {
     float roughness;
+    uint32 size;
+    uint32 padding[2];
 };
 
 EnvironmentMap
@@ -294,6 +296,7 @@ void generate_env_maps(
                                  static_cast<float>(level) /
                                      static_cast<float>(num_mips - 1) :
                                  0.0f,
+                .size = size,
             };
             // Each dispatch owns its constants until the submitted command
             // buffer completes. Reusing one destination buffer would allow a

@@ -17,7 +17,6 @@ struct PresentSettings {
     float scalar_scale;
     float scalar_bias;
     uint flags;
-    float3 padding;
 };
 
 layout(set = 0, binding = 0) Texture2D<float4> source;

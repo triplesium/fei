@@ -36,7 +36,7 @@ VertexOutput vertex_main(MeshVertexInput input) {
 }
 
 [shader("fragment")]
-FragmentOutput fragment_main(VertexOutput input, float4 frag_coord : SV_Position) {
+FragmentOutput fragment_main(VertexOutput input) {
     FragmentOutput output;
     StandardMaterialTexCoords tex_coords;
     tex_coords.uv0 = float2(0.0);
@@ -83,6 +83,6 @@ FragmentOutput fragment_main(VertexOutput input, float4 frag_coord : SV_Position
     output.specular.a = 1.0;
 
     output.emissive_depth.rgb = material.sample_emissive(tex_coords);
-    output.emissive_depth.a = frag_coord.z;
+    output.emissive_depth.a = input.position.z;
     return output;
 }

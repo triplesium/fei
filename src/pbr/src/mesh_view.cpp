@@ -89,8 +89,8 @@ void init_mesh_view_layout(
             {ShaderStages::Fragment},
             {
                 uniform_buffer("environment"),
-                texture_read_only("irradiance_map"),
-                texture_read_only("radiance_map"),
+                texture_read_only("irradiance_map", TextureViewDimension::Cube),
+                texture_read_only("radiance_map", TextureViewDimension::Cube),
                 sampler("cubemap_sampler"),
                 texture_read_only("brdf_lut"),
                 sampler("brdf_sampler"),

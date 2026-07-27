@@ -15,6 +15,13 @@
 
 namespace fei {
 
+struct alignas(16) EquirectToCubemapUniform {
+    uint32 width {};
+    uint32 height {};
+    uint32 layers {};
+    uint32 padding {};
+};
+
 class EquirectToCubemap {
   private:
     std::unordered_map<AssetId, std::shared_ptr<Texture>> m_cubemaps;

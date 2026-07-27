@@ -74,6 +74,7 @@ void setup_skybox_resources(
                     .name = "skybox",
                     .kind = ResourceKind::TextureReadOnly,
                     .stages = ShaderStages::Fragment,
+                    .texture_dimension = TextureViewDimension::Cube,
                 },
                 {
                     .binding = 1,
