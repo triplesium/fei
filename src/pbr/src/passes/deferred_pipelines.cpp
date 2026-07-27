@@ -29,7 +29,7 @@ void setup_deferred_pipelines(
     ResRW<ShaderCache> shader_cache,
     ResRO<MeshViewLayout> mesh_view_layout,
     ResRO<LightingResources> lighting_resources,
-    ResRO<VxgiResources> vxgi_resources,
+    Optional<ResRO<VxgiResources>> vxgi_resources,
     ResRW<DeferredRenderPipelines> pipelines,
     ResRW<PipelineCache> pipeline_cache,
     Optional<ResRO<MainSwapchain>> main_swapchain
@@ -68,10 +68,6 @@ void setup_deferred_pipelines(
         "shader://pbr/deferred_gi_direct.slang",
         ShaderStages::Fragment
     );
-    auto indirect_lighting_shader = create_shader_module(
-        "shader://pbr/deferred_gi_indirect.slang",
-        ShaderStages::Fragment
-    );
     auto composite_shader = create_shader_module(
         "shader://pbr/deferred_gi_composite.slang",
         ShaderStages::Fragment
@@ -96,7 +92,8 @@ void setup_deferred_pipelines(
         pipeline_cache->request_render_pipeline(
             RenderPipelineDescription {
                 .depth_stencil_state = DepthStencilStateDescription::Disabled,
-                .rasterizer_state = {},
+                .rasterizer_state =
+                    RasterizerStateDescription {.cull_mode = CullMode::None},
                 .render_primitive = RenderPrimitive::Triangles,
                 .shader_program =
                     ShaderProgramDescription {
@@ -118,32 +115,42 @@ void setup_deferred_pipelines(
             }
         );
 
-    pipelines->indirect_lighting_pipeline =
-        pipeline_cache->request_render_pipeline(
-            RenderPipelineDescription {
-                .depth_stencil_state = DepthStencilStateDescription::Disabled,
-                .rasterizer_state = {},
-                .render_primitive = RenderPrimitive::Triangles,
-                .shader_program =
-                    ShaderProgramDescription {
-                        .vertex_layouts = {fullscreen_vertex_layout},
-                        .shaders =
-                            {
-                                quad_vert_shader,
-                                indirect_lighting_shader,
-                            },
-                    },
-                .resource_layouts =
-                    {
-                        mesh_view_layout->layout,
-                        pipelines->gbuffer_resource_layout,
-                        vxgi_resources->resource_layout,
-                        mesh_view_layout->environment_layout,
-                    },
-                .output_description =
-                    single_color_output(PixelFormat::Rgba16Float),
-            }
+    if (vxgi_resources) {
+        auto indirect_lighting_shader = create_shader_module(
+            "shader://pbr/deferred_gi_indirect.slang",
+            ShaderStages::Fragment
         );
+        pipelines->indirect_lighting_pipeline =
+            pipeline_cache->request_render_pipeline(
+                RenderPipelineDescription {
+                    .depth_stencil_state =
+                        DepthStencilStateDescription::Disabled,
+                    .rasterizer_state =
+                        RasterizerStateDescription {
+                            .cull_mode = CullMode::None,
+                        },
+                    .render_primitive = RenderPrimitive::Triangles,
+                    .shader_program =
+                        ShaderProgramDescription {
+                            .vertex_layouts = {fullscreen_vertex_layout},
+                            .shaders =
+                                {
+                                    quad_vert_shader,
+                                    indirect_lighting_shader,
+                                },
+                        },
+                    .resource_layouts =
+                        {
+                            mesh_view_layout->layout,
+                            pipelines->gbuffer_resource_layout,
+                            (*vxgi_resources)->resource_layout,
+                            mesh_view_layout->environment_layout,
+                        },
+                    .output_description =
+                        single_color_output(PixelFormat::Rgba16Float),
+                }
+            );
+    }
 
     pipelines->composite_resource_layout = device->create_resource_layout(
         ResourceLayoutDescription::sequencial(
@@ -176,7 +183,8 @@ void setup_deferred_pipelines(
         pipeline_cache->request_render_pipeline(
             RenderPipelineDescription {
                 .depth_stencil_state = DepthStencilStateDescription::Disabled,
-                .rasterizer_state = {},
+                .rasterizer_state =
+                    RasterizerStateDescription {.cull_mode = CullMode::None},
                 .render_primitive = RenderPrimitive::Triangles,
                 .shader_program =
                     ShaderProgramDescription {

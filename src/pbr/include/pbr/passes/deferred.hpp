@@ -43,7 +43,13 @@ struct DeferredRenderPipelines {
 };
 
 class DeferredRenderPlugin : public Plugin {
+  private:
+    bool m_enable_vxgi {true};
+
   public:
+    explicit DeferredRenderPlugin(bool enable_vxgi = true) :
+        m_enable_vxgi(enable_vxgi) {}
+
     void setup(App& app) override;
 };
 

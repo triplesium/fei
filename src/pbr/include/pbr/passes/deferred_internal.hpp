@@ -29,7 +29,7 @@ void setup_deferred_pipelines(
     ResRW<ShaderCache> shader_cache,
     ResRO<MeshViewLayout> mesh_view_layout,
     ResRO<LightingResources> lighting_resources,
-    ResRO<VxgiResources> vxgi_resources,
+    Optional<ResRO<VxgiResources>> vxgi_resources,
     ResRW<DeferredRenderPipelines> pipelines,
     ResRW<PipelineCache> pipeline_cache,
     Optional<ResRO<MainSwapchain>> main_swapchain
@@ -118,6 +118,11 @@ void indirect_lighting_pass(
     ResRO<DeferredRenderPipelines> pipelines,
     ResRO<PipelineCache> pipeline_cache,
     ResRO<FullscreenQuad> fullscreen_quad
+);
+
+void clear_indirect_lighting_pass(
+    ResRW<RenderFrameContext> frame,
+    ResRO<DeferredViewTargets> targets
 );
 
 void composite_pass(

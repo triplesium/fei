@@ -22,7 +22,12 @@ struct PbrSystems {
 };
 
 class PbrPlugin : public Plugin {
+  private:
+    bool m_enable_vxgi {true};
+
   public:
+    explicit PbrPlugin(bool enable_vxgi = true) : m_enable_vxgi(enable_vxgi) {}
+
     void setup(App& app) override;
 };
 

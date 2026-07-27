@@ -78,11 +78,11 @@ void PbrPlugin::setup(App& app) {
             )
         );
 
-    app.add_plugins(
-           MaterialPlugin<StandardMaterial> {},
-           VxgiPlugin {},
-           DeferredRenderPlugin {}
-    )
+    app.add_plugin(MaterialPlugin<StandardMaterial> {});
+    if (m_enable_vxgi) {
+        app.add_plugin(VxgiPlugin {});
+    }
+    app.add_plugin(DeferredRenderPlugin {m_enable_vxgi})
         .add_resource(MeshViewLayout {})
         .add_resource(MeshViewResourceSet {})
         .add_resource<ShadowMapPhase>()

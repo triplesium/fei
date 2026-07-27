@@ -366,6 +366,28 @@ void indirect_lighting_pass(
     );
 }
 
+void clear_indirect_lighting_pass(
+    ResRW<RenderFrameContext> frame,
+    ResRO<DeferredViewTargets> targets
+) {
+    auto* command_buffer = frame->command_buffer();
+    if (!command_buffer || !targets->valid()) {
+        return;
+    }
+    command_buffer->begin_render_pass(
+        RenderPassDescription {
+            .color_attachments = {
+                {
+                    .texture = targets->indirect,
+                    .load_op = LoadOp::Clear,
+                    .clear_color = Color4F {0.0f, 0.0f, 0.0f, 1.0f},
+                },
+            }
+        }
+    );
+    command_buffer->end_render_pass();
+}
+
 void composite_pass(
     Query<const MeshViewResourceSet>::Filter<With<Camera3d>> query_cameras,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
