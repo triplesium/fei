@@ -48,12 +48,22 @@ enum class ResourceLayoutElementOptions : uint8 {
     DynamicBinding = 1 << 0,
 };
 
+enum class TextureViewDimension : uint8 {
+    Texture1D,
+    Texture2D,
+    Texture2DArray,
+    Cube,
+    CubeArray,
+    Texture3D,
+};
+
 struct ResourceLayoutElementDescription {
     // Binding within the resource set that owns this layout.
     uint32 binding;
     std::string name;
     ResourceKind kind;
     BitFlags<ShaderStages> stages;
+    TextureViewDimension texture_dimension {TextureViewDimension::Texture2D};
     uint32 array_count {1};
     BitFlags<ResourceLayoutElementOptions> options;
 };
@@ -121,21 +131,29 @@ inline ResourceLayoutElementDescription uniform_buffer(std::string name) {
     };
 }
 
-inline ResourceLayoutElementDescription texture_read_only(std::string name) {
+inline ResourceLayoutElementDescription texture_read_only(
+    std::string name,
+    TextureViewDimension dimension = TextureViewDimension::Texture2D
+) {
     return ResourceLayoutElementDescription {
         .binding = 0,
         .name = std::move(name),
         .kind = ResourceKind::TextureReadOnly,
         .stages = {},
+        .texture_dimension = dimension,
     };
 }
 
-inline ResourceLayoutElementDescription texture_read_write(std::string name) {
+inline ResourceLayoutElementDescription texture_read_write(
+    std::string name,
+    TextureViewDimension dimension = TextureViewDimension::Texture2D
+) {
     return ResourceLayoutElementDescription {
         .binding = 0,
         .name = std::move(name),
         .kind = ResourceKind::TextureReadWrite,
         .stages = {},
+        .texture_dimension = dimension,
     };
 }
 

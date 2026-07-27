@@ -10,6 +10,11 @@
 
 namespace fei {
 
+enum class TextureDataOrigin : uint8 {
+    BottomLeft,
+    TopLeft,
+};
+
 struct TextureReadbackRequest {
     std::shared_ptr<Texture> texture;
     uint32 mip_level {0};
@@ -24,6 +29,7 @@ struct TextureReadbackFrame {
     uint32 height {0};
     uint32 depth {0};
     PixelFormat format {PixelFormat::Rgba8Unorm};
+    TextureDataOrigin data_origin {TextureDataOrigin::BottomLeft};
     uint64 user_data {0};
 
     bool empty() const { return data.empty(); }

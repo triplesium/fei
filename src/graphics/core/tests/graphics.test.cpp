@@ -274,7 +274,7 @@ TEST_CASE(
 ) {
     SECTION("helpers create the expected resource kinds") {
         auto uniform = uniform_buffer("camera");
-        auto sampled = texture_read_only("albedo");
+        auto sampled = texture_read_only("albedo", TextureViewDimension::Cube);
         auto storage_texture = texture_read_write("output");
         auto read_buffer = storage_buffer_read_only("particles");
         auto write_buffer = storage_buffer_read_write("visible_particles");
@@ -286,6 +286,7 @@ TEST_CASE(
         REQUIRE_FALSE(uniform.options);
         REQUIRE(sampled.name == "albedo");
         REQUIRE(sampled.kind == ResourceKind::TextureReadOnly);
+        REQUIRE(sampled.texture_dimension == TextureViewDimension::Cube);
         REQUIRE(storage_texture.name == "output");
         REQUIRE(storage_texture.kind == ResourceKind::TextureReadWrite);
         REQUIRE(read_buffer.name == "particles");
