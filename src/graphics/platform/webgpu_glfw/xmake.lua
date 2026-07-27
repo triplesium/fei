@@ -1,0 +1,10 @@
+add_requires("glfw3webgpu v1.3.0-alpha")
+
+target("fei-graphics-webgpu-glfw")
+    set_kind("static")
+    set_default(false)
+    add_headerfiles("include/**.hpp")
+    add_files("src/*.cpp")
+    add_includedirs("include", {public = true})
+    add_deps("fei-graphics", "fei-graphics-webgpu", "fei-window")
+    add_packages("glfw", "wgpu-native", "glfw3webgpu")

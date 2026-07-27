@@ -1,5 +1,7 @@
 includes("core")
 includes("backends/opengl")
 includes("backends/vulkan")
+includes("backends/webgpu")
 includes("platform/opengl_glfw")
 includes("platform/vulkan_glfw")
+includes("platform/webgpu_glfw")
