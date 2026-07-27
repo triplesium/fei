@@ -1,4 +1,5 @@
 #include "app/app.hpp"
+#include "app/reflection_plugin.hpp"
 #include "asset/handle.hpp"
 #include "asset/plugin.hpp"
 #include "asset/server.hpp"
@@ -7,10 +8,14 @@
 #include "core/text.hpp"
 #include "core/time.hpp"
 #include "core/transform.hpp"
+#include "devtools/plugin.hpp"
+#include "devtools_pbr/plugin.hpp"
+#include "devtools_rendering/plugin.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
 #include "graphics_opengl_glfw/plugin.hpp"
+#include "graphics_webgpu_glfw/plugin.hpp"
 #include "imgui/plugin.hpp"
 #include "math/vector.hpp"
 #include "pbr/environment_map.hpp"
@@ -27,8 +32,62 @@
 
 #include <imgui.h>
 #include <memory>
+#include <string_view>
 
 using namespace fei;
+
+namespace {
+
+enum class GraphicsBackend {
+    OpenGL,
+    WebGPU,
+};
+
+struct SampleOptions {
+    GraphicsBackend backend {GraphicsBackend::OpenGL};
+    bool devtools {false};
+};
+
+GraphicsBackend parse_backend(std::string_view value) {
+    if (value == "opengl" || value == "gl") {
+        return GraphicsBackend::OpenGL;
+    }
+    if (value == "webgpu" || value == "wgpu") {
+        return GraphicsBackend::WebGPU;
+    }
+    fatal("sample-rendering --backend expects opengl or webgpu, got {}", value);
+}
+
+SampleOptions parse_arguments(int argc, char** argv) {
+    SampleOptions result;
+    for (int index = 1; index < argc; ++index) {
+        const std::string_view argument {argv[index]};
+        constexpr std::string_view prefix {"--backend="};
+        if (argument.starts_with(prefix)) {
+            result.backend = parse_backend(argument.substr(prefix.size()));
+            continue;
+        }
+        if (argument == "--devtools") {
+            result.devtools = true;
+            continue;
+        }
+        fatal("Unknown sample-rendering argument {}", argument);
+    }
+    return result;
+}
+
+void add_graphics_backend(App& app, GraphicsBackend backend) {
+    switch (backend) {
+        case GraphicsBackend::OpenGL:
+            app.add_plugin<OpenGLGlfwPlugin>();
+            break;
+        case GraphicsBackend::WebGPU:
+            app.add_plugin<WebGpuGlfwPlugin>();
+            break;
+    }
+}
+
+} // namespace
 
 struct Foo {
     Handle<TextAsset> handle;
@@ -275,13 +334,13 @@ void update_imgui(
     ImGui::End();
 }
 
-int main() {
+int main(int argc, char** argv) {
     App app;
-    app.add_plugin<AssetsPlugin>()
-        .add_plugin<ImagePlugin>()
-        .add_plugin<OpenGLGlfwPlugin>()
-        .add_plugin<RenderingPlugin>()
-        .add_plugin<PbrPlugin>()
+    const auto options = parse_arguments(argc, argv);
+    app.add_plugin<AssetsPlugin>().add_plugin<ImagePlugin>();
+    add_graphics_backend(app, options.backend);
+    app.add_plugin<RenderingPlugin>()
+        .add_plugin(PbrPlugin {false})
         .add_plugin<InputPlugin>()
         .add_plugin<TimePlugin>()
         .add_plugin<EnvironmentMapPlugin>()
@@ -292,6 +351,18 @@ int main() {
         RenderUpdate,
         update_imgui | in_set<RenderingSystems::Render>() | main_thread()
     );
+
+    if (options.devtools) {
+        app.add_plugin<ReflectionPlugin>();
+        app.add_plugin(
+            devtools::CorePlugin {devtools::Config {
+                .host = "127.0.0.1",
+                .port = 8080,
+            }}
+        );
+        app.add_plugin(devtools::rendering::ProviderPlugin {});
+        app.add_plugin(devtools::pbr::ProviderPlugin {});
+    }
 
     app.run();
 

@@ -43,11 +43,21 @@ add_sample("registered_system")
 add_sample("multithreading")
 add_sample("graphics")
 add_sample("rendering")
+target("sample-rendering")
+    add_deps(
+        "fei-devtools",
+        "fei-devtools-pbr",
+        "fei-devtools-rendering",
+        "fei-graphics-webgpu",
+        "fei-graphics-webgpu-glfw"
+    )
 add_sample("asset")
 add_sample("sprite")
 target("sample-sprite")
     add_deps(
         "fei-sprite",
         "fei-graphics-vulkan",
-        "fei-graphics-vulkan-glfw"
+        "fei-graphics-vulkan-glfw",
+        "fei-graphics-webgpu",
+        "fei-graphics-webgpu-glfw"
     )

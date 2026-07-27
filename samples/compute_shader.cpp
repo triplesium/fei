@@ -7,6 +7,7 @@
 #include "graphics/enums.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics_opengl_glfw/plugin.hpp"
+#include "pbr/cubemap.hpp"
 #include "pbr/plugin.hpp"
 #include "rendering/plugin.hpp"
 #include "rendering/shader_cache.hpp"
@@ -115,6 +116,7 @@ void equirect_to_cubemap(
                 texture_read_only("input_texture"),
                 fei::sampler("input_sampler"),
                 texture_read_write("output_texture"),
+                uniform_buffer("constants"),
             }
         )
     );
@@ -130,20 +132,34 @@ void equirect_to_cubemap(
             .view_type = TextureViewType::Texture2DArray,
         }
     );
+    auto constants_buffer = device->create_buffer(
+        BufferDescription {
+            .size = sizeof(EquirectToCubemapUniform),
+            .usages = BufferUsages::Uniform,
+        }
+    );
+    const EquirectToCubemapUniform constants {
+        .width = cubemap_texture->width(),
+        .height = cubemap_texture->height(),
+        .layers = cubemap_texture->depth(),
+    };
     auto resource_set = device->create_resource_set(
         ResourceSetDescription {
             .layout = resource_layout,
-            .resources = {equirect_texture, sampler, output_view},
+            .resources =
+                {equirect_texture, sampler, output_view, constants_buffer},
         }
     );
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
+    command_buffer
+        ->update_buffer(constants_buffer, &constants, sizeof(constants));
     command_buffer->set_compute_pipeline(compute_pipeline);
     command_buffer->set_resource_set(0, resource_set);
     command_buffer->dispatch(
-        cubemap_texture->width() / 32,
-        cubemap_texture->height() / 32,
-        6
+        (cubemap_texture->width() + 15) / 16,
+        (cubemap_texture->height() + 15) / 16,
+        constants.layers
     );
     command_buffer->end();
     device->submit_commands(command_buffer);

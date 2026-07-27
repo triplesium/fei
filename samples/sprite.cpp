@@ -10,6 +10,7 @@
 #include "ecs/system_params.hpp"
 #include "graphics_opengl_glfw/plugin.hpp"
 #include "graphics_vulkan_glfw/plugin.hpp"
+#include "graphics_webgpu_glfw/plugin.hpp"
 #include "rendering/plugin.hpp"
 #include "sprite/components.hpp"
 #include "sprite/plugin.hpp"
@@ -26,6 +27,7 @@ namespace {
 enum class GraphicsBackend {
     OpenGL,
     Vulkan,
+    WebGPU,
 };
 
 struct DemoSprite {};
@@ -37,7 +39,13 @@ GraphicsBackend parse_backend(std::string_view value) {
     if (value == "vulkan" || value == "vk") {
         return GraphicsBackend::Vulkan;
     }
-    fatal("sample-sprite --backend expects opengl or vulkan, got {}", value);
+    if (value == "webgpu" || value == "wgpu") {
+        return GraphicsBackend::WebGPU;
+    }
+    fatal(
+        "sample-sprite --backend expects opengl, vulkan, or webgpu; got {}",
+        value
+    );
 }
 
 GraphicsBackend parse_arguments(int argc, char** argv) {
@@ -61,6 +69,9 @@ void add_graphics_backend(App& app, GraphicsBackend backend) {
             break;
         case GraphicsBackend::Vulkan:
             app.add_plugin<VulkanGlfwPlugin>();
+            break;
+        case GraphicsBackend::WebGPU:
+            app.add_plugin<WebGpuGlfwPlugin>();
             break;
     }
 }
