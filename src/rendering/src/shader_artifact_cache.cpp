@@ -21,7 +21,7 @@ namespace fei {
 namespace {
 
 constexpr std::uint64_t ShaderCacheMagic = 0x4548434143454946ULL;
-constexpr std::uint32_t ShaderCacheVersion = 1;
+constexpr std::uint32_t ShaderCacheVersion = 2;
 constexpr std::uint64_t MaxCacheCollectionSize = 1'000'000;
 constexpr std::uint64_t MaxCacheStringSize = 64ULL * 1024 * 1024;
 constexpr std::uint64_t MaxCacheBlobSize = 512ULL * 1024 * 1024;
@@ -273,6 +273,7 @@ void write_shader_description(
 ) {
     writer.write(static_cast<std::uint8_t>(description.stage));
     writer.write(description.source);
+    writer.write(description.wgsl);
     writer.write(std::span(description.spirv));
     writer.write(description.path);
     writer.write(static_cast<std::uint64_t>(description.resources.size()));
@@ -302,7 +303,8 @@ bool read_shader_description(
 ) {
     std::uint8_t stage = 0;
     if (!reader.read(stage) || !reader.read(description.source) ||
-        !reader.read(description.spirv) || !reader.read(description.path)) {
+        !reader.read(description.wgsl) || !reader.read(description.spirv) ||
+        !reader.read(description.path)) {
         return false;
     }
     description.stage = static_cast<ShaderStages>(stage);

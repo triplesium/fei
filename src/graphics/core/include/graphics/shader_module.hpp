@@ -22,6 +22,7 @@ struct ShaderResourceBinding {
 struct ShaderDescription {
     ShaderStages stage;
     std::string source;
+    std::string wgsl;
     std::vector<std::byte> spirv;
     std::string path;
     std::vector<ShaderResourceBinding> resources;

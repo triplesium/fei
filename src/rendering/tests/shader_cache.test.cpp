@@ -70,6 +70,7 @@ class RecordingShaderCompiler final : public ShaderCompiler {
                 ShaderDescription {
                     .stage = request.stage,
                     .source = "#version 450\nvoid main() {}\n",
+                    .wgsl = "@fragment fn fragment_main() {}\n",
                     .spirv =
                         {
                             std::byte {0x03},
@@ -500,6 +501,7 @@ TEST_CASE(
     REQUIRE(cached.has_value());
     REQUIRE(second_compiler.requests.empty());
     CHECK(cached->description.source == first->description.source);
+    CHECK(cached->description.wgsl == first->description.wgsl);
     CHECK(cached->description.spirv == first->description.spirv);
     CHECK(cached->description.defs == first->description.defs);
     REQUIRE(cached->description.resources.size() == 1);

@@ -216,6 +216,54 @@ std::string blob_text(slang::IBlob* blob) {
     return std::string(data, data + blob->getBufferSize());
 }
 
+void use_write_only_storage_texture_access(std::string& wgsl) {
+    constexpr std::string_view storage_prefix = "texture_storage_";
+    constexpr std::string_view read_write = "read_write";
+    std::size_t search_from = 0;
+    while (true) {
+        auto storage = wgsl.find(storage_prefix, search_from);
+        if (storage == std::string::npos) {
+            return;
+        }
+        auto declaration_end = wgsl.find(';', storage);
+        auto access = wgsl.find(read_write, storage);
+        if (declaration_end == std::string::npos ||
+            access == std::string::npos || access > declaration_end) {
+            search_from = storage + storage_prefix.size();
+            continue;
+        }
+        auto variable = wgsl.rfind("var ", storage);
+        if (variable == std::string::npos) {
+            search_from = declaration_end + 1;
+            continue;
+        }
+        auto name_begin = variable + 4;
+        auto name_end = wgsl.find_first_of(" :", name_begin);
+        if (name_end == std::string::npos || name_end > storage) {
+            search_from = declaration_end + 1;
+            continue;
+        }
+        auto name = wgsl.substr(name_begin, name_end - name_begin);
+        bool write_only = true;
+        auto use = wgsl.find(name, declaration_end + 1);
+        while (use != std::string::npos) {
+            auto statement_begin = wgsl.find_last_of(";{}\n", use);
+            auto store = wgsl.rfind("textureStore", use);
+            if (store == std::string::npos ||
+                (statement_begin != std::string::npos &&
+                 store < statement_begin)) {
+                write_only = false;
+                break;
+            }
+            use = wgsl.find(name, use + name.size());
+        }
+        if (write_only) {
+            wgsl.replace(access, read_write.size(), "write");
+        }
+        search_from = declaration_end + 1;
+    }
+}
+
 ShaderCompileError
 slang_compile_error(std::string message, slang::IBlob* diagnostics = nullptr) {
     return ShaderCompileError {
@@ -576,6 +624,7 @@ find_slang_entry_point(
 
 struct SlangCompileOutput {
     std::vector<std::byte> spirv;
+    std::string wgsl;
     std::vector<ShaderArtifactLogicalResourceName> logical_resource_names;
     std::vector<std::filesystem::path> dependencies;
     std::vector<ShaderDependencySnapshot> dependency_snapshots;
@@ -924,6 +973,129 @@ compile_slang_to_spirv(const ShaderCompileRequest& request) {
         return failure(std::move(logical_resource_names).error());
     }
 
+    auto compile_wgsl = [&]() -> std::string {
+        slang::TargetDesc wgsl_target_desc {};
+        wgsl_target_desc.format = SLANG_WGSL;
+
+        auto wgsl_defs = request.defs;
+        std::erase_if(wgsl_defs, [](const ShaderDefVal& def) {
+            return def.name == "FEI_SHADER_TARGET_WGSL";
+        });
+        wgsl_defs.push_back(ShaderDefVal::bool_def("FEI_SHADER_TARGET_WGSL"));
+        auto wgsl_macros = make_slang_macro_storage(std::move(wgsl_defs));
+
+        auto wgsl_file_system = make_tracking_slang_file_system();
+        auto wgsl_session_desc = session_desc;
+        wgsl_session_desc.targets = &wgsl_target_desc;
+        wgsl_session_desc.fileSystem = wgsl_file_system.get();
+        wgsl_session_desc.preprocessorMacros = wgsl_macros.macros.data();
+        wgsl_session_desc.preprocessorMacroCount =
+            static_cast<SlangInt>(wgsl_macros.macros.size());
+
+        Slang::ComPtr<slang::ISession> wgsl_session;
+        auto wgsl_result = global_session->createSession(
+            wgsl_session_desc,
+            wgsl_session.writeRef()
+        );
+        if (SLANG_FAILED(wgsl_result) || !wgsl_session) {
+            trace(
+                "Slang skipped WGSL session creation for '{}'",
+                request.logical_path.string()
+            );
+            return {};
+        }
+
+        Slang::ComPtr<slang::IBlob> wgsl_diagnostics;
+        auto* wgsl_module = wgsl_session->loadModuleFromSourceString(
+            module_name.c_str(),
+            source_path.c_str(),
+            source.c_str(),
+            wgsl_diagnostics.writeRef()
+        );
+        if (wgsl_module == nullptr) {
+            trace(
+                "Slang skipped WGSL module generation for '{}': {}",
+                request.logical_path.string(),
+                blob_text(wgsl_diagnostics)
+            );
+            return {};
+        }
+
+        auto wgsl_entry_point = find_slang_entry_point(*wgsl_module, request);
+        if (!wgsl_entry_point) {
+            trace(
+                "Slang skipped WGSL entry point generation for '{}': {} {}",
+                request.logical_path.string(),
+                wgsl_entry_point.error().message,
+                wgsl_entry_point.error().diagnostics
+            );
+            return {};
+        }
+
+        slang::IComponentType* wgsl_components[] = {
+            wgsl_module,
+            wgsl_entry_point->get(),
+        };
+        Slang::ComPtr<slang::IComponentType> wgsl_program;
+        wgsl_diagnostics.setNull();
+        wgsl_result = wgsl_session->createCompositeComponentType(
+            wgsl_components,
+            2,
+            wgsl_program.writeRef(),
+            wgsl_diagnostics.writeRef()
+        );
+        if (SLANG_FAILED(wgsl_result) || !wgsl_program) {
+            trace(
+                "Slang skipped WGSL program generation for '{}': {}",
+                request.logical_path.string(),
+                blob_text(wgsl_diagnostics)
+            );
+            return {};
+        }
+
+        Slang::ComPtr<slang::IComponentType> wgsl_linked_program;
+        wgsl_diagnostics.setNull();
+        wgsl_result = wgsl_program->link(
+            wgsl_linked_program.writeRef(),
+            wgsl_diagnostics.writeRef()
+        );
+        if (SLANG_FAILED(wgsl_result) || !wgsl_linked_program) {
+            trace(
+                "Slang skipped WGSL link for '{}': {}",
+                request.logical_path.string(),
+                blob_text(wgsl_diagnostics)
+            );
+            return {};
+        }
+
+        Slang::ComPtr<slang::IBlob> wgsl_code;
+        wgsl_diagnostics.setNull();
+        wgsl_result = wgsl_linked_program->getEntryPointCode(
+            0,
+            0,
+            wgsl_code.writeRef(),
+            wgsl_diagnostics.writeRef()
+        );
+        if (SLANG_FAILED(wgsl_result) || !wgsl_code) {
+            trace(
+                "Slang skipped WGSL code generation for '{}': {}",
+                request.logical_path.string(),
+                blob_text(wgsl_diagnostics)
+            );
+            return {};
+        }
+
+        auto wgsl = blob_text(wgsl_code);
+        if (!wgsl.empty() && wgsl.back() == '\0') {
+            wgsl.pop_back();
+        }
+        use_write_only_storage_texture_access(wgsl);
+        return wgsl;
+    };
+
+    auto wgsl = request.stage == ShaderStages::Geometry ? std::string {} :
+                                                          compile_wgsl();
+
     std::vector<std::filesystem::path> dependencies;
     insert_unique_dependency(dependencies, request.source_path);
     for (const auto& dependency : file_system->dependencies()) {
@@ -939,6 +1111,7 @@ compile_slang_to_spirv(const ShaderCompileRequest& request) {
 
     return SlangCompileOutput {
         .spirv = std::move(spirv).value(),
+        .wgsl = std::move(wgsl),
         .logical_resource_names = std::move(logical_resource_names).value(),
         .dependencies = std::move(dependencies),
         .dependency_snapshots = std::move(dependency_snapshots),
@@ -1139,6 +1312,7 @@ SlangLibraryShaderCompiler::compile(ShaderCompileRequest request) {
             ShaderDescription {
                 .stage = request.stage,
                 .source = std::move(artifacts->opengl_source),
+                .wgsl = std::move(slang->wgsl),
                 .spirv = std::move(slang->spirv),
                 .path = request.logical_path.string(),
                 .resources = std::move(artifacts->resources),

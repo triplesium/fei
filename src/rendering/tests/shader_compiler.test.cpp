@@ -90,6 +90,7 @@ float4 fragment_main() : SV_Target0
     REQUIRE(output->description.stage == ShaderStages::Fragment);
     REQUIRE(output->description.path == "shader.slang");
     REQUIRE_FALSE(output->description.source.empty());
+    REQUIRE_FALSE(output->description.wgsl.empty());
     REQUIRE_FALSE(output->description.spirv.empty());
     REQUIRE(
         output->description.defs ==
@@ -250,6 +251,154 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID)
         output->description.source.find("buffer RWStructuredBuffer") ==
         std::string::npos
     );
+}
+
+TEST_CASE(
+    "SlangLibraryShaderCompiler emits write-only WGSL storage textures",
+    "[rendering][shader-compiler][slang][wgsl]"
+) {
+    auto root = std::filesystem::current_path() / "build" / "test" /
+                "slang-library-shader-compiler-storage-texture";
+    std::filesystem::remove_all(root);
+    auto source_path = root / "shader.slang";
+    write_text_file(
+        source_path,
+        R"(
+layout(set = 0, binding = 0, rgba32f) RWTexture2D<float4> output_texture;
+
+[shader("compute")]
+[numthreads(1, 1, 1)]
+void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID)
+{
+    output_texture[dispatch_thread_id.xy] = float4(1.0);
+}
+)"
+    );
+
+    ShaderCompileRequest request {
+        .source_path = source_path,
+        .source_root = root,
+        .logical_path = "shader.slang",
+        .stage = ShaderStages::Compute,
+        .entry = "compute_main",
+    };
+
+    SlangLibraryShaderCompiler compiler;
+    auto output = compiler.compile(request);
+
+    if (!output) {
+        INFO(output.error().message);
+        INFO(output.error().diagnostics);
+    }
+    REQUIRE(output.has_value());
+    INFO(output->description.wgsl);
+    CHECK(
+        output->description.wgsl.find(
+            "texture_storage_2d<rgba32float, write>"
+        ) != std::string::npos
+    );
+    CHECK(
+        output->description.wgsl.find(
+            "texture_storage_2d<rgba32float, read_write>"
+        ) == std::string::npos
+    );
+}
+
+TEST_CASE(
+    "SlangLibraryShaderCompiler defines the WGSL target macro only for WGSL",
+    "[rendering][shader-compiler][slang][wgsl]"
+) {
+    auto root = std::filesystem::current_path() / "build" / "test" /
+                "slang-library-shader-compiler-wgsl-target-macro";
+    std::filesystem::remove_all(root);
+    auto source_path = root / "shader.slang";
+    write_text_file(
+        source_path,
+        R"(
+[shader("fragment")]
+float4 fragment_main() : SV_Target0
+{
+#if FEI_SHADER_TARGET_WGSL
+    return float4(29.0, 0.0, 0.0, 1.0);
+#else
+    return float4(17.0, 0.0, 0.0, 1.0);
+#endif
+}
+)"
+    );
+
+    ShaderCompileRequest request {
+        .source_path = source_path,
+        .source_root = root,
+        .logical_path = "shader.slang",
+        .stage = ShaderStages::Fragment,
+        .entry = "fragment_main",
+    };
+
+    SlangLibraryShaderCompiler compiler;
+    auto output = compiler.compile(request);
+
+    if (!output) {
+        INFO(output.error().message);
+        INFO(output.error().diagnostics);
+    }
+    REQUIRE(output.has_value());
+    INFO(output->description.source);
+    INFO(output->description.wgsl);
+    CHECK(output->description.source.find("17") != std::string::npos);
+    CHECK(output->description.source.find("29") == std::string::npos);
+    CHECK(output->description.wgsl.find("29") != std::string::npos);
+    CHECK(output->description.wgsl.find("17") == std::string::npos);
+}
+
+TEST_CASE(
+    "SlangLibraryShaderCompiler keeps geometry shaders SPIR-V only",
+    "[rendering][shader-compiler][slang][wgsl]"
+) {
+    auto root = std::filesystem::current_path() / "build" / "test" /
+                "slang-library-shader-compiler-geometry";
+    std::filesystem::remove_all(root);
+    auto source_path = root / "shader.slang";
+    write_text_file(
+        source_path,
+        R"(
+struct VertexOutput
+{
+    float4 position : SV_Position;
+};
+
+[shader("geometry")]
+[maxvertexcount(3)]
+void geometry_main(
+    triangle VertexOutput input[3],
+    inout TriangleStream<VertexOutput> stream
+)
+{
+    stream.Append(input[0]);
+    stream.Append(input[1]);
+    stream.Append(input[2]);
+}
+)"
+    );
+
+    ShaderCompileRequest request {
+        .source_path = source_path,
+        .source_root = root,
+        .logical_path = "shader.slang",
+        .stage = ShaderStages::Geometry,
+        .entry = "geometry_main",
+    };
+
+    SlangLibraryShaderCompiler compiler;
+    auto output = compiler.compile(request);
+
+    if (!output) {
+        INFO(output.error().message);
+        INFO(output.error().diagnostics);
+    }
+    REQUIRE(output.has_value());
+    CHECK_FALSE(output->description.spirv.empty());
+    CHECK(output->description.wgsl.empty());
 }
 
 TEST_CASE(

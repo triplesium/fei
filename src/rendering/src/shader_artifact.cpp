@@ -787,7 +787,7 @@ generate_shader_artifacts(const ShaderArtifactGenerationInput& input) {
 }
 
 std::string shader_artifact_cache_identity() {
-    constexpr std::string_view artifact_version = "fei-shader-artifact-v2";
+    constexpr std::string_view artifact_version = "fei-shader-artifact-v4";
     auto* spirv_cross_version = spvc_get_commit_revision_and_timestamp();
     if (spirv_cross_version == nullptr) {
         return std::string(artifact_version);
