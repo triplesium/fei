@@ -504,6 +504,7 @@ void publish_and_enqueue_frame_capture(
                 completed->data,
                 completed->width,
                 completed->height,
+                completed->data_origin,
                 config->jpeg_quality
             );
             if (jpeg.empty()) {

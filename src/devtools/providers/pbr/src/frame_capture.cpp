@@ -68,10 +68,11 @@ void append_jpeg_bytes(void* context, void* data, int size) {
 
 } // namespace
 
-std::vector<unsigned char> rgba_to_flipped_rgb(
+std::vector<unsigned char> rgba_to_rgb(
     const std::vector<byte>& rgba,
     uint32 width,
-    uint32 height
+    uint32 height,
+    TextureDataOrigin data_origin
 ) {
     std::vector<unsigned char> rgb(
         static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 3
@@ -80,7 +81,9 @@ std::vector<unsigned char> rgba_to_flipped_rgb(
     auto row_rgb_size = static_cast<std::size_t>(width) * 3;
 
     for (uint32 dst_y = 0; dst_y < height; ++dst_y) {
-        auto src_y = height - dst_y - 1;
+        auto src_y = data_origin == TextureDataOrigin::TopLeft ?
+                         dst_y :
+                         height - dst_y - 1;
         auto* src = reinterpret_cast<const unsigned char*>(rgba.data()) +
                     static_cast<std::size_t>(src_y) * row_rgba_size;
         auto* dst = rgb.data() + static_cast<std::size_t>(dst_y) * row_rgb_size;
@@ -97,13 +100,14 @@ std::vector<byte> encode_jpeg(
     const std::vector<byte>& rgba,
     uint32 width,
     uint32 height,
+    TextureDataOrigin data_origin,
     int quality
 ) {
     if (rgba.empty()) {
         return {};
     }
 
-    auto rgb = rgba_to_flipped_rgb(rgba, width, height);
+    auto rgb = rgba_to_rgb(rgba, width, height, data_origin);
     std::vector<byte> jpeg;
     auto ok = stbi_write_jpg_to_func(
         append_jpeg_bytes,

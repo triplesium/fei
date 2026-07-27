@@ -49,13 +49,18 @@ void mark_capture_enqueued(
     std::chrono::steady_clock::time_point now
 );
 
-std::vector<unsigned char>
-rgba_to_flipped_rgb(const std::vector<byte>& rgba, uint32 width, uint32 height);
+std::vector<unsigned char> rgba_to_rgb(
+    const std::vector<byte>& rgba,
+    uint32 width,
+    uint32 height,
+    TextureDataOrigin data_origin
+);
 
 std::vector<byte> encode_jpeg(
     const std::vector<byte>& rgba,
     uint32 width,
     uint32 height,
+    TextureDataOrigin data_origin,
     int quality
 );
 

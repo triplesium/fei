@@ -66,7 +66,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "PBR frame capture converts RGBA rows to flipped RGB",
+    "PBR frame capture converts bottom-left RGBA rows to top-left RGB",
     "[devtools][pbr][capture]"
 ) {
     const std::vector<byte> rgba {
@@ -88,10 +88,41 @@ TEST_CASE(
         byte {16},
     };
 
-    const auto rgb = rgba_to_flipped_rgb(rgba, 2, 2);
+    const auto rgb = rgba_to_rgb(rgba, 2, 2, TextureDataOrigin::BottomLeft);
 
     CHECK(
         rgb ==
         std::vector<unsigned char> {9, 10, 11, 13, 14, 15, 1, 2, 3, 5, 6, 7}
+    );
+}
+
+TEST_CASE(
+    "PBR frame capture preserves top-left RGBA row order",
+    "[devtools][pbr][capture]"
+) {
+    const std::vector<byte> rgba {
+        byte {1},
+        byte {2},
+        byte {3},
+        byte {4},
+        byte {5},
+        byte {6},
+        byte {7},
+        byte {8},
+        byte {9},
+        byte {10},
+        byte {11},
+        byte {12},
+        byte {13},
+        byte {14},
+        byte {15},
+        byte {16},
+    };
+
+    const auto rgb = rgba_to_rgb(rgba, 2, 2, TextureDataOrigin::TopLeft);
+
+    CHECK(
+        rgb ==
+        std::vector<unsigned char> {1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15}
     );
 }
