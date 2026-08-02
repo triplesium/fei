@@ -15,6 +15,18 @@ struct TransformSystems {
     struct Propagate : SystemSet<Propagate> {};
 };
 
+void sync_global_transforms_2d(
+    Query<Entity, const Transform2d>::Filter<Without<GlobalTransform2d>> query,
+    Commands commands
+);
+
+void propagate_transforms_2d(
+    Query<Entity, const Transform2d, GlobalTransform2d> transforms,
+    Query<Entity, const ChildOf> parents,
+    Query<Entity, const GlobalTransform2d>::Filter<Without<Transform2d>>
+        explicit_globals
+);
+
 void sync_global_transforms(
     Query<Entity, const Transform3d>::Filter<Without<GlobalTransform3d>> query,
     Commands commands

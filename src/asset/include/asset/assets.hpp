@@ -318,6 +318,18 @@ class Assets {
         return nullopt;
     }
 
+    Optional<const AssetPath&> path(const Handle<T>& handle) const {
+        return path(handle.id());
+    }
+
+    Optional<const AssetPath&> path(AssetId id) const {
+        auto entry = get_entry(id);
+        if (!entry || !entry->path) {
+            return nullopt;
+        }
+        return *entry->path;
+    }
+
     Optional<T&> modify(const Handle<T>& handle) { return modify(handle.id()); }
 
     Optional<T&> modify(AssetId id) {

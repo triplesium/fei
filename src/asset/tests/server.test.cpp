@@ -6,8 +6,14 @@
 #include "asset/path.hpp"
 #include "asset/plugin.hpp"
 #include "asset/request.hpp"
+#include "asset/serialization.hpp"
 #include "asset/source.hpp"
 #include "ecs/event.hpp"
+#include "refl/cls.hpp"
+#include "refl/ref.hpp"
+#include "refl/registry.hpp"
+#include "serialization/node.hpp"
+#include "serialization/serializer.hpp"
 #include "task/plugin.hpp"
 
 #include <array>
@@ -35,6 +41,10 @@ struct ServerAsset {
     int byte_count {0};
     std::string path;
     Handle<DependencyAsset> dependency;
+};
+
+struct AssetHolder {
+    Handle<ServerAsset> asset;
 };
 
 using ServerAssetLoadFn = decltype(&AssetServer::load<ServerAsset>);
@@ -261,6 +271,83 @@ TEST_CASE(
     REQUIRE(asset.has_value());
     REQUIRE(asset->byte_count == 4);
     REQUIRE(asset->path == "memory://asset.bin");
+}
+
+TEST_CASE(
+    "Asset handle codecs persist source paths and resolve through the server",
+    "[asset][serialization]"
+) {
+    App app;
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
+
+    auto handle = app.resource<AssetServer>().load<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+    auto& assets = app.resource<Assets<ServerAsset>>();
+    auto stored_path = assets.path(handle);
+    REQUIRE(stored_path);
+    CHECK(stored_path->as_string() == "memory://asset.bin");
+
+    Registry::instance().register_cls<AssetHolder>().add_property(
+        "asset",
+        &AssetHolder::asset
+    );
+    serialization::ValueCodecRegistry codecs;
+    REQUIRE(
+        register_asset_handle_codec<ServerAsset>(
+            codecs,
+            app.resource<AssetServer>(),
+            assets
+        )
+    );
+
+    const AssetHolder expected {.asset = handle};
+    auto node = serialization::serialize(
+        Ref(expected),
+        serialization::SerializeOptions {
+            .include_type_tag = false,
+            .codecs = &codecs,
+        }
+    );
+    REQUIRE(node);
+    const auto* object = node->try_object();
+    REQUIRE(object);
+    const auto* asset = serialization::find_field(*object, "asset");
+    REQUIRE(asset);
+    const auto* asset_object = asset->value.try_object();
+    REQUIRE(asset_object);
+    const auto* encoded = serialization::find_field(*asset_object, "$asset");
+    REQUIRE(encoded);
+    REQUIRE(encoded->value.try_string());
+    CHECK(*encoded->value.try_string() == "memory://asset.bin");
+
+    auto decoded = serialization::deserialize(
+        type_id<AssetHolder>(),
+        *node,
+        serialization::DeserializeOptions {.codecs = &codecs}
+    );
+    REQUIRE(decoded);
+    CHECK(decoded->get<AssetHolder>().asset.id() == handle.id());
+
+    const AssetHolder empty;
+    auto empty_node = serialization::serialize(
+        Ref(empty),
+        serialization::SerializeOptions {
+            .include_type_tag = false,
+            .codecs = &codecs,
+        }
+    );
+    REQUIRE(empty_node);
+    auto empty_decoded = serialization::deserialize(
+        type_id<AssetHolder>(),
+        *empty_node,
+        serialization::DeserializeOptions {.codecs = &codecs}
+    );
+    REQUIRE(empty_decoded);
+    CHECK_FALSE(empty_decoded->get<AssetHolder>().asset);
 }
 
 TEST_CASE(

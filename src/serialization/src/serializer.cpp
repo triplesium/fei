@@ -908,6 +908,11 @@ Result<SerializedNode, SerializeError> serialize_value(
     }
 
     const auto type_id = value.type_id();
+    if (options.codecs) {
+        if (const auto* codec = options.codecs->find(type_id)) {
+            return codec->encode(value, path);
+        }
+    }
     if (same_type<bool>(type_id)) {
         return SerializedNode::boolean(value.get_const<bool>());
     }
@@ -2004,6 +2009,11 @@ Result<Val, DeserializeError> deserialize_value(
     const std::string& path,
     const DeserializeOptions& options
 ) {
+    if (options.codecs) {
+        if (const auto* codec = options.codecs->find(type_id)) {
+            return codec->decode(node, path);
+        }
+    }
     if (same_type<bool>(type_id) || same_type<std::string>(type_id) ||
         is_signed_integral_type(type_id) ||
         is_unsigned_integral_type(type_id) || is_floating_type(type_id)) {
@@ -2036,6 +2046,18 @@ Result<Val, DeserializeError> deserialize_value(
 }
 
 } // namespace
+
+bool ValueCodecRegistry::register_codec(TypeId type, ValueCodec codec) {
+    if (!codec.encode || !codec.decode) {
+        return false;
+    }
+    return m_codecs.emplace(type, std::move(codec)).second;
+}
+
+const ValueCodec* ValueCodecRegistry::find(TypeId type) const {
+    auto codec = m_codecs.find(type);
+    return codec == m_codecs.end() ? nullptr : &codec->second;
+}
 
 Result<SerializedNode, SerializeError>
 serialize(Ref value, const SerializeOptions& options) {

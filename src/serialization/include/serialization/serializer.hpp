@@ -6,7 +6,11 @@
 #include "refl/val.hpp"
 #include "serialization/node.hpp"
 
+#include <functional>
 #include <string>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
 
 namespace fei::serialization {
 
@@ -18,16 +22,6 @@ enum class ObjectFieldPolicy {
 enum class EnumInputPolicy {
     NameOrInteger,
     NameOnly,
-};
-
-struct SerializeOptions {
-    bool include_type_tag {true};
-};
-
-struct DeserializeOptions {
-    ObjectFieldPolicy object_fields {ObjectFieldPolicy::Permissive};
-    EnumInputPolicy enum_input {EnumInputPolicy::NameOrInteger};
-    bool allow_type_tag {true};
 };
 
 struct SerializeError {
@@ -61,6 +55,47 @@ struct DeserializeError {
     TypeId type;
     std::string path;
     std::string message;
+};
+
+struct ValueCodec {
+    using Encode = std::function<Result<SerializedNode, SerializeError>(
+        Ref value,
+        std::string_view path
+    )>;
+    using Decode = std::function<Result<Val, DeserializeError>(
+        const SerializedNode& node,
+        std::string_view path
+    )>;
+
+    Encode encode;
+    Decode decode;
+};
+
+class ValueCodecRegistry {
+  public:
+    bool register_codec(TypeId type, ValueCodec codec);
+
+    template<class T>
+    bool register_codec(ValueCodec codec) {
+        return register_codec(type_id<T>(), std::move(codec));
+    }
+
+    [[nodiscard]] const ValueCodec* find(TypeId type) const;
+
+  private:
+    std::unordered_map<TypeId, ValueCodec> m_codecs;
+};
+
+struct SerializeOptions {
+    bool include_type_tag {true};
+    const ValueCodecRegistry* codecs {nullptr};
+};
+
+struct DeserializeOptions {
+    ObjectFieldPolicy object_fields {ObjectFieldPolicy::Permissive};
+    EnumInputPolicy enum_input {EnumInputPolicy::NameOrInteger};
+    bool allow_type_tag {true};
+    const ValueCodecRegistry* codecs {nullptr};
 };
 
 Result<SerializedNode, SerializeError>

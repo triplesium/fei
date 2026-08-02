@@ -1,12 +1,15 @@
 #include "graphics/resource.hpp"
 #include "math/common.hpp"
+#include "sprite/output.hpp"
 #include "sprite/renderer.hpp"
+#include "test_graphics_device.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 
 using namespace fei;
+using namespace fei::rendering_test;
 
 namespace {
 
@@ -58,6 +61,63 @@ TEST_CASE("Sprite quad applies size and transform", "[sprite][geometry]") {
     CHECK(quad.vertices[3].uv == Vector2 {1.0f, 1.0f});
     CHECK(quad.vertices[0].color.a == Catch::Approx(0.8f));
     CHECK(quad.indices == std::array<std::uint32_t, 6> {0, 1, 2, 2, 1, 3});
+}
+
+TEST_CASE(
+    "Sprite quad accepts propagated world transforms",
+    "[sprite][geometry]"
+) {
+    const Sprite sprite {.size = {2.0f, 2.0f}};
+    const auto parent = Transform2d {.position = {3.0f, 4.0f}}.model_matrix();
+    const auto local = Transform2d {.position = {1.0f, 2.0f}}.model_matrix();
+
+    const auto quad = make_sprite_quad(sprite, parent * local);
+
+    check_position(quad.vertices[0].position, 3.0f, 5.0f);
+    check_position(quad.vertices[3].position, 5.0f, 7.0f);
+}
+
+TEST_CASE(
+    "Sprite output creates and resizes a sampled render texture",
+    "[sprite][output]"
+) {
+    FakeGraphicsDevice device;
+    SpriteOutput output {
+        .mode = SpriteOutputMode::Texture,
+        .requested_width = 320,
+        .requested_height = 180,
+    };
+
+    update_sprite_output(device, nullptr, output);
+
+    REQUIRE(output.texture);
+    REQUIRE(output.framebuffer);
+    CHECK(output.width == 320);
+    CHECK(output.height == 180);
+    CHECK(output.texture->format() == PixelFormat::Rgba8Unorm);
+    CHECK(output.texture->usage().is_set(TextureUsage::RenderTarget));
+    CHECK(output.texture->usage().is_set(TextureUsage::Sampled));
+    REQUIRE(output.framebuffer->color_attachments().size() == 1);
+    CHECK(output.framebuffer->color_attachments()[0].texture == output.texture);
+
+    const auto first_texture = output.texture;
+    update_sprite_output(device, nullptr, output);
+    CHECK(output.texture == first_texture);
+    REQUIRE(device.texture_descriptions.size() == 1);
+
+    output.resize(640, 360);
+    update_sprite_output(device, nullptr, output);
+    CHECK(output.texture != first_texture);
+    CHECK(output.width == 640);
+    CHECK(output.height == 360);
+    REQUIRE(device.texture_descriptions.size() == 2);
+
+    output.resize(0, 0);
+    update_sprite_output(device, nullptr, output);
+    CHECK_FALSE(output.texture);
+    CHECK_FALSE(output.framebuffer);
+    CHECK(output.width == 0);
+    CHECK(output.height == 0);
 }
 
 TEST_CASE("Sprite phase appends indexed quads", "[sprite][geometry]") {

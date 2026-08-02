@@ -22,6 +22,11 @@ void require_vector_near(const Vector3& actual, const Vector3& expected) {
     require_near(actual.z, expected.z);
 }
 
+void require_vector_near(const Vector2& actual, const Vector2& expected) {
+    require_near(actual.x, expected.x);
+    require_near(actual.y, expected.y);
+}
+
 void require_matrix_near(const Matrix4x4& actual, const Matrix4x4& expected) {
     for (std::size_t row = 0; row < 4; ++row) {
         for (std::size_t col = 0; col < 4; ++col) {
@@ -46,6 +51,62 @@ TEST_CASE("Transform2d rotation uses degrees", "[core][transform]") {
     REQUIRE(transformed.y == Catch::Approx(3.0f).margin(EPSILON));
     REQUIRE(transformed.z == Catch::Approx(0.0f).margin(EPSILON));
     REQUIRE(transformed.w == Catch::Approx(1.0f).margin(EPSILON));
+}
+
+TEST_CASE(
+    "GlobalTransform2d propagates through entity hierarchies",
+    "[core][transform][hierarchy]"
+) {
+    App app;
+    app.add_plugin<TransformPlugin>();
+
+    auto root = app.world().entity();
+    auto child = app.world().entity();
+    auto grandchild = app.world().entity();
+
+    const Transform2d root_transform {
+        .position = {2.0f, 3.0f},
+        .scale = {2.0f, 2.0f},
+        .rotation = 90.0f,
+    };
+    const Transform2d child_transform {.position = {1.0f, 0.0f}};
+    const Transform2d grandchild_transform {.position = {0.0f, 2.0f}};
+
+    app.world().add_component(root, root_transform);
+    app.world().add_component(child, child_transform);
+    app.world().add_component(grandchild, grandchild_transform);
+    app.world().set_parent(child, root);
+    app.world().set_parent(grandchild, child);
+
+    app.world().sort_systems();
+    app.run_schedule(PostUpdate);
+
+    REQUIRE(app.world().has_component<GlobalTransform2d>(root));
+    REQUIRE(app.world().has_component<GlobalTransform2d>(child));
+    REQUIRE(app.world().has_component<GlobalTransform2d>(grandchild));
+    require_matrix_near(
+        app.world().get_component<GlobalTransform2d>(grandchild).to_matrix(),
+        root_transform.model_matrix() * child_transform.model_matrix() *
+            grandchild_transform.model_matrix()
+    );
+
+    app.world().get_component_rw<Transform2d>(root)->position.x = 6.0f;
+    app.run_schedule(PostUpdate);
+
+    const auto& updated_root = app.world().get_component<Transform2d>(root);
+    require_matrix_near(
+        app.world().get_component<GlobalTransform2d>(grandchild).to_matrix(),
+        updated_root.model_matrix() * child_transform.model_matrix() *
+            grandchild_transform.model_matrix()
+    );
+
+    const auto world_origin =
+        app.world().get_component<GlobalTransform2d>(grandchild).to_matrix() *
+        Vector4 {0.0f, 0.0f, 0.0f, 1.0f};
+    require_vector_near(
+        Vector2 {world_origin.x, world_origin.y},
+        Vector2 {2.0f, 5.0f}
+    );
 }
 
 TEST_CASE(

@@ -26,6 +26,7 @@
 #include "rendering/resource_set_cache.hpp"
 #include "rendering/shader_cache.hpp"
 #include "sprite/components.hpp"
+#include "sprite/output.hpp"
 #include "sprite/renderer.hpp"
 
 #include <algorithm>
@@ -61,6 +62,18 @@ struct QueuedSprite {
     Sprite sprite;
     SpriteQuad quad;
 };
+
+void prepare_sprite_output(
+    ResRO<GraphicsDevice> device,
+    Optional<ResRO<MainSwapchain>> main_swapchain,
+    ResRW<SpriteOutput> output
+) {
+    update_sprite_output(
+        *device,
+        main_swapchain ? &main_swapchain->get() : nullptr,
+        *output
+    );
+}
 
 void setup_sprite_resources(
     ResRO<GraphicsDevice> device,
@@ -98,19 +111,20 @@ void prepare_sprite_pipeline(
     ResRW<SpriteRenderState> state,
     ResRW<ShaderCache> shader_cache,
     ResRW<PipelineCache> pipeline_cache,
-    ResRO<MainSwapchain> main_swapchain
+    ResRO<SpriteOutput> output
 ) {
-    if (!main_swapchain->swapchain) {
-        return;
-    }
     if (!state->view_layout || !state->texture_layout) {
         return;
     }
-    const auto framebuffer = main_swapchain->swapchain->framebuffer();
+    const auto& framebuffer = output->framebuffer;
     if (!framebuffer) {
         return;
     }
-    const auto format = main_swapchain->swapchain->color_format();
+    const auto& output_description = framebuffer->output_description();
+    if (output_description.color_attachments.empty()) {
+        return;
+    }
+    const auto format = output_description.color_attachments.front().format;
     if (state->pipeline_id && state->pipeline_format == format) {
         return;
     }
@@ -176,22 +190,22 @@ void prepare_sprite_pipeline(
 }
 
 void queue_sprites(
-    Query<const Camera2d, const Transform2d> query_cameras,
-    Query<Entity, const Sprite, const Transform2d> query_sprites,
+    Query<const Camera2d, const GlobalTransform2d> query_cameras,
+    Query<Entity, const Sprite, const GlobalTransform2d> query_sprites,
     ResRO<GraphicsDevice> device,
     ResRO<RenderQueue> render_queue,
-    ResRO<MainSwapchain> main_swapchain,
+    ResRO<SpriteOutput> output,
     ResRO<RenderAssets<GpuImage>> gpu_images,
     ResRW<RenderResourceSetCache> resource_sets,
     ResRO<SpriteRenderState> state,
     ResRW<SpritePhase> phase
 ) {
     phase->clear();
-    if (!main_swapchain->swapchain || query_cameras.empty()) {
+    if (!output->framebuffer || query_cameras.empty()) {
         return;
     }
-    const auto target_width = main_swapchain->swapchain->width();
-    const auto target_height = main_swapchain->swapchain->height();
+    const auto target_width = output->width;
+    const auto target_height = output->height;
     if (target_width == 0 || target_height == 0) {
         return;
     }
@@ -202,7 +216,7 @@ void queue_sprites(
     phase->clip_from_world =
         device->clip_space_transform() * camera_2d_clip_from_world(
                                              camera,
-                                             camera_transform,
+                                             camera_transform.to_matrix(),
                                              target_width,
                                              target_height
                                          );
@@ -214,7 +228,7 @@ void queue_sprites(
     std::vector<QueuedSprite> queued;
     queued.reserve(query_sprites.size());
     for (const auto& [entity, sprite, transform] : query_sprites) {
-        auto quad = make_sprite_quad(sprite, transform);
+        auto quad = make_sprite_quad(sprite, transform.to_matrix());
         if (!is_sprite_quad_visible(quad, phase->clip_from_world)) {
             continue;
         }
@@ -261,18 +275,16 @@ void queue_sprites(
 void render_sprites(
     ResRW<PipelineCache> pipeline_cache,
     ResRW<RenderFrameContext> frame_context,
-    ResRO<MainSwapchain> main_swapchain,
+    ResRO<SpriteOutput> output,
     ResRO<SpritePhase> phase,
     ResRO<SpriteRenderState> state
 ) {
-    if (!main_swapchain->swapchain || !phase->active ||
-        !frame_context->recording()) {
+    if (!output->framebuffer || !phase->active || !frame_context->recording()) {
         return;
     }
-    auto framebuffer = main_swapchain->swapchain->framebuffer();
+    auto framebuffer = output->framebuffer;
     auto* commands = frame_context->command_buffer();
-    if (!framebuffer || !commands || main_swapchain->swapchain->width() == 0 ||
-        main_swapchain->swapchain->height() == 0) {
+    if (!commands || output->width == 0 || output->height == 0) {
         return;
     }
 
@@ -288,12 +300,7 @@ void render_sprites(
             .framebuffer = std::move(framebuffer),
         }
     );
-    commands->set_viewport(
-        0,
-        0,
-        main_swapchain->swapchain->width(),
-        main_swapchain->swapchain->height()
-    );
+    commands->set_viewport(0, 0, output->width, output->height);
 
     auto pipeline =
         state->pipeline_id ?
@@ -324,7 +331,8 @@ void SpritePlugin::setup(App& app) {
     if (!app.has_resource<GraphicsDevice>()) {
         fatal("SpritePlugin requires GraphicsDevice");
     }
-    if (!app.has_resource<MainSwapchain>()) {
+    if (m_config.output == SpriteOutputMode::MainSwapchain &&
+        !app.has_resource<MainSwapchain>()) {
         fatal("SpritePlugin requires MainSwapchain");
     }
     if (!app.has_plugin<RenderingPlugin>()) {
@@ -334,12 +342,20 @@ void SpritePlugin::setup(App& app) {
         app.add_plugin<ImagePlugin>();
     }
 
-    app.add_resource(SpriteRenderState {})
+    app.add_resource(
+           SpriteOutput {
+               .mode = m_config.output,
+               .requested_width = m_config.width,
+               .requested_height = m_config.height,
+               .texture_format = m_config.texture_format,
+           }
+    )
+        .add_resource(SpriteRenderState {})
         .add_resource(SpritePhase {})
         .add_systems(StartUp, setup_sprite_resources)
         .add_systems(
             RenderUpdate,
-            prepare_sprite_pipeline |
+            chain(prepare_sprite_output, prepare_sprite_pipeline) |
                 in_set<RenderingSystems::PrepareResources>()
         )
         .add_systems(

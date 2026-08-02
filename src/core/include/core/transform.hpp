@@ -7,7 +7,7 @@
 
 namespace fei {
 
-struct Transform2d {
+struct FEI_REFLECT Transform2d {
     Vector2 position {0.0f, 0.0f};
     Vector2 scale {1.0f, 1.0f};
     // Euler angle in degrees.
@@ -18,6 +18,15 @@ struct Transform2d {
                rotate_z(rotation * DEG2RAD) *
                fei::scale(scale.x, scale.y, 1.0f);
     }
+};
+
+struct GlobalTransform2d {
+    Matrix4x4 matrix {Matrix4x4::Identity};
+
+    GlobalTransform2d() = default;
+    explicit GlobalTransform2d(Matrix4x4 value) : matrix(value) {}
+
+    const Matrix4x4& to_matrix() const { return matrix; }
 };
 
 struct FEI_REFLECT Transform3d {

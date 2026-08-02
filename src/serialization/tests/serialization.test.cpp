@@ -68,6 +68,14 @@ struct UnsupportedValue {
     Result<int, int> result;
 };
 
+struct EncodedValue {
+    int value {0};
+};
+
+struct EncodedOwner {
+    EncodedValue nested;
+};
+
 struct ImmovableValue {
     int value {0};
 
@@ -117,6 +125,10 @@ void register_test_types() {
     registry.register_cls<UnsupportedValue>().add_property(
         "result",
         &UnsupportedValue::result
+    );
+    registry.register_cls<EncodedOwner>().add_property(
+        "nested",
+        &EncodedOwner::nested
     );
 
     registered = true;
@@ -170,6 +182,74 @@ TEST_CASE("SerializedNode round trips through JSON", "[serialization][json]") {
     REQUIRE(object->size() == 2);
     REQUIRE((*object)[0].name == "name");
     REQUIRE(*(*object)[0].value.try_string() == "example");
+}
+
+TEST_CASE(
+    "Custom value codecs handle nested reflected properties",
+    "[serialization][codec]"
+) {
+    register_test_types();
+
+    ValueCodecRegistry codecs;
+    REQUIRE(codecs.register_codec<EncodedValue>(ValueCodec {
+        .encode = [](Ref value, std::string_view path)
+            -> Result<SerializedNode, SerializeError> {
+            const auto* encoded = value.try_get_const<EncodedValue>();
+            if (!encoded) {
+                return failure(
+                    SerializeError {
+                        .kind = SerializeError::Kind::UnsupportedType,
+                        .type = value.type_id(),
+                        .path = std::string(path),
+                        .message = "Codec received the wrong value type",
+                    }
+                );
+            }
+            return SerializedNode::string(
+                "encoded:" + std::to_string(encoded->value)
+            );
+        },
+        .decode = [](const SerializedNode& node,
+                     std::string_view path) -> Result<Val, DeserializeError> {
+            const auto* encoded = node.try_string();
+            constexpr std::string_view prefix {"encoded:"};
+            if (!encoded || !encoded->starts_with(prefix)) {
+                return failure(
+                    DeserializeError {
+                        .kind = DeserializeError::Kind::InvalidNode,
+                        .type = type_id<EncodedValue>(),
+                        .path = std::string(path),
+                        .message = "Expected an encoded string",
+                    }
+                );
+            }
+            return make_val<EncodedValue>(EncodedValue {
+                .value = std::stoi(encoded->substr(prefix.size())),
+            });
+        },
+    }));
+    CHECK_FALSE(codecs.register_codec<EncodedValue>(ValueCodec {}));
+
+    const EncodedOwner expected {.nested = EncodedValue {.value = 42}};
+    auto node = serialize(
+        Ref(expected),
+        SerializeOptions {.include_type_tag = false, .codecs = &codecs}
+    );
+    REQUIRE(node);
+    const auto* object = node->try_object();
+    REQUIRE(object);
+    const auto* nested = find_field(*object, "nested");
+    REQUIRE(nested);
+    REQUIRE(nested->value.try_string());
+    CHECK(*nested->value.try_string() == "encoded:42");
+
+    auto decoded = deserialize(
+        type_id<EncodedOwner>(),
+        *node,
+        DeserializeOptions {.codecs = &codecs}
+    );
+    REQUIRE(decoded);
+    CHECK(decoded->get<EncodedOwner>().nested.value == 42);
 }
 
 TEST_CASE(

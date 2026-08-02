@@ -32,6 +32,7 @@ struct ImGuiLifecycle {
 void setup_imgui(
     ResRO<Window> window,
     ResRO<GraphicsDevice> device,
+    ResRO<ImGuiPluginConfig> plugin_config,
     ResRW<ImGuiTextureRegistry> texture_registry,
     ResRW<ImGuiRenderer> renderer,
     ResRW<ImGuiLifecycle> lifecycle
@@ -42,6 +43,9 @@ void setup_imgui(
     }
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
+    if (plugin_config->docking) {
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    }
 
     auto reader = EmbededAssets::get("Cousine-Regular.ttf").reader();
     if (reader.size() >
@@ -137,7 +141,8 @@ void ImGuiPlugin::setup(App& app) {
         fatal("ImGuiPlugin requires RenderingPlugin to be installed first");
     }
 
-    app.add_resource(ImGuiTextureRegistry {})
+    app.add_resource(m_config)
+        .add_resource(ImGuiTextureRegistry {})
         .add_resource(ImGuiRenderer {})
         .add_resource(ImGuiInputCapture {})
         .add_resource(ImGuiLifecycle {})

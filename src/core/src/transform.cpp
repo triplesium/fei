@@ -5,6 +5,7 @@
 #include "core/transform_plugin.hpp"
 #include "ecs/system_config.hpp"
 
+#include <ranges>
 #include <tuple>
 #include <unordered_set>
 #include <vector>
@@ -12,6 +13,65 @@
 namespace fei {
 
 namespace {
+
+void resolve_global_transform_2d(
+    Query<Entity, const Transform2d, GlobalTransform2d>& transforms,
+    Query<Entity, const ChildOf>& parents,
+    Query<Entity, const GlobalTransform2d>::Filter<Without<Transform2d>>&
+        explicit_globals,
+    Entity entity,
+    std::unordered_set<Entity>& resolved
+) {
+    if (resolved.contains(entity)) {
+        return;
+    }
+
+    std::vector<Entity> chain;
+    Matrix4x4 parent_matrix {Matrix4x4::Identity};
+    auto current = entity;
+
+    while (true) {
+        if (resolved.contains(current)) {
+            auto item = transforms.get(current);
+            FEI_ASSERT(item);
+            parent_matrix = std::get<2>(*item).read().to_matrix();
+            break;
+        }
+
+        auto transform_item = transforms.get(current);
+        if (!transform_item) {
+            if (auto global_item = explicit_globals.get(current)) {
+                parent_matrix = std::get<1>(*global_item).to_matrix();
+                break;
+            }
+            auto parent_item = parents.get(current);
+            if (!parent_item) {
+                break;
+            }
+            current = std::get<1>(*parent_item).parent;
+            continue;
+        }
+
+        chain.push_back(current);
+
+        auto parent_item = parents.get(current);
+        if (!parent_item) {
+            break;
+        }
+        current = std::get<1>(*parent_item).parent;
+    }
+
+    for (const auto chain_entity : std::views::reverse(chain)) {
+        auto item = transforms.get(chain_entity);
+        FEI_ASSERT(item);
+        parent_matrix = parent_matrix * std::get<1>(*item).model_matrix();
+        auto& global_transform = std::get<2>(*item);
+        if (global_transform.read().matrix != parent_matrix) {
+            global_transform.write().matrix = parent_matrix;
+        }
+        resolved.insert(chain_entity);
+    }
+}
 
 void resolve_global_transform(
     Query<Entity, const Transform3d, GlobalTransform3d>& transforms,
@@ -60,8 +120,7 @@ void resolve_global_transform(
         current = std::get<1>(*parent_item).parent;
     }
 
-    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
-        const auto chain_entity = *it;
+    for (const auto chain_entity : std::views::reverse(chain)) {
         auto item = transforms.get(chain_entity);
         FEI_ASSERT(item);
         parent_matrix = parent_matrix * std::get<1>(*item).to_matrix();
@@ -74,6 +133,37 @@ void resolve_global_transform(
 }
 
 } // namespace
+
+void sync_global_transforms_2d(
+    Query<Entity, const Transform2d>::Filter<Without<GlobalTransform2d>> query,
+    Commands commands
+) {
+    for (const auto& [entity, transform] : query) {
+        (void)transform;
+        commands.entity(entity).add(GlobalTransform2d {});
+    }
+}
+
+void propagate_transforms_2d(
+    Query<Entity, const Transform2d, GlobalTransform2d> transforms,
+    Query<Entity, const ChildOf> parents,
+    Query<Entity, const GlobalTransform2d>::Filter<Without<Transform2d>>
+        explicit_globals
+) {
+    std::unordered_set<Entity> resolved;
+    resolved.reserve(transforms.size());
+    for (const auto& [entity, transform, global_transform] : transforms) {
+        (void)transform;
+        (void)global_transform;
+        resolve_global_transform_2d(
+            transforms,
+            parents,
+            explicit_globals,
+            entity,
+            resolved
+        );
+    }
+}
 
 void sync_global_transforms(
     Query<Entity, const Transform3d>::Filter<Without<GlobalTransform3d>> query,
@@ -109,6 +199,8 @@ void propagate_transforms(
 void TransformPlugin::setup(App& app) {
     app.add_systems(
         PostUpdate,
+        chain(sync_global_transforms_2d, propagate_transforms_2d) |
+            in_set<TransformSystems::Propagate>(),
         chain(sync_global_transforms, propagate_transforms) |
             in_set<TransformSystems::Propagate>()
     );

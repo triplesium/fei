@@ -1,11 +1,13 @@
 target("fei-sprite")
     set_kind("static")
+    add_rules("fei.reflect")
     add_shader_source("sprite", path.join(os.scriptdir(), "shaders"))
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
     add_deps(
         "fei-base",
+        "fei-refl",
         "fei-ecs",
         "fei-app",
         "fei-math",

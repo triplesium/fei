@@ -23,6 +23,20 @@ Matrix4x4 camera_2d_clip_from_world(
     uint32 target_width,
     uint32 target_height
 ) {
+    return camera_2d_clip_from_world(
+        camera,
+        transform.model_matrix(),
+        target_width,
+        target_height
+    );
+}
+
+Matrix4x4 camera_2d_clip_from_world(
+    const Camera2d& camera,
+    const Matrix4x4& world_from_camera,
+    uint32 target_width,
+    uint32 target_height
+) {
     if (target_width == 0 || target_height == 0 ||
         camera.vertical_size <= 0.0f) {
         return Matrix4x4::Identity;
@@ -36,15 +50,20 @@ Matrix4x4 camera_2d_clip_from_world(
         -1.0f,
         1.0f
     );
-    return projection * transform.model_matrix().inverse_affine();
+    return projection * world_from_camera.inverse_affine();
 }
 
 SpriteQuad
 make_sprite_quad(const Sprite& sprite, const Transform2d& transform) {
-    const auto world_from_local =
-        transform.model_matrix() * scale(sprite.size.x, sprite.size.y, 1.0f);
+    return make_sprite_quad(sprite, transform.model_matrix());
+}
+
+SpriteQuad
+make_sprite_quad(const Sprite& sprite, const Matrix4x4& world_from_local) {
+    const auto world_from_sprite =
+        world_from_local * scale(sprite.size.x, sprite.size.y, 1.0f);
     const auto position = [&](float x, float y) {
-        const auto transformed = world_from_local * Vector4 {x, y, 0.0f, 1.0f};
+        const auto transformed = world_from_sprite * Vector4 {x, y, 0.0f, 1.0f};
         return Vector2 {transformed.x, transformed.y};
     };
     const auto uv_left =

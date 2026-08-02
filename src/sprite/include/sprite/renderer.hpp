@@ -57,8 +57,18 @@ struct SpritePhase {
     uint32 target_height
 );
 
+[[nodiscard]] Matrix4x4 camera_2d_clip_from_world(
+    const Camera2d& camera,
+    const Matrix4x4& world_from_camera,
+    uint32 target_width,
+    uint32 target_height
+);
+
 [[nodiscard]] SpriteQuad
 make_sprite_quad(const Sprite& sprite, const Transform2d& transform);
+
+[[nodiscard]] SpriteQuad
+make_sprite_quad(const Sprite& sprite, const Matrix4x4& world_from_local);
 
 [[nodiscard]] bool is_sprite_quad_visible(
     const SpriteQuad& quad,

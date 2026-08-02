@@ -5,17 +5,18 @@
 #include "math/color.hpp"
 #include "math/primitives.hpp"
 #include "math/vector.hpp"
+#include "refl/reflect.hpp"
 
 #include <cstdint>
 
 namespace fei {
 
-struct Camera2d {
+struct FEI_REFLECT Camera2d {
     float vertical_size {10.0f};
     Color4F clear_color {0.08f, 0.09f, 0.12f, 1.0f};
 };
 
-struct Sprite {
+struct FEI_REFLECT Sprite {
     Handle<Image> image;
     Vector2 size {1.0f, 1.0f};
     Rect uv_rect {
