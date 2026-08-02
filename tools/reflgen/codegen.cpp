@@ -132,6 +132,10 @@ void generate_cpp_file(
             }
         }
         out << "    ;\n";
+        for (const auto& tag : cls.tags) {
+            out << "registry.add_generated_tag<" << cls.name << ">(" << '"'
+                << tag << "\");\n";
+        }
     }
 
     out << "\n";
@@ -144,6 +148,10 @@ void generate_cpp_file(
                 << "::" << enum_value.name << "))\n";
         }
         out << "    ;\n";
+        for (const auto& tag : enum_info.tags) {
+            out << "registry.add_generated_tag<" << enum_info.name << ">("
+                << '"' << tag << "\");\n";
+        }
     }
 
     out << "\n}\n";

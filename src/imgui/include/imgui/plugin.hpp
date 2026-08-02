@@ -5,7 +5,8 @@
 
 namespace fei {
 
-struct FEI_REFLECT ImGuiInputCapture {
+FEI_REFLECT()
+struct ImGuiInputCapture {
     bool mouse {false};
     bool keyboard {false};
     bool text {false};

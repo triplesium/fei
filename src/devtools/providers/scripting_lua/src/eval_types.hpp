@@ -16,11 +16,13 @@ inline constexpr std::size_t c_default_max_output_bytes =
 inline constexpr std::uint64_t c_default_instruction_limit = 1'000'000;
 inline constexpr std::uint32_t c_default_time_limit_ms = 100;
 
-struct FEI_REFLECT EvalRequest {
+FEI_REFLECT()
+struct EvalRequest {
     std::string source;
 };
 
-struct FEI_REFLECT EvalResponse {
+FEI_REFLECT()
+struct EvalResponse {
     bool ok {false};
     std::vector<std::string> output;
     std::string error;

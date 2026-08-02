@@ -3,6 +3,7 @@
 #include "refl/registry.hpp"
 #include "test_types.hpp"
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <vector>
 
@@ -18,6 +19,10 @@ struct EqualityOnly {
 };
 
 struct NoEquality {
+    int value;
+};
+
+struct TaggedType {
     int value;
 };
 
@@ -119,4 +124,30 @@ TEST_CASE("Registry records type metadata and capabilities", "[refl][type]") {
     Type& vector_type = registry.register_type<std::vector<NoEquality>>();
     REQUIRE_FALSE(vector_type.equality_comparable());
     REQUIRE_FALSE(vector_type.hashable());
+}
+
+TEST_CASE("Reflection types expose registered tags", "[refl][type][tag]") {
+    Registry& registry = Registry::instance();
+    Type& tagged_type = registry.register_type<TaggedType>();
+
+    constexpr TypeTagId component_tag {"Component"};
+    constexpr TypeTagId resource_tag {"Resource"};
+    REQUIRE_FALSE(tagged_type.has_tag(component_tag));
+
+    registry.add_generated_tag<TaggedType>("Component");
+    registry.add_generated_tag<TaggedType>("Resource");
+    registry.add_generated_tag<TaggedType>("Component");
+
+    REQUIRE(tagged_type.has_tag(component_tag));
+    REQUIRE(tagged_type.has_tag(resource_tag));
+    REQUIRE(tagged_type.tags().size() == 2);
+    const auto component_tag_name = registry.tag_name(component_tag);
+    REQUIRE(component_tag_name.has_value());
+    REQUIRE(*component_tag_name == "Component");
+
+    const auto component_types = registry.types_with_tag(component_tag);
+    REQUIRE(
+        std::ranges::find(component_types, type_id<TaggedType>()) !=
+        component_types.end()
+    );
 }

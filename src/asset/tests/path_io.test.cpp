@@ -72,11 +72,9 @@ TEST_CASE(
 
 TEST_CASE("AssetPath identifies unapproved paths", "[asset][path]") {
     CHECK_FALSE(AssetPath("models/robot.bin").is_unapproved());
-    CHECK_FALSE(
-        AssetPath("models/robot/scene.gltf")
-            .resolve_embed_str("../../shared/model.bin")
-            .is_unapproved()
-    );
+    CHECK_FALSE(AssetPath("models/robot/scene.gltf")
+                    .resolve_embed_str("../../shared/model.bin")
+                    .is_unapproved());
     CHECK(AssetPath("../secret.bin").is_unapproved());
     CHECK(AssetPath("models/../../secret.bin").is_unapproved());
     CHECK(AssetPath("C:/secret.bin").is_unapproved());

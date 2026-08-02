@@ -5,18 +5,21 @@
 
 namespace fei::devtools::input {
 
-struct FEI_REFLECT KeyInputRequest {
+FEI_REFLECT()
+struct KeyInputRequest {
     KeyCode key {KeyCode::Unknown};
     bool down {false};
 };
 
-struct FEI_REFLECT KeyInputResponse {
+FEI_REFLECT()
+struct KeyInputResponse {
     bool ok {true};
     KeyCode key {KeyCode::Unknown};
     bool down {false};
 };
 
-struct FEI_REFLECT ClearInputResponse {
+FEI_REFLECT()
+struct ClearInputResponse {
     bool ok {true};
 };
 

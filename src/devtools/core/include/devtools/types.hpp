@@ -36,7 +36,8 @@ struct Capability {
     std::string label;
 };
 
-struct FEI_REFLECT BlobRef {
+FEI_REFLECT()
+struct BlobRef {
     std::string capability;
 };
 

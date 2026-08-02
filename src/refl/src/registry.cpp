@@ -256,6 +256,43 @@ Registry::try_get_container_adapter(TypeId id) {
     return *it->second;
 }
 
+Type& Registry::add_generated_tag(TypeId type_id, std::string tag) {
+    const TypeTagId tag_id {std::string_view {tag}};
+    auto existing = m_tag_names.find(tag_id);
+    if (existing != m_tag_names.end() && existing->second != tag) {
+        fatal(
+            "Type tag collision for id {}: '{}' conflicts with '{}'",
+            tag_id.id(),
+            tag,
+            existing->second
+        );
+    }
+
+    m_tag_names.emplace(tag_id, std::move(tag));
+    auto& registered_type = get_type(type_id);
+    registered_type.add_tag(tag_id);
+    return registered_type;
+}
+
+Optional<std::string_view> Registry::tag_name(TypeTagId tag) const {
+    auto it = m_tag_names.find(tag);
+    if (it == m_tag_names.end()) {
+        return nullopt;
+    }
+    return std::string_view {it->second};
+}
+
+std::vector<TypeId> Registry::types_with_tag(TypeTagId tag) const {
+    std::vector<TypeId> result;
+    for (const auto& [id, reflected_type] : m_types) {
+        if (reflected_type.has_tag(tag)) {
+            result.push_back(id);
+        }
+    }
+    std::ranges::sort(result);
+    return result;
+}
+
 bool Registry::has_enum(TypeId id) const {
     return m_enums.contains(id);
 }
@@ -263,6 +300,10 @@ bool Registry::has_enum(TypeId id) const {
 void Registry::clear_generated_metadata() {
     m_classes.clear();
     m_enums.clear();
+    m_tag_names.clear();
+    for (auto& [_, reflected_type] : m_types) {
+        reflected_type.clear_tags();
+    }
 
     for (const auto& [id, adapter] : m_container_adapters) {
         register_container_methods(add_cls(id), *adapter);

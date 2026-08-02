@@ -67,6 +67,10 @@ PointerAlignment: Left
 ReflowComments: true
 SortIncludes: CaseInsensitive
 SortUsingDeclarations: true
+StatementMacros:
+  - Q_UNUSED
+  - QT_REQUIRE_VERSION
+  - FEI_REFLECT
 SpaceAfterCStyleCast: false
 SpaceAfterLogicalNot: false
 SpaceAfterTemplateKeyword: false

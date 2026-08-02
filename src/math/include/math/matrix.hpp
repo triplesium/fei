@@ -17,7 +17,8 @@ namespace fei {
 // - View space is right-handed: cameras look down -Z.
 // - Projection helpers use OpenGL-style NDC z in [-1, 1].
 // - rotate_x/y/z and perspective fov arguments are radians.
-class FEI_REFLECT Matrix3x3 {
+FEI_REFLECT()
+class Matrix3x3 {
   public:
     float mat[3][3];
 
@@ -254,7 +255,8 @@ class FEI_REFLECT Matrix3x3 {
     }
 };
 
-class FEI_REFLECT Matrix4x4 {
+FEI_REFLECT()
+class Matrix4x4 {
   public:
     float mat[4][4];
 

@@ -11,7 +11,8 @@ namespace fei {
 // Quaternion stores the vector part in x/y/z and the scalar part in w.
 // Multiplication composes column-vector rotations right-to-left, matching
 // Matrix4x4 composition.
-class FEI_REFLECT Quaternion {
+FEI_REFLECT()
+class Quaternion {
   public:
     float x {0.0f};
     float y {0.0f};

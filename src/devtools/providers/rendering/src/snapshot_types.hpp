@@ -11,7 +11,8 @@
 
 namespace fei::devtools::rendering {
 
-struct FEI_REFLECT RenderSystemSnapshot {
+FEI_REFLECT()
+struct RenderSystemSnapshot {
     std::uint32_t id {0};
     std::string name;
     std::vector<std::uint32_t> dependencies;
@@ -19,7 +20,8 @@ struct FEI_REFLECT RenderSystemSnapshot {
     std::uint64_t batch_index {0};
 };
 
-struct FEI_REFLECT RenderScheduleSnapshot {
+FEI_REFLECT()
+struct RenderScheduleSnapshot {
     bool available {false};
     std::uint64_t total_systems {0};
     std::uint64_t batch_count {0};
@@ -27,7 +29,8 @@ struct FEI_REFLECT RenderScheduleSnapshot {
     std::vector<std::vector<std::uint32_t>> batches;
 };
 
-struct FEI_REFLECT ResourceSetSourceSnapshot {
+FEI_REFLECT()
+struct ResourceSetSourceSnapshot {
     std::string name;
     std::uint64_t requests {0};
     std::uint64_t hits {0};
@@ -35,7 +38,8 @@ struct FEI_REFLECT ResourceSetSourceSnapshot {
     std::size_t cache_size {0};
 };
 
-struct FEI_REFLECT GraphicsCacheSnapshot {
+FEI_REFLECT()
+struct GraphicsCacheSnapshot {
     std::uint64_t framebuffer_requests {0};
     std::uint64_t framebuffer_hits {0};
     std::uint64_t framebuffer_creates {0};

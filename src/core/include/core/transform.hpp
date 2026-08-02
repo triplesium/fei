@@ -7,7 +7,8 @@
 
 namespace fei {
 
-struct FEI_REFLECT Transform2d {
+FEI_REFLECT(Component)
+struct Transform2d {
     Vector2 position {0.0f, 0.0f};
     Vector2 scale {1.0f, 1.0f};
     // Euler angle in degrees.
@@ -29,7 +30,8 @@ struct GlobalTransform2d {
     const Matrix4x4& to_matrix() const { return matrix; }
 };
 
-struct FEI_REFLECT Transform3d {
+FEI_REFLECT(Component)
+struct Transform3d {
     Vector3 position {0.0f, 0.0f, 0.0f};
     Quaternion rotation {0.0f, 0.0f, 0.0f, 1.0f};
     Vector3 scale {1.0f, 1.0f, 1.0f};

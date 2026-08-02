@@ -39,7 +39,8 @@ enum MainSchedules : std::uint32_t {
     RenderLast
 };
 
-struct FEI_REFLECT AppStates {
+FEI_REFLECT()
+struct AppStates {
     bool should_stop {false};
 };
 

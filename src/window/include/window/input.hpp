@@ -13,7 +13,8 @@ struct InputSystems {
     struct Update : SystemSet<Update> {};
     struct ApplyDevtools : SystemSet<ApplyDevtools> {};
 };
-enum class FEI_REFLECT KeyCode : std::int32_t {
+FEI_REFLECT()
+enum class KeyCode : std::int32_t {
 #define KEY_CODE(name, code) name = (code),
 #include "keycode.def"
 #undef KEY_CODE
@@ -46,7 +47,8 @@ struct KeyEvent {
     KeyState state;
 };
 
-class FEI_REFLECT KeyInput {
+FEI_REFLECT()
+class KeyInput {
   public:
     KeyInput() {
         for (auto key : c_key_codes) {

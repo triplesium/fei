@@ -16,7 +16,8 @@ namespace devtools::ecs {
 inline constexpr std::size_t c_max_entity_inspect_response_bytes =
     std::size_t {4} * 1024 * 1024;
 
-struct FEI_REFLECT EntityInspectRequest {
+FEI_REFLECT()
+struct EntityInspectRequest {
     Entity entity {};
 };
 

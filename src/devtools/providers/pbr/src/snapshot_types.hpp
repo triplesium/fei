@@ -11,7 +11,8 @@
 
 namespace fei::devtools::pbr {
 
-struct FEI_REFLECT RenderTargetViewSnapshot {
+FEI_REFLECT()
+struct RenderTargetViewSnapshot {
     std::string id;
     std::string label;
     bool available {false};
@@ -19,7 +20,8 @@ struct FEI_REFLECT RenderTargetViewSnapshot {
     std::string visualization;
 };
 
-struct FEI_REFLECT RenderTargetSnapshot {
+FEI_REFLECT()
+struct RenderTargetSnapshot {
     std::string id;
     std::string label;
     bool available {false};
@@ -32,7 +34,8 @@ struct FEI_REFLECT RenderTargetSnapshot {
     std::vector<RenderTargetViewSnapshot> views;
 };
 
-struct FEI_REFLECT RenderTargetsSnapshot {
+FEI_REFLECT()
+struct RenderTargetsSnapshot {
     std::vector<BlobRef> previews;
     bool available {false};
     std::uint64_t total_targets {0};

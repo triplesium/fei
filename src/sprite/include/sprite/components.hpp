@@ -11,12 +11,14 @@
 
 namespace fei {
 
-struct FEI_REFLECT Camera2d {
+FEI_REFLECT()
+struct Camera2d {
     float vertical_size {10.0f};
     Color4F clear_color {0.08f, 0.09f, 0.12f, 1.0f};
 };
 
-struct FEI_REFLECT Sprite {
+FEI_REFLECT()
+struct Sprite {
     Handle<Image> image;
     Vector2 size {1.0f, 1.0f};
     Rect uv_rect {

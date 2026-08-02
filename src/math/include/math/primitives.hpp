@@ -8,12 +8,14 @@
 
 namespace fei {
 
-struct FEI_REFLECT Rect {
+FEI_REFLECT()
+struct Rect {
     Vector2 min;
     Vector2 max;
 };
 
-struct FEI_REFLECT Aabb {
+FEI_REFLECT()
+struct Aabb {
     Vector3 min {0.0f};
     Vector3 max {0.0f};
 

@@ -12,7 +12,8 @@ struct Color4B;
 struct Color3F;
 struct Color4F;
 
-struct FEI_REFLECT Color3B {
+FEI_REFLECT()
+struct Color3B {
     std::uint8_t r {0}, g {0}, b {0};
 
     Color3B() = default;
@@ -21,7 +22,8 @@ struct FEI_REFLECT Color3B {
     const std::uint8_t* data() const { return &r; }
 };
 
-struct FEI_REFLECT Color4B {
+FEI_REFLECT()
+struct Color4B {
     std::uint8_t r {0}, g {0}, b {0}, a {0};
 
     Color4B() = default;
@@ -30,7 +32,8 @@ struct FEI_REFLECT Color4B {
     const std::uint8_t* data() const { return &r; }
 };
 
-struct FEI_REFLECT Color3F {
+FEI_REFLECT()
+struct Color3F {
     float r {.0f}, g {.0f}, b {.0f};
 
     Color3F() = default;
@@ -41,7 +44,8 @@ struct FEI_REFLECT Color3F {
     const float* data() const { return &r; }
 };
 
-struct FEI_REFLECT Color4F {
+FEI_REFLECT()
+struct Color4F {
     float r {.0f}, g {.0f}, b {.0f}, a {.0f};
 
     Color4F() = default;

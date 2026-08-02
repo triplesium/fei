@@ -7,7 +7,8 @@
 
 namespace fei {
 
-struct FEI_REFLECT Time {
+FEI_REFLECT(Resource)
+struct Time {
     Time() :
         m_last_tick_time(std::chrono::steady_clock::now()),
         m_start_time(std::chrono::steady_clock::now()) {}

@@ -30,6 +30,7 @@ struct MethodInfo : MemberInfo {
 struct ClassInfo {
     std::string name;
     std::string source_file;
+    std::vector<std::string> tags;
     std::vector<MemberInfo> properties;
     std::vector<MethodInfo> methods;
     std::vector<MethodInfo> constructors;
@@ -45,6 +46,7 @@ struct EnumValueInfo {
 struct EnumInfo {
     std::string name;
     std::string source_file;
+    std::vector<std::string> tags;
     std::string underlying_type;
     bool is_scoped = false;
     std::vector<EnumValueInfo> values;

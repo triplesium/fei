@@ -13,7 +13,8 @@ class Vector2;
 class Vector3;
 class Vector4;
 
-class FEI_REFLECT Vector2 {
+FEI_REFLECT()
+class Vector2 {
   public:
     float x {0.0f}, y {0.0f};
 
@@ -156,7 +157,8 @@ class FEI_REFLECT Vector2 {
     }
 };
 
-class FEI_REFLECT Vector3 {
+FEI_REFLECT()
+class Vector3 {
   public:
     float x {0.f};
     float y {0.f};
@@ -361,7 +363,8 @@ class FEI_REFLECT Vector3 {
     float angle(const Vector3& rhs) const { return Vector3::angle(*this, rhs); }
 };
 
-class FEI_REFLECT Vector4 {
+FEI_REFLECT()
+class Vector4 {
   public:
     float x {0.0f};
     float y {0.0f};

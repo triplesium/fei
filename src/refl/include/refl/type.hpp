@@ -3,16 +3,19 @@
 #include "base/optional.hpp"
 #include "refl/utils.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <vector>
 
 namespace fei {
 
-constexpr std::uint64_t stable_type_hash(std::string_view name) {
+constexpr std::uint64_t stable_name_hash(std::string_view name) {
     std::uint64_t hash = 14695981039346656037ull;
     for (char c : name) {
         hash ^= static_cast<std::uint8_t>(c);
@@ -20,6 +23,10 @@ constexpr std::uint64_t stable_type_hash(std::string_view name) {
     }
     hash &= 0x7fffffffffffffffull;
     return hash == 0 ? 1 : hash;
+}
+
+constexpr std::uint64_t stable_type_hash(std::string_view name) {
+    return stable_name_hash(name);
 }
 
 class TypeId {
@@ -39,6 +46,28 @@ class TypeId {
 
     operator std::uint64_t() const { return m_id; }
     operator bool() const { return m_id != 0; }
+};
+
+class TypeTagId {
+  private:
+    std::uint64_t m_id;
+
+  public:
+    constexpr TypeTagId() : m_id(0) {}
+    constexpr explicit TypeTagId(std::uint64_t id) : m_id(id) {}
+    constexpr explicit TypeTagId(std::string_view name) :
+        m_id(stable_name_hash(name)) {}
+
+    constexpr std::uint64_t id() const { return m_id; }
+
+    constexpr auto operator<=>(const TypeTagId& other) const {
+        return m_id <=> other.m_id;
+    }
+    constexpr bool operator==(const TypeTagId& other) const {
+        return m_id == other.m_id;
+    }
+
+    constexpr explicit operator bool() const { return m_id != 0; }
 };
 
 template<typename T>
@@ -95,6 +124,18 @@ class Type {
     std::size_t m_size;
     std::size_t m_align;
     TypeOps m_ops;
+    std::vector<TypeTagId> m_tags;
+
+    void add_tag(TypeTagId tag) {
+        auto position = std::ranges::lower_bound(m_tags, tag);
+        if (position == m_tags.end() || *position != tag) {
+            m_tags.insert(position, tag);
+        }
+    }
+
+    void clear_tags() { m_tags.clear(); }
+
+    friend class Registry;
 
   public:
     Type(
@@ -199,6 +240,11 @@ class Type {
     bool equality_comparable() const { return m_ops.equal != nullptr; }
     bool hashable() const { return m_ops.hash_value != nullptr; }
 
+    bool has_tag(TypeTagId tag) const {
+        return std::ranges::binary_search(m_tags, tag);
+    }
+    std::span<const TypeTagId> tags() const { return m_tags; }
+
     auto operator<=>(const Type& other) const { return m_id <=> other.m_id; }
 };
 } // namespace fei
@@ -214,6 +260,13 @@ template<>
 struct hash<fei::Type> { // NOLINT(readability-identifier-naming)
     size_t operator()(const fei::Type& type) const {
         return static_cast<size_t>(type.hash().id());
+    }
+};
+
+template<>
+struct hash<fei::TypeTagId> { // NOLINT(readability-identifier-naming)
+    size_t operator()(const fei::TypeTagId& id) const {
+        return static_cast<size_t>(id.id());
     }
 };
 

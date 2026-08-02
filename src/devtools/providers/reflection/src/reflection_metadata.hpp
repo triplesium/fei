@@ -13,32 +13,38 @@ namespace fei::devtools::reflection {
 inline constexpr uint32 c_default_search_limit = 50;
 inline constexpr uint32 c_max_search_limit = 200;
 
-struct FEI_REFLECT SearchRequest {
+FEI_REFLECT()
+struct SearchRequest {
     std::string pattern;
     uint32 limit {c_default_search_limit};
 };
 
-struct FEI_REFLECT TypeSummary {
+FEI_REFLECT()
+struct TypeSummary {
     std::string id;
     std::string name;
     std::vector<std::string> facets;
 };
 
-struct FEI_REFLECT SearchResponse {
+FEI_REFLECT()
+struct SearchResponse {
     std::vector<TypeSummary> matches;
     bool truncated {false};
 };
 
-struct FEI_REFLECT DescribeRequest {
+FEI_REFLECT()
+struct DescribeRequest {
     std::string type;
 };
 
-struct FEI_REFLECT TypeReference {
+FEI_REFLECT()
+struct TypeReference {
     std::string id;
     std::string name;
 };
 
-struct FEI_REFLECT QualifiedTypeDescriptor {
+FEI_REFLECT()
+struct QualifiedTypeDescriptor {
     TypeReference type;
     bool is_const {false};
     bool is_pointer {false};
@@ -46,7 +52,8 @@ struct FEI_REFLECT QualifiedTypeDescriptor {
     bool is_rvalue_reference {false};
 };
 
-struct FEI_REFLECT TypeOperationsDescriptor {
+FEI_REFLECT()
+struct TypeOperationsDescriptor {
     bool default_constructible {false};
     bool copy_constructible {false};
     bool move_constructible {false};
@@ -57,17 +64,20 @@ struct FEI_REFLECT TypeOperationsDescriptor {
     bool hashable {false};
 };
 
-struct FEI_REFLECT ParameterDescriptor {
+FEI_REFLECT()
+struct ParameterDescriptor {
     std::string name;
     QualifiedTypeDescriptor type;
 };
 
-struct FEI_REFLECT PropertyDescriptor {
+FEI_REFLECT()
+struct PropertyDescriptor {
     std::string name;
     TypeReference type;
 };
 
-struct FEI_REFLECT MethodDescriptor {
+FEI_REFLECT()
+struct MethodDescriptor {
     std::string name;
     std::vector<ParameterDescriptor> parameters;
     QualifiedTypeDescriptor return_type;
@@ -75,29 +85,34 @@ struct FEI_REFLECT MethodDescriptor {
     bool is_static {false};
 };
 
-struct FEI_REFLECT ConstructorDescriptor {
+FEI_REFLECT()
+struct ConstructorDescriptor {
     std::vector<ParameterDescriptor> parameters;
 };
 
-struct FEI_REFLECT EnumValueDescriptor {
+FEI_REFLECT()
+struct EnumValueDescriptor {
     std::string name;
     std::string value;
 };
 
-struct FEI_REFLECT GenericArgumentDescriptor {
+FEI_REFLECT()
+struct GenericArgumentDescriptor {
     std::string kind;
     TypeReference type;
     std::string value;
 };
 
-struct FEI_REFLECT GenericDescriptor {
+FEI_REFLECT()
+struct GenericDescriptor {
     bool present {false};
     std::string name;
     std::string id;
     std::vector<GenericArgumentDescriptor> arguments;
 };
 
-struct FEI_REFLECT ContainerDescriptor {
+FEI_REFLECT()
+struct ContainerDescriptor {
     bool present {false};
     std::string kind;
     TypeReference element_type;
@@ -106,7 +121,8 @@ struct FEI_REFLECT ContainerDescriptor {
     bool fixed_size {false};
 };
 
-struct FEI_REFLECT TypeDescriptor {
+FEI_REFLECT()
+struct TypeDescriptor {
     TypeSummary summary;
     uint64 size {0};
     uint64 alignment {0};

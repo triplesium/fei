@@ -4,18 +4,31 @@
 #include <cctype>
 #include <clang-c/Index.h>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <optional>
+#include <stdexcept>
 #include <string_view>
 
 namespace fei::reflgen {
 namespace {
 
+struct ReflectionMarker {
+    std::size_t end_offset {0};
+    std::vector<std::string> tags;
+};
+
 struct TranslationUnitContext {
     CXTranslationUnit translation_unit = nullptr;
     std::string header_path;
     std::string comparable_header_path;
+    std::string source;
+    std::vector<ReflectionMarker> reflection_markers;
 };
+
+[[nodiscard]] bool
+cursor_is_from_header(CXCursor cursor, const TranslationUnitContext& context);
 
 template<typename Visitor>
 void visit_children(CXCursor cursor, Visitor visitor) {
@@ -67,6 +80,179 @@ void visit_children(CXCursor cursor, Visitor visitor) {
     }
     const auto last = text.find_last_not_of(" \t\r\n");
     return std::string(text.substr(first, last - first + 1));
+}
+
+[[nodiscard]] std::optional<std::size_t> cursor_offset(CXCursor cursor) {
+    const auto location = clang_getRangeStart(clang_getCursorExtent(cursor));
+    if (clang_equalLocations(location, clang_getNullLocation())) {
+        return std::nullopt;
+    }
+
+    CXFile file = nullptr;
+    unsigned offset = 0;
+    clang_getExpansionLocation(location, &file, nullptr, nullptr, &offset);
+    if (!file) {
+        return std::nullopt;
+    }
+    return static_cast<std::size_t>(offset);
+}
+
+[[nodiscard]] std::vector<std::string>
+parse_reflection_tags(std::string_view arguments) {
+    std::vector<std::string> tags;
+    std::size_t start = 0;
+    int nesting = 0;
+    for (std::size_t index = 0; index <= arguments.size(); ++index) {
+        const bool at_end = index == arguments.size();
+        const char character = at_end ? ',' : arguments[index];
+        if (!at_end) {
+            if (character == '(' || character == '<' || character == '[') {
+                ++nesting;
+            } else if (
+                character == ')' || character == '>' || character == ']'
+            ) {
+                --nesting;
+            }
+        }
+
+        if (character != ',' || nesting != 0) {
+            continue;
+        }
+
+        auto tag = trim(arguments.substr(start, index - start));
+        if (!tag.empty()) {
+            const bool valid = std::ranges::all_of(tag, [](unsigned char ch) {
+                return std::isalnum(ch) || ch == '_' || ch == ':' || ch == '.';
+            });
+            if (!valid) {
+                throw std::runtime_error(
+                    "Invalid FEI_REFLECT tag '" + tag + "'"
+                );
+            }
+            tags.push_back(std::move(tag));
+        } else if (!trim(arguments).empty()) {
+            throw std::runtime_error("FEI_REFLECT contains an empty tag");
+        }
+        start = index + 1;
+    }
+
+    std::ranges::sort(tags);
+    tags.erase(std::unique(tags.begin(), tags.end()), tags.end());
+    return tags;
+}
+
+[[nodiscard]] ReflectionMarker
+parse_reflection_marker(std::string_view source, std::size_t marker_offset) {
+    constexpr std::string_view c_marker_name = "FEI_REFLECT";
+    std::size_t position = marker_offset + c_marker_name.size();
+    while (position < source.size() &&
+           std::isspace(static_cast<unsigned char>(source[position]))) {
+        ++position;
+    }
+    if (position >= source.size() || source[position] != '(') {
+        throw std::runtime_error(
+            "FEI_REFLECT must be invoked with parentheses"
+        );
+    }
+
+    const std::size_t arguments_begin = ++position;
+    int depth = 1;
+    while (position < source.size() && depth > 0) {
+        if (source[position] == '(') {
+            ++depth;
+        } else if (source[position] == ')') {
+            --depth;
+        }
+        ++position;
+    }
+    if (depth != 0) {
+        throw std::runtime_error("Unterminated FEI_REFLECT invocation");
+    }
+
+    const std::size_t arguments_end = position - 1;
+    return ReflectionMarker {
+        .end_offset = position,
+        .tags = parse_reflection_tags(
+            source.substr(arguments_begin, arguments_end - arguments_begin)
+        ),
+    };
+}
+
+[[nodiscard]] bool only_trivia_between(
+    std::string_view source,
+    std::size_t begin,
+    std::size_t end
+) {
+    std::size_t position = begin;
+    while (position < end) {
+        if (std::isspace(static_cast<unsigned char>(source[position]))) {
+            ++position;
+            continue;
+        }
+        if (position + 1 < end && source[position] == '/' &&
+            source[position + 1] == '/') {
+            position += 2;
+            while (position < end && source[position] != '\n') {
+                ++position;
+            }
+            continue;
+        }
+        if (position + 1 < end && source[position] == '/' &&
+            source[position + 1] == '*') {
+            const auto comment_end = source.find("*/", position + 2);
+            if (comment_end == std::string_view::npos ||
+                comment_end + 2 > end) {
+                return false;
+            }
+            position = comment_end + 2;
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+void collect_reflection_markers(
+    CXCursor cursor,
+    TranslationUnitContext& context
+) {
+    visit_children(cursor, [&](CXCursor child, CXCursor) {
+        if (clang_getCursorKind(child) == CXCursor_MacroExpansion &&
+            cursor_spelling(child) == "FEI_REFLECT" &&
+            cursor_is_from_header(child, context)) {
+            if (const auto offset = cursor_offset(child)) {
+                auto marker = parse_reflection_marker(context.source, *offset);
+                context.reflection_markers.push_back(std::move(marker));
+            }
+        }
+        collect_reflection_markers(child, context);
+        return CXChildVisit_Continue;
+    });
+}
+
+[[nodiscard]] std::optional<std::vector<std::string>>
+reflection_tags_for(CXCursor cursor, const TranslationUnitContext& context) {
+    const auto declaration_offset = cursor_offset(cursor);
+    if (!declaration_offset) {
+        return std::nullopt;
+    }
+
+    for (auto marker = context.reflection_markers.rbegin();
+         marker != context.reflection_markers.rend();
+         ++marker) {
+        if (marker->end_offset > *declaration_offset) {
+            continue;
+        }
+        if (only_trivia_between(
+                context.source,
+                marker->end_offset,
+                *declaration_offset
+            )) {
+            return marker->tags;
+        }
+        break;
+    }
+    return std::nullopt;
 }
 
 [[nodiscard]] std::filesystem::path
@@ -143,7 +329,7 @@ void collect_translation_unit_dependencies(
     }
 
     CXFile file = nullptr;
-    clang_getFileLocation(location, &file, nullptr, nullptr, nullptr);
+    clang_getExpansionLocation(location, &file, nullptr, nullptr, nullptr);
     if (!file) {
         return std::nullopt;
     }
@@ -451,45 +637,6 @@ cursor_access(CXCursor cursor, std::string_view fallback) {
     return {};
 }
 
-[[nodiscard]] bool
-has_reflgen_attribute(CXCursor cursor, CXTranslationUnit translation_unit) {
-    bool found = false;
-    visit_children(cursor, [&](CXCursor child, CXCursor) {
-        const auto kind = clang_getCursorKind(child);
-        if (kind == CXCursor_AnnotateAttr &&
-            trim(cursor_spelling(child)) == "reflgen") {
-            found = true;
-            return CXChildVisit_Break;
-        }
-
-        if (kind == CXCursor_UnexposedAttr) {
-            CXToken* tokens = nullptr;
-            unsigned token_count = 0;
-            clang_tokenize(
-                translation_unit,
-                clang_getCursorExtent(child),
-                &tokens,
-                &token_count
-            );
-
-            std::string token_text;
-            for (unsigned i = 0; i < token_count; ++i) {
-                token_text += clang_string(
-                    clang_getTokenSpelling(translation_unit, tokens[i])
-                );
-            }
-            clang_disposeTokens(translation_unit, tokens, token_count);
-
-            if (contains(token_text, "reflgen")) {
-                found = true;
-                return CXChildVisit_Break;
-            }
-        }
-        return CXChildVisit_Continue;
-    });
-    return found;
-}
-
 [[nodiscard]] std::vector<ParamInfo> parameters_for(CXCursor cursor) {
     std::vector<ParamInfo> params;
     visit_children(cursor, [&](CXCursor child, CXCursor) {
@@ -506,8 +653,8 @@ has_reflgen_attribute(CXCursor cursor, CXTranslationUnit translation_unit) {
 
 [[nodiscard]] std::optional<EnumInfo>
 parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
-    if (!clang_isCursorDefinition(cursor) ||
-        !has_reflgen_attribute(cursor, context.translation_unit)) {
+    auto tags = reflection_tags_for(cursor, context);
+    if (!clang_isCursorDefinition(cursor) || !tags) {
         return std::nullopt;
     }
 
@@ -519,6 +666,7 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
     auto enum_info = EnumInfo {
         .name = qualified_name(cursor),
         .source_file = context.header_path,
+        .tags = std::move(*tags),
         .underlying_type =
             fully_qualified_type(clang_getEnumDeclIntegerType(cursor)),
         .is_scoped = clang_EnumDecl_isScoped(cursor) != 0,
@@ -551,8 +699,8 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
     }
 
     auto class_name = cursor_spelling(cursor);
-    if (class_name.empty() ||
-        !has_reflgen_attribute(cursor, context.translation_unit)) {
+    auto tags = reflection_tags_for(cursor, context);
+    if (class_name.empty() || !tags) {
         return std::nullopt;
     }
 
@@ -576,6 +724,7 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
     ClassInfo class_info {
         .name = std::move(qualified_class_name),
         .source_file = context.header_path,
+        .tags = std::move(*tags),
     };
 
     std::string current_access(default_access);
@@ -741,6 +890,16 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
         return output;
     }
 
+    std::ifstream source_file(header_path, std::ios::binary);
+    if (!source_file) {
+        std::cerr << "Warning: Failed to read " << header << '\n';
+        return output;
+    }
+    std::string source {
+        std::istreambuf_iterator<char> {source_file},
+        std::istreambuf_iterator<char> {}
+    };
+
     CXIndex index = clang_createIndex(0, 0);
     std::vector<std::string> args =
         {"-x", "c++-header", "-std=c++23", "-DFEI_REFLGEN_SCRIPT"};
@@ -762,7 +921,7 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
         static_cast<int>(c_args.size()),
         nullptr,
         0,
-        CXTranslationUnit_None
+        CXTranslationUnit_DetailedPreprocessingRecord
     );
 
     if (!translation_unit) {
@@ -791,7 +950,18 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
         .translation_unit = translation_unit,
         .header_path = header_path,
         .comparable_header_path = comparable_path(header_path),
+        .source = std::move(source),
     };
+
+    collect_reflection_markers(
+        clang_getTranslationUnitCursor(translation_unit),
+        context
+    );
+    std::ranges::sort(
+        context.reflection_markers,
+        {},
+        &ReflectionMarker::end_offset
+    );
 
     collect_translation_unit_dependencies(
         translation_unit,

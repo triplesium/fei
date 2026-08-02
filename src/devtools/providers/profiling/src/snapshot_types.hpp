@@ -9,7 +9,8 @@
 
 namespace fei::devtools::profiling {
 
-struct FEI_REFLECT FrameStatsSnapshot {
+FEI_REFLECT()
+struct FrameStatsSnapshot {
     bool available {false};
     std::uint64_t frame_count {0};
     double fps {0.0};
@@ -17,7 +18,8 @@ struct FEI_REFLECT FrameStatsSnapshot {
     double average_frame_ms {0.0};
 };
 
-struct FEI_REFLECT SummaryEntrySnapshot {
+FEI_REFLECT()
+struct SummaryEntrySnapshot {
     std::uint64_t schedule_id {0};
     std::string schedule_name;
     std::string name;
@@ -33,24 +35,28 @@ struct FEI_REFLECT SummaryEntrySnapshot {
     double max_ms {0.0};
 };
 
-struct FEI_REFLECT SummarySnapshot {
+FEI_REFLECT()
+struct SummarySnapshot {
     bool available {false};
     FrameStatsSnapshot frame_stats;
     std::vector<SummaryEntrySnapshot> systems;
     std::vector<SummaryEntrySnapshot> zones;
 };
 
-struct FEI_REFLECT FrameHistorySampleSnapshot {
+FEI_REFLECT()
+struct FrameHistorySampleSnapshot {
     std::uint64_t frame {0};
     double duration_ms {0.0};
 };
 
-struct FEI_REFLECT FrameHistorySnapshot {
+FEI_REFLECT()
+struct FrameHistorySnapshot {
     bool available {false};
     std::vector<FrameHistorySampleSnapshot> frames;
 };
 
-struct FEI_REFLECT GpuSummaryEntrySnapshot {
+FEI_REFLECT()
+struct GpuSummaryEntrySnapshot {
     std::string name;
     std::uint64_t count {0};
     double latest_ms {0.0};
@@ -60,7 +66,8 @@ struct FEI_REFLECT GpuSummaryEntrySnapshot {
     double max_ms {0.0};
 };
 
-struct FEI_REFLECT GpuSummarySnapshot {
+FEI_REFLECT()
+struct GpuSummarySnapshot {
     bool available {false};
     std::vector<GpuSummaryEntrySnapshot> entries;
 };

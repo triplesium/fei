@@ -22,7 +22,8 @@ inline constexpr std::size_t c_max_type_selector_length = 256;
 inline constexpr std::size_t c_max_query_response_bytes =
     std::size_t {4} * 1024 * 1024;
 
-struct FEI_REFLECT QueryRequest {
+FEI_REFLECT()
+struct QueryRequest {
     std::vector<std::string> components;
     std::vector<std::string> with;
     std::vector<std::string> without;

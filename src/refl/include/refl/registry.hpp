@@ -334,6 +334,9 @@ class Registry {
     ContainerAdapter& get_container_adapter(TypeId id);
     Result<ContainerAdapter&, RegistryError>
     try_get_container_adapter(TypeId id);
+    Type& add_generated_tag(TypeId type_id, std::string tag);
+    Optional<std::string_view> tag_name(TypeTagId tag) const;
+    std::vector<TypeId> types_with_tag(TypeTagId tag) const;
     bool has_enum(TypeId id) const;
     void clear_generated_metadata();
 
@@ -346,6 +349,12 @@ class Registry {
         register_type<T>();
         TypeId id = type_id<T>();
         return add_cls(id);
+    }
+
+    template<typename T>
+    Type& add_generated_tag(std::string tag) {
+        auto& registered = register_type<T>();
+        return add_generated_tag(registered.id(), std::move(tag));
     }
 
     template<typename T>
@@ -612,6 +621,7 @@ class Registry {
 
     std::unordered_map<TypeId, Type> m_types;
     std::unordered_map<std::string, TypeId> m_type_ids_by_name;
+    std::unordered_map<TypeTagId, std::string> m_tag_names;
     std::unordered_map<TypeId, Cls> m_classes;
     std::unordered_map<TypeId, Enum> m_enums;
     std::unordered_map<TypeId, GenericType> m_generic_types;
