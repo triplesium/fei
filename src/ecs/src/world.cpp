@@ -89,6 +89,18 @@ Entity World::entity() {
     return entity;
 }
 
+bool World::mark_component_changed(Entity entity, TypeId type_id) {
+    if (!has_entity(entity) || !has_component(entity, type_id)) {
+        return false;
+    }
+
+    const auto location = m_entities.get_location(entity);
+    m_archetypes.get(location.archetype_id)
+        .component_ticks(type_id, location.row)
+        .mark_changed(increment_change_tick());
+    return true;
+}
+
 void World::add_component(Entity entity, Ref ref) {
     if (ref && ref.type_id() == type_id<ChildOf>()) {
         set_parent(entity, ref.get_const<ChildOf>().parent);

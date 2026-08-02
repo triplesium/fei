@@ -124,5 +124,6 @@ add_cxxflags("cl::/Zc:preprocessor")
 
 includes("tools")
 includes("src")
+includes("editor")
 includes("samples")
 includes("tests")

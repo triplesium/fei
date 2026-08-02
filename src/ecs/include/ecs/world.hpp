@@ -112,6 +112,7 @@ class World {
     }
     Ref get_component(Entity entity, TypeId type_id);
     Ref get_component(Entity entity, TypeId type_id) const;
+    bool mark_component_changed(Entity entity, TypeId type_id);
     template<typename T>
     const T& get_component(Entity entity) {
         return static_cast<const World&>(*this).get_component<T>(entity);
@@ -132,6 +133,11 @@ class World {
             archetype.component_ticks(type_id<U>(), location.row),
             m_change_tick
         );
+    }
+
+    template<typename T>
+    bool mark_component_changed(Entity entity) {
+        return mark_component_changed(entity, type_id<T>());
     }
 
     bool has_entity(Entity entity) const { return m_entities.contains(entity); }

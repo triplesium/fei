@@ -110,6 +110,38 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "ECS dynamic mutations can explicitly mark components changed",
+    "[ecs][change_detection][world]"
+) {
+    World world;
+    prepare_change_detection_world(world);
+
+    const Entity entity = world.entity();
+    world.add_component(entity, Position(1.0f, 2.0f));
+
+    std::vector<std::size_t> changed_counts;
+    world.add_systems(
+        TestSchedule,
+        [&changed_counts](
+            Query<const Position>::Filter<Changed<Position>> query
+        ) {
+            changed_counts.push_back(query.size());
+        }
+    );
+    world.run_schedule(TestSchedule);
+    world.run_schedule(TestSchedule);
+
+    auto position = world.get_component(entity, type_id<Position>());
+    REQUIRE(position);
+    position.get<Position>().x = 5.0f;
+    REQUIRE(world.mark_component_changed(entity, type_id<Position>()));
+    REQUIRE_FALSE(world.mark_component_changed(entity, type_id<Velocity>()));
+    world.run_schedule(TestSchedule);
+
+    REQUIRE(changed_counts == std::vector<std::size_t> {1, 0, 1});
+}
+
+TEST_CASE(
     "ECS writable component proxies mark only mutable access",
     "[ecs][change_detection]"
 ) {
