@@ -1,6 +1,6 @@
 #include "ecs/world.hpp"
 #include "editor/activity.hpp"
-#include "editor/component_registry.hpp"
+#include "editor/component_operations.hpp"
 #include "refl/cls.hpp"
 #include "refl/registry.hpp"
 #include "serialization/node.hpp"
@@ -19,6 +19,8 @@ struct TestComponent {
     int value {7};
 };
 
+struct UntaggedType {};
+
 struct EncodedValue {};
 
 void register_test_component() {
@@ -26,34 +28,31 @@ void register_test_component() {
         "value",
         &TestComponent::value
     );
+    Registry::instance().add_generated_tag<TestComponent>("Component");
 }
 
 } // namespace
 
 TEST_CASE(
-    "Editor component registry performs generic component mutations",
+    "Editor component operations use reflected Component tags",
     "[editor][components]"
 ) {
     register_test_component();
-    ComponentRegistry components;
-    REQUIRE(components.register_component<TestComponent>("Test Component"));
-    REQUIRE_FALSE(
-        components.register_component<TestComponent>("Test Component")
-    );
+    ComponentOperations operations;
 
     World world;
     const auto entity = world.entity();
 
-    REQUIRE(components.add_default(world, entity, type_id<TestComponent>()));
+    REQUIRE(operations.add_default(world, entity, type_id<TestComponent>()));
     REQUIRE(world.has_component<TestComponent>(entity));
     REQUIRE(world.get_component<TestComponent>(entity).value == 7);
 
     auto snapshot =
-        components.serialize(world, entity, type_id<TestComponent>());
+        operations.serialize(world, entity, type_id<TestComponent>());
     REQUIRE(snapshot);
     REQUIRE(snapshot->is_object());
 
-    auto set_result = components.set(
+    auto set_result = operations.set(
         world,
         entity,
         type_id<TestComponent>(),
@@ -67,8 +66,24 @@ TEST_CASE(
     REQUIRE(set_result);
     REQUIRE(world.get_component<TestComponent>(entity).value == 42);
 
-    REQUIRE(components.remove(world, entity, type_id<TestComponent>()));
+    REQUIRE(operations.remove(world, entity, type_id<TestComponent>()));
     REQUIRE_FALSE(world.has_component<TestComponent>(entity));
+}
+
+TEST_CASE(
+    "Editor component operations reject untagged reflected types",
+    "[editor][components]"
+) {
+    Registry::instance().register_type<UntaggedType>();
+    ComponentOperations operations;
+    World world;
+    const auto entity = world.entity();
+
+    const auto result =
+        operations.add_default(world, entity, type_id<UntaggedType>());
+    REQUIRE_FALSE(result);
+    REQUIRE(result.error().kind == ComponentError::Kind::NotComponent);
+    REQUIRE_FALSE(world.has_component<UntaggedType>(entity));
 }
 
 TEST_CASE("Editor activity log remains bounded", "[editor][activity]") {
@@ -92,8 +107,8 @@ TEST_CASE(
     "[editor][components][preview]"
 ) {
     Registry::instance().register_type<EncodedValue>();
-    ComponentRegistry components;
-    REQUIRE(components.codecs().register_codec<EncodedValue>(ValueCodec {
+    ComponentOperations operations;
+    REQUIRE(operations.codecs().register_codec<EncodedValue>(ValueCodec {
         .encode = [](Ref, std::string_view)
             -> Result<SerializedNode, SerializeError> {
             return SerializedNode::object({
@@ -110,7 +125,7 @@ TEST_CASE(
     }));
 
     EncodedValue value;
-    auto preview = components.preview(Ref(value));
+    auto preview = operations.preview(Ref(value));
     REQUIRE(preview);
     REQUIRE(*preview == "images/face.png");
 }

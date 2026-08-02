@@ -1,5 +1,9 @@
+#include "ecs/type_tags.hpp"
 #include "graphics/resource.hpp"
 #include "math/common.hpp"
+#include "refl/generated.hpp"
+#include "refl/registry.hpp"
+#include "sprite/components.hpp"
 #include "sprite/output.hpp"
 #include "sprite/renderer.hpp"
 #include "test_graphics_device.hpp"
@@ -23,6 +27,17 @@ void check_position(const Vector2& actual, float x, float y) {
 }
 
 } // namespace
+
+TEST_CASE(
+    "Generated reflection tags 2D rendering components",
+    "[sprite][refl][tag]"
+) {
+    register_generated_reflection();
+    auto& registry = Registry::instance();
+
+    CHECK(registry.get_type<Camera2d>().has_tag(ComponentTypeTag));
+    CHECK(registry.get_type<Sprite>().has_tag(ComponentTypeTag));
+}
 
 TEST_CASE("Camera2d projection preserves vertical size", "[sprite][camera]") {
     const Camera2d camera {.vertical_size = 10.0f};

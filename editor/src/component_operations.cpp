@@ -1,10 +1,11 @@
-#include "editor/component_registry.hpp"
+#include "editor/component_operations.hpp"
 
+#include "ecs/type_tags.hpp"
 #include "ecs/world.hpp"
+#include "refl/registry.hpp"
 #include "refl/val.hpp"
 #include "serialization/json_archive.hpp"
 
-#include <algorithm>
 #include <utility>
 
 namespace fei::editor {
@@ -23,6 +24,27 @@ ComponentError make_error(
         .type = type,
         .message = std::move(message),
     };
+}
+
+Result<Type*, ComponentError> component_type(Entity entity, TypeId type) {
+    auto reflected_type = Registry::instance().try_get_type(type);
+    if (!reflected_type) {
+        return failure(make_error(
+            ComponentError::Kind::TypeNotFound,
+            entity,
+            type,
+            reflected_type.error().message
+        ));
+    }
+    if (!reflected_type->has_tag(ComponentTypeTag)) {
+        return failure(make_error(
+            ComponentError::Kind::NotComponent,
+            entity,
+            type,
+            "Reflected type is not tagged as a Component"
+        ));
+    }
+    return &*reflected_type;
 }
 
 std::string node_preview(const serialization::SerializedNode& node) {
@@ -57,21 +79,7 @@ std::string node_preview(const serialization::SerializedNode& node) {
 
 } // namespace
 
-bool ComponentRegistry::register_component(TypeId type, std::string name) {
-    if (!type || name.empty() || find(type) != nullptr) {
-        return false;
-    }
-    m_entries.push_back(ComponentInfo {.type = type, .name = std::move(name)});
-    std::ranges::sort(m_entries, {}, &ComponentInfo::name);
-    return true;
-}
-
-const ComponentInfo* ComponentRegistry::find(TypeId type) const {
-    const auto entry = std::ranges::find(m_entries, type, &ComponentInfo::type);
-    return entry == m_entries.end() ? nullptr : &*entry;
-}
-
-Optional<std::string> ComponentRegistry::preview(Ref value) const {
+Optional<std::string> ComponentOperations::preview(Ref value) const {
     if (!value) {
         return nullopt;
     }
@@ -87,16 +95,14 @@ Optional<std::string> ComponentRegistry::preview(Ref value) const {
     return node_preview(*node);
 }
 
-Status<ComponentError>
-ComponentRegistry::add_default(World& world, Entity entity, TypeId type) const {
-    const auto* component = find(type);
-    if (!component) {
-        return failure(make_error(
-            ComponentError::Kind::NotRegistered,
-            entity,
-            type,
-            "Component type is not registered with the editor"
-        ));
+Status<ComponentError> ComponentOperations::add_default(
+    World& world,
+    Entity entity,
+    TypeId type
+) const {
+    auto reflected_type = component_type(entity, type);
+    if (!reflected_type) {
+        return failure(std::move(reflected_type.error()));
     }
     if (!world.has_entity(entity)) {
         return failure(make_error(
@@ -109,39 +115,26 @@ ComponentRegistry::add_default(World& world, Entity entity, TypeId type) const {
     if (world.has_component(entity, type)) {
         return {};
     }
-
-    auto reflected_type = Registry::instance().try_get_type(type);
-    if (!reflected_type) {
-        return failure(make_error(
-            ComponentError::Kind::TypeNotFound,
-            entity,
-            type,
-            reflected_type.error().message
-        ));
-    }
-    if (!reflected_type->default_constructible()) {
+    if (!(*reflected_type)->default_constructible()) {
         return failure(make_error(
             ComponentError::Kind::NotDefaultConstructible,
             entity,
             type,
-            "Component '" + component->name + "' is not default constructible"
+            "Component '" + (*reflected_type)->stripped_name() +
+                "' is not default constructible"
         ));
     }
 
-    auto value = Val::default_construct(*reflected_type);
+    auto value = Val::default_construct(**reflected_type);
     world.add_component(entity, value.ref());
     return {};
 }
 
 Status<ComponentError>
-ComponentRegistry::remove(World& world, Entity entity, TypeId type) const {
-    if (!find(type)) {
-        return failure(make_error(
-            ComponentError::Kind::NotRegistered,
-            entity,
-            type,
-            "Component type is not registered with the editor"
-        ));
+ComponentOperations::remove(World& world, Entity entity, TypeId type) const {
+    auto reflected_type = component_type(entity, type);
+    if (!reflected_type) {
+        return failure(std::move(reflected_type.error()));
     }
     if (!world.has_entity(entity)) {
         return failure(make_error(
@@ -165,18 +158,14 @@ ComponentRegistry::remove(World& world, Entity entity, TypeId type) const {
 }
 
 Result<serialization::SerializedNode, ComponentError>
-ComponentRegistry::serialize(
+ComponentOperations::serialize(
     const World& world,
     Entity entity,
     TypeId type
 ) const {
-    if (!find(type)) {
-        return failure(make_error(
-            ComponentError::Kind::NotRegistered,
-            entity,
-            type,
-            "Component type is not registered with the editor"
-        ));
+    auto reflected_type = component_type(entity, type);
+    if (!reflected_type) {
+        return failure(std::move(reflected_type.error()));
     }
     if (!world.has_entity(entity)) {
         return failure(make_error(
@@ -210,19 +199,15 @@ ComponentRegistry::serialize(
     return std::move(*node);
 }
 
-Status<ComponentError> ComponentRegistry::set(
+Status<ComponentError> ComponentOperations::set(
     World& world,
     Entity entity,
     TypeId type,
     const serialization::SerializedNode& node
 ) const {
-    if (!find(type)) {
-        return failure(make_error(
-            ComponentError::Kind::NotRegistered,
-            entity,
-            type,
-            "Component type is not registered with the editor"
-        ));
+    auto reflected_type = component_type(entity, type);
+    if (!reflected_type) {
+        return failure(std::move(reflected_type.error()));
     }
     if (!world.has_entity(entity)) {
         return failure(make_error(

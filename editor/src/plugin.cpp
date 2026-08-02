@@ -11,9 +11,10 @@
 #include "ecs/hierarchy.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
+#include "ecs/type_tags.hpp"
 #include "ecs/world.hpp"
 #include "editor/activity.hpp"
-#include "editor/component_registry.hpp"
+#include "editor/component_operations.hpp"
 #include "imgui/plugin.hpp"
 #include "imgui/renderer.hpp"
 #include "refl/cls.hpp"
@@ -64,6 +65,40 @@ std::string reflected_type_name(TypeId type) {
     auto reflected_type = Registry::instance().try_get_type(type);
     return reflected_type ? reflected_type->stripped_name() :
                             "Type " + std::to_string(type.id());
+}
+
+struct ReflectedComponent {
+    TypeId type;
+    std::string name;
+    bool default_constructible {false};
+};
+
+std::vector<ReflectedComponent>
+reflected_components(const std::vector<TypeId>& types) {
+    std::vector<ReflectedComponent> components;
+    components.reserve(types.size());
+    for (const auto type : types) {
+        auto reflected_type = Registry::instance().try_get_type(type);
+        if (!reflected_type || !reflected_type->has_tag(ComponentTypeTag)) {
+            continue;
+        }
+        components.push_back(
+            ReflectedComponent {
+                .type = type,
+                .name = reflected_type->stripped_name(),
+                .default_constructible =
+                    reflected_type->default_constructible(),
+            }
+        );
+    }
+    std::ranges::sort(components, {}, &ReflectedComponent::name);
+    return components;
+}
+
+std::vector<ReflectedComponent> reflected_components() {
+    return reflected_components(
+        Registry::instance().types_with_tag(ComponentTypeTag)
+    );
 }
 
 void initialize_style(EditorUiState& state) {
@@ -248,13 +283,13 @@ bool draw_reflected_value(
     Ref value,
     std::string_view label,
     int depth,
-    const ComponentRegistry& components
+    const ComponentOperations& operations
 );
 
 bool draw_reflected_object(
     Ref value,
     int depth,
-    const ComponentRegistry& components
+    const ComponentOperations& operations
 ) {
     if (depth > 8) {
         ImGui::TextDisabled("Reflection depth limit reached");
@@ -282,7 +317,7 @@ bool draw_reflected_object(
             *property_value,
             property->name(),
             depth + 1,
-            components
+            operations
         );
     }
     return changed;
@@ -292,7 +327,7 @@ bool draw_reflected_value(
     Ref value,
     std::string_view label,
     int depth,
-    const ComponentRegistry& components
+    const ComponentOperations& operations
 ) {
     const std::string label_string(label);
     ImGui::PushID(label_string.c_str());
@@ -314,7 +349,7 @@ bool draw_reflected_value(
     } else if (auto* data = value.try_get<unsigned int>()) {
         draw_field_label(label);
         changed = ImGui::DragScalar("##value", ImGuiDataType_U32, data, 0.1f);
-    } else if (auto preview = components.preview(value)) {
+    } else if (auto preview = operations.preview(value)) {
         draw_field_label(label);
         ImGui::TextUnformatted(preview->c_str());
     } else if (Registry::instance().try_get_cls(value.type_id())) {
@@ -322,7 +357,7 @@ bool draw_reflected_value(
             ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
         const bool open = ImGui::TreeNodeEx(label_string.c_str(), flags);
         if (open) {
-            changed = draw_reflected_object(value, depth, components);
+            changed = draw_reflected_object(value, depth, operations);
             ImGui::TreePop();
         }
     } else {
@@ -338,11 +373,11 @@ void record_component_result(
     ActivityLog& activity,
     std::string action,
     Entity entity,
-    const ComponentInfo& component,
+    std::string_view component_name,
     const Status<ComponentError>& result
 ) {
     const auto detail = "Entity " + std::to_string(entity) + " / " +
-                        component.name +
+                        std::string(component_name) +
                         (result ? "" : ": " + result.error().message);
     activity.record(
         OperationSource::User,
@@ -355,7 +390,7 @@ void record_component_result(
 void draw_inspector(
     World& world,
     Selection& selection,
-    const ComponentRegistry& components,
+    const ComponentOperations& operations,
     ActivityLog& activity
 ) {
     if (!ImGui::Begin("Inspector")) {
@@ -375,10 +410,11 @@ void draw_inspector(
     ImGui::Separator();
 
     Optional<TypeId> pending_remove;
-    for (const auto& component : components.entries()) {
-        if (!world.has_component(entity, component.type)) {
-            continue;
-        }
+    const auto location = world.entity_location(entity);
+    const auto component_list = reflected_components(
+        world.archetypes().get(location->archetype_id).components()
+    );
+    for (const auto& component : component_list) {
 
         ImGui::PushID(static_cast<int>(component.type.id()));
         const bool open = ImGui::CollapsingHeader(
@@ -391,7 +427,7 @@ void draw_inspector(
         }
         if (open) {
             auto value = world.get_component(entity, component.type);
-            if (draw_reflected_object(value, 0, components)) {
+            if (draw_reflected_object(value, 0, operations)) {
                 world.mark_component_changed(entity, component.type);
                 activity.record(
                     OperationSource::User,
@@ -405,35 +441,38 @@ void draw_inspector(
     }
 
     if (pending_remove) {
-        const auto* component = components.find(*pending_remove);
-        const auto result = components.remove(world, entity, *pending_remove);
-        if (component) {
-            record_component_result(
-                activity,
-                "RemoveComponent",
-                entity,
-                *component,
-                result
-            );
-        }
+        const auto component_name = reflected_type_name(*pending_remove);
+        const auto result = operations.remove(world, entity, *pending_remove);
+        record_component_result(
+            activity,
+            "RemoveComponent",
+            entity,
+            component_name,
+            result
+        );
     }
 
     if (ImGui::Button("Add Component")) {
         ImGui::OpenPopup("add_component");
     }
     if (ImGui::BeginPopup("add_component")) {
-        for (const auto& component : components.entries()) {
+        for (const auto& component : reflected_components()) {
             if (world.has_component(entity, component.type)) {
                 continue;
             }
-            if (ImGui::MenuItem(component.name.c_str())) {
+            if (ImGui::MenuItem(
+                    component.name.c_str(),
+                    nullptr,
+                    false,
+                    component.default_constructible
+                )) {
                 const auto result =
-                    components.add_default(world, entity, component.type);
+                    operations.add_default(world, entity, component.type);
                 record_component_result(
                     activity,
                     "AddComponent",
                     entity,
-                    component,
+                    component.name,
                     result
                 );
             }
@@ -490,8 +529,7 @@ void draw_scene(
 
 void draw_activity(
     const ActivityLog& activity,
-    const ExternalAgentStatus& agent,
-    const ComponentRegistry& components
+    const ExternalAgentStatus& agent
 ) {
     if (!ImGui::Begin("Agent Activity")) {
         ImGui::End();
@@ -507,10 +545,9 @@ void draw_activity(
         connected ? "External agent connected" : "External agent disconnected"
     );
     ImGui::SameLine();
-    ImGui::TextDisabled(
-        "| generic component API: %zu types",
-        components.entries().size()
-    );
+    const auto component_count =
+        Registry::instance().types_with_tag(ComponentTypeTag).size();
+    ImGui::TextDisabled("| generic component API: %zu types", component_count);
     ImGui::Separator();
 
     if (ImGui::BeginTable(
@@ -572,8 +609,8 @@ void draw_editor(WorldRef world_ref) {
     auto& activity = world.resource<ActivityLog>();
     auto& output = world.resource<SpriteOutput>();
     auto& textures = world.resource<ImGuiTextureRegistry>();
-    const auto& components =
-        static_cast<const World&>(world).resource<ComponentRegistry>();
+    const auto& operations =
+        static_cast<const World&>(world).resource<ComponentOperations>();
     const auto& agent =
         static_cast<const World&>(world).resource<ExternalAgentStatus>();
 
@@ -592,13 +629,13 @@ void draw_editor(WorldRef world_ref) {
         draw_hierarchy(world, selection, activity);
     }
     if (state.show_inspector) {
-        draw_inspector(world, selection, components, activity);
+        draw_inspector(world, selection, operations, activity);
     }
     if (state.show_scene) {
         draw_scene(output, textures, state);
     }
     if (state.show_activity) {
-        draw_activity(activity, agent, components);
+        draw_activity(activity, agent);
     }
 }
 
@@ -655,18 +692,15 @@ void EditorPlugin::setup(App& app) {
         fatal("EditorPlugin requires SpritePlugin texture output mode");
     }
 
-    app.add_resource(ComponentRegistry {})
+    app.add_resource(ComponentOperations {})
         .add_resource(ActivityLog {})
         .add_resource(ExternalAgentStatus {})
         .add_resource(Selection {})
         .add_resource(EditorUiState {});
 
-    auto& components = app.resource<ComponentRegistry>();
-    components.register_component<Transform2d>("Transform 2D");
-    components.register_component<Camera2d>("Camera 2D");
-    components.register_component<Sprite>("Sprite");
+    auto& operations = app.resource<ComponentOperations>();
     if (!register_asset_handle_codec<Image>(
-            components.codecs(),
+            operations.codecs(),
             app.resource<AssetServer>(),
             app.resource<Assets<Image>>()
         )) {
