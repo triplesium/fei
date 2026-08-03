@@ -10,6 +10,7 @@ namespace fei {
 
 struct AssetsPluginConfig {
     std::filesystem::path project_asset_root;
+    std::filesystem::path import_cache_root;
 };
 
 class AssetsPlugin : public Plugin {

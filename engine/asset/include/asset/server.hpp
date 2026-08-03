@@ -1,6 +1,7 @@
 #pragma once
 #include "app/app.hpp"
 #include "asset/assets.hpp"
+#include "asset/database.hpp"
 #include "asset/loader.hpp"
 #include "asset/path.hpp"
 #include "asset/request.hpp"
@@ -43,6 +44,15 @@ class AssetServer {
     std::string m_default_source;
     std::unordered_map<std::string, std::unique_ptr<AssetSource>> m_sources;
     std::unordered_map<TypeId, AssetTypeAccess> m_asset_types;
+
+    [[nodiscard]] Optional<std::filesystem::path>
+    imported_artifact_for(const AssetPath& path, std::string_view kind) const {
+        if (kind.empty() || !path.source() || *path.source() != "project" ||
+            !m_app->has_resource<AssetDatabase>()) {
+            return nullopt;
+        }
+        return m_app->resource<AssetDatabase>().artifact_path(path, kind);
+    }
 
   public:
     explicit AssetServer(App* app, std::string default_source = "project") :
@@ -159,12 +169,25 @@ class AssetServer {
             ));
         }
         SyncLoadContext context(*this, asset_path);
-        auto reader = source->try_get_reader(asset_path.path());
+        const auto artifact =
+            imported_artifact_for(asset_path, loader->artifact_kind());
+        auto reader = artifact ?
+                          [&]() -> Result<Reader, std::string> {
+            auto imported = Reader::from_file(*artifact);
+            if (!imported) {
+                return failure(std::move(imported.error().message));
+            }
+            return std::move(*imported);
+        }() :
+                          source->try_get_reader(asset_path.path());
         if (!reader) {
             return assets.add_failed(AssetLoadError(
                 asset_path,
-                "Failed to read asset from source '" + source_name +
-                    "': " + reader.error()
+                artifact ?
+                    "Failed to read imported artifact '" + artifact->string() +
+                        "': " + reader.error() :
+                    "Failed to read asset from source '" + source_name +
+                        "': " + reader.error()
             ));
         }
         return assets.load(*reader, context);
@@ -225,21 +248,39 @@ class AssetServer {
         auto load_requests = m_app->has_resource<AssetLoadRequests>() ?
                                  m_app->resource<AssetLoadRequests>().sender() :
                                  std::shared_ptr<AssetLoadRequestSender> {};
+        const auto artifact =
+            imported_artifact_for(asset_path, loader->artifact_kind());
         struct LoadTaskResult {
             AssetLoadResult<T> result;
             std::vector<AssetKey> dependencies;
             std::vector<AssetPath> loader_dependencies;
         };
         m_app->resource<Tasks>().general().submit(
-            [source, loader, source_name, asset_path, load_requests]() mutable
-                -> LoadTaskResult {
-                auto reader = source->try_get_reader(asset_path.path());
+            [source,
+             loader,
+             source_name,
+             asset_path,
+             artifact,
+             load_requests]() mutable -> LoadTaskResult {
+                auto reader = artifact ?
+                                  [&]() -> Result<Reader, std::string> {
+                    auto imported = Reader::from_file(*artifact);
+                    if (!imported) {
+                        return failure(std::move(imported.error().message));
+                    }
+                    return std::move(*imported);
+                }() :
+                                  source->try_get_reader(asset_path.path());
                 if (!reader) {
                     return {
                         .result = failure(AssetLoadError(
                             asset_path,
-                            "Failed to read asset from source '" + source_name +
-                                "': " + reader.error()
+                            artifact ?
+                                "Failed to read imported artifact '" +
+                                    artifact->string() +
+                                    "': " + reader.error() :
+                                "Failed to read asset from source '" +
+                                    source_name + "': " + reader.error()
                         )),
                         .dependencies = {},
                         .loader_dependencies = {},

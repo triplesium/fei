@@ -3,6 +3,8 @@
 #include "app/app.hpp"
 #include "app/reflection_plugin.hpp"
 #include "asset/assets.hpp"
+#include "asset/database.hpp"
+#include "asset/importer.hpp"
 #include "asset/serialization.hpp"
 #include "asset/server.hpp"
 #include "base/log.hpp"
@@ -31,8 +33,10 @@
 #include "sprite/plugin.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdint>
+#include <filesystem>
 #include <format>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -59,6 +63,9 @@ struct EditorUiState {
     bool show_inspector {true};
     bool show_assets {true};
     bool show_activity {true};
+    std::array<char, 1024> import_source {};
+    std::array<char, 512> import_destination {};
+    Optional<std::string> import_error;
 };
 
 const char* operation_source_name(OperationSource source) {
@@ -538,6 +545,166 @@ std::string asset_size_label(std::uintmax_t size) {
                        std::format("{:.1f} {}", value, units[unit]);
 }
 
+const char* asset_import_state_label(AssetImportState state) {
+    switch (state) {
+        case AssetImportState::Unimported:
+            return "Unimported";
+        case AssetImportState::Imported:
+            return "Imported";
+        case AssetImportState::Failed:
+            return "Failed";
+    }
+    return "Unknown";
+}
+
+template<std::size_t Size>
+void set_text_buffer(std::array<char, Size>& buffer, std::string_view value) {
+    const auto length = std::min(value.size(), buffer.size() - 1);
+    std::ranges::copy_n(value.begin(), length, buffer.begin());
+    buffer[length] = '\0';
+}
+
+void draw_import_popup(
+    AssetBrowser& browser,
+    const AssetImporterRegistry& importers,
+    AssetDatabase& database,
+    ActivityLog& activity,
+    EditorUiState& state
+) {
+    if (!ImGui::BeginPopupModal(
+            "Import Asset",
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize
+        )) {
+        return;
+    }
+
+    ImGui::TextUnformatted("Copy an external file into this project.");
+    ImGui::SetNextItemWidth(560.0f);
+    if (ImGui::InputTextWithHint(
+            "Source file",
+            "Absolute or relative filesystem path",
+            state.import_source.data(),
+            state.import_source.size()
+        )) {
+        state.import_error = nullopt;
+        if (state.import_destination.front() == '\0') {
+            const auto filename =
+                std::filesystem::path(state.import_source.data())
+                    .filename()
+                    .generic_string();
+            if (!filename.empty()) {
+                auto destination =
+                    AssetPath(browser.current_directory().path() / filename);
+                if (browser.current_directory().source()) {
+                    destination = destination.with_source(
+                        *browser.current_directory().source()
+                    );
+                }
+                set_text_buffer(
+                    state.import_destination,
+                    destination.as_string()
+                );
+            }
+        }
+    }
+    ImGui::SetNextItemWidth(560.0f);
+    if (ImGui::InputTextWithHint(
+            "Destination",
+            "project://textures/example.png",
+            state.import_destination.data(),
+            state.import_destination.size()
+        )) {
+        state.import_error = nullopt;
+    }
+
+    if (state.import_error) {
+        ImGui::PushTextWrapPos(580.0f);
+        ImGui::TextColored(
+            ImVec4 {0.95f, 0.35f, 0.35f, 1.0f},
+            "%s",
+            state.import_error->c_str()
+        );
+        ImGui::PopTextWrapPos();
+    }
+
+    const bool has_request = state.import_source.front() != '\0' &&
+                             state.import_destination.front() != '\0';
+    ImGui::BeginDisabled(!has_request);
+    if (ImGui::Button("Import")) {
+        auto result = import_asset(
+            AssetImportRequest {
+                .source_file =
+                    std::filesystem::path(state.import_source.data()),
+                .destination = AssetPath(state.import_destination.data()),
+                .settings = {},
+            },
+            importers,
+            database
+        );
+        if (result) {
+            activity.record(
+                OperationSource::User,
+                "ImportAsset",
+                result->path.as_string()
+            );
+            browser.request_refresh();
+            state.import_source.fill('\0');
+            state.import_destination.fill('\0');
+            state.import_error = nullopt;
+            ImGui::CloseCurrentPopup();
+        } else {
+            state.import_error = result.error().message;
+            activity.record(
+                OperationSource::User,
+                "ImportAsset",
+                result.error().destination.as_string() + ": " +
+                    result.error().message,
+                false
+            );
+        }
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+        state.import_error = nullopt;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+void auto_import_project_assets(
+    const AssetImporterRegistry& importers,
+    AssetDatabase& database,
+    ActivityLog& activity
+) {
+    auto report = import_pending_assets(importers, database);
+    if (!report) {
+        activity.record(
+            OperationSource::Editor,
+            "DiscoverAssets",
+            report.error(),
+            false
+        );
+        return;
+    }
+    for (const auto& imported : report->imported) {
+        activity.record(
+            OperationSource::Editor,
+            "AutoImportAsset",
+            imported.path.as_string()
+        );
+    }
+    for (const auto& failed : report->failed) {
+        activity.record(
+            OperationSource::Editor,
+            "AutoImportAsset",
+            failed.destination.as_string() + ": " + failed.message,
+            false
+        );
+    }
+}
+
 bool is_previewable_image(const AssetEntry& entry) {
     if (entry.kind != AssetEntryKind::File) {
         return false;
@@ -636,8 +803,11 @@ bool draw_asset_breadcrumb(AssetBrowser& browser) {
 }
 
 void draw_asset_details(
-    const AssetBrowser& browser,
+    AssetBrowser& browser,
     AssetServer& asset_server,
+    const AssetImporterRegistry& importers,
+    AssetDatabase& database,
+    ActivityLog& activity,
     const Assets<Image>& images,
     RenderAssets<GpuImage>& gpu_images,
     ImGuiTextureRegistry& textures,
@@ -658,6 +828,81 @@ void draw_asset_details(
             "| Size: %s",
             asset_size_label(selected->size).c_str()
         );
+
+        const auto import_state = database.state(selected->path);
+        ImGui::TextDisabled(
+            "Import status: %s",
+            asset_import_state_label(import_state)
+        );
+        if (const auto* metadata = database.metadata(selected->path)) {
+            ImGui::TextDisabled("ID: %s", metadata->id.as_string().c_str());
+            if (const auto* record = database.import_record(selected->path)) {
+                ImGui::TextDisabled(
+                    "Importer: %s v%u",
+                    metadata->importer.c_str(),
+                    record->importer_version
+                );
+                ImGui::TextDisabled(
+                    "Source hash: %s",
+                    record->source_hash.c_str()
+                );
+            } else {
+                ImGui::TextDisabled(
+                    "Importer: %s (waiting for import)",
+                    metadata->importer.c_str()
+                );
+            }
+        } else {
+            if (const auto import_error = database.error(selected->path)) {
+                ImGui::TextColored(
+                    ImVec4 {0.95f, 0.35f, 0.35f, 1.0f},
+                    "%s",
+                    import_error->c_str()
+                );
+            }
+            const auto* importer = importers.find_for(selected->path.path());
+            if (import_state == AssetImportState::Failed && importer &&
+                ImGui::Button("Retry Import")) {
+                auto source = database.resolve(selected->path);
+                if (!source) {
+                    activity.record(
+                        OperationSource::User,
+                        "ImportAsset",
+                        source.error(),
+                        false
+                    );
+                } else {
+                    auto result = import_asset(
+                        AssetImportRequest {
+                            .source_file = *source,
+                            .destination = selected->path,
+                            .settings = {},
+                        },
+                        importers,
+                        database
+                    );
+                    if (result) {
+                        activity.record(
+                            OperationSource::User,
+                            "ImportAsset",
+                            result->path.as_string()
+                        );
+                        browser.request_refresh();
+                    } else {
+                        activity.record(
+                            OperationSource::User,
+                            "ImportAsset",
+                            result.error().destination.as_string() + ": " +
+                                result.error().message,
+                            false
+                        );
+                    }
+                }
+            }
+            if (!importer) {
+                ImGui::TextDisabled("No importer registered for this type");
+            }
+        }
     }
 
     if (!is_previewable_image(*selected)) {
@@ -709,6 +954,9 @@ void draw_asset_details(
 void draw_assets(
     AssetBrowser& browser,
     AssetServer& asset_server,
+    const AssetImporterRegistry& importers,
+    AssetDatabase& database,
+    ActivityLog& activity,
     const Assets<Image>& images,
     RenderAssets<GpuImage>& gpu_images,
     ImGuiTextureRegistry& textures,
@@ -729,9 +977,16 @@ void draw_assets(
         browser.request_refresh();
     }
     ImGui::SameLine();
+    if (ImGui::SmallButton("Import...")) {
+        state.import_error = nullopt;
+        ImGui::OpenPopup("Import Asset");
+    }
+    ImGui::SameLine();
     draw_asset_breadcrumb(browser);
+    draw_import_popup(browser, importers, database, activity, state);
 
     if (browser.refresh_requested()) {
+        auto_import_project_assets(importers, database, activity);
         browser.refresh(asset_server);
     }
     if (browser.error()) {
@@ -747,7 +1002,7 @@ void draw_assets(
         std::max(ImGui::GetContentRegionAvail().y - 150.0f, 120.0f);
     if (ImGui::BeginTable(
             "asset_entries",
-            3,
+            4,
             ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
                 ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
             ImVec2 {0.0f, table_height}
@@ -763,6 +1018,11 @@ void draw_assets(
             "Size",
             ImGuiTableColumnFlags_WidthFixed,
             84.0f
+        );
+        ImGui::TableSetupColumn(
+            "Status",
+            ImGuiTableColumnFlags_WidthFixed,
+            90.0f
         );
         ImGui::TableHeadersRow();
 
@@ -793,16 +1053,26 @@ void draw_assets(
             if (entry.kind == AssetEntryKind::File) {
                 ImGui::TextUnformatted(asset_size_label(entry.size).c_str());
             }
+            ImGui::TableSetColumnIndex(3);
+            if (entry.kind == AssetEntryKind::File) {
+                ImGui::TextUnformatted(
+                    asset_import_state_label(database.state(entry.path))
+                );
+            }
         }
         ImGui::EndTable();
     }
     if (navigated && browser.refresh_requested()) {
+        auto_import_project_assets(importers, database, activity);
         browser.refresh(asset_server);
     }
 
     draw_asset_details(
         browser,
         asset_server,
+        importers,
+        database,
+        activity,
         images,
         gpu_images,
         textures,
@@ -942,6 +1212,9 @@ void draw_editor(WorldRef world_ref) {
     auto& activity = world.resource<ActivityLog>();
     auto& asset_browser = world.resource<AssetBrowser>();
     auto& asset_server = world.resource<AssetServer>();
+    auto& asset_database = world.resource<AssetDatabase>();
+    const auto& asset_importers =
+        static_cast<const World&>(world).resource<AssetImporterRegistry>();
     const auto& images =
         static_cast<const World&>(world).resource<Assets<Image>>();
     auto& gpu_images = world.resource<RenderAssets<GpuImage>>();
@@ -976,6 +1249,9 @@ void draw_editor(WorldRef world_ref) {
         draw_assets(
             asset_browser,
             asset_server,
+            asset_importers,
+            asset_database,
+            activity,
             images,
             gpu_images,
             textures,
@@ -1034,6 +1310,10 @@ void EditorPlugin::setup(App& app) {
     }
     if (!app.has_plugin<ImGuiPlugin>()) {
         fatal("EditorPlugin requires ImGuiPlugin to be installed first");
+    }
+    if (!app.has_resource<AssetDatabase>() ||
+        !app.has_resource<AssetImporterRegistry>()) {
+        fatal("EditorPlugin requires AssetsPlugin to be installed first");
     }
     if (!app.has_resource<SpriteOutput>() ||
         app.resource<SpriteOutput>().mode != SpriteOutputMode::Texture) {

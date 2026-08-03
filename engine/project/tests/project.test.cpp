@@ -1,6 +1,7 @@
 #include "project/project.hpp"
 
 #include "app/app.hpp"
+#include "asset/database.hpp"
 #include "asset/server.hpp"
 #include "project/plugin.hpp"
 
@@ -78,6 +79,10 @@ TEST_CASE("Project loads project.yaml", "[project]") {
         project->asset_root() ==
         std::filesystem::weakly_canonical(directory.path() / "assets")
     );
+    CHECK(project->cache_root() == directory.path() / ".fei");
+    CHECK(
+        project->imported_asset_root() == directory.path() / ".fei" / "imported"
+    );
 }
 
 TEST_CASE("Project defaults its asset directory", "[project]") {
@@ -135,6 +140,10 @@ TEST_CASE(
     auto& asset_server = app.resource<AssetServer>();
     CHECK(asset_server.default_source() == "project");
     CHECK(asset_server.has_source("project"));
+    CHECK(
+        app.resource<AssetDatabase>().import_cache_root() ==
+        directory.path() / ".fei" / "imported"
+    );
     auto bytes = asset_server.read_asset_bytes("project://readme.txt");
     REQUIRE(bytes);
     CHECK(bytes->size() == std::string_view("project asset").size());

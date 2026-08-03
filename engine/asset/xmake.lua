@@ -11,6 +11,7 @@ target("fei-asset")
         "fei-task",
         "fei-serialization"
     )
+    add_packages("yaml-cpp")
 
 target("fei-asset-tests")
     set_kind("binary")

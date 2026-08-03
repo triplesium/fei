@@ -92,6 +92,10 @@ bool AssetBrowser::refresh(const AssetServer& assets) {
     }
 
     m_entries = std::move(*entries);
+    std::erase_if(m_entries, [](const AssetEntry& entry) {
+        return entry.kind == AssetEntryKind::File &&
+               entry.path.path().extension() == ".meta";
+    });
     std::ranges::sort(
         m_entries,
         [](const AssetEntry& lhs, const AssetEntry& rhs) {

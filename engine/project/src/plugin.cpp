@@ -17,10 +17,14 @@ void ProjectPlugin::setup(App& app) {
     }
 
     const auto asset_root = m_project.asset_root();
+    const auto import_cache_root = m_project.imported_asset_root();
     app.add_resource(std::move(m_project));
     app.add_plugin(
         AssetsPlugin {
-            AssetsPluginConfig {.project_asset_root = asset_root},
+            AssetsPluginConfig {
+                .project_asset_root = asset_root,
+                .import_cache_root = import_cache_root,
+            },
         }
     );
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "app/plugin.hpp"
+#include "asset/importer.hpp"
 #include "asset/io.hpp"
 #include "asset/loader.hpp"
 #include "asset/plugin.hpp"
@@ -11,6 +12,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <span>
 #include <string>
@@ -68,11 +70,34 @@ struct ImageDecodeOptions {
 
 Result<std::unique_ptr<Image>, std::string>
 decode_image(std::span<const std::byte> bytes, ImageDecodeOptions options = {});
+[[nodiscard]] bool is_image_artifact(std::span<const std::byte> bytes);
+Result<std::unique_ptr<Image>, std::string>
+decode_image_artifact(std::span<const std::byte> bytes);
+Status<std::string>
+write_image_artifact(const Image& image, const std::filesystem::path& path);
 
 class ImageLoader : public AssetLoader<Image> {
   public:
+    [[nodiscard]] std::string_view artifact_kind() const override;
     AssetLoadResult<Image>
     load(Reader& reader, const LoadContext& context) override;
+};
+
+class ImageImporter : public AssetImporter {
+  public:
+    [[nodiscard]] std::string_view name() const override;
+    [[nodiscard]] std::uint32_t version() const override;
+    [[nodiscard]] std::span<const std::string_view> extensions() const override;
+    [[nodiscard]] AssetImportSettings
+    default_settings(const AssetPath& destination) const override;
+    [[nodiscard]] Result<AssetImportArtifacts, std::string> import(
+        const Reader& source,
+        const AssetImportContext& context
+    ) const override;
+    [[nodiscard]] Status<std::string> validate(
+        const Reader& source,
+        const AssetImportContext& context
+    ) const override;
 };
 
 class ImagePlugin : public Plugin {

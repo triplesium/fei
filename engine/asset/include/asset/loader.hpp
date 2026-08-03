@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -111,6 +112,7 @@ template<typename T>
 class AssetLoader {
   public:
     virtual ~AssetLoader() = default;
+    [[nodiscard]] virtual std::string_view artifact_kind() const { return {}; }
     virtual AssetLoadResult<T>
     load(Reader& reader, const LoadContext& context) = 0;
 };

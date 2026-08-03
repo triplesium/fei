@@ -39,10 +39,12 @@ Project::Project(
     ProjectConfig config,
     std::filesystem::path project_file,
     std::filesystem::path root,
-    std::filesystem::path asset_root
+    std::filesystem::path asset_root,
+    std::filesystem::path cache_root
 ) :
     m_config(std::move(config)), m_project_file(std::move(project_file)),
-    m_root(std::move(root)), m_asset_root(std::move(asset_root)) {}
+    m_root(std::move(root)), m_asset_root(std::move(asset_root)),
+    m_cache_root(std::move(cache_root)) {}
 
 Result<Project, ProjectLoadError>
 Project::load(const std::filesystem::path& project_file) {
@@ -163,7 +165,8 @@ Project::load(const std::filesystem::path& project_file) {
         std::move(config),
         std::move(absolute_file),
         root,
-        std::move(asset_root)
+        std::move(asset_root),
+        root / ".fei"
     );
 }
 

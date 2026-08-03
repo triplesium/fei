@@ -30,12 +30,14 @@ class Project {
     std::filesystem::path m_project_file;
     std::filesystem::path m_root;
     std::filesystem::path m_asset_root;
+    std::filesystem::path m_cache_root;
 
     Project(
         ProjectConfig config,
         std::filesystem::path project_file,
         std::filesystem::path root,
-        std::filesystem::path asset_root
+        std::filesystem::path asset_root,
+        std::filesystem::path cache_root
     );
 
   public:
@@ -52,6 +54,14 @@ class Project {
 
     [[nodiscard]] const std::filesystem::path& asset_root() const {
         return m_asset_root;
+    }
+
+    [[nodiscard]] const std::filesystem::path& cache_root() const {
+        return m_cache_root;
+    }
+
+    [[nodiscard]] std::filesystem::path imported_asset_root() const {
+        return m_cache_root / "imported";
     }
 };
 

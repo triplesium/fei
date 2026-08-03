@@ -29,6 +29,7 @@ class TemporaryAssetDirectory {
                   std::to_string(sequence.fetch_add(1)));
         std::filesystem::create_directories(m_path / "textures");
         write("readme.txt", "root");
+        write("readme.txt.meta", "metadata");
         write("textures/face.png", "image");
     }
 
@@ -77,6 +78,7 @@ TEST_CASE("AssetBrowser navigates project assets", "[editor][assets]") {
     AssetBrowser browser;
     REQUIRE(browser.refresh(assets));
     REQUIRE(browser.entries().size() == 2);
+    CHECK_FALSE(find_entry(browser, AssetPath("project://readme.txt.meta")));
     CHECK(browser.entries().front().kind == AssetEntryKind::Directory);
 
     const auto* textures = find_entry(browser, AssetPath("project://textures"));
