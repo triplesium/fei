@@ -18,6 +18,7 @@
 #include "ecs/world.hpp"
 #include "editor/activity.hpp"
 #include "editor/asset_browser.hpp"
+#include "editor/asset_watcher.hpp"
 #include "editor/component_operations.hpp"
 #include "imgui/plugin.hpp"
 #include "imgui/renderer.hpp"
@@ -43,6 +44,8 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace fei::editor {
@@ -91,6 +94,10 @@ struct EditorUiState {
     Optional<AssetPath> delete_target;
     bool delete_target_is_directory {false};
     Optional<std::string> delete_error;
+};
+
+struct AssetWatchSyncState {
+    Optional<std::string> last_error;
 };
 
 const char* operation_source_name(OperationSource source) {
@@ -966,6 +973,169 @@ void auto_import_project_assets(
             failed.destination.as_string() + ": " + failed.message,
             false
         );
+    }
+}
+
+void sync_project_assets(
+    ResRW<ProjectAssetWatcher> watcher,
+    ResRW<AssetDatabase> database,
+    Res<AssetImporterRegistry> importers,
+    ResRW<AssetServer> asset_server,
+    ResRW<AssetBrowser> browser,
+    ResRW<ActivityLog> activity,
+    ResRW<AssetWatchSyncState> sync_state
+) {
+    auto changes = watcher->poll();
+    if (!changes) {
+        if (!sync_state->last_error ||
+            *sync_state->last_error != changes.error()) {
+            activity->record(
+                OperationSource::Editor,
+                "WatchProjectAssets",
+                changes.error(),
+                false
+            );
+            sync_state->last_error = changes.error();
+        }
+        return;
+    }
+    sync_state->last_error = nullopt;
+    if (changes->empty()) {
+        return;
+    }
+
+    const auto make_path_map = [](const AssetDatabase& source) {
+        std::unordered_map<AssetUuid, AssetPath> paths;
+        for (const auto& [id, path] : source.registered_assets()) {
+            paths.emplace(id, path);
+        }
+        return paths;
+    };
+    const auto old_paths = make_path_map(*database);
+    const auto scan_status = database->scan();
+    if (!scan_status) {
+        activity->record(
+            OperationSource::ExternalAgent,
+            "ScanProjectAssets",
+            scan_status.error(),
+            false
+        );
+    }
+    const auto new_paths = make_path_map(*database);
+    std::unordered_set<AssetPath> handled_paths;
+
+    for (const auto& [id, old_path] : old_paths) {
+        const auto current = new_paths.find(id);
+        if (current == new_paths.end()) {
+            asset_server->remove_path(old_path);
+            handled_paths.insert(old_path);
+            activity->record(
+                OperationSource::ExternalAgent,
+                "DeleteAsset",
+                old_path.as_string()
+            );
+            continue;
+        }
+        if (current->second != old_path) {
+            asset_server->remap_path(old_path, current->second);
+            handled_paths.insert(old_path);
+            handled_paths.insert(current->second);
+            activity->record(
+                OperationSource::ExternalAgent,
+                "MoveAsset",
+                old_path.as_string() + " -> " + current->second.as_string()
+            );
+        }
+    }
+
+    auto report = import_pending_assets(*importers, *database);
+    if (!report) {
+        activity->record(
+            OperationSource::ExternalAgent,
+            "ImportProjectAssets",
+            report.error(),
+            false
+        );
+    } else {
+        for (const auto& imported : report->imported) {
+            handled_paths.insert(imported.path);
+            bool reloaded = true;
+            if (imported.metadata.importer == "image") {
+                auto reload =
+                    asset_server->reload_if_loaded<Image>(imported.path);
+                reloaded = reload.has_value();
+                if (!reload) {
+                    activity->record(
+                        OperationSource::ExternalAgent,
+                        "HotReloadAsset",
+                        imported.path.as_string() + ": " +
+                            reload.error().message,
+                        false
+                    );
+                }
+            }
+            activity->record(
+                OperationSource::ExternalAgent,
+                "ImportAsset",
+                imported.path.as_string(),
+                reloaded
+            );
+        }
+        for (const auto& failed : report->failed) {
+            handled_paths.insert(failed.destination);
+            activity->record(
+                OperationSource::ExternalAgent,
+                "ImportAsset",
+                failed.destination.as_string() + ": " + failed.message,
+                false
+            );
+        }
+    }
+
+    for (const auto& change : *changes) {
+        if (change.path.path().extension() == ".meta" ||
+            handled_paths.contains(change.path)) {
+            continue;
+        }
+        if (change.directory && change.kind == AssetFileChangeKind::Modified) {
+            continue;
+        }
+        if (change.kind == AssetFileChangeKind::Removed && !change.directory) {
+            asset_server->remove_path(change.path);
+        }
+        const char* action = nullptr;
+        if (change.directory) {
+            action = change.kind == AssetFileChangeKind::Removed ?
+                         "DeleteAssetFolder" :
+                         "CreateAssetFolder";
+        } else {
+            switch (change.kind) {
+                case AssetFileChangeKind::Added:
+                    action = "CreateAssetFile";
+                    break;
+                case AssetFileChangeKind::Modified:
+                    action = "ModifyAssetFile";
+                    break;
+                case AssetFileChangeKind::Removed:
+                    action = "DeleteAssetFile";
+                    break;
+            }
+        }
+        activity->record(
+            OperationSource::ExternalAgent,
+            action,
+            change.path.as_string()
+        );
+    }
+    browser->request_refresh();
+    if (auto acknowledge = watcher->acknowledge(); !acknowledge) {
+        activity->record(
+            OperationSource::Editor,
+            "WatchProjectAssets",
+            acknowledge.error(),
+            false
+        );
+        sync_state->last_error = acknowledge.error();
     }
 }
 
@@ -2124,6 +2294,7 @@ void draw_editor(WorldRef world_ref) {
     auto& asset_browser = world.resource<AssetBrowser>();
     auto& asset_server = world.resource<AssetServer>();
     auto& asset_database = world.resource<AssetDatabase>();
+    auto& asset_watcher = world.resource<ProjectAssetWatcher>();
     const auto& asset_importers =
         static_cast<const World&>(world).resource<AssetImporterRegistry>();
     const auto& images =
@@ -2135,6 +2306,9 @@ void draw_editor(WorldRef world_ref) {
         static_cast<const World&>(world).resource<ComponentOperations>();
     const auto& agent =
         static_cast<const World&>(world).resource<ExternalAgentStatus>();
+    const auto activity_sequence = activity.entries().empty() ?
+                                       std::uint64_t {0} :
+                                       activity.entries().back().sequence;
 
     initialize_style(state);
     draw_main_menu(world, state);
@@ -2183,6 +2357,26 @@ void draw_editor(WorldRef world_ref) {
     }
     if (state.show_activity) {
         draw_activity(activity, agent);
+    }
+
+    const bool changed_assets = std::ranges::any_of(
+        activity.entries(),
+        [activity_sequence](const OperationEntry& entry) {
+            return entry.sequence > activity_sequence &&
+                   entry.source != OperationSource::ExternalAgent &&
+                   (entry.action.contains("Asset") ||
+                    entry.action.contains("Import"));
+        }
+    );
+    if (changed_assets) {
+        if (auto status = asset_watcher.acknowledge(); !status) {
+            activity.record(
+                OperationSource::Editor,
+                "WatchProjectAssets",
+                status.error(),
+                false
+            );
+        }
     }
 }
 
@@ -2243,9 +2437,16 @@ void EditorPlugin::setup(App& app) {
         fatal("EditorPlugin requires SpritePlugin texture output mode");
     }
 
+    ProjectAssetWatcher asset_watcher(app.resource<AssetDatabase>().root());
+    if (auto status = asset_watcher.acknowledge(); !status) {
+        warn("Failed to initialize project asset watcher: {}", status.error());
+    }
+
     app.add_resource(ComponentOperations {})
         .add_resource(ActivityLog {})
         .add_resource(AssetBrowser {})
+        .add_resource(std::move(asset_watcher))
+        .add_resource(AssetWatchSyncState {})
         .add_resource(ExternalAgentStatus {})
         .add_resource(Selection {})
         .add_resource(EditorUiState {});
@@ -2291,10 +2492,15 @@ void EditorPlugin::setup(App& app) {
             import_report->failed.empty()
         );
     }
+    if (auto status = app.resource<ProjectAssetWatcher>().acknowledge();
+        !status) {
+        warn("Failed to synchronize project asset watcher: {}", status.error());
+    }
 
     if (m_config.create_welcome_scene) {
         app.add_systems(PreStartUp, setup_welcome_scene);
     }
+    app.add_systems(Update, sync_project_assets | main_thread());
     app.add_systems(
         RenderUpdate,
         draw_editor | in_set<RenderingSystems::Render>() | main_thread()

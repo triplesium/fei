@@ -253,6 +253,16 @@ Optional<AssetPath> AssetDatabase::path(AssetUuid id) const {
     return path->second;
 }
 
+std::vector<std::pair<AssetUuid, AssetPath>>
+AssetDatabase::registered_assets() const {
+    std::vector<std::pair<AssetUuid, AssetPath>> assets;
+    assets.reserve(m_by_id.size());
+    for (const auto& [id, path] : m_by_id) {
+        assets.emplace_back(id, path);
+    }
+    return assets;
+}
+
 AssetImportState AssetDatabase::state(const AssetPath& path) const {
     auto normalized = path.normalized();
     if (!normalized.source()) {
@@ -302,6 +312,47 @@ Status<std::string> AssetDatabase::scan() {
             const auto relative = source_file.lexically_relative(m_root);
             const auto path =
                 AssetPath(relative.generic_string()).with_source("project");
+            const bool source_exists =
+                std::filesystem::exists(source_file, error);
+            if (error) {
+                const auto message =
+                    "Failed to inspect asset metadata source: " +
+                    error.message();
+                record_failure(path, message);
+                if (first_error.empty()) {
+                    first_error = message;
+                }
+                error.clear();
+                iterator.increment(error);
+                continue;
+            }
+            if (!source_exists) {
+                const auto message =
+                    "Asset metadata source is missing: " + source_file.string();
+                record_failure(path, message);
+                if (first_error.empty()) {
+                    first_error = message;
+                }
+                iterator.increment(error);
+                continue;
+            }
+            const bool source_is_file =
+                std::filesystem::is_regular_file(source_file, error);
+            if (error || !source_is_file) {
+                const auto message = error ? "Failed to inspect asset metadata "
+                                             "source: " +
+                                                 error.message() :
+                                             "Asset metadata source is not a "
+                                             "regular file: " +
+                                                 source_file.string();
+                record_failure(path, message);
+                if (first_error.empty()) {
+                    first_error = message;
+                }
+                error.clear();
+                iterator.increment(error);
+                continue;
+            }
             auto metadata = read_asset_metadata(metadata_file);
             if (!metadata) {
                 record_failure(path, metadata.error());

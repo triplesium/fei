@@ -102,6 +102,8 @@ class AssetDatabase {
     [[nodiscard]] const AssetImportRecord*
     import_record(const AssetPath& path) const;
     [[nodiscard]] Optional<AssetPath> path(AssetUuid id) const;
+    [[nodiscard]] std::vector<std::pair<AssetUuid, AssetPath>>
+    registered_assets() const;
     [[nodiscard]] AssetImportState state(const AssetPath& path) const;
     [[nodiscard]] Optional<std::string> error(const AssetPath& path) const;
 

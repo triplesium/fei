@@ -359,6 +359,23 @@ class AssetServer {
     }
 
     template<typename T>
+    Result<bool, AssetLoadError> reload_if_loaded(const AssetPath& path) {
+        if (!m_app->has_resource<Assets<T>>()) {
+            fatal("No asset found for type: {}", type_name<T>());
+        }
+        const auto asset_path = canonicalize_path(path);
+        auto& assets = m_app->resource<Assets<T>>();
+        if (!assets.cached_handle(asset_path)) {
+            return false;
+        }
+        auto reloaded = reload<T>(asset_path);
+        if (!reloaded) {
+            return failure(std::move(reloaded.error()));
+        }
+        return true;
+    }
+
+    template<typename T>
     Handle<T> load_async(const AssetPath& path) {
         if (!m_app->has_resource<Assets<T>>()) {
             fatal("No asset found for type: {}", type_name<T>());

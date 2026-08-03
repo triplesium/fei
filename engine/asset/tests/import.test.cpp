@@ -470,6 +470,27 @@ TEST_CASE(
     CHECK(database.state(path) == AssetImportState::Unimported);
 }
 
+TEST_CASE(
+    "Asset database rejects metadata without a source file",
+    "[asset][scan]"
+) {
+    TemporaryImportDirectory directory;
+    const auto id = AssetUuid::random();
+    directory.write_project_asset(
+        "orphan.mock.meta",
+        "id: " + id.as_string() + "\nimporter: mock\nsettings: {}\n"
+    );
+    AssetDatabase database(directory.project_assets());
+
+    REQUIRE_FALSE(database.scan());
+    CHECK(database.metadata(AssetPath("project://orphan.mock")) == nullptr);
+    CHECK_FALSE(database.path(id));
+    CHECK(
+        database.state(AssetPath("project://orphan.mock")) ==
+        AssetImportState::Failed
+    );
+}
+
 TEST_CASE("Asset import records validation failures", "[asset][import]") {
     TemporaryImportDirectory directory;
     auto registry = mock_registry();

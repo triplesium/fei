@@ -4,6 +4,7 @@ target("fei-editor-core")
     add_files(
         "src/activity.cpp",
         "src/asset_browser.cpp",
+        "src/asset_watcher.cpp",
         "src/component_operations.cpp",
         "src/plugin.cpp"
     )

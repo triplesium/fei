@@ -342,6 +342,36 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "AssetServer reloads a path only when it is already loaded",
+    "[asset][server][reload]"
+) {
+    MemorySource::asset_size = 4;
+    App app;
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
+
+    auto not_loaded = app.resource<AssetServer>().reload_if_loaded<ServerAsset>(
+        AssetPath("memory://dependency.bin")
+    );
+    REQUIRE(not_loaded);
+    CHECK_FALSE(*not_loaded);
+
+    auto handle = app.resource<AssetServer>().load<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+    MemorySource::asset_size = 2;
+    auto reloaded = app.resource<AssetServer>().reload_if_loaded<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+    REQUIRE(reloaded);
+    CHECK(*reloaded);
+    CHECK(app.resource<Assets<ServerAsset>>().get(handle)->byte_count == 2);
+    MemorySource::asset_size = 4;
+}
+
+TEST_CASE(
     "AssetServer remaps loaded paths across registered asset types",
     "[asset][server][path]"
 ) {
