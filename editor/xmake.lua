@@ -1,7 +1,12 @@
 target("fei-editor-core")
     set_kind("static")
     add_headerfiles("include/**.hpp")
-    add_files("src/activity.cpp", "src/component_operations.cpp", "src/plugin.cpp")
+    add_files(
+        "src/activity.cpp",
+        "src/asset_browser.cpp",
+        "src/component_operations.cpp",
+        "src/plugin.cpp"
+    )
     add_includedirs("include", {public = true})
     add_deps(
         "fei-base",

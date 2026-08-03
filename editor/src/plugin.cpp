@@ -2,6 +2,7 @@
 
 #include "app/app.hpp"
 #include "app/reflection_plugin.hpp"
+#include "asset/assets.hpp"
 #include "asset/serialization.hpp"
 #include "asset/server.hpp"
 #include "base/log.hpp"
@@ -14,6 +15,7 @@
 #include "ecs/type_tags.hpp"
 #include "ecs/world.hpp"
 #include "editor/activity.hpp"
+#include "editor/asset_browser.hpp"
 #include "editor/component_operations.hpp"
 #include "imgui/plugin.hpp"
 #include "imgui/renderer.hpp"
@@ -21,12 +23,17 @@
 #include "refl/property.hpp"
 #include "refl/ref.hpp"
 #include "refl/registry.hpp"
+#include "rendering/gpu_image.hpp"
 #include "rendering/plugin.hpp"
+#include "rendering/render_asset.hpp"
 #include "sprite/components.hpp"
 #include "sprite/output.hpp"
 #include "sprite/plugin.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <cstdint>
+#include <format>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <memory>
@@ -41,11 +48,16 @@ namespace {
 struct EditorUiState {
     ImTextureID scene_texture_id {ImTextureID_Invalid};
     std::shared_ptr<const Texture> registered_scene_texture;
+    ImTextureID asset_preview_texture_id {ImTextureID_Invalid};
+    std::shared_ptr<const Texture> registered_asset_preview_texture;
+    Optional<AssetPath> asset_preview_path;
+    Handle<Image> asset_preview_handle;
     bool layout_initialized {false};
     bool style_initialized {false};
     bool show_scene {true};
     bool show_hierarchy {true};
     bool show_inspector {true};
+    bool show_assets {true};
     bool show_activity {true};
 };
 
@@ -141,7 +153,18 @@ void build_default_layout(ImGuiID dockspace, EditorUiState& state) {
 
     ImGui::DockBuilderDockWindow("Hierarchy", left);
     ImGui::DockBuilderDockWindow("Inspector", right);
-    ImGui::DockBuilderDockWindow("Agent Activity", bottom);
+    ImGuiID assets = bottom;
+    ImGuiID activity = 0;
+    ImGui::DockBuilderSplitNode(
+        assets,
+        ImGuiDir_Right,
+        0.42f,
+        &activity,
+        &assets
+    );
+
+    ImGui::DockBuilderDockWindow("Assets", assets);
+    ImGui::DockBuilderDockWindow("Agent Activity", activity);
     ImGui::DockBuilderDockWindow("Scene", center);
     ImGui::DockBuilderFinish(dockspace);
 }
@@ -161,6 +184,7 @@ void draw_main_menu(World& world, EditorUiState& state) {
         ImGui::MenuItem("Scene", nullptr, &state.show_scene);
         ImGui::MenuItem("Hierarchy", nullptr, &state.show_hierarchy);
         ImGui::MenuItem("Inspector", nullptr, &state.show_inspector);
+        ImGui::MenuItem("Assets", nullptr, &state.show_assets);
         ImGui::MenuItem("Agent Activity", nullptr, &state.show_activity);
         ImGui::EndMenu();
     }
@@ -483,6 +507,310 @@ void draw_inspector(
     ImGui::End();
 }
 
+std::string asset_type_label(const AssetEntry& entry) {
+    if (entry.kind == AssetEntryKind::Directory) {
+        return "Folder";
+    }
+    auto extension = entry.path.path().extension().string();
+    if (extension.empty()) {
+        return "File";
+    }
+    extension.erase(extension.begin());
+    std::ranges::transform(
+        extension,
+        extension.begin(),
+        [](unsigned char value) {
+            return static_cast<char>(std::toupper(value));
+        }
+    );
+    return extension;
+}
+
+std::string asset_size_label(std::uintmax_t size) {
+    constexpr std::string_view units[] = {"B", "KiB", "MiB", "GiB"};
+    auto value = static_cast<double>(size);
+    std::size_t unit = 0;
+    while (value >= 1024.0 && unit + 1 < std::size(units)) {
+        value /= 1024.0;
+        ++unit;
+    }
+    return unit == 0 ? std::format("{} B", size) :
+                       std::format("{:.1f} {}", value, units[unit]);
+}
+
+bool is_previewable_image(const AssetEntry& entry) {
+    if (entry.kind != AssetEntryKind::File) {
+        return false;
+    }
+    auto extension = entry.path.path().extension().string();
+    std::ranges::transform(
+        extension,
+        extension.begin(),
+        [](unsigned char value) {
+            return static_cast<char>(std::tolower(value));
+        }
+    );
+    return extension == ".png" || extension == ".jpg" || extension == ".jpeg" ||
+           extension == ".bmp" || extension == ".tga" || extension == ".hdr";
+}
+
+void clear_asset_preview(ImGuiTextureRegistry& textures, EditorUiState& state) {
+    if (state.asset_preview_texture_id != ImTextureID_Invalid) {
+        textures.unregister_texture(state.asset_preview_texture_id);
+    }
+    state.asset_preview_texture_id = ImTextureID_Invalid;
+    state.registered_asset_preview_texture.reset();
+    state.asset_preview_path = nullopt;
+    state.asset_preview_handle = {};
+}
+
+void sync_asset_preview(
+    const AssetEntry* selected,
+    AssetServer& asset_server,
+    RenderAssets<GpuImage>& gpu_images,
+    ImGuiTextureRegistry& textures,
+    EditorUiState& state
+) {
+    Optional<AssetPath> preview_path;
+    if (selected && is_previewable_image(*selected)) {
+        preview_path = selected->path;
+    }
+    if (preview_path != state.asset_preview_path) {
+        clear_asset_preview(textures, state);
+        state.asset_preview_path = preview_path;
+        if (preview_path) {
+            state.asset_preview_handle =
+                asset_server.load<Image>(*preview_path);
+        }
+    }
+
+    if (!state.asset_preview_handle) {
+        return;
+    }
+    const auto gpu_image = gpu_images.get(state.asset_preview_handle);
+    if (!gpu_image || !gpu_image->texture() || !gpu_image->sampler()) {
+        return;
+    }
+
+    const auto texture = gpu_image->texture();
+    if (state.registered_asset_preview_texture == texture) {
+        return;
+    }
+    if (state.asset_preview_texture_id != ImTextureID_Invalid) {
+        textures.unregister_texture(state.asset_preview_texture_id);
+    }
+    state.registered_asset_preview_texture = texture;
+    state.asset_preview_texture_id =
+        textures.register_texture(texture, gpu_image->sampler());
+}
+
+bool draw_asset_breadcrumb(AssetBrowser& browser) {
+    bool navigated = false;
+    const auto root_label = browser.root().source() ?
+                                *browser.root().source() + "://" :
+                                std::string("/");
+    if (ImGui::SmallButton(root_label.c_str())) {
+        navigated |= browser.navigate_to(browser.root());
+    }
+
+    auto accumulated = browser.root().path();
+    const auto current = browser.current_directory().path();
+    const auto relative = current.lexically_relative(browser.root().path());
+    int component_index = 0;
+    for (const auto& component : relative) {
+        accumulated /= component;
+        ImGui::SameLine(0.0f, 3.0f);
+        ImGui::TextUnformatted("/");
+        ImGui::SameLine(0.0f, 3.0f);
+        ImGui::PushID(component_index++);
+        if (ImGui::SmallButton(component.string().c_str())) {
+            auto target = AssetPath(accumulated);
+            if (browser.root().source()) {
+                target = target.with_source(*browser.root().source());
+            }
+            navigated |= browser.navigate_to(target);
+        }
+        ImGui::PopID();
+    }
+    return navigated;
+}
+
+void draw_asset_details(
+    const AssetBrowser& browser,
+    AssetServer& asset_server,
+    const Assets<Image>& images,
+    RenderAssets<GpuImage>& gpu_images,
+    ImGuiTextureRegistry& textures,
+    EditorUiState& state
+) {
+    const auto* selected = browser.selected_entry();
+    sync_asset_preview(selected, asset_server, gpu_images, textures, state);
+    if (!selected) {
+        ImGui::TextDisabled("Select an asset to inspect it.");
+        return;
+    }
+
+    ImGui::TextUnformatted(selected->path.as_string().c_str());
+    ImGui::TextDisabled("Type: %s", asset_type_label(*selected).c_str());
+    if (selected->kind == AssetEntryKind::File) {
+        ImGui::SameLine();
+        ImGui::TextDisabled(
+            "| Size: %s",
+            asset_size_label(selected->size).c_str()
+        );
+    }
+
+    if (!is_previewable_image(*selected)) {
+        return;
+    }
+    if (auto load_error = asset_server.load_error(state.asset_preview_handle)) {
+        ImGui::TextColored(
+            ImVec4 {0.95f, 0.35f, 0.35f, 1.0f},
+            "%s",
+            load_error->message.c_str()
+        );
+        return;
+    }
+
+    const auto image = images.get(state.asset_preview_handle);
+    if (!image) {
+        ImGui::TextDisabled("Loading image preview...");
+        return;
+    }
+    ImGui::TextDisabled(
+        "%u x %u | %u channels",
+        image->width(),
+        image->height(),
+        image->channels()
+    );
+
+    if (state.asset_preview_texture_id == ImTextureID_Invalid ||
+        image->width() == 0 || image->height() == 0) {
+        ImGui::TextDisabled("Preparing GPU preview...");
+        return;
+    }
+    const auto available = ImGui::GetContentRegionAvail();
+    const auto scale = std::min({
+        available.x / static_cast<float>(image->width()),
+        120.0f / static_cast<float>(image->height()),
+        1.0f,
+    });
+    ImGui::Image(
+        state.asset_preview_texture_id,
+        ImVec2 {
+            static_cast<float>(image->width()) * scale,
+            static_cast<float>(image->height()) * scale,
+        },
+        ImVec2 {0.0f, 1.0f},
+        ImVec2 {1.0f, 0.0f}
+    );
+}
+
+void draw_assets(
+    AssetBrowser& browser,
+    AssetServer& asset_server,
+    const Assets<Image>& images,
+    RenderAssets<GpuImage>& gpu_images,
+    ImGuiTextureRegistry& textures,
+    EditorUiState& state
+) {
+    if (!ImGui::Begin("Assets")) {
+        ImGui::End();
+        return;
+    }
+
+    ImGui::BeginDisabled(browser.current_directory() == browser.root());
+    if (ImGui::SmallButton("Up")) {
+        browser.navigate_up();
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Refresh")) {
+        browser.request_refresh();
+    }
+    ImGui::SameLine();
+    draw_asset_breadcrumb(browser);
+
+    if (browser.refresh_requested()) {
+        browser.refresh(asset_server);
+    }
+    if (browser.error()) {
+        ImGui::TextColored(
+            ImVec4 {0.95f, 0.35f, 0.35f, 1.0f},
+            "%s",
+            browser.error()->c_str()
+        );
+    }
+
+    bool navigated = false;
+    const auto table_height =
+        std::max(ImGui::GetContentRegionAvail().y - 150.0f, 120.0f);
+    if (ImGui::BeginTable(
+            "asset_entries",
+            3,
+            ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
+            ImVec2 {0.0f, table_height}
+        )) {
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn(
+            "Type",
+            ImGuiTableColumnFlags_WidthFixed,
+            72.0f
+        );
+        ImGui::TableSetupColumn(
+            "Size",
+            ImGuiTableColumnFlags_WidthFixed,
+            84.0f
+        );
+        ImGui::TableHeadersRow();
+
+        for (const auto& entry : browser.entries()) {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::PushID(entry.path.as_string().c_str());
+            const auto filename = entry.path.path().filename().string();
+            const bool selected =
+                browser.selection() && *browser.selection() == entry.path;
+            if (ImGui::Selectable(
+                    filename.c_str(),
+                    selected,
+                    ImGuiSelectableFlags_SpanAllColumns |
+                        ImGuiSelectableFlags_AllowDoubleClick
+                )) {
+                browser.select(entry);
+                if (entry.kind == AssetEntryKind::Directory &&
+                    ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                    navigated |= browser.open(entry);
+                }
+            }
+            ImGui::PopID();
+
+            ImGui::TableSetColumnIndex(1);
+            ImGui::TextUnformatted(asset_type_label(entry).c_str());
+            ImGui::TableSetColumnIndex(2);
+            if (entry.kind == AssetEntryKind::File) {
+                ImGui::TextUnformatted(asset_size_label(entry.size).c_str());
+            }
+        }
+        ImGui::EndTable();
+    }
+    if (navigated && browser.refresh_requested()) {
+        browser.refresh(asset_server);
+    }
+
+    draw_asset_details(
+        browser,
+        asset_server,
+        images,
+        gpu_images,
+        textures,
+        state
+    );
+    ImGui::End();
+}
+
 void sync_scene_texture(
     SpriteOutput& output,
     ImGuiTextureRegistry& textures,
@@ -522,7 +850,12 @@ void draw_scene(
     if (state.scene_texture_id == ImTextureID_Invalid) {
         ImGui::TextDisabled("Waiting for the 2D render target...");
     } else {
-        ImGui::Image(state.scene_texture_id, available);
+        ImGui::Image(
+            state.scene_texture_id,
+            available,
+            ImVec2 {0.0f, 1.0f},
+            ImVec2 {1.0f, 0.0f}
+        );
     }
     ImGui::End();
 }
@@ -607,6 +940,11 @@ void draw_editor(WorldRef world_ref) {
     auto& state = world.resource<EditorUiState>();
     auto& selection = world.resource<Selection>();
     auto& activity = world.resource<ActivityLog>();
+    auto& asset_browser = world.resource<AssetBrowser>();
+    auto& asset_server = world.resource<AssetServer>();
+    const auto& images =
+        static_cast<const World&>(world).resource<Assets<Image>>();
+    auto& gpu_images = world.resource<RenderAssets<GpuImage>>();
     auto& output = world.resource<SpriteOutput>();
     auto& textures = world.resource<ImGuiTextureRegistry>();
     const auto& operations =
@@ -633,6 +971,16 @@ void draw_editor(WorldRef world_ref) {
     }
     if (state.show_scene) {
         draw_scene(output, textures, state);
+    }
+    if (state.show_assets) {
+        draw_assets(
+            asset_browser,
+            asset_server,
+            images,
+            gpu_images,
+            textures,
+            state
+        );
     }
     if (state.show_activity) {
         draw_activity(activity, agent);
@@ -694,6 +1042,7 @@ void EditorPlugin::setup(App& app) {
 
     app.add_resource(ComponentOperations {})
         .add_resource(ActivityLog {})
+        .add_resource(AssetBrowser {})
         .add_resource(ExternalAgentStatus {})
         .add_resource(Selection {})
         .add_resource(EditorUiState {});
@@ -736,6 +1085,7 @@ void EditorPlugin::cleanup(App& app) noexcept {
         state.scene_texture_id = ImTextureID_Invalid;
         state.registered_scene_texture.reset();
     }
+    clear_asset_preview(app.resource<ImGuiTextureRegistry>(), state);
 }
 
 } // namespace fei::editor
