@@ -39,6 +39,13 @@ enum MainSchedules : std::uint32_t {
     RenderLast
 };
 
+enum class AppLifecycle : std::uint8_t {
+    Building,
+    Ready,
+    Running,
+    Stopped,
+};
+
 FEI_REFLECT()
 struct AppStates {
     bool should_stop {false};
@@ -62,6 +69,9 @@ class App {
         std::string_view plugin_name,
         std::unique_ptr<Plugin> plugin
     ) {
+        if (m_lifecycle != AppLifecycle::Building) {
+            fatal("Cannot add plugin {} after App::finish", plugin_name);
+        }
         if (!plugin) {
             fatal("Cannot add null plugin {}", plugin_name);
         }
@@ -210,6 +220,10 @@ class App {
 
     World& world() { return m_world; }
 
+    const World& world() const { return m_world; }
+
+    [[nodiscard]] AppLifecycle lifecycle() const { return m_lifecycle; }
+
     App& set_worker_threads(std::size_t thread_count) {
         m_world.set_worker_threads(thread_count);
         return *this;
@@ -217,10 +231,16 @@ class App {
 
     void run_schedule(ScheduleId schedule) { m_world.run_schedule(schedule); }
 
+    void finish();
+    void startup();
+    void update();
+    void render();
+    void shutdown() noexcept;
     void run();
 
   private:
     World m_world;
+    AppLifecycle m_lifecycle {AppLifecycle::Building};
 };
 
 } // namespace fei

@@ -26,6 +26,11 @@ void register_main_schedule_profile_names() {
     register_profile_schedule_name(RenderLast, "RenderLast");
 }
 
+void run_profiled_schedule(App& app, ScheduleId schedule, const char* name) {
+    FEI_PROFILE_SCOPE(name);
+    app.run_schedule(schedule);
+}
+
 } // namespace
 
 App& App::add_plugins(PluginGroupBuilder builder) {
@@ -33,8 +38,84 @@ App& App::add_plugins(PluginGroupBuilder builder) {
     return *this;
 }
 
-void App::run() {
+void App::finish() {
+    if (m_lifecycle != AppLifecycle::Building) {
+        return;
+    }
+
     register_main_schedule_profile_names();
+    for (auto& plugin : m_plugins) {
+        plugin->finish(*this);
+    }
+    m_world.sort_systems();
+    m_lifecycle = AppLifecycle::Ready;
+}
+
+void App::startup() {
+    if (m_lifecycle == AppLifecycle::Building) {
+        finish();
+    }
+    if (m_lifecycle != AppLifecycle::Ready) {
+        return;
+    }
+
+    run_profiled_schedule(*this, PreStartUp, "PreStartUp");
+    run_profiled_schedule(*this, StartUp, "StartUp");
+    m_lifecycle = AppLifecycle::Running;
+}
+
+void App::update() {
+    if (m_lifecycle == AppLifecycle::Building ||
+        m_lifecycle == AppLifecycle::Ready) {
+        startup();
+    }
+    if (m_lifecycle != AppLifecycle::Running) {
+        return;
+    }
+
+    run_profiled_schedule(*this, First, "First");
+    run_profiled_schedule(*this, PreUpdate, "PreUpdate");
+    run_profiled_schedule(*this, StateTransitionSchedule, "StateTransition");
+    run_profiled_schedule(*this, Update, "Update");
+    run_profiled_schedule(*this, PostUpdate, "PostUpdate");
+    run_profiled_schedule(*this, Last, "Last");
+}
+
+void App::render() {
+    if (m_lifecycle == AppLifecycle::Building ||
+        m_lifecycle == AppLifecycle::Ready) {
+        startup();
+    }
+    if (m_lifecycle != AppLifecycle::Running) {
+        return;
+    }
+
+    run_profiled_schedule(*this, RenderPrepare, "RenderPrepare");
+    run_profiled_schedule(*this, RenderFirst, "RenderFirst");
+    run_profiled_schedule(*this, RenderStart, "RenderStart");
+    run_profiled_schedule(*this, RenderUpdate, "RenderUpdate");
+    run_profiled_schedule(*this, RenderEnd, "RenderEnd");
+    run_profiled_schedule(*this, RenderLast, "RenderLast");
+    FEI_PROFILE_FRAME();
+}
+
+void App::shutdown() noexcept {
+    if (m_lifecycle == AppLifecycle::Stopped) {
+        return;
+    }
+
+    for (auto plugin = m_plugins.rbegin(); plugin != m_plugins.rend();
+         ++plugin) {
+        (*plugin)->cleanup(*this);
+    }
+    m_lifecycle = AppLifecycle::Stopped;
+}
+
+void App::run() {
+    if (m_lifecycle == AppLifecycle::Stopped) {
+        return;
+    }
+
     const auto exit_after_seconds =
         read_environment_variable<double>("FEI_EXIT_AFTER_SECONDS");
     const auto exit_after_frames =
@@ -42,43 +123,12 @@ void App::run() {
     const auto start_time = std::chrono::steady_clock::now();
     std::uint64_t frame_count = 0;
 
-    const auto cleanup_plugins = [this]() noexcept {
-        for (auto plugin = m_plugins.rbegin(); plugin != m_plugins.rend();
-             ++plugin) {
-            (*plugin)->cleanup(*this);
-        }
-    };
-
-#define FEI_RUN_PROFILED_SCHEDULE(schedule) \
-    do {                                    \
-        FEI_PROFILE_SCOPE(#schedule);       \
-        run_schedule(schedule);             \
-    } while (false)
-
     try {
-        for (auto& plugin : m_plugins) {
-            plugin->finish(*this);
-        }
-        m_world.sort_systems();
-
-        FEI_RUN_PROFILED_SCHEDULE(PreStartUp);
-        FEI_RUN_PROFILED_SCHEDULE(StartUp);
+        startup();
         bool should_stop = false;
         while (!should_stop) {
-            FEI_RUN_PROFILED_SCHEDULE(First);
-            FEI_RUN_PROFILED_SCHEDULE(PreUpdate);
-            FEI_RUN_PROFILED_SCHEDULE(StateTransitionSchedule);
-            FEI_RUN_PROFILED_SCHEDULE(Update);
-            FEI_RUN_PROFILED_SCHEDULE(PostUpdate);
-            FEI_RUN_PROFILED_SCHEDULE(Last);
-
-            FEI_RUN_PROFILED_SCHEDULE(RenderPrepare);
-            FEI_RUN_PROFILED_SCHEDULE(RenderFirst);
-            FEI_RUN_PROFILED_SCHEDULE(RenderStart);
-            FEI_RUN_PROFILED_SCHEDULE(RenderUpdate);
-            FEI_RUN_PROFILED_SCHEDULE(RenderEnd);
-            FEI_RUN_PROFILED_SCHEDULE(RenderLast);
-            FEI_PROFILE_FRAME();
+            update();
+            render();
             ++frame_count;
 
             auto& app_states = m_world.resource<AppStates>();
@@ -96,11 +146,9 @@ void App::run() {
             should_stop = app_states.should_stop;
         }
     } catch (...) {
-        cleanup_plugins();
+        shutdown();
         throw;
     }
-    cleanup_plugins();
-
-#undef FEI_RUN_PROFILED_SCHEDULE
+    shutdown();
 }
 } // namespace fei
