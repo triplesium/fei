@@ -1,7 +1,10 @@
 #include "asset/database.hpp"
 
 #include "asset/io.hpp"
+#include "base/log.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <filesystem>
 #include <format>
@@ -35,6 +38,14 @@ std::filesystem::path canonical_root(std::filesystem::path root) {
     }
     auto canonical = std::filesystem::weakly_canonical(absolute, error);
     return error ? absolute.lexically_normal() : canonical;
+}
+
+std::string lowercase_extension(const std::filesystem::path& path) {
+    auto extension = path.extension().string();
+    std::ranges::transform(extension, extension.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return extension;
 }
 
 std::string content_hash(const Reader& reader) {
@@ -413,6 +424,426 @@ void AssetDatabase::clear_failure(const AssetPath& path) {
         normalized = normalized.with_source("project");
     }
     m_errors.erase(normalized);
+}
+
+Result<AssetMoveResult, std::string> AssetDatabase::move_asset(
+    const AssetPath& source,
+    const AssetPath& destination
+) {
+    auto normalized_source = source.normalized();
+    auto normalized_destination = destination.normalized();
+    if (!normalized_source.source()) {
+        normalized_source = normalized_source.with_source("project");
+    }
+    if (!normalized_destination.source()) {
+        normalized_destination = normalized_destination.with_source("project");
+    }
+    if (normalized_source == normalized_destination) {
+        return failure(
+            std::string("Source and destination asset paths are the same")
+        );
+    }
+
+    auto source_file = resolve(normalized_source);
+    if (!source_file) {
+        return failure(std::move(source_file.error()));
+    }
+    auto destination_file = resolve(normalized_destination);
+    if (!destination_file) {
+        return failure(std::move(destination_file.error()));
+    }
+    if (normalized_destination.path().filename().empty()) {
+        return failure(
+            std::string("Asset destination must include a file name")
+        );
+    }
+    if (lowercase_extension(normalized_source.path()) !=
+        lowercase_extension(normalized_destination.path())) {
+        return failure(
+            std::string("Moving an asset cannot change its file extension")
+        );
+    }
+
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(*source_file, error) || error) {
+        return failure(
+            "Asset source is not a regular file: " + source_file->string()
+        );
+    }
+    if (std::filesystem::exists(*destination_file, error)) {
+        return failure(
+            "Asset destination already exists: " + destination_file->string()
+        );
+    }
+    if (error) {
+        return failure(
+            "Failed to inspect asset destination: " + error.message()
+        );
+    }
+    if (metadata(normalized_destination)) {
+        return failure(
+            "Asset destination is already registered: " +
+            normalized_destination.as_string()
+        );
+    }
+
+    const auto source_metadata_file = metadata_path(normalized_source);
+    const auto destination_metadata_file =
+        metadata_path(normalized_destination);
+    const bool has_metadata_file =
+        std::filesystem::exists(source_metadata_file, error);
+    if (error) {
+        return failure("Failed to inspect asset metadata: " + error.message());
+    }
+    if (has_metadata_file) {
+        const bool is_regular =
+            std::filesystem::is_regular_file(source_metadata_file, error);
+        if (error) {
+            return failure(
+                "Failed to inspect asset metadata: " + error.message()
+            );
+        }
+        if (!is_regular) {
+            return failure(
+                "Asset metadata is not a regular file: " +
+                source_metadata_file.string()
+            );
+        }
+    }
+    if (metadata(normalized_source) && !has_metadata_file) {
+        return failure(
+            "Registered asset metadata is missing: " +
+            source_metadata_file.string()
+        );
+    }
+    if (std::filesystem::exists(destination_metadata_file, error)) {
+        return failure(
+            "Asset destination metadata already exists: " +
+            destination_metadata_file.string()
+        );
+    }
+    if (error) {
+        return failure(
+            "Failed to inspect destination metadata: " + error.message()
+        );
+    }
+
+    std::filesystem::create_directories(destination_file->parent_path(), error);
+    if (error) {
+        return failure(
+            "Failed to create asset destination directory: " + error.message()
+        );
+    }
+    std::filesystem::rename(*source_file, *destination_file, error);
+    if (error) {
+        return failure("Failed to move asset: " + error.message());
+    }
+    if (has_metadata_file) {
+        std::filesystem::rename(
+            source_metadata_file,
+            destination_metadata_file,
+            error
+        );
+        if (error) {
+            const auto metadata_error = error.message();
+            std::error_code rollback_error;
+            std::filesystem::rename(
+                *destination_file,
+                *source_file,
+                rollback_error
+            );
+            if (rollback_error) {
+                return failure(
+                    "Failed to move asset metadata (" + metadata_error +
+                    ") and failed to restore the source (" +
+                    rollback_error.message() + ")"
+                );
+            }
+            return failure(
+                "Failed to move asset metadata; the source was restored: " +
+                metadata_error
+            );
+        }
+    }
+
+    Optional<AssetUuid> id;
+    if (auto metadata_entry = m_by_path.find(normalized_source);
+        metadata_entry != m_by_path.end()) {
+        id = metadata_entry->second.id;
+        auto node = m_by_path.extract(metadata_entry);
+        node.key() = normalized_destination;
+        m_by_path.insert(std::move(node));
+        m_by_id.insert_or_assign(*id, normalized_destination);
+    }
+    m_errors.erase(normalized_destination);
+    if (auto failure_entry = m_errors.find(normalized_source);
+        failure_entry != m_errors.end()) {
+        auto node = m_errors.extract(failure_entry);
+        node.key() = normalized_destination;
+        m_errors.insert(std::move(node));
+    }
+
+    return AssetMoveResult {
+        .source = std::move(normalized_source),
+        .destination = std::move(normalized_destination),
+        .id = id,
+    };
+}
+
+Result<AssetPath, std::string> AssetDatabase::copy_asset_file(
+    const AssetPath& source,
+    const AssetPath& destination
+) {
+    auto normalized_source = source.normalized();
+    auto normalized_destination = destination.normalized();
+    if (!normalized_source.source()) {
+        normalized_source = normalized_source.with_source("project");
+    }
+    if (!normalized_destination.source()) {
+        normalized_destination = normalized_destination.with_source("project");
+    }
+    if (normalized_source == normalized_destination) {
+        return failure(
+            std::string("Source and destination asset paths are the same")
+        );
+    }
+
+    auto source_file = resolve(normalized_source);
+    if (!source_file) {
+        return failure(std::move(source_file.error()));
+    }
+    auto destination_file = resolve(normalized_destination);
+    if (!destination_file) {
+        return failure(std::move(destination_file.error()));
+    }
+    if (normalized_destination.path().filename().empty()) {
+        return failure(
+            std::string("Asset destination must include a file name")
+        );
+    }
+
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(*source_file, error) || error) {
+        return failure(
+            "Asset source is not a regular file: " + source_file->string()
+        );
+    }
+    if (std::filesystem::exists(*destination_file, error)) {
+        return failure(
+            "Asset destination already exists: " + destination_file->string()
+        );
+    }
+    if (error) {
+        return failure(
+            "Failed to inspect asset destination: " + error.message()
+        );
+    }
+    if (metadata(normalized_destination) ||
+        std::filesystem::exists(metadata_path(normalized_destination), error)) {
+        return failure(
+            "Asset destination metadata already exists: " +
+            normalized_destination.as_string()
+        );
+    }
+    if (error) {
+        return failure(
+            "Failed to inspect destination metadata: " + error.message()
+        );
+    }
+
+    std::filesystem::create_directories(destination_file->parent_path(), error);
+    if (error) {
+        return failure(
+            "Failed to create asset destination directory: " + error.message()
+        );
+    }
+    if (!std::filesystem::copy_file(*source_file, *destination_file, error)) {
+        return failure("Failed to copy asset: " + error.message());
+    }
+    clear_failure(normalized_destination);
+    return normalized_destination;
+}
+
+Status<std::string> AssetDatabase::create_directory(const AssetPath& path) {
+    auto normalized = path.normalized();
+    if (!normalized.source()) {
+        normalized = normalized.with_source("project");
+    }
+    if (normalized.path().empty()) {
+        return failure(std::string("Cannot create the project asset root"));
+    }
+    auto directory = resolve(normalized);
+    if (!directory) {
+        return failure(std::move(directory.error()));
+    }
+
+    std::error_code error;
+    if (std::filesystem::exists(*directory, error)) {
+        return failure(
+            "Asset directory already exists: " + directory->string()
+        );
+    }
+    if (error) {
+        return failure("Failed to inspect asset directory: " + error.message());
+    }
+    if (!std::filesystem::create_directories(*directory, error)) {
+        return failure("Failed to create asset directory: " + error.message());
+    }
+    return {};
+}
+
+Result<AssetDeleteResult, std::string>
+AssetDatabase::delete_asset(const AssetPath& path) {
+    auto normalized = path.normalized();
+    if (!normalized.source()) {
+        normalized = normalized.with_source("project");
+    }
+    auto source_file = resolve(normalized);
+    if (!source_file) {
+        return failure(std::move(source_file.error()));
+    }
+
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(*source_file, error) || error) {
+        return failure(
+            "Asset source is not a regular file: " + source_file->string()
+        );
+    }
+    const auto metadata_file = metadata_path(normalized);
+    const bool has_metadata_file =
+        std::filesystem::exists(metadata_file, error);
+    if (error) {
+        return failure("Failed to inspect asset metadata: " + error.message());
+    }
+    if (has_metadata_file) {
+        const bool is_regular =
+            std::filesystem::is_regular_file(metadata_file, error);
+        if (error) {
+            return failure(
+                "Failed to inspect asset metadata: " + error.message()
+            );
+        }
+        if (!is_regular) {
+            return failure(
+                "Asset metadata is not a regular file: " +
+                metadata_file.string()
+            );
+        }
+    }
+    if (metadata(normalized) && !has_metadata_file) {
+        return failure(
+            "Registered asset metadata is missing: " + metadata_file.string()
+        );
+    }
+
+    Optional<AssetUuid> id;
+    if (const auto* asset_metadata = metadata(normalized)) {
+        id = asset_metadata->id;
+    }
+    const auto staging_directory = m_import_cache_root.parent_path() /
+                                   "deleting" / AssetUuid::random().as_string();
+    std::filesystem::create_directories(staging_directory, error);
+    if (error) {
+        return failure(
+            "Failed to create asset deletion staging directory: " +
+            error.message()
+        );
+    }
+    const auto staged_source = staging_directory / source_file->filename();
+    const auto staged_metadata = staging_directory / metadata_file.filename();
+    std::filesystem::rename(*source_file, staged_source, error);
+    if (error) {
+        std::error_code cleanup_error;
+        std::filesystem::remove_all(staging_directory, cleanup_error);
+        return failure(
+            "Failed to stage asset for deletion: " + error.message()
+        );
+    }
+    if (has_metadata_file) {
+        std::filesystem::rename(metadata_file, staged_metadata, error);
+        if (error) {
+            const auto metadata_error = error.message();
+            std::error_code rollback_error;
+            std::filesystem::rename(
+                staged_source,
+                *source_file,
+                rollback_error
+            );
+            std::error_code cleanup_error;
+            std::filesystem::remove_all(staging_directory, cleanup_error);
+            if (rollback_error) {
+                return failure(
+                    "Failed to stage asset metadata (" + metadata_error +
+                    ") and failed to restore the source (" +
+                    rollback_error.message() + ")"
+                );
+            }
+            return failure(
+                "Failed to stage asset metadata; the source was restored: " +
+                metadata_error
+            );
+        }
+    }
+
+    std::filesystem::remove_all(staging_directory, error);
+    if (error) {
+        warn(
+            "Failed to remove staged deleted asset '{}': {}",
+            staging_directory.string(),
+            error.message()
+        );
+    }
+
+    if (id) {
+        m_by_id.erase(*id);
+        m_import_records.erase(*id);
+        const auto cache_directory = import_record_path(*id).parent_path();
+        auto cache_status =
+            remove_cache_directory(m_import_cache_root, cache_directory);
+        if (!cache_status) {
+            warn("{}", cache_status.error());
+        }
+    }
+    m_by_path.erase(normalized);
+    m_errors.erase(normalized);
+    return AssetDeleteResult {
+        .path = std::move(normalized),
+        .id = id,
+    };
+}
+
+Status<std::string>
+AssetDatabase::delete_empty_directory(const AssetPath& path) {
+    auto normalized = path.normalized();
+    if (!normalized.source()) {
+        normalized = normalized.with_source("project");
+    }
+    if (normalized.path().empty()) {
+        return failure(std::string("Cannot delete the project asset root"));
+    }
+    auto directory = resolve(normalized);
+    if (!directory) {
+        return failure(std::move(directory.error()));
+    }
+
+    std::error_code error;
+    if (!std::filesystem::is_directory(*directory, error) || error) {
+        return failure(
+            "Asset directory does not exist: " + directory->string()
+        );
+    }
+    if (!std::filesystem::is_empty(*directory, error)) {
+        if (error) {
+            return failure(
+                "Failed to inspect asset directory: " + error.message()
+            );
+        }
+        return failure(std::string("Only empty asset folders can be deleted"));
+    }
+    if (!std::filesystem::remove(*directory, error) || error) {
+        return failure("Failed to delete asset directory: " + error.message());
+    }
+    return {};
 }
 
 Result<AssetMetadata, std::string>

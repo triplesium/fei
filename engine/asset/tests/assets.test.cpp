@@ -241,6 +241,47 @@ TEST_CASE(
     REQUIRE(assets.get(second)->value == 2);
 }
 
+TEST_CASE(
+    "Assets remap cached paths without replacing handles",
+    "[asset][path]"
+) {
+    App app;
+    AssetServer server(&app);
+    Assets<TestAsset> assets(std::make_unique<CountingLoader>());
+    static constexpr std::array<std::byte, 1> bytes = {std::byte {1}};
+    const AssetPath source("project://images/source.mock");
+    const AssetPath destination("project://images/renamed.mock");
+    SyncLoadContext context(server, source);
+
+    auto reader = reader_for(bytes);
+    auto handle = assets.load(reader, context);
+    REQUIRE(assets.remap_path(source, destination));
+
+    auto stored_path = assets.path(handle);
+    REQUIRE(stored_path);
+    CHECK(*stored_path == destination);
+    REQUIRE_FALSE(assets.cached_handle(source));
+    auto cached = assets.cached_handle(destination);
+    REQUIRE(cached);
+    CHECK(cached->id() == handle.id());
+}
+
+TEST_CASE("Assets remove all entries loaded from a path", "[asset][path]") {
+    App app;
+    AssetServer server(&app);
+    Assets<TestAsset> assets(std::make_unique<CountingLoader>());
+    static constexpr std::array<std::byte, 1> bytes = {std::byte {1}};
+    const AssetPath path("project://images/deleted.mock");
+    SyncLoadContext context(server, path);
+    auto reader = reader_for(bytes);
+    auto handle = assets.load(reader, context);
+
+    CHECK(assets.remove_path(path) == 1);
+    CHECK_FALSE(assets.get(handle));
+    CHECK_FALSE(assets.load_state(handle));
+    CHECK_FALSE(assets.cached_handle(path));
+}
+
 TEST_CASE("Assets load stores loader errors", "[asset][loader]") {
     App app;
     AssetServer server(&app);

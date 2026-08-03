@@ -49,6 +49,16 @@ namespace fei::editor {
 
 namespace {
 
+enum class AssetClipboardOperation : std::uint8_t {
+    Cut,
+    Copy,
+};
+
+struct AssetClipboard {
+    AssetClipboardOperation operation;
+    AssetPath source;
+};
+
 struct EditorUiState {
     ImTextureID scene_texture_id {ImTextureID_Invalid};
     std::shared_ptr<const Texture> registered_scene_texture;
@@ -70,6 +80,17 @@ struct EditorUiState {
     AssetImportSettings import_settings;
     bool import_settings_dirty {false};
     Optional<std::string> import_settings_error;
+    std::array<char, 256> rename_name {};
+    Optional<AssetPath> rename_source;
+    Optional<std::string> rename_error;
+    Optional<AssetPath> reveal_asset_path;
+    Optional<AssetClipboard> asset_clipboard;
+    std::array<char, 256> create_folder_name {};
+    Optional<AssetPath> create_folder_parent;
+    Optional<std::string> asset_operation_error;
+    Optional<AssetPath> delete_target;
+    bool delete_target_is_directory {false};
+    Optional<std::string> delete_error;
 };
 
 const char* operation_source_name(OperationSource source) {
@@ -437,8 +458,20 @@ void draw_asset_inspector(
     EditorUiState& state
 );
 
-void draw_asset_preview(
+void reimport_asset(
+    const AssetPath& path,
     AssetBrowser& browser,
+    AssetServer& asset_server,
+    const AssetImporterRegistry& importers,
+    AssetDatabase& database,
+    ActivityLog& activity,
+    EditorUiState& state,
+    std::string_view action,
+    bool use_edited_settings
+);
+
+void draw_asset_preview(
+    const AssetPath& path,
     AssetServer& asset_server,
     const Assets<Image>& images,
     RenderAssets<GpuImage>& gpu_images,
@@ -765,53 +798,22 @@ void draw_asset_inspector(
         }
     }
 
-    ImGui::BeginDisabled(!importer);
-    if (ImGui::Button(metadata ? "Reimport" : "Import")) {
-        auto source = database.resolve(path);
-        if (!source) {
-            state.import_settings_error = source.error();
-        } else {
-            auto result = import_asset(
-                AssetImportRequest {
-                    .source_file = *source,
-                    .destination = path,
-                    .settings = state.import_settings,
-                },
-                importers,
-                database
-            );
-            if (!result) {
-                state.import_settings_error = result.error().message;
-                activity.record(
-                    OperationSource::User,
-                    "ReimportAsset",
-                    path.as_string() + ": " + result.error().message,
-                    false
-                );
-            } else {
-                state.import_settings = result->metadata.settings;
-                state.import_settings_dirty = false;
-                state.import_settings_error = nullopt;
-                browser.request_refresh();
-                bool reloaded = true;
-                if (result->metadata.importer == "image") {
-                    auto reload = asset_server.reload<Image>(path);
-                    reloaded = reload.has_value();
-                    if (!reload) {
-                        state.import_settings_error = reload.error().message;
-                    }
-                }
-                activity.record(
-                    OperationSource::User,
-                    "ReimportAsset",
-                    path.as_string() + (reloaded ? "" : ": reload failed"),
-                    reloaded
-                );
-            }
-        }
-    }
-    ImGui::EndDisabled();
     if (state.import_settings_dirty) {
+        ImGui::BeginDisabled(!importer);
+        if (ImGui::Button("Apply")) {
+            reimport_asset(
+                path,
+                browser,
+                asset_server,
+                importers,
+                database,
+                activity,
+                state,
+                "ApplyImportSettings",
+                true
+            );
+        }
+        ImGui::EndDisabled();
         ImGui::SameLine();
         if (ImGui::Button("Revert")) {
             state.import_settings = current_settings;
@@ -823,14 +825,7 @@ void draw_asset_inspector(
     }
 
     ImGui::Separator();
-    draw_asset_preview(
-        browser,
-        asset_server,
-        images,
-        gpu_images,
-        textures,
-        state
-    );
+    draw_asset_preview(path, asset_server, images, gpu_images, textures, state);
 }
 
 void draw_import_popup(
@@ -974,11 +969,8 @@ void auto_import_project_assets(
     }
 }
 
-bool is_previewable_image(const AssetEntry& entry) {
-    if (entry.kind != AssetEntryKind::File) {
-        return false;
-    }
-    auto extension = entry.path.path().extension().string();
+bool is_previewable_image(const AssetPath& path) {
+    auto extension = path.path().extension().string();
     std::ranges::transform(
         extension,
         extension.begin(),
@@ -1001,15 +993,15 @@ void clear_asset_preview(ImGuiTextureRegistry& textures, EditorUiState& state) {
 }
 
 void sync_asset_preview(
-    const AssetEntry* selected,
+    const AssetPath& path,
     AssetServer& asset_server,
     RenderAssets<GpuImage>& gpu_images,
     ImGuiTextureRegistry& textures,
     EditorUiState& state
 ) {
     Optional<AssetPath> preview_path;
-    if (selected && is_previewable_image(*selected)) {
-        preview_path = selected->path;
+    if (is_previewable_image(path)) {
+        preview_path = path;
     }
     if (preview_path != state.asset_preview_path) {
         clear_asset_preview(textures, state);
@@ -1072,20 +1064,15 @@ bool draw_asset_breadcrumb(AssetBrowser& browser) {
 }
 
 void draw_asset_preview(
-    AssetBrowser& browser,
+    const AssetPath& path,
     AssetServer& asset_server,
     const Assets<Image>& images,
     RenderAssets<GpuImage>& gpu_images,
     ImGuiTextureRegistry& textures,
     EditorUiState& state
 ) {
-    const auto* selected = browser.selected_entry();
-    sync_asset_preview(selected, asset_server, gpu_images, textures, state);
-    if (!selected) {
-        return;
-    }
-
-    if (!is_previewable_image(*selected)) {
+    sync_asset_preview(path, asset_server, gpu_images, textures, state);
+    if (!is_previewable_image(path)) {
         return;
     }
     if (auto load_error = asset_server.load_error(state.asset_preview_handle)) {
@@ -1131,6 +1118,561 @@ void draw_asset_preview(
     );
 }
 
+void reimport_asset(
+    const AssetPath& path,
+    AssetBrowser& browser,
+    AssetServer& asset_server,
+    const AssetImporterRegistry& importers,
+    AssetDatabase& database,
+    ActivityLog& activity,
+    EditorUiState& state,
+    std::string_view action,
+    bool use_edited_settings
+) {
+    const auto* metadata = database.metadata(path);
+    const auto* importer = metadata ? importers.find(metadata->importer) :
+                                      importers.find_for(path.path());
+    if (!importer) {
+        return;
+    }
+    auto settings =
+        metadata ? metadata->settings : importer->default_settings(path);
+    const bool has_edited_settings = state.import_settings_path &&
+                                     *state.import_settings_path == path &&
+                                     state.import_settings_dirty;
+    if (use_edited_settings && state.import_settings_path &&
+        *state.import_settings_path == path) {
+        settings = state.import_settings;
+    }
+
+    auto source = database.resolve(path);
+    if (!source) {
+        state.import_settings_error = source.error();
+        activity.record(
+            OperationSource::User,
+            std::string(action),
+            path.as_string() + ": " + source.error(),
+            false
+        );
+        return;
+    }
+    auto result = import_asset(
+        AssetImportRequest {
+            .source_file = *source,
+            .destination = path,
+            .settings = std::move(settings),
+        },
+        importers,
+        database
+    );
+    if (!result) {
+        state.import_settings_error = result.error().message;
+        activity.record(
+            OperationSource::User,
+            std::string(action),
+            path.as_string() + ": " + result.error().message,
+            false
+        );
+        return;
+    }
+
+    if (use_edited_settings || !has_edited_settings) {
+        state.import_settings_path = path;
+        state.import_settings = result->metadata.settings;
+        state.import_settings_dirty = false;
+    }
+    state.import_settings_error = nullopt;
+    browser.request_refresh();
+    bool reloaded = true;
+    if (result->metadata.importer == "image") {
+        auto reload = asset_server.reload<Image>(path);
+        reloaded = reload.has_value();
+        if (!reload) {
+            state.import_settings_error = reload.error().message;
+        }
+    }
+    activity.record(
+        OperationSource::User,
+        std::string(action),
+        path.as_string() + (reloaded ? "" : ": reload failed"),
+        reloaded
+    );
+}
+
+Result<AssetPath, std::string>
+rename_destination(const AssetPath& source, const EditorUiState& state) {
+    const std::filesystem::path name(state.rename_name.data());
+    if (name.empty() || name != name.filename()) {
+        return failure(std::string("Rename only accepts a file name"));
+    }
+    auto destination = AssetPath(source.path().parent_path() / name);
+    if (source.source()) {
+        destination = destination.with_source(*source.source());
+    }
+    return destination;
+}
+
+AssetPath asset_child_path(
+    const AssetPath& directory,
+    const std::filesystem::path& child
+) {
+    auto path = AssetPath(directory.path() / child);
+    if (directory.source()) {
+        path = path.with_source(*directory.source());
+    }
+    return path;
+}
+
+Result<AssetPath, std::string> unique_copy_destination(
+    const AssetPath& directory,
+    const AssetPath& source,
+    const AssetDatabase& database
+) {
+    const auto stem = source.path().stem().string();
+    const auto extension = source.path().extension().string();
+    for (std::size_t index = 1; index < 10'000; ++index) {
+        const auto suffix = index == 1 ? std::string(" copy") :
+                                         " copy " + std::to_string(index);
+        auto filename = stem;
+        filename += suffix;
+        filename += extension;
+        auto candidate = asset_child_path(directory, filename);
+        auto candidate_file = database.resolve(candidate);
+        if (!candidate_file) {
+            return failure(std::move(candidate_file.error()));
+        }
+        std::error_code error;
+        const bool file_exists =
+            std::filesystem::exists(*candidate_file, error);
+        if (error) {
+            return failure(
+                "Failed to inspect copy destination: " + error.message()
+            );
+        }
+        const bool metadata_exists =
+            std::filesystem::exists(database.metadata_path(candidate), error);
+        if (error) {
+            return failure(
+                "Failed to inspect copy metadata: " + error.message()
+            );
+        }
+        if (!file_exists && !metadata_exists && !database.metadata(candidate)) {
+            return candidate;
+        }
+    }
+    return failure(std::string("Could not find an available copy name"));
+}
+
+void reveal_asset(
+    const AssetPath& path,
+    AssetBrowser& browser,
+    Selection& selection,
+    EditorUiState& state
+) {
+    selection.entity = nullopt;
+    selection.asset = path;
+    state.reveal_asset_path = path;
+    auto directory = AssetPath(path.path().parent_path());
+    if (path.source()) {
+        directory = directory.with_source(*path.source());
+    }
+    browser.navigate_to(directory);
+    browser.request_refresh();
+}
+
+void paste_asset(
+    const AssetPath& directory,
+    AssetBrowser& browser,
+    Selection& selection,
+    AssetServer& asset_server,
+    const AssetImporterRegistry& importers,
+    AssetDatabase& database,
+    ActivityLog& activity,
+    EditorUiState& state
+) {
+    if (!state.asset_clipboard) {
+        return;
+    }
+    const auto clipboard = *state.asset_clipboard;
+    state.asset_operation_error = nullopt;
+
+    if (clipboard.operation == AssetClipboardOperation::Cut) {
+        const auto destination =
+            asset_child_path(directory, clipboard.source.path().filename());
+        auto result = database.move_asset(clipboard.source, destination);
+        if (!result) {
+            state.asset_operation_error = result.error();
+            activity.record(
+                OperationSource::User,
+                "PasteAsset",
+                clipboard.source.as_string() + ": " + result.error(),
+                false
+            );
+            return;
+        }
+        asset_server.remap_path(result->source, result->destination);
+        state.asset_clipboard = nullopt;
+        state.import_settings_path = nullopt;
+        reveal_asset(result->destination, browser, selection, state);
+        activity.record(
+            OperationSource::User,
+            "PasteAsset",
+            result->source.as_string() + " -> " +
+                result->destination.as_string()
+        );
+        return;
+    }
+
+    auto destination =
+        unique_copy_destination(directory, clipboard.source, database);
+    if (!destination) {
+        state.asset_operation_error = destination.error();
+        activity.record(
+            OperationSource::User,
+            "PasteAssetCopy",
+            clipboard.source.as_string() + ": " + destination.error(),
+            false
+        );
+        return;
+    }
+
+    const auto* metadata = database.metadata(clipboard.source);
+    const auto* importer = metadata ?
+                               importers.find(metadata->importer) :
+                               importers.find_for(clipboard.source.path());
+    if (importer) {
+        auto source_file = database.resolve(clipboard.source);
+        if (!source_file) {
+            state.asset_operation_error = source_file.error();
+        } else {
+            auto settings = metadata ? metadata->settings :
+                                       importer->default_settings(*destination);
+            auto result = import_asset(
+                AssetImportRequest {
+                    .source_file = *source_file,
+                    .destination = *destination,
+                    .settings = std::move(settings),
+                },
+                importers,
+                database
+            );
+            if (!result) {
+                state.asset_operation_error = result.error().message;
+            }
+        }
+    } else {
+        auto result = database.copy_asset_file(clipboard.source, *destination);
+        if (!result) {
+            state.asset_operation_error = result.error();
+        }
+    }
+    if (state.asset_operation_error) {
+        activity.record(
+            OperationSource::User,
+            "PasteAssetCopy",
+            clipboard.source.as_string() + ": " + *state.asset_operation_error,
+            false
+        );
+        return;
+    }
+
+    reveal_asset(*destination, browser, selection, state);
+    activity.record(
+        OperationSource::User,
+        "PasteAssetCopy",
+        clipboard.source.as_string() + " -> " + destination->as_string()
+    );
+}
+
+void draw_create_folder_popup(
+    AssetBrowser& browser,
+    AssetDatabase& database,
+    ActivityLog& activity,
+    EditorUiState& state
+) {
+    if (!ImGui::BeginPopupModal(
+            "Create Folder",
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize
+        )) {
+        return;
+    }
+    ImGui::SetNextItemWidth(360.0f);
+    if (ImGui::InputText(
+            "Name",
+            state.create_folder_name.data(),
+            state.create_folder_name.size()
+        )) {
+        state.asset_operation_error = nullopt;
+    }
+    if (state.asset_operation_error) {
+        ImGui::TextColored(
+            ImVec4 {0.95f, 0.35f, 0.35f, 1.0f},
+            "%s",
+            state.asset_operation_error->c_str()
+        );
+    }
+
+    ImGui::BeginDisabled(state.create_folder_name.front() == '\0');
+    if (ImGui::Button("Create") && state.create_folder_parent) {
+        const std::filesystem::path name(state.create_folder_name.data());
+        if (name.empty() || name != name.filename()) {
+            state.asset_operation_error =
+                std::string("Folder name cannot contain a path");
+        } else {
+            const auto path =
+                asset_child_path(*state.create_folder_parent, name);
+            auto result = database.create_directory(path);
+            if (!result) {
+                state.asset_operation_error = result.error();
+                activity.record(
+                    OperationSource::User,
+                    "CreateAssetFolder",
+                    path.as_string() + ": " + result.error(),
+                    false
+                );
+            } else {
+                browser.request_refresh();
+                state.create_folder_parent = nullopt;
+                state.asset_operation_error = nullopt;
+                activity.record(
+                    OperationSource::User,
+                    "CreateAssetFolder",
+                    path.as_string()
+                );
+                ImGui::CloseCurrentPopup();
+            }
+        }
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+        state.create_folder_parent = nullopt;
+        state.asset_operation_error = nullopt;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+void draw_rename_asset_popup(
+    AssetBrowser& browser,
+    Selection& selection,
+    AssetServer& asset_server,
+    AssetDatabase& database,
+    ActivityLog& activity,
+    EditorUiState& state
+) {
+    if (!ImGui::BeginPopupModal(
+            "Rename Asset",
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize
+        )) {
+        return;
+    }
+    if (!state.rename_source) {
+        ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+        return;
+    }
+
+    const auto source = *state.rename_source;
+    ImGui::TextWrapped("Source: %s", source.as_string().c_str());
+    ImGui::SetNextItemWidth(560.0f);
+    if (ImGui::InputTextWithHint(
+            "Name",
+            "renamed.png",
+            state.rename_name.data(),
+            state.rename_name.size()
+        )) {
+        state.rename_error = nullopt;
+    }
+    ImGui::TextDisabled(
+        "The file and .meta sidecar move together; UUID and imported "
+        "artifacts stay unchanged."
+    );
+    if (state.rename_error) {
+        ImGui::PushTextWrapPos(580.0f);
+        ImGui::TextColored(
+            ImVec4 {0.95f, 0.35f, 0.35f, 1.0f},
+            "%s",
+            state.rename_error->c_str()
+        );
+        ImGui::PopTextWrapPos();
+    }
+
+    ImGui::BeginDisabled(state.rename_name.front() == '\0');
+    if (ImGui::Button("Rename")) {
+        auto destination = rename_destination(source, state);
+        if (!destination) {
+            state.rename_error = destination.error();
+            activity.record(
+                OperationSource::User,
+                "RenameAsset",
+                source.as_string() + ": " + destination.error(),
+                false
+            );
+        } else {
+            auto result = database.move_asset(source, *destination);
+            if (!result) {
+                state.rename_error = result.error();
+                activity.record(
+                    OperationSource::User,
+                    "RenameAsset",
+                    source.as_string() + ": " + result.error(),
+                    false
+                );
+            } else {
+                asset_server.remap_path(result->source, result->destination);
+                selection.entity = nullopt;
+                selection.asset = result->destination;
+                state.reveal_asset_path = result->destination;
+                state.rename_source = nullopt;
+                state.rename_error = nullopt;
+                state.import_settings_path = nullopt;
+
+                auto destination_directory =
+                    AssetPath(result->destination.path().parent_path());
+                if (result->destination.source()) {
+                    destination_directory = destination_directory.with_source(
+                        *result->destination.source()
+                    );
+                }
+                browser.navigate_to(destination_directory);
+                browser.request_refresh();
+                activity.record(
+                    OperationSource::User,
+                    "RenameAsset",
+                    result->source.as_string() + " -> " +
+                        result->destination.as_string()
+                );
+                ImGui::CloseCurrentPopup();
+            }
+        }
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+        state.rename_source = nullopt;
+        state.rename_error = nullopt;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+void draw_delete_asset_popup(
+    AssetBrowser& browser,
+    Selection& selection,
+    AssetServer& asset_server,
+    AssetDatabase& database,
+    ActivityLog& activity,
+    ImGuiTextureRegistry& textures,
+    EditorUiState& state
+) {
+    if (!ImGui::BeginPopupModal(
+            "Delete Asset",
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize
+        )) {
+        return;
+    }
+    if (!state.delete_target) {
+        ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+        return;
+    }
+
+    const auto target = *state.delete_target;
+    ImGui::TextWrapped("Delete %s?", target.as_string().c_str());
+    if (state.delete_target_is_directory) {
+        ImGui::TextDisabled("Only empty folders can be deleted.");
+    } else if (const auto* metadata = database.metadata(target)) {
+        ImGui::TextColored(
+            ImVec4 {0.95f, 0.65f, 0.25f, 1.0f},
+            "References to UUID %s will become unresolved.",
+            metadata->id.as_string().c_str()
+        );
+    } else {
+        ImGui::TextDisabled("This file has no imported asset metadata.");
+    }
+    if (state.delete_error) {
+        ImGui::PushTextWrapPos(520.0f);
+        ImGui::TextColored(
+            ImVec4 {0.95f, 0.35f, 0.35f, 1.0f},
+            "%s",
+            state.delete_error->c_str()
+        );
+        ImGui::PopTextWrapPos();
+    }
+
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4 {0.65f, 0.16f, 0.16f, 1.0f});
+    ImGui::PushStyleColor(
+        ImGuiCol_ButtonHovered,
+        ImVec4 {0.82f, 0.22f, 0.22f, 1.0f}
+    );
+    const bool confirm = ImGui::Button("Delete");
+    ImGui::PopStyleColor(2);
+    if (confirm) {
+        bool deleted = false;
+        if (state.delete_target_is_directory) {
+            auto result = database.delete_empty_directory(target);
+            deleted = result.has_value();
+            if (!result) {
+                state.delete_error = result.error();
+            }
+        } else {
+            auto result = database.delete_asset(target);
+            deleted = result.has_value();
+            if (!result) {
+                state.delete_error = result.error();
+            } else {
+                asset_server.remove_path(target);
+                clear_asset_preview(textures, state);
+            }
+        }
+
+        if (deleted) {
+            if (state.asset_clipboard &&
+                state.asset_clipboard->source == target) {
+                state.asset_clipboard = nullopt;
+            }
+            if (selection.asset && *selection.asset == target) {
+                selection.asset = nullopt;
+            }
+            if (state.import_settings_path &&
+                *state.import_settings_path == target) {
+                state.import_settings_path = nullopt;
+            }
+            browser.clear_selection();
+            browser.request_refresh();
+            state.delete_target = nullopt;
+            state.delete_error = nullopt;
+            state.asset_operation_error = nullopt;
+            activity.record(
+                OperationSource::User,
+                state.delete_target_is_directory ? "DeleteAssetFolder" :
+                                                   "DeleteAsset",
+                target.as_string()
+            );
+            ImGui::CloseCurrentPopup();
+        } else {
+            activity.record(
+                OperationSource::User,
+                state.delete_target_is_directory ? "DeleteAssetFolder" :
+                                                   "DeleteAsset",
+                target.as_string() + ": " + *state.delete_error,
+                false
+            );
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+        state.delete_target = nullopt;
+        state.delete_error = nullopt;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
 void draw_assets(
     AssetBrowser& browser,
     Selection& selection,
@@ -1138,6 +1680,7 @@ void draw_assets(
     const AssetImporterRegistry& importers,
     AssetDatabase& database,
     ActivityLog& activity,
+    ImGuiTextureRegistry& textures,
     EditorUiState& state
 ) {
     if (!ImGui::Begin("Assets")) {
@@ -1165,8 +1708,20 @@ void draw_assets(
 
     if (browser.refresh_requested()) {
         auto_import_project_assets(importers, database, activity);
-        browser.refresh(asset_server);
-        if (!browser.selection()) {
+        const bool refreshed = browser.refresh(asset_server);
+        if (refreshed && state.reveal_asset_path) {
+            const auto target = *state.reveal_asset_path;
+            const auto entry =
+                std::ranges::find(browser.entries(), target, &AssetEntry::path);
+            if (entry != browser.entries().end()) {
+                browser.select(*entry);
+                selection.entity = nullopt;
+                selection.asset = target;
+            } else {
+                selection.asset = nullopt;
+            }
+            state.reveal_asset_path = nullopt;
+        } else if (!state.reveal_asset_path && !browser.selection()) {
             selection.asset = nullopt;
         }
     }
@@ -1177,8 +1732,19 @@ void draw_assets(
             browser.error()->c_str()
         );
     }
+    if (state.asset_operation_error) {
+        ImGui::TextColored(
+            ImVec4 {0.95f, 0.35f, 0.35f, 1.0f},
+            "%s",
+            state.asset_operation_error->c_str()
+        );
+    }
 
     bool navigated = false;
+    bool open_rename_popup = false;
+    bool open_create_folder_popup = false;
+    bool open_import_popup = false;
+    bool open_delete_popup = false;
     const auto table_height =
         std::max(ImGui::GetContentRegionAvail().y, 120.0f);
     if (ImGui::BeginTable(
@@ -1230,6 +1796,107 @@ void draw_assets(
                     navigated |= browser.open(entry);
                 }
             }
+            if (ImGui::BeginPopupContextItem("AssetContext")) {
+                browser.select(entry);
+                selection.entity = nullopt;
+                selection.asset = entry.kind == AssetEntryKind::File ?
+                                      Optional<AssetPath> {entry.path} :
+                                      nullopt;
+                if (entry.kind == AssetEntryKind::Directory) {
+                    if (ImGui::MenuItem("Open")) {
+                        navigated |= browser.open(entry);
+                    }
+                    if (ImGui::MenuItem(
+                            "Paste Into",
+                            nullptr,
+                            false,
+                            state.asset_clipboard.has_value()
+                        )) {
+                        paste_asset(
+                            entry.path,
+                            browser,
+                            selection,
+                            asset_server,
+                            importers,
+                            database,
+                            activity,
+                            state
+                        );
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Delete")) {
+                        state.delete_target = entry.path;
+                        state.delete_target_is_directory = true;
+                        state.delete_error = nullopt;
+                        open_delete_popup = true;
+                    }
+                } else {
+                    const auto* metadata = database.metadata(entry.path);
+                    const auto* importer =
+                        metadata ? importers.find(metadata->importer) :
+                                   importers.find_for(entry.path.path());
+                    if (ImGui::MenuItem(
+                            metadata ? "Force Reimport" : "Import",
+                            nullptr,
+                            false,
+                            importer != nullptr
+                        )) {
+                        reimport_asset(
+                            entry.path,
+                            browser,
+                            asset_server,
+                            importers,
+                            database,
+                            activity,
+                            state,
+                            metadata ? "ForceReimportAsset" : "ImportAsset",
+                            false
+                        );
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Cut")) {
+                        state.asset_clipboard = AssetClipboard {
+                            .operation = AssetClipboardOperation::Cut,
+                            .source = entry.path,
+                        };
+                        state.asset_operation_error = nullopt;
+                        activity.record(
+                            OperationSource::User,
+                            "CutAsset",
+                            entry.path.as_string()
+                        );
+                    }
+                    if (ImGui::MenuItem("Copy")) {
+                        state.asset_clipboard = AssetClipboard {
+                            .operation = AssetClipboardOperation::Copy,
+                            .source = entry.path,
+                        };
+                        state.asset_operation_error = nullopt;
+                        activity.record(
+                            OperationSource::User,
+                            "CopyAsset",
+                            entry.path.as_string()
+                        );
+                    }
+                    if (ImGui::MenuItem("Rename...")) {
+                        state.rename_source = entry.path;
+                        set_text_buffer(
+                            state.rename_name,
+                            entry.path.path().filename().string()
+                        );
+                        state.rename_error = nullopt;
+                        open_rename_popup = true;
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Delete")) {
+                        state.delete_target = entry.path;
+                        state.delete_target_is_directory = false;
+                        state.delete_error = nullopt;
+                        open_delete_popup = true;
+                    }
+                }
+                ImGui::EndPopup();
+            }
             ImGui::PopID();
 
             ImGui::TableSetColumnIndex(1);
@@ -1247,6 +1914,75 @@ void draw_assets(
         }
         ImGui::EndTable();
     }
+    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) &&
+        ImGui::IsMouseReleased(ImGuiMouseButton_Right) &&
+        !ImGui::IsAnyItemHovered()) {
+        ImGui::OpenPopup("AssetsBackgroundContext");
+    }
+    if (ImGui::BeginPopup("AssetsBackgroundContext")) {
+        if (ImGui::MenuItem("Create Folder...")) {
+            state.create_folder_parent = browser.current_directory();
+            set_text_buffer(state.create_folder_name, "New Folder");
+            state.asset_operation_error = nullopt;
+            open_create_folder_popup = true;
+        }
+        if (ImGui::MenuItem(
+                "Paste",
+                nullptr,
+                false,
+                state.asset_clipboard.has_value()
+            )) {
+            paste_asset(
+                browser.current_directory(),
+                browser,
+                selection,
+                asset_server,
+                importers,
+                database,
+                activity,
+                state
+            );
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Import...")) {
+            state.import_error = nullopt;
+            open_import_popup = true;
+        }
+        if (ImGui::MenuItem("Refresh")) {
+            browser.request_refresh();
+        }
+        ImGui::EndPopup();
+    }
+    if (open_create_folder_popup) {
+        ImGui::OpenPopup("Create Folder");
+    }
+    if (open_import_popup) {
+        ImGui::OpenPopup("Import Asset");
+    }
+    if (open_rename_popup) {
+        ImGui::OpenPopup("Rename Asset");
+    }
+    if (open_delete_popup) {
+        ImGui::OpenPopup("Delete Asset");
+    }
+    draw_create_folder_popup(browser, database, activity, state);
+    draw_rename_asset_popup(
+        browser,
+        selection,
+        asset_server,
+        database,
+        activity,
+        state
+    );
+    draw_delete_asset_popup(
+        browser,
+        selection,
+        asset_server,
+        database,
+        activity,
+        textures,
+        state
+    );
     if (navigated && browser.refresh_requested()) {
         auto_import_project_assets(importers, database, activity);
         browser.refresh(asset_server);
@@ -1441,6 +2177,7 @@ void draw_editor(WorldRef world_ref) {
             asset_importers,
             asset_database,
             activity,
+            textures,
             state
         );
     }

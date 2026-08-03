@@ -342,6 +342,43 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "AssetServer remaps loaded paths across registered asset types",
+    "[asset][server][path]"
+) {
+    App app;
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
+    const AssetPath source("memory://asset.bin");
+    const AssetPath destination("memory://renamed.bin");
+    auto handle = app.resource<AssetServer>().load<ServerAsset>(source);
+
+    CHECK(app.resource<AssetServer>().remap_path(source, destination) == 1);
+    auto& assets = app.resource<Assets<ServerAsset>>();
+    REQUIRE(assets.path(handle));
+    CHECK(*assets.path(handle) == destination);
+    auto reloaded = app.resource<AssetServer>().load<ServerAsset>(destination);
+    CHECK(reloaded.id() == handle.id());
+}
+
+TEST_CASE(
+    "AssetServer removes loaded assets by path across registered types",
+    "[asset][server][path]"
+) {
+    App app;
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
+    const AssetPath path("memory://asset.bin");
+    auto handle = app.resource<AssetServer>().load<ServerAsset>(path);
+
+    CHECK(app.resource<AssetServer>().remove_path(path) == 1);
+    CHECK_FALSE(app.resource<Assets<ServerAsset>>().get(handle));
+}
+
+TEST_CASE(
     "AssetServer canonicalizes default source paths before caching",
     "[asset][server][path]"
 ) {

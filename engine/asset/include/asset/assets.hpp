@@ -378,6 +378,52 @@ class Assets {
         return *entry->path;
     }
 
+    bool remap_path(const AssetPath& source, const AssetPath& destination) {
+        if (source == destination) {
+            return false;
+        }
+
+        if (const auto destination_cache = m_cache.find(destination);
+            destination_cache != m_cache.end()) {
+            if (auto destination_entry = get_entry(destination_cache->second)) {
+                destination_entry->path = nullopt;
+            }
+            m_cache.erase(destination_cache);
+        }
+
+        bool remapped = false;
+        for (auto& [id, entry] : m_assets) {
+            if (!entry.path || *entry.path != source) {
+                continue;
+            }
+            entry.path = destination;
+            if (entry.error) {
+                entry.error->path = destination;
+            }
+            remapped = true;
+        }
+        if (const auto source_cache = m_cache.find(source);
+            source_cache != m_cache.end()) {
+            const auto id = source_cache->second;
+            m_cache.erase(source_cache);
+            m_cache.insert_or_assign(destination, id);
+        }
+        return remapped;
+    }
+
+    std::size_t remove_path(const AssetPath& path) {
+        std::vector<AssetId> matching;
+        for (const auto& [id, entry] : m_assets) {
+            if (entry.path && *entry.path == path) {
+                matching.push_back(id);
+            }
+        }
+        for (const auto id : matching) {
+            unload(id);
+        }
+        return matching.size();
+    }
+
     Optional<T&> modify(const Handle<T>& handle) { return modify(handle.id()); }
 
     Optional<T&> modify(AssetId id) {

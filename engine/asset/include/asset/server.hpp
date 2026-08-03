@@ -39,6 +39,8 @@ class AssetServer {
         std::function<Optional<AssetLoadState>(AssetId)> load_state;
         std::function<Optional<AssetLoadError>(AssetId)> load_error;
         std::function<std::vector<AssetKey>(AssetId)> dependencies;
+        std::function<bool(const AssetPath&, const AssetPath&)> remap_path;
+        std::function<std::size_t(const AssetPath&)> remove_path;
     };
 
     App* m_app;
@@ -105,6 +107,29 @@ class AssetServer {
             .id = id,
             .fallback_path = canonical,
         };
+    }
+
+    std::size_t
+    remap_path(const AssetPath& source, const AssetPath& destination) {
+        const auto canonical_source = canonicalize_path(source);
+        const auto canonical_destination = canonicalize_path(destination);
+        std::size_t remapped = 0;
+        for (auto& [type, access] : m_asset_types) {
+            (void)type;
+            remapped +=
+                access.remap_path(canonical_source, canonical_destination);
+        }
+        return remapped;
+    }
+
+    std::size_t remove_path(const AssetPath& path) {
+        const auto canonical = canonicalize_path(path);
+        std::size_t removed = 0;
+        for (auto& [type, access] : m_asset_types) {
+            (void)type;
+            removed += access.remove_path(canonical);
+        }
+        return removed;
     }
 
     [[nodiscard]] Result<AssetPath, AssetLoadError>
@@ -707,6 +732,25 @@ class AssetServer {
                     dependencies->end()
                 );
             },
+            .remap_path =
+                [app](const AssetPath& source, const AssetPath& destination) {
+                    if (!app || !app->template has_resource<Assets<T>>()) {
+                        return false;
+                    }
+                    return app->template resource<Assets<T>>().remap_path(
+                        source,
+                        destination
+                    );
+                },
+            .remove_path =
+                [app](const AssetPath& path) {
+                    if (!app || !app->template has_resource<Assets<T>>()) {
+                        return std::size_t {0};
+                    }
+                    return app->template resource<Assets<T>>().remove_path(
+                        path
+                    );
+                },
         };
     }
 

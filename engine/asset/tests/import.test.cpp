@@ -260,6 +260,216 @@ TEST_CASE("Asset import supports project files in place", "[asset][import]") {
     CHECK(std::filesystem::exists(source.string() + ".meta"));
 }
 
+TEST_CASE(
+    "Asset move preserves metadata UUID and imported artifacts",
+    "[asset][import][move]"
+) {
+    TemporaryImportDirectory directory;
+    auto registry = mock_registry();
+    AssetDatabase database(directory.project_assets());
+    const auto source_file = directory.write_source("move.mock", "valid move");
+    const AssetPath source("project://textures/move.mock");
+    const AssetPath destination("project://characters/moved.mock");
+    auto imported = import_asset(
+        AssetImportRequest {
+            .source_file = source_file,
+            .destination = source,
+            .settings = {},
+        },
+        registry,
+        database
+    );
+    REQUIRE(imported);
+    const auto id = imported->metadata.id;
+    const auto artifact = database.artifact_path(source, "mock");
+    REQUIRE(artifact);
+
+    auto moved = database.move_asset(source, destination);
+
+    REQUIRE(moved);
+    CHECK(moved->source == source);
+    CHECK(moved->destination == destination);
+    REQUIRE(moved->id);
+    CHECK(*moved->id == id);
+    CHECK_FALSE(
+        std::filesystem::exists(
+            directory.project_assets() / "textures" / "move.mock"
+        )
+    );
+    CHECK_FALSE(
+        std::filesystem::exists(
+            directory.project_assets() / "textures" / "move.mock.meta"
+        )
+    );
+    CHECK(
+        std::filesystem::exists(
+            directory.project_assets() / "characters" / "moved.mock"
+        )
+    );
+    CHECK(
+        std::filesystem::exists(
+            directory.project_assets() / "characters" / "moved.mock.meta"
+        )
+    );
+    CHECK(database.metadata(source) == nullptr);
+    REQUIRE(database.metadata(destination));
+    CHECK(database.metadata(destination)->id == id);
+    REQUIRE(database.path(id));
+    CHECK(*database.path(id) == destination);
+    CHECK(database.state(destination) == AssetImportState::Imported);
+    CHECK(database.artifact_path(destination, "mock") == artifact);
+    CHECK(std::filesystem::exists(*artifact));
+
+    AssetDatabase rescanned(directory.project_assets());
+    REQUIRE(rescanned.scan());
+    REQUIRE(rescanned.path(id));
+    CHECK(*rescanned.path(id) == destination);
+    CHECK(rescanned.state(destination) == AssetImportState::Imported);
+}
+
+TEST_CASE("Asset move rejects unsafe target changes", "[asset][move]") {
+    TemporaryImportDirectory directory;
+    AssetDatabase database(directory.project_assets());
+    directory.write_project_asset("source.mock", "valid");
+    directory.write_project_asset("occupied.mock", "valid");
+
+    auto extension_change = database.move_asset(
+        AssetPath("project://source.mock"),
+        AssetPath("project://source.png")
+    );
+    REQUIRE_FALSE(extension_change);
+    CHECK(std::filesystem::exists(directory.project_assets() / "source.mock"));
+
+    auto occupied = database.move_asset(
+        AssetPath("project://source.mock"),
+        AssetPath("project://occupied.mock")
+    );
+    REQUIRE_FALSE(occupied);
+    CHECK(std::filesystem::exists(directory.project_assets() / "source.mock"));
+
+    const AssetPath stale_failure("project://stale.mock");
+    database.record_failure(stale_failure, "previous import failed");
+    auto moved =
+        database.move_asset(AssetPath("project://source.mock"), stale_failure);
+    REQUIRE(moved);
+    CHECK(database.state(stale_failure) == AssetImportState::Unimported);
+}
+
+TEST_CASE(
+    "Asset file copy omits metadata and imports with a new UUID",
+    "[asset][copy]"
+) {
+    TemporaryImportDirectory directory;
+    auto registry = mock_registry();
+    AssetDatabase database(directory.project_assets());
+    const auto external = directory.write_source("source.mock", "valid copy");
+    const AssetPath source("project://source.mock");
+    const AssetPath destination("project://copies/source copy.mock");
+    auto imported = import_asset(
+        AssetImportRequest {
+            .source_file = external,
+            .destination = source,
+            .settings = {},
+        },
+        registry,
+        database
+    );
+    REQUIRE(imported);
+
+    auto copied = database.copy_asset_file(source, destination);
+
+    REQUIRE(copied);
+    CHECK(*copied == destination);
+    CHECK(
+        std::filesystem::exists(
+            directory.project_assets() / "copies" / "source copy.mock"
+        )
+    );
+    CHECK_FALSE(
+        std::filesystem::exists(
+            directory.project_assets() / "copies" / "source copy.mock.meta"
+        )
+    );
+    CHECK(database.metadata(destination) == nullptr);
+
+    auto report = import_pending_assets(registry, database);
+    REQUIRE(report);
+    REQUIRE(report->imported.size() == 1);
+    CHECK(report->imported.front().path == destination);
+    CHECK(report->imported.front().metadata.id != imported->metadata.id);
+}
+
+TEST_CASE(
+    "Asset database creates safe project directories",
+    "[asset][folder]"
+) {
+    TemporaryImportDirectory directory;
+    AssetDatabase database(directory.project_assets());
+    const AssetPath folder("project://characters/heroes");
+
+    REQUIRE(database.create_directory(folder));
+    CHECK(
+        std::filesystem::is_directory(
+            directory.project_assets() / "characters" / "heroes"
+        )
+    );
+    REQUIRE_FALSE(database.create_directory(folder));
+    directory.write_project_asset("characters/heroes/hero.mock", "valid");
+    REQUIRE_FALSE(database.delete_empty_directory(folder));
+    std::filesystem::remove(
+        directory.project_assets() / "characters" / "heroes" / "hero.mock"
+    );
+    REQUIRE(database.delete_empty_directory(folder));
+    CHECK_FALSE(
+        std::filesystem::exists(
+            directory.project_assets() / "characters" / "heroes"
+        )
+    );
+    REQUIRE_FALSE(database.create_directory(AssetPath("project://../outside")));
+    REQUIRE_FALSE(database.delete_empty_directory(AssetPath("project://")));
+}
+
+TEST_CASE(
+    "Asset deletion removes metadata UUID and imported artifacts",
+    "[asset][delete]"
+) {
+    TemporaryImportDirectory directory;
+    auto registry = mock_registry();
+    AssetDatabase database(directory.project_assets());
+    const auto external = directory.write_source("delete.mock", "valid");
+    const AssetPath path("project://delete.mock");
+    auto imported = import_asset(
+        AssetImportRequest {
+            .source_file = external,
+            .destination = path,
+            .settings = {},
+        },
+        registry,
+        database
+    );
+    REQUIRE(imported);
+    const auto id = imported->metadata.id;
+    const auto artifact = database.artifact_path(path, "mock");
+    REQUIRE(artifact);
+    REQUIRE(std::filesystem::exists(*artifact));
+
+    auto deleted = database.delete_asset(path);
+
+    REQUIRE(deleted);
+    REQUIRE(deleted->id);
+    CHECK(*deleted->id == id);
+    CHECK_FALSE(
+        std::filesystem::exists(directory.project_assets() / "delete.mock")
+    );
+    CHECK_FALSE(
+        std::filesystem::exists(directory.project_assets() / "delete.mock.meta")
+    );
+    CHECK_FALSE(std::filesystem::exists(*artifact));
+    CHECK(database.metadata(path) == nullptr);
+    CHECK_FALSE(database.path(id));
+    CHECK(database.state(path) == AssetImportState::Unimported);
+}
+
 TEST_CASE("Asset import records validation failures", "[asset][import]") {
     TemporaryImportDirectory directory;
     auto registry = mock_registry();

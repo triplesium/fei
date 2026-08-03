@@ -68,6 +68,17 @@ struct AssetImportReport {
     std::vector<AssetImportError> failed;
 };
 
+struct AssetMoveResult {
+    AssetPath source;
+    AssetPath destination;
+    Optional<AssetUuid> id;
+};
+
+struct AssetDeleteResult {
+    AssetPath path;
+    Optional<AssetUuid> id;
+};
+
 class AssetDatabase {
   public:
     explicit AssetDatabase(
@@ -106,6 +117,14 @@ class AssetDatabase {
     ) const;
     void record_failure(const AssetPath& path, std::string message);
     void clear_failure(const AssetPath& path);
+    [[nodiscard]] Result<AssetMoveResult, std::string>
+    move_asset(const AssetPath& source, const AssetPath& destination);
+    [[nodiscard]] Result<AssetPath, std::string>
+    copy_asset_file(const AssetPath& source, const AssetPath& destination);
+    Status<std::string> create_directory(const AssetPath& path);
+    [[nodiscard]] Result<AssetDeleteResult, std::string>
+    delete_asset(const AssetPath& path);
+    Status<std::string> delete_empty_directory(const AssetPath& path);
 
   private:
     std::filesystem::path m_root;
