@@ -354,14 +354,14 @@ local function reflection_runtime_headers()
     -- Generated reflection files instantiate MethodImpl/PropertyImpl templates.
     -- Rebuild them whenever the reflection runtime ABI changes.
     local files = {}
-    for _, file in ipairs(os.files(path.join(os.projectdir(), "src/refl/**.hpp"))) do
+    for _, file in ipairs(os.files(path.join(os.projectdir(), "engine/refl/**.hpp"))) do
         if not normalize_path(file):find("/tests/", 1, true) then
             insert_unique(files, file)
         end
     end
     insert_unique(
         files,
-        path.join(os.projectdir(), "src/base/include/base/result.hpp")
+        path.join(os.projectdir(), "engine/base/include/base/result.hpp")
     )
     return files
 end
@@ -470,7 +470,7 @@ end
 local function module_inputs(target)
     local include_dirs = {}
     insert_unique(include_dirs, os.projectdir())
-    insert_unique(include_dirs, path.join(os.projectdir(), "src"))
+    insert_unique(include_dirs, path.join(os.projectdir(), "engine"))
     collect_recursive_include_dirs(include_dirs, target)
     return {
         module_file = target:values("fei.reflect.module_file"),

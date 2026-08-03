@@ -4,7 +4,7 @@
 
 ```text
 .
-|-- src/                 # engine modules and xmake targets
+|-- engine/              # engine modules and xmake targets
 |   |-- <module>/include/<module>/  # public headers
 |   |-- <module>/src/               # module implementation
 |   |-- <module>/tests/             # module-local Catch2 tests
@@ -19,7 +19,7 @@
 - Module targets follow `fei-<module>`, for example `fei-ecs`, `fei-refl`,
   `fei-rendering`, and `fei-scripting`.
 - Public includes use module prefixes, for example `#include "math/vector.hpp"`.
-  Do not add `src/` as a global include root; expose headers through each
+  Do not add `engine/` as a global include root; expose headers through each
   target's `include/` directory.
 - Keep shaders, fonts, and other module-owned assets beside the module that
   consumes them.
@@ -43,8 +43,8 @@
   reflection metadata.
 - `xmake format --check` or `xmake format fei-math`: check formatting without
   modifying files, or format one target.
-- `xmake format --files="src/math/src/*.cpp"` or
-  `xmake tidy -f "src/**/vector.cpp"`: restrict format/tidy to matching files.
+- `xmake format --files="engine/math/src/*.cpp"` or
+  `xmake tidy -f "engine/**/vector.cpp"`: restrict format/tidy to matching files.
   `--files` supports `*` and `**`; separate multiple patterns with the platform
   path separator, for example `;` on Windows.
 - `xmake tidy`: run clang-tidy for all xmake targets, including target headers.

@@ -20,6 +20,6 @@ imgui.ini
 assets/
 
 # Generated reflection output
-src/generated/reflgen.cpp
+engine/generated/reflgen.cpp
 
 .codex/

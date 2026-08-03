@@ -123,7 +123,7 @@ target("fei-test-support")
 add_cxxflags("cl::/Zc:preprocessor")
 
 includes("tools")
-includes("src")
+includes("engine")
 includes("editor")
 includes("samples")
 includes("tests")

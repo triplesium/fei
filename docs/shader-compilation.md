@@ -115,5 +115,5 @@ an older artifact can keep using stale backend names after the compiler code is
 fixed.
 
 The imported-namespace regression in
-`src/rendering/tests/shader_compiler.test.cpp` verifies that a uniform block's
+`engine/rendering/tests/shader_compiler.test.cpp` verifies that a uniform block's
 stored OpenGL name is the sanitized identifier present in the generated GLSL.

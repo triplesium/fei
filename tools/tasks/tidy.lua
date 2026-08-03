@@ -6,7 +6,7 @@ local tooling = import("tasks.tooling", {
     rootdir = path.join(os.projectdir(), "tools")
 })
 local project_include_dirs = os.dirs(
-    path.join(os.projectdir(), "src", "**", "include")
+    path.join(os.projectdir(), "engine", "**", "include")
 )
 table.sort(project_include_dirs)
 
