@@ -1342,6 +1342,33 @@ void EditorPlugin::setup(App& app) {
         "External-agent mode; no internal agent"
     );
 
+    auto import_report = import_pending_assets(
+        app.resource<AssetImporterRegistry>(),
+        app.resource<AssetDatabase>()
+    );
+    if (!import_report) {
+        warn("Failed to import project assets: {}", import_report.error());
+        app.resource<ActivityLog>().record(
+            OperationSource::Editor,
+            "ImportProjectAssets",
+            import_report.error(),
+            false
+        );
+    } else if (
+        !import_report->imported.empty() || !import_report->failed.empty()
+    ) {
+        app.resource<ActivityLog>().record(
+            OperationSource::Editor,
+            "ImportProjectAssets",
+            std::format(
+                "{} imported, {} failed",
+                import_report->imported.size(),
+                import_report->failed.size()
+            ),
+            import_report->failed.empty()
+        );
+    }
+
     if (m_config.create_welcome_scene) {
         app.add_systems(PreStartUp, setup_welcome_scene);
     }

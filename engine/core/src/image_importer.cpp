@@ -31,7 +31,7 @@ std::string_view ImageImporter::name() const {
 }
 
 std::uint32_t ImageImporter::version() const {
-    return 2;
+    return 3;
 }
 
 std::span<const std::string_view> ImageImporter::extensions() const {
@@ -47,10 +47,9 @@ std::span<const std::string_view> ImageImporter::extensions() const {
 }
 
 AssetImportSettings
-ImageImporter::default_settings(const AssetPath& destination) const {
+ImageImporter::default_settings(const AssetPath& /*destination*/) const {
     return {
-        {"color_space",
-         lowercase_extension(destination) == ".hdr" ? "linear" : "srgb"},
+        {"color_space", "linear"},
         {"generate_mipmaps", "false"},
     };
 }

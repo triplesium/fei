@@ -96,7 +96,7 @@ TEST_CASE("ImageImporter validates image bytes", "[core][import]") {
     auto status = importer.validate(invalid, context);
     REQUIRE_FALSE(status);
     CHECK(status.error().contains("Failed to read image info"));
-    CHECK(context.settings.at("color_space") == "srgb");
+    CHECK(context.settings.at("color_space") == "linear");
 }
 
 TEST_CASE("ImageImporter writes a loadable image.bin", "[core][import]") {
@@ -127,7 +127,7 @@ TEST_CASE("ImageImporter writes a loadable image.bin", "[core][import]") {
     CHECK((*image)->channels() == 4);
     CHECK(
         (*image)->texture_description().texture_format ==
-        PixelFormat::Rgba8UnormSrgb
+        PixelFormat::Rgba8Unorm
     );
     CHECK((*image)->data()[0] == 0x10);
     CHECK((*image)->data()[3] == 0x40);
@@ -183,7 +183,6 @@ TEST_CASE(
     REQUIRE(image);
     CHECK(image->width() == 1);
     CHECK(
-        image->texture_description().texture_format ==
-        PixelFormat::Rgba8UnormSrgb
+        image->texture_description().texture_format == PixelFormat::Rgba8Unorm
     );
 }
