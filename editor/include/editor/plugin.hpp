@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/plugin.hpp"
+#include "asset/path.hpp"
 #include "base/optional.hpp"
 #include "ecs/fwd.hpp"
 
@@ -12,6 +13,7 @@ struct EditorPluginConfig {
 
 struct Selection {
     Optional<Entity> entity;
+    Optional<AssetPath> asset;
 };
 
 class EditorPlugin : public Plugin {

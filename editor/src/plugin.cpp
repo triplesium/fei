@@ -66,6 +66,10 @@ struct EditorUiState {
     std::array<char, 1024> import_source {};
     std::array<char, 512> import_destination {};
     Optional<std::string> import_error;
+    Optional<AssetPath> import_settings_path;
+    AssetImportSettings import_settings;
+    bool import_settings_dirty {false};
+    Optional<std::string> import_settings_error;
 };
 
 const char* operation_source_name(OperationSource source) {
@@ -244,6 +248,7 @@ void draw_entity_node(
     const bool open = ImGui::TreeNodeEx("entity", flags, "Entity %u", entity);
     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
         selection.entity = entity;
+        selection.asset = nullopt;
     }
     if (ImGui::BeginPopupContextItem("entity_context")) {
         if (ImGui::MenuItem("Delete")) {
@@ -272,6 +277,7 @@ void draw_hierarchy(World& world, Selection& selection, ActivityLog& activity) {
     if (ImGui::Button("+ Entity")) {
         const auto entity = world.entity();
         selection.entity = entity;
+        selection.asset = nullopt;
         activity.record(
             OperationSource::User,
             "CreateEntity",
@@ -418,19 +424,67 @@ void record_component_result(
     );
 }
 
+void draw_asset_inspector(
+    const AssetPath& path,
+    AssetBrowser& browser,
+    AssetServer& asset_server,
+    const AssetImporterRegistry& importers,
+    AssetDatabase& database,
+    ActivityLog& activity,
+    const Assets<Image>& images,
+    RenderAssets<GpuImage>& gpu_images,
+    ImGuiTextureRegistry& textures,
+    EditorUiState& state
+);
+
+void draw_asset_preview(
+    AssetBrowser& browser,
+    AssetServer& asset_server,
+    const Assets<Image>& images,
+    RenderAssets<GpuImage>& gpu_images,
+    ImGuiTextureRegistry& textures,
+    EditorUiState& state
+);
+
 void draw_inspector(
     World& world,
     Selection& selection,
     const ComponentOperations& operations,
-    ActivityLog& activity
+    ActivityLog& activity,
+    AssetBrowser& browser,
+    AssetServer& asset_server,
+    const AssetImporterRegistry& importers,
+    AssetDatabase& database,
+    const Assets<Image>& images,
+    RenderAssets<GpuImage>& gpu_images,
+    ImGuiTextureRegistry& textures,
+    EditorUiState& state
 ) {
     if (!ImGui::Begin("Inspector")) {
         ImGui::End();
         return;
     }
 
-    if (!selection.entity || !world.has_entity(*selection.entity)) {
+    if (selection.entity && !world.has_entity(*selection.entity)) {
         selection.entity = nullopt;
+    }
+    if (!selection.entity && selection.asset) {
+        draw_asset_inspector(
+            *selection.asset,
+            browser,
+            asset_server,
+            importers,
+            database,
+            activity,
+            images,
+            gpu_images,
+            textures,
+            state
+        );
+        ImGui::End();
+        return;
+    }
+    if (!selection.entity) {
         ImGui::TextDisabled("Select an entity to inspect it.");
         ImGui::End();
         return;
@@ -562,6 +616,221 @@ void set_text_buffer(std::array<char, Size>& buffer, std::string_view value) {
     const auto length = std::min(value.size(), buffer.size() - 1);
     std::ranges::copy_n(value.begin(), length, buffer.begin());
     buffer[length] = '\0';
+}
+
+bool draw_import_setting(std::string_view name, std::string& value) {
+    ImGui::PushID(name.data(), name.data() + name.size());
+    bool changed = false;
+    draw_field_label(name);
+    if (value == "true" || value == "false") {
+        bool enabled = value == "true";
+        if (ImGui::Checkbox("##value", &enabled)) {
+            value = enabled ? "true" : "false";
+            changed = true;
+        }
+    } else if (value == "linear" || value == "srgb") {
+        if (ImGui::BeginCombo("##value", value.c_str())) {
+            for (const auto option : {"linear", "srgb"}) {
+                const bool selected = value == option;
+                if (ImGui::Selectable(option, selected)) {
+                    value = option;
+                    changed = true;
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+    } else {
+        std::array<char, 256> buffer {};
+        set_text_buffer(buffer, value);
+        if (ImGui::InputText("##value", buffer.data(), buffer.size())) {
+            value = buffer.data();
+            changed = true;
+        }
+    }
+    ImGui::PopID();
+    return changed;
+}
+
+void draw_asset_inspector(
+    const AssetPath& path,
+    AssetBrowser& browser,
+    AssetServer& asset_server,
+    const AssetImporterRegistry& importers,
+    AssetDatabase& database,
+    ActivityLog& activity,
+    const Assets<Image>& images,
+    RenderAssets<GpuImage>& gpu_images,
+    ImGuiTextureRegistry& textures,
+    EditorUiState& state
+) {
+    const auto* metadata = database.metadata(path);
+    const auto* importer = metadata ? importers.find(metadata->importer) :
+                                      importers.find_for(path.path());
+    const auto current_settings = metadata ? metadata->settings :
+                                  importer ? importer->default_settings(path) :
+                                             AssetImportSettings {};
+    if (!state.import_settings_path || *state.import_settings_path != path ||
+        (!state.import_settings_dirty &&
+         state.import_settings != current_settings)) {
+        state.import_settings_path = path;
+        state.import_settings = current_settings;
+        state.import_settings_dirty = false;
+        state.import_settings_error = nullopt;
+    }
+
+    ImGui::TextUnformatted(path.as_string().c_str());
+    ImGui::Separator();
+    ImGui::TextDisabled(
+        "Status: %s",
+        asset_import_state_label(database.state(path))
+    );
+    if (auto source = database.resolve(path)) {
+        ImGui::TextWrapped("Source: %s", source->string().c_str());
+    }
+    if (metadata) {
+        ImGui::TextDisabled("UUID: %s", metadata->id.as_string().c_str());
+        if (const auto* record = database.import_record(path)) {
+            ImGui::TextDisabled(
+                "Importer: %s v%u%s",
+                metadata->importer.c_str(),
+                record->importer_version,
+                importer && record->importer_version != importer->version() ?
+                    " (outdated)" :
+                    ""
+            );
+            ImGui::TextDisabled("Source hash: %s", record->source_hash.c_str());
+            if (ImGui::CollapsingHeader(
+                    "Artifacts",
+                    ImGuiTreeNodeFlags_DefaultOpen
+                )) {
+                if (record->artifacts.empty()) {
+                    ImGui::TextDisabled("No generated artifacts");
+                }
+                for (const auto& artifact : record->artifacts) {
+                    ImGui::BulletText(
+                        "%s: %s",
+                        artifact.kind.c_str(),
+                        artifact.path.generic_string().c_str()
+                    );
+                    if (auto artifact_file =
+                            database.artifact_path(path, artifact.kind)) {
+                        ImGui::TextWrapped(
+                            "  %s",
+                            artifact_file->string().c_str()
+                        );
+                    }
+                }
+            }
+        } else {
+            ImGui::TextDisabled(
+                "Importer: %s (not imported)",
+                metadata->importer.c_str()
+            );
+        }
+    } else if (importer) {
+        const auto importer_name = std::string(importer->name());
+        ImGui::TextDisabled(
+            "Importer: %s v%u",
+            importer_name.c_str(),
+            importer->version()
+        );
+    } else {
+        ImGui::TextDisabled("No importer registered for this type");
+    }
+
+    if (const auto error = database.error(path)) {
+        ImGui::TextColored(
+            ImVec4 {0.95f, 0.35f, 0.35f, 1.0f},
+            "%s",
+            error->c_str()
+        );
+    }
+    if (state.import_settings_error) {
+        ImGui::TextColored(
+            ImVec4 {0.95f, 0.35f, 0.35f, 1.0f},
+            "%s",
+            state.import_settings_error->c_str()
+        );
+    }
+
+    if (!state.import_settings.empty() && ImGui::CollapsingHeader(
+                                              "Import Settings",
+                                              ImGuiTreeNodeFlags_DefaultOpen
+                                          )) {
+        for (auto& [name, value] : state.import_settings) {
+            state.import_settings_dirty |= draw_import_setting(name, value);
+        }
+    }
+
+    ImGui::BeginDisabled(!importer);
+    if (ImGui::Button(metadata ? "Reimport" : "Import")) {
+        auto source = database.resolve(path);
+        if (!source) {
+            state.import_settings_error = source.error();
+        } else {
+            auto result = import_asset(
+                AssetImportRequest {
+                    .source_file = *source,
+                    .destination = path,
+                    .settings = state.import_settings,
+                },
+                importers,
+                database
+            );
+            if (!result) {
+                state.import_settings_error = result.error().message;
+                activity.record(
+                    OperationSource::User,
+                    "ReimportAsset",
+                    path.as_string() + ": " + result.error().message,
+                    false
+                );
+            } else {
+                state.import_settings = result->metadata.settings;
+                state.import_settings_dirty = false;
+                state.import_settings_error = nullopt;
+                browser.request_refresh();
+                bool reloaded = true;
+                if (result->metadata.importer == "image") {
+                    auto reload = asset_server.reload<Image>(path);
+                    reloaded = reload.has_value();
+                    if (!reload) {
+                        state.import_settings_error = reload.error().message;
+                    }
+                }
+                activity.record(
+                    OperationSource::User,
+                    "ReimportAsset",
+                    path.as_string() + (reloaded ? "" : ": reload failed"),
+                    reloaded
+                );
+            }
+        }
+    }
+    ImGui::EndDisabled();
+    if (state.import_settings_dirty) {
+        ImGui::SameLine();
+        if (ImGui::Button("Revert")) {
+            state.import_settings = current_settings;
+            state.import_settings_dirty = false;
+            state.import_settings_error = nullopt;
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("Unsaved import settings");
+    }
+
+    ImGui::Separator();
+    draw_asset_preview(
+        browser,
+        asset_server,
+        images,
+        gpu_images,
+        textures,
+        state
+    );
 }
 
 void draw_import_popup(
@@ -802,12 +1071,9 @@ bool draw_asset_breadcrumb(AssetBrowser& browser) {
     return navigated;
 }
 
-void draw_asset_details(
+void draw_asset_preview(
     AssetBrowser& browser,
     AssetServer& asset_server,
-    const AssetImporterRegistry& importers,
-    AssetDatabase& database,
-    ActivityLog& activity,
     const Assets<Image>& images,
     RenderAssets<GpuImage>& gpu_images,
     ImGuiTextureRegistry& textures,
@@ -816,93 +1082,7 @@ void draw_asset_details(
     const auto* selected = browser.selected_entry();
     sync_asset_preview(selected, asset_server, gpu_images, textures, state);
     if (!selected) {
-        ImGui::TextDisabled("Select an asset to inspect it.");
         return;
-    }
-
-    ImGui::TextUnformatted(selected->path.as_string().c_str());
-    ImGui::TextDisabled("Type: %s", asset_type_label(*selected).c_str());
-    if (selected->kind == AssetEntryKind::File) {
-        ImGui::SameLine();
-        ImGui::TextDisabled(
-            "| Size: %s",
-            asset_size_label(selected->size).c_str()
-        );
-
-        const auto import_state = database.state(selected->path);
-        ImGui::TextDisabled(
-            "Import status: %s",
-            asset_import_state_label(import_state)
-        );
-        if (const auto* metadata = database.metadata(selected->path)) {
-            ImGui::TextDisabled("ID: %s", metadata->id.as_string().c_str());
-            if (const auto* record = database.import_record(selected->path)) {
-                ImGui::TextDisabled(
-                    "Importer: %s v%u",
-                    metadata->importer.c_str(),
-                    record->importer_version
-                );
-                ImGui::TextDisabled(
-                    "Source hash: %s",
-                    record->source_hash.c_str()
-                );
-            } else {
-                ImGui::TextDisabled(
-                    "Importer: %s (waiting for import)",
-                    metadata->importer.c_str()
-                );
-            }
-        } else {
-            if (const auto import_error = database.error(selected->path)) {
-                ImGui::TextColored(
-                    ImVec4 {0.95f, 0.35f, 0.35f, 1.0f},
-                    "%s",
-                    import_error->c_str()
-                );
-            }
-            const auto* importer = importers.find_for(selected->path.path());
-            if (import_state == AssetImportState::Failed && importer &&
-                ImGui::Button("Retry Import")) {
-                auto source = database.resolve(selected->path);
-                if (!source) {
-                    activity.record(
-                        OperationSource::User,
-                        "ImportAsset",
-                        source.error(),
-                        false
-                    );
-                } else {
-                    auto result = import_asset(
-                        AssetImportRequest {
-                            .source_file = *source,
-                            .destination = selected->path,
-                            .settings = {},
-                        },
-                        importers,
-                        database
-                    );
-                    if (result) {
-                        activity.record(
-                            OperationSource::User,
-                            "ImportAsset",
-                            result->path.as_string()
-                        );
-                        browser.request_refresh();
-                    } else {
-                        activity.record(
-                            OperationSource::User,
-                            "ImportAsset",
-                            result.error().destination.as_string() + ": " +
-                                result.error().message,
-                            false
-                        );
-                    }
-                }
-            }
-            if (!importer) {
-                ImGui::TextDisabled("No importer registered for this type");
-            }
-        }
     }
 
     if (!is_previewable_image(*selected)) {
@@ -953,13 +1133,11 @@ void draw_asset_details(
 
 void draw_assets(
     AssetBrowser& browser,
+    Selection& selection,
     AssetServer& asset_server,
     const AssetImporterRegistry& importers,
     AssetDatabase& database,
     ActivityLog& activity,
-    const Assets<Image>& images,
-    RenderAssets<GpuImage>& gpu_images,
-    ImGuiTextureRegistry& textures,
     EditorUiState& state
 ) {
     if (!ImGui::Begin("Assets")) {
@@ -988,6 +1166,9 @@ void draw_assets(
     if (browser.refresh_requested()) {
         auto_import_project_assets(importers, database, activity);
         browser.refresh(asset_server);
+        if (!browser.selection()) {
+            selection.asset = nullopt;
+        }
     }
     if (browser.error()) {
         ImGui::TextColored(
@@ -999,7 +1180,7 @@ void draw_assets(
 
     bool navigated = false;
     const auto table_height =
-        std::max(ImGui::GetContentRegionAvail().y - 150.0f, 120.0f);
+        std::max(ImGui::GetContentRegionAvail().y, 120.0f);
     if (ImGui::BeginTable(
             "asset_entries",
             4,
@@ -1040,6 +1221,10 @@ void draw_assets(
                         ImGuiSelectableFlags_AllowDoubleClick
                 )) {
                 browser.select(entry);
+                selection.entity = nullopt;
+                selection.asset = entry.kind == AssetEntryKind::File ?
+                                      Optional<AssetPath> {entry.path} :
+                                      nullopt;
                 if (entry.kind == AssetEntryKind::Directory &&
                     ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
                     navigated |= browser.open(entry);
@@ -1065,19 +1250,9 @@ void draw_assets(
     if (navigated && browser.refresh_requested()) {
         auto_import_project_assets(importers, database, activity);
         browser.refresh(asset_server);
+        selection.asset = nullopt;
     }
 
-    draw_asset_details(
-        browser,
-        asset_server,
-        importers,
-        database,
-        activity,
-        images,
-        gpu_images,
-        textures,
-        state
-    );
     ImGui::End();
 }
 
@@ -1240,7 +1415,20 @@ void draw_editor(WorldRef world_ref) {
         draw_hierarchy(world, selection, activity);
     }
     if (state.show_inspector) {
-        draw_inspector(world, selection, operations, activity);
+        draw_inspector(
+            world,
+            selection,
+            operations,
+            activity,
+            asset_browser,
+            asset_server,
+            asset_importers,
+            asset_database,
+            images,
+            gpu_images,
+            textures,
+            state
+        );
     }
     if (state.show_scene) {
         draw_scene(output, textures, state);
@@ -1248,13 +1436,11 @@ void draw_editor(WorldRef world_ref) {
     if (state.show_assets) {
         draw_assets(
             asset_browser,
+            selection,
             asset_server,
             asset_importers,
             asset_database,
             activity,
-            images,
-            gpu_images,
-            textures,
             state
         );
     }

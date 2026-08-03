@@ -138,6 +138,54 @@ class Assets {
         return std::move(handle);
     }
 
+    Result<Handle<T>, AssetLoadError>
+    reload(Reader& reader, const LoadContext& context) {
+        if (!m_loader) {
+            return failure(AssetLoadError(
+                context.asset_path(),
+                "AssetLoader not set for " + context.asset_path().as_string()
+            ));
+        }
+
+        auto asset = m_loader->load(reader, context);
+        if (!asset) {
+            return failure(std::move(asset.error()));
+        }
+
+        const auto cached = m_cache.find(context.asset_path());
+        if (cached == m_cache.end()) {
+            return add_loaded(
+                std::move(*asset),
+                context.asset_path(),
+                context.dependencies(),
+                context.loader_dependencies()
+            );
+        }
+        auto entry = get_entry(cached->second);
+        if (!entry) {
+            m_cache.erase(cached);
+            return add_loaded(
+                std::move(*asset),
+                context.asset_path(),
+                context.dependencies(),
+                context.loader_dependencies()
+            );
+        }
+
+        entry->asset = std::move(*asset);
+        entry->state = AssetLoadState::Loaded;
+        entry->error = nullopt;
+        entry->dependencies = context.dependencies();
+        entry->loader_dependencies = context.loader_dependencies();
+        m_event_queue.push_back(
+            AssetEvent<T> {
+                .type = AssetEventType::Modified,
+                .id = entry->id,
+            }
+        );
+        return make_handle(*entry);
+    }
+
     Handle<T> add(std::unique_ptr<T> asset) {
         return add_loaded(std::move(asset), nullopt);
     }

@@ -79,6 +79,8 @@ class MemorySource : public AssetSource {
     };
 
   public:
+    static inline std::atomic<std::size_t> asset_size {4};
+
     std::string name() const override { return "memory"; }
 
     bool exists(const std::filesystem::path& path) const override {
@@ -94,7 +96,7 @@ class MemorySource : public AssetSource {
         if (path.generic_string() != "asset.bin") {
             return failure("memory asset not found: " + path.generic_string());
         }
-        return Reader(m_bytes.data(), m_bytes.size());
+        return Reader(m_bytes.data(), asset_size.load());
     }
 };
 
@@ -279,6 +281,34 @@ TEST_CASE(
     REQUIRE(asset.has_value());
     REQUIRE(asset->byte_count == 4);
     REQUIRE(asset->path == "memory://asset.bin");
+}
+
+TEST_CASE(
+    "AssetServer reload preserves handles and replaces contents",
+    "[asset][server][reload]"
+) {
+    MemorySource::asset_size = 4;
+    App app;
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
+
+    auto handle = app.resource<AssetServer>().load<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+    REQUIRE(app.resource<Assets<ServerAsset>>().get(handle)->byte_count == 4);
+
+    MemorySource::asset_size = 3;
+    auto reloaded = app.resource<AssetServer>().reload<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+
+    REQUIRE(reloaded);
+    CHECK(reloaded->id() == handle.id());
+    REQUIRE(app.resource<Assets<ServerAsset>>().get(handle));
+    CHECK(app.resource<Assets<ServerAsset>>().get(handle)->byte_count == 3);
+    MemorySource::asset_size = 4;
 }
 
 TEST_CASE(

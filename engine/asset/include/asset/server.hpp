@@ -171,26 +171,83 @@ class AssetServer {
         SyncLoadContext context(*this, asset_path);
         const auto artifact =
             imported_artifact_for(asset_path, loader->artifact_kind());
-        auto reader = artifact ?
-                          [&]() -> Result<Reader, std::string> {
+        auto reader = artifact ? [&]() -> Result<Reader, std::string> {
             auto imported = Reader::from_file(*artifact);
             if (!imported) {
                 return failure(std::move(imported.error().message));
             }
             return std::move(*imported);
         }() :
-                          source->try_get_reader(asset_path.path());
+            source->try_get_reader(asset_path.path());
         if (!reader) {
             return assets.add_failed(AssetLoadError(
                 asset_path,
-                artifact ?
-                    "Failed to read imported artifact '" + artifact->string() +
-                        "': " + reader.error() :
-                    "Failed to read asset from source '" + source_name +
-                        "': " + reader.error()
+                artifact ? "Failed to read imported artifact '" +
+                               artifact->string() + "': " + reader.error() :
+                           "Failed to read asset from source '" + source_name +
+                               "': " + reader.error()
             ));
         }
         return assets.load(*reader, context);
+    }
+
+    template<typename T>
+    Result<Handle<T>, AssetLoadError> reload(const AssetPath& path) {
+        if (!m_app->has_resource<Assets<T>>()) {
+            fatal("No asset found for type: {}", type_name<T>());
+        }
+        const auto asset_path = canonicalize_path(path);
+        auto& assets = m_app->resource<Assets<T>>();
+        auto* loader = assets.loader();
+        if (!loader) {
+            return failure(AssetLoadError(
+                asset_path,
+                "AssetLoader not set for " + asset_path.as_string()
+            ));
+        }
+        if (asset_path.is_unapproved()) {
+            return failure(AssetLoadError(
+                asset_path,
+                "Asset path escapes its source root: " + asset_path.as_string()
+            ));
+        }
+        const auto& source_name = *asset_path.source();
+        if (!m_sources.contains(source_name)) {
+            return failure(AssetLoadError(
+                asset_path,
+                "No asset source found with name: " + source_name
+            ));
+        }
+        auto& source = m_sources.at(source_name);
+        if (!source->exists(asset_path.path())) {
+            return failure(AssetLoadError(
+                asset_path,
+                "Asset not found at path: " + asset_path.path().string() +
+                    " in source: " + source_name
+            ));
+        }
+
+        const auto artifact =
+            imported_artifact_for(asset_path, loader->artifact_kind());
+        auto reader = artifact ? [&]() -> Result<Reader, std::string> {
+            auto imported = Reader::from_file(*artifact);
+            if (!imported) {
+                return failure(std::move(imported.error().message));
+            }
+            return std::move(*imported);
+        }() :
+            source->try_get_reader(asset_path.path());
+        if (!reader) {
+            return failure(AssetLoadError(
+                asset_path,
+                artifact ? "Failed to read imported artifact '" +
+                               artifact->string() + "': " + reader.error() :
+                           "Failed to read asset from source '" + source_name +
+                               "': " + reader.error()
+            ));
+        }
+        SyncLoadContext context(*this, asset_path);
+        return assets.reload(*reader, context);
     }
 
     template<typename T>
@@ -262,25 +319,23 @@ class AssetServer {
              asset_path,
              artifact,
              load_requests]() mutable -> LoadTaskResult {
-                auto reader = artifact ?
-                                  [&]() -> Result<Reader, std::string> {
+                auto reader = artifact ? [&]() -> Result<Reader, std::string> {
                     auto imported = Reader::from_file(*artifact);
                     if (!imported) {
                         return failure(std::move(imported.error().message));
                     }
                     return std::move(*imported);
                 }() :
-                                  source->try_get_reader(asset_path.path());
+                    source->try_get_reader(asset_path.path());
                 if (!reader) {
                     return {
                         .result = failure(AssetLoadError(
                             asset_path,
-                            artifact ?
-                                "Failed to read imported artifact '" +
-                                    artifact->string() +
-                                    "': " + reader.error() :
-                                "Failed to read asset from source '" +
-                                    source_name + "': " + reader.error()
+                            artifact ? "Failed to read imported artifact '" +
+                                           artifact->string() +
+                                           "': " + reader.error() :
+                                       "Failed to read asset from source '" +
+                                           source_name + "': " + reader.error()
                         )),
                         .dependencies = {},
                         .loader_dependencies = {},
