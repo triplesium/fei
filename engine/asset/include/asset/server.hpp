@@ -4,6 +4,7 @@
 #include "asset/database.hpp"
 #include "asset/loader.hpp"
 #include "asset/path.hpp"
+#include "asset/reference.hpp"
 #include "asset/request.hpp"
 #include "asset/source.hpp"
 #include "asset/systems.hpp"
@@ -88,6 +89,60 @@ class AssetServer {
             canonical = canonical.with_source(m_default_source);
         }
         return canonical;
+    }
+
+    [[nodiscard]] AssetReference reference(const AssetPath& path) const {
+        const auto canonical = canonicalize_path(path);
+        Optional<AssetUuid> id;
+        if (canonical.source() && *canonical.source() == "project" &&
+            m_app->has_resource<AssetDatabase>()) {
+            if (const auto* metadata =
+                    m_app->resource<AssetDatabase>().metadata(canonical)) {
+                id = metadata->id;
+            }
+        }
+        return AssetReference {
+            .id = id,
+            .fallback_path = canonical,
+        };
+    }
+
+    [[nodiscard]] Result<AssetPath, AssetLoadError>
+    resolve(const AssetReference& reference) const {
+        if (reference.id && m_app->has_resource<AssetDatabase>()) {
+            if (auto current =
+                    m_app->resource<AssetDatabase>().path(*reference.id)) {
+                return canonicalize_path(*current);
+            }
+        }
+        auto fallback = canonicalize_path(reference.fallback_path);
+        if (fallback.is_unapproved()) {
+            return failure(AssetLoadError(
+                fallback,
+                "Asset reference fallback escapes its source root"
+            ));
+        }
+        return fallback;
+    }
+
+    [[nodiscard]] Result<AssetPath, AssetLoadError>
+    resolve(AssetUuid id) const {
+        const AssetPath unresolved("project://");
+        if (!m_app->has_resource<AssetDatabase>()) {
+            return failure(AssetLoadError(
+                unresolved,
+                "Asset database is not available while resolving UUID " +
+                    id.as_string()
+            ));
+        }
+        auto path = m_app->resource<AssetDatabase>().path(id);
+        if (!path) {
+            return failure(AssetLoadError(
+                unresolved,
+                "No project asset found for UUID " + id.as_string()
+            ));
+        }
+        return canonicalize_path(*path);
     }
 
     template<typename T, std::derived_from<AssetLoader<T>> Loader>
@@ -189,6 +244,34 @@ class AssetServer {
             ));
         }
         return assets.load(*reader, context);
+    }
+
+    template<typename T>
+    Handle<T> load(const AssetReference& reference) {
+        auto path = resolve(reference);
+        if (!path) {
+            if (!m_app->has_resource<Assets<T>>()) {
+                fatal("No asset found for type: {}", type_name<T>());
+            }
+            return m_app->resource<Assets<T>>().add_failed(
+                std::move(path.error())
+            );
+        }
+        return load<T>(*path);
+    }
+
+    template<typename T>
+    Handle<T> load(AssetUuid id) {
+        auto path = resolve(id);
+        if (!path) {
+            if (!m_app->has_resource<Assets<T>>()) {
+                fatal("No asset found for type: {}", type_name<T>());
+            }
+            return m_app->resource<Assets<T>>().add_failed(
+                std::move(path.error())
+            );
+        }
+        return load<T>(*path);
     }
 
     template<typename T>

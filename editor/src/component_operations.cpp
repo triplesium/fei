@@ -67,6 +67,16 @@ std::string node_preview(const serialization::SerializedNode& node) {
         return std::to_string(*value);
     }
     if (const auto* object = node.try_object(); object && object->size() == 1) {
+        if (object->front().name == "$asset") {
+            if (const auto* reference = object->front().value.try_object()) {
+                if (const auto* path =
+                        serialization::find_field(*reference, "path")) {
+                    if (const auto* value = path->value.try_string()) {
+                        return *value;
+                    }
+                }
+            }
+        }
         const auto& value = object->front().value;
         if (!value.is_array() && !value.is_object()) {
             return node_preview(value);

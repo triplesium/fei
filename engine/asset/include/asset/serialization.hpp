@@ -24,7 +24,7 @@ bool register_asset_handle_codec(
     using namespace serialization;
 
     return codecs.register_codec<Handle<T>>(ValueCodec {
-        .encode = [&assets](Ref value, std::string_view path)
+        .encode = [&server, &assets](Ref value, std::string_view path)
             -> Result<SerializedNode, SerializeError> {
             const auto* handle = value.try_get_const<Handle<T>>();
             if (!handle) {
@@ -53,10 +53,30 @@ bool register_asset_handle_codec(
                     }
                 );
             }
+            const auto reference = server.reference(*asset_path);
+            SerializedNode::Object encoded_reference;
+            if (reference.id) {
+                encoded_reference.push_back(
+                    SerializedField {
+                        .name = "id",
+                        .value =
+                            SerializedNode::string(reference.id->as_string()),
+                    }
+                );
+            }
+            encoded_reference.push_back(
+                SerializedField {
+                    .name = "path",
+                    .value = SerializedNode::string(
+                        reference.fallback_path.as_string()
+                    ),
+                }
+            );
             return SerializedNode::object({
                 SerializedField {
                     .name = "$asset",
-                    .value = SerializedNode::string(asset_path->as_string()),
+                    .value =
+                        SerializedNode::object(std::move(encoded_reference)),
                 },
             });
         },
@@ -67,33 +87,67 @@ bool register_asset_handle_codec(
             }
 
             const auto* object = node.try_object();
-            const auto* asset =
-                object ? find_field(*object, "$asset") : nullptr;
-            const auto* encoded = asset ? asset->value.try_string() : nullptr;
-            if (!object || object->size() != 1 || !encoded) {
+            const auto invalid_node = [&](std::string message) {
                 return failure(
                     DeserializeError {
                         .kind = DeserializeError::Kind::InvalidNode,
                         .type = type_id<Handle<T>>(),
                         .path = std::string(path),
-                        .message = "Expected an object containing one string "
+                        .message = std::move(message),
+                    }
+                );
+            };
+            const auto* asset =
+                object ? find_field(*object, "$asset") : nullptr;
+            if (!object || object->size() != 1 || !asset) {
+                return failure(
+                    DeserializeError {
+                        .kind = DeserializeError::Kind::InvalidNode,
+                        .type = type_id<Handle<T>>(),
+                        .path = std::string(path),
+                        .message = "Expected an object containing one "
                                    "'$asset' field",
                     }
                 );
             }
 
-            AssetPath asset_path(*encoded);
-            if (asset_path.is_unapproved()) {
-                return failure(
-                    DeserializeError {
-                        .kind = DeserializeError::Kind::InvalidNode,
-                        .type = type_id<Handle<T>>(),
-                        .path = std::string(path),
-                        .message = "Asset path escapes its source root",
+            AssetReference reference {.id = nullopt, .fallback_path = ""};
+            if (const auto* legacy_path = asset->value.try_string()) {
+                reference.fallback_path = AssetPath(*legacy_path);
+            } else if (const auto* encoded = asset->value.try_object()) {
+                const auto* path_field = find_field(*encoded, "path");
+                const auto* encoded_path =
+                    path_field ? path_field->value.try_string() : nullptr;
+                const auto* id_field = find_field(*encoded, "id");
+                const auto* encoded_id =
+                    id_field ? id_field->value.try_string() : nullptr;
+                const auto expected_size = id_field ? 2U : 1U;
+                if (!encoded_path || encoded->size() != expected_size ||
+                    (id_field && !encoded_id)) {
+                    return invalid_node(
+                        "Expected '$asset' to contain a string 'path' and an "
+                        "optional string 'id'"
+                    );
+                }
+                reference.fallback_path = AssetPath(*encoded_path);
+                if (encoded_id) {
+                    auto id = AssetUuid::parse(*encoded_id);
+                    if (!id) {
+                        return invalid_node(std::move(id.error()));
                     }
+                    reference.id = *id;
+                }
+            } else {
+                return invalid_node(
+                    "Expected '$asset' to be a path string or reference object"
                 );
             }
-            return make_val<Handle<T>>(server.load<T>(asset_path));
+
+            auto resolved = server.resolve(reference);
+            if (!resolved) {
+                return invalid_node(std::move(resolved.error().message));
+            }
+            return make_val<Handle<T>>(server.load<T>(*resolved));
         },
     });
 }

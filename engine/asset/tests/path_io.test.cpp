@@ -4,6 +4,7 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
+#include <filesystem>
 #include <unordered_map>
 
 using namespace fei;
@@ -58,6 +59,13 @@ TEST_CASE("AssetPath can be normalized and source-qualified", "[asset][path]") {
         path.with_source("project") ==
         AssetPath("project://textures/player.png")
     );
+}
+
+TEST_CASE("AssetPath strings use portable separators", "[asset][path]") {
+    const auto native = std::filesystem::path("textures") / "ui" / "button.png";
+    const auto path = AssetPath(native).with_source("project");
+
+    CHECK(path.as_string() == "project://textures/ui/button.png");
 }
 
 TEST_CASE(

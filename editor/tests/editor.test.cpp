@@ -114,7 +114,20 @@ TEST_CASE(
             return SerializedNode::object({
                 SerializedField {
                     .name = "$asset",
-                    .value = SerializedNode::string("images/face.png"),
+                    .value = SerializedNode::object({
+                        SerializedField {
+                            .name = "id",
+                            .value = SerializedNode::string(
+                                "7fc50b74-694b-4967-872f-82bc6ce93724"
+                            ),
+                        },
+                        SerializedField {
+                            .name = "path",
+                            .value = SerializedNode::string(
+                                "project://images/face.png"
+                            ),
+                        },
+                    }),
                 },
             });
         },
@@ -127,5 +140,5 @@ TEST_CASE(
     EncodedValue value;
     auto preview = operations.preview(Ref(value));
     REQUIRE(preview);
-    REQUIRE(*preview == "images/face.png");
+    REQUIRE(*preview == "project://images/face.png");
 }

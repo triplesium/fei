@@ -47,7 +47,12 @@ struct AssetHolder {
     Handle<ServerAsset> asset;
 };
 
-using ServerAssetLoadFn = decltype(&AssetServer::load<ServerAsset>);
+struct ProjectAssetHolder {
+    Handle<ServerAsset> asset;
+};
+
+using ServerAssetLoadFn =
+    Handle<ServerAsset> (AssetServer::*)(const AssetPath&);
 using ServerAssetLoadAsyncFn = decltype(&AssetServer::load_async<ServerAsset>);
 
 static_assert(
@@ -111,6 +116,31 @@ class FailingReadSource : public AssetSource {
     Result<Reader, std::string>
     try_get_reader(const std::filesystem::path& /*path*/) const override {
         return failure(std::string("source read failed"));
+    }
+};
+
+class ProjectMemorySource : public AssetSource {
+  private:
+    std::array<std::byte, 3> m_bytes {
+        std::byte {7},
+        std::byte {8},
+        std::byte {9},
+    };
+
+  public:
+    std::string name() const override { return "project"; }
+
+    bool exists(const std::filesystem::path& path) const override {
+        const auto value = path.generic_string();
+        return value == "old.bin" || value == "moved/new.bin";
+    }
+
+    Result<Reader, std::string>
+    try_get_reader(const std::filesystem::path& path) const override {
+        if (!exists(path)) {
+            return failure("project asset not found: " + path.generic_string());
+        }
+        return Reader(m_bytes.data(), m_bytes.size());
     }
 };
 
@@ -391,8 +421,13 @@ TEST_CASE(
     REQUIRE(asset_object);
     const auto* encoded = serialization::find_field(*asset_object, "$asset");
     REQUIRE(encoded);
-    REQUIRE(encoded->value.try_string());
-    CHECK(*encoded->value.try_string() == "memory://asset.bin");
+    const auto* reference = encoded->value.try_object();
+    REQUIRE(reference);
+    CHECK_FALSE(serialization::find_field(*reference, "id"));
+    const auto* encoded_path = serialization::find_field(*reference, "path");
+    REQUIRE(encoded_path);
+    REQUIRE(encoded_path->value.try_string());
+    CHECK(*encoded_path->value.try_string() == "memory://asset.bin");
 
     auto decoded = serialization::deserialize(
         type_id<AssetHolder>(),
@@ -401,6 +436,27 @@ TEST_CASE(
     );
     REQUIRE(decoded);
     CHECK(decoded->get<AssetHolder>().asset.id() == handle.id());
+
+    auto legacy = serialization::SerializedNode::object({
+        serialization::SerializedField {
+            .name = "asset",
+            .value = serialization::SerializedNode::object({
+                serialization::SerializedField {
+                    .name = "$asset",
+                    .value = serialization::SerializedNode::string(
+                        "memory://asset.bin"
+                    ),
+                },
+            }),
+        },
+    });
+    auto legacy_decoded = serialization::deserialize(
+        type_id<AssetHolder>(),
+        legacy,
+        serialization::DeserializeOptions {.codecs = &codecs}
+    );
+    REQUIRE(legacy_decoded);
+    CHECK(legacy_decoded->get<AssetHolder>().asset.id() == handle.id());
 
     const AssetHolder empty;
     auto empty_node = serialization::serialize(
@@ -418,6 +474,111 @@ TEST_CASE(
     );
     REQUIRE(empty_decoded);
     CHECK_FALSE(empty_decoded->get<AssetHolder>().asset);
+}
+
+TEST_CASE(
+    "Project asset handle codecs resolve moved assets by UUID",
+    "[asset][serialization][uuid]"
+) {
+    const auto id = AssetUuid::random();
+    const AssetPath original_path("project://old.bin");
+    const AssetPath moved_path("project://moved/new.bin");
+
+    App save_app;
+    save_app.add_resource(AssetDatabase(std::filesystem::current_path()));
+    REQUIRE(save_app.resource<AssetDatabase>().register_metadata(
+        original_path,
+        AssetMetadata {
+            .id = id,
+            .importer = "test",
+            .settings = {},
+        }
+    ));
+    AssetServer save_server(&save_app);
+    save_server.emplace_source<ProjectMemorySource>();
+    save_app.add_resource(std::move(save_server));
+    save_app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
+    auto saved_handle =
+        save_app.resource<AssetServer>().load<ServerAsset>(original_path);
+
+    Registry::instance().register_cls<ProjectAssetHolder>().add_property(
+        "asset",
+        &ProjectAssetHolder::asset
+    );
+    serialization::ValueCodecRegistry save_codecs;
+    REQUIRE(
+        register_asset_handle_codec<ServerAsset>(
+            save_codecs,
+            save_app.resource<AssetServer>(),
+            save_app.resource<Assets<ServerAsset>>()
+        )
+    );
+    const ProjectAssetHolder saved {.asset = saved_handle};
+    auto node = serialization::serialize(
+        Ref(saved),
+        serialization::SerializeOptions {
+            .include_type_tag = false,
+            .codecs = &save_codecs,
+        }
+    );
+    REQUIRE(node);
+
+    const auto* holder_object = node->try_object();
+    REQUIRE(holder_object);
+    const auto* asset = serialization::find_field(*holder_object, "asset");
+    REQUIRE(asset);
+    const auto* asset_object = asset->value.try_object();
+    REQUIRE(asset_object);
+    const auto* encoded = serialization::find_field(*asset_object, "$asset");
+    REQUIRE(encoded);
+    const auto* reference = encoded->value.try_object();
+    REQUIRE(reference);
+    const auto* encoded_id = serialization::find_field(*reference, "id");
+    REQUIRE(encoded_id);
+    REQUIRE(encoded_id->value.try_string());
+    CHECK(*encoded_id->value.try_string() == id.as_string());
+
+    App load_app;
+    load_app.add_resource(AssetDatabase(std::filesystem::current_path()));
+    REQUIRE(load_app.resource<AssetDatabase>().register_metadata(
+        moved_path,
+        AssetMetadata {
+            .id = id,
+            .importer = "test",
+            .settings = {},
+        }
+    ));
+    AssetServer load_server(&load_app);
+    load_server.emplace_source<ProjectMemorySource>();
+    load_app.add_resource(std::move(load_server));
+    load_app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
+    serialization::ValueCodecRegistry load_codecs;
+    REQUIRE(
+        register_asset_handle_codec<ServerAsset>(
+            load_codecs,
+            load_app.resource<AssetServer>(),
+            load_app.resource<Assets<ServerAsset>>()
+        )
+    );
+
+    auto loaded_by_id = load_app.resource<AssetServer>().load<ServerAsset>(id);
+    const auto by_id =
+        load_app.resource<Assets<ServerAsset>>().get(loaded_by_id);
+    REQUIRE(by_id);
+    CHECK(by_id->path == moved_path.as_string());
+
+    auto decoded = serialization::deserialize(
+        type_id<ProjectAssetHolder>(),
+        *node,
+        serialization::DeserializeOptions {.codecs = &load_codecs}
+    );
+
+    REQUIRE(decoded);
+    const auto loaded = load_app.resource<Assets<ServerAsset>>().get(
+        decoded->get<ProjectAssetHolder>().asset
+    );
+    REQUIRE(loaded);
+    CHECK(loaded->path == moved_path.as_string());
 }
 
 TEST_CASE(

@@ -37,7 +37,8 @@ class AssetPath {
             m_path = path;
         }
     }
-    AssetPath(const std::filesystem::path& path) : AssetPath(path.string()) {}
+    AssetPath(const std::filesystem::path& path) :
+        AssetPath(path.generic_string()) {}
     AssetPath(const char* path) : AssetPath(std::string(path)) {}
 
     const Optional<std::string>& source() const { return m_source; }
@@ -94,9 +95,9 @@ class AssetPath {
 
     std::string as_string() const {
         if (m_source) {
-            return *m_source + "://" + m_path.string();
+            return *m_source + "://" + m_path.generic_string();
         } else {
-            return m_path.string();
+            return m_path.generic_string();
         }
     }
 
