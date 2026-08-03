@@ -1,5 +1,6 @@
 includes("app")
 includes("asset")
+includes("project")
 includes("profiling")
 includes("base")
 includes("refl")

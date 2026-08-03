@@ -21,10 +21,12 @@ target("fei-editor-core")
 
 target("fei-editor")
     set_kind("binary")
+    set_rundir("$(projectdir)")
     add_rules("fei.reflect")
     add_files("src/main.cpp")
     add_deps(
         "fei-editor-core",
+        "fei-project",
         "fei-graphics-opengl",
         "fei-graphics-opengl-glfw"
     )

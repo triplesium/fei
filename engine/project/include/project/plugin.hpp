@@ -1,0 +1,19 @@
+#pragma once
+#include "app/plugin.hpp"
+#include "project/project.hpp"
+
+#include <utility>
+
+namespace fei {
+
+class ProjectPlugin : public Plugin {
+  private:
+    Project m_project;
+
+  public:
+    explicit ProjectPlugin(Project project) : m_project(std::move(project)) {}
+
+    void setup(App& app) override;
+};
+
+} // namespace fei
