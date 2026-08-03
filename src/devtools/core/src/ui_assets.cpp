@@ -9,9 +9,9 @@ EMBED(devtools_app_js, "devtools/app.js");
 namespace fei::devtools::detail {
 namespace {
 
-const Reader c_index_html = EmbededAssets::get("devtools/index.html").reader();
-const Reader c_app_css = EmbededAssets::get("devtools/app.css").reader();
-const Reader c_app_js = EmbededAssets::get("devtools/app.js").reader();
+const Reader c_index_html = EmbeddedAssets::get("devtools/index.html").reader();
+const Reader c_app_css = EmbeddedAssets::get("devtools/app.css").reader();
+const Reader c_app_js = EmbeddedAssets::get("devtools/app.js").reader();
 
 } // namespace
 

@@ -9,15 +9,15 @@
 
 namespace fei {
 
-class EmbededData {
+class EmbeddedData {
   private:
     const std::byte* m_begin;
     const std::byte* m_end;
 
   public:
-    EmbededData(const std::byte* begin, const std::byte* end) :
+    EmbeddedData(const std::byte* begin, const std::byte* end) :
         m_begin(begin), m_end(end) {}
-    EmbededData(const uint8_t* begin, const uint8_t* end) :
+    EmbeddedData(const uint8_t* begin, const uint8_t* end) :
         m_begin(reinterpret_cast<const std::byte*>(begin)),
         m_end(reinterpret_cast<const std::byte*>(end)) {}
     Reader reader() const {
@@ -25,22 +25,22 @@ class EmbededData {
     }
 };
 
-class EmbededAssets {
+class EmbeddedAssets {
   private:
-    inline static std::unordered_map<std::string_view, EmbededData>
+    inline static std::unordered_map<std::string_view, EmbeddedData>
         s_embedded_assets {};
 
   public:
     static void
     add(std::string_view name, const uint8_t* begin, const uint8_t* end) {
-        s_embedded_assets.emplace(name, EmbededData(begin, end));
+        s_embedded_assets.emplace(name, EmbeddedData(begin, end));
     }
 
     static bool has(std::string_view name) {
         return s_embedded_assets.find(name) != s_embedded_assets.end();
     }
 
-    static const EmbededData& get(std::string_view name) {
+    static const EmbeddedData& get(std::string_view name) {
         if (!has(name)) {
             fatal("No embedded asset found with name: {}", name);
         }
@@ -49,13 +49,13 @@ class EmbededAssets {
 };
 
 namespace detail {
-struct EmbededAssetsRegistrar {
-    EmbededAssetsRegistrar(
+struct EmbeddedAssetsRegistrar {
+    EmbeddedAssetsRegistrar(
         std::string_view name,
         const uint8_t* begin,
         const uint8_t* end
     ) {
-        EmbededAssets::add(name, begin, end);
+        EmbeddedAssets::add(name, begin, end);
     }
 };
 } // namespace detail
@@ -68,8 +68,8 @@ struct EmbededAssetsRegistrar {
     extern const uint8_t _binary_##name##_end[];                 \
     }                                                            \
     namespace {                                                  \
-    static const fei::detail::EmbededAssetsRegistrar             \
-        _embeded_asset_registrar_##name(                         \
+    static const fei::detail::EmbeddedAssetsRegistrar            \
+        _embedded_asset_registrar_##name(                        \
             asset_name,                                          \
             static_cast<const uint8_t*>(_binary_##name##_start), \
             static_cast<const uint8_t*>(_binary_##name##_end)    \

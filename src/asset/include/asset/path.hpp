@@ -44,6 +44,14 @@ class AssetPath {
 
     const std::filesystem::path& path() const { return m_path; }
 
+    AssetPath normalized() const {
+        return AssetPath(normalize(m_path), m_source);
+    }
+
+    AssetPath with_source(std::string source) const {
+        return AssetPath(normalize(m_path), std::move(source));
+    }
+
     AssetPath resolve(const AssetPath& path) const {
         if (path.source()) {
             return AssetPath(normalize(path.path()), path.source());

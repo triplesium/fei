@@ -18,6 +18,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -39,11 +40,13 @@ class AssetServer {
     };
 
     App* m_app;
+    std::string m_default_source;
     std::unordered_map<std::string, std::unique_ptr<AssetSource>> m_sources;
     std::unordered_map<TypeId, AssetTypeAccess> m_asset_types;
 
   public:
-    AssetServer(App* app) : m_app(app) {}
+    explicit AssetServer(App* app, std::string default_source = "project") :
+        m_app(app), m_default_source(std::move(default_source)) {}
 
     // Delete copy constructor and copy assignment operator
     AssetServer(const AssetServer&) = delete;
@@ -52,6 +55,30 @@ class AssetServer {
     // Default move constructor and move assignment operator
     AssetServer(AssetServer&&) noexcept = default;
     AssetServer& operator=(AssetServer&&) = default;
+
+    [[nodiscard]] const std::string& default_source() const {
+        return m_default_source;
+    }
+
+    [[nodiscard]] bool has_source(std::string_view name) const {
+        return m_sources.contains(std::string(name));
+    }
+
+    bool set_default_source(std::string source) {
+        if (!has_source(source)) {
+            return false;
+        }
+        m_default_source = std::move(source);
+        return true;
+    }
+
+    [[nodiscard]] AssetPath canonicalize_path(const AssetPath& path) const {
+        auto canonical = path.normalized();
+        if (!canonical.source()) {
+            canonical = canonical.with_source(m_default_source);
+        }
+        return canonical;
+    }
 
     template<typename T, std::derived_from<AssetLoader<T>> Loader>
     void add_loader() {
@@ -98,43 +125,44 @@ class AssetServer {
         if (!m_app->has_resource<Assets<T>>()) {
             fatal("No asset found for type: {}", type_name<T>());
         }
+        const auto asset_path = canonicalize_path(path);
         auto& assets = m_app->resource<Assets<T>>();
-        if (auto cached = assets.cached_handle(path)) {
+        if (auto cached = assets.cached_handle(asset_path)) {
             return std::move(*cached);
         }
         auto* loader = assets.loader();
         if (!loader) {
             return assets.add_failed(AssetLoadError(
-                path,
-                "AssetLoader not set for " + path.as_string()
+                asset_path,
+                "AssetLoader not set for " + asset_path.as_string()
             ));
         }
-        if (path.is_unapproved()) {
+        if (asset_path.is_unapproved()) {
             return assets.add_failed(AssetLoadError(
-                path,
-                "Asset path escapes its source root: " + path.as_string()
+                asset_path,
+                "Asset path escapes its source root: " + asset_path.as_string()
             ));
         }
-        auto source_name = path.source().value_or("default");
+        const auto& source_name = *asset_path.source();
         if (!m_sources.contains(source_name)) {
             return assets.add_failed(AssetLoadError(
-                path,
+                asset_path,
                 "No asset source found with name: " + source_name
             ));
         }
         auto& source = m_sources.at(source_name);
-        if (!source->exists(path.path())) {
+        if (!source->exists(asset_path.path())) {
             return assets.add_failed(AssetLoadError(
-                path,
-                "Asset not found at path: " + path.path().string() +
+                asset_path,
+                "Asset not found at path: " + asset_path.path().string() +
                     " in source: " + source_name
             ));
         }
-        SyncLoadContext context(*this, path);
-        auto reader = source->try_get_reader(path.path());
+        SyncLoadContext context(*this, asset_path);
+        auto reader = source->try_get_reader(asset_path.path());
         if (!reader) {
             return assets.add_failed(AssetLoadError(
-                path,
+                asset_path,
                 "Failed to read asset from source '" + source_name +
                     "': " + reader.error()
             ));
@@ -148,49 +176,50 @@ class AssetServer {
             fatal("No asset found for type: {}", type_name<T>());
         }
 
+        const auto asset_path = canonicalize_path(path);
         auto& assets = m_app->resource<Assets<T>>();
-        if (auto cached = assets.cached_handle(path)) {
+        if (auto cached = assets.cached_handle(asset_path)) {
             return std::move(*cached);
         }
 
         auto* loader = assets.loader();
         if (!loader) {
             return assets.add_failed(AssetLoadError(
-                path,
-                "AssetLoader not set for " + path.as_string()
+                asset_path,
+                "AssetLoader not set for " + asset_path.as_string()
             ));
         }
-        if (path.is_unapproved()) {
+        if (asset_path.is_unapproved()) {
             return assets.add_failed(AssetLoadError(
-                path,
-                "Asset path escapes its source root: " + path.as_string()
+                asset_path,
+                "Asset path escapes its source root: " + asset_path.as_string()
             ));
         }
 
         if (!m_app->has_resource<Tasks>()) {
             return assets.add_failed(AssetLoadError(
-                path,
+                asset_path,
                 "Tasks resource not found for async asset loading"
             ));
         }
 
-        auto source_name = path.source().value_or("default");
+        const auto& source_name = *asset_path.source();
         if (!m_sources.contains(source_name)) {
             return assets.add_failed(AssetLoadError(
-                path,
+                asset_path,
                 "No asset source found with name: " + source_name
             ));
         }
         auto* source = m_sources.at(source_name).get();
-        if (!source->exists(path.path())) {
+        if (!source->exists(asset_path.path())) {
             return assets.add_failed(AssetLoadError(
-                path,
-                "Asset not found at path: " + path.path().string() +
+                asset_path,
+                "Asset not found at path: " + asset_path.path().string() +
                     " in source: " + source_name
             ));
         }
 
-        auto handle = assets.reserve_loading(path);
+        auto handle = assets.reserve_loading(asset_path);
         auto id = handle.id();
         auto assets_state = assets.state();
         auto load_requests = m_app->has_resource<AssetLoadRequests>() ?
@@ -202,13 +231,13 @@ class AssetServer {
             std::vector<AssetPath> loader_dependencies;
         };
         m_app->resource<Tasks>().general().submit(
-            [source, loader, source_name, path, load_requests]() mutable
+            [source, loader, source_name, asset_path, load_requests]() mutable
                 -> LoadTaskResult {
-                auto reader = source->try_get_reader(path.path());
+                auto reader = source->try_get_reader(asset_path.path());
                 if (!reader) {
                     return {
                         .result = failure(AssetLoadError(
-                            path,
+                            asset_path,
                             "Failed to read asset from source '" + source_name +
                                 "': " + reader.error()
                         )),
@@ -218,7 +247,10 @@ class AssetServer {
                 }
 
                 if (load_requests) {
-                    AsyncLoadContext context(std::move(load_requests), path);
+                    AsyncLoadContext context(
+                        std::move(load_requests),
+                        asset_path
+                    );
                     auto result = loader->load(*reader, context);
                     auto dependencies = context.dependencies();
                     auto loader_dependencies = context.loader_dependencies();
@@ -229,7 +261,7 @@ class AssetServer {
                     };
                 }
 
-                LoadContext context(path);
+                LoadContext context(asset_path);
                 auto result = loader->load(*reader, context);
                 auto dependencies = context.dependencies();
                 auto loader_dependencies = context.loader_dependencies();
@@ -241,7 +273,7 @@ class AssetServer {
             },
             [assets_state,
              id,
-             path](TaskResult<LoadTaskResult> result) mutable {
+             asset_path](TaskResult<LoadTaskResult> result) mutable {
                 if (!assets_state || !assets_state->assets) {
                     return;
                 }
@@ -258,13 +290,13 @@ class AssetServer {
                 } catch (const std::exception& error) {
                     assets.enqueue_async_load_result(
                         id,
-                        failure(AssetLoadError(path, error.what()))
+                        failure(AssetLoadError(asset_path, error.what()))
                     );
                 } catch (...) {
                     assets.enqueue_async_load_result(
                         id,
                         failure(AssetLoadError(
-                            path,
+                            asset_path,
                             "Unknown async asset load error"
                         ))
                     );
@@ -277,31 +309,32 @@ class AssetServer {
 
     Result<std::vector<std::byte>, AssetLoadError>
     read_asset_bytes(const AssetPath& path) const {
-        if (path.is_unapproved()) {
+        const auto asset_path = canonicalize_path(path);
+        if (asset_path.is_unapproved()) {
             return failure(AssetLoadError(
-                path,
-                "Asset path escapes its source root: " + path.as_string()
+                asset_path,
+                "Asset path escapes its source root: " + asset_path.as_string()
             ));
         }
-        const auto source_name = path.source().value_or("default");
+        const auto& source_name = *asset_path.source();
         const auto source = m_sources.find(source_name);
         if (source == m_sources.end()) {
             return failure(AssetLoadError(
-                path,
+                asset_path,
                 "No asset source found with name: " + source_name
             ));
         }
-        if (!source->second->exists(path.path())) {
+        if (!source->second->exists(asset_path.path())) {
             return failure(AssetLoadError(
-                path,
-                "Asset not found at path: " + path.path().string() +
+                asset_path,
+                "Asset not found at path: " + asset_path.path().string() +
                     " in source: " + source_name
             ));
         }
-        auto reader = source->second->try_get_reader(path.path());
+        auto reader = source->second->try_get_reader(asset_path.path());
         if (!reader) {
             return failure(AssetLoadError(
-                path,
+                asset_path,
                 "Failed to read asset from source '" + source_name +
                     "': " + reader.error()
             ));
@@ -327,6 +360,22 @@ class AssetServer {
             fatal("Asset source with name {} already exists", name);
         }
         m_sources.emplace(std::move(name), std::move(source));
+    }
+
+    Result<std::vector<AssetEntry>, std::string>
+    list(const AssetPath& directory, bool recursive = false) const {
+        const auto asset_path = canonicalize_path(directory);
+        if (asset_path.is_unapproved()) {
+            return failure(
+                "Asset path escapes its source root: " + asset_path.as_string()
+            );
+        }
+        const auto& source_name = *asset_path.source();
+        const auto source = m_sources.find(source_name);
+        if (source == m_sources.end()) {
+            return failure("No asset source found with name: " + source_name);
+        }
+        return source->second->list(asset_path.path(), recursive);
     }
 
     Optional<AssetLoadState> load_state(AssetKey key) const {

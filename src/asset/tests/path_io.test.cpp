@@ -12,12 +12,12 @@ TEST_CASE(
     "AssetPath parses and hashes source-qualified paths",
     "[asset][path]"
 ) {
-    AssetPath sourced("embeded://shaders/forward.frag");
+    AssetPath sourced("embedded://shaders/forward.frag");
 
     REQUIRE(sourced.source().has_value());
-    REQUIRE(*sourced.source() == "embeded");
+    REQUIRE(*sourced.source() == "embedded");
     REQUIRE(sourced.path().generic_string() == "shaders/forward.frag");
-    REQUIRE(sourced.as_string() == "embeded://shaders/forward.frag");
+    REQUIRE(sourced.as_string() == "embedded://shaders/forward.frag");
 
     AssetPath default_source("textures/albedo.png");
     REQUIRE_FALSE(default_source.source().has_value());
@@ -26,7 +26,7 @@ TEST_CASE(
 
     std::unordered_map<AssetPath, int> values;
     values.emplace(sourced, 7);
-    REQUIRE(values[AssetPath("embeded://shaders/forward.frag")] == 7);
+    REQUIRE(values[AssetPath("embedded://shaders/forward.frag")] == 7);
 }
 
 TEST_CASE("AssetPath resolves virtual asset paths", "[asset][path]") {
@@ -47,6 +47,16 @@ TEST_CASE("AssetPath resolves virtual asset paths", "[asset][path]") {
     CHECK(
         directory.resolve_str("other://shared/base.png") ==
         AssetPath("other://shared/base.png")
+    );
+}
+
+TEST_CASE("AssetPath can be normalized and source-qualified", "[asset][path]") {
+    const AssetPath path("textures/./ui/../player.png");
+
+    CHECK(path.normalized() == AssetPath("textures/player.png"));
+    CHECK(
+        path.with_source("project") ==
+        AssetPath("project://textures/player.png")
     );
 }
 

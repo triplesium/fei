@@ -3,11 +3,24 @@
 #include "asset/server.hpp"
 
 #include <concepts>
+#include <filesystem>
+#include <utility>
 
 namespace fei {
 
+struct AssetsPluginConfig {
+    std::filesystem::path project_asset_root;
+};
+
 class AssetsPlugin : public Plugin {
+  private:
+    AssetsPluginConfig m_config;
+
   public:
+    AssetsPlugin() = default;
+    explicit AssetsPlugin(AssetsPluginConfig config) :
+        m_config(std::move(config)) {}
+
     void setup(App& app) override;
 };
 

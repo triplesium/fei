@@ -228,6 +228,14 @@ TEST_CASE("AssetsPlugin installs task resources", "[asset][plugin]") {
     REQUIRE(app.has_resource<AssetLoadRequests>());
     REQUIRE(app.has_resource<Tasks>());
     REQUIRE(app.has_plugin<TaskPlugin>());
+    CHECK(app.resource<AssetServer>().default_source() == "project");
+    CHECK(app.resource<AssetServer>().has_source("project"));
+    CHECK(app.resource<AssetServer>().has_source("embedded"));
+    CHECK(
+        app.resource<AssetServer>().canonicalize_path(
+            AssetPath("textures/player.png")
+        ) == AssetPath("project://textures/player.png")
+    );
 }
 
 TEST_CASE(
@@ -271,6 +279,38 @@ TEST_CASE(
     REQUIRE(asset.has_value());
     REQUIRE(asset->byte_count == 4);
     REQUIRE(asset->path == "memory://asset.bin");
+}
+
+TEST_CASE(
+    "AssetServer canonicalizes default source paths before caching",
+    "[asset][server][path]"
+) {
+    App app;
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    REQUIRE(server.set_default_source("memory"));
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
+
+    auto first =
+        app.resource<AssetServer>().load<ServerAsset>(AssetPath("./asset.bin"));
+    auto second = app.resource<AssetServer>().load<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+
+    CHECK(first.id() == second.id());
+    auto& assets = app.resource<Assets<ServerAsset>>();
+    auto stored_path = assets.path(first);
+    REQUIRE(stored_path);
+    CHECK(*stored_path == AssetPath("memory://asset.bin"));
+    auto asset = assets.get(first);
+    REQUIRE(asset);
+    CHECK(asset->path == "memory://asset.bin");
+
+    auto bytes =
+        app.resource<AssetServer>().read_asset_bytes(AssetPath("asset.bin"));
+    REQUIRE(bytes);
+    CHECK(bytes->size() == 4);
 }
 
 TEST_CASE(

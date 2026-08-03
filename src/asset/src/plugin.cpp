@@ -6,6 +6,18 @@
 
 namespace fei {
 
+namespace {
+
+std::filesystem::path default_project_asset_root() {
+#ifdef FEI_ASSETS_PATH
+    return FEI_ASSETS_PATH;
+#else
+    return std::filesystem::current_path();
+#endif
+}
+
+} // namespace
+
 void AssetsPlugin::setup(App& app) {
     if (!app.has_plugin<TaskPlugin>()) {
         app.add_plugin<TaskPlugin>();
@@ -31,9 +43,15 @@ void AssetsPlugin::setup(App& app) {
             in_set<AssetSystems::ProcessLoadRequests>()
     );
 
-    AssetServer server {&app};
-    server.emplace_source<DefaultAssetSource>();
-    server.emplace_source<EmbededAssetSource>();
+    auto project_asset_root = m_config.project_asset_root.empty() ?
+                                  default_project_asset_root() :
+                                  m_config.project_asset_root;
+    AssetServer server {&app, "project"};
+    server.emplace_source<FilesystemAssetSource>(
+        "project",
+        std::move(project_asset_root)
+    );
+    server.emplace_source<EmbeddedAssetSource>();
     app.add_resource(std::move(server));
 }
 

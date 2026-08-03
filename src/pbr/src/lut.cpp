@@ -8,7 +8,7 @@
 namespace fei {
 
 void init_luts(ResRW<LUTs> luts, ResRW<AssetServer> asset_server) {
-    luts->brdf_lut = asset_server->load<Image>("embeded://ibl_brdf_lut.png");
+    luts->brdf_lut = asset_server->load<Image>("embedded://ibl_brdf_lut.png");
 }
 
 void init_gpu_luts(

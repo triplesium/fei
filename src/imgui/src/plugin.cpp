@@ -47,7 +47,7 @@ void setup_imgui(
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     }
 
-    auto reader = EmbededAssets::get("Cousine-Regular.ttf").reader();
+    auto reader = EmbeddedAssets::get("Cousine-Regular.ttf").reader();
     if (reader.size() >
         static_cast<std::size_t>(std::numeric_limits<int>::max())) {
         fatal("Embedded ImGui font exceeds ImGui's size limit");
