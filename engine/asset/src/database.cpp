@@ -273,7 +273,8 @@ AssetImportState AssetDatabase::state(const AssetPath& path) const {
     }
     const auto metadata = m_by_path.find(normalized);
     if (metadata != m_by_path.end() &&
-        m_import_records.contains(metadata->second.id)) {
+        (metadata->second.importer == native_asset_importer_name ||
+         m_import_records.contains(metadata->second.id))) {
         return AssetImportState::Imported;
     }
     return AssetImportState::Unimported;
@@ -413,6 +414,71 @@ AssetDatabase::register_import_record(AssetUuid id, AssetImportRecord record) {
     m_import_records.insert_or_assign(id, std::move(record));
     clear_failure(m_by_id.at(id));
     return {};
+}
+
+Result<AssetMetadata, std::string>
+AssetDatabase::ensure_native_asset(const AssetPath& path) {
+    auto normalized = path.normalized();
+    if (!normalized.source()) {
+        normalized = normalized.with_source("project");
+    }
+    auto source_file = resolve(normalized);
+    if (!source_file) {
+        return failure(std::move(source_file.error()));
+    }
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(*source_file, error) || error) {
+        return failure(
+            "Native asset source does not exist: " + source_file->string()
+        );
+    }
+
+    if (const auto* existing = metadata(normalized)) {
+        if (existing->importer != native_asset_importer_name) {
+            return failure(
+                "Asset metadata selects importer '" + existing->importer +
+                "', not 'native'"
+            );
+        }
+        return *existing;
+    }
+
+    const auto metadata_file = metadata_path(normalized);
+    if (std::filesystem::exists(metadata_file, error)) {
+        if (error) {
+            return failure(
+                "Failed to inspect native asset metadata: " + error.message()
+            );
+        }
+        auto existing = read_asset_metadata(metadata_file);
+        if (!existing) {
+            return failure(std::move(existing.error()));
+        }
+        if (existing->importer != native_asset_importer_name) {
+            return failure(
+                "Asset metadata selects importer '" + existing->importer +
+                "', not 'native'"
+            );
+        }
+        if (auto status = register_metadata(normalized, *existing); !status) {
+            return failure(std::move(status.error()));
+        }
+        return *existing;
+    }
+
+    AssetMetadata created {
+        .id = AssetUuid::random(),
+        .importer = std::string(native_asset_importer_name),
+        .settings = {},
+    };
+    if (auto status = write_asset_metadata(metadata_file, created); !status) {
+        return failure(std::move(status.error()));
+    }
+    if (auto status = register_metadata(normalized, created); !status) {
+        std::filesystem::remove(metadata_file, error);
+        return failure(std::move(status.error()));
+    }
+    return created;
 }
 
 bool AssetDatabase::is_import_current(

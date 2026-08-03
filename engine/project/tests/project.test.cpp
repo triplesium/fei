@@ -95,6 +95,31 @@ TEST_CASE("Project defaults its asset directory", "[project]") {
     CHECK(project->config().asset_directory == "assets");
 }
 
+TEST_CASE("Project loads a persistent main scene reference", "[project]") {
+    TemporaryProjectDirectory directory;
+    directory.write_config(R"(
+name: Test Game
+asset_directory: assets
+main_scene:
+  asset: "1a02e8da-05b6-41c4-b526-c9ad8bba17e4"
+  path: project://scenes/main.scene.yaml
+)");
+
+    auto project = Project::load(directory.project_file());
+
+    REQUIRE(project);
+    REQUIRE(project->config().main_scene);
+    REQUIRE(project->config().main_scene->id);
+    CHECK(
+        project->config().main_scene->id->as_string() ==
+        "1a02e8da-05b6-41c4-b526-c9ad8bba17e4"
+    );
+    CHECK(
+        project->config().main_scene->fallback_path.as_string() ==
+        "project://scenes/main.scene.yaml"
+    );
+}
+
 TEST_CASE("Project rejects invalid configuration", "[project]") {
     TemporaryProjectDirectory directory;
 

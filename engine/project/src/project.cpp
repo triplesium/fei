@@ -109,6 +109,58 @@ Project::load(const std::filesystem::path& project_file) {
             }
             config.asset_directory = asset_directory_node.as<std::string>();
         }
+        const auto main_scene_node = document["main_scene"];
+        if (main_scene_node) {
+            AssetReference reference {.id = nullopt, .fallback_path = ""};
+            if (main_scene_node.IsScalar()) {
+                reference.fallback_path =
+                    AssetPath(main_scene_node.as<std::string>());
+            } else if (
+                main_scene_node.IsMap() && main_scene_node["path"].IsScalar()
+            ) {
+                reference.fallback_path =
+                    AssetPath(main_scene_node["path"].as<std::string>());
+                if (const auto id_node = main_scene_node["asset"]; id_node) {
+                    if (!id_node.IsScalar()) {
+                        return failure(load_error(
+                            ProjectLoadErrorKind::InvalidConfig,
+                            absolute_file,
+                            "Project main_scene asset must be a UUID string"
+                        ));
+                    }
+                    auto id = AssetUuid::parse(id_node.as<std::string>());
+                    if (!id) {
+                        return failure(load_error(
+                            ProjectLoadErrorKind::InvalidConfig,
+                            absolute_file,
+                            "Invalid project main_scene asset: " + id.error()
+                        ));
+                    }
+                    reference.id = *id;
+                }
+            } else {
+                return failure(load_error(
+                    ProjectLoadErrorKind::InvalidConfig,
+                    absolute_file,
+                    "Project main_scene must be a path string or a mapping "
+                    "containing 'path'"
+                ));
+            }
+            auto scene_path = reference.fallback_path.normalized();
+            if (!scene_path.source()) {
+                scene_path = scene_path.with_source("project");
+            }
+            if (!scene_path.source() || *scene_path.source() != "project" ||
+                scene_path.path().empty() || scene_path.is_unapproved()) {
+                return failure(load_error(
+                    ProjectLoadErrorKind::InvalidConfig,
+                    absolute_file,
+                    "Project main_scene must be a safe project:// path"
+                ));
+            }
+            reference.fallback_path = std::move(scene_path);
+            config.main_scene = std::move(reference);
+        }
     } catch (const YAML::Exception& yaml_error) {
         return failure(load_error(
             ProjectLoadErrorKind::InvalidConfig,

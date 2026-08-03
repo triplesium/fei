@@ -1,4 +1,6 @@
 #pragma once
+#include "asset/reference.hpp"
+#include "base/optional.hpp"
 #include "base/result.hpp"
 
 #include <cstdint>
@@ -22,6 +24,7 @@ struct ProjectLoadError {
 struct ProjectConfig {
     std::string name;
     std::filesystem::path asset_directory {"assets"};
+    Optional<AssetReference> main_scene;
 };
 
 class Project {

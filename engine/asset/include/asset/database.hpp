@@ -14,6 +14,8 @@
 
 namespace fei {
 
+inline constexpr std::string_view native_asset_importer_name = "native";
+
 struct AssetMetadata {
     AssetUuid id;
     std::string importer;
@@ -112,6 +114,8 @@ class AssetDatabase {
     register_metadata(const AssetPath& path, AssetMetadata metadata);
     Status<std::string>
     register_import_record(AssetUuid id, AssetImportRecord record);
+    [[nodiscard]] Result<AssetMetadata, std::string>
+    ensure_native_asset(const AssetPath& path);
     [[nodiscard]] bool is_import_current(
         const AssetPath& path,
         const AssetImporter& importer,

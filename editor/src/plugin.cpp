@@ -5,6 +5,7 @@
 #include "asset/assets.hpp"
 #include "asset/database.hpp"
 #include "asset/importer.hpp"
+#include "asset/plugin.hpp"
 #include "asset/serialization.hpp"
 #include "asset/server.hpp"
 #include "base/log.hpp"
@@ -22,6 +23,7 @@
 #include "editor/component_operations.hpp"
 #include "imgui/plugin.hpp"
 #include "imgui/renderer.hpp"
+#include "project/project.hpp"
 #include "refl/cls.hpp"
 #include "refl/property.hpp"
 #include "refl/ref.hpp"
@@ -29,6 +31,8 @@
 #include "rendering/gpu_image.hpp"
 #include "rendering/plugin.hpp"
 #include "rendering/render_asset.hpp"
+#include "scene/document.hpp"
+#include "serialization/json_archive.hpp"
 #include "sprite/components.hpp"
 #include "sprite/output.hpp"
 #include "sprite/plugin.hpp"
@@ -39,6 +43,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <format>
+#include <fstream>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <memory>
@@ -99,6 +104,327 @@ struct EditorUiState {
 struct AssetWatchSyncState {
     Optional<std::string> last_error;
 };
+
+struct EditorSceneSession {
+    Optional<AssetPath> path;
+    Optional<SceneDocument> document;
+    SceneEntityBindings bindings;
+    bool dirty {false};
+    bool external_change_pending {false};
+    Optional<std::string> error;
+};
+
+bool is_scene_document_path(const AssetPath& path) {
+    return path.path().filename().string().ends_with(".scene.yaml");
+}
+
+Status<std::string> write_file_atomically(
+    const std::filesystem::path& path,
+    std::string_view contents
+) {
+    auto temporary = path;
+    temporary += ".saving";
+    auto backup = path;
+    backup += ".backup";
+    {
+        std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
+        if (!stream) {
+            return failure(
+                "Failed to create temporary scene file: " + temporary.string()
+            );
+        }
+        stream.write(
+            contents.data(),
+            static_cast<std::streamsize>(contents.size())
+        );
+        if (!stream) {
+            return failure(
+                "Failed to write temporary scene file: " + temporary.string()
+            );
+        }
+    }
+
+    std::error_code error;
+    std::filesystem::remove(backup, error);
+    error.clear();
+    const bool had_original = std::filesystem::exists(path, error);
+    if (error) {
+        std::filesystem::remove(temporary, error);
+        return failure("Failed to inspect scene file: " + error.message());
+    }
+    if (had_original) {
+        std::filesystem::rename(path, backup, error);
+        if (error) {
+            std::filesystem::remove(temporary, error);
+            return failure(
+                "Failed to stage old scene file: " + error.message()
+            );
+        }
+    }
+    std::filesystem::rename(temporary, path, error);
+    if (error) {
+        if (had_original) {
+            std::error_code rollback_error;
+            std::filesystem::rename(backup, path, rollback_error);
+        }
+        std::filesystem::remove(temporary, error);
+        return failure("Failed to publish scene file: " + error.message());
+    }
+    std::filesystem::remove(backup, error);
+    return {};
+}
+
+bool serialized_nodes_equal(
+    const serialization::SerializedNode& lhs,
+    const serialization::SerializedNode& rhs
+) {
+    const auto lhs_json = serialization::write_json(lhs, 0);
+    const auto rhs_json = serialization::write_json(rhs, 0);
+    return lhs_json && rhs_json && *lhs_json == *rhs_json;
+}
+
+void record_scene_diff(
+    const Optional<SceneDocument>& previous,
+    const SceneDocument& current,
+    ActivityLog& activity
+) {
+    if (!previous) {
+        activity.record(
+            OperationSource::ExternalAgent,
+            "OpenScene",
+            std::to_string(current.entities.size()) + " entities"
+        );
+        return;
+    }
+    std::unordered_map<AssetUuid, const SceneEntityDocument*> old_entities;
+    std::unordered_map<AssetUuid, const SceneEntityDocument*> new_entities;
+    for (const auto& entity : previous->entities) {
+        old_entities.emplace(entity.id, &entity);
+    }
+    for (const auto& entity : current.entities) {
+        new_entities.emplace(entity.id, &entity);
+    }
+    for (const auto& [id, entity] : old_entities) {
+        (void)entity;
+        if (!new_entities.contains(id)) {
+            activity.record(
+                OperationSource::ExternalAgent,
+                "DeleteEntity",
+                id.as_string()
+            );
+        }
+    }
+    for (const auto& [id, entity] : new_entities) {
+        const auto old = old_entities.find(id);
+        if (old == old_entities.end()) {
+            activity.record(
+                OperationSource::ExternalAgent,
+                "CreateEntity",
+                id.as_string()
+            );
+            continue;
+        }
+        if (entity->parent != old->second->parent) {
+            activity.record(
+                OperationSource::ExternalAgent,
+                "ReparentEntity",
+                id.as_string()
+            );
+        }
+        std::unordered_map<std::string, const SceneComponentDocument*>
+            old_components;
+        std::unordered_map<std::string, const SceneComponentDocument*>
+            new_components;
+        for (const auto& component : old->second->components) {
+            old_components.emplace(component.type, &component);
+        }
+        for (const auto& component : entity->components) {
+            new_components.emplace(component.type, &component);
+        }
+        for (const auto& [type, component] : old_components) {
+            (void)component;
+            if (!new_components.contains(type)) {
+                activity.record(
+                    OperationSource::ExternalAgent,
+                    "RemoveComponent",
+                    id.as_string() + " / " + type
+                );
+            }
+        }
+        for (const auto& [type, component] : new_components) {
+            const auto old_component = old_components.find(type);
+            if (old_component == old_components.end()) {
+                activity.record(
+                    OperationSource::ExternalAgent,
+                    "AddComponent",
+                    id.as_string() + " / " + type
+                );
+            } else if (!serialized_nodes_equal(
+                           component->properties,
+                           old_component->second->properties
+                       )) {
+                activity.record(
+                    OperationSource::ExternalAgent,
+                    "SetComponentProperty",
+                    id.as_string() + " / " + type
+                );
+            }
+        }
+    }
+}
+
+Status<std::string> replace_editor_scene(
+    World& world,
+    const AssetPath& path,
+    SceneDocument document,
+    const ComponentOperations& operations,
+    Selection& selection,
+    ActivityLog& activity,
+    EditorSceneSession& session,
+    OperationSource source
+) {
+    auto instantiated =
+        instantiate_scene_document(document, world, &operations.codecs());
+    if (!instantiated) {
+        return failure(
+            instantiated.error().path + ": " + instantiated.error().message
+        );
+    }
+
+    const auto old_entities = session.bindings.entities();
+    for (const auto entity : old_entities) {
+        if (world.has_entity(entity)) {
+            world.despawn(entity);
+        }
+    }
+    if (source == OperationSource::ExternalAgent) {
+        record_scene_diff(session.document, document, activity);
+    }
+    session.path = path;
+    session.document = std::move(document);
+    session.bindings = std::move(instantiated->bindings);
+    session.dirty = false;
+    session.external_change_pending = false;
+    session.error = nullopt;
+    selection.entity = nullopt;
+    for (const auto& warning : instantiated->warnings) {
+        activity.record(source, "LoadSceneComponent", warning, false);
+    }
+    return {};
+}
+
+Result<SceneDocument, std::string>
+read_scene_document(const AssetPath& path, const AssetDatabase& database) {
+    auto file = database.resolve(path);
+    if (!file) {
+        return failure(std::move(file.error()));
+    }
+    auto reader = Reader::from_file(*file);
+    if (!reader) {
+        return failure(std::move(reader.error().message));
+    }
+    auto document = parse_scene_document(reader->as_string_view());
+    if (!document) {
+        return failure(document.error().path + ": " + document.error().message);
+    }
+    return std::move(*document);
+}
+
+Status<std::string> save_editor_scene(
+    World& world,
+    AssetDatabase& database,
+    ProjectAssetWatcher& watcher,
+    const ComponentOperations& operations,
+    ActivityLog& activity,
+    EditorSceneSession& session
+) {
+    if (!session.path) {
+        return failure(std::string("The current scene has no asset path"));
+    }
+    auto document = capture_scene_document(
+        world,
+        session.bindings,
+        &operations.codecs(),
+        session.document ? &*session.document : nullptr
+    );
+    if (!document) {
+        return failure(document.error().path + ": " + document.error().message);
+    }
+    auto encoded = write_scene_document(*document);
+    if (!encoded) {
+        return failure(encoded.error().path + ": " + encoded.error().message);
+    }
+    auto file = database.resolve(*session.path);
+    if (!file) {
+        return failure(std::move(file.error()));
+    }
+    std::error_code directory_error;
+    std::filesystem::create_directories(file->parent_path(), directory_error);
+    if (directory_error) {
+        return failure(
+            "Failed to create scene directory: " + directory_error.message()
+        );
+    }
+    if (auto status = write_file_atomically(*file, *encoded); !status) {
+        return status;
+    }
+    auto metadata = database.ensure_native_asset(*session.path);
+    if (!metadata) {
+        return failure(std::move(metadata.error()));
+    }
+    session.document = std::move(*document);
+    session.dirty = false;
+    session.external_change_pending = false;
+    session.error = nullopt;
+    if (auto status = watcher.acknowledge(); !status) {
+        return status;
+    }
+    activity
+        .record(OperationSource::User, "SaveScene", session.path->as_string());
+    return {};
+}
+
+AssetPath next_untitled_scene_path(const AssetDatabase& database) {
+    for (std::uint32_t index = 1;; ++index) {
+        const auto name =
+            index == 1 ? "untitled.scene.yaml" :
+                         "untitled_" + std::to_string(index) + ".scene.yaml";
+        const auto candidate = AssetPath("project://scenes/" + name);
+        auto file = database.resolve(candidate);
+        std::error_code error;
+        if (!file || !std::filesystem::exists(*file, error)) {
+            return candidate;
+        }
+    }
+}
+
+Status<std::string> reload_editor_scene(
+    World& world,
+    const AssetDatabase& database,
+    const ComponentOperations& operations,
+    Selection& selection,
+    ActivityLog& activity,
+    EditorSceneSession& session,
+    OperationSource source
+) {
+    if (!session.path) {
+        return failure(std::string("The current scene has no asset path"));
+    }
+    auto document = read_scene_document(*session.path, database);
+    if (!document) {
+        return failure(std::move(document.error()));
+    }
+    return replace_editor_scene(
+        world,
+        *session.path,
+        std::move(*document),
+        operations,
+        selection,
+        activity,
+        session,
+        source
+    );
+}
 
 const char* operation_source_name(OperationSource source) {
     switch (source) {
@@ -214,6 +540,143 @@ void draw_main_menu(World& world, EditorUiState& state) {
     }
 
     if (ImGui::BeginMenu("File")) {
+        auto& scene = world.resource<EditorSceneSession>();
+        auto& activity = world.resource<ActivityLog>();
+        auto& selection = world.resource<Selection>();
+        if (ImGui::MenuItem("New Scene", nullptr, false, !scene.dirty)) {
+            const auto path = next_untitled_scene_path(
+                static_cast<const World&>(world).resource<AssetDatabase>()
+            );
+            auto status = replace_editor_scene(
+                world,
+                path,
+                SceneDocument {},
+                static_cast<const World&>(world)
+                    .resource<ComponentOperations>(),
+                selection,
+                activity,
+                scene,
+                OperationSource::User
+            );
+            if (status) {
+                scene.dirty = true;
+                activity.record(
+                    OperationSource::User,
+                    "NewScene",
+                    path.as_string()
+                );
+            }
+        }
+        const bool can_open_selected = selection.asset && !scene.dirty &&
+                                       is_scene_document_path(*selection.asset);
+        if (ImGui::MenuItem(
+                "Open Selected Scene",
+                nullptr,
+                false,
+                can_open_selected
+            )) {
+            const auto selected_path = *selection.asset;
+            auto document = read_scene_document(
+                selected_path,
+                static_cast<const World&>(world).resource<AssetDatabase>()
+            );
+            Status<std::string> status =
+                document ? replace_editor_scene(
+                               world,
+                               selected_path,
+                               std::move(*document),
+                               static_cast<const World&>(world)
+                                   .resource<ComponentOperations>(),
+                               selection,
+                               activity,
+                               scene,
+                               OperationSource::User
+                           ) :
+                           failure(document.error());
+            if (!status) {
+                scene.error = status.error();
+                activity.record(
+                    OperationSource::User,
+                    "OpenScene",
+                    status.error(),
+                    false
+                );
+            } else {
+                activity.record(
+                    OperationSource::User,
+                    "OpenScene",
+                    scene.path->as_string()
+                );
+            }
+        }
+        if (ImGui::MenuItem(
+                "Save Scene",
+                "Ctrl+S",
+                false,
+                scene.path.has_value()
+            )) {
+            auto status = save_editor_scene(
+                world,
+                world.resource<AssetDatabase>(),
+                world.resource<ProjectAssetWatcher>(),
+                static_cast<const World&>(world)
+                    .resource<ComponentOperations>(),
+                activity,
+                scene
+            );
+            if (!status) {
+                scene.error = status.error();
+                activity.record(
+                    OperationSource::User,
+                    "SaveScene",
+                    status.error(),
+                    false
+                );
+            }
+        }
+        if (ImGui::MenuItem(
+                "Reload Scene from Disk",
+                nullptr,
+                false,
+                scene.path.has_value()
+            )) {
+            auto status = reload_editor_scene(
+                world,
+                static_cast<const World&>(world).resource<AssetDatabase>(),
+                static_cast<const World&>(world)
+                    .resource<ComponentOperations>(),
+                selection,
+                activity,
+                scene,
+                OperationSource::User
+            );
+            if (!status) {
+                scene.error = status.error();
+                activity.record(
+                    OperationSource::User,
+                    "ReloadScene",
+                    status.error(),
+                    false
+                );
+            } else {
+                activity.record(
+                    OperationSource::User,
+                    "ReloadScene",
+                    scene.path->as_string()
+                );
+            }
+        }
+        if (scene.external_change_pending &&
+            ImGui::MenuItem("Keep Local Scene")) {
+            scene.external_change_pending = false;
+            scene.dirty = true;
+            activity.record(
+                OperationSource::User,
+                "KeepLocalScene",
+                scene.path ? scene.path->as_string() : std::string {}
+            );
+        }
+        ImGui::Separator();
         if (ImGui::MenuItem("Exit")) {
             world.resource<AppStates>().should_stop = true;
         }
@@ -296,7 +759,12 @@ void draw_entity_node(
     ImGui::PopID();
 }
 
-void draw_hierarchy(World& world, Selection& selection, ActivityLog& activity) {
+void draw_hierarchy(
+    World& world,
+    Selection& selection,
+    ActivityLog& activity,
+    EditorSceneSession& scene
+) {
     if (!ImGui::Begin("Hierarchy")) {
         ImGui::End();
         return;
@@ -304,6 +772,7 @@ void draw_hierarchy(World& world, Selection& selection, ActivityLog& activity) {
 
     if (ImGui::Button("+ Entity")) {
         const auto entity = world.entity();
+        scene.bindings.ensure(entity);
         selection.entity = entity;
         selection.asset = nullopt;
         activity.record(
@@ -983,7 +1452,11 @@ void sync_project_assets(
     ResRW<AssetServer> asset_server,
     ResRW<AssetBrowser> browser,
     ResRW<ActivityLog> activity,
-    ResRW<AssetWatchSyncState> sync_state
+    ResRW<AssetWatchSyncState> sync_state,
+    ResRW<EditorSceneSession> scene_session,
+    Res<ComponentOperations> operations,
+    ResRW<Selection> selection,
+    Commands commands
 ) {
     auto changes = watcher->poll();
     if (!changes) {
@@ -1034,6 +1507,11 @@ void sync_project_assets(
                 "DeleteAsset",
                 old_path.as_string()
             );
+            if (scene_session->path && *scene_session->path == old_path) {
+                scene_session->error =
+                    "The active scene was deleted externally";
+                scene_session->external_change_pending = true;
+            }
             continue;
         }
         if (current->second != old_path) {
@@ -1045,6 +1523,9 @@ void sync_project_assets(
                 "MoveAsset",
                 old_path.as_string() + " -> " + current->second.as_string()
             );
+            if (scene_session->path && *scene_session->path == old_path) {
+                scene_session->path = current->second;
+            }
         }
     }
 
@@ -1098,6 +1579,43 @@ void sync_project_assets(
             continue;
         }
         if (change.directory && change.kind == AssetFileChangeKind::Modified) {
+            continue;
+        }
+        if (!change.directory && scene_session->path &&
+            change.path == *scene_session->path &&
+            change.kind != AssetFileChangeKind::Removed) {
+            handled_paths.insert(change.path);
+            if (scene_session->dirty) {
+                if (!scene_session->external_change_pending) {
+                    activity->record(
+                        OperationSource::ExternalAgent,
+                        "SceneConflict",
+                        change.path.as_string() +
+                            " changed while local edits are unsaved",
+                        false
+                    );
+                }
+                scene_session->external_change_pending = true;
+                continue;
+            }
+            auto status = reload_editor_scene(
+                commands.world(),
+                *database,
+                *operations,
+                *selection,
+                *activity,
+                *scene_session,
+                OperationSource::ExternalAgent
+            );
+            if (!status) {
+                scene_session->error = status.error();
+                activity->record(
+                    OperationSource::ExternalAgent,
+                    "ReloadScene",
+                    change.path.as_string() + ": " + status.error(),
+                    false
+                );
+            }
             continue;
         }
         if (change.kind == AssetFileChangeKind::Removed && !change.directory) {
@@ -2183,13 +2701,28 @@ void sync_scene_texture(
 void draw_scene(
     SpriteOutput& output,
     ImGuiTextureRegistry& textures,
-    EditorUiState& state
+    EditorUiState& state,
+    const EditorSceneSession& session
 ) {
     if (!ImGui::Begin("Scene")) {
         ImGui::End();
         return;
     }
 
+    if (session.external_change_pending) {
+        ImGui::TextColored(
+            ImVec4 {0.95f, 0.7f, 0.2f, 1.0f},
+            "Scene changed on disk; use File > Reload Scene from Disk or Keep "
+            "Local Scene."
+        );
+    }
+    if (session.error) {
+        ImGui::TextColored(
+            ImVec4 {0.95f, 0.35f, 0.35f, 1.0f},
+            "%s",
+            session.error->c_str()
+        );
+    }
     const auto available = ImGui::GetContentRegionAvail();
     const auto width = static_cast<uint32>(std::max(available.x, 1.0f));
     const auto height = static_cast<uint32>(std::max(available.y, 1.0f));
@@ -2295,6 +2828,7 @@ void draw_editor(WorldRef world_ref) {
     auto& asset_server = world.resource<AssetServer>();
     auto& asset_database = world.resource<AssetDatabase>();
     auto& asset_watcher = world.resource<ProjectAssetWatcher>();
+    auto& scene_session = world.resource<EditorSceneSession>();
     const auto& asset_importers =
         static_cast<const World&>(world).resource<AssetImporterRegistry>();
     const auto& images =
@@ -2322,7 +2856,7 @@ void draw_editor(WorldRef world_ref) {
     );
 
     if (state.show_hierarchy) {
-        draw_hierarchy(world, selection, activity);
+        draw_hierarchy(world, selection, activity, scene_session);
     }
     if (state.show_inspector) {
         draw_inspector(
@@ -2341,7 +2875,7 @@ void draw_editor(WorldRef world_ref) {
         );
     }
     if (state.show_scene) {
-        draw_scene(output, textures, state);
+        draw_scene(output, textures, state, scene_session);
     }
     if (state.show_assets) {
         draw_assets(
@@ -2378,15 +2912,32 @@ void draw_editor(WorldRef world_ref) {
             );
         }
     }
+    const bool changed_scene = std::ranges::any_of(
+        activity.entries(),
+        [activity_sequence](const OperationEntry& entry) {
+            return entry.sequence > activity_sequence &&
+                   entry.source == OperationSource::User &&
+                   (entry.action == "CreateEntity" ||
+                    entry.action == "DeleteEntity" ||
+                    entry.action == "AddComponent" ||
+                    entry.action == "RemoveComponent" ||
+                    entry.action == "SetComponentProperty" ||
+                    entry.action == "ReparentEntity");
+        }
+    );
+    if (changed_scene) {
+        scene_session.dirty = true;
+    }
 }
 
 void setup_welcome_scene(
     ResRW<AssetServer> assets,
     ResRW<Selection> selection,
     ResRW<ActivityLog> activity,
+    ResRW<EditorSceneSession> scene,
     Commands commands
 ) {
-    commands.spawn().add(
+    const auto camera = commands.spawn().add(
         Camera2d {
             .vertical_size = 7.0f,
             .clear_color = {0.035f, 0.045f, 0.065f, 1.0f},
@@ -2405,6 +2956,9 @@ void setup_welcome_scene(
         Transform2d {}
     );
     sprite.set_parent(root.id());
+    scene->bindings.ensure(camera.id());
+    scene->bindings.ensure(root.id());
+    scene->bindings.ensure(sprite.id());
     selection->entity = sprite.id();
     activity->record(
         OperationSource::Editor,
@@ -2437,6 +2991,8 @@ void EditorPlugin::setup(App& app) {
         fatal("EditorPlugin requires SpritePlugin texture output mode");
     }
 
+    app.add_plugin<AssetPlugin<SceneDocument, SceneDocumentLoader>>();
+
     ProjectAssetWatcher asset_watcher(app.resource<AssetDatabase>().root());
     if (auto status = asset_watcher.acknowledge(); !status) {
         warn("Failed to initialize project asset watcher: {}", status.error());
@@ -2447,6 +3003,7 @@ void EditorPlugin::setup(App& app) {
         .add_resource(AssetBrowser {})
         .add_resource(std::move(asset_watcher))
         .add_resource(AssetWatchSyncState {})
+        .add_resource(EditorSceneSession {})
         .add_resource(ExternalAgentStatus {})
         .add_resource(Selection {})
         .add_resource(EditorUiState {});
@@ -2465,6 +3022,62 @@ void EditorPlugin::setup(App& app) {
         "StartEditor",
         "External-agent mode; no internal agent"
     );
+
+    bool loaded_main_scene = false;
+    const auto& project = app.resource<Project>();
+    if (project.config().main_scene) {
+        auto scene_path =
+            app.resource<AssetServer>().resolve(*project.config().main_scene);
+        if (!scene_path) {
+            app.resource<ActivityLog>().record(
+                OperationSource::Editor,
+                "OpenMainScene",
+                scene_path.error().message,
+                false
+            );
+        } else {
+            auto metadata =
+                app.resource<AssetDatabase>().ensure_native_asset(*scene_path);
+            auto document =
+                read_scene_document(*scene_path, app.resource<AssetDatabase>());
+            if (!metadata || !document) {
+                const auto message =
+                    !metadata ? metadata.error() : document.error();
+                app.resource<ActivityLog>().record(
+                    OperationSource::Editor,
+                    "OpenMainScene",
+                    message,
+                    false
+                );
+            } else {
+                auto status = replace_editor_scene(
+                    app.world(),
+                    *scene_path,
+                    std::move(*document),
+                    app.resource<ComponentOperations>(),
+                    app.resource<Selection>(),
+                    app.resource<ActivityLog>(),
+                    app.resource<EditorSceneSession>(),
+                    OperationSource::Editor
+                );
+                if (!status) {
+                    app.resource<ActivityLog>().record(
+                        OperationSource::Editor,
+                        "OpenMainScene",
+                        status.error(),
+                        false
+                    );
+                } else {
+                    loaded_main_scene = true;
+                    app.resource<ActivityLog>().record(
+                        OperationSource::Editor,
+                        "OpenMainScene",
+                        scene_path->as_string()
+                    );
+                }
+            }
+        }
+    }
 
     auto import_report = import_pending_assets(
         app.resource<AssetImporterRegistry>(),
@@ -2497,7 +3110,7 @@ void EditorPlugin::setup(App& app) {
         warn("Failed to synchronize project asset watcher: {}", status.error());
     }
 
-    if (m_config.create_welcome_scene) {
+    if (m_config.create_welcome_scene && !loaded_main_scene) {
         app.add_systems(PreStartUp, setup_welcome_scene);
     }
     app.add_systems(Update, sync_project_assets | main_thread());

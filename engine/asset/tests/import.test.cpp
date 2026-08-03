@@ -138,6 +138,34 @@ TEST_CASE("AssetUuid round trips stable text", "[asset][import]") {
     CHECK_FALSE(AssetUuid::parse("not-a-uuid"));
 }
 
+TEST_CASE("Native assets use metadata without import artifacts", "[asset]") {
+    TemporaryImportDirectory directory;
+    directory.write_project_asset(
+        "scenes/main.scene.yaml",
+        "format: fei.scene"
+    );
+    AssetDatabase database(directory.project_assets());
+    const AssetPath path("project://scenes/main.scene.yaml");
+
+    auto metadata = database.ensure_native_asset(path);
+
+    REQUIRE(metadata);
+    CHECK(metadata->importer == native_asset_importer_name);
+    CHECK(database.state(path) == AssetImportState::Imported);
+    CHECK_FALSE(database.import_record(path));
+    CHECK(
+        std::filesystem::exists(
+            directory.project_assets() / "scenes" / "main.scene.yaml.meta"
+        )
+    );
+
+    AssetDatabase rescanned(directory.project_assets());
+    REQUIRE(rescanned.scan());
+    REQUIRE(rescanned.metadata(path));
+    CHECK(rescanned.metadata(path)->id == metadata->id);
+    CHECK(rescanned.state(path) == AssetImportState::Imported);
+}
+
 TEST_CASE(
     "Asset import copies, validates, and registers metadata",
     "[asset][import]"

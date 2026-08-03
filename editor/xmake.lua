@@ -17,6 +17,8 @@ target("fei-editor-core")
         "fei-app",
         "fei-math",
         "fei-asset",
+        "fei-project",
+        "fei-scene",
         "fei-core",
         "fei-graphics",
         "fei-rendering",
