@@ -7,6 +7,7 @@
 namespace fei {
 
 struct SpriteSystems {
+    struct PrepareOutput : SystemSet<PrepareOutput> {};
     struct QueueSprites : SystemSet<QueueSprites> {};
     struct RenderSprites : SystemSet<RenderSprites> {};
 };

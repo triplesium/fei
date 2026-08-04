@@ -9,6 +9,8 @@ namespace {
 
 constexpr uint64 image_texture_id_mask = uint64 {1} << 62;
 constexpr uint64 image_texture_sequence_mask = image_texture_id_mask - 1;
+constexpr uint64 render_texture_id_mask = uint64 {1} << 61;
+constexpr uint64 render_texture_sequence_mask = render_texture_id_mask - 1;
 
 } // namespace
 
@@ -50,6 +52,27 @@ ExtractedImGuiImages ImGuiImages::extract() const {
         );
     }
     return extracted;
+}
+
+ImGuiTextureHandle ImGuiRenderTextures::reserve_texture() {
+    if (m_next_id > render_texture_sequence_mask) {
+        fatal("ImGuiRenderTextures exhausted texture IDs");
+    }
+    const auto texture_id = render_texture_id_mask | m_next_id++;
+    m_textures.insert(texture_id);
+    return ImGuiTextureHandle(texture_id);
+}
+
+bool ImGuiRenderTextures::release_texture(ImGuiTextureHandle texture) {
+    return m_textures.erase(texture.raw_id()) != 0;
+}
+
+bool ImGuiRenderTextures::contains(ImGuiTextureHandle texture) const {
+    return m_textures.contains(texture.raw_id());
+}
+
+std::size_t ImGuiRenderTextures::size() const noexcept {
+    return m_textures.size();
 }
 
 } // namespace fei

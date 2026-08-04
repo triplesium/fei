@@ -60,6 +60,20 @@ struct RenderExtractRegistry {
 
 namespace detail {
 
+struct RenderOutputTransferState {
+    std::unordered_map<Entity, Entity> transient_targets;
+};
+
+inline void cleanup_transient_render_outputs(World&, World& render_world) {
+    auto& state = render_world.resource<RenderOutputTransferState>();
+    for (const auto& [render_entity, _] : state.transient_targets) {
+        if (render_world.has_entity(render_entity)) {
+            render_world.despawn(render_entity);
+        }
+    }
+    state.transient_targets.clear();
+}
+
 template<typename T>
 struct ExtractComponentState {
     std::unordered_set<Entity> previous_entities;
@@ -169,13 +183,27 @@ App& add_render_to_main_component(App& app) {
         }
 
         for (auto& transfer : transfers) {
-            auto target = transfer.main_entity &&
-                                  main_world.has_entity(*transfer.main_entity) ?
-                              *transfer.main_entity :
-                              main_world.entity();
+            Entity target;
+            const bool linked = transfer.main_entity &&
+                                main_world.has_entity(*transfer.main_entity);
+            if (linked) {
+                target = *transfer.main_entity;
+            } else {
+                auto& state =
+                    render_world.resource<detail::RenderOutputTransferState>();
+                auto [entry, inserted] = state.transient_targets.try_emplace(
+                    transfer.render_entity,
+                    Entity {}
+                );
+                if (inserted) {
+                    entry->second = main_world.entity();
+                }
+                target = entry->second;
+            }
             main_world.add_component(target, std::move(transfer.component));
-            if (render_world.has_entity(transfer.render_entity)) {
-                render_world.despawn(transfer.render_entity);
+            if (render_world.has_entity(transfer.render_entity) &&
+                render_world.has_component<T>(transfer.render_entity)) {
+                render_world.remove_component<T>(transfer.render_entity);
             }
         }
     });

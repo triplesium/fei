@@ -18,6 +18,10 @@ namespace fei {
 InlineSubAppRunner::InlineSubAppRunner(SubApp sub_app) :
     m_sub_app(std::move(sub_app)) {}
 
+InlineSubAppRunner::~InlineSubAppRunner() {
+    shutdown();
+}
+
 void InlineSubAppRunner::run_on_execution_thread(ExecutionTask task) {
     if (!task) {
         throw std::invalid_argument("SubApp execution task cannot be empty");
@@ -46,7 +50,9 @@ void InlineSubAppRunner::update(World& main_world) {
     m_sub_app.post_update(main_world);
 }
 
-void InlineSubAppRunner::shutdown() noexcept {}
+void InlineSubAppRunner::shutdown() noexcept {
+    m_sub_app.shutdown();
+}
 
 namespace {
 
@@ -286,6 +292,7 @@ class ThreadedSubAppRunner::Impl {
     void worker_loop() noexcept {
         while (auto work = m_to_worker.receive()) {
             if (work->kind == SubAppWorkKind::Shutdown) {
+                work->sub_app->shutdown();
                 work->sub_app.reset();
                 static_cast<void>(m_from_worker.send(
                     SubAppWorkResult {

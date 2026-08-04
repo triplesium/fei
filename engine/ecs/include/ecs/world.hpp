@@ -46,8 +46,10 @@ class World {
     };
 
     Entities m_entities;
-    Archetypes m_archetypes;
     Resources m_resources;
+    // Components may own resource-backed handles. Declare archetypes after
+    // resources so components are destroyed before the resources they use.
+    Archetypes m_archetypes;
     Schedules m_schedules;
     std::unordered_map<SystemId, RegisteredSystem> m_registered_systems;
     SystemId m_next_registered_system_id {0};
@@ -61,8 +63,8 @@ class World {
 
     World(World&& other) noexcept :
         m_entities(std::move(other.m_entities)),
-        m_archetypes(std::move(other.m_archetypes)),
         m_resources(std::move(other.m_resources)),
+        m_archetypes(std::move(other.m_archetypes)),
         m_schedules(std::move(other.m_schedules)),
         m_registered_systems(std::move(other.m_registered_systems)),
         m_next_registered_system_id(other.m_next_registered_system_id),
@@ -71,6 +73,7 @@ class World {
     World& operator=(World&& other) noexcept {
         if (this != &other) {
             m_entities = std::move(other.m_entities);
+            // Release components while their backing resources still exist.
             m_archetypes = std::move(other.m_archetypes);
             m_resources = std::move(other.m_resources);
             m_schedules = std::move(other.m_schedules);

@@ -332,6 +332,22 @@ void release_sprite_swapchain_framebuffer(ResRW<SpriteOutput> output) {
     }
 }
 
+void shutdown_sprite_renderer(World& world) {
+    if (world.has_resource<SpriteOutput>()) {
+        auto& output = world.resource<SpriteOutput>();
+        output.texture.reset();
+        output.framebuffer.reset();
+        output.width = 0;
+        output.height = 0;
+    }
+    if (world.has_resource<SpriteRenderState>()) {
+        world.resource<SpriteRenderState>() = SpriteRenderState {};
+    }
+    if (world.has_resource<SpritePhase>()) {
+        world.resource<SpritePhase>() = SpritePhase {};
+    }
+}
+
 } // namespace
 
 void SpritePlugin::setup(App& app) {
@@ -365,13 +381,16 @@ void SpritePlugin::setup(App& app) {
         )
         .add_resource(SpriteRenderState {})
         .add_resource(SpritePhase {})
+        .add_shutdown(shutdown_sprite_renderer)
         .add_systems(RenderStartup, setup_sprite_resources);
 
     render_app
         .add_systems(
             RenderUpdate,
-            chain(prepare_sprite_output, prepare_sprite_pipeline) |
-                in_set<RenderingSystems::PrepareResources>()
+            chain(
+                prepare_sprite_output | in_set<SpriteSystems::PrepareOutput>(),
+                prepare_sprite_pipeline
+            ) | in_set<RenderingSystems::PrepareResources>()
         )
         .add_systems(
             RenderUpdate,

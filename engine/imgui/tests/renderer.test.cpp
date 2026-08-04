@@ -109,6 +109,46 @@ TEST_CASE("ImGui image handles keep stable extracted IDs", "[imgui][texture]") {
     ImGui::DestroyContext();
 }
 
+TEST_CASE("ImGui render texture handles stay stable", "[imgui][texture]") {
+    ImGuiRenderTextures textures;
+
+    const auto first = textures.reserve_texture();
+    const auto second = textures.reserve_texture();
+    REQUIRE(first);
+    REQUIRE(second);
+    REQUIRE(first != second);
+    REQUIRE(textures.contains(first));
+    REQUIRE(textures.contains(second));
+    REQUIRE(textures.size() == 2);
+
+    REQUIRE(textures.release_texture(first));
+    REQUIRE_FALSE(textures.release_texture(first));
+    REQUIRE_FALSE(textures.contains(first));
+    REQUIRE(textures.contains(second));
+}
+
+TEST_CASE(
+    "ImGui texture registry binds reserved render texture handles",
+    "[imgui][texture]"
+) {
+    FakeGraphicsDevice device;
+    ImGuiTextureRegistry registry;
+    ImGuiRenderer renderer;
+    ImGuiRenderTextures textures;
+    renderer.initialize(device, registry);
+
+    const auto handle = textures.reserve_texture();
+    const auto texture = make_texture(device);
+    const auto sampler = device.create_sampler(SamplerDescription::Linear);
+
+    registry.bind_render_texture(handle, texture, sampler);
+    REQUIRE(registry.contains(handle.texture_id()));
+
+    registry.unbind_render_texture(handle);
+    REQUIRE(registry.pending_removal(handle.texture_id()));
+    renderer.shutdown(registry);
+}
+
 TEST_CASE(
     "ImGui image bindings use fallback and survive GPU image replacement",
     "[imgui][texture]"

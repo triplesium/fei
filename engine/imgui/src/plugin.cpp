@@ -191,6 +191,7 @@ void ImGuiPlugin::setup(App& app) {
     app.add_resource(m_config)
         .add_resource(ImGuiInputCapture {})
         .add_resource(ImGuiImages {})
+        .add_resource(ImGuiRenderTextures {})
         .add_resource(ImGuiLifecycle {})
         .add_resource(PendingImGuiFrame {})
         .add_systems(StartUp, setup_imgui_platform | main_thread())
@@ -198,6 +199,14 @@ void ImGuiPlugin::setup(App& app) {
         .add_systems(RenderLast, capture_imgui_frame | main_thread());
     render_app.add_resource(ImGuiTextureRegistry {})
         .add_resource(ImGuiRenderer {})
+        .add_shutdown([](World& world) {
+            if (world.has_resource<ImGuiRenderer>() &&
+                world.has_resource<ImGuiTextureRegistry>()) {
+                world.resource<ImGuiRenderer>().shutdown(
+                    world.resource<ImGuiTextureRegistry>()
+                );
+            }
+        })
         .add_systems(
             RenderStartup,
             FEI_NAMED_SYSTEM(setup_imgui_renderer) | main_thread()
@@ -217,17 +226,6 @@ void ImGuiPlugin::setup(App& app) {
 }
 
 void ImGuiPlugin::cleanup(App& app) noexcept {
-    if (app.has_sub_app<RenderApp>() &&
-        app.sub_app_runner<RenderApp>().execution_mode() ==
-            SubAppExecutionMode::Inline) {
-        auto& render_app = app.sub_app<RenderApp>();
-        if (render_app.has_resource<ImGuiRenderer>() &&
-            render_app.has_resource<ImGuiTextureRegistry>()) {
-            render_app.resource<ImGuiRenderer>().shutdown(
-                render_app.resource<ImGuiTextureRegistry>()
-            );
-        }
-    }
     if (!ImGui::GetCurrentContext()) {
         return;
     }

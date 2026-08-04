@@ -179,8 +179,10 @@ void install_render_app(App& app, RenderRunnerFactory runner_factory) {
         .add_resource(ExtractMainWorld {})
         .add_resource(RenderEntityMap {})
         .add_resource(RenderExtractRegistry {})
+        .add_resource(detail::RenderOutputTransferState {})
         .set_extract_before_startup()
-        .set_pre_extract(run_render_extract);
+        .set_pre_extract(run_render_extract)
+        .add_post_update_cleanup(detail::cleanup_transient_render_outputs);
 
     app.insert_sub_app<RenderApp>(runner_factory(std::move(render_app)));
 }

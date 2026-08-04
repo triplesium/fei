@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <imgui.h>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace fei {
@@ -28,6 +29,7 @@ class ImGuiTextureHandle {
 
   private:
     friend class ImGuiImages;
+    friend class ImGuiRenderTextures;
 
     explicit ImGuiTextureHandle(uint64 texture_id) : m_texture_id(texture_id) {}
 
@@ -54,6 +56,21 @@ class ImGuiImages {
 
   private:
     std::unordered_map<uint64, Handle<Image>> m_images;
+    uint64 m_next_id {1};
+};
+
+// Allocates stable ImGui IDs for textures produced inside the Render World.
+// The Main World owns only these handles; the renderer owns their GPU bindings.
+class ImGuiRenderTextures {
+  public:
+    [[nodiscard]] ImGuiTextureHandle reserve_texture();
+    bool release_texture(ImGuiTextureHandle texture);
+
+    [[nodiscard]] bool contains(ImGuiTextureHandle texture) const;
+    [[nodiscard]] std::size_t size() const noexcept;
+
+  private:
+    std::unordered_set<uint64> m_textures;
     uint64 m_next_id {1};
 };
 

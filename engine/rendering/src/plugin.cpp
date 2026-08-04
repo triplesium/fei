@@ -134,6 +134,15 @@ void present_graphics_runtime(Optional<ResRO<GraphicsRuntime>> runtime) {
     }
 }
 
+void shutdown_graphics_runtime(World& world) {
+    if (world.has_resource<RenderResourceSetCache>()) {
+        world.resource<RenderResourceSetCache>().clear();
+    }
+    if (world.has_resource<GraphicsRuntime>()) {
+        static_cast<const World&>(world).resource<GraphicsRuntime>().flush();
+    }
+}
+
 void RenderingPlugin::setup(App& app) {
     if (app.has_resource<GraphicsRuntime>() ||
         app.has_resource<GraphicsDevice>() ||
@@ -173,6 +182,8 @@ void RenderingPlugin::setup(App& app) {
 
     const auto& graphics_device =
         static_cast<const SubApp&>(render_app).resource<GraphicsDevice>();
+
+    render_app.add_shutdown(shutdown_graphics_runtime);
 
     app.resource<AssetServer>().emplace_source<ShaderAssetSource>();
     render_app.add_resource(SlangLibraryShaderCompiler {});

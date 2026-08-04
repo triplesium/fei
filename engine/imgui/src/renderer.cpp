@@ -206,6 +206,23 @@ void ImGuiTextureRegistry::unregister_texture(ImTextureID texture_id) {
     }
 }
 
+void ImGuiTextureRegistry::bind_render_texture(
+    ImGuiTextureHandle handle,
+    std::shared_ptr<const Texture> texture,
+    std::shared_ptr<const Sampler> sampler
+) {
+    if (!handle) {
+        fatal("ImGuiTextureRegistry received an invalid render texture handle");
+    }
+    upsert_texture(handle.raw_id(), std::move(texture), std::move(sampler));
+}
+
+void ImGuiTextureRegistry::unbind_render_texture(ImGuiTextureHandle handle) {
+    if (handle) {
+        unregister_texture(handle.texture_id());
+    }
+}
+
 bool ImGuiTextureRegistry::contains(ImTextureID texture_id) const {
     return m_impl->entries.contains(static_cast<uint64>(texture_id));
 }

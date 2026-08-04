@@ -4,6 +4,7 @@
 #include "ecs/commands.hpp"
 
 #include <algorithm>
+#include <exception>
 
 namespace fei {
 
@@ -69,9 +70,48 @@ SubApp& SubApp::add_post_update(ExtractFn post_update) {
     return *this;
 }
 
+SubApp& SubApp::add_post_update_cleanup(ExtractFn cleanup) {
+    if (!cleanup) {
+        fatal("Cannot add an empty SubApp post-update cleanup function");
+    }
+    m_post_update_cleanups.push_back(std::move(cleanup));
+    return *this;
+}
+
 void SubApp::post_update(World& main_world) {
     for (auto& post_update : m_post_updates) {
         post_update(main_world, m_world);
+    }
+    for (auto& cleanup : m_post_update_cleanups) {
+        cleanup(main_world, m_world);
+    }
+}
+
+SubApp& SubApp::add_shutdown(ShutdownFn shutdown) {
+    if (!shutdown) {
+        fatal("Cannot add an empty SubApp shutdown function");
+    }
+    if (m_shutdown) {
+        fatal("Cannot add a SubApp shutdown function after shutdown");
+    }
+    m_shutdowns.push_back(std::move(shutdown));
+    return *this;
+}
+
+void SubApp::shutdown() noexcept {
+    if (m_shutdown) {
+        return;
+    }
+    m_shutdown = true;
+    for (auto shutdown = m_shutdowns.rbegin(); shutdown != m_shutdowns.rend();
+         ++shutdown) {
+        try {
+            (*shutdown)(m_world);
+        } catch (const std::exception& exception) {
+            error("SubApp shutdown failed: {}", exception.what());
+        } catch (...) {
+            error("SubApp shutdown failed with an unknown exception");
+        }
     }
 }
 

@@ -8,6 +8,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace fei {
 
@@ -44,9 +45,22 @@ class Resources {
     static Ref make_val_const_ref(const Val& value) { return value.ref(); }
 
     std::unordered_map<TypeId, ResourceEntry> m_resources;
+    std::vector<TypeId> m_insertion_order;
 
   public:
     Resources() = default;
+    Resources(const Resources&) = delete;
+    Resources& operator=(const Resources&) = delete;
+    Resources(Resources&&) noexcept = default;
+    Resources& operator=(Resources&& other) noexcept {
+        if (this != &other) {
+            clear();
+            m_resources = std::move(other.m_resources);
+            m_insertion_order = std::move(other.m_insertion_order);
+        }
+        return *this;
+    }
+    ~Resources() { clear(); }
 
     bool contains(TypeId type_id) const {
         return m_resources.contains(type_id);
@@ -70,6 +84,7 @@ class Resources {
             );
         }
 
+        const bool inserted = !m_resources.contains(type_id);
         ResourceEntry entry {
             .value = std::move(val),
             .external = {},
@@ -81,10 +96,14 @@ class Resources {
             entry.ticks.added = it->second.ticks.added;
         }
         m_resources.insert_or_assign(type_id, std::move(entry));
+        if (inserted) {
+            m_insertion_order.push_back(type_id);
+        }
     }
 
     template<typename Exposed, typename Stored, typename... Args>
     void emplace(TypeId type_id, Tick tick, Args&&... args) {
+        const bool inserted = !m_resources.contains(type_id);
         ResourceEntry entry {
             .value = make_val<Stored>(std::forward<Args>(args)...),
             .external = {},
@@ -96,10 +115,14 @@ class Resources {
             entry.ticks.added = it->second.ticks.added;
         }
         m_resources.insert_or_assign(type_id, std::move(entry));
+        if (inserted) {
+            m_insertion_order.push_back(type_id);
+        }
     }
 
     template<typename T>
     void set_readonly_ref(TypeId type_id, Tick tick, const T& resource) {
+        const bool inserted = !m_resources.contains(type_id);
         ResourceEntry entry {
             .value = {},
             .external = Ref(resource),
@@ -111,6 +134,19 @@ class Resources {
             entry.ticks.added = it->second.ticks.added;
         }
         m_resources.insert_or_assign(type_id, std::move(entry));
+        if (inserted) {
+            m_insertion_order.push_back(type_id);
+        }
+    }
+
+    void clear() noexcept {
+        for (auto type = m_insertion_order.rbegin();
+             type != m_insertion_order.rend();
+             ++type) {
+            m_resources.erase(*type);
+        }
+        m_resources.clear();
+        m_insertion_order.clear();
     }
 
     Ref get(TypeId type_id) {

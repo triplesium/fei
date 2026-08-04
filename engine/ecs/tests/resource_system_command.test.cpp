@@ -14,6 +14,44 @@
 using namespace fei;
 using namespace fei::ecs_test;
 
+namespace {
+
+struct FirstResourceLifetime {
+    std::shared_ptr<std::vector<int>> trace;
+
+    explicit FirstResourceLifetime(std::shared_ptr<std::vector<int>> trace) :
+        trace(std::move(trace)) {}
+    FirstResourceLifetime(FirstResourceLifetime&& other) noexcept :
+        trace(std::exchange(other.trace, nullptr)) {}
+    FirstResourceLifetime& operator=(FirstResourceLifetime&&) = delete;
+    FirstResourceLifetime(const FirstResourceLifetime&) = delete;
+    FirstResourceLifetime& operator=(const FirstResourceLifetime&) = delete;
+    ~FirstResourceLifetime() {
+        if (trace) {
+            trace->push_back(1);
+        }
+    }
+};
+
+struct SecondResourceLifetime {
+    std::shared_ptr<std::vector<int>> trace;
+
+    explicit SecondResourceLifetime(std::shared_ptr<std::vector<int>> trace) :
+        trace(std::move(trace)) {}
+    SecondResourceLifetime(SecondResourceLifetime&& other) noexcept :
+        trace(std::exchange(other.trace, nullptr)) {}
+    SecondResourceLifetime& operator=(SecondResourceLifetime&&) = delete;
+    SecondResourceLifetime(const SecondResourceLifetime&) = delete;
+    SecondResourceLifetime& operator=(const SecondResourceLifetime&) = delete;
+    ~SecondResourceLifetime() {
+        if (trace) {
+            trace->push_back(2);
+        }
+    }
+};
+
+} // namespace
+
 static_assert(std::is_same_v<
               decltype(std::declval<World&>().resource<GameConfig>()),
               GameConfig&>);
@@ -50,6 +88,21 @@ TEST_CASE("ECS manages world resources", "[ecs][resource]") {
         REQUIRE(event_queue.events[0] == "test_event");
         REQUIRE(event_queue.events[1] == "another_event");
     }
+}
+
+TEST_CASE(
+    "ECS destroys resources in reverse insertion order",
+    "[ecs][resource][lifetime]"
+) {
+    auto trace = std::make_shared<std::vector<int>>();
+
+    {
+        World world;
+        world.add_resource(FirstResourceLifetime(trace));
+        world.add_resource(SecondResourceLifetime(trace));
+    }
+
+    REQUIRE(*trace == std::vector<int> {2, 1});
 }
 
 TEST_CASE(

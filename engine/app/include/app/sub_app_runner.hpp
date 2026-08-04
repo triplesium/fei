@@ -47,6 +47,7 @@ class SubAppRunner {
 class InlineSubAppRunner final : public SubAppRunner {
   public:
     explicit InlineSubAppRunner(SubApp sub_app);
+    ~InlineSubAppRunner() override;
 
     [[nodiscard]] SubAppExecutionMode execution_mode() const noexcept override {
         return SubAppExecutionMode::Inline;

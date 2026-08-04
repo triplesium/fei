@@ -15,6 +15,7 @@ namespace fei {
 class SubApp {
   public:
     using ExtractFn = std::move_only_function<void(World&, World&)>;
+    using ShutdownFn = std::move_only_function<void(World&)>;
 
     SubApp();
     SubApp(const SubApp&) = delete;
@@ -110,7 +111,10 @@ class SubApp {
     SubApp& set_post_extract(ExtractFn extract);
     void extract(World& main_world);
     SubApp& add_post_update(ExtractFn post_update);
+    SubApp& add_post_update_cleanup(ExtractFn cleanup);
     void post_update(World& main_world);
+    SubApp& add_shutdown(ShutdownFn shutdown);
+    void shutdown() noexcept;
 
     SubApp& set_worker_threads(std::size_t thread_count) {
         m_world.set_worker_threads(thread_count);
@@ -130,9 +134,12 @@ class SubApp {
     std::vector<ExtractFn> m_extractors;
     ExtractFn m_post_extract;
     std::vector<ExtractFn> m_post_updates;
+    std::vector<ExtractFn> m_post_update_cleanups;
+    std::vector<ShutdownFn> m_shutdowns;
     bool m_extract_before_startup {false};
     bool m_finished {false};
     bool m_started {false};
+    bool m_shutdown {false};
 };
 
 } // namespace fei

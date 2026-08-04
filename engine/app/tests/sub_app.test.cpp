@@ -358,6 +358,35 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Threaded sub app runs shutdown callbacks in reverse order on its worker",
+    "[app][sub-app][runner][threaded][shutdown]"
+) {
+    const auto caller_thread = std::this_thread::get_id();
+    auto trace = std::make_shared<std::vector<int>>();
+    auto shutdown_thread = std::make_shared<std::thread::id>();
+
+    SubApp sub_app;
+    sub_app
+        .add_shutdown([trace](World&) {
+            trace->push_back(1);
+        })
+        .add_shutdown([trace, shutdown_thread](World&) {
+            trace->push_back(2);
+            *shutdown_thread = std::this_thread::get_id();
+        });
+
+    App app;
+    app.insert_sub_app<TestSubApp>(
+        std::make_unique<ThreadedSubAppRunner>(std::move(sub_app))
+    );
+    app.shutdown();
+    app.shutdown();
+
+    REQUIRE(*trace == std::vector<int> {2, 1});
+    REQUIRE(*shutdown_thread != caller_thread);
+}
+
+TEST_CASE(
     "Threaded sub app runner propagates bootstrap exceptions",
     "[app][sub-app][runner][threaded]"
 ) {

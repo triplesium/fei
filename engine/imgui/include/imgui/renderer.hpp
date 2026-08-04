@@ -13,6 +13,7 @@ namespace fei {
 class GraphicsDevice;
 class GpuImage;
 class ImGuiRenderer;
+class ImGuiTextureHandle;
 class PipelineCache;
 class RenderFrameContext;
 class ResourceLayout;
@@ -74,6 +75,12 @@ class ImGuiTextureRegistry {
         std::shared_ptr<const Sampler> sampler = nullptr
     );
     void unregister_texture(ImTextureID texture_id);
+    void bind_render_texture(
+        ImGuiTextureHandle handle,
+        std::shared_ptr<const Texture> texture,
+        std::shared_ptr<const Sampler> sampler = nullptr
+    );
+    void unbind_render_texture(ImGuiTextureHandle handle);
 
     [[nodiscard]] bool contains(ImTextureID texture_id) const;
     [[nodiscard]] bool pending_removal(ImTextureID texture_id) const;

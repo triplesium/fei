@@ -509,3 +509,92 @@ TEST_CASE(
     REQUIRE(query.size() == 1);
     REQUIRE(std::get<0>(query.first()).value == 17);
 }
+
+TEST_CASE(
+    "Render output preserves linked render entities",
+    "[rendering][render-app][output]"
+) {
+    struct LinkedOutput {
+        int value {0};
+    };
+
+    App app;
+    install_render_app(app);
+    add_extract_component<ExtractedA>(app);
+    add_render_to_main_component<LinkedOutput>(app);
+    app.sub_app<RenderApp>().add_systems(
+        RenderUpdate,
+        [](Query<Entity, const MainEntity> linked, Commands commands) {
+            for (const auto& [entity, _] : linked) {
+                commands.entity(entity).add(LinkedOutput {.value = 29});
+            }
+        }
+    );
+
+    const auto main_entity = app.world().entity();
+    app.world().add_component(main_entity, ExtractedA {});
+    app.render();
+
+    auto& render_world = app.sub_app<RenderApp>().world();
+    const auto render_entity =
+        render_world.resource<RenderEntityMap>().main_to_render.at(main_entity);
+    REQUIRE(render_world.has_entity(render_entity));
+    REQUIRE_FALSE(render_world.has_component<LinkedOutput>(render_entity));
+    REQUIRE(app.world().get_component<LinkedOutput>(main_entity).value == 29);
+    REQUIRE(
+        app.world().get_component<RenderEntity>(main_entity).entity ==
+        render_entity
+    );
+}
+
+TEST_CASE(
+    "Render output groups transient components on one main entity",
+    "[rendering][render-app][output]"
+) {
+    struct FirstOutput {
+        int value {0};
+    };
+    struct SecondOutput {
+        int value {0};
+    };
+    struct SpawnedOutput {
+        Optional<Entity> entity;
+    };
+
+    App app;
+    install_render_app(app);
+    add_render_to_main_component<FirstOutput>(app);
+    add_render_to_main_component<SecondOutput>(app);
+    app.sub_app<RenderApp>()
+        .add_resource(SpawnedOutput {})
+        .add_systems(
+            RenderUpdate,
+            [](Commands commands, ResRW<SpawnedOutput> spawned) {
+                auto entity = commands.spawn().add(
+                    FirstOutput {.value = 3},
+                    SecondOutput {.value = 5}
+                );
+                spawned->entity = entity.id();
+            }
+        );
+
+    app.render();
+
+    auto outputs =
+        Query<Entity, const FirstOutput, const SecondOutput>::get_param(
+            app.world(),
+            SystemTicks {
+                .last_run = 0,
+                .this_run = app.world().read_change_tick(),
+            }
+        );
+    REQUIRE(outputs.size() == 1);
+    const auto& [_, first, second] = outputs.first();
+    REQUIRE(first.value == 3);
+    REQUIRE(second.value == 5);
+
+    auto& render_world = app.sub_app<RenderApp>().world();
+    const auto spawned = render_world.resource<SpawnedOutput>().entity;
+    REQUIRE(spawned);
+    REQUIRE_FALSE(render_world.has_entity(*spawned));
+}

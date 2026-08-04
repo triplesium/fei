@@ -23,14 +23,14 @@
 #include "editor/component_operations.hpp"
 #include "imgui/plugin.hpp"
 #include "imgui/renderer.hpp"
+#include "imgui/texture.hpp"
 #include "project/project.hpp"
 #include "refl/cls.hpp"
 #include "refl/property.hpp"
 #include "refl/ref.hpp"
 #include "refl/registry.hpp"
-#include "rendering/gpu_image.hpp"
 #include "rendering/plugin.hpp"
-#include "rendering/render_asset.hpp"
+#include "rendering/render_app.hpp"
 #include "scene/document.hpp"
 #include "serialization/json_archive.hpp"
 #include "sprite/components.hpp"
@@ -68,10 +68,10 @@ struct AssetClipboard {
 };
 
 struct EditorUiState {
-    ImTextureID scene_texture_id {ImTextureID_Invalid};
-    std::shared_ptr<const Texture> registered_scene_texture;
-    ImTextureID asset_preview_texture_id {ImTextureID_Invalid};
-    std::shared_ptr<const Texture> registered_asset_preview_texture;
+    ImGuiTextureHandle scene_texture;
+    uint32 scene_width {1280};
+    uint32 scene_height {720};
+    ImGuiTextureHandle asset_preview_texture;
     Optional<AssetPath> asset_preview_path;
     Handle<Image> asset_preview_handle;
     bool layout_initialized {false};
@@ -100,6 +100,52 @@ struct EditorUiState {
     bool delete_target_is_directory {false};
     Optional<std::string> delete_error;
 };
+
+struct ExtractedEditorViewport {
+    ImGuiTextureHandle texture;
+    uint32 width {0};
+    uint32 height {0};
+};
+
+struct EditorRenderSystems {
+    struct BindViewport : SystemSet<BindViewport> {};
+};
+
+void extract_editor_viewport(
+    Extract<ResRO<EditorUiState>> editor,
+    ResRW<ExtractedEditorViewport> viewport,
+    ResRW<SpriteOutput> output
+) {
+    viewport->texture = (*editor)->scene_texture;
+    viewport->width = (*editor)->show_scene ? (*editor)->scene_width : 0;
+    viewport->height = (*editor)->show_scene ? (*editor)->scene_height : 0;
+    output->resize(viewport->width, viewport->height);
+}
+
+void bind_editor_viewport(
+    ResRO<ExtractedEditorViewport> viewport,
+    ResRO<SpriteOutput> output,
+    ResRW<ImGuiTextureRegistry> textures
+) {
+    if (!viewport->texture) {
+        return;
+    }
+    if (!output->texture) {
+        textures->unbind_render_texture(viewport->texture);
+        return;
+    }
+    textures->bind_render_texture(viewport->texture, output->texture);
+}
+
+void shutdown_editor_viewport(World& world) {
+    if (!world.has_resource<ExtractedEditorViewport>() ||
+        !world.has_resource<ImGuiTextureRegistry>()) {
+        return;
+    }
+    world.resource<ImGuiTextureRegistry>().unbind_render_texture(
+        world.resource<ExtractedEditorViewport>().texture
+    );
+}
 
 struct AssetWatchSyncState {
     Optional<std::string> last_error;
@@ -929,8 +975,7 @@ void draw_asset_inspector(
     AssetDatabase& database,
     ActivityLog& activity,
     const Assets<Image>& images,
-    RenderAssets<GpuImage>& gpu_images,
-    ImGuiTextureRegistry& textures,
+    ImGuiImages& image_textures,
     EditorUiState& state
 );
 
@@ -950,8 +995,7 @@ void draw_asset_preview(
     const AssetPath& path,
     AssetServer& asset_server,
     const Assets<Image>& images,
-    RenderAssets<GpuImage>& gpu_images,
-    ImGuiTextureRegistry& textures,
+    ImGuiImages& image_textures,
     EditorUiState& state
 );
 
@@ -965,8 +1009,7 @@ void draw_inspector(
     const AssetImporterRegistry& importers,
     AssetDatabase& database,
     const Assets<Image>& images,
-    RenderAssets<GpuImage>& gpu_images,
-    ImGuiTextureRegistry& textures,
+    ImGuiImages& image_textures,
     EditorUiState& state
 ) {
     if (!ImGui::Begin("Inspector")) {
@@ -986,8 +1029,7 @@ void draw_inspector(
             database,
             activity,
             images,
-            gpu_images,
-            textures,
+            image_textures,
             state
         );
         ImGui::End();
@@ -1171,8 +1213,7 @@ void draw_asset_inspector(
     AssetDatabase& database,
     ActivityLog& activity,
     const Assets<Image>& images,
-    RenderAssets<GpuImage>& gpu_images,
-    ImGuiTextureRegistry& textures,
+    ImGuiImages& image_textures,
     EditorUiState& state
 ) {
     const auto* metadata = database.metadata(path);
@@ -1301,7 +1342,7 @@ void draw_asset_inspector(
     }
 
     ImGui::Separator();
-    draw_asset_preview(path, asset_server, images, gpu_images, textures, state);
+    draw_asset_preview(path, asset_server, images, image_textures, state);
 }
 
 void draw_import_popup(
@@ -1456,7 +1497,7 @@ void sync_project_assets(
     ResRW<EditorSceneSession> scene_session,
     Res<ComponentOperations> operations,
     ResRW<Selection> selection,
-    Commands commands
+    WorldRef world
 ) {
     auto changes = watcher->poll();
     if (!changes) {
@@ -1599,7 +1640,7 @@ void sync_project_assets(
                 continue;
             }
             auto status = reload_editor_scene(
-                commands.world(),
+                *world,
                 *database,
                 *operations,
                 *selection,
@@ -1670,12 +1711,11 @@ bool is_previewable_image(const AssetPath& path) {
            extension == ".bmp" || extension == ".tga" || extension == ".hdr";
 }
 
-void clear_asset_preview(ImGuiTextureRegistry& textures, EditorUiState& state) {
-    if (state.asset_preview_texture_id != ImTextureID_Invalid) {
-        textures.unregister_texture(state.asset_preview_texture_id);
+void clear_asset_preview(ImGuiImages& images, EditorUiState& state) {
+    if (state.asset_preview_texture) {
+        images.unregister_image(state.asset_preview_texture);
     }
-    state.asset_preview_texture_id = ImTextureID_Invalid;
-    state.registered_asset_preview_texture.reset();
+    state.asset_preview_texture = {};
     state.asset_preview_path = nullopt;
     state.asset_preview_handle = {};
 }
@@ -1683,8 +1723,7 @@ void clear_asset_preview(ImGuiTextureRegistry& textures, EditorUiState& state) {
 void sync_asset_preview(
     const AssetPath& path,
     AssetServer& asset_server,
-    RenderAssets<GpuImage>& gpu_images,
-    ImGuiTextureRegistry& textures,
+    ImGuiImages& images,
     EditorUiState& state
 ) {
     Optional<AssetPath> preview_path;
@@ -1692,32 +1731,17 @@ void sync_asset_preview(
         preview_path = path;
     }
     if (preview_path != state.asset_preview_path) {
-        clear_asset_preview(textures, state);
+        clear_asset_preview(images, state);
         state.asset_preview_path = preview_path;
         if (preview_path) {
             state.asset_preview_handle =
                 asset_server.load<Image>(*preview_path);
+            if (state.asset_preview_handle) {
+                state.asset_preview_texture =
+                    images.register_image(state.asset_preview_handle);
+            }
         }
     }
-
-    if (!state.asset_preview_handle) {
-        return;
-    }
-    const auto gpu_image = gpu_images.get(state.asset_preview_handle);
-    if (!gpu_image || !gpu_image->texture() || !gpu_image->sampler()) {
-        return;
-    }
-
-    const auto texture = gpu_image->texture();
-    if (state.registered_asset_preview_texture == texture) {
-        return;
-    }
-    if (state.asset_preview_texture_id != ImTextureID_Invalid) {
-        textures.unregister_texture(state.asset_preview_texture_id);
-    }
-    state.registered_asset_preview_texture = texture;
-    state.asset_preview_texture_id =
-        textures.register_texture(texture, gpu_image->sampler());
 }
 
 bool draw_asset_breadcrumb(AssetBrowser& browser) {
@@ -1755,11 +1779,10 @@ void draw_asset_preview(
     const AssetPath& path,
     AssetServer& asset_server,
     const Assets<Image>& images,
-    RenderAssets<GpuImage>& gpu_images,
-    ImGuiTextureRegistry& textures,
+    ImGuiImages& image_textures,
     EditorUiState& state
 ) {
-    sync_asset_preview(path, asset_server, gpu_images, textures, state);
+    sync_asset_preview(path, asset_server, image_textures, state);
     if (!is_previewable_image(path)) {
         return;
     }
@@ -1784,8 +1807,8 @@ void draw_asset_preview(
         image->channels()
     );
 
-    if (state.asset_preview_texture_id == ImTextureID_Invalid ||
-        image->width() == 0 || image->height() == 0) {
+    if (!state.asset_preview_texture || image->width() == 0 ||
+        image->height() == 0) {
         ImGui::TextDisabled("Preparing GPU preview...");
         return;
     }
@@ -1796,7 +1819,7 @@ void draw_asset_preview(
         1.0f,
     });
     ImGui::Image(
-        state.asset_preview_texture_id,
+        state.asset_preview_texture.texture_id(),
         ImVec2 {
             static_cast<float>(image->width()) * scale,
             static_cast<float>(image->height()) * scale,
@@ -2253,7 +2276,7 @@ void draw_delete_asset_popup(
     AssetServer& asset_server,
     AssetDatabase& database,
     ActivityLog& activity,
-    ImGuiTextureRegistry& textures,
+    ImGuiImages& images,
     EditorUiState& state
 ) {
     if (!ImGui::BeginPopupModal(
@@ -2314,7 +2337,7 @@ void draw_delete_asset_popup(
                 state.delete_error = result.error();
             } else {
                 asset_server.remove_path(target);
-                clear_asset_preview(textures, state);
+                clear_asset_preview(images, state);
             }
         }
 
@@ -2368,7 +2391,7 @@ void draw_assets(
     const AssetImporterRegistry& importers,
     AssetDatabase& database,
     ActivityLog& activity,
-    ImGuiTextureRegistry& textures,
+    ImGuiImages& images,
     EditorUiState& state
 ) {
     if (!ImGui::Begin("Assets")) {
@@ -2668,7 +2691,7 @@ void draw_assets(
         asset_server,
         database,
         activity,
-        textures,
+        images,
         state
     );
     if (navigated && browser.refresh_requested()) {
@@ -2680,30 +2703,7 @@ void draw_assets(
     ImGui::End();
 }
 
-void sync_scene_texture(
-    SpriteOutput& output,
-    ImGuiTextureRegistry& textures,
-    EditorUiState& state
-) {
-    if (state.registered_scene_texture == output.texture) {
-        return;
-    }
-    if (state.scene_texture_id != ImTextureID_Invalid) {
-        textures.unregister_texture(state.scene_texture_id);
-        state.scene_texture_id = ImTextureID_Invalid;
-    }
-    state.registered_scene_texture = output.texture;
-    if (output.texture) {
-        state.scene_texture_id = textures.register_texture(output.texture);
-    }
-}
-
-void draw_scene(
-    SpriteOutput& output,
-    ImGuiTextureRegistry& textures,
-    EditorUiState& state,
-    const EditorSceneSession& session
-) {
+void draw_scene(EditorUiState& state, const EditorSceneSession& session) {
     if (!ImGui::Begin("Scene")) {
         ImGui::End();
         return;
@@ -2726,16 +2726,14 @@ void draw_scene(
     const auto available = ImGui::GetContentRegionAvail();
     const auto width = static_cast<uint32>(std::max(available.x, 1.0f));
     const auto height = static_cast<uint32>(std::max(available.y, 1.0f));
-    if (output.requested_width != width || output.requested_height != height) {
-        output.resize(width, height);
-    }
+    state.scene_width = width;
+    state.scene_height = height;
 
-    sync_scene_texture(output, textures, state);
-    if (state.scene_texture_id == ImTextureID_Invalid) {
+    if (!state.scene_texture) {
         ImGui::TextDisabled("Waiting for the 2D render target...");
     } else {
         ImGui::Image(
-            state.scene_texture_id,
+            state.scene_texture.texture_id(),
             available,
             ImVec2 {0.0f, 1.0f},
             ImVec2 {1.0f, 0.0f}
@@ -2833,9 +2831,7 @@ void draw_editor(WorldRef world_ref) {
         static_cast<const World&>(world).resource<AssetImporterRegistry>();
     const auto& images =
         static_cast<const World&>(world).resource<Assets<Image>>();
-    auto& gpu_images = world.resource<RenderAssets<GpuImage>>();
-    auto& output = world.resource<SpriteOutput>();
-    auto& textures = world.resource<ImGuiTextureRegistry>();
+    auto& image_textures = world.resource<ImGuiImages>();
     const auto& operations =
         static_cast<const World&>(world).resource<ComponentOperations>();
     const auto& agent =
@@ -2869,13 +2865,12 @@ void draw_editor(WorldRef world_ref) {
             asset_importers,
             asset_database,
             images,
-            gpu_images,
-            textures,
+            image_textures,
             state
         );
     }
     if (state.show_scene) {
-        draw_scene(output, textures, state, scene_session);
+        draw_scene(state, scene_session);
     }
     if (state.show_assets) {
         draw_assets(
@@ -2885,7 +2880,7 @@ void draw_editor(WorldRef world_ref) {
             asset_importers,
             asset_database,
             activity,
-            textures,
+            image_textures,
             state
         );
     }
@@ -2986,9 +2981,15 @@ void EditorPlugin::setup(App& app) {
         !app.has_resource<AssetImporterRegistry>()) {
         fatal("EditorPlugin requires AssetsPlugin to be installed first");
     }
-    if (!app.has_resource<SpriteOutput>() ||
-        app.resource<SpriteOutput>().mode != SpriteOutputMode::Texture) {
+    auto& render_app = app.sub_app<RenderApp>();
+    if (!render_app.has_resource<SpriteOutput>() ||
+        static_cast<const SubApp&>(render_app).resource<SpriteOutput>().mode !=
+            SpriteOutputMode::Texture) {
         fatal("EditorPlugin requires SpritePlugin texture output mode");
+    }
+    if (!app.has_resource<ImGuiImages>() ||
+        !app.has_resource<ImGuiRenderTextures>()) {
+        fatal("EditorPlugin requires ImGui texture services");
     }
 
     app.add_plugin<AssetPlugin<SceneDocument, SceneDocumentLoader>>();
@@ -2998,6 +2999,8 @@ void EditorPlugin::setup(App& app) {
         warn("Failed to initialize project asset watcher: {}", status.error());
     }
 
+    const auto scene_texture =
+        app.resource<ImGuiRenderTextures>().reserve_texture();
     app.add_resource(ComponentOperations {})
         .add_resource(ActivityLog {})
         .add_resource(AssetBrowser {})
@@ -3006,7 +3009,22 @@ void EditorPlugin::setup(App& app) {
         .add_resource(EditorSceneSession {})
         .add_resource(ExternalAgentStatus {})
         .add_resource(Selection {})
-        .add_resource(EditorUiState {});
+        .add_resource(EditorUiState {.scene_texture = scene_texture});
+
+    render_app.add_resource(ExtractedEditorViewport {})
+        .add_shutdown(shutdown_editor_viewport)
+        .configure_sets(
+            RenderUpdate,
+            EditorRenderSystems::BindViewport {}
+                .after<SpriteSystems::PrepareOutput>()
+        )
+        .add_systems(RenderExtract, extract_editor_viewport)
+        .add_systems(
+            RenderUpdate,
+            bind_editor_viewport |
+                in_set<RenderingSystems::PrepareResources>() |
+                in_set<EditorRenderSystems::BindViewport>()
+        );
 
     auto& operations = app.resource<ComponentOperations>();
     if (!register_asset_handle_codec<Image>(
@@ -3121,20 +3139,20 @@ void EditorPlugin::setup(App& app) {
 }
 
 void EditorPlugin::cleanup(App& app) noexcept {
-    if (!app.has_resource<EditorUiState>() ||
-        !app.has_resource<ImGuiTextureRegistry>()) {
+    if (!app.has_resource<EditorUiState>()) {
         return;
     }
 
     auto& state = app.resource<EditorUiState>();
-    if (state.scene_texture_id != ImTextureID_Invalid) {
-        app.resource<ImGuiTextureRegistry>().unregister_texture(
-            state.scene_texture_id
-        );
-        state.scene_texture_id = ImTextureID_Invalid;
-        state.registered_scene_texture.reset();
+    if (app.has_resource<ImGuiImages>()) {
+        clear_asset_preview(app.resource<ImGuiImages>(), state);
     }
-    clear_asset_preview(app.resource<ImGuiTextureRegistry>(), state);
+    if (state.scene_texture && app.has_resource<ImGuiRenderTextures>()) {
+        app.resource<ImGuiRenderTextures>().release_texture(
+            state.scene_texture
+        );
+        state.scene_texture = {};
+    }
 }
 
 } // namespace fei::editor
