@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -83,6 +85,30 @@ shader_source_candidates(const std::filesystem::path& path) {
     return candidates;
 }
 
+std::filesystem::path normalized_absolute_path(std::filesystem::path path) {
+    std::error_code error;
+    auto absolute = std::filesystem::absolute(path, error);
+    if (!error) {
+        path = std::move(absolute);
+    }
+    return path.lexically_normal();
+}
+
+bool is_path_below(
+    const std::filesystem::path& path,
+    const std::filesystem::path& directory
+) {
+    auto relative = path.lexically_relative(directory);
+    if (path == directory) {
+        return true;
+    }
+    if (relative.empty()) {
+        return false;
+    }
+    auto it = relative.begin();
+    return it != relative.end() && *it != "..";
+}
+
 void add_shader_source_entry(
     ShaderSourceRegistry& registry,
     std::string_view entry
@@ -147,6 +173,83 @@ std::vector<std::filesystem::path> ShaderSourceRegistry::roots() const {
         result.push_back(source.root);
     }
     return result;
+}
+
+ShaderSourceSnapshot
+ShaderSourceSnapshot::capture(const ShaderSourceRegistry& registry) {
+    ShaderSourceSnapshot snapshot;
+    snapshot.m_registry = registry;
+    for (const auto& source : registry.sources()) {
+        std::error_code error;
+        std::filesystem::recursive_directory_iterator it(
+            source.root,
+            std::filesystem::directory_options::skip_permission_denied,
+            error
+        );
+        const std::filesystem::recursive_directory_iterator end;
+        while (!error && it != end) {
+            const auto& entry = *it;
+            if (entry.is_regular_file(error) && !error &&
+                entry.path().extension() == ".slang") {
+                std::ifstream input(entry.path(), std::ios::binary);
+                if (input) {
+                    snapshot.m_files.insert_or_assign(
+                        normalized_absolute_path(entry.path()),
+                        std::string(
+                            std::istreambuf_iterator<char>(input),
+                            std::istreambuf_iterator<char>()
+                        )
+                    );
+                }
+            }
+            it.increment(error);
+        }
+    }
+    return snapshot;
+}
+
+Optional<ResolvedShaderSource>
+ShaderSourceSnapshot::resolve(const std::filesystem::path& path) const {
+    for (const auto& source : m_registry.sources()) {
+        for (auto relative : root_relative_paths(path, source.prefix)) {
+            for (auto candidate : shader_source_candidates(relative)) {
+                auto source_path =
+                    normalized_absolute_path(source.root / candidate);
+                if (!m_files.contains(source_path)) {
+                    continue;
+                }
+                return ResolvedShaderSource {
+                    .prefix = source.prefix,
+                    .root = normalized_absolute_path(source.root),
+                    .relative_path = std::move(candidate),
+                    .source_path = std::move(source_path),
+                };
+            }
+        }
+    }
+    return nullopt;
+}
+
+Optional<const std::string&>
+ShaderSourceSnapshot::source(const std::filesystem::path& path) const {
+    auto it = m_files.find(normalized_absolute_path(path));
+    if (it == m_files.end()) {
+        return nullopt;
+    }
+    return it->second;
+}
+
+bool ShaderSourceSnapshot::is_file(const std::filesystem::path& path) const {
+    return m_files.contains(normalized_absolute_path(path));
+}
+
+bool ShaderSourceSnapshot::is_directory(
+    const std::filesystem::path& path
+) const {
+    const auto directory = normalized_absolute_path(path);
+    return std::ranges::any_of(m_files, [&](const auto& file) {
+        return is_path_below(file.first, directory);
+    });
 }
 
 ShaderSourceRegistry generated_shader_source_registry() {

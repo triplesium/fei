@@ -5,11 +5,18 @@
 #include "base/log.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
+#include "ecs/system_profile.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics/swapchain.hpp"
 #include "imgui/renderer.hpp"
+#include "imgui/texture.hpp"
+#include "rendering/defaults.hpp"
+#include "rendering/extract_resource.hpp"
+#include "rendering/gpu_image.hpp"
 #include "rendering/pipeline_cache.hpp"
 #include "rendering/plugin.hpp"
+#include "rendering/render_app.hpp"
+#include "rendering/render_asset.hpp"
 #include "rendering/render_frame.hpp"
 #include "rendering/shader_cache.hpp"
 #include "window/window.hpp"
@@ -23,18 +30,33 @@ EMBED(Cousine_Regular_ttf, "Cousine-Regular.ttf");
 
 namespace fei {
 
+template<>
+struct ExtractResource<ExtractedImGuiFrame> {
+    using Source = PendingImGuiFrame;
+
+    static ExtractedImGuiFrame extract_resource(const Source& source) {
+        return ExtractedImGuiFrame {.snapshot = source.snapshot};
+    }
+};
+
+template<>
+struct ExtractResource<ExtractedImGuiImages> {
+    using Source = ImGuiImages;
+
+    static ExtractedImGuiImages extract_resource(const Source& source) {
+        return source.extract();
+    }
+};
+
 namespace {
 
 struct ImGuiLifecycle {
     bool platform_initialized {false};
 };
 
-void setup_imgui(
+void setup_imgui_platform(
     ResRO<Window> window,
-    ResRO<GraphicsDevice> device,
     ResRO<ImGuiPluginConfig> plugin_config,
-    ResRW<ImGuiTextureRegistry> texture_registry,
-    ResRW<ImGuiRenderer> renderer,
     ResRW<ImGuiLifecycle> lifecycle
 ) {
     IMGUI_CHECKVERSION();
@@ -71,7 +93,13 @@ void setup_imgui(
     io.BackendRendererName = "fei-imgui";
     io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
     io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+}
 
+void setup_imgui_renderer(
+    ResRO<GraphicsDevice> device,
+    ResRW<ImGuiTextureRegistry> texture_registry,
+    ResRW<ImGuiRenderer> renderer
+) {
     renderer->initialize(*device, *texture_registry);
 }
 
@@ -85,6 +113,10 @@ void begin_imgui_frame(ResRW<ImGuiInputCapture> capture) {
     capture->mouse = io.WantCaptureMouse;
     capture->keyboard = io.WantCaptureKeyboard;
     capture->text = io.WantTextInput;
+}
+
+void capture_imgui_frame(ResRW<PendingImGuiFrame> pending_frame) {
+    pending_frame->snapshot = capture_imgui_frame_snapshot();
 }
 
 void prepare_imgui_pipeline(
@@ -103,23 +135,34 @@ void prepare_imgui_pipeline(
     );
 }
 
+void sync_imgui_images(
+    ResRO<GraphicsDevice> device,
+    ResRO<ExtractedImGuiImages> extracted_images,
+    ResRO<RenderAssets<GpuImage>> gpu_images,
+    ResRO<RenderingDefaults> defaults,
+    ResRW<ImGuiTextureRegistry> texture_registry
+) {
+    texture_registry
+        ->sync_images(*device, *extracted_images, *gpu_images, *defaults);
+}
+
 void render_imgui_overlay(
     ResRO<GraphicsDevice> device,
     ResRW<PipelineCache> pipeline_cache,
     ResRW<RenderFrameContext> frame_context,
     ResRO<MainSwapchain> main_swapchain,
     ResRW<ImGuiTextureRegistry> texture_registry,
-    ResRW<ImGuiRenderer> renderer
+    ResRW<ImGuiRenderer> renderer,
+    ResRO<ExtractedImGuiFrame> extracted_frame
 ) {
-    if (!ImGui::GetCurrentContext()) {
-        return;
-    }
+    static const ImGuiFrameSnapshot empty_frame;
     renderer->render(
         *device,
         *pipeline_cache,
         *frame_context,
         *main_swapchain,
-        *texture_registry
+        *texture_registry,
+        extracted_frame->snapshot ? *extracted_frame->snapshot : empty_frame
     );
 }
 
@@ -131,41 +174,59 @@ void ImGuiPlugin::setup(App& app) {
             "ImGuiPlugin requires Window; install a GLFW graphics plugin first"
         );
     }
-    if (!app.has_resource<GraphicsDevice>()) {
-        fatal("ImGuiPlugin requires GraphicsDevice");
-    }
-    if (!app.has_resource<MainSwapchain>()) {
-        fatal("ImGuiPlugin requires MainSwapchain");
-    }
     if (!app.has_plugin<RenderingPlugin>()) {
         fatal("ImGuiPlugin requires RenderingPlugin to be installed first");
     }
+    auto& render_app = app.sub_app<RenderApp>();
+    if (!render_app.has_resource<GraphicsDevice>()) {
+        fatal("ImGuiPlugin requires GraphicsDevice in the Render World");
+    }
+    if (!render_app.has_resource<MainSwapchain>()) {
+        fatal("ImGuiPlugin requires MainSwapchain in the Render World");
+    }
 
+    add_extract_resource<Window>(app);
+    add_extract_resource<ExtractedImGuiFrame>(app);
+    add_extract_resource<ExtractedImGuiImages>(app);
     app.add_resource(m_config)
-        .add_resource(ImGuiTextureRegistry {})
-        .add_resource(ImGuiRenderer {})
         .add_resource(ImGuiInputCapture {})
+        .add_resource(ImGuiImages {})
         .add_resource(ImGuiLifecycle {})
-        .add_systems(StartUp, setup_imgui | main_thread())
+        .add_resource(PendingImGuiFrame {})
+        .add_systems(StartUp, setup_imgui_platform | main_thread())
         .add_systems(PreUpdate, begin_imgui_frame | main_thread())
+        .add_systems(RenderLast, capture_imgui_frame | main_thread());
+    render_app.add_resource(ImGuiTextureRegistry {})
+        .add_resource(ImGuiRenderer {})
+        .add_systems(
+            RenderStartup,
+            FEI_NAMED_SYSTEM(setup_imgui_renderer) | main_thread()
+        )
         .add_systems(
             RenderUpdate,
-            prepare_imgui_pipeline |
+            FEI_NAMED_SYSTEM(prepare_imgui_pipeline) |
+                in_set<RenderingSystems::PrepareResources>(),
+            FEI_NAMED_SYSTEM(sync_imgui_images) |
                 in_set<RenderingSystems::PrepareResources>()
         )
         .add_systems(
             RenderUpdate,
-            render_imgui_overlay | in_set<RenderingSystems::Overlay>() |
-                main_thread()
+            FEI_NAMED_SYSTEM(render_imgui_overlay) |
+                in_set<RenderingSystems::Overlay>() | main_thread()
         );
 }
 
 void ImGuiPlugin::cleanup(App& app) noexcept {
-    if (app.has_resource<ImGuiRenderer>() &&
-        app.has_resource<ImGuiTextureRegistry>()) {
-        app.resource<ImGuiRenderer>().shutdown(
-            app.resource<ImGuiTextureRegistry>()
-        );
+    if (app.has_sub_app<RenderApp>() &&
+        app.sub_app_runner<RenderApp>().execution_mode() ==
+            SubAppExecutionMode::Inline) {
+        auto& render_app = app.sub_app<RenderApp>();
+        if (render_app.has_resource<ImGuiRenderer>() &&
+            render_app.has_resource<ImGuiTextureRegistry>()) {
+            render_app.resource<ImGuiRenderer>().shutdown(
+                render_app.resource<ImGuiTextureRegistry>()
+            );
+        }
     }
     if (!ImGui::GetCurrentContext()) {
         return;

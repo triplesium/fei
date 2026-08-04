@@ -43,9 +43,11 @@
 #include "scripting_lua/script_system_registry.hpp"
 #include "window/input.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <imgui.h>
 #include <iterator>
+#include <limits>
 #include <string_view>
 
 using namespace fei;
@@ -268,7 +270,7 @@ void draw_lighting_controls(
 
 void draw_indirect_lighting_controls(
     EnvironmentLightQuery& query_environment_lights,
-    VxgiVolumes& vxgi_volumes
+    VxgiConfig& vxgi_config
 ) {
     if (ImGui::CollapsingHeader(
             "Environment / IBL",
@@ -291,14 +293,14 @@ void draw_indirect_lighting_controls(
     if (ImGui::CollapsingHeader("VXGI", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::DragFloat(
             "Bounce Strength",
-            &vxgi_volumes.config.bounce_strength,
+            &vxgi_config.bounce_strength,
             0.01f,
             0.0f,
             2.0f
         );
         ImGui::DragFloat(
             "Skylight Leaking",
-            &vxgi_volumes.config.skylight_leaking,
+            &vxgi_config.skylight_leaking,
             0.01f,
             0.0f,
             1.0f
@@ -374,7 +376,7 @@ void draw_debug_view_controls(DeferredPresentSettings& present_settings) {
     }
 }
 
-void draw_diagnostics(const GraphicsDevice& device, World& world) {
+void draw_diagnostics(const GraphicsDevice* device, World& world) {
     if (ImGui::CollapsingHeader(
             "Diagnostics",
             ImGuiTreeNodeFlags_DefaultOpen
@@ -386,8 +388,8 @@ void draw_diagnostics(const GraphicsDevice& device, World& world) {
             frame_stats.latest_frame_ms
         );
         draw_render_schedule_stats(world.schedule_debug_info(RenderUpdate));
-        if (ImGui::TreeNode("Graphics Cache")) {
-            draw_graphics_cache_stats(device);
+        if (device && ImGui::TreeNode("Graphics Cache")) {
+            draw_graphics_cache_stats(*device);
             ImGui::TreePop();
         }
     }
@@ -510,16 +512,42 @@ void spawn_default_gltf_scene(
     }
 }
 
-void configure_vxgi(ResRW<VxgiVolumes> volumes) {
-    volumes->config.voxel_resolution = 128;
-    volumes->config.bounce_strength = 1.0f;
+void configure_vxgi(ResRW<VxgiConfig> config) {
+    config->voxel_resolution = 128;
+    config->bounce_strength = 1.0f;
 }
 
 void update_directional_light(
     Query<DirectionalLight, Transform3d> query_directional_lights,
-    ResRO<VxgiVoxelization> voxelization
+    Query<const GlobalTransform3d, const Aabb>::Filter<With<Mesh3d>>
+        query_meshes
 ) {
-    auto& aabb = voxelization->scene_aabb;
+    if (query_meshes.empty()) {
+        return;
+    }
+
+    Vector3 min_point {
+        std::numeric_limits<float>::max(),
+        std::numeric_limits<float>::max(),
+        std::numeric_limits<float>::max(),
+    };
+    Vector3 max_point {
+        std::numeric_limits<float>::lowest(),
+        std::numeric_limits<float>::lowest(),
+        std::numeric_limits<float>::lowest(),
+    };
+    for (const auto& [transform, local_aabb] : query_meshes) {
+        const auto world_aabb =
+            transform_aabb(local_aabb, transform.to_matrix());
+        min_point.x = std::min(min_point.x, world_aabb.min.x);
+        min_point.y = std::min(min_point.y, world_aabb.min.y);
+        min_point.z = std::min(min_point.z, world_aabb.min.z);
+        max_point.x = std::max(max_point.x, world_aabb.max.x);
+        max_point.y = std::max(max_point.y, world_aabb.max.y);
+        max_point.z = std::max(max_point.z, world_aabb.max.z);
+    }
+
+    const Aabb aabb {.min = min_point, .max = max_point};
     for (auto [light, transform] : query_directional_lights) {
         light->projection_size = aabb.extent().magnitude() * 2.0f;
         auto& transform_value = transform.write();
@@ -533,15 +561,18 @@ void update_imgui(
     DirectionalLightQuery query_directional_lights,
     PointLightQuery query_point_lights,
     EnvironmentLightQuery query_environment_lights,
-    ResRW<VxgiVolumes> vxgi_volumes,
+    ResRW<VxgiConfig> vxgi_config,
     ResRW<DeferredPresentSettings> present_settings,
-    ResRO<GraphicsDevice> graphics_device,
+    Optional<ResRO<GraphicsDevice>> graphics_device,
     WorldRef world
 ) {
     ImGui::SetNextWindowPos(ImVec2(20.0f, 20.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(420.0f, 520.0f), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Scene Controls")) {
-        draw_diagnostics(*graphics_device, *world);
+        draw_diagnostics(
+            graphics_device ? &graphics_device->get() : nullptr,
+            *world
+        );
         ImGui::Separator();
         if (ImGui::BeginTabBar("SceneControlsTabs")) {
             if (ImGui::BeginTabItem("Lighting")) {
@@ -554,7 +585,7 @@ void update_imgui(
             if (ImGui::BeginTabItem("Indirect")) {
                 draw_indirect_lighting_controls(
                     query_environment_lights,
-                    *vxgi_volumes
+                    *vxgi_config
                 );
                 ImGui::EndTabItem();
             }

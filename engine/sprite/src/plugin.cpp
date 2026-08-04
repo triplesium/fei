@@ -20,6 +20,7 @@
 #include "rendering/gpu_image.hpp"
 #include "rendering/pipeline_cache.hpp"
 #include "rendering/plugin.hpp"
+#include "rendering/render_app.hpp"
 #include "rendering/render_asset.hpp"
 #include "rendering/render_frame.hpp"
 #include "rendering/render_queue.hpp"
@@ -325,34 +326,48 @@ void render_sprites(
     commands->end_render_pass();
 }
 
+void release_sprite_swapchain_framebuffer(ResRW<SpriteOutput> output) {
+    if (output->mode == SpriteOutputMode::MainSwapchain) {
+        output->framebuffer.reset();
+    }
+}
+
 } // namespace
 
 void SpritePlugin::setup(App& app) {
-    if (!app.has_resource<GraphicsDevice>()) {
-        fatal("SpritePlugin requires GraphicsDevice");
-    }
-    if (m_config.output == SpriteOutputMode::MainSwapchain &&
-        !app.has_resource<MainSwapchain>()) {
-        fatal("SpritePlugin requires MainSwapchain");
-    }
     if (!app.has_plugin<RenderingPlugin>()) {
         fatal("SpritePlugin requires RenderingPlugin to be installed first");
+    }
+    auto& render_app = app.sub_app<RenderApp>();
+    if (!render_app.has_resource<GraphicsDevice>()) {
+        fatal("SpritePlugin requires GraphicsDevice in the Render World");
+    }
+    if (m_config.output == SpriteOutputMode::MainSwapchain &&
+        !render_app.has_resource<MainSwapchain>()) {
+        fatal("SpritePlugin requires MainSwapchain in the Render World");
     }
     if (!app.has_plugin<ImagePlugin>()) {
         app.add_plugin<ImagePlugin>();
     }
 
-    app.add_resource(
-           SpriteOutput {
-               .mode = m_config.output,
-               .requested_width = m_config.width,
-               .requested_height = m_config.height,
-               .texture_format = m_config.texture_format,
-           }
-    )
+    add_extract_component<Camera2d>(app);
+    add_extract_component<GlobalTransform2d>(app);
+    add_extract_component<Sprite>(app);
+
+    render_app
+        .add_resource(
+            SpriteOutput {
+                .mode = m_config.output,
+                .requested_width = m_config.width,
+                .requested_height = m_config.height,
+                .texture_format = m_config.texture_format,
+            }
+        )
         .add_resource(SpriteRenderState {})
         .add_resource(SpritePhase {})
-        .add_systems(StartUp, setup_sprite_resources)
+        .add_systems(RenderStartup, setup_sprite_resources);
+
+    render_app
         .add_systems(
             RenderUpdate,
             chain(prepare_sprite_output, prepare_sprite_pipeline) |
@@ -368,6 +383,11 @@ void SpritePlugin::setup(App& app) {
             FEI_NAMED_SYSTEM(render_sprites) |
                 in_set<RenderingSystems::MainPass>() |
                 in_set<SpriteSystems::RenderSprites>()
+        )
+        .add_systems(
+            RenderUpdate,
+            FEI_NAMED_SYSTEM(release_sprite_swapchain_framebuffer) |
+                in_set<RenderingSystems::Submit>()
         );
 }
 

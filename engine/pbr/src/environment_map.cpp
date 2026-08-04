@@ -13,6 +13,7 @@
 #include "pbr/plugin.hpp"
 #include "rendering/gpu_image.hpp"
 #include "rendering/plugin.hpp"
+#include "rendering/render_app.hpp"
 #include "rendering/render_asset.hpp"
 #include "rendering/shader_cache.hpp"
 
@@ -67,9 +68,9 @@ const EnvironmentMap& get_or_create_environment_map(
 ) {
     auto [iter, inserted] = cache->entries.try_emplace(source);
     if (inserted) {
-        iter->second.environment_map = create_environment_map(images, source);
+        iter->second = create_environment_map(images, source);
     }
-    return iter->second.environment_map;
+    return iter->second;
 }
 
 void generated_equirect_env_map_to_env_map(
@@ -134,7 +135,7 @@ void convert_equirect_to_cubemap(
     Query<Entity, const GeneratedEquirectEnvironmentMap, GpuEnvironmentMap>
         query,
     ResRO<GraphicsDevice> device,
-    ResRO<Assets<Image>> images,
+    ResRO<RenderAssets<GpuImage>> images,
     ResRW<EquirectToCubemap> equirect_to_cubemap
 ) {
     for (auto [entity, gen_env_map, gpu_env_map] : query) {
@@ -204,23 +205,27 @@ void setup_environment_map_generation_resources(
 }
 
 void invalidate_environment_map_cache(
-    EventReader<AssetEvent<Image>> image_events,
+    Extract<Optional<EventReaderRO<AssetEvent<Image>>>> image_events,
     ResRW<EquirectToCubemap> equirect_to_cubemap,
-    ResRW<EnvironmentMapCache> cache
+    ResRW<RenderEnvironmentMapCache> cache
 ) {
-    for (auto event = image_events.next(); event; event = image_events.next()) {
+    auto& events = image_events.get();
+    if (!events) {
+        return;
+    }
+    for (auto event = events->next(); event; event = events->next()) {
         if (event->type == AssetEventType::Added) {
             continue;
         }
         equirect_to_cubemap->invalidate(event->id);
-        auto entry = cache->entries.find(event->id);
-        if (entry == cache->entries.end()) {
+        auto entry = cache->generated_from_textures.find(event->id);
+        if (entry == cache->generated_from_textures.end()) {
             continue;
         }
         if (event->type == AssetEventType::Modified) {
-            entry->second.generated_from_texture = nullptr;
+            entry->second = nullptr;
         } else {
-            cache->entries.erase(entry);
+            cache->generated_from_textures.erase(entry);
         }
     }
 }
@@ -229,22 +234,20 @@ void generate_env_maps(
     Query<const GeneratedEquirectEnvironmentMap, const GpuEnvironmentMap> query,
     ResRO<GraphicsDevice> device,
     ResRO<EnvironmentMapGenerationResources> resources,
-    ResRW<EnvironmentMapCache> cache
+    ResRW<RenderEnvironmentMapCache> cache
 ) {
     if (!resources->valid()) {
         return;
     }
 
     for (auto [generated, gpu_env_map] : query) {
-        auto cache_entry = cache->entries.find(generated.equirect_image.id());
-        if (cache_entry == cache->entries.end()) {
-            continue;
-        }
+        auto& generated_from_texture =
+            cache->generated_from_textures[generated.equirect_image.id()];
         auto source = gpu_env_map.environment_cubemap.texture();
         auto irradiance = gpu_env_map.irradiance_cubemap.texture();
         auto radiance = gpu_env_map.radiance_cubemap.texture();
         if (!source || !irradiance || !radiance ||
-            cache_entry->second.generated_from_texture == source.get()) {
+            generated_from_texture == source.get()) {
             continue;
         }
 
@@ -329,19 +332,25 @@ void generate_env_maps(
 
         command_buffer->end();
         device->submit_commands(command_buffer);
-        cache_entry->second.generated_from_texture = source.get();
+        generated_from_texture = source.get();
     }
 }
 
 void EnvironmentMapPlugin::setup(App& app) {
+    add_extract_component<GeneratedEquirectEnvironmentMap>(app);
+    add_extract_component<EnvironmentMap>(app);
+    add_extract_component<EnvironmentMapLight>(app);
+
     app.add_resource(EnvironmentMapCache {})
+        .add_systems(Update, generated_equirect_env_map_to_env_map);
+    app.sub_app<RenderApp>()
         .add_resource(EnvironmentMapGenerationResources {})
-        .add_systems(Update, generated_equirect_env_map_to_env_map)
-        .add_systems(StartUp, setup_environment_map_generation_resources)
+        .add_resource(RenderEnvironmentMapCache {})
+        .add_systems(RenderStartup, setup_environment_map_generation_resources)
+        .add_systems(RenderExtract, invalidate_environment_map_cache)
         .add_systems(
             RenderUpdate,
             chain(
-                invalidate_environment_map_cache,
                 insert_gpu_env_map,
                 convert_equirect_to_cubemap,
                 generate_env_maps

@@ -7,9 +7,9 @@
 #include "core/plugin.hpp"
 #include "core/text.hpp"
 #include "core/time.hpp"
-#include "ecs/commands.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
+#include "graphics/backend.hpp"
 #include "graphics/buffer.hpp"
 #include "graphics/command_buffer.hpp"
 #include "graphics/enums.hpp"
@@ -22,11 +22,16 @@
 #include "graphics_opengl_glfw/plugin.hpp"
 #include "math/common.hpp"
 #include "math/matrix.hpp"
-#include "window/window.hpp"
+#include "rendering/extract_resource.hpp"
+#include "rendering/gpu_image.hpp"
+#include "rendering/plugin.hpp"
+#include "rendering/render_app.hpp"
+#include "rendering/render_asset.hpp"
 
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <string>
 
 using namespace fei;
 
@@ -40,6 +45,40 @@ struct Renderer {
     std::shared_ptr<ResourceSet> resource_set;
 };
 
+struct GraphicsSampleInput {
+    Handle<Image> image;
+    Handle<TextAsset> vertex_shader_asset;
+    Handle<TextAsset> fragment_shader_asset;
+    std::string vertex_shader;
+    std::string fragment_shader;
+};
+
+void request_sample_assets(
+    ResRW<AssetServer> asset_server,
+    ResRW<GraphicsSampleInput> input
+) {
+    input->image = asset_server->load<Image>("awesomeface.png");
+    input->vertex_shader_asset = asset_server->load<TextAsset>("forward.vert");
+    input->fragment_shader_asset =
+        asset_server->load<TextAsset>("forward.frag");
+}
+
+void resolve_sample_shaders(
+    ResRO<Assets<TextAsset>> text_assets,
+    ResRW<GraphicsSampleInput> input
+) {
+    if (!input->vertex_shader.empty() && !input->fragment_shader.empty()) {
+        return;
+    }
+    const auto vertex_shader = text_assets->get(input->vertex_shader_asset);
+    const auto fragment_shader = text_assets->get(input->fragment_shader_asset);
+    if (!vertex_shader || !fragment_shader) {
+        return;
+    }
+    input->vertex_shader = vertex_shader->text();
+    input->fragment_shader = fragment_shader->text();
+}
+
 struct alignas(16) Uniforms {
     Matrix4x4 model;
     Matrix4x4 view;
@@ -47,15 +86,24 @@ struct alignas(16) Uniforms {
     float color[3];
 };
 
-void start_up(
-    ResRW<AssetServer> asset_server,
-    Commands commands,
+void setup_renderer(
     ResRO<GraphicsDevice> device,
     ResRO<MainSwapchain> main_swapchain,
     ResRW<Renderer> renderer,
-    ResRW<Assets<TextAsset>> text_assets,
-    ResRW<Assets<Image>> image_assets
+    ResRO<GraphicsSampleInput> input,
+    ResRW<RenderAssets<GpuImage>> images
 ) {
+    if (renderer->pipeline) {
+        return;
+    }
+    if (input->vertex_shader.empty() || input->fragment_shader.empty()) {
+        return;
+    }
+    auto image = images->get(input->image);
+    if (!image) {
+        return;
+    }
+
     // Create vertex buffer
     struct Vertex {
         float position[3];
@@ -103,44 +151,17 @@ void start_up(
         }
     );
 
-    auto image_handle = asset_server->load<Image>("awesomeface.png");
-    auto image = image_assets->get(image_handle);
-    renderer->texture = device->create_texture(
-        TextureDescription {
-            .width = image->width(),
-            .height = image->height(),
-            .depth = image->depth(),
-            .mip_level = 1,
-            .layer = 0,
-            .texture_format = PixelFormat::Rgba8Unorm,
-            .texture_usage = TextureUsage::Sampled,
-            .texture_type = TextureType::Texture2D,
-        }
-    );
-    device->update_texture(
-        renderer->texture,
-        image->data(),
-        0,
-        0,
-        0,
-        image->width(),
-        image->height(),
-        image->depth(),
-        0,
-        0
-    );
-    auto vert_shader_text = asset_server->load<TextAsset>("forward.vert");
-    auto frag_shader_text = asset_server->load<TextAsset>("forward.frag");
+    renderer->texture = image->texture();
     auto vert_shader = device->create_shader_module(
         ShaderDescription {
             .stage = ShaderStages::Vertex,
-            .source = text_assets->get(vert_shader_text)->text(),
+            .source = input->vertex_shader,
         }
     );
     auto frag_shader = device->create_shader_module(
         ShaderDescription {
             .stage = ShaderStages::Fragment,
-            .source = text_assets->get(frag_shader_text)->text(),
+            .source = input->fragment_shader,
         }
     );
     auto resource_layout = device->create_resource_layout(
@@ -202,22 +223,25 @@ void start_up(
     );
 }
 
-void render_start() {}
-
 void render_update(
     ResRO<GraphicsDevice> device,
     ResRO<Renderer> renderer,
     ResRO<Time> time,
     ResRO<MainSwapchain> main_swapchain,
-    ResRO<Window> win
+    ResRO<GraphicsSurfaceSize> surface_size
 ) {
+    if (!renderer->pipeline) {
+        return;
+    }
+
     // Update uniform buffer
     Uniforms uniforms = {
         rotate_y(45.0f * time->elapsed_time() * DEG2RAD),
         translate(0.0f, 0.0f, -3.f),
         perspective(
             45.0f * DEG2RAD,
-            static_cast<float>(win->width) / static_cast<float>(win->height),
+            static_cast<float>(surface_size->width) /
+                static_cast<float>(surface_size->height),
             0.1f,
             100.0f
         ),
@@ -236,7 +260,8 @@ void render_update(
 
     auto command_buffer = device->create_command_buffer();
     command_buffer->begin();
-    command_buffer->set_viewport(0, 0, win->width, win->height);
+    command_buffer
+        ->set_viewport(0, 0, surface_size->width, surface_size->height);
     auto framebuffer = main_swapchain->swapchain->framebuffer();
     command_buffer->begin_render_pass(
         RenderPassDescription {
@@ -263,24 +288,29 @@ void render_update(
     device->submit_commands(command_buffer);
 }
 
-void render_end(
-    ResRO<GraphicsDevice> device,
-    ResRO<MainSwapchain> main_swapchain
-) {
-    device->present(*main_swapchain->swapchain);
-}
-
 int main() {
-    App()
-        .add_plugin<AssetsPlugin>()
+    App app;
+    app.add_plugin<AssetsPlugin>()
         .add_plugin<OpenGLGlfwPlugin>()
         .add_plugin<CorePlugin>()
+        .add_plugin<RenderingPlugin>();
+
+    app.add_resource(GraphicsSampleInput {});
+    add_extract_resource<GraphicsSampleInput>(app);
+    add_extract_resource<Time>(app);
+    app.add_systems(PreStartUp, request_sample_assets)
+        .add_systems(Update, resolve_sample_shaders);
+    app.sub_app<RenderApp>()
         .add_resource<Renderer>()
-        .add_systems(PreStartUp, start_up)
-        .add_systems(RenderStart, render_start)
-        .add_systems(RenderUpdate, render_update)
-        .add_systems(RenderEnd, render_end | main_thread())
-        .run();
+        .add_systems(
+            RenderUpdate,
+            setup_renderer | in_set<RenderingSystems::PrepareResources>()
+        )
+        .add_systems(
+            RenderUpdate,
+            render_update | in_set<RenderingSystems::MainPass>()
+        );
+    app.run();
 
     return 0;
 }

@@ -27,6 +27,7 @@ void update_sprite_output(
 ) {
     if (output.mode == SpriteOutputMode::MainSwapchain) {
         output.texture.reset();
+        output.framebuffer.reset();
         if (main_swapchain == nullptr || !main_swapchain->swapchain) {
             clear_output(output);
             return;

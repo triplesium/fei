@@ -133,6 +133,7 @@ ShaderCompileError shader_source_not_found_error(
 Result<ShaderCompileRequest, ShaderCompileError>
 make_runtime_shader_compile_request(
     const RuntimeShaderCompilerConfig& config,
+    std::shared_ptr<const ShaderSourceSnapshot> source_snapshot,
     std::filesystem::path logical_path,
     std::string source,
     ShaderStages stage,
@@ -146,7 +147,9 @@ make_runtime_shader_compile_request(
         ));
     }
 
-    auto source_path = config.shader_sources.resolve(logical_path);
+    auto source_path = source_snapshot ?
+                           source_snapshot->resolve(logical_path) :
+                           config.shader_sources.resolve(logical_path);
     std::filesystem::path source_root = config.source_root;
     std::filesystem::path resolved_source_path;
     std::filesystem::path relative_source = logical_path;
@@ -180,6 +183,7 @@ make_runtime_shader_compile_request(
         .stage = stage,
         .entry = std::move(entry),
         .defs = std::move(normalized_defs),
+        .source_snapshot = std::move(source_snapshot),
     };
 }
 
@@ -631,7 +635,14 @@ struct SlangCompileOutput {
 };
 
 class TrackingSlangFileSystem final : public ISlangFileSystemExt {
+  private:
+    std::shared_ptr<const ShaderSourceSnapshot> m_source_snapshot;
+
   public:
+    explicit TrackingSlangFileSystem(
+        std::shared_ptr<const ShaderSourceSnapshot> source_snapshot
+    ) : m_source_snapshot(std::move(source_snapshot)) {}
+
     SLANG_NO_THROW SlangResult SLANG_MCALL
     queryInterface(SlangUUID const& uuid, void** out_object) override {
         if (out_object == nullptr) {
@@ -669,14 +680,23 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
         }
         *out_blob = nullptr;
 
-        std::ifstream input(path, std::ios::binary);
-        if (!input) {
-            return SLANG_E_NOT_FOUND;
+        std::string contents;
+        if (m_source_snapshot) {
+            auto source = m_source_snapshot->source(path);
+            if (!source) {
+                return SLANG_E_NOT_FOUND;
+            }
+            contents = *source;
+        } else {
+            std::ifstream input(path, std::ios::binary);
+            if (!input) {
+                return SLANG_E_NOT_FOUND;
+            }
+            contents.assign(
+                std::istreambuf_iterator<char>(input),
+                std::istreambuf_iterator<char>()
+            );
         }
-        std::string contents {
-            std::istreambuf_iterator<char>(input),
-            std::istreambuf_iterator<char>()
-        };
         *out_blob = slang_createBlob(contents.data(), contents.size());
         if (*out_blob == nullptr) {
             return SLANG_E_OUT_OF_MEMORY;
@@ -702,7 +722,7 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
         }
         *out_unique_identity = nullptr;
         return make_path_blob(
-            canonical_path(std::filesystem::path(path)),
+            canonical_source_path(std::filesystem::path(path)),
             out_unique_identity
         );
     }
@@ -735,18 +755,26 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
             return SLANG_E_INVALID_ARG;
         }
 
-        std::error_code error;
-        const auto status = std::filesystem::status(path, error);
-        if (error || !std::filesystem::exists(status)) {
-            return SLANG_E_NOT_FOUND;
-        }
-        if (std::filesystem::is_directory(status)) {
-            *path_type_out = SLANG_PATH_TYPE_DIRECTORY;
-            return SLANG_OK;
-        }
-        if (std::filesystem::is_regular_file(status)) {
-            *path_type_out = SLANG_PATH_TYPE_FILE;
-            return SLANG_OK;
+        if (m_source_snapshot) {
+            if (m_source_snapshot->is_file(path)) {
+                *path_type_out = SLANG_PATH_TYPE_FILE;
+                return SLANG_OK;
+            }
+            if (m_source_snapshot->is_directory(path)) {
+                *path_type_out = SLANG_PATH_TYPE_DIRECTORY;
+                return SLANG_OK;
+            }
+        } else {
+            std::error_code error;
+            const auto status = std::filesystem::status(path, error);
+            if (!error && std::filesystem::is_directory(status)) {
+                *path_type_out = SLANG_PATH_TYPE_DIRECTORY;
+                return SLANG_OK;
+            }
+            if (!error && std::filesystem::is_regular_file(status)) {
+                *path_type_out = SLANG_PATH_TYPE_FILE;
+                return SLANG_OK;
+            }
         }
         return SLANG_E_NOT_FOUND;
     }
@@ -762,7 +790,7 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
         switch (kind) {
             case PathKind::Canonical:
             case PathKind::OperatingSystem:
-                result = canonical_path(result);
+                result = canonical_source_path(result);
                 break;
             case PathKind::Simplified:
             case PathKind::Display:
@@ -819,6 +847,14 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
         return normalized_absolute_path(path);
     }
 
+    [[nodiscard]] std::filesystem::path
+    canonical_source_path(const std::filesystem::path& path) const {
+        if (m_source_snapshot) {
+            return normalized_absolute_path(path);
+        }
+        return canonical_path(path);
+    }
+
     static SlangResult
     make_path_blob(const std::filesystem::path& path, ISlangBlob** out_blob) {
         auto string = path.lexically_normal().string();
@@ -831,8 +867,10 @@ class TrackingSlangFileSystem final : public ISlangFileSystemExt {
     std::vector<ShaderDependencySnapshot> m_dependency_snapshots;
 };
 
-Slang::ComPtr<TrackingSlangFileSystem> make_tracking_slang_file_system() {
-    auto* file_system = new TrackingSlangFileSystem;
+Slang::ComPtr<TrackingSlangFileSystem> make_tracking_slang_file_system(
+    std::shared_ptr<const ShaderSourceSnapshot> source_snapshot
+) {
+    auto* file_system = new TrackingSlangFileSystem(std::move(source_snapshot));
     file_system->addRef();
     return Slang::ComPtr<TrackingSlangFileSystem>(
         Slang::INIT_ATTACH,
@@ -844,11 +882,23 @@ Result<SlangCompileOutput, ShaderCompileError>
 compile_slang_to_spirv(const ShaderCompileRequest& request) {
     std::string source = request.source;
     if (source.empty()) {
-        auto file_source = read_text_file(request.source_path);
-        if (!file_source) {
-            return failure(std::move(file_source).error());
+        if (request.source_snapshot) {
+            auto snapshot_source =
+                request.source_snapshot->source(request.source_path);
+            if (!snapshot_source) {
+                return failure(shader_compile_error(
+                    "Shader source is absent from the Render World snapshot: " +
+                    request.source_path.string()
+                ));
+            }
+            source = *snapshot_source;
+        } else {
+            auto file_source = read_text_file(request.source_path);
+            if (!file_source) {
+                return failure(std::move(file_source).error());
+            }
+            source = std::move(file_source).value();
         }
-        source = std::move(file_source).value();
     }
 
     Slang::ComPtr<slang::IGlobalSession> global_session;
@@ -877,7 +927,7 @@ compile_slang_to_spirv(const ShaderCompileRequest& request) {
         search_path_storage.push_back(root.string());
         search_paths.push_back(search_path_storage.back().c_str());
     }
-    auto file_system = make_tracking_slang_file_system();
+    auto file_system = make_tracking_slang_file_system(request.source_snapshot);
 
     slang::SessionDesc session_desc {};
     session_desc.targets = &target_desc;
@@ -984,7 +1034,8 @@ compile_slang_to_spirv(const ShaderCompileRequest& request) {
         wgsl_defs.push_back(ShaderDefVal::bool_def("FEI_SHADER_TARGET_WGSL"));
         auto wgsl_macros = make_slang_macro_storage(std::move(wgsl_defs));
 
-        auto wgsl_file_system = make_tracking_slang_file_system();
+        auto wgsl_file_system =
+            make_tracking_slang_file_system(request.source_snapshot);
         auto wgsl_session_desc = session_desc;
         wgsl_session_desc.targets = &wgsl_target_desc;
         wgsl_session_desc.fileSystem = wgsl_file_system.get();
@@ -1197,6 +1248,7 @@ ShaderVariantCompiler::compile_with_dependencies(
 
     auto request = make_runtime_shader_compile_request(
         m_config,
+        m_source_snapshot,
         std::move(logical_path),
         std::move(source),
         stage,
@@ -1209,17 +1261,31 @@ ShaderVariantCompiler::compile_with_dependencies(
 
     auto compile_request = std::move(request).value();
     if (m_artifact_cache && compile_request.source.empty()) {
-        auto source = read_text_file(compile_request.source_path);
-        if (!source) {
-            return failure(std::move(source).error());
+        if (compile_request.source_snapshot) {
+            auto source = compile_request.source_snapshot->source(
+                compile_request.source_path
+            );
+            if (!source) {
+                return failure(shader_compile_error(
+                    "Shader source is absent from the Render World snapshot: " +
+                    compile_request.source_path.string()
+                ));
+            }
+            compile_request.source = *source;
+        } else {
+            auto source = read_text_file(compile_request.source_path);
+            if (!source) {
+                return failure(std::move(source).error());
+            }
+            compile_request.source = std::move(source).value();
         }
-        compile_request.source = std::move(source).value();
     }
     std::optional<ShaderArtifactCache::Key> artifact_cache_key;
     if (m_artifact_cache) {
         artifact_cache_key = m_artifact_cache->key(compile_request);
         if (artifact_cache_key) {
-            auto cached = m_artifact_cache->load(*artifact_cache_key);
+            auto cached =
+                m_artifact_cache->load(*artifact_cache_key, compile_request);
             if (cached) {
                 trace(
                     "Shader cache hit for '{}' ({})",

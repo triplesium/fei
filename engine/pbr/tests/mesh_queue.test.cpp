@@ -2,7 +2,6 @@
 
 #include "../../rendering/tests/test_graphics_device.hpp"
 #include "asset/assets.hpp"
-#include "asset/server.hpp"
 #include "pbr/material.hpp"
 #include "pbr/mesh_view.hpp"
 #include "rendering/shader_cache.hpp"
@@ -118,9 +117,8 @@ TEST_CASE(
 ) {
     FakeGraphicsDevice device;
     PipelineCache pipeline_cache(device);
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
-    ShaderCache shader_cache(asset_server, shaders, device);
+    ShaderCache shader_cache(shaders, device);
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     auto shader_defaults = create_shader_defaults(device);

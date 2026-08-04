@@ -127,7 +127,8 @@ class GpuMeshAdapter : public RenderAssetAdapter<Mesh, GpuMesh> {
   public:
     Optional<GpuMesh>
     prepare_asset(const Mesh& source_asset, World& world) override {
-        auto& device = world.resource<GraphicsDevice>();
+        const auto& device =
+            static_cast<const World&>(world).resource<GraphicsDevice>();
         auto vertex_buffer = device.create_buffer(
             BufferDescription {
                 .size = static_cast<std::uint32_t>(

@@ -8,7 +8,9 @@
 #include "pbr/passes/deferred.hpp"
 #include "pbr/pipelines.hpp"
 #include "pbr/vxgi.hpp"
+#include "rendering/extract_resource.hpp"
 #include "rendering/material.hpp"
+#include "rendering/render_app.hpp"
 #include "rendering/shader_cache.hpp"
 
 EMBED(ibl_brdf_lut_png, "ibl_brdf_lut.png");
@@ -51,57 +53,67 @@ void init_pbr_mesh_shader_defaults(
 } // namespace
 
 void PbrPlugin::setup(App& app) {
-    app.configure_sets(
-           StartUp,
-           chain(
-               PbrSystems::StartupLighting {},
-               PbrSystems::StartupVxgi {},
-               PbrSystems::StartupDeferred {}
-           ),
-           chain(
-               PbrSystems::StartupMeshView {},
-               all(PbrSystems::StartupSkybox {}, PbrSystems::StartupDeferred {})
-           )
-    )
-        .configure_sets(
-            RenderUpdate,
-            chain(
-                all(RenderingSystems::UploadViewUniforms {},
-                    PbrSystems::PrepareEnvironmentMaps {}),
-                PbrSystems::PrepareLighting {},
-                PbrSystems::PrepareVxgi {}
-            ),
-            chain(
-                PbrSystems::ShadowPass {},
-                PbrSystems::VxgiPass {},
-                PbrSystems::DeferredPrepass {}
-            )
-        );
+    add_extract_component<MeshMaterial3d<StandardMaterial>>(app);
+    add_extract_component<DirectionalLight>(app);
+    add_extract_component<PointLight>(app);
+    auto& render_app = app.sub_app<RenderApp>();
+
+    render_app.configure_sets(
+        RenderStartup,
+        chain(
+            PbrSystems::StartupLighting {},
+            PbrSystems::StartupVxgi {},
+            PbrSystems::StartupDeferred {}
+        ),
+        chain(
+            PbrSystems::StartupMeshView {},
+            all(PbrSystems::StartupSkybox {}, PbrSystems::StartupDeferred {})
+        )
+    );
+    render_app.configure_sets(
+        RenderUpdate,
+        chain(
+            all(RenderingSystems::UploadViewUniforms {},
+                PbrSystems::PrepareEnvironmentMaps {}),
+            PbrSystems::PrepareLighting {},
+            PbrSystems::PrepareVxgi {}
+        ),
+        chain(
+            PbrSystems::ShadowPass {},
+            PbrSystems::VxgiPass {},
+            PbrSystems::DeferredPrepass {}
+        )
+    );
 
     app.add_plugin(MaterialPlugin<StandardMaterial> {});
     if (m_enable_vxgi) {
         app.add_plugin(VxgiPlugin {});
     }
-    app.add_plugin(DeferredRenderPlugin {m_enable_vxgi})
-        .add_resource(MeshViewLayout {})
+    app.add_plugin(DeferredRenderPlugin {m_enable_vxgi});
+
+    render_app.add_resource(MeshViewLayout {})
         .add_resource(MeshViewResourceSet {})
         .add_resource<ShadowMapPhase>()
         .add_resource<PbrMeshShaderDefaults>()
         .add_resource(MeshMaterialPipelines(
-            app.resource<MeshViewLayout>(),
-            app.resource<MeshUniforms>(),
-            app.resource<PipelineCache>(),
-            app.resource<ShaderCache>(),
-            app.resource<PbrMeshShaderDefaults>()
+            render_app.resource<MeshViewLayout>(),
+            render_app.resource<MeshUniforms>(),
+            render_app.resource<PipelineCache>(),
+            render_app.resource<ShaderCache>(),
+            render_app.resource<PbrMeshShaderDefaults>()
         ))
-        .add_systems(PreStartUp, setup_fullscreen_quad)
         .add_systems(
-            StartUp,
+            RenderStartup,
             init_pbr_mesh_shader_defaults,
             init_mesh_view_layout | in_set<PbrSystems::StartupMeshView>(),
             setup_lighting | in_set<PbrSystems::StartupLighting>(),
             setup_shadow_mapping
-        )
+        );
+
+    app.add_systems(PreStartUp, setup_fullscreen_quad);
+    add_extract_resource<FullscreenQuad>(app);
+
+    render_app
         .add_systems(
             RenderUpdate,
             chain(init_light_view_uniform, prepare_light_view_uniform) |

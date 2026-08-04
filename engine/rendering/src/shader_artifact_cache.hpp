@@ -31,7 +31,7 @@ class ShaderArtifactCache {
     key(const ShaderCompileRequest& request) const;
 
     [[nodiscard]] std::optional<ShaderVariantCompileOutput>
-    load(const Key& key) const;
+    load(const Key& key, const ShaderCompileRequest& request) const;
 
     void store(
         const Key& key,

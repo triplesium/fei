@@ -3,6 +3,7 @@
 #include "app/app.hpp"
 #include "graphics/graphics_device.hpp"
 #include "math/color.hpp"
+#include "rendering/render_app.hpp"
 
 namespace fei {
 
@@ -38,8 +39,9 @@ void init_rendering_defaults(
 }
 
 void RenderingDefaultsPlugin::setup(App& app) {
-    app.add_resource(RenderingDefaults {})
-        .add_systems(StartUp, init_rendering_defaults);
+    app.sub_app<RenderApp>()
+        .add_resource(RenderingDefaults {})
+        .add_systems(RenderStartup, init_rendering_defaults);
 }
 
 } // namespace fei

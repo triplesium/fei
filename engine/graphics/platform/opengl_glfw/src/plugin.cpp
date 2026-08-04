@@ -1,17 +1,13 @@
 #include "graphics_opengl_glfw/plugin.hpp"
 
 #include "ecs/system_config.hpp"
-#include "graphics/graphics_device.hpp"
-#include "graphics/swapchain.hpp"
-#include "graphics_opengl/plugin.hpp"
-#include "graphics_opengl_glfw/swapchain.hpp"
+#include "graphics/backend.hpp"
+#include "graphics_opengl_glfw/runtime.hpp"
 #include "window/window.hpp"
 
 #include <algorithm>
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <memory>
-#include <stdexcept>
 
 namespace fei {
 
@@ -22,44 +18,49 @@ class OpenGLGlfwWindowPlugin : public Plugin {
     void setup(App& app) override;
 };
 
-class OpenGLGlfwContextPlugin : public Plugin {
-  public:
-    void setup(App& app) override;
-};
-
-class OpenGLGlfwSwapchainPlugin : public Plugin {
-  public:
-    void setup(App& app) override;
-};
-
 uint32 positive_window_extent(int extent) {
     return static_cast<uint32>(std::max(extent, 1));
 }
 
-void sync_main_swapchain_size(
+void sync_graphics_surface_size(
     ResRO<Window> window,
-    ResRW<MainSwapchain> main_swapchain
+    ResRW<GraphicsSurfaceSize> surface_size
 ) {
-    if (!main_swapchain->swapchain) {
-        return;
-    }
+    surface_size->width = positive_window_extent(window->width);
+    surface_size->height = positive_window_extent(window->height);
+}
 
-    const auto width = positive_window_extent(window->width);
-    const auto height = positive_window_extent(window->height);
-    if (main_swapchain->swapchain->width() != width ||
-        main_swapchain->swapchain->height() != height) {
-        main_swapchain->swapchain->resize(width, height);
-    }
+void install_graphics_bootstrap(App& app) {
+    const auto& window = app.resource<Window>();
+    const auto surface_size = GraphicsSurfaceSize {
+        .width = positive_window_extent(window.width),
+        .height = positive_window_extent(window.height),
+    };
+    auto bootstrap =
+        std::make_unique<OpenGLGlfwBootstrap>(OpenGLGlfwBootstrapDescription {
+            .window = window.glfw_window,
+            .surface_size = surface_size,
+        });
+    app.add_resource(bootstrap->capabilities())
+        .add_resource(surface_size)
+        .add_resource_as<GraphicsBackendBootstrap>(
+            BoxedGraphicsBackendBootstrap(std::move(bootstrap))
+        )
+        .configure_sets(
+            First,
+            chain(WindowSystems::Prepare {}, WindowSystems::SyncSwapchain {})
+        )
+        .add_systems(
+            First,
+            sync_graphics_surface_size | in_set<WindowSystems::SyncSwapchain>()
+        );
 }
 
 } // namespace
 
 void OpenGLGlfwPlugin::setup(App& app) {
-    app.add_plugin<OpenGLGlfwWindowPlugin>()
-        .add_plugin<WindowPlugin>()
-        .add_plugin<OpenGLGlfwContextPlugin>()
-        .add_plugin<OpenGLPlugin>()
-        .add_plugin<OpenGLGlfwSwapchainPlugin>();
+    app.add_plugin<OpenGLGlfwWindowPlugin>().add_plugin<WindowPlugin>();
+    install_graphics_bootstrap(app);
 }
 
 void OpenGLGlfwWindowPlugin::setup(App& app) {
@@ -89,36 +90,6 @@ void OpenGLGlfwWindowPlugin::setup(App& app) {
             },
         }
     );
-}
-
-void OpenGLGlfwContextPlugin::setup(App& app) {
-    auto& window = app.resource<Window>();
-    glfwMakeContextCurrent(window.glfw_window);
-    if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
-        throw std::runtime_error("Failed to initialize GLAD");
-    }
-}
-
-void OpenGLGlfwSwapchainPlugin::setup(App& app) {
-    auto& window = app.resource<Window>();
-    static_cast<void>(app.resource<GraphicsDevice>());
-    app.add_resource(
-        MainSwapchain {
-            .swapchain = std::make_shared<SwapchainOpenGLGlfw>(
-                window.glfw_window,
-                positive_window_extent(window.width),
-                positive_window_extent(window.height)
-            ),
-        }
-    );
-    app.configure_sets(
-           First,
-           chain(WindowSystems::Prepare {}, WindowSystems::SyncSwapchain {})
-    )
-        .add_systems(
-            First,
-            sync_main_swapchain_size | in_set<WindowSystems::SyncSwapchain>()
-        );
 }
 
 } // namespace fei

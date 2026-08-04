@@ -1,6 +1,5 @@
 #include "pbr/skybox.hpp"
 
-#include "asset/assets.hpp"
 #include "core/camera.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
@@ -8,6 +7,7 @@
 #include "pbr/cubemap.hpp"
 #include "pbr/plugin.hpp"
 #include "rendering/plugin.hpp"
+#include "rendering/render_app.hpp"
 #include "rendering/render_queue.hpp"
 #include "rendering/shader_cache.hpp"
 #include "rendering/view.hpp"
@@ -130,7 +130,7 @@ void prepare_skybox_resources(
     ResRO<ViewUniforms> view_uniforms,
     ResRW<EquirectToCubemap> equirect_to_cubemap,
     ResRO<GraphicsDevice> device,
-    ResRO<Assets<Image>> images,
+    ResRO<RenderAssets<GpuImage>> images,
     ResRO<RenderQueue> render_queue,
     Commands commands
 ) {
@@ -269,9 +269,12 @@ void render_skybox_pass(
 }
 
 void SkyboxPlugin::setup(App& app) {
-    app.add_resource(SkyboxResource {})
+    add_extract_component<Skybox>(app);
+
+    app.sub_app<RenderApp>()
+        .add_resource(SkyboxResource {})
         .add_systems(
-            StartUp,
+            RenderStartup,
             setup_skybox_resources | in_set<PbrSystems::StartupSkybox>()
         )
         .add_systems(

@@ -32,7 +32,8 @@ class GpuImageAdapter : public RenderAssetAdapter<Image, GpuImage> {
   public:
     Optional<GpuImage>
     prepare_asset(const Image& source_asset, World& world) override {
-        auto& device = world.resource<GraphicsDevice>();
+        const auto& device =
+            static_cast<const World&>(world).resource<GraphicsDevice>();
         auto texture =
             device.create_texture(source_asset.texture_description());
         if (!texture) {

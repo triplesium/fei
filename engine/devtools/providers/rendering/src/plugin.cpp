@@ -7,6 +7,7 @@
 #include "ecs/system_params.hpp"
 #include "ecs/world.hpp"
 #include "graphics/graphics_device.hpp"
+#include "rendering/render_app.hpp"
 #include "snapshot_types.hpp"
 
 #include <string_view>
@@ -14,6 +15,17 @@
 namespace fei::devtools::rendering {
 
 namespace {
+
+struct RenderScheduleState {
+    RenderScheduleSnapshot snapshot;
+};
+
+void capture_render_schedule(ResRW<RenderScheduleState> state, WorldRef world) {
+    state->snapshot = {};
+    if (auto debug = world->schedule_debug_info(RenderUpdate)) {
+        state->snapshot = make_render_schedule_snapshot(*debug);
+    }
+}
 
 struct RenderSchedule {
     using RequestBody = void;
@@ -25,7 +37,8 @@ struct RenderSchedule {
     static constexpr ScheduleId schedule {RenderEnd};
 
     static void
-    run(Query<Entity, const Request, const JsonRequest> requests,
+    run(ResRO<RenderScheduleState> state,
+        Query<Entity, const Request, const JsonRequest> requests,
         Commands commands) {
         for (auto [entity, request, json] : requests) {
             (void)json;
@@ -33,12 +46,7 @@ struct RenderSchedule {
                 continue;
             }
 
-            ResponseBody response;
-            if (auto debug =
-                    commands.world().schedule_debug_info(RenderUpdate)) {
-                response = make_render_schedule_snapshot(*debug);
-            }
-            respond_capability(commands, entity, request, response);
+            respond_capability(commands, entity, request, state->snapshot);
         }
     }
 };
@@ -73,7 +81,26 @@ struct GraphicsCache {
 } // namespace
 
 void ProviderPlugin::setup(App& app) {
-    add_capabilities<RenderSchedule, GraphicsCache>(app);
+    app.add_resource(RenderScheduleState {});
+    add_capability<RenderSchedule>(app);
+    declare_capability<GraphicsCache>(app.world());
+    add_extract_component<Request>(app);
+    add_extract_component<JsonRequest>(app);
+    add_render_to_main_component<JsonResponse>(app);
+    add_render_to_main_component<ErrorResponse>(app);
+    app.sub_app<RenderApp>()
+        .add_resource(RenderScheduleState {})
+        .add_systems(
+            GraphicsCache::schedule,
+            capture_render_schedule,
+            GraphicsCache::run
+        )
+        .add_post_update([](World& main_world, World& render_world) {
+            main_world.resource<RenderScheduleState>().snapshot =
+                static_cast<const World&>(render_world)
+                    .resource<RenderScheduleState>()
+                    .snapshot;
+        });
 }
 
 void ProviderPlugin::finish(App&) {}

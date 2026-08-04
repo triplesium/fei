@@ -2,6 +2,7 @@
 
 #include "base/optional.hpp"
 #include "base/types.hpp"
+#include "imgui/frame.hpp"
 
 #include <cstddef>
 #include <imgui.h>
@@ -10,6 +11,7 @@
 namespace fei {
 
 class GraphicsDevice;
+class GpuImage;
 class ImGuiRenderer;
 class PipelineCache;
 class RenderFrameContext;
@@ -19,7 +21,11 @@ class Sampler;
 class ShaderCache;
 class Swapchain;
 class Texture;
+template<typename T>
+class RenderAssets;
+struct ExtractedImGuiImages;
 struct MainSwapchain;
+struct RenderingDefaults;
 
 struct ImGuiScissor {
     int32 x {0};
@@ -38,9 +44,9 @@ struct ImGuiDrawOffsets {
 };
 
 [[nodiscard]] Optional<ImGuiScissor> calculate_imgui_scissor(
-    const ImVec4& clip_rect,
-    const ImVec2& display_pos,
-    const ImVec2& framebuffer_scale,
+    const Vector4& clip_rect,
+    const Vector2& display_pos,
+    const Vector2& framebuffer_scale,
     uint32 framebuffer_width,
     uint32 framebuffer_height
 );
@@ -72,6 +78,12 @@ class ImGuiTextureRegistry {
     [[nodiscard]] bool contains(ImTextureID texture_id) const;
     [[nodiscard]] bool pending_removal(ImTextureID texture_id) const;
     [[nodiscard]] std::size_t size() const;
+    void sync_images(
+        const GraphicsDevice& device,
+        const ExtractedImGuiImages& extracted_images,
+        const RenderAssets<GpuImage>& gpu_images,
+        const RenderingDefaults& defaults
+    );
 
   private:
     friend class ImGuiRenderer;
@@ -83,8 +95,17 @@ class ImGuiTextureRegistry {
         std::shared_ptr<const ResourceLayout> texture_layout,
         std::shared_ptr<const Sampler> default_sampler
     );
+    void register_managed_texture(
+        uint64 texture_id,
+        std::shared_ptr<const Texture> texture
+    );
+    void upsert_texture(
+        uint64 texture_id,
+        std::shared_ptr<const Texture> texture,
+        std::shared_ptr<const Sampler> sampler = nullptr
+    );
     [[nodiscard]] std::shared_ptr<const ResourceSet>
-    resource_set(ImTextureID texture_id) const;
+    resource_set(uint64 texture_id) const;
     void end_frame();
     void clear() noexcept;
 };
@@ -114,7 +135,8 @@ class ImGuiRenderer {
         PipelineCache& pipeline_cache,
         RenderFrameContext& frame_context,
         const MainSwapchain& main_swapchain,
-        ImGuiTextureRegistry& texture_registry
+        ImGuiTextureRegistry& texture_registry,
+        const ImGuiFrameSnapshot& frame
     );
     void shutdown(ImGuiTextureRegistry& texture_registry) noexcept;
 
@@ -124,6 +146,12 @@ class ImGuiRenderer {
     [[nodiscard]] std::size_t index_capacity(std::size_t slot) const;
 
   private:
+    void process_managed_textures(
+        const GraphicsDevice& device,
+        ImGuiTextureRegistry& texture_registry,
+        const std::vector<ImGuiTextureOperation>& operations
+    );
+
     std::unique_ptr<Impl> m_impl;
 };
 

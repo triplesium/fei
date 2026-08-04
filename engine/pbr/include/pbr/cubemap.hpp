@@ -8,6 +8,8 @@
 #include "graphics/resource.hpp"
 #include "graphics/sampler.hpp"
 #include "graphics/texture.hpp"
+#include "rendering/gpu_image.hpp"
+#include "rendering/render_asset.hpp"
 #include "rendering/shader_cache.hpp"
 
 #include <memory>
@@ -34,7 +36,7 @@ class EquirectToCubemap {
 
     std::shared_ptr<Texture> convert_equirect_to_cubemap(
         const GraphicsDevice& device,
-        std::shared_ptr<Texture> equirect_texture
+        std::shared_ptr<const Texture> equirect_texture
     );
 
     Optional<std::shared_ptr<Texture>>
@@ -44,13 +46,13 @@ class EquirectToCubemap {
 
     Optional<std::shared_ptr<Texture>> prepare_cubemap(
         const GraphicsDevice& device,
-        const Assets<Image>& images,
+        const RenderAssets<GpuImage>& images,
         Handle<Image> equirect_image_handle
     );
 
     Optional<std::shared_ptr<Texture>> get_or_create_cubemap(
         const GraphicsDevice& device,
-        const Assets<Image>& images,
+        const RenderAssets<GpuImage>& images,
         Handle<Image> equirect_image_handle
     );
 };

@@ -184,9 +184,12 @@ class MaterialAdapter
   public:
     Optional<PreparedMaterial>
     prepare_asset(const SourceMaterial& source_asset, World& world) override {
-        auto& device = world.resource<GraphicsDevice>();
-        auto& rendering_defaults = world.resource<RenderingDefaults>();
-        auto& gpu_images = world.resource<RenderAssets<GpuImage>>();
+        const auto& render_world = static_cast<const World&>(world);
+        const auto& device = render_world.resource<GraphicsDevice>();
+        const auto& rendering_defaults =
+            render_world.resource<RenderingDefaults>();
+        const auto& gpu_images =
+            render_world.resource<RenderAssets<GpuImage>>();
 
         if (!source_asset.resources_ready(gpu_images)) {
             return nullopt;

@@ -13,6 +13,7 @@
 #include <functional>
 #include <memory>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 using namespace fei;
@@ -112,13 +113,12 @@ TEST_CASE(
     "ShaderCache reuses shader modules for equivalent variant defs",
     "[rendering][shader-cache]"
 ) {
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
     FakeGraphicsDevice device;
     RecordingShaderCompiler compiler;
     ShaderVariantCompiler variant_compiler(compiler);
-    ShaderCache cache(asset_server, shaders, device, &variant_compiler);
     auto shader = add_test_shader(shaders);
+    ShaderCache cache(shaders, device, &variant_compiler);
 
     auto first = cache.get(
         shader.id(),
@@ -156,13 +156,12 @@ TEST_CASE(
     "ShaderCache separates shader modules for distinct variant defs",
     "[rendering][shader-cache]"
 ) {
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
     FakeGraphicsDevice device;
     RecordingShaderCompiler compiler;
     ShaderVariantCompiler variant_compiler(compiler);
-    ShaderCache cache(asset_server, shaders, device, &variant_compiler);
     auto shader = add_test_shader(shaders);
+    ShaderCache cache(shaders, device, &variant_compiler);
 
     auto without_defs = cache.get(shader.id(), ShaderStages::Fragment, {});
     auto alpha_test = cache.get(
@@ -226,11 +225,10 @@ float4 fragment_main() : SV_Target0
         }
     );
 
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
     FakeGraphicsDevice device;
-    ShaderCache cache(asset_server, shaders, device, &variant_compiler);
     auto shader = add_test_shader(shaders);
+    ShaderCache cache(shaders, device, &variant_compiler);
 
     auto first = cache.get(
         shader.id(),
@@ -308,10 +306,10 @@ float4 fragment_main() : SV_Target0
 
     App app;
     add_shader_asset_loading(app, root / "shaders");
-    auto& asset_server = app.resource<AssetServer>();
     auto& shaders = app.resource<Assets<Shader>>();
     FakeGraphicsDevice device;
-    ShaderCache cache(asset_server, shaders, device, &variant_compiler);
+    ShaderCache cache(shaders, device, &variant_compiler);
+    cache.refresh_source_snapshot();
 
     auto default_shader = cache.get_or_compile(
         AssetPath("shader://test.slang"),
@@ -401,10 +399,10 @@ float4 fragment_main() : SV_Target0
 
     App app;
     add_shader_asset_loading(app, root / "shaders");
-    auto& asset_server = app.resource<AssetServer>();
     auto& shaders = app.resource<Assets<Shader>>();
     FakeGraphicsDevice device;
-    ShaderCache cache(asset_server, shaders, device, &variant_compiler);
+    ShaderCache cache(shaders, device, &variant_compiler);
+    cache.refresh_source_snapshot();
 
     auto first = cache.get_or_compile(
         AssetPath("shader://test.slang"),
@@ -426,6 +424,7 @@ float4 fragment_main() : SV_Target0
         dependency_path,
         std::filesystem::file_time_type::clock::now() + std::chrono::seconds(2)
     );
+    cache.refresh_source_snapshot();
 
     auto recompiled = cache.get_or_compile(
         AssetPath("shader://test.slang"),
@@ -434,6 +433,56 @@ float4 fragment_main() : SV_Target0
     );
 
     REQUIRE(recompiled != first);
+    REQUIRE(compiler.requests.size() == 2);
+    REQUIRE(device.shader_descriptions.size() == 2);
+}
+
+TEST_CASE(
+    "ShaderCache applies source snapshot polling in the background",
+    "[rendering][shader-cache][shader-compiler][snapshot]"
+) {
+    using namespace std::chrono_literals;
+
+    auto root = std::filesystem::current_path() / "build" / "test" /
+                "shader-cache-background-source-refresh";
+    std::filesystem::remove_all(root);
+    auto shader_path = root / "shaders" / "test.slang";
+    write_text_file(shader_path, "first shader source");
+
+    RecordingShaderCompiler compiler;
+    ShaderVariantCompiler variant_compiler(
+        compiler,
+        RuntimeShaderCompilerConfig {
+            .source_root = root / "shaders",
+        }
+    );
+    FakeGraphicsDevice device;
+    ShaderCache cache(device, &variant_compiler);
+    cache.set_source_snapshot_poll_interval(0ms);
+    cache.update_source_snapshot();
+
+    auto first = cache.get_or_compile(
+        AssetPath("shader://test.slang"),
+        ShaderStages::Fragment,
+        {}
+    );
+
+    write_text_file(shader_path, "second shader source");
+    cache.update_source_snapshot();
+
+    auto refreshed = first;
+    const auto deadline = std::chrono::steady_clock::now() + 2s;
+    while (refreshed == first && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(1ms);
+        cache.update_source_snapshot();
+        refreshed = cache.get_or_compile(
+            AssetPath("shader://test.slang"),
+            ShaderStages::Fragment,
+            {}
+        );
+    }
+
+    REQUIRE(refreshed != first);
     REQUIRE(compiler.requests.size() == 2);
     REQUIRE(device.shader_descriptions.size() == 2);
 }
@@ -538,6 +587,59 @@ TEST_CASE(
 
     REQUIRE(recompiled.has_value());
     REQUIRE(third_compiler.requests.size() == 1);
+}
+
+TEST_CASE(
+    "ShaderVariantCompiler resolves roots and imports from an immutable source "
+    "snapshot",
+    "[rendering][shader-cache][shader-compiler][snapshot]"
+) {
+    auto root = std::filesystem::current_path() / "build" / "test" /
+                "shader-cache-source-snapshot";
+    std::filesystem::remove_all(root);
+    write_text_file(
+        root / "shaders" / "shared.slang",
+        R"(
+public float4 snapshot_color()
+{
+    return float4(0.25, 0.5, 0.75, 1.0);
+}
+)"
+    );
+    write_text_file(
+        root / "shaders" / "test.slang",
+        R"(
+import shared;
+
+[shader("fragment")]
+float4 fragment_main() : SV_Target0
+{
+    return snapshot_color();
+}
+)"
+    );
+
+    ShaderSourceRegistry registry;
+    registry.add_root({}, root / "shaders");
+    auto snapshot = std::make_shared<const ShaderSourceSnapshot>(
+        ShaderSourceSnapshot::capture(registry)
+    );
+    std::filesystem::remove_all(root / "shaders");
+
+    SlangLibraryShaderCompiler compiler;
+    ShaderVariantCompiler variant_compiler(
+        compiler,
+        RuntimeShaderCompilerConfig {.shader_sources = registry}
+    );
+    variant_compiler.set_source_snapshot(snapshot);
+
+    auto output =
+        variant_compiler
+            .compile("test.slang", ShaderStages::Fragment, "fragment_main", {});
+
+    REQUIRE(output.has_value());
+    CHECK(output->stage == ShaderStages::Fragment);
+    REQUIRE_FALSE(output->spirv.empty());
 }
 
 TEST_CASE(

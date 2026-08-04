@@ -12,6 +12,7 @@
 #include "ecs/system_profile.hpp"
 #include "ecs/world.hpp"
 #include "rendering/plugin.hpp"
+#include "rendering/render_app.hpp"
 
 #include <memory>
 #include <unordered_set>
@@ -72,80 +73,102 @@ template<typename T>
 struct ExtractedAssets {
     struct Entry {
         AssetId id;
-        const T* asset;
+        std::shared_ptr<const T> asset;
     };
     std::vector<Entry> extracted;
     std::unordered_set<AssetId> removed;
     std::unordered_set<AssetId> modified;
     std::unordered_set<AssetId> added;
+    bool initialized {false};
+
+    Optional<const T&> get(AssetId id) const {
+        for (const auto& entry : extracted) {
+            if (entry.id == id && entry.asset) {
+                return *entry.asset;
+            }
+        }
+        return nullopt;
+    }
+
+    Optional<const T&> get(const Handle<T>& handle) const {
+        return get(handle.id());
+    }
 };
 
 template<typename Source>
 void extract_render_assets(
-    WorldRef world,
-    EventReader<AssetEvent<Source>> events,
-    ResRO<Assets<Source>> assets
+    Extract<Optional<EventReaderRO<AssetEvent<Source>>>> events,
+    Extract<Optional<ResRO<Assets<Source>>>> assets,
+    ResRW<ExtractedAssets<Source>> extracted_assets
 ) {
-    std::unordered_set<AssetId> need_extracting, added, removed, modified;
-    if (world->has_resource<ExtractedAssets<Source>>()) {
-        auto& previous = world->resource<ExtractedAssets<Source>>();
-        for (auto& entry : previous.extracted) {
-            if (assets->get(entry.id)) {
-                need_extracting.insert(entry.id);
-            }
+    const auto& source_assets = assets.get();
+    if (!source_assets) {
+        return;
+    }
+
+    std::unordered_set<AssetId> need_extracting;
+    auto removed = std::move(extracted_assets->removed);
+    auto modified = std::move(extracted_assets->modified);
+    auto added = std::move(extracted_assets->added);
+    for (const auto& entry : extracted_assets->extracted) {
+        if ((*source_assets)->get(entry.id)) {
+            need_extracting.insert(entry.id);
+        }
+    }
+    if (!extracted_assets->initialized) {
+        for (const auto id : (*source_assets)->loaded_ids()) {
+            need_extracting.insert(id);
         }
     }
 
-    for (auto event = events.next(); event; event = events.next()) {
-        AssetEventType type = event->type;
-        AssetId id = event->id;
-        switch (type) {
-            case AssetEventType::Added: {
-                need_extracting.insert(id);
-                break;
-            }
-            case AssetEventType::Modified: {
-                need_extracting.insert(id);
-                modified.insert(id);
-                break;
-            }
-            case AssetEventType::Removed: {
-                removed.insert(id);
-                need_extracting.erase(id);
-                modified.erase(id);
-                break;
-            }
-            case AssetEventType::Failed: {
-                need_extracting.erase(id);
-                modified.erase(id);
-                break;
+    auto& source_events = events.get();
+    if (source_events) {
+        while (auto event = source_events->next()) {
+            AssetEventType type = event->type;
+            AssetId id = event->id;
+            switch (type) {
+                case AssetEventType::Added: {
+                    need_extracting.insert(id);
+                    break;
+                }
+                case AssetEventType::Modified: {
+                    need_extracting.insert(id);
+                    modified.insert(id);
+                    break;
+                }
+                case AssetEventType::Removed: {
+                    removed.insert(id);
+                    need_extracting.erase(id);
+                    modified.erase(id);
+                    break;
+                }
+                case AssetEventType::Failed: {
+                    need_extracting.erase(id);
+                    modified.erase(id);
+                    break;
+                }
             }
         }
     }
     std::vector<typename ExtractedAssets<Source>::Entry> extracted;
     for (AssetId id : need_extracting) {
-        if (auto source_asset = assets->get(id)) {
+        if (auto source_asset = (*source_assets)->snapshot(id)) {
             extracted.push_back(
                 typename ExtractedAssets<Source>::Entry {
                     .id = id,
-                    .asset = source_asset
-                                 .transform([](auto& a) {
-                                     return &a;
-                                 })
-                                 .value_or(nullptr),
+                    .asset = std::move(source_asset),
                 }
             );
             added.insert(id);
         }
     }
-    world->add_resource(
-        ExtractedAssets<Source> {
-            .extracted = std::move(extracted),
-            .removed = std::move(removed),
-            .modified = std::move(modified),
-            .added = std::move(added),
-        }
-    );
+    *extracted_assets = ExtractedAssets<Source> {
+        .extracted = std::move(extracted),
+        .removed = std::move(removed),
+        .modified = std::move(modified),
+        .added = std::move(added),
+        .initialized = true,
+    };
 }
 
 template<typename Source, typename Target, typename Adapter>
@@ -158,12 +181,13 @@ void prepare_assets(
         render_assets->remove(id);
     }
     extracted_assets->removed.clear();
+    extracted_assets->modified.clear();
+    extracted_assets->added.clear();
 
     std::vector<typename ExtractedAssets<Source>::Entry> pending;
     for (const auto& entry : extracted_assets->extracted) {
         auto id = entry.id;
-        auto* source_asset = entry.asset;
-        auto render_asset = Adapter().prepare_asset(*source_asset, *world);
+        auto render_asset = Adapter().prepare_asset(*entry.asset, *world);
         if (!render_asset) {
             pending.push_back(entry);
             continue;
@@ -183,21 +207,23 @@ struct RenderAssetPlugin : public Plugin {
     using SourceAssetType = Source;
 
     void setup(App& app) override {
-        // app.add_resource<ExtractedAssets<Source>>();
-        app.add_resource<RenderAssets<Target>>();
-        app.add_systems(
-            RenderUpdate,
-            chain(
+        app.sub_app<RenderApp>()
+            .add_resource<ExtractedAssets<Source>>()
+            .template add_resource<RenderAssets<Target>>()
+            .add_systems(
+                RenderExtract,
                 FEI_SYSTEM_NAME(
                     "extract_render_assets",
                     (extract_render_assets<Source>)
-                ),
+                )
+            )
+            .add_systems(
+                RenderUpdate,
                 FEI_SYSTEM_NAME(
                     "prepare_render_assets",
                     (prepare_assets<Source, Target, Adapter>)
-                )
-            ) | in_set<RenderingSystems::PrepareAssets>()
-        );
+                ) | in_set<RenderingSystems::PrepareAssets>()
+            );
     }
 };
 

@@ -1,12 +1,13 @@
 #include "pbr/cubemap.hpp"
 
 #include "graphics/enums.hpp"
+#include "rendering/render_app.hpp"
 
 namespace fei {
 
 std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
     const GraphicsDevice& device,
-    std::shared_ptr<Texture> equirect_texture
+    std::shared_ptr<const Texture> equirect_texture
 ) {
     auto cubemap_texture = device.create_texture(
         TextureDescription {
@@ -91,38 +92,25 @@ void EquirectToCubemap::invalidate(AssetId equirect_image_id) {
 
 Optional<std::shared_ptr<Texture>> EquirectToCubemap::prepare_cubemap(
     const GraphicsDevice& device,
-    const Assets<Image>& images,
+    const RenderAssets<GpuImage>& images,
     Handle<Image> equirect_image_handle
 ) {
     if (auto cubemap = get_cubemap(equirect_image_handle)) {
         return cubemap;
     }
     auto equirect_image = images.get(equirect_image_handle);
-    if (!equirect_image) {
+    if (!equirect_image || !equirect_image->texture()) {
         return nullopt;
     }
-    auto equirect_texture =
-        device.create_texture(equirect_image->texture_description());
-    device.update_texture(
-        equirect_texture,
-        equirect_image->data(),
-        0,
-        0,
-        0,
-        equirect_image->width(),
-        equirect_image->height(),
-        equirect_image->depth(),
-        0,
-        0
-    );
-    auto cubemap = convert_equirect_to_cubemap(device, equirect_texture);
+    auto cubemap =
+        convert_equirect_to_cubemap(device, equirect_image->texture());
     m_cubemaps[equirect_image_handle.id()] = cubemap;
     return cubemap;
 }
 
 Optional<std::shared_ptr<Texture>> EquirectToCubemap::get_or_create_cubemap(
     const GraphicsDevice& device,
-    const Assets<Image>& images,
+    const RenderAssets<GpuImage>& images,
     Handle<Image> equirect_image_handle
 ) {
     return prepare_cubemap(device, images, equirect_image_handle);
@@ -185,8 +173,9 @@ void setup_equi2cubemap(
 }
 
 void CubemapPlugin::setup(App& app) {
-    app.add_resource(EquirectToCubemap {})
-        .add_systems(StartUp, setup_equi2cubemap);
+    app.sub_app<RenderApp>()
+        .add_resource(EquirectToCubemap {})
+        .add_systems(RenderStartup, setup_equi2cubemap);
 }
 
 } // namespace fei

@@ -1,8 +1,14 @@
 #include "imgui/renderer.hpp"
 
+#include "asset/assets.hpp"
+#include "core/image.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/swapchain.hpp"
+#include "imgui/texture.hpp"
+#include "rendering/defaults.hpp"
+#include "rendering/gpu_image.hpp"
 #include "rendering/pipeline_cache.hpp"
+#include "rendering/render_asset.hpp"
 #include "rendering/render_frame.hpp"
 #include "test_graphics_device.hpp"
 
@@ -11,6 +17,7 @@
 #include <cstring>
 #include <imgui.h>
 #include <memory>
+#include <thread>
 #include <vector>
 
 using namespace fei;
@@ -38,6 +45,19 @@ std::shared_ptr<Texture> make_texture(FakeGraphicsDevice& device) {
     );
 }
 
+Handle<Image> make_image_handle(Assets<Image>& images) {
+    return images.add(
+        Image::create_empty(
+            1,
+            1,
+            1,
+            PixelFormat::Rgba8Unorm,
+            TextureUsage::Sampled,
+            TextureType::Texture2D
+        )
+    );
+}
+
 void begin_test_frame() {
     ImGuiIO& io = ImGui::GetIO();
     io.DisplaySize = ImVec2(320.0f, 200.0f);
@@ -51,11 +71,118 @@ void begin_test_frame() {
 
 } // namespace
 
+TEST_CASE("ImGui image handles keep stable extracted IDs", "[imgui][texture]") {
+    Assets<Image> assets(nullptr);
+    ImGuiImages images;
+    const auto image = make_image_handle(assets);
+
+    const auto first = images.register_image(image);
+    const auto second = images.register_image(image);
+    REQUIRE(first);
+    REQUIRE(second);
+    REQUIRE(first != second);
+    REQUIRE(images.contains(first));
+    REQUIRE(images.size() == 2);
+
+    const auto extracted = images.extract();
+    REQUIRE(extracted.bindings.size() == 2);
+    for (const auto& binding : extracted.bindings) {
+        REQUIRE(binding.image_id == image.id());
+        REQUIRE(
+            (binding.texture_id == first.raw_id() ||
+             binding.texture_id == second.raw_id())
+        );
+    }
+
+    REQUIRE(images.unregister_image(first));
+    REQUIRE_FALSE(images.unregister_image(first));
+    REQUIRE_FALSE(images.contains(first));
+    REQUIRE(images.contains(second));
+
+    ImGui::CreateContext();
+    begin_test_frame();
+    ImGui::Begin("Image handle test");
+    ImGui::Image(second.texture_id(), ImVec2(32.0f, 32.0f));
+    ImGui::End();
+    const auto frame = capture_imgui_frame_snapshot();
+    REQUIRE(frame);
+    ImGui::DestroyContext();
+}
+
+TEST_CASE(
+    "ImGui image bindings use fallback and survive GPU image replacement",
+    "[imgui][texture]"
+) {
+    FakeGraphicsDevice device;
+    PipelineCache pipeline_cache(device);
+    RenderFrameContext frame_context;
+    MainSwapchain main_swapchain {};
+    ImGuiTextureRegistry registry;
+    ImGuiRenderer renderer;
+    renderer.initialize(device, registry);
+
+    Assets<Image> assets(nullptr);
+    ImGuiImages images;
+    const auto image = make_image_handle(assets);
+    const auto texture_handle = images.register_image(image);
+    RenderAssets<GpuImage> gpu_images;
+    RenderingDefaults defaults {.default_texture = make_texture(device)};
+
+    auto extracted = images.extract();
+    registry.sync_images(device, extracted, gpu_images, defaults);
+    REQUIRE(registry.contains(texture_handle.texture_id()));
+    const auto fallback_resource_sets = device.resource_set_descriptions.size();
+
+    registry.sync_images(device, extracted, gpu_images, defaults);
+    REQUIRE(device.resource_set_descriptions.size() == fallback_resource_sets);
+
+    auto first_gpu_texture = make_texture(device);
+    auto first_gpu_sampler = device.create_sampler(SamplerDescription::Linear);
+    gpu_images.insert(
+        image.id(),
+        std::make_unique<GpuImage>(first_gpu_texture, first_gpu_sampler)
+    );
+    registry.sync_images(device, extracted, gpu_images, defaults);
+    REQUIRE(
+        device.resource_set_descriptions.size() == fallback_resource_sets + 1
+    );
+
+    gpu_images.remove(image.id());
+    gpu_images.insert(
+        image.id(),
+        std::make_unique<GpuImage>(
+            make_texture(device),
+            device.create_sampler(SamplerDescription::Linear)
+        )
+    );
+    registry.sync_images(device, extracted, gpu_images, defaults);
+    REQUIRE(
+        device.resource_set_descriptions.size() == fallback_resource_sets + 2
+    );
+    REQUIRE(registry.contains(texture_handle.texture_id()));
+
+    REQUIRE(images.unregister_image(texture_handle));
+    extracted = images.extract();
+    registry.sync_images(device, extracted, gpu_images, defaults);
+    REQUIRE(registry.pending_removal(texture_handle.texture_id()));
+
+    renderer.render(
+        device,
+        pipeline_cache,
+        frame_context,
+        main_swapchain,
+        registry,
+        ImGuiFrameSnapshot {}
+    );
+    REQUIRE_FALSE(registry.contains(texture_handle.texture_id()));
+    renderer.shutdown(registry);
+}
+
 TEST_CASE("ImGui clip rectangles honor display origin and HiDPI", "[imgui]") {
     const auto scissor = calculate_imgui_scissor(
-        ImVec4(11.0f, 22.0f, 21.0f, 32.0f),
-        ImVec2(10.0f, 20.0f),
-        ImVec2(2.0f, 2.0f),
+        Vector4(11.0f, 22.0f, 21.0f, 32.0f),
+        Vector2(10.0f, 20.0f),
+        Vector2(2.0f, 2.0f),
         100,
         80
     );
@@ -68,9 +195,9 @@ TEST_CASE("ImGui clip rectangles honor display origin and HiDPI", "[imgui]") {
 
 TEST_CASE("ImGui clip rectangles clamp and reject empty regions", "[imgui]") {
     const auto clamped = calculate_imgui_scissor(
-        ImVec4(-20.0f, -10.0f, 150.0f, 90.0f),
-        ImVec2(0.0f, 0.0f),
-        ImVec2(1.0f, 1.0f),
+        Vector4(-20.0f, -10.0f, 150.0f, 90.0f),
+        Vector2(0.0f, 0.0f),
+        Vector2(1.0f, 1.0f),
         100,
         50
     );
@@ -79,9 +206,9 @@ TEST_CASE("ImGui clip rectangles clamp and reject empty regions", "[imgui]") {
         (*clamped == ImGuiScissor {.x = 0, .y = 0, .width = 100, .height = 50})
     );
     REQUIRE_FALSE(calculate_imgui_scissor(
-        ImVec4(120.0f, 60.0f, 140.0f, 80.0f),
-        ImVec2(0.0f, 0.0f),
-        ImVec2(1.0f, 1.0f),
+        Vector4(120.0f, 60.0f, 140.0f, 80.0f),
+        Vector2(0.0f, 0.0f),
+        Vector2(1.0f, 1.0f),
         100,
         50
     ));
@@ -144,20 +271,25 @@ TEST_CASE(
 
     ImGui::CreateContext();
     begin_test_frame();
-    renderer.render(
-        device,
-        pipeline_cache,
-        frame_context,
-        main_swapchain,
-        registry
-    );
+    const auto snapshot = capture_imgui_frame_snapshot();
+    ImGui::DestroyContext();
+    std::thread render_worker([&]() {
+        renderer.render(
+            device,
+            pipeline_cache,
+            frame_context,
+            main_swapchain,
+            registry,
+            *snapshot
+        );
+    });
+    render_worker.join();
     REQUIRE_FALSE(registry.contains(first));
 
     const auto second = registry.register_texture(make_texture(device));
     REQUIRE(second > first);
 
     renderer.shutdown(registry);
-    ImGui::DestroyContext();
 }
 
 TEST_CASE(
@@ -174,12 +306,14 @@ TEST_CASE(
 
     ImGui::CreateContext();
     begin_test_frame();
+    auto snapshot = capture_imgui_frame_snapshot();
     renderer.render(
         device,
         pipeline_cache,
         frame_context,
         main_swapchain,
-        registry
+        registry,
+        *snapshot
     );
 
     REQUIRE_FALSE(device.texture_update_calls.empty());
@@ -193,6 +327,7 @@ TEST_CASE(
 
     REQUIRE(texture_data->Width >= 3);
     REQUIRE(texture_data->Height >= 2);
+    begin_test_frame();
     texture_data->UpdateRect = ImTextureRect {.x = 1, .y = 0, .w = 2, .h = 2};
     auto* pixels = static_cast<unsigned char*>(texture_data->GetPixels());
     std::vector<std::byte> expected;
@@ -207,12 +342,14 @@ TEST_CASE(
         }
     }
     texture_data->SetStatus(ImTextureStatus_WantUpdates);
+    snapshot = capture_imgui_frame_snapshot();
     renderer.render(
         device,
         pipeline_cache,
         frame_context,
         main_swapchain,
-        registry
+        registry,
+        *snapshot
     );
 
     const auto& update = device.texture_update_calls.back();
@@ -223,17 +360,21 @@ TEST_CASE(
     REQUIRE(update.bytes == expected);
     REQUIRE(texture_data->Status == ImTextureStatus_OK);
 
-    texture_data->WantDestroyNextFrame = true;
-    texture_data->SetStatus(ImTextureStatus_WantDestroy);
+    ImGuiFrameSnapshot destroy_snapshot;
+    destroy_snapshot.texture_operations.push_back(
+        ImGuiTextureOperation {
+            .kind = ImGuiTextureOperationKind::Destroy,
+            .texture_id = static_cast<uint64>(texture_id),
+        }
+    );
     renderer.render(
         device,
         pipeline_cache,
         frame_context,
         main_swapchain,
-        registry
+        registry,
+        destroy_snapshot
     );
-    REQUIRE(texture_data->GetTexID() == ImTextureID_Invalid);
-    REQUIRE(texture_data->Status == ImTextureStatus_Destroyed);
     REQUIRE_FALSE(registry.contains(texture_id));
 
     renderer.shutdown(registry);

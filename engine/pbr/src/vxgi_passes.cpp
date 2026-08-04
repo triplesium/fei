@@ -130,6 +130,7 @@ void render_mipmap_base(
     CommandBuffer& commands,
     RenderResourceSetCache& cache,
     const GraphicsDevice& device,
+    const VxgiConfig& config,
     const VxgiVolumes& volumes,
     const VxgiGenerateMipmapBase& mipmap_base
 ) {
@@ -145,7 +146,7 @@ void render_mipmap_base(
     }
     commands.set_compute_pipeline(mipmap_base.pipeline);
     commands.set_resource_set(0, std::move(resource_set));
-    const auto work_groups = (volumes.config.voxel_resolution / 2) / 8;
+    const auto work_groups = (config.voxel_resolution / 2) / 8;
     commands.dispatch(work_groups, work_groups, work_groups);
 }
 
@@ -195,6 +196,7 @@ void render_vxgi_voxelization_pass(
         const GlobalTransform3d> query_meshes,
     ResRW<VxgiVoxelization> voxelization,
     ResRW<VxgiVolumes> volumes,
+    ResRO<VxgiConfig> config,
     ResRW<MeshMaterialPipelines> pipelines,
     ResRO<PipelineCache> pipeline_cache,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
@@ -281,7 +283,7 @@ void render_vxgi_voxelization_pass(
         return;
     }
 
-    const auto work_groups = (volumes->config.voxel_resolution + 7) / 8;
+    const auto work_groups = (config->voxel_resolution + 7) / 8;
     commands->set_compute_pipeline(voxelization->clear_pipeline);
     commands->set_resource_set(0, volumes_set);
     commands->set_resource_set(1, voxelization_set);
@@ -303,8 +305,8 @@ void render_vxgi_voxelization_pass(
         commands->set_viewport(
             0,
             0,
-            volumes->config.voxel_resolution,
-            volumes->config.voxel_resolution
+            config->voxel_resolution,
+            config->voxel_resolution
         );
         for (const auto& item : draw_items) {
             commands->set_render_pipeline(item.pipeline);
@@ -339,6 +341,7 @@ void render_vxgi_voxelization_pass(
 }
 
 void render_vxgi_mipmap_base_pass(
+    ResRO<VxgiConfig> config,
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiGenerateMipmapBase> generate_mipmap_base,
     ResRW<RenderFrameContext> frame,
@@ -350,6 +353,7 @@ void render_vxgi_mipmap_base_pass(
             *commands,
             *resource_sets,
             *device,
+            *config,
             *volumes,
             *generate_mipmap_base
         );
@@ -357,6 +361,7 @@ void render_vxgi_mipmap_base_pass(
 }
 
 void render_vxgi_mipmap_base_after_propagation_pass(
+    ResRO<VxgiConfig> config,
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiGenerateMipmapBase> generate_mipmap_base,
     ResRW<RenderFrameContext> frame,
@@ -368,6 +373,7 @@ void render_vxgi_mipmap_base_after_propagation_pass(
             *commands,
             *resource_sets,
             *device,
+            *config,
             *volumes,
             *generate_mipmap_base
         );
@@ -410,6 +416,7 @@ void render_vxgi_mipmap_volume_after_propagation_pass(
 
 void render_vxgi_inject_radiance_pass(
     Query<const ShadowMap> query_shadow_maps,
+    ResRO<VxgiConfig> config,
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiVoxelization> voxelization,
     ResRO<VxgiInjectRadiance> inject_radiance,
@@ -471,11 +478,12 @@ void render_vxgi_inject_radiance_pass(
     commands->set_resource_set(1, std::move(voxelization_set));
     commands->set_resource_set(2, std::move(lighting_set));
     commands->set_resource_set(3, std::move(inject_set));
-    const auto work_groups = volumes->config.voxel_resolution / 8;
+    const auto work_groups = config->voxel_resolution / 8;
     commands->dispatch(work_groups, work_groups, work_groups);
 }
 
 void render_vxgi_inject_propagation_pass(
+    ResRO<VxgiConfig> config,
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiInjectPropagation> inject_propagation,
     ResRW<RenderFrameContext> frame,
@@ -498,7 +506,7 @@ void render_vxgi_inject_propagation_pass(
     }
     commands->set_compute_pipeline(inject_propagation->pipeline);
     commands->set_resource_set(0, std::move(resource_set));
-    const auto work_groups = volumes->config.voxel_resolution / 8;
+    const auto work_groups = config->voxel_resolution / 8;
     commands->dispatch(work_groups, work_groups, work_groups);
 }
 

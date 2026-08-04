@@ -2,6 +2,8 @@
 
 #include "base/hash.hpp"
 #include "pbr/plugin.hpp"
+#include "rendering/extract_resource.hpp"
+#include "rendering/render_app.hpp"
 #include "scene/scene.hpp"
 
 #include <algorithm>
@@ -100,16 +102,16 @@ void VxgiVoxelizationSpecializer::specialize(
 }
 
 void setup_vxgi(
+    ResRO<VxgiConfig> config,
     ResRW<VxgiVolumes> volumes,
     ResRO<GraphicsDevice> device,
     ResRW<ShaderCache> shader_cache,
     Commands commands
 ) {
-    const auto& config = volumes->config;
     TextureDescription desc {
-        .width = config.voxel_resolution,
-        .height = config.voxel_resolution,
-        .depth = config.voxel_resolution,
+        .width = config->voxel_resolution,
+        .height = config->voxel_resolution,
+        .depth = config->voxel_resolution,
         .mip_level = 1,
         .layer = 1,
         .texture_format = PixelFormat::Rgba8Unorm,
@@ -129,11 +131,11 @@ void setup_vxgi(
     for (int i = 0; i < 6; ++i) {
         volumes->mipmap[i] = device->create_texture(
             TextureDescription {
-                .width = config.voxel_resolution / 2,
-                .height = config.voxel_resolution / 2,
-                .depth = config.voxel_resolution / 2,
+                .width = config->voxel_resolution / 2,
+                .height = config->voxel_resolution / 2,
+                .depth = config->voxel_resolution / 2,
                 .mip_level = static_cast<uint32>(
-                    std::floor(std::log2(config.voxel_resolution))
+                    std::floor(std::log2(config->voxel_resolution))
                 ),
                 .layer = 1,
                 .texture_format = PixelFormat::Rgba8Unorm,
@@ -193,13 +195,13 @@ void setup_vxgi(
         }
     );
     auto albedo_accumulation_buffer =
-        create_vxgi_accumulation_buffer(*device, config.voxel_resolution, 4);
+        create_vxgi_accumulation_buffer(*device, config->voxel_resolution, 4);
     auto normal_accumulation_buffer =
-        create_vxgi_accumulation_buffer(*device, config.voxel_resolution, 3);
+        create_vxgi_accumulation_buffer(*device, config->voxel_resolution, 3);
     auto emissive_accumulation_buffer =
-        create_vxgi_accumulation_buffer(*device, config.voxel_resolution, 4);
+        create_vxgi_accumulation_buffer(*device, config->voxel_resolution, 4);
     auto count_accumulation_buffer =
-        create_vxgi_accumulation_buffer(*device, config.voxel_resolution, 1);
+        create_vxgi_accumulation_buffer(*device, config->voxel_resolution, 1);
     auto clear_shader_module = shader_cache->get_or_compile(
         AssetPath("shader://pbr/clear_voxels.slang"),
         ShaderStages::Compute,
@@ -304,7 +306,7 @@ void compute_scene_aabb(
 
 void prepare_vxgi_voxelization(
     ResRW<VxgiVoxelization> voxelization,
-    ResRO<VxgiVolumes> volumes,
+    ResRO<VxgiConfig> config,
     ResRO<RenderQueue> render_queue
 ) {
     auto axis_size = voxelization->scene_aabb.extent() * 2.0f;
@@ -312,7 +314,7 @@ void prepare_vxgi_voxelization(
     auto volume_grid_size = std::max({axis_size.x, axis_size.y, axis_size.z});
     VxgiVoxelizationUniform uniform {};
     auto voxel_size =
-        volume_grid_size / static_cast<float>(volumes->config.voxel_resolution);
+        volume_grid_size / static_cast<float>(config->voxel_resolution);
     auto half_size = volume_grid_size * 0.5f;
     auto proj = orthographic(
         -half_size,
@@ -335,7 +337,7 @@ void prepare_vxgi_voxelization(
         uniform.inv_view_projections[i] =
             uniform.view_projections[i].inverse_affine();
     }
-    uniform.volume_dimension = volumes->config.voxel_resolution;
+    uniform.volume_dimension = config->voxel_resolution;
     uniform.flag_static_voxels = 1;
     uniform.voxel_scale = 1.0f / volume_grid_size;
     uniform.voxel_size = voxel_size;
@@ -350,15 +352,22 @@ void prepare_vxgi_voxelization(
 }
 
 void mark_vxgi_voxelization_dirty(
-    ResRW<VxgiVoxelization> voxelization,
-    EventReader<SceneSpawnedEvent> spawn_events
+    Optional<ResRW<VxgiVoxelization>> voxelization,
+    Extract<Optional<EventReaderRO<SceneSpawnedEvent>>> spawn_events
 ) {
+    if (!voxelization) {
+        return;
+    }
+    auto& events = spawn_events.get();
+    if (!events) {
+        return;
+    }
     bool dirty = false;
-    while (spawn_events.next()) {
+    while (events->next()) {
         dirty = true;
     }
     if (dirty) {
-        voxelization->dirty = true;
+        (*voxelization)->dirty = true;
     }
 }
 
@@ -400,6 +409,7 @@ void queue_vxgi_voxelization_pipelines(
 }
 
 void setup_vxgi_generate_mipmap_base(
+    ResRO<VxgiConfig> config,
     ResRO<VxgiVolumes> volumes,
     ResRO<GraphicsDevice> device,
     ResRW<ShaderCache> shader_cache,
@@ -438,7 +448,7 @@ void setup_vxgi_generate_mipmap_base(
         }
     );
     VxgiGenerateMipmapBase::Uniform uniform {
-        .mip_dimension = static_cast<int>(volumes->config.voxel_resolution / 2),
+        .mip_dimension = static_cast<int>(config->voxel_resolution / 2),
     };
     device->update_buffer(
         uniform_buffer,
@@ -518,18 +528,19 @@ void setup_vxgi_generate_mipmap_volume(
 }
 
 void prepare_vxgi_generate_mipmap_volume(
+    ResRO<VxgiConfig> config,
     ResRO<VxgiVolumes> volumes,
     ResRW<VxgiGenerateMipmapVolume> generate_mipmap_volume,
     ResRO<GraphicsDevice> device
 ) {
     if (generate_mipmap_volume->prepared_resolution ==
-            volumes->config.voxel_resolution &&
+            config->voxel_resolution &&
         !generate_mipmap_volume->mip_entries.empty()) {
         return;
     }
 
     generate_mipmap_volume->mip_entries.clear();
-    uint32 mip_dimension = volumes->config.voxel_resolution / 4;
+    uint32 mip_dimension = config->voxel_resolution / 4;
     uint32 mip_level = 0;
 
     while (mip_dimension > 0) {
@@ -563,8 +574,7 @@ void prepare_vxgi_generate_mipmap_volume(
         ++mip_level;
     }
 
-    generate_mipmap_volume->prepared_resolution =
-        volumes->config.voxel_resolution;
+    generate_mipmap_volume->prepared_resolution = config->voxel_resolution;
 }
 
 void setup_inject_radiance(
@@ -630,7 +640,7 @@ void prepare_inject_radiance(
 }
 
 void setup_inject_propagation(
-    ResRO<VxgiVolumes> volumes,
+    ResRO<VxgiConfig> config,
     ResRO<GraphicsDevice> device,
     ResRW<ShaderCache> shader_cache,
     Commands commands
@@ -671,7 +681,7 @@ void setup_inject_propagation(
         }
     );
     VxgiInjectPropagationUniform uniform {
-        .volume_dimension = static_cast<int>(volumes->config.voxel_resolution),
+        .volume_dimension = static_cast<int>(config->voxel_resolution),
     };
     device->update_buffer(
         uniform_buffer,
@@ -739,7 +749,7 @@ void setup_vxgi_resources(ResRO<GraphicsDevice> device, Commands commands) {
 
 void prepare_vxgi_resources(
     ResRW<VxgiResources> vxgi,
-    ResRO<VxgiVolumes> volumes,
+    ResRO<VxgiConfig> config,
     ResRO<VxgiVoxelization> voxelization,
     ResRO<RenderQueue> render_queue
 ) {
@@ -754,20 +764,22 @@ void prepare_vxgi_resources(
     uniform.voxel_scale = 1.0f / volume_grid_size;
     uniform.world_min_point = cube_min_point;
     uniform.world_max_point = cube_max_point;
-    uniform.volume_dimension =
-        static_cast<int>(volumes->config.voxel_resolution);
-    uniform.bounce_strength = volumes->config.bounce_strength;
-    uniform.skylight_leaking = volumes->config.skylight_leaking;
+    uniform.volume_dimension = static_cast<int>(config->voxel_resolution);
+    uniform.bounce_strength = config->bounce_strength;
+    uniform.skylight_leaking = config->skylight_leaking;
 
     render_queue
         ->write_buffer(vxgi->uniform_buffer, 0, &uniform, sizeof(VxgiUniform));
 }
 
 void VxgiPlugin::setup(App& app) {
-    app.add_event<SceneSpawnedEvent>()
+    app.add_event<SceneSpawnedEvent>().add_resource<VxgiConfig>();
+    add_extract_resource<VxgiConfig>(app);
+    app.sub_app<RenderApp>()
         .add_resource<VxgiVolumes>()
+        .add_systems(RenderExtract, mark_vxgi_voxelization_dirty)
         .add_systems(
-            StartUp,
+            RenderStartup,
             chain(
                 setup_vxgi,
                 all(setup_inject_radiance,
@@ -787,10 +799,8 @@ void VxgiPlugin::setup(App& app) {
                 prepare_vxgi_resources
             ) | in_set<RenderingSystems::PrepareResources>() |
                 in_set<PbrSystems::PrepareVxgi>(),
-            chain(
-                mark_vxgi_voxelization_dirty,
-                queue_vxgi_voxelization_pipelines
-            ) | in_set<RenderingSystems::Queue>(),
+            queue_vxgi_voxelization_pipelines |
+                in_set<RenderingSystems::Queue>(),
             chain(
                 FEI_NAMED_SYSTEM(render_vxgi_voxelization_pass),
                 FEI_NAMED_SYSTEM(render_vxgi_inject_radiance_pass),

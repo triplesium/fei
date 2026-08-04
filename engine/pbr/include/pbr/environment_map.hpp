@@ -59,19 +59,18 @@ struct EnvironmentMapGenerationResources {
 };
 
 struct EnvironmentMapCache {
-    struct Entry {
-        EnvironmentMap environment_map;
-        const Texture* generated_from_texture {};
-    };
+    std::unordered_map<AssetId, EnvironmentMap> entries;
+};
 
-    std::unordered_map<AssetId, Entry> entries;
+struct RenderEnvironmentMapCache {
+    std::unordered_map<AssetId, const Texture*> generated_from_textures;
 };
 
 void generate_env_maps(
     Query<const GeneratedEquirectEnvironmentMap, const GpuEnvironmentMap> query,
     ResRO<GraphicsDevice> device,
     ResRO<EnvironmentMapGenerationResources> resources,
-    ResRW<EnvironmentMapCache> cache
+    ResRW<RenderEnvironmentMapCache> cache
 );
 
 class EnvironmentMapPlugin : public Plugin {

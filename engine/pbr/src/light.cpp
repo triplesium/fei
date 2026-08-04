@@ -367,7 +367,7 @@ void prepare_lighting(
 void setup_shadow_mapping(
     ResRO<GraphicsDevice> device,
     ResRW<ShaderCache> shader_cache,
-    ResRO<Assets<Mesh>> mesh_assets,
+    ResRO<ExtractedAssets<Mesh>> mesh_assets,
     ResRO<FullscreenQuad> fs_quad,
     Commands commands
 ) {
@@ -423,9 +423,15 @@ void setup_shadow_mapping(
         }
     );
 
-    auto& quad_mesh = mesh_assets->get(fs_quad->fullscreen_quad_mesh).value();
+    auto quad_mesh = mesh_assets->get(fs_quad->fullscreen_quad_mesh);
+    if (!quad_mesh) {
+        fatal(
+            "Fullscreen quad mesh is not available while setting up shadow "
+            "mapping"
+        );
+    }
     auto blur_vertex_layout =
-        quad_mesh.vertex_buffer_layout().to_vertex_layout_description();
+        quad_mesh->vertex_buffer_layout().to_vertex_layout_description();
     remove_vertex_input_attribute(
         blur_vertex_layout,
         Mesh::ATTRIBUTE_NORMAL.id

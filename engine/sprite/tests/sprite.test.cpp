@@ -1,10 +1,17 @@
+#include "app/app.hpp"
+#include "asset/plugin.hpp"
 #include "ecs/type_tags.hpp"
+#include "graphics/backend.hpp"
 #include "graphics/resource.hpp"
+#include "graphics/swapchain.hpp"
 #include "math/common.hpp"
 #include "refl/generated.hpp"
 #include "refl/registry.hpp"
+#include "rendering/plugin.hpp"
+#include "rendering/render_app.hpp"
 #include "sprite/components.hpp"
 #include "sprite/output.hpp"
+#include "sprite/plugin.hpp"
 #include "sprite/renderer.hpp"
 #include "test_graphics_device.hpp"
 
@@ -26,7 +33,85 @@ void check_position(const Vector2& actual, float x, float y) {
     check_near(actual.y, y);
 }
 
+class RenderOwnedTestRuntime final : public GraphicsRuntime {
+  public:
+    const GraphicsBackendCapabilities& capabilities() const noexcept override {
+        return m_capabilities;
+    }
+    GraphicsDevice& device() noexcept override { return m_device; }
+    const GraphicsDevice& device() const noexcept override { return m_device; }
+    std::shared_ptr<Swapchain> presentation_target() noexcept override {
+        return nullptr;
+    }
+    std::shared_ptr<const Swapchain>
+    presentation_target() const noexcept override {
+        return nullptr;
+    }
+    void resize(std::uint32_t, std::uint32_t) override {}
+    void flush() const override { m_device.flush(); }
+    void present() const override {}
+
+  private:
+    GraphicsBackendCapabilities m_capabilities;
+    FakeGraphicsDevice m_device;
+};
+
+class RenderOwnedTestBootstrap final : public GraphicsBackendBootstrap {
+  public:
+    const GraphicsBackendCapabilities& capabilities() const noexcept override {
+        return m_capabilities;
+    }
+    std::unique_ptr<GraphicsRuntime> initialize() override {
+        return std::make_unique<RenderOwnedTestRuntime>();
+    }
+
+  private:
+    GraphicsBackendCapabilities m_capabilities;
+};
+
+class TransientFramebufferSwapchain final : public Swapchain {
+  public:
+    std::shared_ptr<const Framebuffer> framebuffer() const override {
+        previous_released_before_acquire = m_previous.expired();
+        auto result = std::make_shared<Framebuffer>(FramebufferDescription {});
+        m_previous = result;
+        return result;
+    }
+    uint32 width() const override { return 800; }
+    uint32 height() const override { return 450; }
+    PixelFormat color_format() const override {
+        return PixelFormat::Bgra8Unorm;
+    }
+    void resize(uint32, uint32) override {}
+    void present() const override {}
+
+    mutable bool previous_released_before_acquire {false};
+
+  private:
+    mutable std::weak_ptr<const Framebuffer> m_previous;
+};
+
 } // namespace
+
+TEST_CASE(
+    "SpritePlugin accepts a Render World-owned graphics device",
+    "[sprite][plugin][render-app][threaded]"
+) {
+    App app;
+    app.add_plugin<AssetsPlugin>().add_resource_as<GraphicsBackendBootstrap>(
+        BoxedGraphicsBackendBootstrap(
+            std::make_unique<RenderOwnedTestBootstrap>()
+        )
+    );
+    app.add_plugin<RenderingPlugin>().add_plugin(
+        SpritePlugin(SpritePluginConfig {.output = SpriteOutputMode::Texture})
+    );
+
+    REQUIRE_FALSE(app.has_resource<GraphicsDevice>());
+    REQUIRE(app.sub_app<RenderApp>().has_resource<GraphicsDevice>());
+    REQUIRE(app.sub_app<RenderApp>().has_resource<SpriteOutput>());
+    app.shutdown();
+}
 
 TEST_CASE(
     "Generated reflection tags 2D rendering components",
@@ -133,6 +218,26 @@ TEST_CASE(
     CHECK_FALSE(output.framebuffer);
     CHECK(output.width == 0);
     CHECK(output.height == 0);
+}
+
+TEST_CASE(
+    "Sprite releases a transient swapchain framebuffer before reacquiring",
+    "[sprite][output][swapchain]"
+) {
+    FakeGraphicsDevice device;
+    auto swapchain = std::make_shared<TransientFramebufferSwapchain>();
+    const MainSwapchain main_swapchain {.swapchain = swapchain};
+    SpriteOutput output {.mode = SpriteOutputMode::MainSwapchain};
+
+    update_sprite_output(device, &main_swapchain, output);
+    REQUIRE(output.framebuffer);
+    REQUIRE(swapchain->previous_released_before_acquire);
+
+    update_sprite_output(device, &main_swapchain, output);
+    REQUIRE(output.framebuffer);
+    REQUIRE(swapchain->previous_released_before_acquire);
+    CHECK(output.width == 800);
+    CHECK(output.height == 450);
 }
 
 TEST_CASE("Sprite phase appends indexed quads", "[sprite][geometry]") {

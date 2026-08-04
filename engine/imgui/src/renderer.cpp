@@ -12,14 +12,17 @@
 #include "graphics/sampler.hpp"
 #include "graphics/swapchain.hpp"
 #include "graphics/texture.hpp"
+#include "imgui/texture.hpp"
 #include "math/vector.hpp"
+#include "rendering/defaults.hpp"
+#include "rendering/gpu_image.hpp"
 #include "rendering/pipeline_cache.hpp"
+#include "rendering/render_asset.hpp"
 #include "rendering/render_frame.hpp"
 #include "rendering/shader_cache.hpp"
 
 #include <algorithm>
 #include <bit>
-#include <cstring>
 #include <limits>
 #include <optional>
 #include <unordered_map>
@@ -34,12 +37,7 @@ namespace {
 constexpr std::size_t min_imgui_buffer_capacity =
     std::size_t {64} * std::size_t {1024};
 
-static_assert(
-    sizeof(ImDrawIdx) == sizeof(uint16) || sizeof(ImDrawIdx) == sizeof(uint32)
-);
-constexpr IndexFormat imgui_index_format = sizeof(ImDrawIdx) == sizeof(uint16) ?
-                                               IndexFormat::Uint16 :
-                                               IndexFormat::Uint32;
+constexpr IndexFormat imgui_index_format = IndexFormat::Uint32;
 
 struct ImGuiFrameUniform {
     Vector2 scale;
@@ -60,42 +58,12 @@ int32 checked_i32(std::size_t value, const char* label) {
     return static_cast<int32>(value);
 }
 
-void upload_texture_region(
-    const GraphicsDevice& device,
-    const std::shared_ptr<Texture>& texture,
-    const std::byte* source,
-    std::size_t source_pitch,
-    uint32 x,
-    uint32 y,
-    uint32 width,
-    uint32 height,
-    uint32 bytes_per_pixel,
-    std::vector<std::byte>& scratch
-) {
-    const auto row_size = static_cast<std::size_t>(width) * bytes_per_pixel;
-    const void* upload_data = source;
-    if (source_pitch != row_size) {
-        scratch.resize(row_size * height);
-        for (uint32 row = 0; row < height; ++row) {
-            std::memcpy(
-                scratch.data() + row_size * row,
-                source + source_pitch * row,
-                row_size
-            );
-        }
-        upload_data = scratch.data();
-    }
-
-    device
-        .update_texture(texture, upload_data, x, y, 0, width, height, 1, 0, 0);
-}
-
 } // namespace
 
 Optional<ImGuiScissor> calculate_imgui_scissor(
-    const ImVec4& clip_rect,
-    const ImVec2& display_pos,
-    const ImVec2& framebuffer_scale,
+    const Vector4& clip_rect,
+    const Vector2& display_pos,
+    const Vector2& framebuffer_scale,
     uint32 framebuffer_width,
     uint32 framebuffer_height
 ) {
@@ -170,7 +138,8 @@ struct ImGuiTextureRegistry::Impl {
     const GraphicsDevice* device {nullptr};
     std::shared_ptr<const ResourceLayout> texture_layout;
     std::shared_ptr<const Sampler> default_sampler;
-    std::unordered_map<ImTextureID, Entry> entries;
+    std::unordered_map<uint64, Entry> entries;
+    std::unordered_set<uint64> image_ids;
     ImTextureID next_id {1};
 };
 
@@ -220,7 +189,7 @@ ImTextureID ImGuiTextureRegistry::register_texture(
         }
     );
     m_impl->entries.emplace(
-        texture_id,
+        static_cast<uint64>(texture_id),
         Impl::Entry {
             .texture = std::move(texture),
             .sampler = std::move(sampler),
@@ -231,18 +200,18 @@ ImTextureID ImGuiTextureRegistry::register_texture(
 }
 
 void ImGuiTextureRegistry::unregister_texture(ImTextureID texture_id) {
-    if (auto entry = m_impl->entries.find(texture_id);
+    if (auto entry = m_impl->entries.find(static_cast<uint64>(texture_id));
         entry != m_impl->entries.end()) {
         entry->second.pending_removal = true;
     }
 }
 
 bool ImGuiTextureRegistry::contains(ImTextureID texture_id) const {
-    return m_impl->entries.contains(texture_id);
+    return m_impl->entries.contains(static_cast<uint64>(texture_id));
 }
 
 bool ImGuiTextureRegistry::pending_removal(ImTextureID texture_id) const {
-    const auto entry = m_impl->entries.find(texture_id);
+    const auto entry = m_impl->entries.find(static_cast<uint64>(texture_id));
     return entry != m_impl->entries.end() && entry->second.pending_removal;
 }
 
@@ -250,8 +219,97 @@ std::size_t ImGuiTextureRegistry::size() const {
     return m_impl->entries.size();
 }
 
+void ImGuiTextureRegistry::register_managed_texture(
+    uint64 texture_id,
+    std::shared_ptr<const Texture> texture
+) {
+    upsert_texture(texture_id, std::move(texture));
+}
+
+void ImGuiTextureRegistry::upsert_texture(
+    uint64 texture_id,
+    std::shared_ptr<const Texture> texture,
+    std::shared_ptr<const Sampler> sampler
+) {
+    if (!m_impl->device || !m_impl->texture_layout ||
+        !m_impl->default_sampler) {
+        fatal("ImGuiTextureRegistry is not initialized");
+    }
+    if (!texture || texture_id == static_cast<uint64>(ImTextureID_Invalid)) {
+        fatal("ImGuiTextureRegistry received an invalid texture binding");
+    }
+    if (!sampler) {
+        sampler = m_impl->default_sampler;
+    }
+    if (const auto existing = m_impl->entries.find(texture_id);
+        existing != m_impl->entries.end() &&
+        !existing->second.pending_removal &&
+        existing->second.texture == texture &&
+        existing->second.sampler == sampler) {
+        return;
+    }
+    auto resource_set = m_impl->device->create_resource_set(
+        ResourceSetDescription {
+            .layout = m_impl->texture_layout,
+            .resources = {texture, sampler},
+            .name = "imgui_texture",
+        }
+    );
+    m_impl->entries.insert_or_assign(
+        texture_id,
+        Impl::Entry {
+            .texture = std::move(texture),
+            .sampler = std::move(sampler),
+            .resource_set = std::move(resource_set),
+        }
+    );
+}
+
+void ImGuiTextureRegistry::sync_images(
+    const GraphicsDevice& device,
+    const ExtractedImGuiImages& extracted_images,
+    const RenderAssets<GpuImage>& gpu_images,
+    const RenderingDefaults& defaults
+) {
+    if (m_impl->device != &device) {
+        fatal("ImGuiTextureRegistry cannot sync images from another device");
+    }
+
+    std::unordered_set<uint64> desired_ids;
+    desired_ids.reserve(extracted_images.bindings.size());
+    for (const auto& binding : extracted_images.bindings) {
+        desired_ids.insert(binding.texture_id);
+
+        std::shared_ptr<const Texture> texture = defaults.default_texture;
+        std::shared_ptr<const Sampler> sampler;
+        if (const auto gpu_image = gpu_images.get(binding.image_id)) {
+            texture = gpu_image->texture();
+            sampler = gpu_image->sampler();
+        }
+        if (!texture) {
+            error(
+                "fei-imgui has no fallback texture for image binding {}",
+                binding.texture_id
+            );
+            continue;
+        }
+        upsert_texture(
+            binding.texture_id,
+            std::move(texture),
+            std::move(sampler)
+        );
+    }
+
+    for (const auto texture_id : m_impl->image_ids) {
+        if (!desired_ids.contains(texture_id)) {
+            unregister_texture(static_cast<ImTextureID>(texture_id));
+        }
+    }
+    m_impl->image_ids = std::move(desired_ids);
+}
+
 std::shared_ptr<const ResourceSet>
-ImGuiTextureRegistry::resource_set(ImTextureID texture_id) const {
+ImGuiTextureRegistry::resource_set(uint64 texture_id) const {
     const auto entry = m_impl->entries.find(texture_id);
     return entry == m_impl->entries.end() ? nullptr :
                                             entry->second.resource_set;
@@ -265,6 +323,7 @@ void ImGuiTextureRegistry::end_frame() {
 
 void ImGuiTextureRegistry::clear() noexcept {
     m_impl->entries.clear();
+    m_impl->image_ids.clear();
     m_impl->device = nullptr;
     m_impl->texture_layout.reset();
     m_impl->default_sampler.reset();
@@ -285,11 +344,8 @@ struct ImGuiRenderer::Impl {
     std::shared_ptr<Sampler> default_sampler;
     std::vector<FrameSlot> slots;
     std::size_t next_slot {0};
-    std::vector<ImDrawVert> vertices;
-    std::vector<ImDrawIdx> indices;
-    std::vector<std::byte> texture_scratch;
-    std::unordered_map<ImTextureID, std::shared_ptr<Texture>> managed_textures;
-    std::unordered_set<ImTextureID> missing_texture_errors;
+    std::unordered_map<uint64, std::shared_ptr<Texture>> managed_textures;
+    std::unordered_set<uint64> missing_texture_errors;
     std::optional<PixelFormat> pipeline_format;
     std::optional<CachedRenderPipelineId> pipeline_id;
     bool initialized {false};
@@ -418,22 +474,29 @@ void ImGuiRenderer::prepare_pipeline(
                                     {
                                         VertexAttributeDescription {
                                             .location = 0,
-                                            .offset = offsetof(ImDrawVert, pos),
+                                            .offset = offsetof(
+                                                ImGuiFrameVertex,
+                                                position
+                                            ),
                                             .format = VertexFormat::Float2,
                                         },
                                         VertexAttributeDescription {
                                             .location = 1,
-                                            .offset = offsetof(ImDrawVert, uv),
+                                            .offset =
+                                                offsetof(ImGuiFrameVertex, uv),
                                             .format = VertexFormat::Float2,
                                         },
                                         VertexAttributeDescription {
                                             .location = 2,
-                                            .offset = offsetof(ImDrawVert, col),
+                                            .offset = offsetof(
+                                                ImGuiFrameVertex,
+                                                color
+                                            ),
                                             .format = VertexFormat::UByte4,
                                             .normalized = true,
                                         },
                                     },
-                                .stride = sizeof(ImDrawVert),
+                                .stride = sizeof(ImGuiFrameVertex),
                             },
                         },
                     .shaders = {vertex_shader, fragment_shader},
@@ -445,53 +508,25 @@ void ImGuiRenderer::prepare_pipeline(
     m_impl->pipeline_format = format;
 }
 
-namespace {
-
-void process_managed_textures(
-    ImGuiRenderer::Impl& renderer,
+void ImGuiRenderer::process_managed_textures(
     const GraphicsDevice& device,
     ImGuiTextureRegistry& registry,
-    ImVector<ImTextureData*>* textures
+    const std::vector<ImGuiTextureOperation>& operations
 ) {
-    if (!textures) {
-        return;
-    }
-    for (ImTextureData* texture_data : *textures) {
-        if (!texture_data || texture_data->Status == ImTextureStatus_OK ||
-            texture_data->Status == ImTextureStatus_Destroyed) {
-            continue;
-        }
-        if (texture_data->Status == ImTextureStatus_WantDestroy) {
-            const auto texture_id = texture_data->GetTexID();
-            registry.unregister_texture(texture_id);
-            renderer.managed_textures.erase(texture_id);
-            texture_data->SetTexID(ImTextureID_Invalid);
-            texture_data->SetStatus(ImTextureStatus_Destroyed);
-            continue;
-        }
-        if (texture_data->Format != ImTextureFormat_RGBA32) {
-            error(
-                "fei-imgui only supports RGBA32 managed textures (texture {})",
-                texture_data->UniqueID
+    for (const auto& operation : operations) {
+        if (operation.kind == ImGuiTextureOperationKind::Destroy) {
+            registry.unregister_texture(
+                static_cast<ImTextureID>(operation.texture_id)
             );
+            m_impl->managed_textures.erase(operation.texture_id);
             continue;
         }
 
-        if (texture_data->Status == ImTextureStatus_WantCreate) {
-            if (texture_data->Width <= 0 || texture_data->Height <= 0) {
-                error(
-                    "fei-imgui cannot create managed texture {} with size "
-                    "{}x{}",
-                    texture_data->UniqueID,
-                    texture_data->Width,
-                    texture_data->Height
-                );
-                continue;
-            }
+        if (operation.kind == ImGuiTextureOperationKind::Create) {
             auto texture = device.create_texture(
                 TextureDescription {
-                    .width = static_cast<uint32>(texture_data->Width),
-                    .height = static_cast<uint32>(texture_data->Height),
+                    .width = operation.width,
+                    .height = operation.height,
                     .depth = 1,
                     .mip_level = 1,
                     .layer = 1,
@@ -500,78 +535,64 @@ void process_managed_textures(
                     .texture_type = TextureType::Texture2D,
                 }
             );
-            upload_texture_region(
-                device,
+            device.update_texture(
                 texture,
-                static_cast<const std::byte*>(texture_data->GetPixels()),
-                static_cast<std::size_t>(texture_data->GetPitch()),
+                operation.pixels.data(),
                 0,
                 0,
-                static_cast<uint32>(texture_data->Width),
-                static_cast<uint32>(texture_data->Height),
-                4,
-                renderer.texture_scratch
+                0,
+                operation.width,
+                operation.height,
+                1,
+                0,
+                0
             );
-            const auto texture_id = registry.register_texture(texture);
-            renderer.managed_textures.emplace(texture_id, std::move(texture));
-            texture_data->SetTexID(texture_id);
-            texture_data->SetStatus(ImTextureStatus_OK);
+            registry.register_managed_texture(operation.texture_id, texture);
+            m_impl->managed_textures.emplace(
+                operation.texture_id,
+                std::move(texture)
+            );
             continue;
         }
 
-        if (texture_data->Status == ImTextureStatus_WantUpdates) {
+        if (operation.kind == ImGuiTextureOperationKind::Update) {
             const auto texture =
-                renderer.managed_textures.find(texture_data->GetTexID());
-            if (texture == renderer.managed_textures.end()) {
+                m_impl->managed_textures.find(operation.texture_id);
+            if (texture == m_impl->managed_textures.end()) {
                 error(
-                    "fei-imgui cannot update unknown managed texture {}",
-                    texture_data->UniqueID
+                    "fei-imgui cannot update unknown managed texture ID {}",
+                    operation.texture_id
                 );
                 continue;
             }
-            const auto& rect = texture_data->UpdateRect;
-            if (rect.w != 0 && rect.h != 0) {
-                upload_texture_region(
-                    device,
-                    texture->second,
-                    static_cast<const std::byte*>(
-                        texture_data->GetPixelsAt(rect.x, rect.y)
-                    ),
-                    static_cast<std::size_t>(texture_data->GetPitch()),
-                    rect.x,
-                    rect.y,
-                    rect.w,
-                    rect.h,
-                    4,
-                    renderer.texture_scratch
-                );
-            }
-            texture_data->SetStatus(ImTextureStatus_OK);
-            continue;
+            device.update_texture(
+                texture->second,
+                operation.pixels.data(),
+                operation.x,
+                operation.y,
+                0,
+                operation.width,
+                operation.height,
+                1,
+                0,
+                0
+            );
         }
     }
 }
-
-} // namespace
 
 void ImGuiRenderer::render(
     const GraphicsDevice& device,
     PipelineCache& pipeline_cache,
     RenderFrameContext& frame_context,
     const MainSwapchain& main_swapchain,
-    ImGuiTextureRegistry& texture_registry
+    ImGuiTextureRegistry& texture_registry,
+    const ImGuiFrameSnapshot& frame
 ) {
-    ImGui::Render();
-    ImDrawData* draw_data = ImGui::GetDrawData();
-    if (!draw_data) {
-        texture_registry.end_frame();
-        return;
-    }
     process_managed_textures(
-        *m_impl,
         device,
         texture_registry,
-        draw_data->Textures
+        frame.texture_operations
     );
 
     const auto finish_overlay = [&texture_registry]() {
@@ -588,40 +609,19 @@ void ImGuiRenderer::render(
         return;
     }
     auto pipeline = pipeline_cache.get_render_pipeline(*m_impl->pipeline_id);
-    const auto framebuffer_width = static_cast<int>(
-        draw_data->DisplaySize.x * draw_data->FramebufferScale.x
-    );
-    const auto framebuffer_height = static_cast<int>(
-        draw_data->DisplaySize.y * draw_data->FramebufferScale.y
-    );
+    const auto framebuffer_width =
+        static_cast<int>(frame.display_size.x * frame.framebuffer_scale.x);
+    const auto framebuffer_height =
+        static_cast<int>(frame.display_size.y * frame.framebuffer_scale.y);
     if (!pipeline || framebuffer_width <= 0 || framebuffer_height <= 0 ||
-        draw_data->TotalVtxCount <= 0 || draw_data->TotalIdxCount <= 0) {
+        frame.vertices.empty() || frame.indices.empty()) {
         finish_overlay();
         return;
     }
 
-    m_impl->vertices.clear();
-    m_impl->indices.clear();
-    m_impl->vertices.reserve(
-        static_cast<std::size_t>(draw_data->TotalVtxCount)
-    );
-    m_impl->indices.reserve(static_cast<std::size_t>(draw_data->TotalIdxCount));
-    for (const ImDrawList* command_list : draw_data->CmdLists) {
-        m_impl->vertices.insert(
-            m_impl->vertices.end(),
-            command_list->VtxBuffer.begin(),
-            command_list->VtxBuffer.end()
-        );
-        m_impl->indices.insert(
-            m_impl->indices.end(),
-            command_list->IdxBuffer.begin(),
-            command_list->IdxBuffer.end()
-        );
-    }
-
     auto& slot = m_impl->slots[m_impl->next_slot];
-    const auto vertex_size = m_impl->vertices.size() * sizeof(ImDrawVert);
-    const auto index_size = m_impl->indices.size() * sizeof(ImDrawIdx);
+    const auto vertex_size = frame.vertices.size() * sizeof(ImGuiFrameVertex);
+    const auto index_size = frame.indices.size() * sizeof(uint32);
     if (vertex_size > slot.vertex_capacity) {
         slot.vertex_capacity = imgui_buffer_capacity(vertex_size);
         slot.vertex_buffer = device.create_buffer(
@@ -643,23 +643,20 @@ void ImGuiRenderer::render(
 
     ImGuiFrameUniform uniform {
         .scale = Vector2 {
-            2.0f / draw_data->DisplaySize.x,
-            -2.0f / draw_data->DisplaySize.y,
+            2.0f / frame.display_size.x,
+            -2.0f / frame.display_size.y,
         },
     };
     uniform.translate = Vector2 {
-        -1.0f - draw_data->DisplayPos.x * uniform.scale.x,
-        1.0f - draw_data->DisplayPos.y * uniform.scale.y,
+        -1.0f - frame.display_position.x * uniform.scale.x,
+        1.0f - frame.display_position.y * uniform.scale.y,
     };
 
     auto* commands = frame_context.command_buffer();
-    commands->update_buffer(
-        slot.vertex_buffer,
-        m_impl->vertices.data(),
-        vertex_size
-    );
     commands
-        ->update_buffer(slot.index_buffer, m_impl->indices.data(), index_size);
+        ->update_buffer(slot.vertex_buffer, frame.vertices.data(), vertex_size);
+    commands
+        ->update_buffer(slot.index_buffer, frame.indices.data(), index_size);
     commands->update_buffer(slot.uniform_buffer, &uniform, sizeof(uniform));
 
     commands->begin_render_pass(
@@ -689,63 +686,46 @@ void ImGuiRenderer::render(
     };
     bind_render_state();
 
-    std::size_t global_index_offset = 0;
-    std::size_t global_vertex_offset = 0;
-    for (const ImDrawList* command_list : draw_data->CmdLists) {
-        for (const ImDrawCmd& draw_command : command_list->CmdBuffer) {
-            if (draw_command.UserCallback) {
-                if (draw_command.UserCallback ==
-                    ImDrawCallback_ResetRenderState) {
-                    bind_render_state();
-                } else {
-                    draw_command.UserCallback(command_list, &draw_command);
-                }
-                continue;
-            }
-            const auto scissor = calculate_imgui_scissor(
-                draw_command.ClipRect,
-                draw_data->DisplayPos,
-                draw_data->FramebufferScale,
-                static_cast<uint32>(framebuffer_width),
-                static_cast<uint32>(framebuffer_height)
-            );
-            if (!scissor) {
-                continue;
-            }
-
-            const auto texture_id = draw_command.GetTexID();
-            auto texture_set = texture_registry.resource_set(texture_id);
-            if (!texture_set) {
-                if (m_impl->missing_texture_errors.insert(texture_id).second) {
-                    error(
-                        "fei-imgui draw references unregistered texture ID {}",
-                        static_cast<unsigned long long>(texture_id)
-                    );
-                }
-                continue;
-            }
-            commands->set_scissor(
-                scissor->x,
-                scissor->y,
-                scissor->width,
-                scissor->height
-            );
-            commands->set_resource_set(1, std::move(texture_set));
-            const auto offsets = calculate_imgui_draw_offsets(
-                global_index_offset,
-                global_vertex_offset,
-                draw_command
-            );
-            commands->draw_indexed(
-                draw_command.ElemCount,
-                offsets.first_index,
-                offsets.vertex_offset
-            );
+    for (const auto& draw_command : frame.commands) {
+        if (draw_command.kind == ImGuiFrameCommandKind::ResetRenderState) {
+            bind_render_state();
+            continue;
         }
-        global_index_offset +=
-            static_cast<std::size_t>(command_list->IdxBuffer.Size);
-        global_vertex_offset +=
-            static_cast<std::size_t>(command_list->VtxBuffer.Size);
+        const auto scissor = calculate_imgui_scissor(
+            draw_command.clip_rect,
+            frame.display_position,
+            frame.framebuffer_scale,
+            static_cast<uint32>(framebuffer_width),
+            static_cast<uint32>(framebuffer_height)
+        );
+        if (!scissor) {
+            continue;
+        }
+
+        auto texture_set =
+            texture_registry.resource_set(draw_command.texture_id);
+        if (!texture_set) {
+            if (m_impl->missing_texture_errors.insert(draw_command.texture_id)
+                    .second) {
+                error(
+                    "fei-imgui draw references unregistered texture ID {}",
+                    draw_command.texture_id
+                );
+            }
+            continue;
+        }
+        commands->set_scissor(
+            scissor->x,
+            scissor->y,
+            scissor->width,
+            scissor->height
+        );
+        commands->set_resource_set(1, std::move(texture_set));
+        commands->draw_indexed(
+            draw_command.element_count,
+            draw_command.first_index,
+            draw_command.vertex_offset
+        );
     }
     commands->end_render_pass();
     m_impl->next_slot = (m_impl->next_slot + 1) % m_impl->slots.size();
@@ -753,21 +733,8 @@ void ImGuiRenderer::render(
 }
 
 void ImGuiRenderer::shutdown(ImGuiTextureRegistry& texture_registry) noexcept {
-    if (ImGui::GetCurrentContext()) {
-        auto& textures = ImGui::GetPlatformIO().Textures;
-        for (ImTextureData* texture_data : textures) {
-            if (!texture_data) {
-                continue;
-            }
-            texture_data->SetTexID(ImTextureID_Invalid);
-            texture_data->SetStatus(ImTextureStatus_Destroyed);
-        }
-    }
     m_impl->managed_textures.clear();
     m_impl->missing_texture_errors.clear();
-    m_impl->vertices.clear();
-    m_impl->indices.clear();
-    m_impl->texture_scratch.clear();
     m_impl->slots.clear();
     m_impl->frame_layout.reset();
     m_impl->texture_layout.reset();

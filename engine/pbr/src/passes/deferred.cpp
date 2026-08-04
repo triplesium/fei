@@ -7,22 +7,28 @@
 #include "pbr/passes/target.hpp"
 #include "pbr/plugin.hpp"
 #include "pbr/skybox.hpp"
+#include "rendering/extract_resource.hpp"
 #include "rendering/plugin.hpp"
+#include "rendering/render_app.hpp"
 
 namespace fei {
 
 void DeferredRenderPlugin::setup(App& app) {
-    app.add_plugins(CubemapPlugin {}, SkyboxPlugin {}, LUTPlugin {})
-        .add_resource(DeferredRenderPipelines {})
+    auto& render_app = app.sub_app<RenderApp>();
+    app.add_plugins(CubemapPlugin {}, SkyboxPlugin {}, LUTPlugin {});
+    app.add_resource(DeferredPresentSettings {});
+    add_extract_resource<DeferredPresentSettings>(app);
+    add_extract_resource<Window>(app);
+    render_app.add_resource(DeferredRenderPipelines {})
         .add_resource(RenderTarget {})
         .add_resource(DeferredViewTargets {})
-        .add_resource(DeferredPresentSettings {})
         .add_resource<DeferredPrepassPhase>()
         .add_resource<TransparentPhase>()
         .add_systems(
-            StartUp,
+            RenderStartup,
             setup_deferred_pipelines | in_set<PbrSystems::StartupDeferred>()
-        )
+        );
+    render_app
         .add_systems(
             RenderUpdate,
             chain(setup_render_target, prepare_deferred_view_targets) |
@@ -40,7 +46,7 @@ void DeferredRenderPlugin::setup(App& app) {
         );
 
     if (m_enable_vxgi) {
-        app.add_systems(
+        render_app.add_systems(
             RenderUpdate,
             chain(
                 FEI_NAMED_SYSTEM(direct_lighting_pass),
@@ -51,7 +57,7 @@ void DeferredRenderPlugin::setup(App& app) {
             ) | in_set<RenderingSystems::MainPass>()
         );
     } else {
-        app.add_systems(
+        render_app.add_systems(
             RenderUpdate,
             chain(
                 FEI_NAMED_SYSTEM(direct_lighting_pass),

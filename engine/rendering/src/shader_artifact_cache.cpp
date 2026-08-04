@@ -166,6 +166,20 @@ std::uint64_t shader_source_hash(std::string_view source) {
     return hasher.value();
 }
 
+std::optional<std::uint64_t> shader_source_hash(
+    const ShaderCompileRequest& request,
+    const std::filesystem::path& path
+) {
+    if (request.source_snapshot) {
+        auto source = request.source_snapshot->source(path);
+        if (!source) {
+            return std::nullopt;
+        }
+        return shader_source_hash(*source);
+    }
+    return shader_file_hash(path);
+}
+
 std::filesystem::path normalized_absolute_path(std::filesystem::path path) {
     std::error_code error;
     auto absolute = std::filesystem::absolute(path, error);
@@ -392,7 +406,7 @@ std::optional<std::vector<CachedDependency>> cache_dependencies(
         }
 
         auto content_hash = shader_source_hash(*consumed_source);
-        auto current_hash = shader_file_hash(dependency);
+        auto current_hash = shader_source_hash(request, dependency);
         if (!current_hash || *current_hash != content_hash) {
             return std::nullopt;
         }
@@ -408,7 +422,8 @@ std::optional<std::vector<CachedDependency>> cache_dependencies(
 
 std::optional<ShaderVariantCompileOutput> load_shader_cache(
     const std::filesystem::path& path,
-    std::uint64_t expected_key
+    std::uint64_t expected_key,
+    const ShaderCompileRequest& request
 ) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
@@ -442,7 +457,7 @@ std::optional<ShaderVariantCompileOutput> load_shader_cache(
             return std::nullopt;
         }
         auto path = std::filesystem::path(dependency);
-        auto current_hash = shader_file_hash(path);
+        auto current_hash = shader_source_hash(request, path);
         if (!current_hash || *current_hash != expected_hash) {
             return std::nullopt;
         }
@@ -532,9 +547,11 @@ ShaderArtifactCache::key(const ShaderCompileRequest& request) const {
     };
 }
 
-std::optional<ShaderVariantCompileOutput>
-ShaderArtifactCache::load(const Key& key) const {
-    return load_shader_cache(key.path, key.value);
+std::optional<ShaderVariantCompileOutput> ShaderArtifactCache::load(
+    const Key& key,
+    const ShaderCompileRequest& request
+) const {
+    return load_shader_cache(key.path, key.value, request);
 }
 
 void ShaderArtifactCache::store(

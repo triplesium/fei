@@ -23,6 +23,7 @@ struct ShaderCompileRequest {
     ShaderStages stage {ShaderStages::None};
     std::string entry {"main"};
     ShaderDefs defs;
+    std::shared_ptr<const ShaderSourceSnapshot> source_snapshot;
 };
 
 struct ShaderDependencySnapshot {
@@ -65,6 +66,7 @@ class ShaderVariantCompiler {
     ShaderCompiler* m_compiler;
     RuntimeShaderCompilerConfig m_config;
     std::shared_ptr<ShaderArtifactCache> m_artifact_cache;
+    std::shared_ptr<const ShaderSourceSnapshot> m_source_snapshot;
 
   public:
     ShaderVariantCompiler(
@@ -74,6 +76,11 @@ class ShaderVariantCompiler {
 
     [[nodiscard]] const RuntimeShaderCompilerConfig& config() const {
         return m_config;
+    }
+
+    void
+    set_source_snapshot(std::shared_ptr<const ShaderSourceSnapshot> snapshot) {
+        m_source_snapshot = std::move(snapshot);
     }
 
     Result<ShaderVariantCompileOutput, ShaderCompileError>

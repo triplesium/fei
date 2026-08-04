@@ -13,6 +13,7 @@
 
 #include <filesystem>
 #include <string>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -26,6 +27,8 @@ struct Shader {
 struct ShaderSourceRoot {
     std::string prefix;
     std::filesystem::path root;
+
+    bool operator==(const ShaderSourceRoot&) const = default;
 };
 
 struct ResolvedShaderSource {
@@ -47,7 +50,35 @@ class ShaderSourceRegistry {
     [[nodiscard]] Optional<ResolvedShaderSource>
     resolve(const std::filesystem::path& path) const;
 
+    [[nodiscard]] const std::vector<ShaderSourceRoot>& sources() const {
+        return m_roots;
+    }
+
     [[nodiscard]] std::vector<std::filesystem::path> roots() const;
+
+    bool operator==(const ShaderSourceRegistry&) const = default;
+};
+
+class ShaderSourceSnapshot {
+  private:
+    ShaderSourceRegistry m_registry;
+    std::unordered_map<std::filesystem::path, std::string> m_files;
+
+  public:
+    ShaderSourceSnapshot() = default;
+
+    static ShaderSourceSnapshot capture(const ShaderSourceRegistry& registry);
+
+    [[nodiscard]] Optional<ResolvedShaderSource>
+    resolve(const std::filesystem::path& path) const;
+
+    [[nodiscard]] Optional<const std::string&>
+    source(const std::filesystem::path& path) const;
+
+    [[nodiscard]] bool is_file(const std::filesystem::path& path) const;
+    [[nodiscard]] bool is_directory(const std::filesystem::path& path) const;
+
+    bool operator==(const ShaderSourceSnapshot&) const = default;
 };
 
 ShaderSourceRegistry generated_shader_source_registry();
@@ -97,6 +128,13 @@ class ShaderRef {
             return nullopt;
         }
         return std::get<AssetPath>(m_source);
+    }
+
+    Optional<const Handle<Shader>&> handle() const {
+        if (!std::holds_alternative<Handle<Shader>>(m_source)) {
+            return nullopt;
+        }
+        return std::get<Handle<Shader>>(m_source);
     }
 
     std::size_t hash() const {

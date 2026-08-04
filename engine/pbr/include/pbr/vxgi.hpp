@@ -42,7 +42,6 @@ struct VxgiConfig {
 };
 
 struct VxgiVolumes {
-    VxgiConfig config;
     std::shared_ptr<Texture> albedo;
     std::shared_ptr<Texture> normal;
     std::shared_ptr<Texture> emissive;
@@ -111,6 +110,7 @@ struct VxgiVoxelization {
 };
 
 void setup_vxgi(
+    ResRO<VxgiConfig> config,
     ResRW<VxgiVolumes> volumes,
     ResRO<GraphicsDevice> device,
     ResRW<ShaderCache> shader_cache,
@@ -124,13 +124,13 @@ void compute_scene_aabb(
 
 void prepare_vxgi_voxelization(
     ResRW<VxgiVoxelization> voxelization,
-    ResRO<VxgiVolumes> volumes,
+    ResRO<VxgiConfig> config,
     ResRO<RenderQueue> render_queue
 );
 
 void mark_vxgi_voxelization_dirty(
-    ResRW<VxgiVoxelization> voxelization,
-    EventReader<SceneSpawnedEvent> spawn_events
+    Optional<ResRW<VxgiVoxelization>> voxelization,
+    Extract<Optional<EventReaderRO<SceneSpawnedEvent>>> spawn_events
 );
 
 void queue_vxgi_voxelization_pipelines(
@@ -153,6 +153,7 @@ void render_vxgi_voxelization_pass(
         const GlobalTransform3d> query_meshes,
     ResRW<VxgiVoxelization> voxelization,
     ResRW<VxgiVolumes> volumes,
+    ResRO<VxgiConfig> config,
     ResRW<MeshMaterialPipelines> pipelines,
     ResRO<PipelineCache> pipeline_cache,
     ResRO<RenderAssets<GpuMesh>> gpu_meshes,
@@ -174,6 +175,7 @@ struct VxgiGenerateMipmapBase {
 };
 
 void setup_vxgi_generate_mipmap_base(
+    ResRO<VxgiConfig> config,
     ResRO<VxgiVolumes> volumes,
     ResRO<GraphicsDevice> device,
     ResRW<ShaderCache> shader_cache,
@@ -181,6 +183,7 @@ void setup_vxgi_generate_mipmap_base(
 );
 
 void render_vxgi_mipmap_base_pass(
+    ResRO<VxgiConfig> config,
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiGenerateMipmapBase> generate_mipmap_base,
     ResRW<RenderFrameContext> frame,
@@ -189,6 +192,7 @@ void render_vxgi_mipmap_base_pass(
 );
 
 void render_vxgi_mipmap_base_after_propagation_pass(
+    ResRO<VxgiConfig> config,
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiGenerateMipmapBase> generate_mipmap_base,
     ResRW<RenderFrameContext> frame,
@@ -221,6 +225,7 @@ void setup_vxgi_generate_mipmap_volume(
 );
 
 void prepare_vxgi_generate_mipmap_volume(
+    ResRO<VxgiConfig> config,
     ResRO<VxgiVolumes> volumes,
     ResRW<VxgiGenerateMipmapVolume> generate_mipmap_volume,
     ResRO<GraphicsDevice> device
@@ -269,6 +274,7 @@ void prepare_inject_radiance(
 
 void render_vxgi_inject_radiance_pass(
     Query<const ShadowMap> query_shadow_maps,
+    ResRO<VxgiConfig> config,
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiVoxelization> voxelization,
     ResRO<VxgiInjectRadiance> inject_radiance,
@@ -293,13 +299,14 @@ struct VxgiInjectPropagation {
 };
 
 void setup_inject_propagation(
-    ResRO<VxgiVolumes> volumes,
+    ResRO<VxgiConfig> config,
     ResRO<GraphicsDevice> device,
     ResRW<ShaderCache> shader_cache,
     Commands commands
 );
 
 void render_vxgi_inject_propagation_pass(
+    ResRO<VxgiConfig> config,
     ResRO<VxgiVolumes> volumes,
     ResRO<VxgiInjectPropagation> inject_propagation,
     ResRW<RenderFrameContext> frame,
@@ -331,7 +338,7 @@ void setup_vxgi_resources(ResRO<GraphicsDevice> device, Commands commands);
 
 void prepare_vxgi_resources(
     ResRW<VxgiResources> vxgi,
-    ResRO<VxgiVolumes> volumes,
+    ResRO<VxgiConfig> config,
     ResRO<VxgiVoxelization> voxelization,
     ResRO<RenderQueue> render_queue
 );

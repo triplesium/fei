@@ -1,5 +1,4 @@
 #include "app/app.hpp"
-#include "asset/assets.hpp"
 #include "asset/plugin.hpp"
 #include "asset/server.hpp"
 #include "core/image.hpp"
@@ -9,12 +8,18 @@
 #include "graphics_opengl_glfw/plugin.hpp"
 #include "pbr/cubemap.hpp"
 #include "pbr/plugin.hpp"
+#include "rendering/extract_resource.hpp"
+#include "rendering/gpu_image.hpp"
 #include "rendering/plugin.hpp"
+#include "rendering/render_app.hpp"
+#include "rendering/render_asset.hpp"
 #include "rendering/shader_cache.hpp"
 
 #include <cstddef>
+#include <filesystem>
 #include <format>
 #include <print>
+#include <utility>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image_write.h>
@@ -23,6 +28,11 @@ using namespace fei;
 
 struct Global {
     std::shared_ptr<Texture> cubemap;
+    bool irradiance_complete {false};
+};
+
+struct ComputeShaderInput {
+    Handle<Image> equirect_image;
 };
 
 std::shared_ptr<Texture> copy_to_staging_texture(
@@ -59,28 +69,19 @@ std::shared_ptr<Texture> copy_to_staging_texture(
 
 void equirect_to_cubemap(
     ResRO<GraphicsDevice> device,
-    ResRW<AssetServer> asset_server,
     ResRW<ShaderCache> shader_cache,
-    ResRW<Assets<Image>> images,
+    ResRO<ComputeShaderInput> input,
+    ResRW<RenderAssets<GpuImage>> images,
     ResRW<Global> global
 ) {
-    auto equirect_image_handle =
-        asset_server->load<Image>("the_sky_is_on_fire_4k.hdr");
-    auto& equirect_image = images->get(equirect_image_handle).value();
-    auto equirect_texture =
-        device->create_texture(equirect_image.texture_description());
-    device->update_texture(
-        equirect_texture,
-        equirect_image.data(),
-        0,
-        0,
-        0,
-        equirect_image.width(),
-        equirect_image.height(),
-        equirect_image.depth(),
-        0,
-        0
-    );
+    if (global->cubemap) {
+        return;
+    }
+    auto equirect_image = images->get(input->equirect_image);
+    if (!equirect_image) {
+        return;
+    }
+    auto equirect_texture = equirect_image->texture();
     std::println(
         "Equirectangular texture: {}x{}",
         equirect_texture->width(),
@@ -195,8 +196,11 @@ void equirect_to_cubemap(
 void cubemap_to_irradiance_map(
     ResRO<GraphicsDevice> device,
     ResRW<ShaderCache> shader_cache,
-    ResRO<Global> global
+    ResRW<Global> global
 ) {
+    if (!global->cubemap || global->irradiance_complete) {
+        return;
+    }
     auto irradiance_texture = device->create_texture(
         TextureDescription {
             .width = 32,
@@ -285,29 +289,40 @@ void cubemap_to_irradiance_map(
         }
     }
     device->unmap(staging_texture);
+    global->irradiance_complete = true;
 }
 
 int main() {
-    App()
-        .add_plugins(
-            AssetsPlugin {},
-            ImagePlugin {},
-            OpenGLGlfwPlugin {},
-            RenderingPlugin {},
-            PbrPlugin {}
-        )
-        .add_resource(Global {})
-        .add_systems(
-            StartUp,
-            chain(equirect_to_cubemap, cubemap_to_irradiance_map)
-        )
-        .add_systems(
-            Update,
-            [](ResRW<AppStates> states) {
-                states->should_stop = true;
-            }
-        )
-        .run();
+    std::filesystem::create_directories(FEI_ASSETS_PATH "/../temp");
+
+    App app;
+    app.add_plugins(
+        AssetsPlugin {},
+        ImagePlugin {},
+        OpenGLGlfwPlugin {},
+        RenderingPlugin {},
+        PbrPlugin {}
+    );
+
+    auto equirect_image =
+        app.resource<AssetServer>().load<Image>("the_sky_is_on_fire_4k.hdr");
+    app.add_resource(
+        ComputeShaderInput {
+            .equirect_image = std::move(equirect_image),
+        }
+    );
+    add_extract_resource<ComputeShaderInput>(app);
+    app.sub_app<RenderApp>().add_resource(Global {}).add_systems(
+        RenderUpdate,
+        chain(equirect_to_cubemap, cubemap_to_irradiance_map) |
+            in_set<RenderingSystems::PrepareResources>() | main_thread()
+    );
+    app.add_systems(
+           Update,
+           [](ResRW<AppStates> states) {
+               states->should_stop = true;
+           }
+    ).run();
 
     return 0;
 }

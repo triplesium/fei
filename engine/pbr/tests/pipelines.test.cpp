@@ -2,7 +2,6 @@
 
 #include "../../rendering/tests/test_graphics_device.hpp"
 #include "asset/assets.hpp"
-#include "asset/server.hpp"
 #include "base/optional.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/pipeline.hpp"
@@ -304,9 +303,8 @@ TEST_CASE(
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     PipelineCache pipeline_cache(device);
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
-    ShaderCache shader_cache(asset_server, shaders, device);
+    ShaderCache shader_cache(shaders, device);
     auto shader_defaults = create_shader_defaults(device);
     auto pipelines = create_mesh_material_pipelines(
         mesh_view_layout,
@@ -346,9 +344,8 @@ TEST_CASE(
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     PipelineCache pipeline_cache(device);
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
-    ShaderCache shader_cache(asset_server, shaders, device);
+    ShaderCache shader_cache(shaders, device);
     auto shader_defaults = create_shader_defaults(device);
     auto pipelines = create_mesh_material_pipelines(
         mesh_view_layout,
@@ -398,9 +395,8 @@ TEST_CASE(
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     PipelineCache pipeline_cache(device);
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
-    ShaderCache shader_cache(asset_server, shaders, device);
+    ShaderCache shader_cache(shaders, device);
     auto shader_defaults = create_shader_defaults(device);
     auto pipelines = create_mesh_material_pipelines(
         mesh_view_layout,
@@ -450,9 +446,8 @@ TEST_CASE(
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     PipelineCache pipeline_cache(device);
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
-    ShaderCache shader_cache(asset_server, shaders, device);
+    ShaderCache shader_cache(shaders, device);
     auto shader_defaults = create_shader_defaults(device);
     auto pipelines = create_mesh_material_pipelines(
         mesh_view_layout,
@@ -502,9 +497,8 @@ TEST_CASE(
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     PipelineCache pipeline_cache(device);
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
-    ShaderCache shader_cache(asset_server, shaders, device);
+    ShaderCache shader_cache(shaders, device);
     auto shader_defaults = create_shader_defaults(device);
     auto pipelines = create_mesh_material_pipelines(
         mesh_view_layout,
@@ -532,9 +526,8 @@ TEST_CASE(
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     PipelineCache pipeline_cache(device);
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
-    ShaderCache shader_cache(asset_server, shaders, device);
+    ShaderCache shader_cache(shaders, device);
     auto shader_defaults = create_shader_defaults(device);
     auto pipelines = create_mesh_material_pipelines(
         mesh_view_layout,
@@ -635,11 +628,10 @@ TEST_CASE(
     FakeGraphicsDevice device;
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
     TestShaderCompiler compiler;
     ShaderVariantCompiler variant_compiler(compiler);
-    ShaderCache shader_cache(asset_server, shaders, device, &variant_compiler);
+    ShaderCache shader_cache(shaders, device, &variant_compiler);
     auto shader_defaults = create_shader_defaults(device);
     device.shader_descriptions.clear();
     PbrMaterialPipelineSpecializer material_pipeline_specializer {
@@ -652,6 +644,14 @@ TEST_CASE(
     auto vertex_shader = add_shader(shaders, ShaderStages::Vertex, "test.vert");
     auto fragment_shader =
         add_shader(shaders, ShaderStages::Fragment, "test.frag");
+    shader_cache.set_shader(
+        vertex_shader.id(),
+        shaders.snapshot(vertex_shader)
+    );
+    shader_cache.set_shader(
+        fragment_shader.id(),
+        shaders.snapshot(fragment_shader)
+    );
     auto material_layout = create_layout(device);
     auto material = create_shader_request_material(
         device,
@@ -723,9 +723,8 @@ TEST_CASE(
         .environment_layout = create_layout(device),
     };
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
-    ShaderCache shader_cache(asset_server, shaders, device);
+    ShaderCache shader_cache(shaders, device);
     auto shader_defaults = create_shader_defaults(device);
     PbrMaterialPipelineSpecializer material_pipeline_specializer {
         mesh_view_layout,
@@ -773,11 +772,10 @@ TEST_CASE(
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     PipelineCache pipeline_cache(device);
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
     TestShaderCompiler compiler;
     ShaderVariantCompiler variant_compiler(compiler);
-    ShaderCache shader_cache(asset_server, shaders, device, &variant_compiler);
+    ShaderCache shader_cache(shaders, device, &variant_compiler);
     auto shader_defaults = create_shader_defaults(device);
     device.shader_descriptions.clear();
     auto pipelines = create_mesh_material_pipelines(
@@ -791,6 +789,14 @@ TEST_CASE(
     auto vertex_shader = add_shader(shaders, ShaderStages::Vertex, "test.vert");
     auto fragment_shader =
         add_shader(shaders, ShaderStages::Fragment, "test.frag");
+    shader_cache.set_shader(
+        vertex_shader.id(),
+        shaders.snapshot(vertex_shader)
+    );
+    shader_cache.set_shader(
+        fragment_shader.id(),
+        shaders.snapshot(fragment_shader)
+    );
     auto material = create_shader_request_material(
         device,
         create_layout(device),
@@ -833,11 +839,10 @@ TEST_CASE(
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     PipelineCache pipeline_cache(device);
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
     TestShaderCompiler compiler;
     ShaderVariantCompiler variant_compiler(compiler);
-    ShaderCache shader_cache(asset_server, shaders, device, &variant_compiler);
+    ShaderCache shader_cache(shaders, device, &variant_compiler);
     auto shader_defaults = create_shader_defaults(device);
     device.shader_descriptions.clear();
     auto pipelines = create_mesh_material_pipelines(
@@ -851,6 +856,14 @@ TEST_CASE(
     auto vertex_shader = add_shader(shaders, ShaderStages::Vertex, "test.vert");
     auto fragment_shader =
         add_shader(shaders, ShaderStages::Fragment, "test.frag");
+    shader_cache.set_shader(
+        vertex_shader.id(),
+        shaders.snapshot(vertex_shader)
+    );
+    shader_cache.set_shader(
+        fragment_shader.id(),
+        shaders.snapshot(fragment_shader)
+    );
     auto material = create_shader_request_material(
         device,
         create_layout(device),
@@ -907,11 +920,10 @@ TEST_CASE(
     MeshViewLayout mesh_view_layout {.layout = create_layout(device)};
     MeshUniforms mesh_uniforms {.resource_layout = create_layout(device)};
     PipelineCache pipeline_cache(device);
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
     TestShaderCompiler compiler;
     ShaderVariantCompiler variant_compiler(compiler);
-    ShaderCache shader_cache(asset_server, shaders, device, &variant_compiler);
+    ShaderCache shader_cache(shaders, device, &variant_compiler);
     auto shader_defaults = create_shader_defaults(device);
     device.shader_descriptions.clear();
     auto pipelines = create_mesh_material_pipelines(
@@ -925,6 +937,14 @@ TEST_CASE(
     auto vertex_shader = add_shader(shaders, ShaderStages::Vertex, "test.vert");
     auto fragment_shader =
         add_shader(shaders, ShaderStages::Fragment, "test.frag");
+    shader_cache.set_shader(
+        vertex_shader.id(),
+        shaders.snapshot(vertex_shader)
+    );
+    shader_cache.set_shader(
+        fragment_shader.id(),
+        shaders.snapshot(fragment_shader)
+    );
     auto material = create_shader_request_material(
         device,
         create_layout(device),

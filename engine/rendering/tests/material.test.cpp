@@ -1,7 +1,6 @@
 #include "rendering/material.hpp"
 
 #include "asset/assets.hpp"
-#include "asset/server.hpp"
 #include "ecs/world.hpp"
 #include "graphics/buffer.hpp"
 #include "rendering/defaults.hpp"
@@ -109,12 +108,11 @@ TEST_CASE(
     world.add_resource(RenderingDefaults {});
     world.add_resource(RenderAssets<GpuImage> {});
 
-    AssetServer asset_server(nullptr);
     Assets<Shader> shaders(nullptr);
     auto vertex_shader = add_shader(shaders, ShaderStages::Vertex, "test.vert");
     auto fragment_shader =
         add_shader(shaders, ShaderStages::Fragment, "test.frag");
-    world.add_resource(ShaderCache(asset_server, shaders, device));
+    world.add_resource(ShaderCache(shaders, device));
 
     MaterialAdapter<VariantMaterial> adapter;
     auto base_material = adapter.prepare_asset(

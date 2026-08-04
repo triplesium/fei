@@ -3,7 +3,9 @@
 #include "app/app.hpp"
 #include "core/image.hpp"
 #include "ecs/system_config.hpp"
+#include "rendering/extract_resource.hpp"
 #include "rendering/plugin.hpp"
+#include "rendering/render_app.hpp"
 
 namespace fei {
 
@@ -24,9 +26,10 @@ void init_gpu_luts(
 }
 
 void LUTPlugin::setup(App& app) {
-    app.add_resource(LUTs {})
+    app.add_resource(LUTs {}).add_systems(StartUp, init_luts);
+    add_extract_resource<LUTs>(app);
+    app.sub_app<RenderApp>()
         .add_resource(GpuLUTs {})
-        .add_systems(StartUp, init_luts)
         .add_systems(
             RenderUpdate,
             init_gpu_luts | in_set<RenderingSystems::PrepareResources>()

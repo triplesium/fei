@@ -1,18 +1,14 @@
 #include "graphics_webgpu_glfw/plugin.hpp"
 
-#include "base/log.hpp"
 #include "ecs/system_config.hpp"
-#include "graphics/graphics_device.hpp"
-#include "graphics/swapchain.hpp"
-#include "graphics_webgpu/graphics_device.hpp"
-#include "graphics_webgpu_glfw/swapchain.hpp"
+#include "graphics/backend.hpp"
+#include "graphics_webgpu_glfw/runtime.hpp"
 #include "window/window.hpp"
 
 #ifndef GLFW_INCLUDE_NONE
 #    define GLFW_INCLUDE_NONE
 #endif
 #include <GLFW/glfw3.h>
-#include <glfw3webgpu.h>
 #include <memory>
 
 namespace fei {
@@ -24,36 +20,49 @@ class WebGpuGlfwWindowPlugin final : public Plugin {
     void setup(App& app) override;
 };
 
-class WebGpuGlfwDevicePlugin final : public Plugin {
-  public:
-    void setup(App& app) override;
-};
-
 uint32 window_extent(int value) {
     return value > 0 ? static_cast<uint32>(value) : 0;
 }
 
-void sync_main_swapchain_size(
+void sync_graphics_surface_size(
     ResRO<Window> window,
-    ResRW<MainSwapchain> main_swapchain
+    ResRW<GraphicsSurfaceSize> surface_size
 ) {
-    if (!main_swapchain->swapchain) {
-        return;
-    }
-    const auto width = window_extent(window->width);
-    const auto height = window_extent(window->height);
-    if (main_swapchain->swapchain->width() != width ||
-        main_swapchain->swapchain->height() != height) {
-        main_swapchain->swapchain->resize(width, height);
-    }
+    surface_size->width = window_extent(window->width);
+    surface_size->height = window_extent(window->height);
+}
+
+void install_graphics_bootstrap(App& app) {
+    const auto& window = app.resource<Window>();
+    const auto surface_size = GraphicsSurfaceSize {
+        .width = window_extent(window.width),
+        .height = window_extent(window.height),
+    };
+    auto bootstrap =
+        std::make_unique<WebGpuGlfwBootstrap>(WebGpuGlfwBootstrapDescription {
+            .window = window.glfw_window,
+            .surface_size = surface_size,
+        });
+    app.add_resource(bootstrap->capabilities())
+        .add_resource(surface_size)
+        .add_resource_as<GraphicsBackendBootstrap>(
+            BoxedGraphicsBackendBootstrap(std::move(bootstrap))
+        )
+        .configure_sets(
+            First,
+            chain(WindowSystems::Prepare {}, WindowSystems::SyncSwapchain {})
+        )
+        .add_systems(
+            First,
+            sync_graphics_surface_size | in_set<WindowSystems::SyncSwapchain>()
+        );
 }
 
 } // namespace
 
 void WebGpuGlfwPlugin::setup(App& app) {
-    app.add_plugin<WebGpuGlfwWindowPlugin>()
-        .add_plugin<WindowPlugin>()
-        .add_plugin<WebGpuGlfwDevicePlugin>();
+    app.add_plugin<WebGpuGlfwWindowPlugin>().add_plugin<WindowPlugin>();
+    install_graphics_bootstrap(app);
 }
 
 void WebGpuGlfwWindowPlugin::setup(App& app) {
@@ -66,46 +75,6 @@ void WebGpuGlfwWindowPlugin::setup(App& app) {
             .value = GLFW_NO_API,
         }
     );
-}
-
-void WebGpuGlfwDevicePlugin::setup(App& app) {
-    auto& window = app.resource<Window>();
-    auto instance = create_webgpu_instance();
-    auto surface = glfwCreateWindowWGPUSurface(instance, window.glfw_window);
-    if (surface == nullptr) {
-        wgpuInstanceRelease(instance);
-        fatal("Failed to create WebGPU surface for GLFW window");
-    }
-
-    app.add_resource_as<GraphicsDevice>(GraphicsDeviceWebGpu {
-        WebGpuDeviceStateDescription {
-            .instance = instance,
-            .compatible_surface = surface,
-        },
-    });
-    auto* device =
-        dynamic_cast<GraphicsDeviceWebGpu*>(&app.resource<GraphicsDevice>());
-    if (device == nullptr) {
-        fatal("WebGpuGlfwPlugin requires GraphicsDeviceWebGpu");
-    }
-    app.add_resource(
-        MainSwapchain {
-            .swapchain = std::make_shared<SwapchainWebGpuGlfw>(
-                device->state(),
-                surface,
-                window_extent(window.width),
-                window_extent(window.height)
-            ),
-        }
-    );
-    app.configure_sets(
-           First,
-           chain(WindowSystems::Prepare {}, WindowSystems::SyncSwapchain {})
-    )
-        .add_systems(
-            First,
-            sync_main_swapchain_size | in_set<WindowSystems::SyncSwapchain>()
-        );
 }
 
 } // namespace fei

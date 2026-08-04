@@ -73,33 +73,40 @@ TEST_CASE(
     "extract_render_assets gathers live assets referenced by asset events",
     "[rendering][render-asset]"
 ) {
-    World world;
+    App app;
     Assets<SourceAsset> source_assets(nullptr);
     auto live =
         source_assets.add(std::make_unique<SourceAsset>(SourceAsset {5}));
     constexpr AssetId removed_id = 99;
 
-    world.add_resource(Events<AssetEvent<SourceAsset>> {});
-    world.add_resource(std::move(source_assets));
+    app.add_resource(Events<AssetEvent<SourceAsset>> {});
+    app.add_resource(std::move(source_assets));
+    install_render_app(app);
+    app.sub_app<RenderApp>()
+        .add_resource(ExtractedAssets<SourceAsset> {})
+        .add_systems(RenderExtract, extract_render_assets<SourceAsset>);
 
-    world.run_system_once([&](EventWriter<AssetEvent<SourceAsset>> writer) {
-        writer.send(
-            AssetEvent<SourceAsset> {
-                .type = AssetEventType::Added,
-                .id = live.id(),
-            }
-        );
-        writer.send(
-            AssetEvent<SourceAsset> {
-                .type = AssetEventType::Removed,
-                .id = removed_id,
-            }
-        );
-    });
+    app.world().run_system_once(
+        [&](EventWriter<AssetEvent<SourceAsset>> writer) {
+            writer.send(
+                AssetEvent<SourceAsset> {
+                    .type = AssetEventType::Added,
+                    .id = live.id(),
+                }
+            );
+            writer.send(
+                AssetEvent<SourceAsset> {
+                    .type = AssetEventType::Removed,
+                    .id = removed_id,
+                }
+            );
+        }
+    );
 
-    world.run_system_once(extract_render_assets<SourceAsset>);
+    app.render();
 
-    const auto& extracted = world.resource<ExtractedAssets<SourceAsset>>();
+    const auto& extracted =
+        app.sub_app<RenderApp>().resource<ExtractedAssets<SourceAsset>>();
     REQUIRE(extracted.extracted.size() == 1);
     REQUIRE(extracted.extracted[0].id == live.id());
     REQUIRE(extracted.extracted[0].asset != nullptr);
@@ -109,18 +116,45 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "initial render asset extraction includes assets before events are "
+    "published",
+    "[rendering][render-asset][startup]"
+) {
+    App app;
+    Assets<SourceAsset> source_assets(nullptr);
+    auto live =
+        source_assets.add(std::make_unique<SourceAsset>(SourceAsset {11}));
+
+    app.add_resource(Events<AssetEvent<SourceAsset>> {});
+    app.add_resource(std::move(source_assets));
+    install_render_app(app);
+    app.sub_app<RenderApp>()
+        .add_resource(ExtractedAssets<SourceAsset> {})
+        .add_systems(RenderExtract, extract_render_assets<SourceAsset>);
+
+    app.render();
+
+    const auto& extracted =
+        app.sub_app<RenderApp>().resource<ExtractedAssets<SourceAsset>>();
+    REQUIRE(extracted.initialized);
+    REQUIRE(extracted.extracted.size() == 1);
+    REQUIRE(extracted.extracted.front().id == live.id());
+    REQUIRE(extracted.extracted.front().asset->value == 11);
+}
+
+TEST_CASE(
     "prepare_assets removes stale assets and replaces extracted assets",
     "[rendering][render-asset]"
 ) {
     constexpr AssetId prepared_id = 1;
     constexpr AssetId stale_id = 2;
-    SourceAsset source {.value = 21};
+    auto source = std::make_shared<SourceAsset>(SourceAsset {.value = 21});
 
     ExtractedAssets<SourceAsset> extracted;
     extracted.extracted.push_back(
         ExtractedAssets<SourceAsset>::Entry {
             .id = prepared_id,
-            .asset = &source,
+            .asset = source,
         }
     );
     extracted.removed.insert(stale_id);
@@ -162,13 +196,13 @@ TEST_CASE(
     RetryingAdapter::ready = false;
 
     constexpr AssetId prepared_id = 1;
-    SourceAsset source {.value = 21};
+    auto source = std::make_shared<SourceAsset>(SourceAsset {.value = 21});
 
     ExtractedAssets<SourceAsset> extracted;
     extracted.extracted.push_back(
         ExtractedAssets<SourceAsset>::Entry {
             .id = prepared_id,
-            .asset = &source,
+            .asset = source,
         }
     );
 
@@ -209,7 +243,7 @@ TEST_CASE(
     "extract_render_assets preserves pending retries across frames",
     "[rendering][render-asset]"
 ) {
-    World world;
+    App app;
     Assets<SourceAsset> source_assets(nullptr);
     auto live =
         source_assets.add(std::make_unique<SourceAsset>(SourceAsset {5}));
@@ -222,15 +256,36 @@ TEST_CASE(
         }
     );
 
-    world.add_resource(Events<AssetEvent<SourceAsset>> {});
-    world.add_resource(std::move(source_assets));
-    world.add_resource(std::move(pending));
+    app.add_resource(Events<AssetEvent<SourceAsset>> {});
+    app.add_resource(std::move(source_assets));
+    install_render_app(app);
+    app.sub_app<RenderApp>()
+        .add_resource(std::move(pending))
+        .add_systems(RenderExtract, extract_render_assets<SourceAsset>);
 
-    world.run_system_once(extract_render_assets<SourceAsset>);
+    app.render();
 
-    const auto& extracted = world.resource<ExtractedAssets<SourceAsset>>();
+    const auto& extracted =
+        app.sub_app<RenderApp>().resource<ExtractedAssets<SourceAsset>>();
     REQUIRE(extracted.extracted.size() == 1);
     REQUIRE(extracted.extracted[0].id == live.id());
     REQUIRE(extracted.extracted[0].asset != nullptr);
     REQUIRE(extracted.extracted[0].asset->value == 5);
+}
+
+TEST_CASE(
+    "asset snapshots remain valid after the main asset is unloaded",
+    "[rendering][render-asset][snapshot]"
+) {
+    Assets<SourceAsset> assets(nullptr);
+    auto handle =
+        assets.add(std::make_unique<SourceAsset>(SourceAsset {.value = 37}));
+
+    auto snapshot = assets.snapshot(handle);
+    REQUIRE(snapshot);
+
+    assets.unload(handle.id());
+
+    REQUIRE_FALSE(assets.get(handle));
+    REQUIRE(snapshot->value == 37);
 }

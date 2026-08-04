@@ -25,7 +25,7 @@ OutputDescription single_color_output(PixelFormat format) {
 void setup_deferred_pipelines(
     ResRO<GraphicsDevice> device,
     ResRO<FullscreenQuad> fullscreen_quad,
-    ResRO<Assets<Mesh>> meshes,
+    ResRO<ExtractedAssets<Mesh>> meshes,
     ResRW<ShaderCache> shader_cache,
     ResRO<MeshViewLayout> mesh_view_layout,
     ResRO<LightingResources> lighting_resources,

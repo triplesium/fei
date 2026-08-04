@@ -175,7 +175,7 @@ void prepare_lighting(
 void setup_shadow_mapping(
     ResRO<GraphicsDevice> device,
     ResRW<ShaderCache> shader_cache,
-    ResRO<Assets<Mesh>> mesh_assets,
+    ResRO<ExtractedAssets<Mesh>> mesh_assets,
     ResRO<FullscreenQuad> fs_quad,
     Commands commands
 );

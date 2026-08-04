@@ -1,7 +1,6 @@
 #include "devtools_pbr/plugin.hpp"
 
 #include "app/app.hpp"
-#include "asset/assets.hpp"
 #include "base/log.hpp"
 #include "devtools/capability.hpp"
 #include "ecs/commands.hpp"
@@ -14,9 +13,11 @@
 #include "pbr/pipeline_specializer.hpp"
 #include "pbr/postprocess.hpp"
 #include "render_targets.hpp"
+#include "rendering/extract_resource.hpp"
 #include "rendering/mesh/mesh.hpp"
 #include "rendering/pipeline_cache.hpp"
 #include "rendering/plugin.hpp"
+#include "rendering/render_app.hpp"
 #include "rendering/render_asset.hpp"
 #include "rendering/render_frame.hpp"
 #include "rendering/shader_cache.hpp"
@@ -63,6 +64,13 @@ struct SelectedFrameView {
     const RenderTargetViewDescriptor* view {nullptr};
 };
 
+void setup_frame_capture(
+    ResRO<GraphicsDevice> device,
+    ResRW<FrameCaptureState> state
+) {
+    state->readback = device->create_texture_readback();
+}
+
 OutputDescription preview_output_description() {
     return OutputDescription {
         .color_attachments =
@@ -98,7 +106,7 @@ preview_pipeline_variant(const RenderTargetViewDescriptor& view) {
 void setup_render_target_preview_pipeline(
     ResRO<GraphicsDevice> device,
     ResRO<FullscreenQuad> fullscreen_quad,
-    ResRO<Assets<Mesh>> meshes,
+    ResRO<ExtractedAssets<Mesh>> meshes,
     ResRW<ShaderCache> shader_cache,
     ResRW<PipelineCache> pipeline_cache,
     ResRW<RenderTargetPreviewResources> resources
@@ -473,7 +481,6 @@ struct RenderTargets {
     static constexpr std::string_view id {c_render_targets_capability};
     static constexpr std::string_view label {"PBR Render Targets"};
     static constexpr std::string_view schema {"pbr.render_targets.v4"};
-    static constexpr ScheduleId schedule {RenderEnd};
 
     static void
     run(ResRO<DeferredViewTargets> targets,
@@ -578,13 +585,35 @@ void declare_frame_capability(App& app, const char* id, const char* label) {
 ProviderPlugin::ProviderPlugin(Config config) : m_config(config) {}
 
 void ProviderPlugin::setup(App& app) {
-    if (!app.has_resource<DeferredViewTargets>()) {
+    if (!app.has_resource<Bridge>()) {
+        fatal(
+            "DevTools capability '{}' requires devtools::CorePlugin. Add "
+            "devtools::CorePlugin before its provider.",
+            RenderTargets::id
+        );
+    }
+    if (!app.has_plugin<ReflectionPlugin>()) {
+        fatal(
+            "DevTools capability '{}' requires ReflectionPlugin. Add "
+            "ReflectionPlugin before its provider.",
+            RenderTargets::id
+        );
+    }
+
+    auto& render_app = app.sub_app<RenderApp>();
+    if (!render_app.has_resource<DeferredViewTargets>()) {
         fatal(
             "devtools::pbr::ProviderPlugin requires DeferredRenderPlugin. "
             "Add PbrPlugin before devtools::pbr::ProviderPlugin."
         );
     }
-    add_capability<RenderTargets>(app);
+    declare_capability<RenderTargets>(app.world());
+    add_extract_component<Request>(app);
+    add_extract_component<BlobRequest>(app);
+    add_extract_component<Subscription>(app);
+    add_render_to_main_component<JsonResponse>(app);
+    add_render_to_main_component<BlobResponse>(app);
+    add_render_to_main_component<ErrorResponse>(app);
     for (const auto& target : render_target_descriptors()) {
         for (const auto& view : target.views) {
             declare_frame_capability(app, view.blob_capability, view.label);
@@ -592,19 +621,23 @@ void ProviderPlugin::setup(App& app) {
     }
 
     app.add_resource(Config {m_config});
-    app.add_resource(RenderTargetPreviewResources {});
-    app.add_resource(
-        FrameCaptureState {
-            .readback =
-                app.resource<GraphicsDevice>().create_texture_readback(),
-        }
-    );
-    app.add_systems(StartUp, setup_render_target_preview_pipeline);
-    app.add_systems(
-        RenderUpdate,
-        render_target_preview | in_set<RenderingSystems::PostProcess>()
-    );
-    app.add_systems(RenderEnd, publish_and_enqueue_frame_capture);
+    add_extract_resource<Config>(app);
+    render_app.add_resource(RenderTargetPreviewResources {})
+        .add_resource(FrameCaptureState {})
+        .add_systems(
+            RenderStartup,
+            setup_frame_capture,
+            setup_render_target_preview_pipeline
+        )
+        .add_systems(
+            RenderUpdate,
+            render_target_preview | in_set<RenderingSystems::PostProcess>()
+        )
+        .add_systems(
+            RenderEnd,
+            RenderTargets::run,
+            publish_and_enqueue_frame_capture
+        );
 }
 
 void ProviderPlugin::finish(App&) {}

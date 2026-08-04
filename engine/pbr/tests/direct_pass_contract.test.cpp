@@ -181,7 +181,6 @@ std::shared_ptr<Texture> make_texture(
 
 VxgiVolumes make_vxgi_volumes(const GraphicsDevice& device) {
     VxgiVolumes volumes;
-    volumes.config.voxel_resolution = 64;
     volumes.resource_layout =
         device.create_resource_layout(ResourceLayoutDescription {});
     auto make_volume = [&]() {
@@ -463,6 +462,7 @@ TEST_CASE(
 ) {
     PassTestWorld test;
     auto volumes = make_vxgi_volumes(*test.device);
+    test.world.add_resource(VxgiConfig {.voxel_resolution = 64});
     auto base_pipeline = std::make_shared<FakePipeline>();
     auto propagation_pipeline = std::make_shared<FakePipeline>();
     auto empty_layout =
