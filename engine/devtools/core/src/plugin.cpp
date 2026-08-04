@@ -185,12 +185,13 @@ bool has_response_component(World& world, Entity entity) {
 
 void expire_devtools_requests(
     Query<Entity, const Request> requests,
+    WorldRef world,
     Commands commands
 ) {
     const auto now = std::chrono::steady_clock::now();
-    auto& world = commands.world();
     for (auto [entity, request] : requests) {
-        if (request.deadline <= now && !has_response_component(world, entity)) {
+        if (request.deadline <= now &&
+            !has_response_component(*world, entity)) {
             commands.entity(entity).add(
                 ErrorResponse {
                     .token = request.token,
@@ -206,13 +207,13 @@ void expire_devtools_requests(
 void export_devtools_blob_responses(
     ResRW<Bridge> bridge,
     Query<Entity, BlobResponse> responses,
+    WorldRef world,
     Commands commands
 ) {
-    auto& world = commands.world();
     for (auto [entity, response] : responses) {
         auto out = std::move(response.write());
-        if (world.has_component<Request>(entity)) {
-            const auto& request = world.get_component<Request>(entity);
+        if (world->has_component<Request>(entity)) {
+            const auto& request = world->get_component<Request>(entity);
             if (out.token == 0) {
                 out.token = request.token;
             }
@@ -228,13 +229,13 @@ void export_devtools_blob_responses(
 void export_devtools_json_responses(
     ResRW<Bridge> bridge,
     Query<Entity, JsonResponse> responses,
+    WorldRef world,
     Commands commands
 ) {
-    auto& world = commands.world();
     for (auto [entity, response] : responses) {
         auto out = std::move(response.write());
-        if (world.has_component<Request>(entity)) {
-            const auto& request = world.get_component<Request>(entity);
+        if (world->has_component<Request>(entity)) {
+            const auto& request = world->get_component<Request>(entity);
             if (out.token == 0) {
                 out.token = request.token;
             }
@@ -250,13 +251,13 @@ void export_devtools_json_responses(
 void export_devtools_error_responses(
     ResRW<Bridge> bridge,
     Query<Entity, ErrorResponse> responses,
+    WorldRef world,
     Commands commands
 ) {
-    auto& world = commands.world();
     for (auto [entity, response] : responses) {
         auto out = std::move(response.write());
-        if (world.has_component<Request>(entity)) {
-            const auto& request = world.get_component<Request>(entity);
+        if (world->has_component<Request>(entity)) {
+            const auto& request = world->get_component<Request>(entity);
             if (out.token == 0) {
                 out.token = request.token;
             }

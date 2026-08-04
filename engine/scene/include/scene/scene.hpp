@@ -137,6 +137,7 @@ void spawn_scene(
     ResRO<Assets<SceneMesh>> scene_meshes,
     EventWriter<SceneSpawnedEvent> spawned_events,
     EventWriter<SceneSpawnFailedEvent> spawn_failed_events,
+    WorldRef world,
     Commands commands
 );
 

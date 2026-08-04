@@ -86,6 +86,8 @@ class World {
     }
 
     Entity entity();
+    Entity reserve_entity() { return m_entities.reserve(); }
+    void materialize_entity(Entity entity);
     void add_component(Entity entity, Ref ref);
     template<typename T>
     void add_component(Entity entity, T val) {
@@ -189,6 +191,12 @@ class World {
         m_schedules.run_systems(schedule, *this);
     }
 
+    void set_schedule_apply_deferred(ScheduleId schedule, bool enabled) {
+        m_schedules.set_apply_deferred(schedule, enabled);
+    }
+
+    void apply_deferred();
+
     Optional<ScheduleDebugInfo> schedule_debug_info(ScheduleId schedule) {
         return m_schedules.debug_info(schedule);
     }
@@ -258,6 +266,16 @@ class World {
         return m_resources.get_mut(type_id<T>()).template get<T>();
     }
 
+    template<typename T>
+    void add_readonly_resource_ref(T& resource) {
+        using U = std::remove_cvref_t<T>;
+        m_resources.set_readonly_ref(
+            type_id<U>(),
+            increment_change_tick(),
+            static_cast<const U&>(resource)
+        );
+    }
+
     template<FromWorld T>
     T& init_resource() {
         T resource(*this);
@@ -271,10 +289,19 @@ class World {
 
     template<typename T>
     bool has_resource() const {
-        return m_resources.contains(type_id<T>());
+        return has_resource(type_id<T>());
     }
 
     bool has_resource(TypeId type_id) const {
+        return m_resources.contains(type_id);
+    }
+
+    template<typename T>
+    bool has_local_resource() const {
+        return has_local_resource(type_id<T>());
+    }
+
+    bool has_local_resource(TypeId type_id) const {
         return m_resources.contains(type_id);
     }
 
@@ -284,6 +311,9 @@ class World {
         auto ret = m_resources.get_mut(type);
         if (!ret) {
             fatal("Resource of type {} not found", type_name<T>());
+        }
+        if (ret.is_const()) {
+            fatal("Resource of type {} is read-only", type_name<T>());
         }
         m_resources.ticks(type).mark_changed(increment_change_tick());
         return ret.template get<T>();
@@ -303,6 +333,9 @@ class World {
         if (!ret) {
             fatal("Resource with type id {} not found", type_id.id());
         }
+        if (ret.is_const()) {
+            fatal("Resource with type id {} is read-only", type_id.id());
+        }
         m_resources.ticks(type_id).mark_changed(increment_change_tick());
         return ret;
     }
@@ -320,6 +353,9 @@ class World {
         if (!ret) {
             fatal("Resource with type id {} not found", type_id.id());
         }
+        if (ret.is_const()) {
+            fatal("Resource with type id {} is read-only", type_id.id());
+        }
         return ret;
     }
 
@@ -333,7 +369,9 @@ class World {
 
     template<typename F>
     void run_system_once(F&& func) {
-        FunctionSystem(std::forward<F>(func)).run(*this);
+        FunctionSystem system(std::forward<F>(func));
+        system.run(*this);
+        queue_system_deferred(system);
         flush_system_commands();
     }
 
@@ -342,6 +380,7 @@ class World {
 
   private:
     Status<RegisteredSystemError> run_registered_system(RegisteredSystemId id);
+    void queue_system_deferred(System& system);
     void flush_system_commands();
 
     void raw_add_component(Entity entity, Ref ref);

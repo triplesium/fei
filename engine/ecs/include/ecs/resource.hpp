@@ -15,6 +15,7 @@ class Resources {
   private:
     struct ResourceEntry {
         Val value;
+        Ref external;
         Ref (*ref)(Val&) {nullptr};
         Ref (*const_ref)(const Val&) {nullptr};
         ComponentTicks ticks;
@@ -71,6 +72,7 @@ class Resources {
 
         ResourceEntry entry {
             .value = std::move(val),
+            .external = {},
             .ref = &make_val_ref,
             .const_ref = &make_val_const_ref,
             .ticks = ComponentTicks::added_at(tick),
@@ -85,8 +87,24 @@ class Resources {
     void emplace(TypeId type_id, Tick tick, Args&&... args) {
         ResourceEntry entry {
             .value = make_val<Stored>(std::forward<Args>(args)...),
+            .external = {},
             .ref = &make_resource_ref<Exposed, Stored>,
             .const_ref = &make_resource_const_ref<Exposed, Stored>,
+            .ticks = ComponentTicks::added_at(tick),
+        };
+        if (auto it = m_resources.find(type_id); it != m_resources.end()) {
+            entry.ticks.added = it->second.ticks.added;
+        }
+        m_resources.insert_or_assign(type_id, std::move(entry));
+    }
+
+    template<typename T>
+    void set_readonly_ref(TypeId type_id, Tick tick, const T& resource) {
+        ResourceEntry entry {
+            .value = {},
+            .external = Ref(resource),
+            .ref = nullptr,
+            .const_ref = nullptr,
             .ticks = ComponentTicks::added_at(tick),
         };
         if (auto it = m_resources.find(type_id); it != m_resources.end()) {
@@ -98,6 +116,9 @@ class Resources {
     Ref get(TypeId type_id) {
         auto it = m_resources.find(type_id);
         if (it != m_resources.end()) {
+            if (it->second.external) {
+                return it->second.external;
+            }
             return it->second.ref(it->second.value);
         }
         return {};
@@ -106,6 +127,9 @@ class Resources {
     Ref get(TypeId type_id) const {
         auto it = m_resources.find(type_id);
         if (it != m_resources.end()) {
+            if (it->second.external) {
+                return it->second.external;
+            }
             return it->second.const_ref(it->second.value);
         }
         return {};
@@ -114,6 +138,9 @@ class Resources {
     Ref get_mut(TypeId type_id) {
         auto it = m_resources.find(type_id);
         if (it != m_resources.end()) {
+            if (it->second.external) {
+                return it->second.external;
+            }
             return it->second.ref(it->second.value);
         }
         return {};

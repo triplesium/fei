@@ -98,6 +98,7 @@ class System {
 
     void run(World& world);
     virtual const SystemAccess& access() const = 0;
+    virtual void queue_deferred(CommandsQueue&) {}
     virtual bool has_profile_key() const { return false; }
     virtual std::size_t profile_key() const { return 0; }
 
@@ -141,6 +142,13 @@ class FunctionSystem : public System {
 
     const SystemAccess& access() const override { return m_access; }
 
+    void queue_deferred(CommandsQueue& target) override {
+        queue_deferred_impl(
+            target,
+            std::make_index_sequence<std::tuple_size_v<ParamTypes>> {}
+        );
+    }
+
     bool has_profile_key() const override { return HasProfileKey; }
 
     std::size_t profile_key() const override {
@@ -183,6 +191,26 @@ class FunctionSystem : public System {
             state.emplace(Traits::init_state(world));
         }
         return Traits::get_param(world, *state, system_ticks);
+    }
+
+    template<std::size_t... Is>
+    void
+    queue_deferred_impl(CommandsQueue& target, std::index_sequence<Is...>) {
+        (queue_param_deferred<std::tuple_element_t<Is, ParamTypes>, Is>(target),
+         ...);
+    }
+
+    template<typename T, std::size_t I>
+    void queue_param_deferred(CommandsQueue& target) {
+        using Traits = SystemParamTraits<T>;
+        auto& state = std::get<I>(m_states);
+        if constexpr (requires(typename Traits::State& value) {
+                          Traits::queue_deferred(value, target);
+                      }) {
+            if (state) {
+                Traits::queue_deferred(*state, target);
+            }
+        }
     }
 };
 

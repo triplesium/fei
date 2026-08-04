@@ -339,6 +339,7 @@ void spawn_scene(
     ResRO<Assets<SceneMesh>> scene_meshes,
     EventWriter<SceneSpawnedEvent> spawned_events,
     EventWriter<SceneSpawnFailedEvent> spawn_failed_events,
+    WorldRef world,
     Commands commands
 ) {
     for (const auto& [entity, spawner] : scene_query) {
@@ -408,7 +409,7 @@ void spawn_scene(
 
         if (auto old_instance = instance_query.get(entity)) {
             const auto old_root = std::get<1>(*old_instance).root;
-            if (commands.world().has_entity(old_root)) {
+            if (world->has_entity(old_root)) {
                 commands.entity(old_root).despawn_recursive();
             }
         }

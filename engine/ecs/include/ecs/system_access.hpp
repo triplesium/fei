@@ -30,6 +30,9 @@ template<typename T>
 class EventReader;
 
 template<typename T>
+class EventReaderRO;
+
+template<typename T>
 class EventWriter;
 
 template<typename... Datas>
@@ -49,13 +52,19 @@ template<typename Q, typename... Filters>
 class FilteredQuery;
 
 template<typename T>
-struct IsReadOnlyConditionParam : std::false_type {};
+struct IsReadOnlySystemParam : std::false_type {};
 
 template<typename T>
-struct IsReadOnlyConditionParam<ResRO<T>> : std::true_type {};
+struct IsReadOnlySystemParam<ResRO<T>> : std::true_type {};
 
 template<typename T>
-struct IsReadOnlyConditionParam<Optional<ResRO<T>>> : std::true_type {};
+struct IsReadOnlySystemParam<Optional<ResRO<T>>> : std::true_type {};
+
+template<typename T>
+struct IsReadOnlySystemParam<EventReaderRO<T>> : std::true_type {};
+
+template<typename T>
+struct IsReadOnlySystemParam<Optional<EventReaderRO<T>>> : std::true_type {};
 
 template<typename T>
 struct IsReadOnlyQueryData : std::bool_constant<
@@ -64,13 +73,18 @@ struct IsReadOnlyQueryData : std::bool_constant<
 };
 
 template<typename... Datas>
-struct IsReadOnlyConditionParam<Query<Datas...>>
+struct IsReadOnlySystemParam<Query<Datas...>>
     : std::bool_constant<(IsReadOnlyQueryData<Datas>::value && ...)> {};
 
 template<typename Q, typename... Filters>
     requires SpecializationOf<Q, Query>
-struct IsReadOnlyConditionParam<FilteredQuery<Q, Filters...>>
-    : IsReadOnlyConditionParam<Q> {};
+struct IsReadOnlySystemParam<FilteredQuery<Q, Filters...>>
+    : IsReadOnlySystemParam<Q> {};
+
+// Kept as a compatibility alias for code that customized condition params
+// before read-only params were also used by extraction systems.
+template<typename T>
+struct IsReadOnlyConditionParam : IsReadOnlySystemParam<T> {};
 
 struct SystemAccess {
     std::unordered_set<TypeId> read_resources;
@@ -80,6 +94,7 @@ struct SystemAccess {
     bool world_exclusive {false};
     bool main_thread_only {false};
     bool commands {false};
+    bool deferred_commands {false};
 
     void merge(const SystemAccess& other) {
         read_resources.insert(
@@ -101,6 +116,7 @@ struct SystemAccess {
         world_exclusive = world_exclusive || other.world_exclusive;
         main_thread_only = main_thread_only || other.main_thread_only;
         commands = commands || other.commands;
+        deferred_commands = deferred_commands || other.deferred_commands;
     }
 
     bool conflicts_with(const SystemAccess& other) const {
@@ -192,16 +208,27 @@ struct SystemParamAccess<WorldRef> {
 
 template<>
 struct SystemParamAccess<Commands> {
-    static void add(SystemAccess& access) {
-        access.commands = true;
-        access.write_resources.insert(type_id<CommandsQueue>());
-    }
+    static void add(SystemAccess& access) { access.deferred_commands = true; }
 };
 
 template<typename T>
 struct SystemParamAccess<EventReader<T>> {
     static void add(SystemAccess& access) {
         access.write_resources.insert(type_id<Events<T>>());
+    }
+};
+
+template<typename T>
+struct SystemParamAccess<EventReaderRO<T>> {
+    static void add(SystemAccess& access) {
+        access.read_resources.insert(type_id<Events<T>>());
+    }
+};
+
+template<typename T>
+struct SystemParamAccess<Optional<EventReaderRO<T>>> {
+    static void add(SystemAccess& access) {
+        access.read_resources.insert(type_id<Events<T>>());
     }
 };
 

@@ -53,6 +53,26 @@ TEST_CASE("ECS manages world resources", "[ecs][resource]") {
 }
 
 TEST_CASE(
+    "ECS exposes explicit external resources as read-only",
+    "[ecs][resource][readonly-ref]"
+) {
+    GameConfig config {.max_entities = 64, .dt = 0.25f};
+    World world;
+    world.add_readonly_resource_ref(config);
+
+    REQUIRE(world.has_resource<GameConfig>());
+    REQUIRE(world.has_local_resource<GameConfig>());
+
+    const GameConfig* observed = nullptr;
+    world.run_system_once([&](ResRO<GameConfig> resource) {
+        observed = &*resource;
+    });
+
+    REQUIRE(observed == &config);
+    REQUIRE(observed->max_entities == 64);
+}
+
+TEST_CASE(
     "ECS stores dynamically typed world resources",
     "[ecs][resource][dynamic]"
 ) {
@@ -285,6 +305,28 @@ TEST_CASE(
         std::vector<std::string> {"one-shot"}
     );
     REQUIRE(world.resource<GameConfig>().max_entities == 42);
+}
+
+TEST_CASE(
+    "ECS schedules can defer command application to their execution owner",
+    "[ecs][commands][schedule]"
+) {
+    Registry::instance().register_type<CommandsQueue>();
+    Registry::instance().register_type<GameConfig>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.set_schedule_apply_deferred(TestSchedule, false);
+    world.add_systems(TestSchedule, [](Commands commands) {
+        commands.add_resource(GameConfig {.max_entities = 73});
+    });
+    world.sort_systems();
+
+    world.run_schedule(TestSchedule);
+    REQUIRE_FALSE(world.has_resource<GameConfig>());
+
+    world.apply_deferred();
+    REQUIRE(world.resource<GameConfig>().max_entities == 73);
 }
 
 TEST_CASE(

@@ -262,8 +262,9 @@ TEST_CASE("ECS system access metadata detects conflicts", "[ecs][system]") {
     REQUIRE_FALSE(
         read_position.access().conflicts_with(resource_access.access())
     );
-    REQUIRE(commands.access().conflicts_with(read_position.access()));
-    REQUIRE(commands.access().is_barrier());
+    REQUIRE_FALSE(commands.access().conflicts_with(read_position.access()));
+    REQUIRE_FALSE(commands.access().is_barrier());
+    REQUIRE(commands.access().deferred_commands);
 }
 
 TEST_CASE(
@@ -365,6 +366,66 @@ TEST_CASE(
 
     REQUIRE(world.worker_threads() == 2);
     REQUIRE(overlapped == 2);
+}
+
+TEST_CASE(
+    "ECS deferred command systems run in parallel",
+    "[ecs][schedule][commands]"
+) {
+    register_components();
+
+    World world;
+    world.set_worker_threads(2);
+    world.add_resource(CommandsQueue {});
+
+    std::mutex mutex;
+    std::condition_variable cv;
+    int entered = 0;
+    int overlapped = 0;
+
+    auto wait_for_peer = [&]() {
+        bool saw_peer = false;
+        {
+            std::unique_lock lock(mutex);
+            ++entered;
+            if (entered == 2) {
+                saw_peer = true;
+                cv.notify_all();
+            } else {
+                saw_peer = cv.wait_for(lock, std::chrono::seconds {1}, [&]() {
+                    return entered == 2;
+                });
+            }
+        }
+        if (saw_peer) {
+            std::scoped_lock lock(mutex);
+            ++overlapped;
+        }
+    };
+
+    world.add_systems(
+        TestSchedule,
+        [&](Commands commands) {
+            wait_for_peer();
+            commands.spawn().add(Position {1.0f, 2.0f});
+        },
+        [&](Commands commands) {
+            wait_for_peer();
+            commands.spawn().add(Position {3.0f, 4.0f});
+        }
+    );
+    world.sort_systems();
+    world.run_schedule(TestSchedule);
+
+    auto positions = Query<const Position>::get_param(
+        world,
+        SystemTicks {
+            .last_run = 0,
+            .this_run = world.read_change_tick(),
+        }
+    );
+    REQUIRE(overlapped == 2);
+    REQUIRE(positions.size() == 2);
 }
 
 TEST_CASE(

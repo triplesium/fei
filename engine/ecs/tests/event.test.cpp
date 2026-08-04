@@ -163,3 +163,40 @@ TEST_CASE("ECS events can be sent, read, and aged", "[ecs][event]") {
         REQUIRE(world.resource<Events<GameEvent>>().size() == 0);
     }
 }
+
+TEST_CASE(
+    "Optional read-only event readers tolerate late event resources",
+    "[ecs][event][readonly]"
+) {
+    Registry::instance().register_type<Events<GameEvent>>();
+    Registry::instance().register_type<CommandsQueue>();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    int runs = 0;
+    std::vector<std::string> messages;
+    world.add_systems(
+        TestSchedule,
+        [&](Optional<EventReaderRO<GameEvent>> reader) {
+            ++runs;
+            if (!reader) {
+                return;
+            }
+            while (auto event = reader->next()) {
+                messages.push_back(event->message);
+            }
+        }
+    );
+    world.sort_systems();
+
+    world.run_schedule(TestSchedule);
+    REQUIRE(runs == 1);
+    REQUIRE(messages.empty());
+
+    auto& events = world.add_resource(Events<GameEvent> {});
+    events.send(GameEvent("late"));
+    world.run_schedule(TestSchedule);
+
+    REQUIRE(runs == 2);
+    REQUIRE(messages == std::vector<std::string> {"late"});
+}

@@ -250,30 +250,32 @@ void ensure_lua_entity_commands_metatable(lua_State* L) {
 
 int lua_commands_spawn(lua_State* L) {
     auto* commands = check_lua_commands(L, 1);
+    auto& world = detail::DynamicCommandsWorldAccess::get(*commands);
     int arg_count = lua_gettop(L);
     auto entity = commands->spawn().id();
     if (arg_count > 1) {
         queue_lua_entity_components(
             L,
-            commands->world(),
+            world,
             entity,
             2,
             arg_count,
             "Commands.spawn"
         );
     }
-    push_lua_entity_commands(L, commands->world(), entity);
+    push_lua_entity_commands(L, world, entity);
     return 1;
 }
 
 int lua_commands_entity(lua_State* L) {
     auto* commands = check_lua_commands(L, 1);
+    auto& world = detail::DynamicCommandsWorldAccess::get(*commands);
     auto entity = static_cast<Entity>(luaL_checkinteger(L, 2));
-    if (!commands->world().has_entity(entity)) {
+    if (!world.has_entity(entity)) {
         luaL_error(L, "Entity %d does not exist", static_cast<int>(entity));
         return 0;
     }
-    push_lua_entity_commands(L, commands->world(), entity);
+    push_lua_entity_commands(L, world, entity);
     return 1;
 }
 

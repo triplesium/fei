@@ -78,6 +78,19 @@ SystemAccess effective_access(const SystemConfig& config) {
     return access;
 }
 
+void queue_batch_deferred(
+    const std::vector<SystemId>& batch,
+    std::unordered_map<SystemId, SystemConfig>& systems,
+    CommandsQueue& target
+) {
+    for (const auto system_id : batch) {
+        auto it = systems.find(system_id);
+        if (it != systems.end()) {
+            it->second.system->queue_deferred(target);
+        }
+    }
+}
+
 } // namespace
 
 SystemId SystemConfig::next_id = 0;
@@ -272,15 +285,27 @@ void Schedule::run_systems(ScheduleId schedule, World& world) {
     ensure_execution_plan();
 
     for (const auto& batch : m_execution_batches) {
-        for (auto system_id : batch) {
-            auto it = m_systems.find(system_id);
-            if (it != m_systems.end() && should_run(it->second, world)) {
-                run_profiled_system(schedule, it->second, world);
+        try {
+            for (auto system_id : batch) {
+                auto it = m_systems.find(system_id);
+                if (it != m_systems.end() && should_run(it->second, world)) {
+                    run_profiled_system(schedule, it->second, world);
+                }
             }
+        } catch (...) {
+            CommandsQueue discarded;
+            queue_batch_deferred(batch, m_systems, discarded);
+            throw;
         }
-        world.resource<CommandsQueue>().execute_after_batch(world);
+        auto& commands = world.resource<CommandsQueue>();
+        queue_batch_deferred(batch, m_systems, commands);
+        if (m_apply_deferred) {
+            commands.execute_after_batch(world);
+        }
     }
-    world.resource<CommandsQueue>().execute_after_schedule(world);
+    if (m_apply_deferred) {
+        world.resource<CommandsQueue>().execute_after_schedule(world);
+    }
 }
 
 void Schedule::run_systems(World& world, ThreadPool& thread_pool) {
@@ -302,9 +327,14 @@ void Schedule::run_systems(
     };
 
     for (const auto& batch : m_execution_batches) {
+        std::exception_ptr exception;
         if (batch.size() == 1 || thread_pool.thread_count() == 1) {
-            for (auto system_id : batch) {
-                run_one(system_id);
+            try {
+                for (auto system_id : batch) {
+                    run_one(system_id);
+                }
+            } catch (...) {
+                exception = std::current_exception();
             }
         } else {
             std::vector<std::future<void>> jobs;
@@ -315,7 +345,6 @@ void Schedule::run_systems(
                 }));
             }
 
-            std::exception_ptr exception;
             for (auto& job : jobs) {
                 try {
                     job.get();
@@ -325,13 +354,21 @@ void Schedule::run_systems(
                     }
                 }
             }
-            if (exception) {
-                std::rethrow_exception(exception);
-            }
         }
-        world.resource<CommandsQueue>().execute_after_batch(world);
+        if (exception) {
+            CommandsQueue discarded;
+            queue_batch_deferred(batch, m_systems, discarded);
+            std::rethrow_exception(exception);
+        }
+        auto& commands = world.resource<CommandsQueue>();
+        queue_batch_deferred(batch, m_systems, commands);
+        if (m_apply_deferred) {
+            commands.execute_after_batch(world);
+        }
     }
-    world.resource<CommandsQueue>().execute_after_schedule(world);
+    if (m_apply_deferred) {
+        world.resource<CommandsQueue>().execute_after_schedule(world);
+    }
 }
 
 void Schedule::resolve_system_profiles() {

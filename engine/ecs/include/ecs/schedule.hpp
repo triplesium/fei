@@ -63,6 +63,7 @@ class Schedule {
     std::unordered_map<SystemId, SystemConfig> m_systems;
     ScheduleGraph m_graph;
     std::vector<std::vector<SystemId>> m_execution_batches;
+    bool m_apply_deferred {true};
     bool m_dirty {true};
 
   public:
@@ -118,6 +119,8 @@ class Schedule {
     void run_systems(World& world, ThreadPool& thread_pool);
     void
     run_systems(ScheduleId schedule, World& world, ThreadPool& thread_pool);
+
+    void set_apply_deferred(bool enabled) { m_apply_deferred = enabled; }
 
     const std::vector<std::vector<SystemId>>& execution_batches() const {
         return m_execution_batches;
@@ -259,6 +262,10 @@ class Schedules {
 
     void set_worker_threads(std::size_t thread_count);
     std::size_t worker_threads() const;
+
+    void set_apply_deferred(ScheduleId schedule, bool enabled) {
+        m_schedules[schedule].set_apply_deferred(enabled);
+    }
 
     void run_systems(ScheduleId schedule, World& world);
     Optional<ScheduleDebugInfo> debug_info(ScheduleId schedule);

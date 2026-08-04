@@ -5,12 +5,18 @@
 #include "ecs/world.hpp"
 
 #include <functional>
+#include <iterator>
 #include <queue>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
 
 namespace fei {
+
+namespace detail {
+struct DynamicCommandsWorldAccess;
+}
 
 struct AddScheduleSystemCommand {
     ScheduleId schedule;
@@ -46,6 +52,21 @@ struct CommandsQueue {
     CommandsQueue& operator=(const CommandsQueue&) = delete;
     CommandsQueue(CommandsQueue&&) noexcept = default;
     CommandsQueue& operator=(CommandsQueue&&) noexcept = default;
+
+    void append(CommandsQueue&& other) {
+        while (!other.after_batch_commands.empty()) {
+            after_batch_commands.push(
+                std::move(other.after_batch_commands.front())
+            );
+            other.after_batch_commands.pop();
+        }
+        after_schedule_commands.insert(
+            after_schedule_commands.end(),
+            std::make_move_iterator(other.after_schedule_commands.begin()),
+            std::make_move_iterator(other.after_schedule_commands.end())
+        );
+        other.after_schedule_commands.clear();
+    }
 
     void add_command(BatchCommand command) {
         after_batch_commands.push(std::move(command));
@@ -121,16 +142,16 @@ struct CommandsQueue {
 
 class EntityCommands {
   private:
-    World& m_world;
+    CommandsQueue& m_commands_queue;
     Entity m_entity;
 
   public:
-    EntityCommands(World& world, Entity entity) :
-        m_world(world), m_entity(entity) {}
+    EntityCommands(CommandsQueue& queue, Entity entity) :
+        m_commands_queue(queue), m_entity(entity) {}
 
     template<typename... Ts>
     EntityCommands& add(Ts&&... vals) {
-        (m_world.resource<CommandsQueue>().add_command(
+        (m_commands_queue.add_command(
              [entity = this->m_entity,
               val = std::forward<Ts>(vals)](World& world) {
                  world.add_component(entity, val);
@@ -142,42 +163,31 @@ class EntityCommands {
 
     template<typename T>
     EntityCommands& remove() {
-        m_world.resource<CommandsQueue>().add_command(
-            [entity = this->m_entity](World& world) {
-                world.remove_component(entity, type_id<T>());
-            }
-        );
+        m_commands_queue.add_command([entity = this->m_entity](World& world) {
+            world.remove_component(entity, type_id<T>());
+        });
         return *this;
     }
 
-    template<typename T>
-    bool has() const {
-        return m_world.has_component(m_entity, type_id<T>());
-    }
-
     EntityCommands& set_parent(Entity parent) {
-        m_world.resource<CommandsQueue>().add_command([entity = this->m_entity,
-                                                       parent](World& world) {
+        m_commands_queue.add_command([entity = this->m_entity,
+                                      parent](World& world) {
             world.set_parent(entity, parent);
         });
         return *this;
     }
 
     EntityCommands& remove_parent() {
-        m_world.resource<CommandsQueue>().add_command(
-            [entity = this->m_entity](World& world) {
-                world.remove_parent(entity);
-            }
-        );
+        m_commands_queue.add_command([entity = this->m_entity](World& world) {
+            world.remove_parent(entity);
+        });
         return *this;
     }
 
     void despawn() {
-        m_world.resource<CommandsQueue>().add_command(
-            [entity = this->m_entity](World& world) {
-                world.despawn(entity);
-            }
-        );
+        m_commands_queue.add_command([entity = this->m_entity](World& world) {
+            world.despawn(entity);
+        });
     }
 
     void despawn_recursive() { despawn(); }
@@ -187,6 +197,8 @@ class EntityCommands {
 
 class Commands {
   private:
+    friend struct detail::DynamicCommandsWorldAccess;
+
     CommandsQueue& m_commands_queue;
     World& m_world;
 
@@ -199,6 +211,30 @@ class Commands {
 
     void add_command(CommandsQueue::BatchCommand command) {
         m_commands_queue.add_command(std::move(command));
+    }
+
+    template<typename T>
+    void insert_batch(std::vector<std::pair<Entity, T>> components) {
+        m_commands_queue.add_command(
+            [components = std::move(components)](World& world) mutable {
+                for (auto& [entity, component] : components) {
+                    world.add_component(entity, std::move(component));
+                }
+            }
+        );
+    }
+
+    template<typename T>
+    void remove_batch(std::vector<Entity> entities) {
+        m_commands_queue.add_command([entities =
+                                          std::move(entities)](World& world) {
+            for (const auto entity : entities) {
+                if (world.has_entity(entity) &&
+                    world.has_component<T>(entity)) {
+                    world.remove_component<T>(entity);
+                }
+            }
+        });
     }
 
     template<typename R>
@@ -282,15 +318,43 @@ class Commands {
     }
 
     EntityCommands entity(Entity entity) {
-        return EntityCommands(m_world, entity);
+        return EntityCommands(m_commands_queue, entity);
     }
 
-    EntityCommands spawn() { return EntityCommands(m_world, m_world.entity()); }
-
-    World& world() { return m_world; }
+    EntityCommands spawn() {
+        const auto entity = m_world.reserve_entity();
+        m_commands_queue.add_command([entity](World& world) {
+            world.materialize_entity(entity);
+        });
+        return EntityCommands(m_commands_queue, entity);
+    }
 };
+
+namespace detail {
+
+// Dynamic bindings retain exclusive World access and may need to validate
+// reflected entity operations before queuing them. Static systems must express
+// such reads with WorldRef so their scheduler access remains accurate.
+struct DynamicCommandsWorldAccess {
+    static World& get(Commands& commands) { return commands.m_world; }
+};
+
+} // namespace detail
+
 template<>
-struct SystemParamTraits<Commands> : StatelessParamTraits<Commands> {};
+struct SystemParamTraits<Commands> {
+    using State = CommandsQueue;
+
+    static State init_state(World&) { return {}; }
+
+    static Commands get_param(World& world, State& state, SystemTicks) {
+        return Commands(state, world);
+    }
+
+    static void queue_deferred(State& state, CommandsQueue& target) {
+        target.append(std::move(state));
+    }
+};
 static_assert(SystemParam<Commands>);
 
 } // namespace fei

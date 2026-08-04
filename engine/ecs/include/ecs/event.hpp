@@ -84,11 +84,31 @@ class Events {
         }
     }
 
+    const EventSequence<T>& sequence(size_t id) const {
+        if (id < m_events_b.start_event_count) {
+            return m_events_a;
+        }
+        return m_events_b;
+    }
+
     Optional<EventInstance<T>&> get_event(size_t id) {
         if (id < oldest_event_count()) {
             return nullopt;
         }
         auto& seq = sequence(id);
+        size_t index =
+            id > seq.start_event_count ? id - seq.start_event_count : 0;
+        if (index >= seq.events.size()) {
+            return nullopt;
+        }
+        return seq.events[index];
+    }
+
+    Optional<const EventInstance<T>&> get_event(size_t id) const {
+        if (id < oldest_event_count()) {
+            return nullopt;
+        }
+        const auto& seq = sequence(id);
         size_t index =
             id > seq.start_event_count ? id - seq.start_event_count : 0;
         if (index >= seq.events.size()) {
@@ -141,6 +161,71 @@ template<typename T>
 struct SystemParamTraits<EventReader<T>> : StatefulParamTraits<EventReader<T>> {
 };
 static_assert(SystemParam<EventReader<int>>);
+
+template<typename T>
+class EventReaderRO {
+  public:
+    EventReaderRO(const Events<T>& events, std::size_t& last_event_count) :
+        m_events(events), m_last_event_count(last_event_count) {}
+
+    Optional<const T&> next() {
+        if (m_last_event_count < m_events.oldest_event_count()) {
+            m_last_event_count = m_events.oldest_event_count();
+        }
+        auto event = m_events.get_event(m_last_event_count);
+        if (!event) {
+            return nullopt;
+        }
+        ++m_last_event_count;
+        return event->event;
+    }
+
+    void reset() { m_last_event_count = m_events.oldest_event_count(); }
+
+    using State = std::size_t;
+
+    static State init_state(World& world) {
+        return static_cast<const World&>(world)
+            .resource<Events<T>>()
+            .oldest_event_count();
+    }
+
+    static EventReaderRO get_param(World& world, State& state) {
+        return EventReaderRO(
+            static_cast<const World&>(world).resource<Events<T>>(),
+            state
+        );
+    }
+
+  private:
+    const Events<T>& m_events;
+    std::size_t& m_last_event_count;
+};
+template<typename T>
+struct SystemParamTraits<EventReaderRO<T>>
+    : StatefulParamTraits<EventReaderRO<T>> {};
+static_assert(SystemParam<EventReaderRO<int>>);
+
+template<typename T>
+struct SystemParamTraits<Optional<EventReaderRO<T>>> {
+    using State = typename EventReaderRO<T>::State;
+
+    static State init_state(World& world) {
+        if (!world.has_resource<Events<T>>()) {
+            return 0;
+        }
+        return EventReaderRO<T>::init_state(world);
+    }
+
+    static Optional<EventReaderRO<T>>
+    get_param(World& world, State& state, SystemTicks) {
+        if (!world.has_resource<Events<T>>()) {
+            return nullopt;
+        }
+        return EventReaderRO<T>::get_param(world, state);
+    }
+};
+static_assert(SystemParam<Optional<EventReaderRO<int>>>);
 
 template<typename T>
 class EventWriter {

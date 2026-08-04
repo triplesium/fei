@@ -1,6 +1,7 @@
 #include "ecs/hierarchy.hpp"
 
 #include "ecs/commands.hpp"
+#include "ecs/system_params.hpp"
 #include "ecs/world.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -146,9 +147,10 @@ TEST_CASE(
     Entity parent = world.entity();
     Entity child = world.entity();
 
-    world.run_system_once([parent, child](Commands commands) {
+    world.run_system_once([parent,
+                           child](WorldRef world_ref, Commands commands) {
         commands.entity(child).set_parent(parent);
-        REQUIRE(!commands.world().has_parent(child));
+        REQUIRE(!world_ref->has_parent(child));
     });
 
     REQUIRE(world.has_parent(child));

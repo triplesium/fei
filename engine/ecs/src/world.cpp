@@ -47,6 +47,7 @@ World::run_registered_system(RegisteredSystemId id) {
     }
     --m_registered_system_execution_depth;
     registered.running = false;
+    queue_system_deferred(*registered.system);
     return {};
 }
 
@@ -70,6 +71,16 @@ Status<RegisteredSystemError> World::unregister_system(RegisteredSystemId id) {
     return {};
 }
 
+void World::queue_system_deferred(System& system) {
+    if (!system.access().commands && !system.access().deferred_commands) {
+        return;
+    }
+    if (!has_resource<CommandsQueue>()) {
+        add_resource(CommandsQueue {});
+    }
+    system.queue_deferred(resource<CommandsQueue>());
+}
+
 void World::flush_system_commands() {
     if (m_registered_system_execution_depth != 0 ||
         !has_resource<CommandsQueue>()) {
@@ -80,13 +91,22 @@ void World::flush_system_commands() {
         .execute_after_batch(*this);
 }
 
+void World::apply_deferred() {
+    resource<CommandsQueue>().execute(*this);
+}
+
 Entity World::entity() {
-    auto entity = m_entities.alloc();
+    auto entity = reserve_entity();
+    materialize_entity(entity);
+    return entity;
+}
+
+void World::materialize_entity(Entity entity) {
+    m_entities.materialize(entity);
     auto archetype_id = m_archetypes.get_id_or_insert({});
     auto& archetype = m_archetypes.get(archetype_id);
     auto row = archetype.alloc(entity, read_change_tick());
     m_entities.set_location(entity, {archetype_id, row});
-    return entity;
 }
 
 bool World::mark_component_changed(Entity entity, TypeId type_id) {
