@@ -41,6 +41,7 @@ class TextureWebGpu final : public Texture {
         std::shared_ptr<WebGpuDeviceState> state,
         const TextureDescription& desc
     );
+    // Wraps a surface-owned texture handle that is consumed by present.
     TextureWebGpu(
         std::shared_ptr<WebGpuDeviceState> state,
         const TextureDescription& desc,
@@ -71,6 +72,7 @@ class TextureWebGpu final : public Texture {
     std::shared_ptr<WebGpuDeviceState> m_state;
     TextureDescription m_desc;
     WGPUTexture m_texture {nullptr};
+    bool m_release_on_destroy {true};
 };
 
 class TextureViewWebGpu final : public TextureView {

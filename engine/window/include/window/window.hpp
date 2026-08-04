@@ -65,6 +65,8 @@ class WindowPlugin : public Plugin {
         );
         app.add_systems(Last, update_should_close);
     }
+
+    void cleanup(App& app) noexcept override;
 };
 
 } // namespace fei

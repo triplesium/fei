@@ -4,7 +4,12 @@ target("fei-graphics-vulkan-glfw")
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
-    add_deps("fei-graphics", "fei-graphics-vulkan", "fei-window", "fei-profiling")
+    add_deps(
+        "fei-graphics",
+        "fei-graphics-vulkan",
+        "fei-window",
+        "fei-profiling"
+    )
     add_packages("glfw", "vulkansdk")
 
 target("fei-graphics-vulkan-glfw-tests")

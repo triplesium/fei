@@ -50,4 +50,17 @@ void update_should_close(ResRO<Window> win_res, ResRW<AppStates> app_states) {
     }
 }
 
+void WindowPlugin::cleanup(App& app) noexcept {
+    if (!app.has_resource<Window>()) {
+        return;
+    }
+
+    auto& window = app.resource<Window>();
+    if (window.glfw_window != nullptr) {
+        glfwDestroyWindow(window.glfw_window);
+        window.glfw_window = nullptr;
+    }
+    glfwTerminate();
+}
+
 } // namespace fei

@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -110,6 +111,8 @@ class FakeBuffer : public Buffer {
 class FakeGraphicsDevice : public GraphicsDevice {
   public:
     mutable std::vector<TextureViewDescription> texture_view_requests;
+    mutable std::uint32_t flush_calls {0};
+    mutable std::uint32_t present_calls {0};
 
     std::shared_ptr<ShaderModule>
     create_shader_module(const ShaderDescription&) const override {
@@ -200,7 +203,8 @@ class FakeGraphicsDevice : public GraphicsDevice {
         return nullptr;
     }
 
-    void present(const Swapchain&) const override {}
+    void present(const Swapchain&) const override { ++present_calls; }
+    void flush() const override { ++flush_calls; }
 };
 
 } // namespace

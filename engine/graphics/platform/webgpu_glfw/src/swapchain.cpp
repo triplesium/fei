@@ -201,8 +201,8 @@ void SwapchainWebGpuGlfw::present() const {
     if (!m_framebuffer) {
         return;
     }
-    const auto status = wgpuSurfacePresent(m_surface);
     m_framebuffer.reset();
+    const auto status = wgpuSurfacePresent(m_surface);
     if (status != WGPUStatus_Success) {
         m_configured = false;
         error("Failed to present WebGPU surface");

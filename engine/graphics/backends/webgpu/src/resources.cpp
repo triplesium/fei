@@ -325,14 +325,16 @@ TextureWebGpu::TextureWebGpu(
     std::shared_ptr<WebGpuDeviceState> state,
     const TextureDescription& desc,
     WGPUTexture texture
-) : m_state(std::move(state)), m_desc(desc), m_texture(texture) {
+) :
+    m_state(std::move(state)), m_desc(desc), m_texture(texture),
+    m_release_on_destroy(false) {
     if (m_texture == nullptr) {
         fatal("Cannot wrap a null WebGPU texture");
     }
 }
 
 TextureWebGpu::~TextureWebGpu() {
-    if (m_texture != nullptr) {
+    if (m_release_on_destroy && m_texture != nullptr) {
         wgpuTextureRelease(m_texture);
     }
 }
