@@ -108,18 +108,28 @@ rule_end()
 
 add_rules("fei.shader_sources")
 
+rule("fei.executable_startup")
+    on_load(function(target)
+        if target:kind() == "binary" then
+            target:add(
+                "files",
+                path.join(
+                    os.projectdir(),
+                    "engine/base/src/startup/crt_report.cpp"
+                )
+            )
+        end
+    end)
+rule_end()
+
+add_rules("fei.executable_startup")
+
 rule("fei.test")
     on_load(function(target)
         target:add("packages", "catch2")
         target:add("tests", "default")
-        target:add("deps", "fei-test-support")
     end)
 rule_end()
-
-target("fei-test-support")
-    set_kind("static")
-    set_default(false)
-    add_files("tests/support/crt_report.cpp")
 
 add_cxxflags("cl::/Zc:preprocessor")
 
