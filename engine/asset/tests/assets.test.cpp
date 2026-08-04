@@ -151,6 +151,38 @@ TEST_CASE("Assets collect unused handles", "[asset][handle]") {
     REQUIRE_FALSE(reader.next().has_value());
 }
 
+TEST_CASE("Asset snapshots retain unloaded values", "[asset][snapshot]") {
+    Assets<TestAsset> assets(nullptr);
+    auto handle = assets.emplace(TestAsset {.value = 17});
+    auto id = handle.id();
+    auto snapshot = assets.snapshot(handle);
+
+    REQUIRE(snapshot);
+    REQUIRE(snapshot->value == 17);
+
+    assets.unload(id);
+
+    REQUIRE_FALSE(assets.get(id));
+    REQUIRE(snapshot->value == 17);
+}
+
+TEST_CASE(
+    "Asset snapshots remain immutable when the source asset changes",
+    "[asset][snapshot]"
+) {
+    Assets<TestAsset> assets(nullptr);
+    auto handle = assets.emplace(TestAsset {.value = 17});
+    auto snapshot = assets.snapshot(handle);
+
+    REQUIRE(snapshot);
+    auto modified = assets.modify(handle);
+    REQUIRE(modified);
+    modified->value = 23;
+
+    REQUIRE(snapshot->value == 17);
+    REQUIRE(assets.get(handle)->value == 23);
+}
+
 TEST_CASE("Handle copies and moves keep assets alive", "[asset][handle]") {
     Assets<TestAsset> assets(nullptr);
     auto original = assets.emplace(TestAsset {.value = 3});

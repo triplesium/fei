@@ -40,7 +40,7 @@ class Assets {
         std::shared_ptr<AssetHandleState> handle_state;
         Optional<AssetPath> path;
         TypeId type_id;
-        std::unique_ptr<T> asset;
+        std::shared_ptr<T> asset;
         AssetLoadState state;
         Optional<AssetLoadError> error;
         std::vector<AssetKey> dependencies;
@@ -366,6 +366,29 @@ class Assets {
         return nullopt;
     }
 
+    std::vector<AssetId> loaded_ids() const {
+        std::vector<AssetId> ids;
+        ids.reserve(m_assets.size());
+        for (const auto& [id, entry] : m_assets) {
+            if (entry.state == AssetLoadState::Loaded && entry.asset) {
+                ids.push_back(id);
+            }
+        }
+        return ids;
+    }
+
+    std::shared_ptr<const T> snapshot(AssetId id) const {
+        auto entry = get_entry(id);
+        if (!entry || entry->state != AssetLoadState::Loaded || !entry->asset) {
+            return nullptr;
+        }
+        return entry->asset;
+    }
+
+    std::shared_ptr<const T> snapshot(const Handle<T>& handle) const {
+        return snapshot(handle.id());
+    }
+
     Optional<const AssetPath&> path(const Handle<T>& handle) const {
         return path(handle.id());
     }
@@ -430,6 +453,16 @@ class Assets {
         auto entry = get_entry(id);
         if (!entry || entry->state != AssetLoadState::Loaded) {
             return nullopt;
+        }
+        if (entry->asset.use_count() > 1) {
+            if constexpr (std::copy_constructible<T>) {
+                entry->asset = std::make_shared<T>(*entry->asset);
+            } else {
+                fatal(
+                    "Cannot modify a snapshotted non-copyable asset; replace "
+                    "the asset with a newly loaded value instead"
+                );
+            }
         }
         mark_modified(id);
         return *entry->asset;
