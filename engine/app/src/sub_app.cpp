@@ -20,6 +20,7 @@ void append_unique(std::vector<ScheduleId>& schedules, ScheduleId schedule) {
 
 SubApp::SubApp() {
     m_world.add_resource(CommandsQueue {});
+    m_world.add_resource(SubAppSourceContext {});
 }
 
 SubApp& SubApp::add_startup_schedule(ScheduleId schedule) {
@@ -50,15 +51,28 @@ SubApp& SubApp::set_post_extract(ExtractFn extract) {
     return *this;
 }
 
-void SubApp::extract(World& main_world) {
+void SubApp::extract(World& source_world, SubAppSourceId source_id) {
+    auto& context = m_world.resource<SubAppSourceContext>();
+    context.changed = !m_source_initialized ||
+                      m_source_world != &source_world ||
+                      m_source_id != source_id;
+    if (context.changed) {
+        ++m_source_revision;
+    }
+    context.id = source_id;
+    context.revision = m_source_revision;
+    m_source_world = &source_world;
+    m_source_id = source_id;
+    m_source_initialized = true;
+
     if (m_pre_extract) {
-        m_pre_extract(main_world, m_world);
+        m_pre_extract(source_world, m_world);
     }
     for (auto& extract : m_extractors) {
-        extract(main_world, m_world);
+        extract(source_world, m_world);
     }
     if (m_post_extract) {
-        m_post_extract(main_world, m_world);
+        m_post_extract(source_world, m_world);
     }
 }
 

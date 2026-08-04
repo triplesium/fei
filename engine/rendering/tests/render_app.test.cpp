@@ -340,6 +340,76 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Render app rebuilds synchronized entities when its source world changes",
+    "[rendering][render-app][source]"
+) {
+    World play_world;
+    App app;
+    install_render_app(app);
+    add_extract_component<ExtractedA>(app);
+    app.sub_app<RenderApp>()
+        .add_resource(ChangeObservation {})
+        .add_systems(
+            RenderExtract,
+            [](Extract<Query<Entity, const ExtractedA>::Filter<
+                   Changed<ExtractedA>>> changed,
+               ResRW<ChangeObservation> observation) {
+                observation->changed_count += static_cast<int>(changed->size());
+            }
+        );
+
+    bool playing = false;
+    app.set_sub_app_source<RenderApp>([&](World& editor_world) {
+        return playing ? SubAppSource {&play_world, 1} :
+                         SubAppSource {&editor_world, 0};
+    });
+
+    const auto editor_entity = app.world().entity();
+    app.world().add_component(editor_entity, ExtractedA {.value = 7});
+    const auto play_entity = play_world.entity();
+    play_world.add_component(play_entity, ExtractedA {.value = 23});
+    REQUIRE(editor_entity == play_entity);
+
+    app.render();
+    auto& render_world = app.sub_app<RenderApp>().world();
+    auto& entity_map = render_world.resource<RenderEntityMap>();
+    const auto editor_render_entity =
+        entity_map.main_to_render.at(editor_entity);
+    REQUIRE(
+        render_world.get_component<ExtractedA>(editor_render_entity).value == 7
+    );
+    REQUIRE(render_world.resource<ChangeObservation>().changed_count == 1);
+
+    playing = true;
+    app.render();
+    const auto play_render_entity = entity_map.main_to_render.at(play_entity);
+    REQUIRE_FALSE(render_world.has_entity(editor_render_entity));
+    REQUIRE(
+        render_world.get_component<ExtractedA>(play_render_entity).value == 23
+    );
+    REQUIRE(
+        play_world.get_component<RenderEntity>(play_entity).entity ==
+        play_render_entity
+    );
+    REQUIRE(render_world.resource<ChangeObservation>().changed_count == 2);
+
+    playing = false;
+    app.render();
+    const auto restored_render_entity =
+        entity_map.main_to_render.at(editor_entity);
+    REQUIRE_FALSE(render_world.has_entity(play_render_entity));
+    REQUIRE(
+        render_world.get_component<ExtractedA>(restored_render_entity).value ==
+        7
+    );
+    REQUIRE(
+        app.world().get_component<RenderEntity>(editor_entity).entity ==
+        restored_render_entity
+    );
+    REQUIRE(render_world.resource<ChangeObservation>().changed_count == 3);
+}
+
+TEST_CASE(
     "Render app removes stale components while retaining synchronized entities",
     "[rendering][render-app]"
 ) {
@@ -508,6 +578,66 @@ TEST_CASE(
     );
     REQUIRE(query.size() == 1);
     REQUIRE(std::get<0>(query.first()).value == 17);
+}
+
+TEST_CASE(
+    "Threaded render output returns to the frame source before switching",
+    "[rendering][render-app][source][threaded][output]"
+) {
+    struct SourceOutput {
+        int value {0};
+    };
+
+    World play_world;
+    App app;
+    install_render_app(app, [](SubApp render_app) {
+        return std::make_unique<ThreadedRenderRunner>(std::move(render_app));
+    });
+    add_render_to_main_component<SourceOutput>(app);
+    app.sub_app<RenderApp>().add_systems(RenderUpdate, [](Commands commands) {
+        commands.spawn().add(SourceOutput {.value = 31});
+    });
+
+    bool playing = false;
+    app.set_sub_app_source<RenderApp>([&](World& editor_world) {
+        return playing ? SubAppSource {&play_world, 1} :
+                         SubAppSource {&editor_world, 0};
+    });
+
+    app.render();
+    playing = true;
+    app.render();
+
+    auto editor_outputs = Query<const SourceOutput>::get_param(
+        app.world(),
+        SystemTicks {
+            .last_run = 0,
+            .this_run = app.world().read_change_tick(),
+        }
+    );
+    REQUIRE(editor_outputs.size() == 1);
+    REQUIRE(std::get<0>(editor_outputs.first()).value == 31);
+    auto pending_play_outputs = Query<const SourceOutput>::get_param(
+        play_world,
+        SystemTicks {
+            .last_run = 0,
+            .this_run = play_world.read_change_tick(),
+        }
+    );
+    REQUIRE(pending_play_outputs.empty());
+
+    app.render();
+    auto play_outputs = Query<const SourceOutput>::get_param(
+        play_world,
+        SystemTicks {
+            .last_run = 0,
+            .this_run = play_world.read_change_tick(),
+        }
+    );
+    REQUIRE(play_outputs.size() == 1);
+    REQUIRE(std::get<0>(play_outputs.first()).value == 31);
+
+    app.synchronize_sub_app<RenderApp>();
 }
 
 TEST_CASE(

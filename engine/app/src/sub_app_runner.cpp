@@ -37,17 +37,23 @@ void InlineSubAppRunner::finish() {
     m_sub_app.finish();
 }
 
-void InlineSubAppRunner::startup(World& main_world) {
+void InlineSubAppRunner::startup(SubAppSource source) {
+    if (source.world == nullptr) {
+        throw std::invalid_argument("SubApp source World cannot be null");
+    }
     if (m_sub_app.extracts_before_startup()) {
-        m_sub_app.extract(main_world);
+        m_sub_app.extract(*source.world, source.id);
     }
     m_sub_app.startup();
 }
 
-void InlineSubAppRunner::update(World& main_world) {
-    m_sub_app.extract(main_world);
+void InlineSubAppRunner::update(SubAppSource source) {
+    if (source.world == nullptr) {
+        throw std::invalid_argument("SubApp source World cannot be null");
+    }
+    m_sub_app.extract(*source.world, source.id);
     m_sub_app.update();
-    m_sub_app.post_update(main_world);
+    m_sub_app.post_update(*source.world);
 }
 
 void InlineSubAppRunner::shutdown() noexcept {
@@ -193,19 +199,27 @@ class ThreadedSubAppRunner::Impl {
         local_sub_app().set_worker_threads(thread_count);
     }
 
+    void synchronize() {
+        collect_completed_work();
+        throw_if_worker_failed();
+    }
+
     void finish() {
         collect_completed_work();
         throw_if_worker_failed();
         local_sub_app().finish();
     }
 
-    void startup(World& main_world) {
+    void startup(SubAppSource source) {
         if (m_startup_completed) {
             return;
         }
-        m_main_world = &main_world;
+        if (source.world == nullptr) {
+            throw std::invalid_argument("SubApp source World cannot be null");
+        }
+        m_source_world = source.world;
         if (local_sub_app().extracts_before_startup()) {
-            local_sub_app().extract(main_world);
+            local_sub_app().extract(*source.world, source.id);
         }
 
         start_worker();
@@ -215,15 +229,18 @@ class ThreadedSubAppRunner::Impl {
         m_startup_completed = true;
     }
 
-    void update(World& main_world) {
+    void update(SubAppSource source) {
         FEI_PROFILE_SCOPE("Threaded SubApp Update");
-        m_main_world = &main_world;
+        if (source.world == nullptr) {
+            throw std::invalid_argument("SubApp source World cannot be null");
+        }
         collect_completed_work();
         throw_if_worker_failed();
+        m_source_world = source.world;
 
         {
             FEI_PROFILE_SCOPE("Threaded SubApp Extract");
-            local_sub_app().extract(main_world);
+            local_sub_app().extract(*source.world, source.id);
         }
         {
             FEI_PROFILE_SCOPE("Threaded SubApp Submit");
@@ -388,9 +405,9 @@ class ThreadedSubAppRunner::Impl {
             throw_if_worker_failed();
         }
 
-        if (m_post_update_pending && m_main_world) {
+        if (m_post_update_pending && m_source_world) {
             m_post_update_pending = false;
-            local_sub_app().post_update(*m_main_world);
+            local_sub_app().post_update(*m_source_world);
         }
     }
 
@@ -414,7 +431,7 @@ class ThreadedSubAppRunner::Impl {
     CapacityOneChannel<SubAppWork> m_to_worker;
     CapacityOneChannel<SubAppWorkResult> m_from_worker;
     std::thread m_worker;
-    World* m_main_world {nullptr};
+    World* m_source_world {nullptr};
     std::exception_ptr m_worker_failure;
     bool m_work_in_flight {false};
     bool m_post_update_pending {false};
@@ -446,16 +463,20 @@ void ThreadedSubAppRunner::set_worker_threads(std::size_t thread_count) {
     m_impl->set_worker_threads(thread_count);
 }
 
+void ThreadedSubAppRunner::synchronize() {
+    m_impl->synchronize();
+}
+
 void ThreadedSubAppRunner::finish() {
     m_impl->finish();
 }
 
-void ThreadedSubAppRunner::startup(World& main_world) {
-    m_impl->startup(main_world);
+void ThreadedSubAppRunner::startup(SubAppSource source) {
+    m_impl->startup(source);
 }
 
-void ThreadedSubAppRunner::update(World& main_world) {
-    m_impl->update(main_world);
+void ThreadedSubAppRunner::update(SubAppSource source) {
+    m_impl->update(source);
 }
 
 void ThreadedSubAppRunner::shutdown() noexcept {

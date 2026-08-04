@@ -3,6 +3,8 @@
 #include "base/log.hpp"
 #include "ecs/world.hpp"
 
+#include <cstdint>
+#include <optional>
 #include <type_traits>
 #include <utility>
 
@@ -10,6 +12,7 @@ namespace fei {
 
 struct ExtractMainWorld {
     World* world {nullptr};
+    std::uint64_t source_revision {0};
 };
 
 template<typename P>
@@ -36,7 +39,8 @@ class Extract {
 template<ReadOnlySystemParam P>
 struct SystemParamTraits<Extract<P>> {
     struct State {
-        typename SystemParamTraits<P>::State inner;
+        std::optional<typename SystemParamTraits<P>::State> inner;
+        std::uint64_t source_revision {0};
         Tick last_run {0};
     };
 
@@ -47,7 +51,12 @@ struct SystemParamTraits<Extract<P>> {
             fatal("Extract system params are only available in RenderExtract");
         }
         return State {
-            .inner = SystemParamTraits<P>::init_state(*source.world),
+            .inner =
+                std::optional<typename SystemParamTraits<P>::State> {
+                    std::in_place,
+                    SystemParamTraits<P>::init_state(*source.world),
+                },
+            .source_revision = source.source_revision,
         };
     }
 
@@ -59,6 +68,15 @@ struct SystemParamTraits<Extract<P>> {
             fatal("Extract system params are only available in RenderExtract");
         }
 
+        if (!state.inner || state.source_revision != source.source_revision) {
+            state.inner.reset();
+            state.inner.emplace(
+                SystemParamTraits<P>::init_state(*source.world)
+            );
+            state.source_revision = source.source_revision;
+            state.last_run = 0;
+        }
+
         auto& main_world = *source.world;
         const SystemTicks main_ticks {
             .last_run = state.last_run,
@@ -66,7 +84,7 @@ struct SystemParamTraits<Extract<P>> {
         };
         auto param = SystemParamTraits<P>::get_param(
             main_world,
-            state.inner,
+            *state.inner,
             main_ticks
         );
         state.last_run = main_ticks.this_run;

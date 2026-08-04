@@ -35,10 +35,11 @@ class SubAppRunner {
     // Runs synchronous owner-thread initialization before the SubApp starts.
     // Dedicated runners use this for thread-affine runtime bootstrap.
     virtual void run_on_execution_thread(ExecutionTask task) = 0;
+    virtual void synchronize() = 0;
     virtual void set_worker_threads(std::size_t thread_count) = 0;
     virtual void finish() = 0;
-    virtual void startup(World& main_world) = 0;
-    virtual void update(World& main_world) = 0;
+    virtual void startup(SubAppSource source) = 0;
+    virtual void update(SubAppSource source) = 0;
     virtual void shutdown() noexcept = 0;
 };
 
@@ -57,10 +58,11 @@ class InlineSubAppRunner final : public SubAppRunner {
     const SubApp& sub_app() const override { return m_sub_app; }
 
     void run_on_execution_thread(ExecutionTask task) override;
+    void synchronize() override {}
     void set_worker_threads(std::size_t thread_count) override;
     void finish() override;
-    void startup(World& main_world) override;
-    void update(World& main_world) override;
+    void startup(SubAppSource source) override;
+    void update(SubAppSource source) override;
     void shutdown() noexcept override;
 
   private:
@@ -84,10 +86,11 @@ class ThreadedSubAppRunner final : public SubAppRunner {
     const SubApp& sub_app() const override;
 
     void run_on_execution_thread(ExecutionTask task) override;
+    void synchronize() override;
     void set_worker_threads(std::size_t thread_count) override;
     void finish() override;
-    void startup(World& main_world) override;
-    void update(World& main_world) override;
+    void startup(SubAppSource source) override;
+    void update(SubAppSource source) override;
     void shutdown() noexcept override;
 
   private:

@@ -12,9 +12,14 @@ namespace {
 
 class ExtractScope {
   public:
-    ExtractScope(World& main_world, World& render_world) :
-        m_main_world(main_world), m_render_world(render_world) {
-        m_render_world.resource<ExtractMainWorld>().world = &m_main_world;
+    ExtractScope(
+        World& main_world,
+        World& render_world,
+        std::uint64_t source_revision
+    ) : m_main_world(main_world), m_render_world(render_world) {
+        auto& source = m_render_world.resource<ExtractMainWorld>();
+        source.world = &m_main_world;
+        source.source_revision = source_revision;
     }
 
     ExtractScope(const ExtractScope&) = delete;
@@ -28,6 +33,34 @@ class ExtractScope {
     World& m_main_world;
     World& m_render_world;
 };
+
+void reset_render_source(World& main_world, World& render_world) {
+    auto& entity_map = render_world.resource<RenderEntityMap>();
+    for (const auto& [_, render_entity] : entity_map.main_to_render) {
+        if (render_world.has_entity(render_entity)) {
+            render_world.despawn(render_entity);
+        }
+    }
+    entity_map.main_to_render.clear();
+
+    std::vector<Entity> stale_links;
+    for (const auto& [_, archetype] : main_world.archetypes()) {
+        if (!archetype.has_component(type_id<RenderEntity>())) {
+            continue;
+        }
+        stale_links.insert(
+            stale_links.end(),
+            archetype.entities().begin(),
+            archetype.entities().end()
+        );
+    }
+    for (const auto entity : stale_links) {
+        if (main_world.has_entity(entity) &&
+            main_world.has_component<RenderEntity>(entity)) {
+            main_world.remove_component<RenderEntity>(entity);
+        }
+    }
+}
 
 void ensure_sync_markers(World& main_world, const World& render_world) {
     const auto& registry = render_world.resource<RenderExtractRegistry>();
@@ -148,10 +181,15 @@ void sync_render_entities(World& main_world, World& render_world) {
 }
 
 void run_render_extract(World& main_world, World& render_world) {
+    const auto& source = render_world.resource<SubAppSourceContext>();
+    if (source.changed) {
+        reset_render_source(main_world, render_world);
+    }
+
     ensure_sync_markers(main_world, render_world);
     sync_render_entities(main_world, render_world);
 
-    ExtractScope scope(main_world, render_world);
+    ExtractScope scope(main_world, render_world, source.revision);
     render_world.run_schedule(RenderExtract);
 }
 

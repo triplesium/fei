@@ -64,6 +64,7 @@ class App {
     struct LabeledSubApp {
         TypeId label;
         std::unique_ptr<SubAppRunner> runner;
+        std::move_only_function<SubAppSource(World&)> source_selector;
     };
 
     // Declared first so the Main World outlives plugins and SubApps. Render
@@ -260,9 +261,27 @@ class App {
             LabeledSubApp {
                 .label = label,
                 .runner = std::move(runner),
+                .source_selector = {},
             }
         );
         return *this;
+    }
+
+    // The selector is evaluated before each SubApp startup/update boundary.
+    template<typename Label, typename Selector>
+        requires std::invocable<Selector&, World&> &&
+                 std::convertible_to<
+                     std::invoke_result_t<Selector&, World&>,
+                     SubAppSource>
+    App& set_sub_app_source(Selector&& selector) {
+        const auto label = type_id<Label>();
+        for (auto& entry : m_sub_apps) {
+            if (entry.label == label) {
+                entry.source_selector = std::forward<Selector>(selector);
+                return *this;
+            }
+        }
+        fatal("SubApp {} not found", type_name<Label>());
     }
 
     template<typename Label>
@@ -309,6 +328,12 @@ class App {
         fatal("SubApp {} not found", type_name<Label>());
     }
 
+    template<typename Label>
+    App& synchronize_sub_app() {
+        sub_app_runner<Label>().synchronize();
+        return *this;
+    }
+
     World& world() { return m_world; }
 
     const World& world() const { return m_world; }
@@ -333,6 +358,8 @@ class App {
     void run();
 
   private:
+    SubAppSource resolve_sub_app_source(LabeledSubApp& entry);
+
     AppLifecycle m_lifecycle {AppLifecycle::Building};
 };
 

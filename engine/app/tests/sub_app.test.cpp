@@ -67,6 +67,8 @@ class RecordingSubAppRunner final : public SubAppRunner {
         m_inline.run_on_execution_thread(std::move(task));
     }
 
+    void synchronize() override { m_inline.synchronize(); }
+
     void set_worker_threads(std::size_t thread_count) override {
         m_inline.set_worker_threads(thread_count);
     }
@@ -76,14 +78,14 @@ class RecordingSubAppRunner final : public SubAppRunner {
         m_inline.finish();
     }
 
-    void startup(World& main_world) override {
+    void startup(SubAppSource source) override {
         m_trace->emplace_back("startup");
-        m_inline.startup(main_world);
+        m_inline.startup(source);
     }
 
-    void update(World& main_world) override {
+    void update(SubAppSource source) override {
         m_trace->emplace_back("update");
-        m_inline.update(main_world);
+        m_inline.update(source);
     }
 
     void shutdown() noexcept override {
@@ -241,6 +243,66 @@ TEST_CASE("App owns and runs isolated sub apps", "[app][sub-app]") {
         app.sub_app<TestSubApp>().resource<SubTrace>().entries ==
         std::vector<std::string> {"startup", "update", "update"}
     );
+}
+
+TEST_CASE(
+    "App selects a SubApp source world for extraction and output",
+    "[app][sub-app][source]"
+) {
+    struct SourceOutput {
+        int value {0};
+    };
+    struct SourceTrace {
+        std::vector<SubAppSourceContext> contexts;
+    };
+
+    App app;
+    app.add_resource(MainValue {.value = 7});
+
+    World alternate_world;
+    alternate_world.add_resource(MainValue {.value = 19});
+    bool use_alternate = false;
+
+    SubApp sub_app;
+    sub_app.add_resource(SubValue {})
+        .add_resource(SourceTrace {})
+        .set_pre_extract([](World&, World& sub) {
+            sub.resource<SourceTrace>().contexts.push_back(
+                sub.resource<SubAppSourceContext>()
+            );
+        })
+        .add_extract([](World& source, World& sub) {
+            sub.resource<SubValue>().value =
+                static_cast<const World&>(source).resource<MainValue>().value;
+        })
+        .add_post_update([](World& source, World& sub) {
+            source.add_resource(
+                SourceOutput {.value = sub.resource<SubValue>().value}
+            );
+        });
+    app.insert_sub_app<TestSubApp>(std::move(sub_app));
+    app.set_sub_app_source<TestSubApp>([&](World& main_world) {
+        return use_alternate ? SubAppSource {&alternate_world, 1} :
+                               SubAppSource {&main_world, 0};
+    });
+
+    app.render();
+    REQUIRE(app.world().resource<SourceOutput>().value == 7);
+    REQUIRE_FALSE(alternate_world.has_resource<SourceOutput>());
+
+    app.render();
+    use_alternate = true;
+    app.render();
+    REQUIRE(alternate_world.resource<SourceOutput>().value == 19);
+
+    const auto& contexts =
+        app.sub_app<TestSubApp>().resource<SourceTrace>().contexts;
+    REQUIRE(contexts.size() == 3);
+    REQUIRE(contexts[0].changed);
+    REQUIRE_FALSE(contexts[1].changed);
+    REQUIRE(contexts[2].changed);
+    REQUIRE(contexts[2].id == 1);
+    REQUIRE(contexts[2].revision == contexts[1].revision + 1);
 }
 
 TEST_CASE(

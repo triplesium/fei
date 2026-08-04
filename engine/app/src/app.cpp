@@ -38,6 +38,15 @@ App& App::add_plugins(PluginGroupBuilder builder) {
     return *this;
 }
 
+SubAppSource App::resolve_sub_app_source(LabeledSubApp& entry) {
+    auto source = entry.source_selector ? entry.source_selector(m_world) :
+                                          SubAppSource {&m_world, 0};
+    if (source.world == nullptr) {
+        fatal("SubApp source selector returned a null World");
+    }
+    return source;
+}
+
 void App::finish() {
     if (m_lifecycle != AppLifecycle::Building) {
         return;
@@ -65,7 +74,7 @@ void App::startup() {
     run_profiled_schedule(*this, PreStartUp, "PreStartUp");
     run_profiled_schedule(*this, StartUp, "StartUp");
     for (auto& entry : m_sub_apps) {
-        entry.runner->startup(m_world);
+        entry.runner->startup(resolve_sub_app_source(entry));
     }
     m_lifecycle = AppLifecycle::Running;
 }
@@ -103,7 +112,7 @@ void App::render() {
     run_profiled_schedule(*this, RenderEnd, "RenderEnd");
     run_profiled_schedule(*this, RenderLast, "RenderLast");
     for (auto& entry : m_sub_apps) {
-        entry.runner->update(m_world);
+        entry.runner->update(resolve_sub_app_source(entry));
     }
     FEI_PROFILE_FRAME();
 }

@@ -6,11 +6,29 @@
 
 #include <concepts>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <utility>
 #include <vector>
 
 namespace fei {
+
+using SubAppSourceId = std::uint64_t;
+
+// Selects the World a SubApp extracts from and publishes outputs to. The World
+// must remain alive until the runner has completed the submitted frame. Change
+// id when reconstructing a logical source in place.
+struct SubAppSource {
+    World* world {nullptr};
+    SubAppSourceId id {0};
+};
+
+// Stored in every SubApp World and updated immediately before extraction.
+struct SubAppSourceContext {
+    SubAppSourceId id {0};
+    std::uint64_t revision {0};
+    bool changed {false};
+};
 
 class SubApp {
   public:
@@ -109,7 +127,7 @@ class SubApp {
     SubApp& set_pre_extract(ExtractFn extract);
     SubApp& add_extract(ExtractFn extract);
     SubApp& set_post_extract(ExtractFn extract);
-    void extract(World& main_world);
+    void extract(World& source_world, SubAppSourceId source_id = 0);
     SubApp& add_post_update(ExtractFn post_update);
     SubApp& add_post_update_cleanup(ExtractFn cleanup);
     void post_update(World& main_world);
@@ -136,6 +154,10 @@ class SubApp {
     std::vector<ExtractFn> m_post_updates;
     std::vector<ExtractFn> m_post_update_cleanups;
     std::vector<ShutdownFn> m_shutdowns;
+    World* m_source_world {nullptr};
+    SubAppSourceId m_source_id {0};
+    std::uint64_t m_source_revision {0};
+    bool m_source_initialized {false};
     bool m_extract_before_startup {false};
     bool m_finished {false};
     bool m_started {false};
