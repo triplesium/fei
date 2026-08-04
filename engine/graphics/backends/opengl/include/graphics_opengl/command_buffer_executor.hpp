@@ -76,6 +76,7 @@ class CommandBufferExecutorOpenGL {
         std::int32_t vertex_offset
     );
     void execute_dispatch(
+        ExecutionState& state,
         std::size_t group_x,
         std::size_t group_y,
         std::size_t group_z

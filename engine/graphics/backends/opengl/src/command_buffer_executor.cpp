@@ -190,6 +190,9 @@ struct CommandBufferExecutorOpenGL::ExecutionState {
     std::shared_ptr<const Framebuffer> framebuffer;
     std::shared_ptr<const Pipeline> pipeline;
     std::vector<std::shared_ptr<const ResourceSetOpenGL>> bound_resource_sets;
+    std::vector<std::vector<uint32>> bound_dynamic_offsets;
+    std::shared_ptr<const BufferOpenGL> vertex_buffer;
+    std::shared_ptr<const BufferOpenGL> index_buffer;
     GLenum draw_elements_type {GL_UNSIGNED_INT};
     uint32 index_buffer_offset {0};
     std::int32_t viewport_x {0};
@@ -286,13 +289,19 @@ void CommandBufferExecutorOpenGL::execute_command(
             ) {
                 auto buffer_gl =
                     std::static_pointer_cast<const BufferOpenGL>(cmd.buffer);
-                buffer_gl->ensure_created();
-                FEI_GL_CALL(
-                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_gl->id())
-                );
+                const auto element_type = to_gl_draw_elements_type(cmd.format);
+                if (state.index_buffer != buffer_gl ||
+                    state.draw_elements_type != element_type ||
+                    state.index_buffer_offset != cmd.offset) {
+                    buffer_gl->ensure_created();
+                    FEI_GL_CALL(
+                        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_gl->id())
+                    );
 
-                state.draw_elements_type = to_gl_draw_elements_type(cmd.format);
-                state.index_buffer_offset = cmd.offset;
+                    state.index_buffer = std::move(buffer_gl);
+                    state.draw_elements_type = element_type;
+                    state.index_buffer_offset = cmd.offset;
+                }
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::SetResourceSet>
             ) {
@@ -318,7 +327,7 @@ void CommandBufferExecutorOpenGL::execute_command(
                     cmd.vertex_offset
                 );
             } else if constexpr (std::is_same_v<CommandT, ogl_cmd::Dispatch>) {
-                execute_dispatch(cmd.group_x, cmd.group_y, cmd.group_z);
+                execute_dispatch(state, cmd.group_x, cmd.group_y, cmd.group_z);
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::BeginGpuProfileZone>
             ) {
@@ -367,6 +376,14 @@ void CommandBufferExecutorOpenGL::execute_begin_render_pass(
     ExecutionState& state,
     const RenderPassDescription& desc
 ) {
+    // Attachment clears temporarily override raster state. Force the first
+    // pipeline in every pass to restore its complete state, while still
+    // caching repeated bindings within the pass.
+    state.pipeline.reset();
+    state.bound_resource_sets.clear();
+    state.bound_dynamic_offsets.clear();
+    state.vertex_buffer.reset();
+
     auto framebuffer = desc.framebuffer;
     if (!framebuffer) {
         FramebufferDescription fb_desc;
@@ -477,9 +494,20 @@ void CommandBufferExecutorOpenGL::execute_set_render_pipeline(
     auto pipeline_gl = std::static_pointer_cast<const PipelineOpenGL>(pipeline);
     pipeline_gl->ensure_created();
 
+    if (state.pipeline == pipeline) {
+        return;
+    }
+
+    state.bound_resource_sets.clear();
+    state.bound_dynamic_offsets.clear();
+    state.vertex_buffer.reset();
+
     if (state.bound_resource_sets.size() <
         pipeline_gl->resource_layouts().size()) {
         state.bound_resource_sets.resize(
+            pipeline_gl->resource_layouts().size()
+        );
+        state.bound_dynamic_offsets.resize(
             pipeline_gl->resource_layouts().size()
         );
     }
@@ -563,9 +591,20 @@ void CommandBufferExecutorOpenGL::execute_set_compute_pipeline(
     auto pipeline_gl = std::static_pointer_cast<const PipelineOpenGL>(pipeline);
     pipeline_gl->ensure_created();
 
+    if (state.pipeline == pipeline) {
+        return;
+    }
+
+    state.bound_resource_sets.clear();
+    state.bound_dynamic_offsets.clear();
+    state.vertex_buffer.reset();
+
     if (state.bound_resource_sets.size() <
         pipeline_gl->resource_layouts().size()) {
         state.bound_resource_sets.resize(
+            pipeline_gl->resource_layouts().size()
+        );
+        state.bound_dynamic_offsets.resize(
             pipeline_gl->resource_layouts().size()
         );
     }
@@ -591,6 +630,10 @@ void CommandBufferExecutorOpenGL::execute_set_vertex_buffer(
     buffer_gl->ensure_created();
     pipeline_gl->ensure_created();
 
+    if (state.vertex_buffer == buffer_gl) {
+        return;
+    }
+
     FEI_GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, buffer_gl->id()));
     for (auto& layout : pipeline_gl->vertex_layouts()) {
         for (auto& attr : layout.attributes) {
@@ -608,6 +651,7 @@ void CommandBufferExecutorOpenGL::execute_set_vertex_buffer(
             ));
         }
     }
+    state.vertex_buffer = std::move(buffer_gl);
 }
 
 void CommandBufferExecutorOpenGL::execute_set_resource_set(
@@ -637,7 +681,15 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
     if (state.bound_resource_sets.size() <= slot) {
         state.bound_resource_sets.resize(slot + 1);
     }
+    if (state.bound_dynamic_offsets.size() <= slot) {
+        state.bound_dynamic_offsets.resize(slot + 1);
+    }
+    if (state.bound_resource_sets[slot] == gl_resource_set &&
+        state.bound_dynamic_offsets[slot] == dynamic_offsets) {
+        return;
+    }
     state.bound_resource_sets[slot] = gl_resource_set;
+    state.bound_dynamic_offsets[slot] = dynamic_offsets;
     auto gl_layout = std::static_pointer_cast<const ResourceLayoutOpenGL>(
         gl_pipeline->resource_layouts()[slot]
     );
@@ -865,17 +917,27 @@ void CommandBufferExecutorOpenGL::execute_draw_indexed(
 }
 
 void CommandBufferExecutorOpenGL::execute_dispatch(
+    ExecutionState& state,
     std::size_t group_x,
     std::size_t group_y,
     std::size_t group_z
 ) {
+    if (!state.pipeline) {
+        fatal("CommandBufferOpenGL::dispatch executed without pipeline");
+    }
+
+    auto pipeline_gl =
+        std::static_pointer_cast<const PipelineOpenGL>(state.pipeline);
+    pipeline_gl->ensure_created();
     FEI_GL_CALL(glDispatchCompute(
         static_cast<GLuint>(group_x),
         static_cast<GLuint>(group_y),
         static_cast<GLuint>(group_z)
     ));
 
-    FEI_GL_CALL(glMemoryBarrier(GL_ALL_BARRIER_BITS));
+    if (pipeline_gl->memory_barriers() != 0) {
+        FEI_GL_CALL(glMemoryBarrier(pipeline_gl->memory_barriers()));
+    }
 }
 
 void CommandBufferExecutorOpenGL::execute_generate_mipmaps(
