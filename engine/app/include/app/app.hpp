@@ -1,5 +1,6 @@
 #pragma once
 #include "app/plugin_group.hpp"
+#include "app/sub_app_runner.hpp"
 #include "base/log.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/event.hpp"
@@ -60,9 +61,18 @@ class App {
   private:
     friend class PluginGroupBuilder;
 
+    struct LabeledSubApp {
+        TypeId label;
+        std::unique_ptr<SubAppRunner> runner;
+    };
+
+    // Declared first so the Main World outlives plugins and SubApps. Render
+    // resources may hold explicit read-only references to Main World services.
+    World m_world;
     std::vector<std::unique_ptr<Plugin>> m_plugins;
     std::unordered_set<TypeId> m_plugin_types;
     std::unordered_set<TypeId> m_events;
+    std::vector<LabeledSubApp> m_sub_apps;
 
     App& add_boxed_plugin(
         TypeId plugin_type,
@@ -218,6 +228,87 @@ class App {
         return m_world.resource<R>();
     }
 
+    template<typename Label>
+    [[nodiscard]] bool has_sub_app() const {
+        const auto label = type_id<Label>();
+        return std::ranges::any_of(m_sub_apps, [label](const auto& entry) {
+            return entry.label == label;
+        });
+    }
+
+    template<typename Label>
+    App& insert_sub_app(SubApp sub_app) {
+        return insert_sub_app<Label>(
+            std::make_unique<InlineSubAppRunner>(std::move(sub_app))
+        );
+    }
+
+    template<typename Label>
+    App& insert_sub_app(std::unique_ptr<SubAppRunner> runner) {
+        const auto label = type_id<Label>();
+        if (has_sub_app<Label>()) {
+            fatal("SubApp {} has already been inserted", type_name<Label>());
+        }
+        if (!runner) {
+            fatal(
+                "Cannot insert a null SubApp runner for {}",
+                type_name<Label>()
+            );
+        }
+        runner->set_worker_threads(m_world.worker_threads());
+        m_sub_apps.push_back(
+            LabeledSubApp {
+                .label = label,
+                .runner = std::move(runner),
+            }
+        );
+        return *this;
+    }
+
+    template<typename Label>
+    SubApp& sub_app() {
+        const auto label = type_id<Label>();
+        for (auto& entry : m_sub_apps) {
+            if (entry.label == label) {
+                return entry.runner->sub_app();
+            }
+        }
+        fatal("SubApp {} not found", type_name<Label>());
+    }
+
+    template<typename Label>
+    const SubApp& sub_app() const {
+        const auto label = type_id<Label>();
+        for (const auto& entry : m_sub_apps) {
+            if (entry.label == label) {
+                return entry.runner->sub_app();
+            }
+        }
+        fatal("SubApp {} not found", type_name<Label>());
+    }
+
+    template<typename Label>
+    SubAppRunner& sub_app_runner() {
+        const auto label = type_id<Label>();
+        for (auto& entry : m_sub_apps) {
+            if (entry.label == label) {
+                return *entry.runner;
+            }
+        }
+        fatal("SubApp {} not found", type_name<Label>());
+    }
+
+    template<typename Label>
+    const SubAppRunner& sub_app_runner() const {
+        const auto label = type_id<Label>();
+        for (const auto& entry : m_sub_apps) {
+            if (entry.label == label) {
+                return *entry.runner;
+            }
+        }
+        fatal("SubApp {} not found", type_name<Label>());
+    }
+
     World& world() { return m_world; }
 
     const World& world() const { return m_world; }
@@ -226,6 +317,9 @@ class App {
 
     App& set_worker_threads(std::size_t thread_count) {
         m_world.set_worker_threads(thread_count);
+        for (auto& entry : m_sub_apps) {
+            entry.runner->set_worker_threads(thread_count);
+        }
         return *this;
     }
 
@@ -239,7 +333,6 @@ class App {
     void run();
 
   private:
-    World m_world;
     AppLifecycle m_lifecycle {AppLifecycle::Building};
 };
 

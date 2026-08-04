@@ -27,7 +27,7 @@ void register_main_schedule_profile_names() {
 }
 
 void run_profiled_schedule(App& app, ScheduleId schedule, const char* name) {
-    FEI_PROFILE_SCOPE(name);
+    FEI_PROFILE_DYNAMIC_SCOPE(name, __FILE__, __func__, __LINE__);
     app.run_schedule(schedule);
 }
 
@@ -48,6 +48,9 @@ void App::finish() {
         plugin->finish(*this);
     }
     m_world.sort_systems();
+    for (auto& entry : m_sub_apps) {
+        entry.runner->finish();
+    }
     m_lifecycle = AppLifecycle::Ready;
 }
 
@@ -61,6 +64,9 @@ void App::startup() {
 
     run_profiled_schedule(*this, PreStartUp, "PreStartUp");
     run_profiled_schedule(*this, StartUp, "StartUp");
+    for (auto& entry : m_sub_apps) {
+        entry.runner->startup(m_world);
+    }
     m_lifecycle = AppLifecycle::Running;
 }
 
@@ -96,6 +102,9 @@ void App::render() {
     run_profiled_schedule(*this, RenderUpdate, "RenderUpdate");
     run_profiled_schedule(*this, RenderEnd, "RenderEnd");
     run_profiled_schedule(*this, RenderLast, "RenderLast");
+    for (auto& entry : m_sub_apps) {
+        entry.runner->update(m_world);
+    }
     FEI_PROFILE_FRAME();
 }
 
@@ -104,6 +113,10 @@ void App::shutdown() noexcept {
         return;
     }
 
+    for (auto runner = m_sub_apps.rbegin(); runner != m_sub_apps.rend();
+         ++runner) {
+        runner->runner->shutdown();
+    }
     for (auto plugin = m_plugins.rbegin(); plugin != m_plugins.rend();
          ++plugin) {
         (*plugin)->cleanup(*this);
