@@ -236,17 +236,48 @@ read_scene_document(const AssetPath& path, const AssetDatabase& database) {
     return std::move(*document);
 }
 
-Status<std::string> save_scene(
+static Status<std::string> save_scene_to(
     World& world,
+    const AssetPath& requested_path,
+    bool overwrite,
     AssetDatabase& database,
     ProjectAssetWatcher& watcher,
     const ComponentOperations& operations,
     ActivityLog& activity,
     SceneSession& session
 ) {
-    if (!session.path) {
-        return failure(std::string("The current scene has no asset path"));
+    auto path = requested_path.normalized();
+    if (!path.source()) {
+        path = path.with_source("project");
     }
+    if (*path.source() != "project" || path.is_unapproved() ||
+        path.path().empty()) {
+        return failure(
+            "Scene path must be a safe project:// path: " +
+            requested_path.as_string()
+        );
+    }
+    if (!is_scene_document_path(path)) {
+        return failure(
+            "Scene path must end with .scene.yaml: " + path.as_string()
+        );
+    }
+
+    auto file = database.resolve(path);
+    if (!file) {
+        return failure(std::move(file.error()));
+    }
+    std::error_code existence_error;
+    const bool exists = std::filesystem::exists(*file, existence_error);
+    if (existence_error) {
+        return failure(
+            "Failed to inspect scene destination: " + existence_error.message()
+        );
+    }
+    if (exists && !overwrite) {
+        return failure("Scene asset already exists: " + path.as_string());
+    }
+
     auto document = capture_scene_document(
         world,
         session.bindings,
@@ -260,10 +291,6 @@ Status<std::string> save_scene(
     if (!encoded) {
         return failure(encoded.error().path + ": " + encoded.error().message);
     }
-    auto file = database.resolve(*session.path);
-    if (!file) {
-        return failure(std::move(file.error()));
-    }
     std::error_code directory_error;
     std::filesystem::create_directories(file->parent_path(), directory_error);
     if (directory_error) {
@@ -274,10 +301,12 @@ Status<std::string> save_scene(
     if (auto status = write_file_atomically(*file, *encoded); !status) {
         return status;
     }
-    auto metadata = database.ensure_native_asset(*session.path);
+    auto metadata = database.ensure_native_asset(path);
     if (!metadata) {
         return failure(std::move(metadata.error()));
     }
+    const bool changed_path = !session.path || *session.path != path;
+    session.path = path;
     session.document = std::move(*document);
     session.dirty = false;
     session.external_change_pending = false;
@@ -285,9 +314,57 @@ Status<std::string> save_scene(
     if (auto status = watcher.acknowledge(); !status) {
         return status;
     }
-    activity
-        .record(OperationSource::User, "SaveScene", session.path->as_string());
+    activity.record(
+        OperationSource::User,
+        changed_path ? "SaveSceneAs" : "SaveScene",
+        path.as_string()
+    );
     return {};
+}
+
+Status<std::string> save_scene(
+    World& world,
+    AssetDatabase& database,
+    ProjectAssetWatcher& watcher,
+    const ComponentOperations& operations,
+    ActivityLog& activity,
+    SceneSession& session
+) {
+    if (!session.path) {
+        return failure(std::string("The current scene has no asset path"));
+    }
+    return save_scene_to(
+        world,
+        *session.path,
+        true,
+        database,
+        watcher,
+        operations,
+        activity,
+        session
+    );
+}
+
+Status<std::string> save_scene_as(
+    World& world,
+    const AssetPath& path,
+    bool overwrite,
+    AssetDatabase& database,
+    ProjectAssetWatcher& watcher,
+    const ComponentOperations& operations,
+    ActivityLog& activity,
+    SceneSession& session
+) {
+    return save_scene_to(
+        world,
+        path,
+        overwrite,
+        database,
+        watcher,
+        operations,
+        activity,
+        session
+    );
 }
 
 AssetPath next_untitled_scene_path(const AssetDatabase& database) {

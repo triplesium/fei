@@ -54,6 +54,17 @@ Status<std::string> save_scene(
     SceneSession& session
 );
 
+Status<std::string> save_scene_as(
+    World& world,
+    const AssetPath& path,
+    bool overwrite,
+    AssetDatabase& database,
+    ProjectAssetWatcher& watcher,
+    const ComponentOperations& operations,
+    ActivityLog& activity,
+    SceneSession& session
+);
+
 [[nodiscard]] AssetPath next_untitled_scene_path(const AssetDatabase& database);
 
 Status<std::string> reload_scene(

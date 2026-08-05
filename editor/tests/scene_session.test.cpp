@@ -1,6 +1,10 @@
 #include "editor/scene_session.hpp"
 
 #include "asset/database.hpp"
+#include "ecs/world.hpp"
+#include "editor/activity.hpp"
+#include "editor/asset_watcher.hpp"
+#include "editor/component_operations.hpp"
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -71,4 +75,72 @@ TEST_CASE("Scene sessions choose an unused default path", "[editor][scene]") {
         next_untitled_scene_path(database) ==
         AssetPath("project://scenes/untitled_2.scene.yaml")
     );
+}
+
+TEST_CASE(
+    "Saving a scene as updates its path only after a successful write",
+    "[editor][scene]"
+) {
+    TemporarySceneDirectory directory;
+    AssetDatabase database(directory.path());
+    ProjectAssetWatcher watcher(directory.path());
+    REQUIRE(watcher.acknowledge());
+
+    World world;
+    ComponentOperations operations;
+    ActivityLog activity;
+    SceneSession session {.dirty = true};
+    const AssetPath destination("project://scenes/saved.scene.yaml");
+
+    REQUIRE(save_scene_as(
+        world,
+        destination,
+        false,
+        database,
+        watcher,
+        operations,
+        activity,
+        session
+    ));
+    REQUIRE(session.path);
+    CHECK(*session.path == destination);
+    CHECK_FALSE(session.dirty);
+    CHECK(
+        std::filesystem::exists(directory.path() / "scenes/saved.scene.yaml")
+    );
+    REQUIRE_FALSE(activity.entries().empty());
+    CHECK(activity.entries().back().action == "SaveSceneAs");
+}
+
+TEST_CASE(
+    "Saving a scene as refuses overwrite without changing the session",
+    "[editor][scene]"
+) {
+    TemporarySceneDirectory directory;
+    directory.create("scenes/existing.scene.yaml");
+    AssetDatabase database(directory.path());
+    ProjectAssetWatcher watcher(directory.path());
+    REQUIRE(watcher.acknowledge());
+
+    World world;
+    ComponentOperations operations;
+    ActivityLog activity;
+    const AssetPath original("project://scenes/original.scene.yaml");
+    SceneSession session {.path = original, .dirty = true};
+
+    const auto status = save_scene_as(
+        world,
+        AssetPath("project://scenes/existing.scene.yaml"),
+        false,
+        database,
+        watcher,
+        operations,
+        activity,
+        session
+    );
+
+    REQUIRE_FALSE(status);
+    REQUIRE(session.path);
+    CHECK(*session.path == original);
+    CHECK(session.dirty);
 }
