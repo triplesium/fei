@@ -3,10 +3,16 @@ target("fei-editor-core")
     add_headerfiles("include/**.hpp")
     add_files(
         "src/activity.cpp",
+        "src/activity_panel.cpp",
         "src/asset_browser.cpp",
+        "src/assets_panel.cpp",
         "src/asset_watcher.cpp",
         "src/component_operations.cpp",
-        "src/plugin.cpp"
+        "src/hierarchy_panel.cpp",
+        "src/inspector_panel.cpp",
+        "src/plugin.cpp",
+        "src/scene_panel.cpp",
+        "src/scene_session.cpp"
     )
     add_includedirs("include", {public = true})
     add_deps(
@@ -31,7 +37,7 @@ target("fei-editor")
     set_kind("binary")
     set_rundir("$(projectdir)")
     add_rules("fei.reflect")
-    add_files("src/main.cpp")
+    add_files("src/application.cpp", "src/main.cpp")
     add_deps(
         "fei-editor-core",
         "fei-project",
