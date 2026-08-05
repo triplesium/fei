@@ -8,9 +8,13 @@ target("fei-editor-core")
         "src/assets_panel.cpp",
         "src/asset_watcher.cpp",
         "src/component_operations.cpp",
+        "src/editor_shell.cpp",
+        "src/editor_viewport_bridge.cpp",
         "src/hierarchy_panel.cpp",
         "src/inspector_panel.cpp",
         "src/plugin.cpp",
+        "src/project_asset_sync.cpp",
+        "src/project_session.cpp",
         "src/scene_panel.cpp",
         "src/scene_session.cpp"
     )
