@@ -1,0 +1,24 @@
+target("fei-runtime-protocol")
+    set_kind("static")
+    add_headerfiles("include/**.hpp")
+    add_files("src/*.cpp")
+    add_includedirs("include", {public = true})
+    add_deps("fei-app", "fei-base")
+    add_packages("cpp-httplib", "nlohmann_json")
+    if is_plat("windows") then
+        add_syslinks("ws2_32")
+    end
+
+target("fei-runtime-protocol-tests")
+    set_kind("binary")
+    set_default(false)
+    add_rules("fei.test")
+    add_files("tests/*.test.cpp")
+    add_deps("fei-runtime-protocol")
+
+target("fei-runtime-probe-fixture")
+    set_kind("binary")
+    set_default(false)
+    add_rules("fei.reflect")
+    add_files("tests/probe_fixture.cpp")
+    add_deps("fei-runtime-protocol", "fei-runtime-inspection-ecs")
