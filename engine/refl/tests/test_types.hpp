@@ -1,10 +1,22 @@
 #pragma once
 
+#include "refl/reflect.hpp"
+
 #include <iostream>
 #include <sstream>
 #include <string>
 
 namespace fei::refl_test {
+
+FEI_REFLECT(Plugin(name = rendering, phase = runtime))
+struct ReflectedTaggedType {
+    int value;
+};
+
+FEI_REFLECT(Category(name = example))
+enum class ReflectedTaggedEnum {
+    Value,
+};
 
 struct TestStruct {
     int a;

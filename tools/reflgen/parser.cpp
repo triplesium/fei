@@ -16,7 +16,7 @@ namespace {
 
 struct ReflectionMarker {
     std::size_t end_offset {0};
-    std::vector<std::string> tags;
+    std::vector<ReflectionTag> tags;
 };
 
 struct TranslationUnitContext {
@@ -97,14 +97,57 @@ void visit_children(CXCursor cursor, Visitor visitor) {
     return static_cast<std::size_t>(offset);
 }
 
-[[nodiscard]] std::vector<std::string>
-parse_reflection_tags(std::string_view arguments) {
-    std::vector<std::string> tags;
+[[nodiscard]] bool valid_tag_key(std::string_view key) {
+    return !key.empty() && std::ranges::all_of(key, [](unsigned char ch) {
+        return std::isalnum(ch) || ch == '_' || ch == ':' || ch == '.';
+    });
+}
+
+[[nodiscard]] bool valid_tag_value(std::string_view value) {
+    return !value.empty() && std::ranges::all_of(value, [](unsigned char ch) {
+        return std::isalnum(ch) || ch == '_' || ch == ':' || ch == '.' ||
+               ch == '-' || ch == '/';
+    });
+}
+
+[[nodiscard]] ReflectionTag
+parse_group_field(std::string_view group, std::string_view text) {
+    const auto separator = text.find('=');
+    if (separator == std::string_view::npos ||
+        text.find('=', separator + 1) != std::string_view::npos) {
+        throw std::runtime_error(
+            "FEI_REFLECT group field '" + std::string(text) +
+            "' must use exactly one '='"
+        );
+    }
+
+    const auto key = trim(text.substr(0, separator));
+    if (!valid_tag_key(key)) {
+        throw std::runtime_error(
+            "Invalid FEI_REFLECT group field key '" + key + "'"
+        );
+    }
+    auto value = trim(text.substr(separator + 1));
+    if (!valid_tag_value(value)) {
+        throw std::runtime_error(
+            "Invalid value '" + value + "' for FEI_REFLECT tag '" + key + "'"
+        );
+    }
+    return ReflectionTag {
+        .key = std::string(group) + "." + key,
+        .value = std::move(value),
+        .group = std::string(group),
+        .field = key,
+    };
+}
+
+template<typename Callback>
+void for_each_top_level_item(std::string_view text, Callback callback) {
     std::size_t start = 0;
     int nesting = 0;
-    for (std::size_t index = 0; index <= arguments.size(); ++index) {
-        const bool at_end = index == arguments.size();
-        const char character = at_end ? ',' : arguments[index];
+    for (std::size_t index = 0; index <= text.size(); ++index) {
+        const bool at_end = index == text.size();
+        const char character = at_end ? ',' : text[index];
         if (!at_end) {
             if (character == '(' || character == '<' || character == '[') {
                 ++nesting;
@@ -115,30 +158,84 @@ parse_reflection_tags(std::string_view arguments) {
             }
         }
 
+        if (nesting < 0) {
+            throw std::runtime_error("FEI_REFLECT contains unmatched brackets");
+        }
+
         if (character != ',' || nesting != 0) {
             continue;
         }
 
-        auto tag = trim(arguments.substr(start, index - start));
-        if (!tag.empty()) {
-            const bool valid = std::ranges::all_of(tag, [](unsigned char ch) {
-                return std::isalnum(ch) || ch == '_' || ch == ':' || ch == '.';
-            });
-            if (!valid) {
-                throw std::runtime_error(
-                    "Invalid FEI_REFLECT tag '" + tag + "'"
-                );
-            }
-            tags.push_back(std::move(tag));
-        } else if (!trim(arguments).empty()) {
+        auto item = trim(text.substr(start, index - start));
+        if (!item.empty()) {
+            callback(std::move(item));
+        } else if (!trim(text).empty()) {
             throw std::runtime_error("FEI_REFLECT contains an empty tag");
         }
         start = index + 1;
     }
+    if (nesting != 0) {
+        throw std::runtime_error("FEI_REFLECT contains unmatched brackets");
+    }
+}
 
-    std::ranges::sort(tags);
-    tags.erase(std::unique(tags.begin(), tags.end()), tags.end());
-    return tags;
+void parse_reflection_item(
+    std::string_view text,
+    std::vector<ReflectionTag>& tags
+) {
+    const auto group_begin = text.find('(');
+    if (group_begin == std::string_view::npos) {
+        if (text.find('=') != std::string_view::npos || !valid_tag_key(text)) {
+            throw std::runtime_error(
+                "Invalid FEI_REFLECT tag '" + std::string(text) + "'"
+            );
+        }
+        tags.push_back(ReflectionTag {.key = std::string(text)});
+        return;
+    }
+
+    const auto group = trim(text.substr(0, group_begin));
+    if (!valid_tag_key(group) || text.back() != ')') {
+        throw std::runtime_error(
+            "Invalid FEI_REFLECT group '" + std::string(text) + "'"
+        );
+    }
+
+    tags.push_back(ReflectionTag {.key = group});
+    const auto fields =
+        text.substr(group_begin + 1, text.size() - group_begin - 2);
+    if (trim(fields).empty()) {
+        throw std::runtime_error(
+            "FEI_REFLECT group '" + group + "' must contain at least one field"
+        );
+    }
+    for_each_top_level_item(fields, [&](std::string field) {
+        tags.push_back(parse_group_field(group, field));
+    });
+}
+
+[[nodiscard]] std::vector<ReflectionTag>
+parse_reflection_tags(std::string_view arguments) {
+    std::vector<ReflectionTag> tags;
+    for_each_top_level_item(arguments, [&](std::string item) {
+        parse_reflection_item(item, tags);
+    });
+
+    std::ranges::sort(tags, {}, &ReflectionTag::key);
+    std::vector<ReflectionTag> unique_tags;
+    for (auto& tag : tags) {
+        if (unique_tags.empty() || unique_tags.back().key != tag.key) {
+            unique_tags.push_back(std::move(tag));
+            continue;
+        }
+        if (unique_tags.back().value != tag.value) {
+            throw std::runtime_error(
+                "FEI_REFLECT tag '" + tag.key +
+                "' is declared with conflicting values"
+            );
+        }
+    }
+    return unique_tags;
 }
 
 [[nodiscard]] ReflectionMarker
@@ -230,7 +327,7 @@ void collect_reflection_markers(
     });
 }
 
-[[nodiscard]] std::optional<std::vector<std::string>>
+[[nodiscard]] std::optional<std::vector<ReflectionTag>>
 reflection_tags_for(CXCursor cursor, const TranslationUnitContext& context) {
     const auto declaration_offset = cursor_offset(cursor);
     if (!declaration_offset) {

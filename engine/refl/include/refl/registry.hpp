@@ -335,8 +335,18 @@ class Registry {
     Result<ContainerAdapter&, RegistryError>
     try_get_container_adapter(TypeId id);
     Type& add_generated_tag(TypeId type_id, std::string tag);
+    Type& add_generated_tag(TypeId type_id, std::string tag, std::string value);
+    Type& add_generated_annotation(TypeId type_id, std::string annotation);
+    Type& add_generated_annotation_field(
+        TypeId type_id,
+        std::string annotation,
+        std::string field,
+        std::string value
+    );
     Optional<std::string_view> tag_name(TypeTagId tag) const;
     std::vector<TypeId> types_with_tag(TypeTagId tag) const;
+    std::vector<TypeId>
+    types_with_annotation(std::string_view annotation) const;
     bool has_enum(TypeId id) const;
     void clear_generated_metadata();
 
@@ -355,6 +365,37 @@ class Registry {
     Type& add_generated_tag(std::string tag) {
         auto& registered = register_type<T>();
         return add_generated_tag(registered.id(), std::move(tag));
+    }
+
+    template<typename T>
+    Type& add_generated_tag(std::string tag, std::string value) {
+        auto& registered = register_type<T>();
+        return add_generated_tag(
+            registered.id(),
+            std::move(tag),
+            std::move(value)
+        );
+    }
+
+    template<typename T>
+    Type& add_generated_annotation(std::string annotation) {
+        auto& registered = register_type<T>();
+        return add_generated_annotation(registered.id(), std::move(annotation));
+    }
+
+    template<typename T>
+    Type& add_generated_annotation_field(
+        std::string annotation,
+        std::string field,
+        std::string value
+    ) {
+        auto& registered = register_type<T>();
+        return add_generated_annotation_field(
+            registered.id(),
+            std::move(annotation),
+            std::move(field),
+            std::move(value)
+        );
     }
 
     template<typename T>

@@ -1,5 +1,6 @@
 #include "refl/type.hpp"
 
+#include "refl/generated.hpp"
 #include "refl/registry.hpp"
 #include "test_types.hpp"
 
@@ -149,5 +150,53 @@ TEST_CASE("Reflection types expose registered tags", "[refl][type][tag]") {
     REQUIRE(
         std::ranges::find(component_types, type_id<TaggedType>()) !=
         component_types.end()
+    );
+}
+
+TEST_CASE("Generated reflection tags preserve values", "[refl][type][tag]") {
+    Registry& registry = Registry::instance();
+    register_generated_reflection();
+
+    auto& reflected_type = registry.get_type(type_id<ReflectedTaggedType>());
+    constexpr TypeTagId plugin_tag {"Plugin"};
+    constexpr TypeTagId plugin_name_tag {"Plugin.name"};
+    constexpr TypeTagId plugin_phase_tag {"Plugin.phase"};
+
+    const auto plugin = reflected_type.annotation("Plugin");
+    REQUIRE(plugin);
+    CHECK(plugin->name() == "Plugin");
+    REQUIRE(plugin->value("name"));
+    CHECK(*plugin->value("name") == "rendering");
+    REQUIRE(plugin->value("phase"));
+    CHECK(*plugin->value("phase") == "runtime");
+    CHECK_FALSE(plugin->value("missing"));
+
+    // The flattened tag API remains available as a compatibility index.
+    REQUIRE(reflected_type.has_tag(plugin_tag));
+    REQUIRE_FALSE(reflected_type.tag_value(plugin_tag));
+    REQUIRE(reflected_type.has_tag(plugin_name_tag));
+    REQUIRE(reflected_type.tag_value(plugin_name_tag));
+    CHECK(*reflected_type.tag_value(plugin_name_tag) == "rendering");
+    REQUIRE(reflected_type.has_tag(plugin_phase_tag));
+    REQUIRE(reflected_type.tag_value(plugin_phase_tag));
+    CHECK(*reflected_type.tag_value(plugin_phase_tag) == "runtime");
+
+    auto& reflected_enum = registry.get_type(type_id<ReflectedTaggedEnum>());
+    constexpr TypeTagId category_tag {"Category"};
+    constexpr TypeTagId category_name_tag {"Category.name"};
+    const auto category = reflected_enum.annotation("Category");
+    REQUIRE(category);
+    REQUIRE(category->value("name"));
+    CHECK(*category->value("name") == "example");
+    REQUIRE(reflected_enum.has_tag(category_tag));
+    REQUIRE_FALSE(reflected_enum.tag_value(category_tag));
+    REQUIRE(reflected_enum.has_tag(category_name_tag));
+    REQUIRE(reflected_enum.tag_value(category_name_tag));
+    CHECK(*reflected_enum.tag_value(category_name_tag) == "example");
+
+    const auto plugin_types = registry.types_with_annotation("Plugin");
+    CHECK(
+        std::ranges::find(plugin_types, type_id<ReflectedTaggedType>()) !=
+        plugin_types.end()
     );
 }

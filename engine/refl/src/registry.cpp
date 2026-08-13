@@ -270,7 +270,75 @@ Type& Registry::add_generated_tag(TypeId type_id, std::string tag) {
 
     m_tag_names.emplace(tag_id, std::move(tag));
     auto& registered_type = get_type(type_id);
+    if (registered_type.has_tag(tag_id) && registered_type.tag_value(tag_id)) {
+        fatal(
+            "Type '{}' reflection tag '{}' is declared both with and without "
+            "a value",
+            registered_type.name(),
+            *tag_name(tag_id)
+        );
+    }
     registered_type.add_tag(tag_id);
+    return registered_type;
+}
+
+Type& Registry::add_generated_tag(
+    TypeId type_id,
+    std::string tag,
+    std::string value
+) {
+    const TypeTagId tag_id {std::string_view {tag}};
+    auto existing = m_tag_names.find(tag_id);
+    if (existing != m_tag_names.end() && existing->second != tag) {
+        fatal(
+            "Type tag collision for id {}: '{}' conflicts with '{}'",
+            tag_id.id(),
+            tag,
+            existing->second
+        );
+    }
+
+    m_tag_names.emplace(tag_id, std::move(tag));
+    auto& registered_type = get_type(type_id);
+    if (registered_type.has_tag(tag_id)) {
+        const auto existing_value = registered_type.tag_value(tag_id);
+        if (!existing_value || *existing_value != value) {
+            fatal(
+                "Type '{}' reflection tag '{}' has conflicting values",
+                registered_type.name(),
+                *tag_name(tag_id)
+            );
+        }
+        return registered_type;
+    }
+    registered_type.add_tag(tag_id);
+    registered_type.set_tag_value(tag_id, std::move(value));
+    return registered_type;
+}
+
+Type& Registry::add_generated_annotation(
+    TypeId type_id,
+    std::string annotation
+) {
+    auto& registered_type = add_generated_tag(type_id, annotation);
+    registered_type.add_annotation(std::move(annotation));
+    return registered_type;
+}
+
+Type& Registry::add_generated_annotation_field(
+    TypeId type_id,
+    std::string annotation,
+    std::string field,
+    std::string value
+) {
+    auto& registered_type = add_generated_annotation(type_id, annotation);
+    const std::string tag = annotation + "." + field;
+    add_generated_tag(type_id, tag, value);
+    registered_type.set_annotation_field(
+        std::move(annotation),
+        std::move(field),
+        std::move(value)
+    );
     return registered_type;
 }
 
@@ -286,6 +354,18 @@ std::vector<TypeId> Registry::types_with_tag(TypeTagId tag) const {
     std::vector<TypeId> result;
     for (const auto& [id, reflected_type] : m_types) {
         if (reflected_type.has_tag(tag)) {
+            result.push_back(id);
+        }
+    }
+    std::ranges::sort(result);
+    return result;
+}
+
+std::vector<TypeId>
+Registry::types_with_annotation(std::string_view annotation) const {
+    std::vector<TypeId> result;
+    for (const auto& [id, reflected_type] : m_types) {
+        if (reflected_type.has_annotation(annotation)) {
             result.push_back(id);
         }
     }

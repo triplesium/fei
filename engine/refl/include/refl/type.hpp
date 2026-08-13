@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace fei {
@@ -106,6 +107,40 @@ struct TypeOps {
     HashValueFunc hash_value {nullptr};
 };
 
+struct AnnotationField {
+    std::string name;
+    std::string value;
+};
+
+class AnnotationView {
+  private:
+    std::string_view m_name;
+    std::span<const AnnotationField> m_fields;
+
+  public:
+    AnnotationView(
+        std::string_view name,
+        std::span<const AnnotationField> fields
+    ) : m_name(name), m_fields(fields) {}
+
+    std::string_view name() const { return m_name; }
+    std::span<const AnnotationField> fields() const { return m_fields; }
+
+    Optional<std::string_view> value(std::string_view field) const {
+        const auto found =
+            std::ranges::find(m_fields, field, &AnnotationField::name);
+        if (found == m_fields.end()) {
+            return nullopt;
+        }
+        return std::string_view {found->value};
+    }
+};
+
+struct Annotation {
+    std::string name;
+    std::vector<AnnotationField> fields;
+};
+
 class Type {
   public:
     using DefaultConstructFunc = TypeOps::DefaultConstructFunc;
@@ -125,6 +160,8 @@ class Type {
     std::size_t m_align;
     TypeOps m_ops;
     std::vector<TypeTagId> m_tags;
+    std::vector<std::pair<TypeTagId, std::string>> m_tag_values;
+    std::vector<Annotation> m_annotations;
 
     void add_tag(TypeTagId tag) {
         auto position = std::ranges::lower_bound(m_tags, tag);
@@ -133,7 +170,62 @@ class Type {
         }
     }
 
-    void clear_tags() { m_tags.clear(); }
+    void set_tag_value(TypeTagId tag, std::string value) {
+        auto position = std::ranges::lower_bound(
+            m_tag_values,
+            tag,
+            {},
+            &std::pair<TypeTagId, std::string>::first
+        );
+        if (position == m_tag_values.end() || position->first != tag) {
+            m_tag_values.insert(position, {tag, std::move(value)});
+        } else {
+            position->second = std::move(value);
+        }
+    }
+
+    Annotation& add_annotation(std::string name) {
+        auto position = std::ranges::lower_bound(
+            m_annotations,
+            name,
+            {},
+            &Annotation::name
+        );
+        if (position == m_annotations.end() || position->name != name) {
+            position = m_annotations.insert(
+                position,
+                Annotation {.name = std::move(name)}
+            );
+        }
+        return *position;
+    }
+
+    void set_annotation_field(
+        std::string annotation,
+        std::string field,
+        std::string value
+    ) {
+        auto& fields = add_annotation(std::move(annotation)).fields;
+        auto position =
+            std::ranges::lower_bound(fields, field, {}, &AnnotationField::name);
+        if (position == fields.end() || position->name != field) {
+            fields.insert(
+                position,
+                AnnotationField {
+                    .name = std::move(field),
+                    .value = std::move(value),
+                }
+            );
+        } else {
+            position->value = std::move(value);
+        }
+    }
+
+    void clear_tags() {
+        m_tags.clear();
+        m_tag_values.clear();
+        m_annotations.clear();
+    }
 
     friend class Registry;
 
@@ -243,7 +335,38 @@ class Type {
     bool has_tag(TypeTagId tag) const {
         return std::ranges::binary_search(m_tags, tag);
     }
+    Optional<std::string_view> tag_value(TypeTagId tag) const {
+        auto value = std::ranges::lower_bound(
+            m_tag_values,
+            tag,
+            {},
+            &std::pair<TypeTagId, std::string>::first
+        );
+        if (value == m_tag_values.end() || value->first != tag) {
+            return nullopt;
+        }
+        return std::string_view {value->second};
+    }
     std::span<const TypeTagId> tags() const { return m_tags; }
+
+    bool has_annotation(std::string_view name) const {
+        return annotation(name).has_value();
+    }
+
+    Optional<AnnotationView> annotation(std::string_view name) const {
+        const auto found = std::ranges::lower_bound(
+            m_annotations,
+            name,
+            {},
+            &Annotation::name
+        );
+        if (found == m_annotations.end() || found->name != name) {
+            return nullopt;
+        }
+        return AnnotationView {found->name, found->fields};
+    }
+
+    std::span<const Annotation> annotations() const { return m_annotations; }
 
     auto operator<=>(const Type& other) const { return m_id <=> other.m_id; }
 };

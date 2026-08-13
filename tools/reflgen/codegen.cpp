@@ -133,8 +133,14 @@ void generate_cpp_file(
         }
         out << "    ;\n";
         for (const auto& tag : cls.tags) {
-            out << "registry.add_generated_tag<" << cls.name << ">(" << '"'
-                << tag << "\");\n";
+            if (tag.group && tag.field && tag.value) {
+                out << "registry.add_generated_annotation_field<" << cls.name
+                    << ">(\"" << *tag.group << "\", \"" << *tag.field
+                    << "\", \"" << *tag.value << "\");\n";
+            } else {
+                out << "registry.add_generated_annotation<" << cls.name
+                    << ">(\"" << tag.key << "\");\n";
+            }
         }
     }
 
@@ -149,8 +155,14 @@ void generate_cpp_file(
         }
         out << "    ;\n";
         for (const auto& tag : enum_info.tags) {
-            out << "registry.add_generated_tag<" << enum_info.name << ">("
-                << '"' << tag << "\");\n";
+            if (tag.group && tag.field && tag.value) {
+                out << "registry.add_generated_annotation_field<"
+                    << enum_info.name << ">(\"" << *tag.group << "\", \""
+                    << *tag.field << "\", \"" << *tag.value << "\");\n";
+            } else {
+                out << "registry.add_generated_annotation<" << enum_info.name
+                    << ">(\"" << tag.key << "\");\n";
+            }
         }
     }
 

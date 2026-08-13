@@ -1,10 +1,18 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace fei::reflgen {
+
+struct ReflectionTag {
+    std::string key;
+    std::optional<std::string> value;
+    std::optional<std::string> group;
+    std::optional<std::string> field;
+};
 
 struct ParamInfo {
     std::string name;
@@ -30,7 +38,7 @@ struct MethodInfo : MemberInfo {
 struct ClassInfo {
     std::string name;
     std::string source_file;
-    std::vector<std::string> tags;
+    std::vector<ReflectionTag> tags;
     std::vector<MemberInfo> properties;
     std::vector<MethodInfo> methods;
     std::vector<MethodInfo> constructors;
@@ -46,7 +54,7 @@ struct EnumValueInfo {
 struct EnumInfo {
     std::string name;
     std::string source_file;
-    std::vector<std::string> tags;
+    std::vector<ReflectionTag> tags;
     std::string underlying_type;
     bool is_scoped = false;
     std::vector<EnumValueInfo> values;
