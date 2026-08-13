@@ -95,6 +95,27 @@ TEST_CASE("Project defaults its asset directory", "[project]") {
     CHECK(project->config().asset_directory == "assets");
 }
 
+TEST_CASE("Project loads runtime plugin ids", "[project][plugin]") {
+    TemporaryProjectDirectory directory;
+    directory.write_config(R"(
+name: Test Game
+runtime:
+  plugins:
+    - OpenGLGlfw
+    - LuaScripting
+    - devtools::ecs::Provider
+)");
+
+    auto project = Project::load(directory.project_file());
+
+    REQUIRE(project);
+    const auto& plugins = project->config().runtime.plugins;
+    REQUIRE(plugins.size() == 3);
+    CHECK(plugins[0].qualified_name() == "OpenGLGlfw");
+    CHECK(plugins[1].qualified_name() == "LuaScripting");
+    CHECK(plugins[2].qualified_name() == "devtools::ecs::Provider");
+}
+
 TEST_CASE("Project loads a persistent main scene reference", "[project]") {
     TemporaryProjectDirectory directory;
     directory.write_config(R"(
@@ -144,6 +165,47 @@ TEST_CASE("Project rejects invalid configuration", "[project]") {
         auto project = Project::load(directory.project_file());
         REQUIRE_FALSE(project);
         CHECK(project.error().kind == ProjectLoadErrorKind::InvalidYaml);
+    }
+
+    SECTION("runtime is not a mapping") {
+        directory.write_config("name: Test Game\nruntime: []\n");
+        auto project = Project::load(directory.project_file());
+        REQUIRE_FALSE(project);
+        CHECK(project.error().kind == ProjectLoadErrorKind::InvalidConfig);
+        CHECK(project.error().message.find("runtime") != std::string::npos);
+    }
+
+    SECTION("runtime plugins is not a sequence") {
+        directory.write_config(
+            "name: Test Game\nruntime:\n  plugins: LuaScripting\n"
+        );
+        auto project = Project::load(directory.project_file());
+        REQUIRE_FALSE(project);
+        CHECK(project.error().kind == ProjectLoadErrorKind::InvalidConfig);
+        CHECK(
+            project.error().message.find("runtime.plugins") != std::string::npos
+        );
+    }
+
+    SECTION("runtime plugin id is invalid") {
+        directory.write_config(
+            "name: Test Game\nruntime:\n  plugins:\n    - bad:::plugin\n"
+        );
+        auto project = Project::load(directory.project_file());
+        REQUIRE_FALSE(project);
+        CHECK(project.error().kind == ProjectLoadErrorKind::InvalidConfig);
+        CHECK(project.error().message.find("Invalid") != std::string::npos);
+    }
+
+    SECTION("runtime plugin ids are unique") {
+        directory.write_config(
+            "name: Test Game\nruntime:\n  plugins:\n"
+            "    - LuaScripting\n    - LuaScripting\n"
+        );
+        auto project = Project::load(directory.project_file());
+        REQUIRE_FALSE(project);
+        CHECK(project.error().kind == ProjectLoadErrorKind::InvalidConfig);
+        CHECK(project.error().message.find("Duplicate") != std::string::npos);
     }
 }
 

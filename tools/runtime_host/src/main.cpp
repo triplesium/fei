@@ -2,6 +2,7 @@
 #include "project/project.hpp"
 #include "runtime_host/application.hpp"
 
+#include <exception>
 #include <utility>
 
 using namespace fei;
@@ -22,7 +23,12 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    runtime_host::RuntimeHostApplication application(std::move(*project));
-    application.run();
+    try {
+        runtime_host::RuntimeHostApplication application(std::move(*project));
+        application.run();
+    } catch (const std::exception& exception) {
+        error("Runtime Host failed: {}", exception.what());
+        return 1;
+    }
     return 0;
 }

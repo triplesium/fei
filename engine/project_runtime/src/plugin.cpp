@@ -1,7 +1,6 @@
 #include "project_runtime/plugin.hpp"
 
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "asset/assets.hpp"
 #include "asset/serialization.hpp"
 #include "asset/server.hpp"

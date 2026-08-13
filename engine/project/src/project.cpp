@@ -1,8 +1,10 @@
 #include "project/project.hpp"
 
 #include <filesystem>
+#include <stdexcept>
 #include <string>
 #include <system_error>
+#include <unordered_set>
 #include <utility>
 #include <yaml-cpp/yaml.h> // IWYU pragma: keep
 
@@ -108,6 +110,62 @@ Project::load(const std::filesystem::path& project_file) {
                 ));
             }
             config.asset_directory = asset_directory_node.as<std::string>();
+        }
+        const auto runtime_node = document["runtime"];
+        if (runtime_node) {
+            if (!runtime_node.IsMap()) {
+                return failure(load_error(
+                    ProjectLoadErrorKind::InvalidConfig,
+                    absolute_file,
+                    "Project field 'runtime' must be a mapping"
+                ));
+            }
+
+            const auto plugins_node = runtime_node["plugins"];
+            if (plugins_node) {
+                if (!plugins_node.IsSequence()) {
+                    return failure(load_error(
+                        ProjectLoadErrorKind::InvalidConfig,
+                        absolute_file,
+                        "Project field 'runtime.plugins' must be a sequence"
+                    ));
+                }
+
+                std::unordered_set<std::string> plugin_ids;
+                config.runtime.plugins.reserve(plugins_node.size());
+                for (const auto& plugin_node : plugins_node) {
+                    if (!plugin_node.IsScalar()) {
+                        return failure(load_error(
+                            ProjectLoadErrorKind::InvalidConfig,
+                            absolute_file,
+                            "Project runtime plugin ids must be strings"
+                        ));
+                    }
+
+                    auto plugin_name = plugin_node.as<std::string>();
+                    try {
+                        PluginId plugin_id(std::move(plugin_name));
+                        const auto qualified_name =
+                            std::string(plugin_id.qualified_name());
+                        if (!plugin_ids.emplace(qualified_name).second) {
+                            return failure(load_error(
+                                ProjectLoadErrorKind::InvalidConfig,
+                                absolute_file,
+                                "Duplicate project runtime plugin '" +
+                                    qualified_name + "'"
+                            ));
+                        }
+                        config.runtime.plugins.push_back(std::move(plugin_id));
+                    } catch (const std::runtime_error& plugin_error) {
+                        return failure(load_error(
+                            ProjectLoadErrorKind::InvalidConfig,
+                            absolute_file,
+                            "Invalid project runtime plugin id: " +
+                                std::string(plugin_error.what())
+                        ));
+                    }
+                }
+            }
         }
         const auto main_scene_node = document["main_scene"];
         if (main_scene_node) {

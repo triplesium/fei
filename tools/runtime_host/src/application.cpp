@@ -1,24 +1,20 @@
 #include "runtime_host/application.hpp"
 
-#include "app/reflection_plugin.hpp"
 #include "base/env.hpp"
 #include "base/log.hpp"
-#include "core/plugin.hpp"
-#include "graphics_opengl_glfw/plugin.hpp"
-#include "project/plugin.hpp"
-#include "project_runtime/plugin.hpp"
-#include "rendering/plugin.hpp"
+#include "project_runtime/runtime.hpp"
 #include "runtime_inspection/provider.hpp"
 #include "runtime_inspection/registry.hpp"
 #include "runtime_inspection_ecs/entity.hpp"
 #include "runtime_inspection_ecs/query.hpp"
 #include "runtime_inspection_ecs/world_summary.hpp"
 #include "runtime_protocol/probe.hpp"
-#include "sprite/plugin.hpp"
 #include "window/window.hpp"
 
 #include <chrono>
 #include <cstdint>
+#include <stdexcept>
+#include <string>
 #include <utility>
 
 namespace fei::runtime_host {
@@ -58,6 +54,17 @@ Result<std::string, runtime_protocol::RuntimeInspectionError> inspect_runtime(
         );
     }
     return std::move(*response);
+}
+
+void validate_project_plugins(const ProjectRuntimeConfig& runtime) {
+    for (const auto& plugin : runtime.plugins) {
+        if (plugin.qualified_name() == "runtime_protocol::RuntimeProbe") {
+            throw std::runtime_error(
+                "Plugin 'runtime_protocol::RuntimeProbe' is managed by "
+                "Runtime Host and cannot be enabled by a project"
+            );
+        }
+    }
 }
 
 } // namespace
@@ -127,26 +134,13 @@ RuntimeHostApplication::RuntimeHostApplication(Project project) {
                 .title = "Fei Runtime Host",
             }
         );
-    m_app.add_plugin(ProjectPlugin {std::move(project)})
-        .add_plugin<OpenGLGlfwPlugin>()
-        .add_plugin<CorePlugin>()
-        .add_plugin<RenderingPlugin>()
-        .add_plugin(
-            SpritePlugin {
-                SpritePluginConfig {
-                    .output = SpriteOutputMode::Texture,
-                    .width = 1280,
-                    .height = 720,
-                },
-            }
-        )
-        .add_plugin<ReflectionPlugin>()
-        .add_plugin<ProjectRuntimePlugin>()
-        .add_plugin(
-            runtime_protocol::RuntimeProbePlugin {
-                std::move(runtime_probe_config),
-            }
-        );
+    validate_project_plugins(project.config().runtime);
+    configure_project_runtime(m_app, std::move(project));
+    m_app.add_plugin(
+        runtime_protocol::RuntimeProbePlugin {
+            std::move(runtime_probe_config),
+        }
+    );
 }
 
 RuntimeHostApplication::~RuntimeHostApplication() {

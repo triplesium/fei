@@ -135,6 +135,5 @@ add_cxxflags("cl::/Zc:preprocessor")
 
 includes("tools")
 includes("engine")
-includes("runtime_host")
 includes("samples")
 includes("tests")

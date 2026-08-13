@@ -1,4 +1,5 @@
 #pragma once
+#include "app/plugin_id.hpp"
 #include "asset/reference.hpp"
 #include "base/optional.hpp"
 #include "base/result.hpp"
@@ -6,6 +7,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace fei {
 
@@ -21,9 +23,14 @@ struct ProjectLoadError {
     std::string message;
 };
 
+struct ProjectRuntimeConfig {
+    std::vector<PluginId> plugins;
+};
+
 struct ProjectConfig {
     std::string name;
     std::filesystem::path asset_directory {"assets"};
+    ProjectRuntimeConfig runtime;
     Optional<AssetReference> main_scene;
 };
 
