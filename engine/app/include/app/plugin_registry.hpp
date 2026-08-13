@@ -38,13 +38,19 @@ class PluginRegistry {
     std::unordered_map<std::string, PluginDescriptor> m_descriptors;
 
   public:
-    static PluginRegistry& instance();
+    PluginRegistry() = default;
 
     void add(PluginDescriptor descriptor);
     [[nodiscard]] const PluginDescriptor* find(const PluginId& id) const;
     [[nodiscard]] const PluginDescriptor* find(std::string_view name) const;
     [[nodiscard]] std::vector<const PluginDescriptor*> plugins() const;
 };
+
+[[nodiscard]] PluginRegistry& plugin_registry();
+
+namespace detail {
+[[nodiscard]] PluginRegistry& plugin_registry_storage();
+} // namespace detail
 
 template<typename T>
     requires std::derived_from<T, Plugin>
@@ -53,7 +59,7 @@ void register_generated_plugin(std::string name) {
         std::default_initializable<T>,
         "Reflected plugin types must be default constructible"
     );
-    PluginRegistry::instance().add(
+    detail::plugin_registry_storage().add(
         PluginDescriptor {
             .id = PluginId {std::move(name)},
             .type = type_id<T>(),

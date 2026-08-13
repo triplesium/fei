@@ -57,9 +57,14 @@ std::string_view PluginId::local_name() const {
     return std::string_view(m_qualified_name).substr(separator + 2);
 }
 
-PluginRegistry& PluginRegistry::instance() {
+PluginRegistry& detail::plugin_registry_storage() {
     static PluginRegistry registry;
     return registry;
+}
+
+PluginRegistry& plugin_registry() {
+    register_generated_reflection();
+    return detail::plugin_registry_storage();
 }
 
 void PluginRegistry::add(PluginDescriptor descriptor) {
@@ -100,7 +105,6 @@ const PluginDescriptor* PluginRegistry::find(std::string_view name) const {
 }
 
 const PluginDescriptor* PluginRegistry::find(const PluginId& id) const {
-    register_generated_reflection();
     auto descriptor = m_descriptors.find(std::string(id.qualified_name()));
     if (descriptor == m_descriptors.end()) {
         return nullptr;
@@ -109,7 +113,6 @@ const PluginDescriptor* PluginRegistry::find(const PluginId& id) const {
 }
 
 std::vector<const PluginDescriptor*> PluginRegistry::plugins() const {
-    register_generated_reflection();
     std::vector<const PluginDescriptor*> result;
     result.reserve(m_descriptors.size());
     for (const auto& descriptor : m_descriptors) {
@@ -191,7 +194,7 @@ App& App::add_plugin(std::string_view name) {
 }
 
 App& App::add_plugin(const PluginId& id) {
-    const auto& registry = PluginRegistry::instance();
+    const auto& registry = plugin_registry();
     const auto* descriptor = registry.find(id);
     if (!descriptor) {
         throw std::runtime_error(unknown_plugin_message(registry, id));

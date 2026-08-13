@@ -71,7 +71,7 @@ TEST_CASE("Plugin ids expose qualified name parts", "[app][plugin]") {
 }
 
 TEST_CASE("Plugin registry rejects duplicate names", "[app][plugin]") {
-    auto& registry = PluginRegistry::instance();
+    PluginRegistry registry;
     registry.add(
         PluginDescriptor {
             .id = PluginId {"collision::test"},
@@ -99,18 +99,37 @@ TEST_CASE("Plugin registry rejects duplicate names", "[app][plugin]") {
 }
 
 TEST_CASE("Plugin registry enumerates plugins by id", "[app][plugin]") {
-    const auto plugins = PluginRegistry::instance().plugins();
+    const auto plugins = plugin_registry().plugins();
     REQUIRE(plugins.size() >= 3);
     CHECK(std::ranges::is_sorted(plugins, {}, [](const auto* descriptor) {
         return descriptor->id.qualified_name();
     }));
 
     const PluginId app_test_id {"app_test::AppTest"};
-    const auto* descriptor = PluginRegistry::instance().find(app_test_id);
+    const auto* descriptor = plugin_registry().find(app_test_id);
     REQUIRE(descriptor != nullptr);
     CHECK(descriptor->type == type_id<AppTestPlugin>());
     CHECK(descriptor->type_name == type_name<AppTestPlugin>());
     CHECK(descriptor->is_constructible());
+}
+
+TEST_CASE("Plugin registries isolate their entries", "[app][plugin]") {
+    PluginRegistry first;
+    PluginRegistry second;
+    first.add(
+        PluginDescriptor {
+            .id = PluginId {"isolated::Plugin"},
+            .type = type_id<OrderedPluginB>(),
+            .type_name = std::string(type_name<OrderedPluginB>()),
+            .create = []() -> std::unique_ptr<Plugin> {
+                return std::make_unique<OrderedPluginB>();
+            },
+        }
+    );
+
+    CHECK(first.find("isolated::Plugin") != nullptr);
+    CHECK(second.find("isolated::Plugin") == nullptr);
+    CHECK(plugin_registry().find("isolated::Plugin") == nullptr);
 }
 
 TEST_CASE("App adds reflected plugins by plugin id", "[app][plugin]") {
