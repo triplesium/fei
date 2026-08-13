@@ -1,7 +1,6 @@
 #include "project_runtime/runtime.hpp"
 
 #include "app/app.hpp"
-#include "core/plugin.hpp"
 #include "project/plugin.hpp"
 #include "project/project.hpp"
 #include "scripting_lua/plugin.hpp"
@@ -73,7 +72,6 @@ TEST_CASE(
 
     CHECK(app.has_plugin<ProjectPlugin>());
     CHECK(app.has_plugin<LuaScriptingPlugin>());
-    CHECK_FALSE(app.has_plugin<CorePlugin>());
 
     app.finish();
     CHECK(app.has_resource<Project>());

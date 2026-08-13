@@ -116,28 +116,33 @@ runtime:
     CHECK(plugins[2].qualified_name() == "devtools::ecs::Provider");
 }
 
-TEST_CASE("Project loads a persistent main scene reference", "[project]") {
+TEST_CASE("Project loads persistent script references", "[project]") {
     TemporaryProjectDirectory directory;
     directory.write_config(R"(
 name: Test Game
 asset_directory: assets
-main_scene:
-  asset: "1a02e8da-05b6-41c4-b526-c9ad8bba17e4"
-  path: project://scenes/main.scene.yaml
+scripts:
+  - project://scripts/game.lua
+  - asset: "1a02e8da-05b6-41c4-b526-c9ad8bba17e4"
+    path: scripts/player.lua
 )");
 
     auto project = Project::load(directory.project_file());
 
     REQUIRE(project);
-    REQUIRE(project->config().main_scene);
-    REQUIRE(project->config().main_scene->id);
+    REQUIRE(project->config().scripts.size() == 2);
     CHECK(
-        project->config().main_scene->id->as_string() ==
+        project->config().scripts[0].fallback_path.as_string() ==
+        "project://scripts/game.lua"
+    );
+    REQUIRE(project->config().scripts[1].id);
+    CHECK(
+        project->config().scripts[1].id->as_string() ==
         "1a02e8da-05b6-41c4-b526-c9ad8bba17e4"
     );
     CHECK(
-        project->config().main_scene->fallback_path.as_string() ==
-        "project://scenes/main.scene.yaml"
+        project->config().scripts[1].fallback_path.as_string() ==
+        "project://scripts/player.lua"
     );
 }
 
@@ -206,6 +211,48 @@ TEST_CASE("Project rejects invalid configuration", "[project]") {
         REQUIRE_FALSE(project);
         CHECK(project.error().kind == ProjectLoadErrorKind::InvalidConfig);
         CHECK(project.error().message.find("Duplicate") != std::string::npos);
+    }
+
+    SECTION("scripts is not a sequence") {
+        directory.write_config(
+            "name: Test Game\nscripts: project://scripts/game.lua\n"
+        );
+        auto project = Project::load(directory.project_file());
+        REQUIRE_FALSE(project);
+        CHECK(project.error().kind == ProjectLoadErrorKind::InvalidConfig);
+        CHECK(project.error().message.find("scripts") != std::string::npos);
+    }
+
+    SECTION("script path escapes the project source") {
+        directory.write_config(
+            "name: Test Game\nscripts:\n  - project://../game.lua\n"
+        );
+        auto project = Project::load(directory.project_file());
+        REQUIRE_FALSE(project);
+        CHECK(project.error().kind == ProjectLoadErrorKind::InvalidConfig);
+        CHECK(project.error().message.find("safe") != std::string::npos);
+    }
+
+    SECTION("script path uses another asset source") {
+        directory.write_config(
+            "name: Test Game\nscripts:\n  - embedded://game.lua\n"
+        );
+        auto project = Project::load(directory.project_file());
+        REQUIRE_FALSE(project);
+        CHECK(project.error().kind == ProjectLoadErrorKind::InvalidConfig);
+        CHECK(project.error().message.find("project://") != std::string::npos);
+    }
+
+    SECTION("legacy main scene is rejected") {
+        directory.write_config(
+            "name: Test Game\n"
+            "main_scene: project://scenes/main.scene.yaml\n"
+        );
+        auto project = Project::load(directory.project_file());
+        REQUIRE_FALSE(project);
+        CHECK(project.error().kind == ProjectLoadErrorKind::InvalidConfig);
+        CHECK(project.error().message.find("main_scene") != std::string::npos);
+        CHECK(project.error().message.find("script") != std::string::npos);
     }
 }
 

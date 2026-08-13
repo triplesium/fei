@@ -1,7 +1,6 @@
 #pragma once
 #include "app/plugin_id.hpp"
 #include "asset/reference.hpp"
-#include "base/optional.hpp"
 #include "base/result.hpp"
 
 #include <cstdint>
@@ -31,7 +30,7 @@ struct ProjectConfig {
     std::string name;
     std::filesystem::path asset_directory {"assets"};
     ProjectRuntimeConfig runtime;
-    Optional<AssetReference> main_scene;
+    std::vector<AssetReference> scripts;
 };
 
 class Project {

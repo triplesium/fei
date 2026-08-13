@@ -1,18 +1,9 @@
 target("fei-project-runtime")
     set_kind("static")
-    add_rules("fei.reflect")
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
-    add_deps(
-        "fei-base",
-        "fei-app",
-        "fei-asset",
-        "fei-project",
-        "fei-serialization",
-        "fei-scene",
-        "fei-core"
-    )
+    add_deps("fei-app", "fei-project")
 
 target("fei-project-runtime-tests")
     set_kind("binary")

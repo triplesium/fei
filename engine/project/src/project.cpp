@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <unordered_set>
 #include <utility>
@@ -33,6 +34,50 @@ bool is_within(
         return candidate == root;
     }
     return !relative.is_absolute() && *relative.begin() != "..";
+}
+
+Result<AssetReference, std::string>
+parse_project_asset_reference(const YAML::Node& node, std::string_view field) {
+    AssetReference reference {.id = nullopt, .fallback_path = ""};
+    if (node.IsScalar()) {
+        reference.fallback_path = AssetPath(node.as<std::string>());
+    } else if (node.IsMap() && node["path"].IsScalar()) {
+        reference.fallback_path = AssetPath(node["path"].as<std::string>());
+        if (const auto id_node = node["asset"]; id_node) {
+            if (!id_node.IsScalar()) {
+                return failure(
+                    "Project " + std::string(field) +
+                    " asset must be a UUID string"
+                );
+            }
+            auto id = AssetUuid::parse(id_node.as<std::string>());
+            if (!id) {
+                return failure(
+                    "Invalid project " + std::string(field) +
+                    " asset: " + id.error()
+                );
+            }
+            reference.id = *id;
+        }
+    } else {
+        return failure(
+            "Project " + std::string(field) +
+            " must be a path string or a mapping containing 'path'"
+        );
+    }
+
+    auto path = reference.fallback_path.normalized();
+    if (!path.source()) {
+        path = path.with_source("project");
+    }
+    if (!path.source() || *path.source() != "project" || path.path().empty() ||
+        path.is_unapproved()) {
+        return failure(
+            "Project " + std::string(field) + " must be a safe project:// path"
+        );
+    }
+    reference.fallback_path = std::move(path);
+    return reference;
 }
 
 } // namespace
@@ -167,57 +212,36 @@ Project::load(const std::filesystem::path& project_file) {
                 }
             }
         }
-        const auto main_scene_node = document["main_scene"];
-        if (main_scene_node) {
-            AssetReference reference {.id = nullopt, .fallback_path = ""};
-            if (main_scene_node.IsScalar()) {
-                reference.fallback_path =
-                    AssetPath(main_scene_node.as<std::string>());
-            } else if (
-                main_scene_node.IsMap() && main_scene_node["path"].IsScalar()
-            ) {
-                reference.fallback_path =
-                    AssetPath(main_scene_node["path"].as<std::string>());
-                if (const auto id_node = main_scene_node["asset"]; id_node) {
-                    if (!id_node.IsScalar()) {
-                        return failure(load_error(
-                            ProjectLoadErrorKind::InvalidConfig,
-                            absolute_file,
-                            "Project main_scene asset must be a UUID string"
-                        ));
-                    }
-                    auto id = AssetUuid::parse(id_node.as<std::string>());
-                    if (!id) {
-                        return failure(load_error(
-                            ProjectLoadErrorKind::InvalidConfig,
-                            absolute_file,
-                            "Invalid project main_scene asset: " + id.error()
-                        ));
-                    }
-                    reference.id = *id;
+        const auto scripts_node = document["scripts"];
+        if (scripts_node) {
+            if (!scripts_node.IsSequence()) {
+                return failure(load_error(
+                    ProjectLoadErrorKind::InvalidConfig,
+                    absolute_file,
+                    "Project field 'scripts' must be a sequence"
+                ));
+            }
+            config.scripts.reserve(scripts_node.size());
+            for (const auto& script_node : scripts_node) {
+                auto script =
+                    parse_project_asset_reference(script_node, "script");
+                if (!script) {
+                    return failure(load_error(
+                        ProjectLoadErrorKind::InvalidConfig,
+                        absolute_file,
+                        std::move(script.error())
+                    ));
                 }
-            } else {
-                return failure(load_error(
-                    ProjectLoadErrorKind::InvalidConfig,
-                    absolute_file,
-                    "Project main_scene must be a path string or a mapping "
-                    "containing 'path'"
-                ));
+                config.scripts.push_back(std::move(*script));
             }
-            auto scene_path = reference.fallback_path.normalized();
-            if (!scene_path.source()) {
-                scene_path = scene_path.with_source("project");
-            }
-            if (!scene_path.source() || *scene_path.source() != "project" ||
-                scene_path.path().empty() || scene_path.is_unapproved()) {
-                return failure(load_error(
-                    ProjectLoadErrorKind::InvalidConfig,
-                    absolute_file,
-                    "Project main_scene must be a safe project:// path"
-                ));
-            }
-            reference.fallback_path = std::move(scene_path);
-            config.main_scene = std::move(reference);
+        }
+        if (document["main_scene"]) {
+            return failure(load_error(
+                ProjectLoadErrorKind::InvalidConfig,
+                absolute_file,
+                "Project field 'main_scene' is no longer supported; load "
+                "scene assets from a project script"
+            ));
         }
     } catch (const YAML::Exception& yaml_error) {
         return failure(load_error(

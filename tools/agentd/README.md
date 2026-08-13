@@ -24,9 +24,23 @@ fei-agentd --project path/to/project.yaml --port 8091
 automatically. Use `--runtime path/to/host` to override the host executable,
 or `--external-runtime` when another launcher owns the runtime process.
 
-The Runtime Host uses `ProjectRuntimePlugin` for main-scene loading and does
-not install editor-style activity tracking, file watching, scene saving,
-external-change merging, or welcome content.
+Example script-driven project configuration:
+
+```yaml
+name: My Game
+asset_directory: assets
+runtime:
+  plugins:
+    - project_runtime::LuaScripts
+scripts:
+  - project://scripts/game.lua
+```
+
+The Runtime Host assembles the plugins declared by the project. Projects can
+use the optional `project_runtime::LuaScripts` plugin to load their `scripts`
+entries as Lua ECS modules. The host does not install editor-style activity
+tracking, file watching, scene saving, external-change merging, or welcome
+content.
 
 Inspect, watch, or restart it from another terminal:
 
