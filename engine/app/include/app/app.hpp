@@ -24,6 +24,8 @@
 
 namespace fei {
 
+class PluginId;
+
 enum MainSchedules : std::uint32_t {
     First,
     PreStartUp,
@@ -230,6 +232,7 @@ class App {
     }
 
     App& add_plugin(std::string_view name);
+    App& add_plugin(const PluginId& id);
 
     App& add_plugins(PluginGroupBuilder builder);
 

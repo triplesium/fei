@@ -2,6 +2,7 @@
 #include "app/reflection_plugin.hpp"
 #include "test_types.hpp"
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <vector>
 
@@ -44,6 +45,13 @@ TEST_CASE("App adds reflected plugins by name", "[app][plugin][reflection]") {
 TEST_CASE("App rejects unknown reflected plugin names", "[app][plugin]") {
     App app;
     REQUIRE_THROWS_AS(app.add_plugin("missing"), std::runtime_error);
+
+    try {
+        app.add_plugin("app_test::Missing");
+        FAIL("Expected unknown plugin error");
+    } catch (const std::runtime_error& error) {
+        CHECK(std::string_view(error.what()).contains("app_test::AppTest"));
+    }
 }
 
 TEST_CASE("Plugin ids expose qualified name parts", "[app][plugin]") {
@@ -88,6 +96,27 @@ TEST_CASE("Plugin registry rejects duplicate names", "[app][plugin]") {
         ),
         std::runtime_error
     );
+}
+
+TEST_CASE("Plugin registry enumerates plugins by id", "[app][plugin]") {
+    const auto plugins = PluginRegistry::instance().plugins();
+    REQUIRE(plugins.size() >= 3);
+    CHECK(std::ranges::is_sorted(plugins, {}, [](const auto* descriptor) {
+        return descriptor->id.qualified_name();
+    }));
+
+    const PluginId app_test_id {"app_test::AppTest"};
+    const auto* descriptor = PluginRegistry::instance().find(app_test_id);
+    REQUIRE(descriptor != nullptr);
+    CHECK(descriptor->type == type_id<AppTestPlugin>());
+    CHECK(descriptor->type_name == type_name<AppTestPlugin>());
+    CHECK(descriptor->is_constructible());
+}
+
+TEST_CASE("App adds reflected plugins by plugin id", "[app][plugin]") {
+    App app;
+    app.add_plugin(PluginId {"app_test::AppTest"});
+    CHECK(app.has_plugin<AppTestPlugin>());
 }
 
 TEST_CASE("App expands plugin groups in order", "[app][plugin]") {

@@ -8,6 +8,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace fei {
 
@@ -28,6 +29,8 @@ struct PluginDescriptor {
     TypeId type;
     std::string type_name;
     std::unique_ptr<Plugin> (*create)() {nullptr};
+
+    [[nodiscard]] bool is_constructible() const { return create != nullptr; }
 };
 
 class PluginRegistry {
@@ -38,7 +41,9 @@ class PluginRegistry {
     static PluginRegistry& instance();
 
     void add(PluginDescriptor descriptor);
-    const PluginDescriptor* find(std::string_view name) const;
+    [[nodiscard]] const PluginDescriptor* find(const PluginId& id) const;
+    [[nodiscard]] const PluginDescriptor* find(std::string_view name) const;
+    [[nodiscard]] std::vector<const PluginDescriptor*> plugins() const;
 };
 
 template<typename T>

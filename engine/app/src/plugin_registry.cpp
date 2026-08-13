@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace fei {
 
@@ -95,18 +96,105 @@ void PluginRegistry::add(PluginDescriptor descriptor) {
 }
 
 const PluginDescriptor* PluginRegistry::find(std::string_view name) const {
-    auto descriptor = m_descriptors.find(std::string(name));
+    return find(PluginId {std::string(name)});
+}
+
+const PluginDescriptor* PluginRegistry::find(const PluginId& id) const {
+    register_generated_reflection();
+    auto descriptor = m_descriptors.find(std::string(id.qualified_name()));
     if (descriptor == m_descriptors.end()) {
         return nullptr;
     }
     return &descriptor->second;
 }
 
-App& App::add_plugin(std::string_view name) {
+std::vector<const PluginDescriptor*> PluginRegistry::plugins() const {
     register_generated_reflection();
-    const auto* descriptor = PluginRegistry::instance().find(name);
+    std::vector<const PluginDescriptor*> result;
+    result.reserve(m_descriptors.size());
+    for (const auto& descriptor : m_descriptors) {
+        result.push_back(&descriptor.second);
+    }
+    std::ranges::sort(result, {}, [](const PluginDescriptor* descriptor) {
+        return descriptor->id.qualified_name();
+    });
+    return result;
+}
+
+namespace {
+
+[[nodiscard]] std::size_t
+edit_distance(std::string_view left, std::string_view right) {
+    std::vector<std::size_t> previous(right.size() + 1);
+    std::vector<std::size_t> current(right.size() + 1);
+    for (std::size_t index = 0; index <= right.size(); ++index) {
+        previous[index] = index;
+    }
+    for (std::size_t left_index = 0; left_index < left.size(); ++left_index) {
+        current[0] = left_index + 1;
+        for (std::size_t right_index = 0; right_index < right.size();
+             ++right_index) {
+            const auto substitution =
+                previous[right_index] +
+                (left[left_index] == right[right_index] ? 0U : 1U);
+            current[right_index + 1] = std::min(
+                {previous[right_index + 1] + 1,
+                 current[right_index] + 1,
+                 substitution}
+            );
+        }
+        std::swap(previous, current);
+    }
+    return previous.back();
+}
+
+[[nodiscard]] std::string unknown_plugin_message(
+    const PluginRegistry& registry,
+    const PluginId& requested
+) {
+    std::vector<const PluginDescriptor*> candidates;
+    for (const auto* descriptor : registry.plugins()) {
+        const auto same_namespace =
+            descriptor->id.namespace_name() == requested.namespace_name();
+        const auto distance =
+            edit_distance(descriptor->id.local_name(), requested.local_name());
+        const auto fuzzy_limit =
+            std::max<std::size_t>(2, requested.local_name().size() / 3);
+        if (same_namespace || distance <= fuzzy_limit) {
+            candidates.push_back(descriptor);
+        }
+    }
+
+    std::string message =
+        "Unknown plugin '" + std::string(requested.qualified_name()) + "'";
+    if (candidates.empty()) {
+        return message;
+    }
+    message += ". Available candidates: ";
+    constexpr std::size_t c_max_candidates = 5;
+    for (std::size_t index = 0;
+         index < std::min(candidates.size(), c_max_candidates);
+         ++index) {
+        if (index != 0) {
+            message += ", ";
+        }
+        message +=
+            "'" + std::string(candidates[index]->id.qualified_name()) + "'";
+    }
+    return message;
+}
+
+} // namespace
+
+App& App::add_plugin(std::string_view name) {
+    return add_plugin(PluginId {std::string(name)});
+}
+
+App& App::add_plugin(const PluginId& id) {
+    const auto& registry = PluginRegistry::instance();
+    const auto* descriptor = registry.find(id);
     if (!descriptor) {
-        throw std::runtime_error("Unknown plugin '" + std::string(name) + "'");
+        throw std::runtime_error(unknown_plugin_message(registry, id));
     }
     return add_boxed_plugin(
         descriptor->type,
