@@ -9,6 +9,7 @@
 
 namespace fei {
 
+FEI_REFLECT(Plugin)
 class GltfPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {

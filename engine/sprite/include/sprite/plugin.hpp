@@ -19,6 +19,7 @@ struct SpritePluginConfig {
     PixelFormat texture_format {PixelFormat::Rgba8Unorm};
 };
 
+FEI_REFLECT(Plugin)
 class SpritePlugin : public Plugin {
   public:
     explicit SpritePlugin(SpritePluginConfig config = {}) : m_config(config) {}

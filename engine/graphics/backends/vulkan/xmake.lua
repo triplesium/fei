@@ -2,6 +2,7 @@ add_requires("vulkansdk", "vulkan-validationlayers")
 
 target("fei-graphics-vulkan")
     set_kind("static")
+    add_rules("fei.reflect")
     set_default(false)
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")

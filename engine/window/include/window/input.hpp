@@ -133,6 +133,7 @@ class MouseInput {
 void key_input_system(ResRO<Window> win, ResRW<KeyInput> input);
 void mouse_input_system(ResRO<Window> win, ResRW<MouseInput> input);
 
+FEI_REFLECT(Plugin)
 class InputPlugin : public Plugin {
   public:
     void setup(App& app) override {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "refl/reflect.hpp" // IWYU pragma: export
 #include "refl/type.hpp"
 
 #include <concepts>

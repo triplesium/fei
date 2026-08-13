@@ -73,6 +73,7 @@ void generate_env_maps(
     ResRW<RenderEnvironmentMapCache> cache
 );
 
+FEI_REFLECT(Plugin)
 class EnvironmentMapPlugin : public Plugin {
   public:
     void setup(App& app) override;

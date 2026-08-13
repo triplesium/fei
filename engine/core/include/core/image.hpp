@@ -100,6 +100,7 @@ class ImageImporter : public AssetImporter {
     ) const override;
 };
 
+FEI_REFLECT(Plugin)
 class ImagePlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {

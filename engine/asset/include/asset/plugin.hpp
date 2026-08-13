@@ -14,6 +14,7 @@ struct AssetsPluginConfig {
     std::filesystem::path import_cache_root;
 };
 
+FEI_REFLECT(Plugin)
 class AssetsPlugin : public Plugin {
   private:
     AssetsPluginConfig m_config;

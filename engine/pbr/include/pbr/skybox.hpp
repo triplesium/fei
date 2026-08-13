@@ -58,6 +58,7 @@ void render_skybox_pass(
     ResRO<SkyboxResource> skybox_resource
 );
 
+FEI_REFLECT(Plugin)
 class SkyboxPlugin : public Plugin {
   public:
     void setup(App& app) override;

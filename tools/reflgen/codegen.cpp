@@ -117,6 +117,11 @@ has_annotation(const std::vector<ReflectionTag>& tags, std::string_view name) {
     return default_plugin_name(cls.name);
 }
 
+[[nodiscard]] bool is_plugin_lifecycle_method(std::string_view name) {
+    return name == "dependencies" || name == "setup" || name == "finish" ||
+           name == "cleanup";
+}
+
 } // namespace
 
 void generate_cpp_file(
@@ -166,6 +171,7 @@ void generate_cpp_file(
         if (cls.name == "fei::Registry") {
             continue;
         }
+        const auto generated_plugin_name = plugin_name(cls);
 
         out << "registry.register_cls<" << cls.name << ">()\n";
         for (const auto& prop : cls.properties) {
@@ -175,7 +181,9 @@ void generate_cpp_file(
             }
         }
         for (const auto& method : cls.methods) {
-            if (method.access == "public") {
+            if (method.access == "public" &&
+                !(generated_plugin_name &&
+                  is_plugin_lifecycle_method(method.name))) {
                 out << "    .add_method(\"" << method.name << "\", static_cast<"
                     << method.to_cpp_type(cls.name) << ">(&" << cls.name
                     << "::" << method.name << "))\n";
@@ -206,9 +214,9 @@ void generate_cpp_file(
                     << ">(\"" << tag.key << "\");\n";
             }
         }
-        if (const auto name = plugin_name(cls)) {
-            out << "register_generated_plugin<" << cls.name << ">(\"" << *name
-                << "\");\n";
+        if (generated_plugin_name) {
+            out << "register_generated_plugin<" << cls.name << ">(\""
+                << *generated_plugin_name << "\");\n";
         }
     }
 

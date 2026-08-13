@@ -62,6 +62,7 @@ class RuntimeProbe {
     std::unique_ptr<Impl> m_impl;
 };
 
+FEI_REFLECT(Plugin)
 class RuntimeProbePlugin : public Plugin {
   public:
     explicit RuntimeProbePlugin(RuntimeProbeConfig config = {}) :

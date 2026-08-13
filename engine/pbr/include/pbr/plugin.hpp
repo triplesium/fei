@@ -21,12 +21,14 @@ struct PbrSystems {
     struct DeferredPrepass : SystemSet<DeferredPrepass> {};
 };
 
+FEI_REFLECT(Plugin)
 class PbrCorePlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
+FEI_REFLECT(Plugin)
 class PbrPlugin : public Plugin {
   private:
     bool m_enable_vxgi {true};

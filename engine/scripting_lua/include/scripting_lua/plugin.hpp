@@ -6,6 +6,7 @@
 
 namespace fei {
 
+FEI_REFLECT(Plugin)
 class LuaScriptingPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {

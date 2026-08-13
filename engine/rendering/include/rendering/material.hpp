@@ -258,6 +258,7 @@ class MaterialAdapter
 };
 
 template<std::derived_from<Material> M>
+FEI_REFLECT(Plugin)
 class MaterialPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {

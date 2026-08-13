@@ -11,6 +11,7 @@ struct RenderingDefaults {
     std::shared_ptr<Texture> default_texture;
 };
 
+FEI_REFLECT(Plugin)
 class RenderingDefaultsPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;

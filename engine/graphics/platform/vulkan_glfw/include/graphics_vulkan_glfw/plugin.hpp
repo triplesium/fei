@@ -4,6 +4,7 @@
 
 namespace fei {
 
+FEI_REFLECT(Plugin)
 class VulkanGlfwPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;

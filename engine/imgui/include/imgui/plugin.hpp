@@ -16,6 +16,7 @@ struct ImGuiPluginConfig {
     bool docking {false};
 };
 
+FEI_REFLECT(Plugin)
 class ImGuiPlugin : public Plugin {
   public:
     explicit ImGuiPlugin(ImGuiPluginConfig config = {}) : m_config(config) {}

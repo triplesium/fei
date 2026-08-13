@@ -45,6 +45,7 @@ GLFWwindow* setup_glfw_window(const WindowConfig& config);
 void window_prepare(ResRW<Window> win_res);
 void update_should_close(ResRO<Window> win_res, ResRW<AppStates> app_states);
 
+FEI_REFLECT(Plugin)
 class WindowPlugin : public Plugin {
   private:
     std::vector<GlfwWindowHint> m_hints;

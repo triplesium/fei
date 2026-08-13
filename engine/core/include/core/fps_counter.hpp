@@ -39,6 +39,7 @@ fps_counter_system(ResRO<Time> time, ResRW<FpsCounter> fps_counter) {
     fps_counter->tick(time->delta());
 }
 
+FEI_REFLECT(Plugin)
 class FpsCounterPlugin : public Plugin {
   public:
     void setup(App& app) override {

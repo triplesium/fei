@@ -57,6 +57,7 @@ class EquirectToCubemap {
     );
 };
 
+FEI_REFLECT(Plugin)
 class CubemapPlugin : public Plugin {
   public:
     void setup(App& app) override;

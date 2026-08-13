@@ -26,6 +26,7 @@ class TextAssetLoader : public AssetLoader<TextAsset> {
     }
 };
 
+FEI_REFLECT(Plugin)
 class TextAssetPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {

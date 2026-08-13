@@ -53,6 +53,7 @@ class Timer {
 
 void time_system(ResRW<Time> time);
 
+FEI_REFLECT(Plugin)
 class TimePlugin : public Plugin {
   public:
     void setup(App& app) override;

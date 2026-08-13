@@ -343,6 +343,7 @@ void prepare_vxgi_resources(
     ResRO<RenderQueue> render_queue
 );
 
+FEI_REFLECT(Plugin)
 class VxgiPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;

@@ -4,6 +4,7 @@
 
 namespace fei::devtools::reflection {
 
+FEI_REFLECT(Plugin)
 class ProviderPlugin : public fei::Plugin {
   public:
     void setup(App& app) override;

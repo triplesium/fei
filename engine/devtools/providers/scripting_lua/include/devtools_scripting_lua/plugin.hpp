@@ -14,6 +14,7 @@ struct Config {
     std::uint32_t time_limit_ms {100};
 };
 
+FEI_REFLECT(Plugin)
 class ProviderPlugin : public fei::Plugin {
   public:
     explicit ProviderPlugin(Config config = {});

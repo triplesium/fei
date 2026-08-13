@@ -42,6 +42,7 @@ struct DeferredRenderPipelines {
     bool present_composite_pipeline_requested {false};
 };
 
+FEI_REFLECT(Plugin)
 class DeferredRenderPlugin : public Plugin {
   private:
     bool m_enable_vxgi {true};

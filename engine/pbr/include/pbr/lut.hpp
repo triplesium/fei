@@ -13,6 +13,7 @@ struct GpuLUTs {
     GpuImage brdf_lut;
 };
 
+FEI_REFLECT(Plugin)
 class LUTPlugin : public Plugin {
   public:
     void setup(App& app) override;

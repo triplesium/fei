@@ -5,6 +5,7 @@
 
 namespace fei {
 
+FEI_REFLECT(Plugin)
 class VulkanPlugin : public Plugin {
   public:
     void setup(App& app) override {

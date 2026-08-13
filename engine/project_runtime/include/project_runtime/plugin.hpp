@@ -33,6 +33,7 @@ struct ProjectRuntimeState {
     std::string error;
 };
 
+FEI_REFLECT(Plugin)
 class ProjectRuntimePlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {

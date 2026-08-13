@@ -5,6 +5,7 @@
 
 namespace fei {
 
+FEI_REFLECT(Plugin)
 class WebGpuGlfwPlugin final : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;

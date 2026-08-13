@@ -5,6 +5,7 @@
 
 namespace fei::devtools {
 
+FEI_REFLECT(Plugin)
 class CorePlugin : public fei::Plugin {
   public:
     explicit CorePlugin(Config config = {});

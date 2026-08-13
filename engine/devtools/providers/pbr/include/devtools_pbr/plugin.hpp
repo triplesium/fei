@@ -10,6 +10,7 @@ struct Config {
     uint32 max_capture_fps {15};
 };
 
+FEI_REFLECT(Plugin)
 class ProviderPlugin : public fei::Plugin {
   public:
     explicit ProviderPlugin(Config config = {});

@@ -39,6 +39,7 @@ void propagate_transforms(
         explicit_globals
 );
 
+FEI_REFLECT(Plugin)
 class TransformPlugin : public Plugin {
   public:
     void setup(App& app) override;
