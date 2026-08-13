@@ -317,7 +317,7 @@ TEST_CASE(
     );
 
     CHECK_FALSE(sync.access().world_exclusive);
-    CHECK(sync.access().commands);
+    CHECK(sync.access().deferred_commands);
     CHECK(sync.access().read_components.contains(type_id<Transform3d>()));
 
     CHECK_FALSE(propagate.access().world_exclusive);
