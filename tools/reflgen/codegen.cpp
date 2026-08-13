@@ -82,12 +82,17 @@ has_annotation(const std::vector<ReflectionTag>& tags, std::string_view name) {
 }
 
 [[nodiscard]] std::string default_plugin_name(std::string_view type_name) {
+    constexpr std::string_view c_root_namespace = "fei::";
     constexpr std::string_view c_plugin_suffix = "Plugin";
-    const auto namespace_end = type_name.rfind("::");
-    std::string name(type_name.substr(
-        namespace_end == std::string_view::npos ? 0 : namespace_end + 2
-    ));
-    if (name.size() > c_plugin_suffix.size() &&
+    std::string name(
+        type_name.starts_with(c_root_namespace) ?
+            type_name.substr(c_root_namespace.size()) :
+            type_name
+    );
+    const auto namespace_end = name.rfind("::");
+    const auto local_name_start =
+        namespace_end == std::string::npos ? 0 : namespace_end + 2;
+    if (name.size() - local_name_start > c_plugin_suffix.size() &&
         name.ends_with(c_plugin_suffix)) {
         name.erase(name.size() - c_plugin_suffix.size());
     }

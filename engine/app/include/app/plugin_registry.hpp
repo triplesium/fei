@@ -11,8 +11,20 @@
 
 namespace fei {
 
+class PluginId {
+  private:
+    std::string m_qualified_name;
+
+  public:
+    explicit PluginId(std::string qualified_name);
+
+    [[nodiscard]] std::string_view qualified_name() const;
+    [[nodiscard]] std::string_view namespace_name() const;
+    [[nodiscard]] std::string_view local_name() const;
+};
+
 struct PluginDescriptor {
-    std::string name;
+    PluginId id;
     TypeId type;
     std::string type_name;
     std::unique_ptr<Plugin> (*create)() {nullptr};
@@ -38,7 +50,7 @@ void register_generated_plugin(std::string name) {
     );
     PluginRegistry::instance().add(
         PluginDescriptor {
-            .name = std::move(name),
+            .id = PluginId {std::move(name)},
             .type = type_id<T>(),
             .type_name = std::string(fei::type_name<T>()),
             .create = []() -> std::unique_ptr<Plugin> {

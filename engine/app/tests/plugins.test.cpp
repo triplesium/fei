@@ -28,7 +28,7 @@ TEST_CASE("App adds reflected plugins by name", "[app][plugin][reflection]") {
     PluginTrace::reset();
 
     App app;
-    app.add_plugin("AppTest");
+    app.add_plugin("app_test::AppTest");
     app.add_plugin("ordered");
     app.add_plugin("Reflection");
 
@@ -46,11 +46,27 @@ TEST_CASE("App rejects unknown reflected plugin names", "[app][plugin]") {
     REQUIRE_THROWS_AS(app.add_plugin("missing"), std::runtime_error);
 }
 
+TEST_CASE("Plugin ids expose qualified name parts", "[app][plugin]") {
+    const PluginId root_id {"Rendering"};
+    CHECK(root_id.qualified_name() == "Rendering");
+    CHECK(root_id.namespace_name().empty());
+    CHECK(root_id.local_name() == "Rendering");
+
+    const PluginId nested_id {"devtools::ecs::Provider"};
+    CHECK(nested_id.qualified_name() == "devtools::ecs::Provider");
+    CHECK(nested_id.namespace_name() == "devtools::ecs");
+    CHECK(nested_id.local_name() == "Provider");
+
+    REQUIRE_THROWS_AS(PluginId {""}, std::runtime_error);
+    REQUIRE_THROWS_AS(PluginId {"devtools::"}, std::runtime_error);
+    REQUIRE_THROWS_AS(PluginId {"devtools::::Provider"}, std::runtime_error);
+}
+
 TEST_CASE("Plugin registry rejects duplicate names", "[app][plugin]") {
     auto& registry = PluginRegistry::instance();
     registry.add(
         PluginDescriptor {
-            .name = "collision-test",
+            .id = PluginId {"collision::test"},
             .type = type_id<OrderedPluginB>(),
             .type_name = std::string(type_name<OrderedPluginB>()),
             .create = []() -> std::unique_ptr<Plugin> {
@@ -62,7 +78,7 @@ TEST_CASE("Plugin registry rejects duplicate names", "[app][plugin]") {
     REQUIRE_THROWS_AS(
         registry.add(
             PluginDescriptor {
-                .name = "collision-test",
+                .id = PluginId {"collision::test"},
                 .type = type_id<OrderedPluginC>(),
                 .type_name = std::string(type_name<OrderedPluginC>()),
                 .create = []() -> std::unique_ptr<Plugin> {
