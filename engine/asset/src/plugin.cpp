@@ -5,7 +5,6 @@
 #include "asset/request.hpp"
 #include "asset/systems.hpp"
 #include "base/log.hpp"
-#include "task/plugin.hpp"
 
 namespace fei {
 
@@ -27,10 +26,6 @@ default_import_cache_root(const std::filesystem::path& project_asset_root) {
 } // namespace
 
 void AssetsPlugin::setup(App& app) {
-    if (!app.has_plugin<TaskPlugin>()) {
-        app.add_plugin<TaskPlugin>();
-    }
-
     app.configure_sets(
         PostUpdate,
         chain(

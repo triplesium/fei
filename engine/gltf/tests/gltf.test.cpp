@@ -241,6 +241,7 @@ TEST_CASE("Gltf starts as an empty asset catalog", "[gltf][asset]") {
 TEST_CASE("GltfPlugin registers its catalog loader", "[gltf][plugin]") {
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    app.finish();
 
     CHECK(app.has_plugin<ScenePlugin>());
     CHECK(app.has_plugin<ImagePlugin>());
@@ -251,6 +252,7 @@ TEST_CASE("GltfPlugin registers its catalog loader", "[gltf][plugin]") {
 TEST_CASE("GltfLoader decodes images embedded in GLB", "[gltf][loader]") {
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.emplace_source<GltfMemorySource>(make_glb(
         R"({
@@ -290,6 +292,7 @@ TEST_CASE(
 ) {
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.emplace_source<GltfMemorySource>(make_glb(
         R"({
@@ -327,6 +330,7 @@ TEST_CASE(
 TEST_CASE("GltfLoader converts scenes and node transforms", "[gltf][loader]") {
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.emplace_source<GltfMemorySource>(make_glb(R"({
             "asset":{"version":"2.0"},
@@ -413,6 +417,7 @@ TEST_CASE(
 ) {
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.emplace_source<GltfMemorySource>(
         make_glb(R"({"asset":{"version":"2.0"},"scenes":[{"nodes":[]}]})")
@@ -526,6 +531,7 @@ TEST_CASE(
 
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.add_without_loader<Mesh>();
     asset_server.add_without_loader<StandardMaterial>();
@@ -664,6 +670,7 @@ TEST_CASE(
 
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.add_without_loader<Mesh>();
     asset_server.add_without_loader<StandardMaterial>();
@@ -786,6 +793,7 @@ TEST_CASE("GltfLoader decodes data URI buffers and images", "[gltf][loader]") {
 
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.add_without_loader<Mesh>();
     asset_server.add_without_loader<StandardMaterial>();
@@ -829,6 +837,7 @@ TEST_CASE(
 ) {
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.emplace_source<ExternalGltfMemorySource>(
         R"({
@@ -873,6 +882,7 @@ TEST_CASE("GltfLoader applies sparse position accessors", "[gltf][loader]") {
 
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.add_without_loader<Mesh>();
     asset_server.add_without_loader<StandardMaterial>();
@@ -1203,6 +1213,7 @@ TEST_CASE(
 ) {
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.add_without_loader<StandardMaterial>();
     asset_server.emplace_source<GltfMemorySource>(make_glb(
@@ -1277,6 +1288,7 @@ TEST_CASE(
 TEST_CASE("GltfLoader maps alpha material modes", "[gltf][loader]") {
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<GltfPlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.add_without_loader<StandardMaterial>();
     asset_server.emplace_source<GltfMemorySource>(make_glb(R"({

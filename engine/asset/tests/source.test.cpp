@@ -99,6 +99,7 @@ TEST_CASE(
             AssetsPluginConfig {.project_asset_root = directory.path()},
         }
     );
+    app.finish();
 
     auto entries = app.resource<AssetServer>().list(AssetPath(""), true);
     REQUIRE(entries);

@@ -173,6 +173,7 @@ HierarchicalSceneAssets add_hierarchical_scene(App& app) {
 
 void setup_hierarchical_scene_app(App& app) {
     app.add_plugin<AssetsPlugin>().add_plugin<ScenePlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.add_without_loader<Mesh>();
     asset_server.add_without_loader<StandardMaterial>();
@@ -266,6 +267,7 @@ TEST_CASE("scene hierarchy validation rejects invalid graphs", "[scene]") {
 TEST_CASE("ScenePlugin registers SceneMesh assets", "[scene][plugin]") {
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<ScenePlugin>();
+    app.finish();
 
     CHECK(app.has_resource<Assets<SceneMesh>>());
 }
@@ -273,6 +275,7 @@ TEST_CASE("ScenePlugin registers SceneMesh assets", "[scene][plugin]") {
 TEST_CASE("SceneLoader maps OBJ shapes to scene nodes", "[scene][loader]") {
     App app;
     app.add_plugin<AssetsPlugin>().add_plugin<ScenePlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.add_without_loader<Mesh>();
     asset_server.add_without_loader<StandardMaterial>();
@@ -435,6 +438,7 @@ TEST_CASE(
 
     App app;
     app.add_plugin<AssetsPlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.emplace_source<MemorySource>();
     asset_server.add_loader<Scene, DependentSceneLoader>();
@@ -512,6 +516,7 @@ TEST_CASE(
 ) {
     App app;
     app.add_plugin<AssetsPlugin>();
+    app.finish();
     auto& asset_server = app.resource<AssetServer>();
     asset_server.emplace_source<MemorySource>();
     asset_server.add_loader<Scene, DependentSceneLoader>();

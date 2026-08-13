@@ -64,6 +64,7 @@ App load_runtime(TemporaryRuntimeProject& directory) {
         .add_plugin<CorePlugin>()
         .add_plugin<ReflectionPlugin>()
         .add_plugin<ProjectRuntimePlugin>();
+    app.finish();
     return app;
 }
 

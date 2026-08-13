@@ -50,6 +50,7 @@ class DeferredRenderPlugin : public Plugin {
     explicit DeferredRenderPlugin(bool enable_vxgi = true) :
         m_enable_vxgi(enable_vxgi) {}
 
+    void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 

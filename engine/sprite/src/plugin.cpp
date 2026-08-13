@@ -350,10 +350,11 @@ void shutdown_sprite_renderer(World& world) {
 
 } // namespace
 
+void SpritePlugin::dependencies(PluginDependencies& dependencies) const {
+    dependencies.require<RenderingPlugin>().require<ImagePlugin>();
+}
+
 void SpritePlugin::setup(App& app) {
-    if (!app.has_plugin<RenderingPlugin>()) {
-        fatal("SpritePlugin requires RenderingPlugin to be installed first");
-    }
     auto& render_app = app.sub_app<RenderApp>();
     if (!render_app.has_resource<GraphicsDevice>()) {
         fatal("SpritePlugin requires GraphicsDevice in the Render World");
@@ -362,10 +363,6 @@ void SpritePlugin::setup(App& app) {
         !render_app.has_resource<MainSwapchain>()) {
         fatal("SpritePlugin requires MainSwapchain in the Render World");
     }
-    if (!app.has_plugin<ImagePlugin>()) {
-        app.add_plugin<ImagePlugin>();
-    }
-
     add_extract_component<Camera2d>(app);
     add_extract_component<GlobalTransform2d>(app);
     add_extract_component<Sprite>(app);

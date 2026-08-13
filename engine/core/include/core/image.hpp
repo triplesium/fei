@@ -102,9 +102,11 @@ class ImageImporter : public AssetImporter {
 
 class ImagePlugin : public Plugin {
   public:
-    void setup(App& app) override {
-        app.add_plugins(AssetPlugin<Image, ImageLoader> {});
+    void dependencies(PluginDependencies& dependencies) const override {
+        dependencies.require<AssetPlugin<Image, ImageLoader>>();
     }
+
+    void setup(App& /*app*/) override {}
 };
 
 } // namespace fei

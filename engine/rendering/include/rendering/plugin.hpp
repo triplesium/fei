@@ -22,9 +22,16 @@ struct RenderingSystems {
     struct Submit : SystemSet<Submit> {};
 };
 
+class RenderingCorePlugin : public Plugin {
+  public:
+    void dependencies(PluginDependencies& dependencies) const override;
+    void setup(App& app) override;
+};
+
 class RenderingPlugin : public Plugin {
   public:
-    void setup(App& app) override;
+    void dependencies(PluginDependencies& dependencies) const override;
+    void setup(App& /*app*/) override {}
 };
 
 } // namespace fei

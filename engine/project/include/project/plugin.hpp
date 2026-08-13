@@ -13,6 +13,7 @@ class ProjectPlugin : public Plugin {
   public:
     explicit ProjectPlugin(Project project) : m_project(std::move(project)) {}
 
+    void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 

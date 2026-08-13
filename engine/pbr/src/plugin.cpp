@@ -52,7 +52,20 @@ void init_pbr_mesh_shader_defaults(
 
 } // namespace
 
-void PbrPlugin::setup(App& app) {
+void PbrCorePlugin::dependencies(PluginDependencies& dependencies) const {
+    dependencies.require<RenderingPlugin>();
+}
+
+void PbrPlugin::dependencies(PluginDependencies& dependencies) const {
+    dependencies.require<PbrCorePlugin>()
+        .require<MaterialPlugin<StandardMaterial>>();
+    if (m_enable_vxgi) {
+        dependencies.require<VxgiPlugin>();
+    }
+    dependencies.require(DeferredRenderPlugin {m_enable_vxgi});
+}
+
+void PbrCorePlugin::setup(App& app) {
     add_extract_component<MeshMaterial3d<StandardMaterial>>(app);
     add_extract_component<DirectionalLight>(app);
     add_extract_component<PointLight>(app);
@@ -84,12 +97,6 @@ void PbrPlugin::setup(App& app) {
             PbrSystems::DeferredPrepass {}
         )
     );
-
-    app.add_plugin(MaterialPlugin<StandardMaterial> {});
-    if (m_enable_vxgi) {
-        app.add_plugin(VxgiPlugin {});
-    }
-    app.add_plugin(DeferredRenderPlugin {m_enable_vxgi});
 
     render_app.add_resource(MeshViewLayout {})
         .add_resource(MeshViewResourceSet {})

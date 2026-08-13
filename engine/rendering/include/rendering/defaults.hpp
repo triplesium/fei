@@ -13,6 +13,7 @@ struct RenderingDefaults {
 
 class RenderingDefaultsPlugin : public Plugin {
   public:
+    void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 

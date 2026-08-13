@@ -59,6 +59,7 @@ TEST_CASE(
 ) {
     App app;
     app.add_plugin<TransformPlugin>();
+    app.finish();
 
     auto root = app.world().entity();
     auto child = app.world().entity();
@@ -181,6 +182,7 @@ TEST_CASE(
 ) {
     App app;
     app.add_plugin<TransformPlugin>();
+    app.finish();
 
     auto root = app.world().entity();
     auto new_root = app.world().entity();
@@ -258,6 +260,7 @@ TEST_CASE(
 ) {
     App app;
     app.add_plugin<TransformPlugin>();
+    app.finish();
 
     auto root = app.world().entity();
     auto intermediary = app.world().entity();
@@ -286,6 +289,7 @@ TEST_CASE(
 ) {
     App app;
     app.add_plugin<TransformPlugin>();
+    app.finish();
 
     auto parent = app.world().entity();
     auto child = app.world().entity();

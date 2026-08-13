@@ -23,6 +23,7 @@ class SpritePlugin : public Plugin {
   public:
     explicit SpritePlugin(SpritePluginConfig config = {}) : m_config(config) {}
 
+    void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 
   private:

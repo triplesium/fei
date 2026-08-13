@@ -159,6 +159,7 @@ TEST_CASE(
 
     App app;
     app.add_plugin(ProjectPlugin {std::move(*project)});
+    app.finish();
 
     REQUIRE(app.has_resource<Project>());
     CHECK(app.resource<Project>().config().name == "Test Game");

@@ -1,9 +1,13 @@
 #pragma once
 
 #include "app/plugin.hpp"
+#include "app/reflection_plugin.hpp"
 #include "asset/handle.hpp"
 #include "asset/path.hpp"
+#include "asset/plugin.hpp"
 #include "base/optional.hpp"
+#include "core/plugin.hpp"
+#include "project/plugin.hpp"
 #include "scene/document.hpp"
 
 #include <cstdint>
@@ -31,6 +35,13 @@ struct ProjectRuntimeState {
 
 class ProjectRuntimePlugin : public Plugin {
   public:
+    void dependencies(PluginDependencies& dependencies) const override {
+        dependencies.require<ProjectPlugin>();
+        dependencies.require<ReflectionPlugin>();
+        dependencies.require<CorePlugin>();
+        dependencies.require<AssetPlugin<SceneDocument, SceneDocumentLoader>>();
+    }
+
     void setup(App& app) override;
 };
 

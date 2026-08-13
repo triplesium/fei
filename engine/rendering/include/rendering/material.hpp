@@ -260,12 +260,13 @@ class MaterialAdapter
 template<std::derived_from<Material> M>
 class MaterialPlugin : public Plugin {
   public:
-    void setup(App& app) override {
-        app.add_plugins(
-            AssetPlugin<M> {},
-            RenderAssetPlugin<M, PreparedMaterial, MaterialAdapter<M>> {}
-        );
+    void dependencies(PluginDependencies& dependencies) const override {
+        dependencies.require<AssetPlugin<M>>()
+            .template require<
+                RenderAssetPlugin<M, PreparedMaterial, MaterialAdapter<M>>>();
     }
+
+    void setup(App& /*app*/) override {}
 };
 
 } // namespace fei

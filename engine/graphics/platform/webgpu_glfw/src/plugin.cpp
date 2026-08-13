@@ -15,11 +15,6 @@ namespace fei {
 
 namespace {
 
-class WebGpuGlfwWindowPlugin final : public Plugin {
-  public:
-    void setup(App& app) override;
-};
-
 uint32 window_extent(int value) {
     return value > 0 ? static_cast<uint32>(value) : 0;
 }
@@ -60,21 +55,19 @@ void install_graphics_bootstrap(App& app) {
 
 } // namespace
 
-void WebGpuGlfwPlugin::setup(App& app) {
-    app.add_plugin<WebGpuGlfwWindowPlugin>().add_plugin<WindowPlugin>();
-    install_graphics_bootstrap(app);
+void WebGpuGlfwPlugin::dependencies(PluginDependencies& dependencies) const {
+    dependencies.require(WindowPlugin(
+        std::vector<GlfwWindowHint> {
+            GlfwWindowHint {
+                .hint = GLFW_CLIENT_API,
+                .value = GLFW_NO_API,
+            },
+        }
+    ));
 }
 
-void WebGpuGlfwWindowPlugin::setup(App& app) {
-    if (!app.has_resource<WindowConfig>()) {
-        app.add_resource(WindowConfig {});
-    }
-    app.resource<WindowConfig>().hints.push_back(
-        GlfwWindowHint {
-            .hint = GLFW_CLIENT_API,
-            .value = GLFW_NO_API,
-        }
-    );
+void WebGpuGlfwPlugin::setup(App& app) {
+    install_graphics_bootstrap(app);
 }
 
 } // namespace fei

@@ -255,6 +255,7 @@ void run_post_update_until(App& app, Done done) {
 TEST_CASE("AssetsPlugin installs task resources", "[asset][plugin]") {
     App app;
     app.add_plugin<AssetsPlugin>();
+    app.finish();
 
     REQUIRE(app.has_resource<AssetServer>());
     REQUIRE(app.has_resource<AssetLoadRequests>());
@@ -758,6 +759,7 @@ TEST_CASE(
 ) {
     App app;
     app.add_plugin<TaskPlugin>();
+    app.finish();
     AssetServer server(&app);
     server.emplace_source<MemorySource>();
     app.add_resource(std::move(server));
@@ -793,6 +795,7 @@ TEST_CASE(
 
     App app;
     app.add_plugin<TaskPlugin>();
+    app.finish();
     AssetServer server(&app);
     server.emplace_source<MemorySource>();
     app.add_resource(std::move(server));
@@ -843,6 +846,7 @@ TEST_CASE(
 
     App app;
     app.add_plugin<AssetsPlugin>();
+    app.finish();
     auto& server = app.resource<AssetServer>();
     server.emplace_source<MemorySource>();
     server.add_loader<ServerAsset, DependentServerLoader>();
@@ -904,6 +908,7 @@ TEST_CASE(
 ) {
     App app;
     app.add_plugin<AssetsPlugin>();
+    app.finish();
     auto& server = app.resource<AssetServer>();
     server.emplace_source<MemorySource>();
     server.add_loader<ServerAsset, RawDependentServerLoader>();
@@ -934,6 +939,7 @@ TEST_CASE(
 ) {
     App app;
     app.add_plugin<AssetsPlugin>();
+    app.finish();
     auto& server = app.resource<AssetServer>();
     server.emplace_source<MemorySource>();
     server.add_loader<ServerAsset, DependentServerLoader>();
@@ -1001,6 +1007,7 @@ TEST_CASE(
 
     App app;
     app.add_plugin<TaskPlugin>();
+    app.finish();
     AssetServer server(&app);
     server.emplace_source<MemorySource>();
     app.add_resource(std::move(server));
@@ -1030,6 +1037,7 @@ TEST_CASE(
 ) {
     App app;
     app.add_plugin<TaskPlugin>();
+    app.finish();
     AssetServer server(&app);
     server.emplace_source<MemorySource>();
     app.add_resource(std::move(server));
@@ -1074,6 +1082,7 @@ TEST_CASE(
 
     App app;
     app.add_plugin<TaskPlugin>();
+    app.finish();
     AssetServer server(&app);
     server.emplace_source<MemorySource>();
     app.add_resource(std::move(server));

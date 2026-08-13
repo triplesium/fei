@@ -136,6 +136,7 @@ TEST_CASE(
         FakeGraphicsDevice {}
     );
     app.add_plugin<RenderingPlugin>();
+    app.finish();
 
     REQUIRE(app.has_plugin<TransformPlugin>());
 
@@ -232,7 +233,8 @@ TEST_CASE(
         FakeGraphicsDevice {}
     );
 
-    REQUIRE_THROWS_AS(app.add_plugin<RenderingPlugin>(), std::runtime_error);
+    app.add_plugin<RenderingPlugin>();
+    REQUIRE_THROWS_AS(app.finish(), std::runtime_error);
 }
 
 TEST_CASE(
@@ -251,6 +253,7 @@ TEST_CASE(
         )
         .add_resource(GraphicsSurfaceSize {.width = 640, .height = 360});
     app.add_plugin<RenderingPlugin>();
+    app.finish();
 
     REQUIRE(
         app.sub_app_runner<RenderApp>().execution_mode() ==
@@ -290,7 +293,8 @@ TEST_CASE(
         .add_resource(GraphicsSurfaceSize {.width = 640, .height = 360});
     install_render_app(app);
 
-    REQUIRE_THROWS_AS(app.add_plugin<RenderingPlugin>(), std::runtime_error);
+    app.add_plugin<RenderingPlugin>();
+    REQUIRE_THROWS_AS(app.finish(), std::runtime_error);
     REQUIRE(state->initialized_on == std::thread::id {});
 }
 
@@ -313,6 +317,7 @@ TEST_CASE(
         )
         .add_resource(GraphicsSurfaceSize {.width = 640, .height = 360});
 
-    REQUIRE_THROWS_AS(app.add_plugin<RenderingPlugin>(), std::runtime_error);
+    app.add_plugin<RenderingPlugin>();
+    REQUIRE_THROWS_AS(app.finish(), std::runtime_error);
     REQUIRE(state->initialized_on != std::thread::id {});
 }

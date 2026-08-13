@@ -6,6 +6,7 @@ namespace fei {
 
 class OpenGLGlfwPlugin : public Plugin {
   public:
+    void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 

@@ -1,6 +1,7 @@
 #pragma once
 #include "app/plugin.hpp"
 #include "asset/server.hpp"
+#include "task/plugin.hpp"
 
 #include <concepts>
 #include <filesystem>
@@ -22,6 +23,9 @@ class AssetsPlugin : public Plugin {
     explicit AssetsPlugin(AssetsPluginConfig config) :
         m_config(std::move(config)) {}
 
+    void dependencies(PluginDependencies& dependencies) const override {
+        dependencies.require<TaskPlugin>();
+    }
     void setup(App& app) override;
 };
 
@@ -30,6 +34,10 @@ struct NoLoader {};
 template<typename Asset, typename Loader = NoLoader>
 class AssetPlugin : public Plugin {
   public:
+    void dependencies(PluginDependencies& dependencies) const override {
+        dependencies.require<AssetsPlugin>();
+    }
+
     void setup(App& app) override {
         if constexpr (std::is_same_v<Loader, NoLoader>) {
             app.resource<AssetServer>().add_without_loader<Asset>();

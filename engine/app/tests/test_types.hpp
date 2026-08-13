@@ -142,4 +142,101 @@ class ThrowingPlugin : public Plugin {
     }
 };
 
+class RequiredPlugin : public Plugin {
+  public:
+    explicit RequiredPlugin(int trace_value = 4) : m_trace_value(trace_value) {}
+
+    void setup(App& /*app*/) override {
+        PluginTrace::setup_order.push_back(m_trace_value);
+    }
+    void finish(App& /*app*/) override {
+        PluginTrace::finish_order.push_back(m_trace_value);
+    }
+    void cleanup(App& /*app*/) noexcept override {
+        PluginTrace::cleanup_order.push_back(m_trace_value);
+    }
+
+  private:
+    int m_trace_value;
+};
+
+class DependentPlugin : public Plugin {
+  public:
+    void dependencies(PluginDependencies& dependencies) const override {
+        dependencies.require<RequiredPlugin>();
+    }
+
+    void setup(App& /*app*/) override { PluginTrace::setup_order.push_back(5); }
+    void finish(App& /*app*/) override {
+        PluginTrace::finish_order.push_back(5);
+    }
+    void cleanup(App& /*app*/) noexcept override {
+        PluginTrace::cleanup_order.push_back(5);
+    }
+};
+
+class TransitivePlugin : public Plugin {
+  public:
+    void dependencies(PluginDependencies& dependencies) const override {
+        dependencies.require<DependentPlugin>();
+    }
+
+    void setup(App& /*app*/) override { PluginTrace::setup_order.push_back(6); }
+};
+
+class NonDefaultPlugin : public Plugin {
+  public:
+    explicit NonDefaultPlugin(int value) : m_value(value) {}
+
+    void setup(App& /*app*/) override {
+        PluginTrace::setup_order.push_back(m_value);
+    }
+
+  private:
+    int m_value;
+};
+
+class RequiresNonDefaultPlugin : public Plugin {
+  public:
+    void dependencies(PluginDependencies& dependencies) const override {
+        dependencies.require<NonDefaultPlugin>();
+    }
+
+    void setup(App& /*app*/) override {
+        PluginTrace::setup_order.push_back(7);
+    }
+};
+
+class ConfiguredDependentPlugin : public Plugin {
+  public:
+    void dependencies(PluginDependencies& dependencies) const override {
+        dependencies.require(RequiredPlugin {30});
+    }
+
+    void setup(App& /*app*/) override {
+        PluginTrace::setup_order.push_back(8);
+    }
+};
+
+class CyclePluginB;
+
+class CyclePluginA : public Plugin {
+  public:
+    void dependencies(PluginDependencies& dependencies) const override;
+    void setup(App& /*app*/) override {}
+};
+
+class CyclePluginB : public Plugin {
+  public:
+    void dependencies(PluginDependencies& dependencies) const override {
+        dependencies.require<CyclePluginA>();
+    }
+    void setup(App& /*app*/) override {}
+};
+
+inline void
+CyclePluginA::dependencies(PluginDependencies& dependencies) const {
+    dependencies.require<CyclePluginB>();
+}
+
 } // namespace fei::app_test

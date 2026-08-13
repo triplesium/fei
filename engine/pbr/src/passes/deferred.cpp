@@ -13,9 +13,17 @@
 
 namespace fei {
 
+void DeferredRenderPlugin::dependencies(
+    PluginDependencies& dependencies
+) const {
+    dependencies.require<PbrCorePlugin>()
+        .require<CubemapPlugin>()
+        .require<SkyboxPlugin>()
+        .require<LUTPlugin>();
+}
+
 void DeferredRenderPlugin::setup(App& app) {
     auto& render_app = app.sub_app<RenderApp>();
-    app.add_plugins(CubemapPlugin {}, SkyboxPlugin {}, LUTPlugin {});
     app.add_resource(DeferredPresentSettings {});
     add_extract_resource<DeferredPresentSettings>(app);
     add_extract_resource<Window>(app);

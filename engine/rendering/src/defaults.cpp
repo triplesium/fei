@@ -3,6 +3,7 @@
 #include "app/app.hpp"
 #include "graphics/graphics_device.hpp"
 #include "math/color.hpp"
+#include "rendering/plugin.hpp"
 #include "rendering/render_app.hpp"
 
 namespace fei {
@@ -36,6 +37,12 @@ void init_rendering_defaults(
         0,
         0
     );
+}
+
+void RenderingDefaultsPlugin::dependencies(
+    PluginDependencies& dependencies
+) const {
+    dependencies.require<RenderingCorePlugin>();
 }
 
 void RenderingDefaultsPlugin::setup(App& app) {

@@ -22,11 +22,6 @@ namespace {
 
 constexpr auto vulkan_swapchain_extension = "VK_KHR_swapchain";
 
-class VulkanGlfwWindowPlugin : public Plugin {
-  public:
-    void setup(App& app) override;
-};
-
 uint32 window_extent(int extent) {
     return extent > 0 ? static_cast<uint32>(extent) : 0;
 }
@@ -95,26 +90,19 @@ void install_graphics_bootstrap(App& app) {
 
 } // namespace
 
-void VulkanGlfwPlugin::setup(App& app) {
-    app.add_plugin<VulkanGlfwWindowPlugin>().add_plugin<WindowPlugin>();
-    install_graphics_bootstrap(app);
-}
-
-void VulkanGlfwWindowPlugin::setup(App& app) {
-    if (!app.has_resource<WindowConfig>()) {
-        app.add_resource(WindowConfig {});
-    }
-
-    auto& config = app.resource<WindowConfig>();
-    config.hints.insert(
-        config.hints.end(),
-        {
+void VulkanGlfwPlugin::dependencies(PluginDependencies& dependencies) const {
+    dependencies.require(WindowPlugin(
+        std::vector<GlfwWindowHint> {
             GlfwWindowHint {
                 .hint = GLFW_CLIENT_API,
                 .value = GLFW_NO_API,
             },
         }
-    );
+    ));
+}
+
+void VulkanGlfwPlugin::setup(App& app) {
+    install_graphics_bootstrap(app);
 }
 
 } // namespace fei

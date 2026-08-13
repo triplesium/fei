@@ -6,6 +6,7 @@
 #include "ecs/system_set.hpp"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 struct GLFWwindow;
@@ -45,13 +46,20 @@ void window_prepare(ResRW<Window> win_res);
 void update_should_close(ResRO<Window> win_res, ResRW<AppStates> app_states);
 
 class WindowPlugin : public Plugin {
+  private:
+    std::vector<GlfwWindowHint> m_hints;
+
   public:
+    explicit WindowPlugin(std::vector<GlfwWindowHint> hints = {}) :
+        m_hints(std::move(hints)) {}
+
     void setup(App& app) override {
         if (!app.has_resource<WindowConfig>()) {
             app.add_resource(WindowConfig {});
         }
 
         auto& config = app.resource<WindowConfig>();
+        config.hints.insert(config.hints.end(), m_hints.begin(), m_hints.end());
         app.add_resource(
             Window {
                 .glfw_window = setup_glfw_window(config),

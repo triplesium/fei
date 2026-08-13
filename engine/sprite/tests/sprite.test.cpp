@@ -106,6 +106,7 @@ TEST_CASE(
     app.add_plugin<RenderingPlugin>().add_plugin(
         SpritePlugin(SpritePluginConfig {.output = SpriteOutputMode::Texture})
     );
+    app.finish();
 
     REQUIRE_FALSE(app.has_resource<GraphicsDevice>());
     REQUIRE(app.sub_app<RenderApp>().has_resource<GraphicsDevice>());

@@ -93,6 +93,7 @@ TEST_CASE("TaskPool forwards task failures to completions", "[task]") {
 TEST_CASE("TaskPlugin drains completions during PostUpdate", "[task][plugin]") {
     App app;
     app.add_plugin<TaskPlugin>();
+    app.finish();
     app.world().sort_systems();
 
     bool completed = false;

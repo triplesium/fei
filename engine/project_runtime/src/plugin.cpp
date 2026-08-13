@@ -3,7 +3,6 @@
 #include "app/app.hpp"
 #include "app/reflection_plugin.hpp"
 #include "asset/assets.hpp"
-#include "asset/plugin.hpp"
 #include "asset/serialization.hpp"
 #include "asset/server.hpp"
 #include "base/log.hpp"
@@ -83,19 +82,6 @@ ProjectRuntimeState load_project_scene(App& app) {
 } // namespace
 
 void ProjectRuntimePlugin::setup(App& app) {
-    if (!app.has_resource<Project>()) {
-        fatal("ProjectRuntimePlugin requires ProjectPlugin first");
-    }
-    if (!app.has_plugin<ReflectionPlugin>()) {
-        fatal("ProjectRuntimePlugin requires ReflectionPlugin first");
-    }
-    if (!app.has_resource<AssetServer>() ||
-        !app.has_resource<Assets<Image>>()) {
-        fatal("ProjectRuntimePlugin requires CorePlugin first");
-    }
-    if (!app.has_resource<Assets<SceneDocument>>()) {
-        app.add_plugin<AssetPlugin<SceneDocument, SceneDocumentLoader>>();
-    }
     app.add_resource(load_project_scene(app));
 }
 

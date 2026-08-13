@@ -28,9 +28,11 @@ class TextAssetLoader : public AssetLoader<TextAsset> {
 
 class TextAssetPlugin : public Plugin {
   public:
-    void setup(App& app) override {
-        app.add_plugin<AssetPlugin<TextAsset, TextAssetLoader>>();
+    void dependencies(PluginDependencies& dependencies) const override {
+        dependencies.require<AssetPlugin<TextAsset, TextAssetLoader>>();
     }
+
+    void setup(App& /*app*/) override {}
 };
 
 } // namespace fei

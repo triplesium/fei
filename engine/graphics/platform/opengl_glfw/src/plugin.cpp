@@ -13,11 +13,6 @@ namespace fei {
 
 namespace {
 
-class OpenGLGlfwWindowPlugin : public Plugin {
-  public:
-    void setup(App& app) override;
-};
-
 uint32 positive_window_extent(int extent) {
     return static_cast<uint32>(std::max(extent, 1));
 }
@@ -58,20 +53,9 @@ void install_graphics_bootstrap(App& app) {
 
 } // namespace
 
-void OpenGLGlfwPlugin::setup(App& app) {
-    app.add_plugin<OpenGLGlfwWindowPlugin>().add_plugin<WindowPlugin>();
-    install_graphics_bootstrap(app);
-}
-
-void OpenGLGlfwWindowPlugin::setup(App& app) {
-    if (!app.has_resource<WindowConfig>()) {
-        app.add_resource(WindowConfig {});
-    }
-
-    auto& config = app.resource<WindowConfig>();
-    config.hints.insert(
-        config.hints.end(),
-        {
+void OpenGLGlfwPlugin::dependencies(PluginDependencies& dependencies) const {
+    dependencies.require(WindowPlugin(
+        std::vector<GlfwWindowHint> {
             GlfwWindowHint {
                 .hint = GLFW_CLIENT_API,
                 .value = GLFW_OPENGL_API,
@@ -89,7 +73,11 @@ void OpenGLGlfwWindowPlugin::setup(App& app) {
                 .value = GLFW_OPENGL_CORE_PROFILE,
             },
         }
-    );
+    ));
+}
+
+void OpenGLGlfwPlugin::setup(App& app) {
+    install_graphics_bootstrap(app);
 }
 
 } // namespace fei

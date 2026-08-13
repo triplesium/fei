@@ -80,6 +80,7 @@ TEST_CASE(
     app.add_plugin<ReflectionPlugin>();
     app.add_resource(Bridge {});
     app.add_plugin<ProviderPlugin>();
+    app.finish();
 
     bool query_declared = false;
     bool inspect_declared = false;

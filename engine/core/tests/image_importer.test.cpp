@@ -160,6 +160,8 @@ TEST_CASE(
             .import_cache_root = cache_root,
         }}
     );
+    app.add_plugin<ImagePlugin>();
+    app.finish();
     REQUIRE(app.resource<AssetImporterRegistry>().emplace<ImageImporter>());
     auto report = import_pending_assets(
         app.resource<AssetImporterRegistry>(),
@@ -174,7 +176,6 @@ TEST_CASE(
         )
     );
 
-    app.add_plugin<ImagePlugin>();
     auto handle = app.resource<AssetServer>().load<Image>(
         AssetPath("project://face.png")
     );

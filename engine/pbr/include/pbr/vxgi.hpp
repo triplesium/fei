@@ -345,6 +345,7 @@ void prepare_vxgi_resources(
 
 class VxgiPlugin : public Plugin {
   public:
+    void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 

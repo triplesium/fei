@@ -14,8 +14,11 @@ TEST_CASE("App reports added plugin types", "[app][plugin]") {
 
     app.add_plugin<AppTestPlugin>();
 
-    REQUIRE(AppTestPlugin::setup_count == 1);
+    REQUIRE(AppTestPlugin::setup_count == 0);
     REQUIRE(app.has_plugin<AppTestPlugin>());
+
+    app.finish();
+    REQUIRE(AppTestPlugin::setup_count == 1);
 }
 
 TEST_CASE("App expands plugin groups in order", "[app][plugin]") {
@@ -23,6 +26,7 @@ TEST_CASE("App expands plugin groups in order", "[app][plugin]") {
 
     App app;
     app.add_plugins(AppTestPluginGroup {});
+    app.finish();
 
     REQUIRE(PluginTrace::setup_order == std::vector<int> {1, 10, 2});
 }
@@ -32,6 +36,7 @@ TEST_CASE("PluginGroupBuilder set replaces plugin in place", "[app][plugin]") {
 
     App app;
     app.add_plugins(AppTestPluginGroup {}.build().set(ConfiguredPlugin {42}));
+    app.finish();
 
     REQUIRE(PluginTrace::setup_order == std::vector<int> {1, 42, 2});
 }
@@ -49,6 +54,7 @@ TEST_CASE(
             .add(OrderedPluginB {})
             .add(OrderedPluginA {})
     );
+    app.finish();
 
     REQUIRE(PluginTrace::setup_order == std::vector<int> {2, 1});
 }
@@ -66,6 +72,7 @@ TEST_CASE(
             .disable<ConfiguredPlugin>()
             .add_after<ConfiguredPlugin>(OrderedPluginC {})
     );
+    app.finish();
 
     REQUIRE(PluginTrace::setup_order == std::vector<int> {1, 3, 2});
 }
@@ -83,6 +90,7 @@ TEST_CASE(
             .disable<ConfiguredPlugin>()
             .enable<ConfiguredPlugin>()
     );
+    app.finish();
 
     REQUIRE(PluginTrace::setup_order == std::vector<int> {1, 10, 2});
 }
@@ -117,8 +125,92 @@ TEST_CASE(
             .add_after<OrderedPluginA>(OrderedPluginB {})
             .add_before<OrderedPluginB>(ConfiguredPlugin {9})
     );
+    app.finish();
 
     REQUIRE(PluginTrace::setup_order == std::vector<int> {1, 9, 2, 3});
+}
+
+TEST_CASE(
+    "App creates and orders transitive plugin requirements",
+    "[app][plugin][dependency]"
+) {
+    PluginTrace::reset();
+
+    App app;
+    app.add_plugins(TransitivePlugin {}, OrderedPluginA {});
+    app.finish();
+
+    REQUIRE(app.has_plugin<RequiredPlugin>());
+    REQUIRE(app.has_plugin<DependentPlugin>());
+    REQUIRE(PluginTrace::setup_order == std::vector<int> {4, 5, 6, 1});
+}
+
+TEST_CASE(
+    "Explicit plugin instances override required defaults",
+    "[app][plugin][dependency]"
+) {
+    PluginTrace::reset();
+
+    App app;
+    app.add_plugins(DependentPlugin {}, RequiredPlugin {40});
+    app.finish();
+
+    REQUIRE(PluginTrace::setup_order == std::vector<int> {40, 5});
+}
+
+TEST_CASE(
+    "Non-default plugin requirements must be registered explicitly",
+    "[app][plugin][dependency]"
+) {
+    PluginTrace::reset();
+
+    App app;
+    app.add_plugin<RequiresNonDefaultPlugin>();
+
+    REQUIRE_THROWS_AS(app.finish(), std::runtime_error);
+    REQUIRE(PluginTrace::setup_order.empty());
+}
+
+TEST_CASE(
+    "Configured plugin requirements create configured instances",
+    "[app][plugin][dependency]"
+) {
+    PluginTrace::reset();
+
+    App app;
+    app.add_plugin<ConfiguredDependentPlugin>();
+    app.finish();
+
+    REQUIRE(PluginTrace::setup_order == std::vector<int> {30, 8});
+}
+
+TEST_CASE(
+    "Plugin dependency cycles fail before setup",
+    "[app][plugin][dependency]"
+) {
+    PluginTrace::reset();
+
+    App app;
+    app.add_plugin<CyclePluginA>();
+
+    REQUIRE_THROWS(app.finish());
+    REQUIRE(PluginTrace::setup_order.empty());
+}
+
+TEST_CASE(
+    "Plugin lifecycle follows dependency order",
+    "[app][plugin][dependency]"
+) {
+    PluginTrace::reset();
+
+    App app;
+    app.add_plugin<DependentPlugin>();
+    app.finish();
+    app.shutdown();
+
+    REQUIRE(PluginTrace::setup_order == std::vector<int> {4, 5});
+    REQUIRE(PluginTrace::finish_order == std::vector<int> {4, 5});
+    REQUIRE(PluginTrace::cleanup_order == std::vector<int> {5, 4});
 }
 
 TEST_CASE(

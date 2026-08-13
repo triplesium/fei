@@ -14,8 +14,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -61,6 +63,22 @@ class App {
   private:
     friend class PluginGroupBuilder;
 
+    enum class PluginState : std::uint8_t {
+        Registered,
+        SettingUp,
+        Setup,
+        Finished,
+        Cleaned,
+    };
+
+    struct PluginEntry {
+        TypeId type;
+        std::string name;
+        std::unique_ptr<Plugin> plugin;
+        std::vector<PluginRequirement> requirements;
+        PluginState state {PluginState::Registered};
+    };
+
     struct LabeledSubApp {
         TypeId label;
         std::unique_ptr<SubAppRunner> runner;
@@ -70,8 +88,10 @@ class App {
     // Declared first so the Main World outlives plugins and SubApps. Render
     // resources may hold explicit read-only references to Main World services.
     World m_world;
-    std::vector<std::unique_ptr<Plugin>> m_plugins;
-    std::unordered_set<TypeId> m_plugin_types;
+    std::vector<PluginEntry> m_plugins;
+    std::unordered_map<TypeId, std::size_t> m_plugin_indices;
+    std::vector<std::size_t> m_plugin_order;
+    bool m_plugin_registry_frozen {false};
     std::unordered_set<TypeId> m_events;
     std::vector<LabeledSubApp> m_sub_apps;
 
@@ -80,20 +100,28 @@ class App {
         std::string_view plugin_name,
         std::unique_ptr<Plugin> plugin
     ) {
-        if (m_lifecycle != AppLifecycle::Building) {
-            fatal("Cannot add plugin {} after App::finish", plugin_name);
+        if (m_lifecycle != AppLifecycle::Building || m_plugin_registry_frozen) {
+            fatal(
+                "Cannot add plugin {} after plugin dependency resolution has "
+                "started",
+                plugin_name
+            );
         }
         if (!plugin) {
             fatal("Cannot add null plugin {}", plugin_name);
         }
-        if (m_plugin_types.contains(plugin_type)) {
+        if (m_plugin_indices.contains(plugin_type)) {
             fatal("Plugin {} has already been added", plugin_name);
         }
 
-        auto* plugin_ptr = plugin.get();
-        m_plugin_types.insert(plugin_type);
-        m_plugins.emplace_back(std::move(plugin));
-        plugin_ptr->setup(*this);
+        m_plugin_indices.emplace(plugin_type, m_plugins.size());
+        m_plugins.push_back(
+            PluginEntry {
+                .type = plugin_type,
+                .name = std::string(plugin_name),
+                .plugin = std::move(plugin),
+            }
+        );
         return *this;
     }
 
@@ -221,7 +249,7 @@ class App {
 
     template<std::derived_from<Plugin> P>
     bool has_plugin() const {
-        return m_plugin_types.contains(type_id<P>());
+        return m_plugin_indices.contains(type_id<P>());
     }
 
     template<typename R>

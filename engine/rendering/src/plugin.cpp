@@ -143,7 +143,20 @@ void shutdown_graphics_runtime(World& world) {
     }
 }
 
-void RenderingPlugin::setup(App& app) {
+void RenderingCorePlugin::dependencies(PluginDependencies& dependencies) const {
+    dependencies.require<AssetsPlugin>().require<TransformPlugin>();
+}
+
+void RenderingPlugin::dependencies(PluginDependencies& dependencies) const {
+    dependencies.require<RenderingCorePlugin>()
+        .require<AssetPlugin<Shader, ShaderLoader>>()
+        .require<AssetPlugin<Mesh, MeshLoader>>()
+        .require<RenderAssetPlugin<Image, GpuImage, GpuImageAdapter>>()
+        .require<RenderAssetPlugin<Mesh, GpuMesh, GpuMeshAdapter>>()
+        .require<RenderingDefaultsPlugin>();
+}
+
+void RenderingCorePlugin::setup(App& app) {
     if (app.has_resource<GraphicsRuntime>() ||
         app.has_resource<GraphicsDevice>() ||
         app.has_resource<MainSwapchain>()) {
@@ -155,10 +168,6 @@ void RenderingPlugin::setup(App& app) {
 
     install_backend_render_app(app);
     initialize_graphics_backend(app);
-
-    if (!app.has_plugin<TransformPlugin>()) {
-        app.add_plugin<TransformPlugin>();
-    }
 
     add_extract_component<Camera3d>(app);
     add_extract_component<GlobalTransform3d>(app);
@@ -221,14 +230,6 @@ void RenderingPlugin::setup(App& app) {
                     .in_set<RenderingSystems::PrepareResources>()
             )
         );
-
-    app.add_plugins(
-        AssetPlugin<Shader, ShaderLoader> {},
-        AssetPlugin<Mesh, MeshLoader> {},
-        RenderAssetPlugin<Image, GpuImage, GpuImageAdapter> {},
-        RenderAssetPlugin<Mesh, GpuMesh, GpuMeshAdapter> {},
-        RenderingDefaultsPlugin {}
-    );
 
     render_app.add_resource(PipelineCache(graphics_device))
         .add_resource<RenderFrameContext>()

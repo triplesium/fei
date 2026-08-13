@@ -44,6 +44,7 @@ void configure_eval_app(App& app, devtools::scripting_lua::Config config = {}) {
         .add_plugin<LuaScriptingPlugin>()
         .add_resource(Bridge {})
         .add_plugin(ProviderPlugin {config});
+    app.finish();
 }
 
 EvalResponse response_for(World& world, Entity entity) {

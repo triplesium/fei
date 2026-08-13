@@ -206,6 +206,10 @@ struct RenderAssetPlugin : public Plugin {
     using RenderAssetType = Target;
     using SourceAssetType = Source;
 
+    void dependencies(PluginDependencies& dependencies) const override {
+        dependencies.require<RenderingCorePlugin>();
+    }
+
     void setup(App& app) override {
         app.sub_app<RenderApp>()
             .add_resource<ExtractedAssets<Source>>()

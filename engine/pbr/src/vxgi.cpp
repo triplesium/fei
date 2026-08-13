@@ -772,6 +772,10 @@ void prepare_vxgi_resources(
         ->write_buffer(vxgi->uniform_buffer, 0, &uniform, sizeof(VxgiUniform));
 }
 
+void VxgiPlugin::dependencies(PluginDependencies& dependencies) const {
+    dependencies.require<PbrCorePlugin>();
+}
+
 void VxgiPlugin::setup(App& app) {
     app.add_event<SceneSpawnedEvent>().add_resource<VxgiConfig>();
     add_extract_resource<VxgiConfig>(app);
