@@ -229,6 +229,8 @@ class App {
         );
     }
 
+    App& add_plugin(std::string_view name);
+
     App& add_plugins(PluginGroupBuilder builder);
 
     template<typename G>

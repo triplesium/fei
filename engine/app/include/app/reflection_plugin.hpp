@@ -1,11 +1,11 @@
 #pragma once
 
-#include "app/plugin.hpp"
+#include "app/app.hpp"
+#include "refl/reflect.hpp"
 
 namespace fei {
 
-class App;
-
+FEI_REFLECT(Plugin)
 class ReflectionPlugin : public Plugin {
   public:
     void setup(App& app) override;

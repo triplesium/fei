@@ -1,3 +1,5 @@
+#include "app/plugin_registry.hpp"
+#include "app/reflection_plugin.hpp"
 #include "test_types.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -19,6 +21,57 @@ TEST_CASE("App reports added plugin types", "[app][plugin]") {
 
     app.finish();
     REQUIRE(AppTestPlugin::setup_count == 1);
+}
+
+TEST_CASE("App adds reflected plugins by name", "[app][plugin][reflection]") {
+    AppTestPlugin::setup_count = 0;
+    PluginTrace::reset();
+
+    App app;
+    app.add_plugin("AppTest");
+    app.add_plugin("ordered");
+    app.add_plugin("Reflection");
+
+    REQUIRE(app.has_plugin<AppTestPlugin>());
+    REQUIRE(app.has_plugin<OrderedPluginA>());
+    REQUIRE(app.has_plugin<ReflectionPlugin>());
+
+    app.finish();
+    CHECK(AppTestPlugin::setup_count == 1);
+    CHECK(PluginTrace::setup_order == std::vector<int> {1});
+}
+
+TEST_CASE("App rejects unknown reflected plugin names", "[app][plugin]") {
+    App app;
+    REQUIRE_THROWS_AS(app.add_plugin("missing"), std::runtime_error);
+}
+
+TEST_CASE("Plugin registry rejects duplicate names", "[app][plugin]") {
+    auto& registry = PluginRegistry::instance();
+    registry.add(
+        PluginDescriptor {
+            .name = "collision-test",
+            .type = type_id<OrderedPluginB>(),
+            .type_name = std::string(type_name<OrderedPluginB>()),
+            .create = []() -> std::unique_ptr<Plugin> {
+                return std::make_unique<OrderedPluginB>();
+            },
+        }
+    );
+
+    REQUIRE_THROWS_AS(
+        registry.add(
+            PluginDescriptor {
+                .name = "collision-test",
+                .type = type_id<OrderedPluginC>(),
+                .type_name = std::string(type_name<OrderedPluginC>()),
+                .create = []() -> std::unique_ptr<Plugin> {
+                    return std::make_unique<OrderedPluginC>();
+                },
+            }
+        ),
+        std::runtime_error
+    );
 }
 
 TEST_CASE("App expands plugin groups in order", "[app][plugin]") {

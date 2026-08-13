@@ -52,6 +52,7 @@ struct PluginTrace {
     }
 };
 
+FEI_REFLECT(Plugin)
 class AppTestPlugin : public Plugin {
   public:
     static inline int setup_count = 0;
@@ -59,6 +60,7 @@ class AppTestPlugin : public Plugin {
     void setup(App& /*app*/) override { ++setup_count; }
 };
 
+FEI_REFLECT(Plugin(name = ordered))
 class OrderedPluginA : public Plugin {
   public:
     void setup(App& /*app*/) override { PluginTrace::setup_order.push_back(1); }
@@ -202,9 +204,7 @@ class RequiresNonDefaultPlugin : public Plugin {
         dependencies.require<NonDefaultPlugin>();
     }
 
-    void setup(App& /*app*/) override {
-        PluginTrace::setup_order.push_back(7);
-    }
+    void setup(App& /*app*/) override { PluginTrace::setup_order.push_back(7); }
 };
 
 class ConfiguredDependentPlugin : public Plugin {
@@ -213,9 +213,7 @@ class ConfiguredDependentPlugin : public Plugin {
         dependencies.require(RequiredPlugin {30});
     }
 
-    void setup(App& /*app*/) override {
-        PluginTrace::setup_order.push_back(8);
-    }
+    void setup(App& /*app*/) override { PluginTrace::setup_order.push_back(8); }
 };
 
 class CyclePluginB;
@@ -234,8 +232,7 @@ class CyclePluginB : public Plugin {
     void setup(App& /*app*/) override {}
 };
 
-inline void
-CyclePluginA::dependencies(PluginDependencies& dependencies) const {
+inline void CyclePluginA::dependencies(PluginDependencies& dependencies) const {
     dependencies.require<CyclePluginB>();
 }
 
