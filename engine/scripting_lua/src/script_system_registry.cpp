@@ -3,6 +3,7 @@
 #include "base/log.hpp"
 #include "ecs/system_params.hpp"
 #include "ecs/world.hpp"
+#include "scripting/module_install.hpp"
 #include "scripting_lua/detail/script_system_loader.hpp"
 
 #include <cstddef>
@@ -53,18 +54,6 @@ load_lua_script_system_module(
         .module = *module,
         .systems = std::move(*systems),
     };
-}
-
-bool remove_lua_script_systems(
-    World& world,
-    const std::vector<SystemHandle>& systems
-) {
-    bool removed_all_systems = true;
-    for (auto handle : systems) {
-        removed_all_systems =
-            world.remove_system(handle) && removed_all_systems;
-    }
-    return removed_all_systems;
 }
 
 std::string request_kind_name(LuaScriptSystemRequestKind kind) {
@@ -288,8 +277,8 @@ Status<LuaScriptError> LuaScriptSystemRegistry::reload_asset(
 
     if (module->state == LuaScriptSystemModuleState::Loaded) {
         const auto old_module = module->module;
-        if (!remove_lua_script_systems(world, module->systems)) {
-            remove_lua_script_systems(world, loaded->systems);
+        if (!remove_script_module_systems(world, module->systems)) {
+            remove_script_module_systems(world, loaded->systems);
             runtime.unload_module(loaded->module);
             return failure(
                 LuaScriptError {
@@ -300,7 +289,7 @@ Status<LuaScriptError> LuaScriptSystemRegistry::reload_asset(
 
         auto unloaded = runtime.unload_module(old_module);
         if (!unloaded) {
-            remove_lua_script_systems(world, loaded->systems);
+            remove_script_module_systems(world, loaded->systems);
             runtime.unload_module(loaded->module);
             return failure(std::move(unloaded.error()));
         }
@@ -325,7 +314,7 @@ Status<LuaScriptError> LuaScriptSystemRegistry::unload(
     }
 
     const bool removed_all_systems =
-        remove_lua_script_systems(world, module->systems);
+        remove_script_module_systems(world, module->systems);
 
     auto unloaded = runtime.unload_module(module->module);
     if (!unloaded) {

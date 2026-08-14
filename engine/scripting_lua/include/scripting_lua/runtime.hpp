@@ -1,6 +1,7 @@
 #pragma once
 #include "base/result.hpp"
 #include "refl/val.hpp"
+#include "scripting/source.hpp"
 #include "scripting_lua/module_decl.hpp"
 
 #include <chrono>
@@ -27,10 +28,7 @@ enum class LuaScriptModuleId : std::uint64_t {
 inline constexpr LuaScriptModuleId invalid_lua_script_module_id =
     LuaScriptModuleId::Invalid;
 
-struct LuaScriptSource {
-    std::string name;
-    std::string content;
-};
+using LuaScriptSource = ScriptSource;
 
 struct LuaEvalGlobal {
     std::string_view name;

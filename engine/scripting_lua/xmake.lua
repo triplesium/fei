@@ -4,7 +4,14 @@ target("fei-scripting-lua")
     add_files("src/*.cpp", "src/detail/*.cpp")
     add_headerfiles("include/**.hpp")
     add_includedirs("include", {public = true})
-    add_deps("fei-base", "fei-refl", "fei-ecs", "fei-app", "fei-asset")
+    add_deps(
+        "fei-base",
+        "fei-refl",
+        "fei-ecs",
+        "fei-app",
+        "fei-asset",
+        "fei-scripting"
+    )
     add_packages("lua")
 
 target("fei-scripting-lua-tests")
