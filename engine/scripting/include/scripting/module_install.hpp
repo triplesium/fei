@@ -31,6 +31,15 @@ using ScriptSystemExecutorFactory =
     std::function<Result<std::unique_ptr<DynamicSystemExecutor>, ScriptError>(
         const DynamicSystemDecl&
     )>;
+using ScriptSystemCall =
+    std::function<Status<ScriptError>(const std::vector<Ref>&)>;
+
+struct ScriptSystemInstallOptions {
+    bool main_thread_only {false};
+};
+
+std::unique_ptr<DynamicSystemExecutor>
+make_script_system_executor(ScriptSystemCall call);
 
 Result<ScriptTypeBindings, ScriptError>
 ensure_script_module_types(const ScriptModuleDecl& decl);
@@ -49,14 +58,16 @@ SystemProfileInfo script_system_profile_for_decl(
 Result<std::vector<SystemHandle>, ScriptError> install_script_module_systems(
     World& world,
     const ScriptModuleDecl& decl,
-    const ScriptSystemExecutorFactory& create_executor
+    const ScriptSystemExecutorFactory& create_executor,
+    ScriptSystemInstallOptions options = {}
 );
 
 Result<std::vector<SystemHandle>, ScriptError> install_script_module(
     World& world,
     const ScriptModuleDecl& decl,
     const ScriptTypeBinder& bind_type,
-    const ScriptSystemExecutorFactory& create_executor
+    const ScriptSystemExecutorFactory& create_executor,
+    ScriptSystemInstallOptions options = {}
 );
 
 bool remove_script_module_systems(

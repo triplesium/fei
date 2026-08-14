@@ -13,6 +13,25 @@
 namespace fei {
 namespace {
 
+class CallbackScriptSystemExecutor final : public DynamicSystemExecutor {
+  private:
+    ScriptSystemCall m_call;
+
+  public:
+    explicit CallbackScriptSystemExecutor(ScriptSystemCall call) :
+        m_call(std::move(call)) {}
+
+    Status<DynamicSystemError> execute(const std::vector<Ref>& args) override {
+        auto status = m_call(args);
+        if (!status) {
+            return failure(
+                DynamicSystemError {std::move(status.error().message)}
+            );
+        }
+        return {};
+    }
+};
+
 Result<TypeId, ScriptError> resolve_script_type_ref(
     const ScriptTypeRef& type_ref,
     const std::unordered_map<std::string, TypeId>& script_types
@@ -209,6 +228,11 @@ Status<ScriptError> apply_script_resource_initial_values(
 
 } // namespace
 
+std::unique_ptr<DynamicSystemExecutor>
+make_script_system_executor(ScriptSystemCall call) {
+    return std::make_unique<CallbackScriptSystemExecutor>(std::move(call));
+}
+
 Result<ScriptTypeBindings, ScriptError>
 ensure_script_module_types(const ScriptModuleDecl& decl) {
     auto ordered = order_script_type_decls(decl);
@@ -325,7 +349,8 @@ SystemProfileInfo script_system_profile_for_decl(
 Result<std::vector<SystemHandle>, ScriptError> install_script_module_systems(
     World& world,
     const ScriptModuleDecl& decl,
-    const ScriptSystemExecutorFactory& create_executor
+    const ScriptSystemExecutorFactory& create_executor,
+    ScriptSystemInstallOptions options
 ) {
     struct CompiledScriptSystem {
         const DynamicSystemDecl* decl {nullptr};
@@ -369,6 +394,7 @@ Result<std::vector<SystemHandle>, ScriptError> install_script_module_systems(
         );
         SystemConfig config(std::move(dynamic_system));
         config.profile = script_system_profile_for_decl(decl, *system.decl);
+        config.main_thread_only = options.main_thread_only;
         handles.push_back(
             world.add_system(system.decl->schedule, std::move(config))
         );
@@ -380,7 +406,8 @@ Result<std::vector<SystemHandle>, ScriptError> install_script_module(
     World& world,
     const ScriptModuleDecl& decl,
     const ScriptTypeBinder& bind_type,
-    const ScriptSystemExecutorFactory& create_executor
+    const ScriptSystemExecutorFactory& create_executor,
+    ScriptSystemInstallOptions options
 ) {
     auto bindings = ensure_script_module_types(decl);
     if (!bindings) {
@@ -397,7 +424,7 @@ Result<std::vector<SystemHandle>, ScriptError> install_script_module(
     if (!resources) {
         return failure(std::move(resources.error()));
     }
-    return install_script_module_systems(world, decl, create_executor);
+    return install_script_module_systems(world, decl, create_executor, options);
 }
 
 bool remove_script_module_systems(
