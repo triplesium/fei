@@ -1,0 +1,139 @@
+#pragma once
+
+#include "asset/assets.hpp"
+#include "asset/handle.hpp"
+#include "base/optional.hpp"
+#include "base/result.hpp"
+#include "ecs/fwd.hpp"
+#include "scripting_luau/asset.hpp"
+#include "scripting_luau/runtime.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+
+namespace fei {
+
+class World;
+class WorldRef;
+
+template<typename T>
+class ResRO;
+
+template<typename T>
+class ResRW;
+
+enum class LuauScriptSystemModuleId : std::uint64_t {
+    Invalid = 0,
+};
+
+inline constexpr LuauScriptSystemModuleId invalid_luau_script_system_module_id =
+    LuauScriptSystemModuleId::Invalid;
+
+enum class LuauScriptSystemModuleSourceKind { Source, Asset };
+enum class LuauScriptSystemModuleState { Loaded, Unloaded };
+enum class LuauScriptSystemRequestKind {
+    LoadSource,
+    LoadAsset,
+    ReloadAsset,
+    Unload,
+};
+
+struct LoadedLuauScriptSystemModule {
+    LuauScriptModuleId module {invalid_luau_script_module_id};
+    std::vector<SystemHandle> systems;
+    LuauScriptSystemModuleSourceKind source_kind {
+        LuauScriptSystemModuleSourceKind::Source
+    };
+    LuauScriptSystemModuleState state {LuauScriptSystemModuleState::Loaded};
+    Handle<LuauScriptAsset> asset;
+};
+
+struct LuauScriptSystemRequestError {
+    LuauScriptSystemRequestKind kind {LuauScriptSystemRequestKind::LoadSource};
+    LuauScriptSystemModuleId module {invalid_luau_script_system_module_id};
+    Handle<LuauScriptAsset> asset;
+    LuauScriptError error;
+};
+
+class LuauScriptSystemRegistry {
+  private:
+    struct QueuedRequest {
+        LuauScriptSystemRequestKind kind {
+            LuauScriptSystemRequestKind::LoadSource
+        };
+        LuauScriptSource source;
+        LuauScriptSystemModuleId module {invalid_luau_script_system_module_id};
+        Handle<LuauScriptAsset> asset;
+    };
+
+    std::vector<LoadedLuauScriptSystemModule> m_modules;
+    std::vector<QueuedRequest> m_queued_requests;
+    std::vector<LuauScriptSystemRequestError> m_queue_errors;
+
+    Optional<LoadedLuauScriptSystemModule&>
+    find_module(LuauScriptSystemModuleId module);
+
+    Result<LuauScriptSystemModuleId, LuauScriptError> load_source(
+        LuauRuntime& runtime,
+        World& world,
+        const LuauScriptSource& source
+    );
+    Result<LuauScriptSystemModuleId, LuauScriptError> load_asset(
+        LuauRuntime& runtime,
+        World& world,
+        const Assets<LuauScriptAsset>& assets,
+        Handle<LuauScriptAsset> asset
+    );
+    Status<LuauScriptError> reload_asset(
+        LuauRuntime& runtime,
+        World& world,
+        const Assets<LuauScriptAsset>& assets,
+        LuauScriptSystemModuleId module
+    );
+    Status<LuauScriptError>
+    unload(LuauRuntime& runtime, World& world, LuauScriptSystemModuleId module);
+    void apply_queued_requests(
+        LuauRuntime& runtime,
+        World& world,
+        const Assets<LuauScriptAsset>& assets
+    );
+
+    friend void apply_luau_script_system_queue(
+        WorldRef world,
+        ResRW<LuauRuntime> runtime,
+        ResRW<LuauScriptSystemRegistry> scripts,
+        ResRO<Assets<LuauScriptAsset>> assets
+    );
+
+  public:
+    void queue_source(LuauScriptSource source);
+    void queue_asset(Handle<LuauScriptAsset> asset);
+    void queue_reload_asset(LuauScriptSystemModuleId module);
+    void queue_unload(LuauScriptSystemModuleId module);
+
+    Optional<const LoadedLuauScriptSystemModule&>
+    get(LuauScriptSystemModuleId module) const;
+    Optional<LuauScriptSystemModuleId>
+    find_asset(Handle<LuauScriptAsset> asset) const;
+    bool is_loaded(LuauScriptSystemModuleId module) const;
+
+    bool has_queued_requests() const { return !m_queued_requests.empty(); }
+    std::size_t queued_request_count() const {
+        return m_queued_requests.size();
+    }
+    const std::vector<LuauScriptSystemRequestError>& queue_errors() const {
+        return m_queue_errors;
+    }
+    void clear_queue_errors() { m_queue_errors.clear(); }
+    std::size_t size() const { return m_modules.size(); }
+};
+
+void apply_luau_script_system_queue(
+    WorldRef world,
+    ResRW<LuauRuntime> runtime,
+    ResRW<LuauScriptSystemRegistry> scripts,
+    ResRO<Assets<LuauScriptAsset>> assets
+);
+
+} // namespace fei
