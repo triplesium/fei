@@ -1,6 +1,7 @@
 #pragma once
 #include "refl/callable.hpp"
 #include "refl/val.hpp"
+#include "scripting/borrow_scope.hpp"
 
 #include <lua.hpp>
 #include <string_view>
@@ -18,6 +19,12 @@ TypeId lua_check_type_id(lua_State* L, int idx, std::string_view context);
 Val lua_copy_reflected_value(lua_State* L, int idx, std::string_view context);
 void lua_push_val(lua_State* L, const Val& val);
 void lua_push_ref(lua_State* L, Ref ref);
+void lua_push_borrowed_ref(
+    lua_State* L,
+    Ref ref,
+    ScriptBorrowScope& scope,
+    ScriptBorrowToken token
+);
 
 template<bool HasRet, typename... Args>
 ReturnValue lua_call_func(lua_State* L, Args&&... args) {

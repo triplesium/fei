@@ -184,15 +184,18 @@ Status<LuaScriptError> LuaRuntime::call_module_function(
         );
     }
 
+    const auto borrow_token = m_borrow_scope.begin();
     for (const auto& arg : args) {
-        lua_push_ref(L, arg);
+        lua_push_borrowed_ref(L, arg, m_borrow_scope, borrow_token);
     }
     if (lua_pcall(L, static_cast<int>(args.size()), 0, 0) != LUA_OK) {
         std::string message = lua_tostring(L, -1);
+        m_borrow_scope.end(borrow_token);
         lua_settop(L, base_top);
         return failure(LuaScriptError {std::move(message)});
     }
 
+    m_borrow_scope.end(borrow_token);
     lua_settop(L, base_top);
     return {};
 }

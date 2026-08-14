@@ -2,6 +2,7 @@
 #include "base/result.hpp"
 #include "refl/val.hpp"
 #include "scripting/source.hpp"
+#include "scripting/borrow_scope.hpp"
 #include "scripting_lua/module_decl.hpp"
 
 #include <chrono>
@@ -58,6 +59,7 @@ class LuaRuntime {
     lua_State* m_state {nullptr};
     std::unordered_map<LuaScriptModuleId, Module> m_modules;
     std::uint64_t m_next_module_id {1};
+    ScriptBorrowScope m_borrow_scope;
 
     void register_lua_type(Type& type);
 

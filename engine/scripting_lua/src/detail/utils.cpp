@@ -20,6 +20,14 @@ int lua_raise_registry_error(lua_State* L, const RegistryError& failure) {
     return 0;
 }
 
+LuaObject& checked_lua_object(lua_State* L, int idx) {
+    auto& object = *reinterpret_cast<LuaObject*>(lua_touserdata(L, idx));
+    if (!object.borrow_valid()) {
+        luaL_error(L, "attempt to access an expired ECS borrow");
+    }
+    return object;
+}
+
 } // namespace
 
 bool lua_is_fei_type(lua_State* L, int idx) {
@@ -108,8 +116,7 @@ Val lua_to_val(lua_State* L, int idx) {
             return make_val<std::string>(lua_tostring(L, idx));
         case LUA_TUSERDATA:
         case LUA_TLIGHTUSERDATA:
-            return reinterpret_cast<LuaObject*>(lua_touserdata(L, idx))
-                ->as_val();
+            return checked_lua_object(L, idx).as_val();
         default:
             return {};
     }
@@ -119,8 +126,7 @@ Ref lua_to_ref(lua_State* L, int idx) {
     switch (lua_type(L, idx)) {
         case LUA_TUSERDATA:
         case LUA_TLIGHTUSERDATA:
-            return reinterpret_cast<LuaObject*>(lua_touserdata(L, idx))
-                ->as_ref();
+            return checked_lua_object(L, idx).as_ref();
         default:
             return {};
     }
@@ -154,8 +160,7 @@ TypeId lua_type_of(lua_State* L, int idx) {
         }
         case LUA_TUSERDATA:
         case LUA_TLIGHTUSERDATA:
-            return reinterpret_cast<LuaObject*>(lua_touserdata(L, idx))
-                ->type_id();
+            return checked_lua_object(L, idx).type_id();
         default:
             return {};
     }
@@ -287,6 +292,44 @@ void lua_push_ref(lua_State* L, Ref ref) {
             return;
         }
         new (lua_newuserdata(L, sizeof(LuaObject))) LuaObject(ref);
+        luaL_setmetatable(L, type->stripped_name().c_str());
+    }
+}
+
+void lua_push_borrowed_ref(
+    lua_State* L,
+    Ref ref,
+    ScriptBorrowScope& scope,
+    ScriptBorrowToken token
+) {
+    if (!ref) {
+        lua_pushnil(L);
+        return;
+    }
+    auto type = Registry::instance().try_get_type(ref.type_id());
+    if (!type) {
+        lua_raise_registry_error(L, type.error());
+        return;
+    }
+    if (type->id() == type_id<bool>()) {
+        lua_pushboolean(L, static_cast<int>(ref.get_const<bool>()));
+    } else if (type->is_integral()) {
+        lua_pushinteger(L, ref.to_number<int>());
+    } else if (type->is_floating_point()) {
+        lua_pushnumber(L, ref.to_number<float>());
+    } else if (type->id() == type_id<std::string>()) {
+        lua_pushstring(L, ref.get_const<std::string>().c_str());
+    } else {
+        if (!lua_is_type_registered(L, *type)) {
+            luaL_error(
+                L,
+                "Type %s is not registered in Lua",
+                type->stripped_name().c_str()
+            );
+            return;
+        }
+        new (lua_newuserdata(L, sizeof(LuaObject)))
+            LuaObject(ref, scope, token);
         luaL_setmetatable(L, type->stripped_name().c_str());
     }
 }

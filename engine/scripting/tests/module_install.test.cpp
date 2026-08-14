@@ -5,6 +5,7 @@
 #include "refl/cls.hpp"
 #include "refl/registry.hpp"
 #include "refl/val.hpp"
+#include "scripting/borrow_scope.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
@@ -57,6 +58,24 @@ class CountingExecutor final : public DynamicSystemExecutor {
 };
 
 } // namespace
+
+TEST_CASE(
+    "Script borrow scopes expire and cannot end newer borrows",
+    "[scripting][borrow]"
+) {
+    ScriptBorrowScope scope;
+    const auto first = scope.begin();
+    REQUIRE(scope.valid(first));
+
+    const auto second = scope.begin();
+    CHECK_FALSE(scope.valid(first));
+    REQUIRE(scope.valid(second));
+
+    scope.end(first);
+    REQUIRE(scope.valid(second));
+    scope.end(second);
+    CHECK_FALSE(scope.valid(second));
+}
 
 TEST_CASE(
     "Script module types reuse identical dynamic schemas",

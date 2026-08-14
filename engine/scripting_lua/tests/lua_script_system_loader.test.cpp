@@ -30,6 +30,42 @@ const T& require_param_decl(const DynamicSystemParamDeclPtr& param) {
 } // namespace
 
 TEST_CASE(
+    "Lua module calls reject escaped ECS borrows",
+    "[scripting][lua][borrow]"
+) {
+    auto runtime = make_test_runtime();
+    auto module = runtime.load_module(
+        LuaScriptSource {
+            .name = "escaped_borrow.lua",
+            .content = R"(
+                local escaped
+
+                function capture(value)
+                    escaped = value
+                end
+
+                function use_escaped()
+                    return escaped.value
+                end
+            )",
+        }
+    );
+    REQUIRE(module);
+
+    ScriptTestReceiver receiver;
+    receiver.value = 3;
+    REQUIRE(
+        runtime.call_module_function(*module, "capture", {make_ref(receiver)})
+    );
+
+    auto escaped = runtime.call_module_function(*module, "use_escaped", {});
+    REQUIRE_FALSE(escaped);
+    CHECK(
+        escaped.error().message.find("expired ECS borrow") != std::string::npos
+    );
+}
+
+TEST_CASE(
     "Lua script systems query script-defined components",
     "[scripting][lua][system][types]"
 ) {

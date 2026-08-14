@@ -4,6 +4,7 @@
 #include "refl/method.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
+#include "scripting/reflection_bridge.hpp"
 #include "scripting_lua/detail/commands_binding.hpp"
 #include "scripting_lua/detail/object.hpp"
 #include "scripting_lua/detail/operator.hpp"
@@ -57,6 +58,22 @@ int lua_raise_container_error(lua_State* L, const ContainerError& failure) {
     return 0;
 }
 
+void lua_push_derived_ref(lua_State* L, Ref ref) {
+    if (lua_isuserdata(L, 1)) {
+        auto* parent = reinterpret_cast<LuaObject*>(lua_touserdata(L, 1));
+        if (parent->borrow_scope()) {
+            lua_push_borrowed_ref(
+                L,
+                ref,
+                *parent->borrow_scope(),
+                parent->borrow_token()
+            );
+            return;
+        }
+    }
+    lua_push_ref(L, ref);
+}
+
 std::size_t lua_check_container_index(lua_State* L, int idx) {
     if (!lua_isinteger(L, idx)) {
         luaL_error(L, "Container index must be an integer");
@@ -73,7 +90,7 @@ std::size_t lua_check_container_index(lua_State* L, int idx) {
 
 int lua_push_return_item(lua_State* L, const ReturnItem& item) {
     if (item.is_ref()) {
-        lua_push_ref(L, item.ref());
+        lua_push_derived_ref(L, item.ref());
     } else {
         lua_push_val(L, item.value());
     }
@@ -347,12 +364,6 @@ int dispatch_new(lua_State* L) {
 
 int dispatch_method(lua_State* L) {
     const auto* name = lua_tostring(L, lua_upvalueindex(1));
-    TypeId type_id = lua_tointeger(L, lua_upvalueindex(2));
-    auto cls = Registry::instance().try_get_cls(type_id);
-    if (!cls) {
-        return lua_raise_registry_error(L, cls.error());
-    }
-
     auto instance = lua_to_ref(L, 1);
 
     auto arg_count = lua_gettop(L) - 1;
@@ -374,8 +385,7 @@ int dispatch_method(lua_State* L) {
     }
 
     std::vector<Ref> refs;
-    refs.reserve(args.size() + 1);
-    refs.push_back(instance);
+    refs.reserve(args.size());
     std::ranges::transform(
         args,
         std::back_inserter(refs),
@@ -384,15 +394,10 @@ int dispatch_method(lua_State* L) {
         }
     );
 
-    auto const_filter = instance.is_const() ? MethodConstFilter::ConstOnly :
-                                              MethodConstFilter::PreferNonConst;
-    auto method_result = cls->get_method_for_args(name, refs, const_filter);
-    if (!method_result) {
-        return lua_raise_failure(L, method_result.error());
-    }
-    auto& method = *method_result;
-
-    return lua_push_invoke_result(L, method.invoke_variadic(refs));
+    return lua_push_invoke_result(
+        L,
+        script_invoke_method(instance, name, refs)
+    );
 }
 
 int dispatch_gc(lua_State* L) {
@@ -476,7 +481,7 @@ int dispatch_indexed_next(lua_State* L) {
         return lua_raise_container_error(L, element.error());
     }
     lua_pushinteger(L, static_cast<lua_Integer>(index));
-    lua_push_ref(L, *element);
+    lua_push_derived_ref(L, *element);
     return 2;
 }
 
@@ -503,7 +508,7 @@ int dispatch_index(lua_State* L) {
         if (!element) {
             return lua_raise_container_error(L, element.error());
         }
-        lua_push_ref(L, *element);
+        lua_push_derived_ref(L, *element);
         return 1;
     }
 
@@ -541,7 +546,7 @@ int dispatch_index(lua_State* L) {
         if (!value) {
             return lua_raise_failure(L, value.error());
         }
-        lua_push_ref(L, *value);
+        lua_push_derived_ref(L, *value);
         return 1;
     }
 
