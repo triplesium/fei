@@ -1,0 +1,664 @@
+#include "app/app.hpp"
+#include "ecs/commands.hpp"
+#include "ecs/dynamic/query.hpp"
+#include "ecs/dynamic/world.hpp"
+#include "ecs/world.hpp"
+#include "refl/cls.hpp"
+#include "refl/registry.hpp"
+#include "scripting/module_install.hpp"
+#include "scripting_luau/compiler.hpp"
+#include "scripting_luau/detail/script_system_loader.hpp"
+#include "scripting_luau/runtime.hpp"
+
+#include <catch2/catch_test_macros.hpp>
+
+using namespace fei;
+
+namespace {
+
+struct LuauTestPosition {
+    float x {0.0F};
+
+    void advance(float amount) { x += amount; }
+};
+
+struct LuauTestVelocity {
+    float x {0.0F};
+};
+
+struct LuauTestTime {
+    float delta {0.0F};
+
+    float scaled(float value) const { return value * delta; }
+};
+
+struct LuauTestObstacle {
+    int weight {0};
+};
+
+struct LuauTestError {
+    int code {0};
+};
+
+struct LuauTestConfig {
+    int executions {0};
+    int obstacle_total {0};
+    float generated_x {0.0F};
+
+    void add_execution(int count) { executions += count; }
+
+    LuauTestPosition make_position(float x) const {
+        return LuauTestPosition {.x = x};
+    }
+
+    Result<int, LuauTestError> result(bool succeed) const {
+        if (succeed) {
+            return 42;
+        }
+        return failure(LuauTestError {.code = 9});
+    }
+};
+
+struct LuauTestCommandState {
+    int target {0};
+    int parent {0};
+    int detached {0};
+    int doomed {0};
+    int spawned {0};
+    int total {0};
+
+    LuauTestPosition make_position(float x) const {
+        return LuauTestPosition {.x = x};
+    }
+
+    LuauTestError make_error(int code) const {
+        return LuauTestError {.code = code};
+    }
+};
+
+void register_luau_system_test_types() {
+    auto& registry = Registry::instance();
+    registry.register_cls<LuauTestPosition>()
+        .add_property("x", &LuauTestPosition::x)
+        .add_method("advance", &LuauTestPosition::advance);
+    registry.register_cls<LuauTestVelocity>().add_property(
+        "x",
+        &LuauTestVelocity::x
+    );
+    registry.register_cls<LuauTestTime>()
+        .add_property("delta", &LuauTestTime::delta)
+        .add_method("scaled", &LuauTestTime::scaled);
+    registry.register_cls<LuauTestObstacle>().add_property(
+        "weight",
+        &LuauTestObstacle::weight
+    );
+    registry.register_cls<LuauTestError>().add_property(
+        "code",
+        &LuauTestError::code
+    );
+    registry.register_cls<LuauTestConfig>()
+        .add_property("executions", &LuauTestConfig::executions)
+        .add_property("obstacle_total", &LuauTestConfig::obstacle_total)
+        .add_property("generated_x", &LuauTestConfig::generated_x)
+        .add_method("add_execution", &LuauTestConfig::add_execution)
+        .add_method("make_position", &LuauTestConfig::make_position)
+        .add_method("result", &LuauTestConfig::result);
+    registry.register_cls<LuauTestCommandState>()
+        .add_property("target", &LuauTestCommandState::target)
+        .add_property("parent", &LuauTestCommandState::parent)
+        .add_property("detached", &LuauTestCommandState::detached)
+        .add_property("doomed", &LuauTestCommandState::doomed)
+        .add_property("spawned", &LuauTestCommandState::spawned)
+        .add_property("total", &LuauTestCommandState::total)
+        .add_method("make_position", &LuauTestCommandState::make_position)
+        .add_method("make_error", &LuauTestCommandState::make_error);
+}
+
+} // namespace
+
+TEST_CASE(
+    "Luau World exposes live entities resources queries and commands",
+    "[scripting_luau][system][world]"
+) {
+    register_luau_system_test_types();
+    const ScriptSource source {
+        .name = "world_system.luau",
+        .content = R"(
+            local function use_world(world: World)
+                local state = world:resource(LuauTestCommandState)
+                assert(state ~= nil)
+                assert(world:has_entity(state.doomed))
+                assert(world:entity(999999) == nil)
+                assert(world:has_resource(LuauTestCommandState))
+
+                local parent = world:spawn()
+                local spawned = world:spawn(state:make_position(5))
+                assert(spawned:has(LuauTestPosition))
+                spawned:add(state:make_error(9))
+                assert(spawned:get(LuauTestError).code == 9)
+                spawned:remove(LuauTestError)
+
+                spawned:set_parent(parent:id())
+                local children = parent:children()
+                assert(#children == 1 and children[1] == spawned:id())
+                assert(spawned:parent() == parent:id())
+                spawned:remove_parent()
+                assert(spawned:parent() == nil)
+
+                local positions = world:query {
+                    Entity,
+                    Write(LuauTestPosition),
+                    Without(LuauTestError),
+                }
+                assert(not positions:empty() and positions:size() == 2)
+                local first_entity, first_position = positions:first()
+                assert(first_entity ~= nil and first_position ~= nil)
+
+                local total = 0
+                for entity, position in positions do
+                    assert(entity ~= nil)
+                    position.x += 10
+                    total += position.x
+                end
+
+                world:commands():entity(state.doomed):despawn()
+                state.spawned = spawned:id()
+                state.total = total
+                world:set_resource(state:make_error(total))
+            end
+
+            return module {
+                name = "test.world",
+                systems = {
+                    system(Update, use_world),
+                },
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact.has_value());
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module.has_value());
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    const Entity matched = world.entity();
+    world.add_component(matched, LuauTestPosition {.x = 1});
+    const Entity filtered = world.entity();
+    world.add_component(filtered, LuauTestPosition {.x = 100});
+    world.add_component(filtered, LuauTestError {.code = 1});
+    const Entity doomed = world.entity();
+    world.add_component(doomed, LuauTestVelocity {.x = 2});
+    world.add_resource(
+        LuauTestCommandState {.doomed = static_cast<int>(doomed)}
+    );
+
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems.has_value());
+    world.run_schedule(Update);
+
+    const auto& state =
+        static_cast<const World&>(world).resource<LuauTestCommandState>();
+    const Entity spawned = static_cast<Entity>(state.spawned);
+    CHECK(state.total == 26);
+    CHECK(world.get_component<LuauTestPosition>(matched).x == 11);
+    CHECK(world.get_component<LuauTestPosition>(spawned).x == 15);
+    CHECK_FALSE(world.has_entity(doomed));
+    REQUIRE(world.has_resource<LuauTestError>());
+    CHECK(world.resource<LuauTestError>().code == 26);
+}
+
+TEST_CASE(
+    "Luau World queries reject structural changes during iteration",
+    "[scripting_luau][world][query]"
+) {
+    register_luau_system_test_types();
+    const ScriptSource source {
+        .name = "world_query_invalidation.luau",
+        .content = R"(
+            local function invalidate(world: World)
+                local positions = world:query { Write(LuauTestPosition) }
+                for position in positions do
+                    world:spawn(position)
+                end
+            end
+
+            return module {
+                name = "test.world_invalidation",
+                systems = {
+                    system(Update, invalidate),
+                },
+            }
+        )",
+    };
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact.has_value());
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module.has_value());
+    REQUIRE(runtime.bind_module_type(
+        *module,
+        "LuauTestPosition",
+        type<LuauTestPosition>()
+    ));
+
+    World world;
+    const Entity entity = world.entity();
+    world.add_component(entity, LuauTestPosition {.x = 1});
+    DynamicWorld dynamic_world("world");
+    auto prepared = dynamic_world.prepare(
+        world,
+        SystemTicks {
+            .last_run = 0,
+            .this_run = world.increment_change_tick(),
+        }
+    );
+    REQUIRE(prepared.has_value());
+    auto status = runtime.call_module_function(
+        *module,
+        "invalidate",
+        std::span<const Ref> {&*prepared, 1}
+    );
+    dynamic_world.finish();
+
+    REQUIRE_FALSE(status.has_value());
+    CHECK(
+        status.error().message.find(
+            "World structurally changed during query iteration"
+        ) != std::string::npos
+    );
+}
+
+TEST_CASE(
+    "Luau World views expire after the system invocation",
+    "[scripting_luau][world][borrow]"
+) {
+    const ScriptSource source {
+        .name = "world_borrow.luau",
+        .content = R"(
+            local escaped_entity = nil
+            local escaped_query = nil
+
+            local function capture(world: World)
+                escaped_entity = world:spawn()
+                escaped_query = world:query { Entity }
+            end
+
+            local function use_entity()
+                return escaped_entity:id()
+            end
+
+            local function use_query()
+                return escaped_query:size()
+            end
+
+            return module {
+                name = "test.world_borrow",
+                systems = {
+                    system(Update, capture),
+                    system(Update, use_entity),
+                    system(Update, use_query),
+                },
+            }
+        )",
+    };
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact.has_value());
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module.has_value());
+
+    World world;
+    DynamicWorld dynamic_world("world");
+    auto prepared = dynamic_world.prepare(
+        world,
+        SystemTicks {
+            .last_run = 0,
+            .this_run = world.increment_change_tick(),
+        }
+    );
+    REQUIRE(prepared.has_value());
+    REQUIRE(runtime.call_module_function(
+        *module,
+        "capture",
+        std::span<const Ref> {&*prepared, 1}
+    ));
+    dynamic_world.finish();
+
+    auto entity = runtime.call_module_function(*module, "use_entity");
+    REQUIRE_FALSE(entity.has_value());
+    CHECK(entity.error().message.find("no longer active") != std::string::npos);
+    auto query = runtime.call_module_function(*module, "use_query");
+    REQUIRE_FALSE(query.has_value());
+    CHECK(query.error().message.find("no longer active") != std::string::npos);
+}
+
+TEST_CASE(
+    "Luau systems queue entity hierarchy and resource commands",
+    "[scripting_luau][system][commands]"
+) {
+    register_luau_system_test_types();
+    const ScriptSource source {
+        .name = "commands_system.luau",
+        .content = R"(
+            local function apply_commands(
+                commands: Commands,
+                state: ResRW<LuauTestCommandState>,
+                _velocities: Query<Entity, Read<LuauTestVelocity>>
+            )
+                local target = commands:entity(state.target)
+                assert(target:has(LuauTestVelocity))
+                target:add(state:make_position(8)):remove(LuauTestVelocity)
+                target:set_parent(state.parent)
+
+                commands:entity(state.detached):remove_parent()
+                commands:entity(state.doomed):despawn()
+
+                local spawned = commands:spawn(state:make_position(3))
+                state.spawned = spawned:id()
+                commands:add_resource(state:make_position(11))
+            end
+
+            return module {
+                name = "test.commands",
+                systems = {
+                    system(Update, apply_commands),
+                },
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact.has_value());
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module.has_value());
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    const Entity target = world.entity();
+    const Entity parent = world.entity();
+    const Entity detached = world.entity();
+    const Entity doomed = world.entity();
+    world.add_component(target, LuauTestVelocity {.x = 2});
+    world.add_component(doomed, LuauTestVelocity {.x = 4});
+    world.set_parent(detached, parent);
+    world.add_resource(
+        LuauTestCommandState {
+            .target = static_cast<int>(target),
+            .parent = static_cast<int>(parent),
+            .detached = static_cast<int>(detached),
+            .doomed = static_cast<int>(doomed),
+        }
+    );
+
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems.has_value());
+
+    world.run_schedule(Update);
+
+    CHECK(world.has_component<LuauTestPosition>(target));
+    CHECK(world.get_component<LuauTestPosition>(target).x == 8);
+    CHECK_FALSE(world.has_component<LuauTestVelocity>(target));
+    REQUIRE(world.parent(target));
+    CHECK(*world.parent(target) == parent);
+    CHECK_FALSE(world.has_parent(detached));
+    CHECK_FALSE(world.has_entity(doomed));
+
+    const Entity spawned =
+        static_cast<Entity>(world.resource<LuauTestCommandState>().spawned);
+    CHECK(world.has_entity(spawned));
+    CHECK(world.get_component<LuauTestPosition>(spawned).x == 3);
+    REQUIRE(world.has_resource<LuauTestPosition>());
+    CHECK(world.resource<LuauTestPosition>().x == 11);
+}
+
+TEST_CASE(
+    "Luau systems execute resource and query parameters",
+    "[scripting_luau][system][query][resource]"
+) {
+    register_luau_system_test_types();
+    const ScriptSource source {
+        .name = "movement_system.luau",
+        .content = R"(
+            local function movement_system(
+                movers: Query<Write<LuauTestPosition>, Read<LuauTestVelocity>>,
+                obstacles: Query<Read<LuauTestObstacle>>,
+                time: ResRO<LuauTestTime>,
+                config: ResRW<LuauTestConfig>?
+            )
+                for position, velocity in movers do
+                    position:advance(time:scaled(velocity.x))
+                end
+                if config then
+                    config:add_execution(1)
+                    for obstacle in obstacles do
+                        config.obstacle_total += obstacle.weight
+                    end
+                    local generated = config:make_position(3.5)
+                    generated:advance(1)
+                    config.generated_x = generated.x
+                    local value, err = config:result(false)
+                    assert(value == nil and err.code == 9)
+                end
+            end
+
+            return module {
+                name = "test.movement",
+                systems = {
+                    system(MainSchedules.Update, movement_system),
+                },
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact.has_value());
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module.has_value());
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(LuauTestTime {.delta = 0.5F});
+    world.add_resource(LuauTestConfig {});
+    Entity entity = world.entity();
+    world.add_component(entity, LuauTestPosition {.x = 1.0F});
+    world.add_component(entity, LuauTestVelocity {.x = 2.0F});
+    Entity obstacle = world.entity();
+    world.add_component(obstacle, LuauTestObstacle {.weight = 7});
+
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems.has_value());
+    REQUIRE(systems->size() == 1);
+
+    world.run_schedule(Update);
+    CHECK(world.get_component<LuauTestPosition>(entity).x == 2.0F);
+    CHECK(world.resource<LuauTestConfig>().executions == 1);
+    CHECK(world.resource<LuauTestConfig>().obstacle_total == 7);
+    CHECK(world.resource<LuauTestConfig>().generated_x == 4.5F);
+
+    CHECK(remove_script_module_systems(world, *systems));
+
+    World world_without_optional_config;
+    world_without_optional_config.add_resource(CommandsQueue {});
+    world_without_optional_config.add_resource(LuauTestTime {.delta = 0.5F});
+    Entity optional_entity = world_without_optional_config.entity();
+    world_without_optional_config.add_component(
+        optional_entity,
+        LuauTestPosition {.x = 3.0F}
+    );
+    world_without_optional_config.add_component(
+        optional_entity,
+        LuauTestVelocity {.x = 2.0F}
+    );
+    auto optional_systems = detail::install_luau_script_systems(
+        world_without_optional_config,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(optional_systems.has_value());
+    world_without_optional_config.run_schedule(Update);
+    CHECK(
+        world_without_optional_config
+            .get_component<LuauTestPosition>(optional_entity)
+            .x == 4.0F
+    );
+    CHECK(remove_script_module_systems(
+        world_without_optional_config,
+        *optional_systems
+    ));
+    REQUIRE(runtime.unload_module(*module));
+}
+
+TEST_CASE(
+    "Luau rejects read-only mutation and escaped ECS borrows",
+    "[scripting_luau][borrow]"
+) {
+    register_luau_system_test_types();
+    const ScriptSource source {
+        .name = "borrow_system.luau",
+        .content = R"(
+            local escaped = nil
+            local escaped_entity = nil
+
+            local function mutate(config: ResRO<LuauTestConfig>)
+                config.executions += 1
+            end
+
+            local function mutate_method(config: ResRO<LuauTestConfig>)
+                config:add_execution(1)
+            end
+
+            local function capture(config: ResRO<LuauTestConfig>)
+                escaped = config
+            end
+
+            local function use_escaped()
+                return escaped.executions
+            end
+
+            local function capture_entity(commands: Commands)
+                escaped_entity = commands:spawn()
+            end
+
+            local function use_escaped_entity()
+                return escaped_entity:id()
+            end
+
+            local function mutate_query(
+                velocities: Query<Read<LuauTestVelocity>>
+            )
+                for velocity in velocities do
+                    velocity.x += 1
+                end
+            end
+
+            return module {
+                name = "test.borrow",
+                systems = {
+                    system(Update, mutate),
+                    system(Update, mutate_method),
+                    system(Update, capture),
+                    system(Update, use_escaped),
+                    system(Update, capture_entity),
+                    system(Update, use_escaped_entity),
+                    system(Update, mutate_query),
+                },
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact.has_value());
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module.has_value());
+
+    const LuauTestConfig config {};
+    const Ref config_ref {config};
+    auto mutation = runtime.call_module_function(
+        *module,
+        "mutate",
+        std::span<const Ref> {&config_ref, 1}
+    );
+    REQUIRE_FALSE(mutation.has_value());
+    CHECK(mutation.error().message.find("read-only") != std::string::npos);
+
+    auto method_mutation = runtime.call_module_function(
+        *module,
+        "mutate_method",
+        std::span<const Ref> {&config_ref, 1}
+    );
+    REQUIRE_FALSE(method_mutation.has_value());
+
+    REQUIRE(runtime.call_module_function(
+        *module,
+        "capture",
+        std::span<const Ref> {&config_ref, 1}
+    ));
+    auto escaped = runtime.call_module_function(*module, "use_escaped");
+    REQUIRE_FALSE(escaped.has_value());
+    CHECK(
+        escaped.error().message.find("expired ECS borrow") != std::string::npos
+    );
+
+    World commands_world;
+    commands_world.add_resource(CommandsQueue {});
+    Commands commands(commands_world.resource<CommandsQueue>(), commands_world);
+    const Ref commands_ref {commands};
+    REQUIRE(runtime.call_module_function(
+        *module,
+        "capture_entity",
+        std::span<const Ref> {&commands_ref, 1}
+    ));
+    auto escaped_entity =
+        runtime.call_module_function(*module, "use_escaped_entity");
+    REQUIRE_FALSE(escaped_entity.has_value());
+    CHECK(
+        escaped_entity.error().message.find("expired EntityCommands") !=
+        std::string::npos
+    );
+
+    World world;
+    Entity entity = world.entity();
+    world.add_component(entity, LuauTestVelocity {.x = 2.0F});
+    DynamicQuery velocities(
+        "velocities",
+        {DynamicQueryField {
+            .name = "velocity",
+            .type = type_id<LuauTestVelocity>(),
+            .access = DynamicParamAccess::Read,
+        }},
+        {}
+    );
+    auto query_ref = velocities.prepare(world);
+    REQUIRE(query_ref.has_value());
+    auto query_mutation = runtime.call_module_function(
+        *module,
+        "mutate_query",
+        std::span<const Ref> {&*query_ref, 1}
+    );
+    REQUIRE_FALSE(query_mutation.has_value());
+    CHECK(
+        query_mutation.error().message.find("read-only") != std::string::npos
+    );
+}
