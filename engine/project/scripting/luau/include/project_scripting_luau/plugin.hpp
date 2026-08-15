@@ -5,9 +5,9 @@
 #include "base/optional.hpp"
 #include "project/plugin.hpp"
 #include "project_scripting/script.hpp"
-#include "scripting_lua/asset.hpp"
-#include "scripting_lua/plugin.hpp"
-#include "scripting_lua/script_system_registry.hpp"
+#include "scripting_luau/asset.hpp"
+#include "scripting_luau/plugin.hpp"
+#include "scripting_luau/script_system_registry.hpp"
 
 #include <string>
 #include <string_view>
@@ -16,14 +16,14 @@ namespace fei::project_runtime {
 
 namespace detail {
 
-struct LuaProjectScriptBackend {
-    using Asset = LuaScriptAsset;
-    using ModuleId = LuaScriptSystemModuleId;
-    using Registry = LuaScriptSystemRegistry;
+struct LuauProjectScriptBackend {
+    using Asset = LuauScriptAsset;
+    using ModuleId = LuauScriptSystemModuleId;
+    using Registry = LuauScriptSystemRegistry;
 
-    inline static constexpr std::string_view extension = ".lua";
+    inline static constexpr std::string_view extension = ".luau";
     inline static constexpr std::string_view asset_load_failure =
-        "Lua script asset failed to load";
+        "Luau script asset failed to load";
 
     static void queue_asset(Registry& registry, Handle<Asset> asset);
     static Optional<ModuleId>
@@ -34,18 +34,18 @@ struct LuaProjectScriptBackend {
 
 } // namespace detail
 
-using LuaScriptStatus = project_scripting::ScriptStatus;
-using LuaScriptState =
-    project_scripting::ScriptState<LuaScriptAsset, LuaScriptSystemModuleId>;
-using LuaScriptsState =
-    project_scripting::ScriptsState<detail::LuaProjectScriptBackend>;
+using LuauScriptStatus = project_scripting::ScriptStatus;
+using LuauScriptState =
+    project_scripting::ScriptState<LuauScriptAsset, LuauScriptSystemModuleId>;
+using LuauScriptsState =
+    project_scripting::ScriptsState<detail::LuauProjectScriptBackend>;
 
 FEI_REFLECT(Plugin)
-class LuaScriptsPlugin : public Plugin {
+class LuauScriptsPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {
         dependencies.require<ProjectPlugin>();
-        dependencies.require<LuaScriptingPlugin>();
+        dependencies.require<LuauScriptingPlugin>();
     }
 
     void setup(App& app) override;

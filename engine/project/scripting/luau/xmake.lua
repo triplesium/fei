@@ -1,4 +1,4 @@
-target("fei-project-scripting-lua")
+target("fei-project-scripting-luau")
     set_kind("static")
     add_rules("fei.reflect")
     add_headerfiles("include/**.hpp")
@@ -9,12 +9,16 @@ target("fei-project-scripting-lua")
         "fei-asset",
         "fei-project",
         "fei-project-scripting",
-        "fei-scripting-lua"
+        "fei-scripting-luau"
     )
 
-target("fei-project-scripting-lua-tests")
+target("fei-project-scripting-luau-tests")
     set_kind("binary")
     set_default(false)
     add_rules("fei.test", "fei.reflect")
     add_files("tests/*.cpp")
-    add_deps("fei-project-runtime", "fei-project-scripting-lua")
+    add_deps(
+        "fei-project-runtime",
+        "fei-project-scripting-lua",
+        "fei-project-scripting-luau"
+    )
