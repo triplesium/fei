@@ -40,6 +40,25 @@ struct LuauTestError {
     int code {0};
 };
 
+enum class LuauTestMode {
+    Idle,
+    Active,
+};
+
+struct LuauTestNested {
+    LuauTestPosition position;
+    LuauTestMode mode {LuauTestMode::Idle};
+};
+
+struct LuauTestConstructionState {
+    float positional_x {0.0F};
+    float initialized_x {0.0F};
+    int spawned {0};
+    LuauTestMode mode {LuauTestMode::Idle};
+
+    void set_mode(LuauTestMode value) { mode = value; }
+};
+
 struct LuauTestConfig {
     int executions {0};
     int obstacle_total {0};
@@ -79,6 +98,7 @@ struct LuauTestCommandState {
 void register_luau_system_test_types() {
     auto& registry = Registry::instance();
     registry.register_cls<LuauTestPosition>()
+        .add_constructor<LuauTestPosition, float>()
         .add_property("x", &LuauTestPosition::x)
         .add_method("advance", &LuauTestPosition::advance);
     registry.register_cls<LuauTestVelocity>().add_property(
@@ -96,6 +116,24 @@ void register_luau_system_test_types() {
         "code",
         &LuauTestError::code
     );
+    registry.register_enum<LuauTestMode>()
+        .add_enumerator("Idle", static_cast<std::int64_t>(LuauTestMode::Idle))
+        .add_enumerator(
+            "Active",
+            static_cast<std::int64_t>(LuauTestMode::Active)
+        );
+    registry.register_cls<LuauTestNested>()
+        .add_property("position", &LuauTestNested::position)
+        .add_property("mode", &LuauTestNested::mode);
+    registry.register_cls<LuauTestConstructionState>()
+        .add_property("positional_x", &LuauTestConstructionState::positional_x)
+        .add_property(
+            "initialized_x",
+            &LuauTestConstructionState::initialized_x
+        )
+        .add_property("spawned", &LuauTestConstructionState::spawned)
+        .add_property("mode", &LuauTestConstructionState::mode)
+        .add_method("set_mode", &LuauTestConstructionState::set_mode);
     registry.register_cls<LuauTestConfig>()
         .add_property("executions", &LuauTestConfig::executions)
         .add_property("obstacle_total", &LuauTestConfig::obstacle_total)
@@ -115,6 +153,75 @@ void register_luau_system_test_types() {
 }
 
 } // namespace
+
+TEST_CASE(
+    "Luau constructs reflected values and exposes reflected enums",
+    "[scripting_luau][system][construction][enum]"
+) {
+    register_luau_system_test_types();
+    const ScriptSource source {
+        .name = "construction_system.luau",
+        .content = R"(
+            local function construct_values(
+                world: World,
+                state: ResRW<LuauTestConstructionState>
+            )
+                local positional = LuauTestPosition.new(3.5)
+                positional:advance(1.5)
+                local initialized = LuauTestPosition.new { x = 7.25 }
+                local nested = LuauTestNested.new {
+                    position = initialized,
+                    mode = LuauTestMode.Active,
+                }
+
+                local writable = pcall(function()
+                    LuauTestMode.Active = LuauTestMode.Idle
+                end)
+                assert(not writable)
+
+                state.positional_x = positional.x
+                state.initialized_x = nested.position.x
+                state:set_mode(nested.mode)
+                state.spawned = world:spawn(nested):id()
+            end
+
+            return module {
+                name = "test.construction",
+                systems = {
+                    system(Update, construct_values),
+                },
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact.has_value());
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module.has_value());
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(LuauTestConstructionState {});
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems.has_value());
+    world.run_schedule(Update);
+
+    const auto& state = world.resource<LuauTestConstructionState>();
+    CHECK(state.positional_x == 5.0F);
+    CHECK(state.initialized_x == 7.25F);
+    CHECK(state.mode == LuauTestMode::Active);
+    const Entity spawned = static_cast<Entity>(state.spawned);
+    REQUIRE(world.has_component<LuauTestNested>(spawned));
+    const auto& nested = world.get_component<LuauTestNested>(spawned);
+    CHECK(nested.position.x == 7.25F);
+    CHECK(nested.mode == LuauTestMode::Active);
+}
 
 TEST_CASE(
     "Luau World exposes live entities resources queries and commands",

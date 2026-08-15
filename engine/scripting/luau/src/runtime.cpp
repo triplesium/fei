@@ -1,5 +1,6 @@
 #include "scripting_luau/runtime.hpp"
 
+#include "refl/enum.hpp"
 #include "refl/type.hpp"
 #include "scripting_luau/detail/binding.hpp"
 
@@ -247,6 +248,26 @@ Status<LuauScriptError> LuauRuntime::bind_module_type(
     }
     auto* thread = found->second.thread;
     detail::push_luau_type_token(thread, type.id());
+    lua_setglobal(thread, name.c_str());
+    return {};
+}
+
+Status<LuauScriptError> LuauRuntime::bind_module_enum(
+    LuauScriptModuleId module,
+    const std::string& name,
+    const Enum& enm
+) {
+    const auto found = m_impl->modules.find(module);
+    if (found == m_impl->modules.end()) {
+        return failure(LuauScriptError {"Luau module not found"});
+    }
+    auto* thread = found->second.thread;
+    lua_newtable(thread);
+    for (const auto& [enumerator, underlying_value] : enm.enumerators()) {
+        detail::push_luau_owned_value(thread, enm.make_val(underlying_value));
+        lua_setfield(thread, -2, enumerator.c_str());
+    }
+    lua_setreadonly(thread, -1, true);
     lua_setglobal(thread, name.c_str());
     return {};
 }

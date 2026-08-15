@@ -12,6 +12,7 @@
 
 namespace fei {
 
+class Enum;
 class Type;
 
 using LuauScriptError = ScriptError;
@@ -46,6 +47,11 @@ class LuauRuntime {
         LuauScriptModuleId module,
         const std::string& name,
         const Type& type
+    );
+    Status<LuauScriptError> bind_module_enum(
+        LuauScriptModuleId module,
+        const std::string& name,
+        const Enum& enm
     );
     Status<LuauScriptError> call_module_function(
         LuauScriptModuleId module,

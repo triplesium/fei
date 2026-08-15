@@ -39,11 +39,9 @@ Status<ScriptError> bind_declared_types(
     const ScriptModuleDecl& declaration
 ) {
     std::unordered_set<TypeId> bound;
-    bool needs_world_types = false;
     for (const auto& system : declaration.systems) {
         for (const auto& param : system.params) {
             if (param->decl_type_id() == type_id<DynamicWorldParamDecl>()) {
-                needs_world_types = true;
                 continue;
             }
             if (param->decl_type_id() == type_id<DynamicResourceParamDecl>()) {
@@ -80,10 +78,6 @@ Status<ScriptError> bind_declared_types(
         }
     }
 
-    if (!needs_world_types) {
-        return {};
-    }
-
     auto valid_identifier = [](std::string_view name) {
         if (name.empty() ||
             (std::isalpha(static_cast<unsigned char>(name.front())) == 0 &&
@@ -96,13 +90,12 @@ Status<ScriptError> bind_declared_types(
         });
     };
     static const std::unordered_set<std::string_view> reserved {
-        "Entity",
-        "Read",
-        "Write",
-        "With",
-        "Without",
-        "module",
-        "system",
+        "Entity",      "Read",        "Write",        "With",
+        "Without",     "module",      "system",       "MainSchedules",
+        "First",       "PreStartUp",  "StartUp",      "PreUpdate",
+        "Update",      "PostUpdate",  "Last",         "RenderPrepare",
+        "RenderFirst", "RenderStart", "RenderUpdate", "RenderEnd",
+        "RenderLast",
     };
     std::unordered_map<std::string, std::size_t> name_counts;
     for (const auto& [id, type] : Registry::instance().types()) {
@@ -112,6 +105,7 @@ Status<ScriptError> bind_declared_types(
     for (auto& [id, type] : Registry::instance().types()) {
         const auto& name = type.stripped_name();
         if (bound.contains(id) || name_counts[name] != 1 ||
+            Registry::instance().enums().contains(id) ||
             reserved.contains(name) || !valid_identifier(name)) {
             continue;
         }
@@ -120,6 +114,21 @@ Status<ScriptError> bind_declared_types(
             return status;
         }
         bound.insert(id);
+    }
+    for (const auto& [id, enm] : Registry::instance().enums()) {
+        auto type = Registry::instance().try_get_type(id);
+        if (!type) {
+            return failure(ScriptError {std::move(type.error().message)});
+        }
+        const auto& name = type->stripped_name();
+        if (name_counts[name] != 1 || reserved.contains(name) ||
+            !valid_identifier(name)) {
+            continue;
+        }
+        auto status = runtime.bind_module_enum(module, name, enm);
+        if (!status) {
+            return status;
+        }
     }
     return {};
 }

@@ -279,14 +279,6 @@ int apply_lua_object_initializer(lua_State* L, Cls& cls, Val& value, int idx) {
 }
 
 int dispatch_default_new(lua_State* L, Type& type, Cls& cls, int arg_count) {
-    if (!type.default_constructible()) {
-        luaL_error(
-            L,
-            "Type '%s' does not have a matching constructor",
-            type.name().c_str()
-        );
-        return 0;
-    }
     if (arg_count > 1 || (arg_count == 1 && !lua_is_object_initializer(L, 1))) {
         luaL_error(
             L,
@@ -297,11 +289,14 @@ int dispatch_default_new(lua_State* L, Type& type, Cls& cls, int arg_count) {
         return 0;
     }
 
-    auto value = Val::default_construct(type);
-    if (arg_count == 1) {
-        apply_lua_object_initializer(L, cls, value, 1);
+    auto value = script_default_construct(type.id());
+    if (!value) {
+        return lua_raise_failure(L, value.error());
     }
-    return push_lua_object(L, type, std::move(value));
+    if (arg_count == 1) {
+        apply_lua_object_initializer(L, cls, *value, 1);
+    }
+    return push_lua_object(L, type, std::move(*value));
 }
 
 int dispatch_new(lua_State* L) {
@@ -341,25 +336,11 @@ int dispatch_new(lua_State* L) {
         }
     );
 
-    auto ctor_result = cls->get_constructor_for_args(refs);
-    if (!ctor_result) {
-        if (arg_count == 0) {
-            return dispatch_default_new(L, *type, *cls, arg_count);
-        }
-        return lua_raise_failure(L, ctor_result.error());
+    auto value = script_construct(type_id, refs);
+    if (!value) {
+        return lua_raise_failure(L, value.error());
     }
-    auto& ctor = *ctor_result;
-
-    auto ret = ctor.invoke_variadic(refs);
-    if (!ret) {
-        return lua_raise_failure(L, ret.error());
-    }
-    if (!ret->is_value()) {
-        luaL_error(L, "Constructor returned an invalid value");
-        return 0;
-    }
-
-    return push_lua_object(L, *type, std::move(ret->value()));
+    return push_lua_object(L, *type, std::move(*value));
 }
 
 int dispatch_method(lua_State* L) {

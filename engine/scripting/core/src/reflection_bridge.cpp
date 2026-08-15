@@ -1,8 +1,10 @@
 #include "scripting/reflection_bridge.hpp"
 
 #include "refl/cls.hpp"
+#include "refl/constructor.hpp"
 #include "refl/method.hpp"
 #include "refl/registry.hpp"
+#include "refl/type.hpp"
 
 #include <string>
 
@@ -23,6 +25,47 @@ Result<Cls&, InvokeFailure> script_class(Ref instance) {
 }
 
 } // namespace
+
+Result<Val, InvokeFailure> script_default_construct(TypeId type_id) {
+    auto type = Registry::instance().try_get_type(type_id);
+    if (!type) {
+        return failure(InvokeFailure::invalid_call(type.error().message));
+    }
+    if (!type->default_constructible()) {
+        return failure(
+            InvokeFailure::invalid_call(
+                "Type '" + type->name() +
+                "' does not have a matching constructor"
+            )
+        );
+    }
+    return Val::default_construct(*type);
+}
+
+Result<Val, InvokeFailure>
+script_construct(TypeId type_id, const std::vector<Ref>& arguments) {
+    auto cls = Registry::instance().try_get_cls(type_id);
+    if (!cls) {
+        return failure(InvokeFailure::invalid_call(cls.error().message));
+    }
+    auto constructor = cls->get_constructor_for_args(arguments);
+    if (!constructor) {
+        if (arguments.empty()) {
+            return script_default_construct(type_id);
+        }
+        return failure(std::move(constructor.error()));
+    }
+    auto result = constructor->invoke_variadic(arguments);
+    if (!result) {
+        return failure(std::move(result.error()));
+    }
+    if (!result->is_value()) {
+        return failure(
+            InvokeFailure::invalid_call("Constructor returned an invalid value")
+        );
+    }
+    return std::move(result->value());
+}
 
 Result<Ref, InvokeFailure>
 script_get_property(Ref instance, std::string_view name) {

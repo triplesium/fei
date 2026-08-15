@@ -64,6 +64,7 @@ LuauObject& check_object(lua_State* state, int index) {
 
 int raise_message(lua_State* state, const std::string& message) {
     luaL_error(state, "%s", message.c_str());
+    return 0;
 }
 
 bool push_primitive(lua_State* state, Ref ref) {
@@ -128,6 +129,110 @@ void push_owned_value(lua_State* state, Val value) {
     auto owner = std::make_shared<Val>(std::move(value));
     Ref ref = owner->ref();
     push_object(state, ref, std::move(owner), nullptr, {});
+}
+
+Result<Val, std::string>
+value_for_type(lua_State* state, int index, TypeId expected);
+Result<Val, std::string> argument_value(lua_State* state, int index);
+
+int type_new(lua_State* state) {
+    const TypeId type = check_luau_type_token(
+        state,
+        lua_upvalueindex(1),
+        "reflected constructor"
+    );
+    const int argument_count = lua_gettop(state);
+    if (argument_count == 1 && lua_istable(state, 1)) {
+        auto value = script_default_construct(type);
+        if (!value) {
+            return raise_message(state, value.error().message);
+        }
+        auto cls = Registry::instance().try_get_cls(type);
+        if (!cls) {
+            return raise_message(state, cls.error().message);
+        }
+        lua_pushnil(state);
+        while (lua_next(state, 1) != 0) {
+            if (lua_type(state, -2) != LUA_TSTRING) {
+                return raise_message(
+                    state,
+                    "reflected initializer keys must be strings"
+                );
+            }
+            const char* name = lua_tostring(state, -2);
+            auto property = cls->try_get_property(name);
+            if (!property) {
+                return raise_message(state, property.error().message);
+            }
+            auto assigned_value =
+                value_for_type(state, -1, property->type_id());
+            if (!assigned_value) {
+                return raise_message(state, assigned_value.error());
+            }
+            auto assigned =
+                script_set_property(value->ref(), name, assigned_value->ref());
+            if (!assigned) {
+                return raise_message(state, assigned.error().message);
+            }
+            lua_pop(state, 1);
+        }
+        push_owned_value(state, std::move(*value));
+        return 1;
+    }
+
+    std::vector<Val> owned_arguments;
+    owned_arguments.reserve(static_cast<std::size_t>(argument_count));
+    std::vector<Ref> arguments;
+    arguments.reserve(static_cast<std::size_t>(argument_count));
+    for (int index = 1; index <= argument_count; ++index) {
+        if (lua_isuserdata(state, index)) {
+            arguments.push_back(check_object(state, index).ref);
+            continue;
+        }
+        auto argument = argument_value(state, index);
+        if (!argument) {
+            return raise_message(state, argument.error());
+        }
+        owned_arguments.push_back(std::move(*argument));
+        arguments.push_back(owned_arguments.back().ref());
+    }
+    auto value = script_construct(type, arguments);
+    if (!value) {
+        return raise_message(state, value.error().message);
+    }
+    push_owned_value(state, std::move(*value));
+    return 1;
+}
+
+int type_token_index(lua_State* state) {
+    const TypeId type =
+        check_luau_type_token(state, 1, "reflected type access");
+    const char* key = luaL_checkstring(state, 2);
+    if (std::string_view {key} == "new") {
+        lua_pushvalue(state, 1);
+        lua_pushcclosure(state, type_new, "type.new", 1);
+        return 1;
+    }
+    if (std::string_view {key} == "__type_id") {
+        lua_pushinteger(state, static_cast<lua_Integer>(type.id()));
+        return 1;
+    }
+    if (std::string_view {key} == "__type_name") {
+        const auto reflected_type = Registry::instance().try_get_type(type);
+        if (!reflected_type) {
+            return raise_message(state, reflected_type.error().message);
+        }
+        lua_pushlstring(
+            state,
+            reflected_type->name().data(),
+            reflected_type->name().size()
+        );
+        return 1;
+    }
+    return raise_message(
+        state,
+        "unknown reflected type member '" + std::string {key} + "'"
+    );
 }
 
 Result<Val, std::string>
@@ -388,6 +493,8 @@ void install_luau_borrowed_object_metatable(lua_State* state) {
     lua_pop(state, 1);
 
     if (luaL_newmetatable(state, c_type_token_metatable)) {
+        lua_pushcfunction(state, type_token_index, "type.__index");
+        lua_setfield(state, -2, "__index");
         lua_pushstring(state, "protected type token");
         lua_setfield(state, -2, "__metatable");
     }
@@ -425,6 +532,10 @@ Result<Val, std::string> copy_luau_reflected_value(
     return failure(
         std::string {context} + " expects a reflected value: " + value.error()
     );
+}
+
+void push_luau_owned_value(lua_State* state, Val value) {
+    push_owned_value(state, std::move(value));
 }
 
 void push_luau_type_token(lua_State* state, TypeId type) {
