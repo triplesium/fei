@@ -33,9 +33,16 @@ struct AssetLoadFailure {
     AssetLoadError error;
 };
 
+struct AssetTypeError {
+    TypeId type;
+    std::string message;
+};
+
 class AssetServer {
   private:
     struct AssetTypeAccess {
+        std::function<UntypedHandle(AssetServer&, const AssetPath&)> load;
+        std::function<UntypedHandle(AssetServer&, const AssetPath&)> load_async;
         std::function<Optional<AssetLoadState>(AssetId)> load_state;
         std::function<Optional<AssetLoadError>(AssetId)> load_error;
         std::function<std::vector<AssetKey>(AssetId)> dependencies;
@@ -208,6 +215,40 @@ class AssetServer {
                 Assets<T>::track_assets | in_set<AssetSystems::TrackAssets>()
             );
         register_asset_type_access<T>();
+    }
+
+    [[nodiscard]] bool has_asset_type(TypeId type) const {
+        return m_asset_types.contains(type);
+    }
+
+    Result<UntypedHandle, AssetTypeError>
+    load(TypeId type, const AssetPath& path) {
+        auto access = m_asset_types.find(type);
+        if (access == m_asset_types.end()) {
+            return failure(
+                AssetTypeError {
+                    .type = type,
+                    .message = "No asset type registered for type id " +
+                               std::to_string(type.id()),
+                }
+            );
+        }
+        return access->second.load(*this, path);
+    }
+
+    Result<UntypedHandle, AssetTypeError>
+    load_async(TypeId type, const AssetPath& path) {
+        auto access = m_asset_types.find(type);
+        if (access == m_asset_types.end()) {
+            return failure(
+                AssetTypeError {
+                    .type = type,
+                    .message = "No asset type registered for type id " +
+                               std::to_string(type.id()),
+                }
+            );
+        }
+        return access->second.load_async(*this, path);
     }
 
     template<typename T>
@@ -612,6 +653,10 @@ class AssetServer {
         return load_state(asset_key(handle));
     }
 
+    Optional<AssetLoadState> load_state(const UntypedHandle& handle) const {
+        return load_state(asset_key(handle));
+    }
+
     Optional<AssetLoadError> load_error(AssetKey key) const {
         auto it = m_asset_types.find(key.type);
         if (it == m_asset_types.end()) {
@@ -625,6 +670,10 @@ class AssetServer {
         return load_error(asset_key(handle));
     }
 
+    Optional<AssetLoadError> load_error(const UntypedHandle& handle) const {
+        return load_error(asset_key(handle));
+    }
+
     bool is_loaded(AssetKey key) const {
         auto state = load_state(key);
         return state && *state == AssetLoadState::Loaded;
@@ -632,6 +681,10 @@ class AssetServer {
 
     template<typename T>
     bool is_loaded(const Handle<T>& handle) const {
+        return is_loaded(asset_key(handle));
+    }
+
+    bool is_loaded(const UntypedHandle& handle) const {
         return is_loaded(asset_key(handle));
     }
 
@@ -645,6 +698,10 @@ class AssetServer {
 
     template<typename T>
     std::vector<AssetKey> dependencies(const Handle<T>& handle) const {
+        return dependencies(asset_key(handle));
+    }
+
+    std::vector<AssetKey> dependencies(const UntypedHandle& handle) const {
         return dependencies(asset_key(handle));
     }
 
@@ -664,6 +721,10 @@ class AssetServer {
         return dependency_load_state(asset_key(handle));
     }
 
+    AssetLoadState dependency_load_state(const UntypedHandle& handle) const {
+        return dependency_load_state(asset_key(handle));
+    }
+
     Optional<AssetLoadFailure> first_failed_dependency(AssetKey key) const {
         std::unordered_set<AssetKey> visited;
         visited.insert(key);
@@ -673,6 +734,11 @@ class AssetServer {
     template<typename T>
     Optional<AssetLoadFailure>
     first_failed_dependency(const Handle<T>& handle) const {
+        return first_failed_dependency(asset_key(handle));
+    }
+
+    Optional<AssetLoadFailure>
+    first_failed_dependency(const UntypedHandle& handle) const {
         return first_failed_dependency(asset_key(handle));
     }
 
@@ -696,6 +762,11 @@ class AssetServer {
         return recursive_dependency_load_state(asset_key(handle));
     }
 
+    AssetLoadState
+    recursive_dependency_load_state(const UntypedHandle& handle) const {
+        return recursive_dependency_load_state(asset_key(handle));
+    }
+
     bool is_loaded_with_dependencies(AssetKey key) const {
         return is_loaded(key) &&
                recursive_dependency_load_state(key) == AssetLoadState::Loaded;
@@ -703,6 +774,10 @@ class AssetServer {
 
     template<typename T>
     bool is_loaded_with_dependencies(const Handle<T>& handle) const {
+        return is_loaded_with_dependencies(asset_key(handle));
+    }
+
+    bool is_loaded_with_dependencies(const UntypedHandle& handle) const {
         return is_loaded_with_dependencies(asset_key(handle));
     }
 
@@ -714,11 +789,26 @@ class AssetServer {
         };
     }
 
+    static AssetKey asset_key(const UntypedHandle& handle) {
+        return AssetKey {
+            .type = handle.asset_type(),
+            .id = handle.id(),
+        };
+    }
+
   private:
     template<typename T>
     void register_asset_type_access() {
         auto* app = m_app;
         m_asset_types[type_id<T>()] = AssetTypeAccess {
+            .load =
+                [](AssetServer& server, const AssetPath& path) {
+                    return server.template load<T>(path).untyped();
+                },
+            .load_async =
+                [](AssetServer& server, const AssetPath& path) {
+                    return server.template load_async<T>(path).untyped();
+                },
             .load_state = [app](AssetId id) -> Optional<AssetLoadState> {
                 if (!app || !app->template has_resource<Assets<T>>()) {
                     return nullopt;

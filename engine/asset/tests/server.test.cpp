@@ -51,6 +51,8 @@ struct ProjectAssetHolder {
     Handle<ServerAsset> asset;
 };
 
+struct UnregisteredAsset {};
+
 using ServerAssetLoadFn =
     Handle<ServerAsset> (AssetServer::*)(const AssetPath&);
 using ServerAssetLoadAsyncFn = decltype(&AssetServer::load_async<ServerAsset>);
@@ -312,6 +314,54 @@ TEST_CASE(
     REQUIRE(asset.has_value());
     REQUIRE(asset->byte_count == 4);
     REQUIRE(asset->path == "memory://asset.bin");
+}
+
+TEST_CASE(
+    "AssetServer loads registered asset types through type-erased access",
+    "[asset][server][untyped]"
+) {
+    App app;
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    app.add_resource(std::move(server));
+    auto& asset_server = app.resource<AssetServer>();
+    asset_server.add_loader<ServerAsset, ServerLoader>();
+
+    REQUIRE(asset_server.has_asset_type(type_id<ServerAsset>()));
+    REQUIRE_FALSE(asset_server.has_asset_type(type_id<UnregisteredAsset>()));
+
+    auto loaded = asset_server.load(
+        type_id<ServerAsset>(),
+        AssetPath("memory://asset.bin")
+    );
+    REQUIRE(loaded);
+    auto handle = std::move(*loaded);
+    CHECK(handle.asset_type() == type_id<ServerAsset>());
+    CHECK(handle.is<ServerAsset>());
+    CHECK_FALSE(handle.is<DependencyAsset>());
+    CHECK(handle.id() != invalid_asset_id);
+    CHECK(asset_server.is_loaded(handle));
+
+    auto typed = handle.try_typed<ServerAsset>();
+    REQUIRE(typed);
+    REQUIRE_FALSE(handle.try_typed<DependencyAsset>());
+    auto asset = app.resource<Assets<ServerAsset>>().get(*typed);
+    REQUIRE(asset);
+    CHECK(asset->byte_count == 4);
+
+    auto missing = asset_server.load(
+        type_id<UnregisteredAsset>(),
+        AssetPath("memory://asset.bin")
+    );
+    REQUIRE_FALSE(missing);
+    CHECK(missing.error().type == type_id<UnregisteredAsset>());
+    CHECK(missing.error().message.contains("No asset type registered"));
+
+    auto& assets = app.resource<Assets<ServerAsset>>();
+    typed = nullopt;
+    CHECK(assets.unload_unused() == 0);
+    handle = UntypedHandle {};
+    CHECK(assets.unload_unused() == 1);
 }
 
 TEST_CASE(
@@ -835,6 +885,52 @@ TEST_CASE(
     REQUIRE(state.has_value());
     REQUIRE(*state == AssetLoadState::Loaded);
     REQUIRE(ServerLoader::load_count.load() == 1);
+}
+
+TEST_CASE(
+    "AssetServer loads registered asset types asynchronously through "
+    "type-erased access",
+    "[asset][server][async][untyped]"
+) {
+    ServerLoader::load_count = 0;
+
+    App app;
+    app.add_plugin<TaskPlugin>();
+    app.finish();
+    AssetServer server(&app);
+    server.emplace_source<MemorySource>();
+    app.add_resource(std::move(server));
+    auto& asset_server = app.resource<AssetServer>();
+    asset_server.add_loader<ServerAsset, ServerLoader>();
+    app.world().sort_systems();
+
+    auto loaded = asset_server.load_async(
+        type_id<ServerAsset>(),
+        AssetPath("memory://asset.bin")
+    );
+    REQUIRE(loaded);
+    auto handle = std::move(*loaded);
+    REQUIRE(handle.is<ServerAsset>());
+    auto state = asset_server.load_state(handle);
+    REQUIRE(state);
+    REQUIRE(*state == AssetLoadState::Loading);
+
+    for (int i = 0; i < 1000 && ServerLoader::load_count.load() != 1; ++i) {
+        app.resource<Tasks>().drain_completions();
+        std::this_thread::sleep_for(std::chrono::milliseconds {1});
+    }
+    REQUIRE(ServerLoader::load_count.load() == 1);
+
+    run_post_update_until(app, [&]() {
+        return asset_server.is_loaded(handle);
+    });
+
+    auto typed = handle.try_typed<ServerAsset>();
+    REQUIRE(typed);
+    auto asset = app.resource<Assets<ServerAsset>>().get(*typed);
+    REQUIRE(asset);
+    CHECK(asset->byte_count == 4);
+    CHECK(asset->path == "memory://asset.bin");
 }
 
 TEST_CASE(
