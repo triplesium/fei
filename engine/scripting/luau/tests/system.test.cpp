@@ -224,6 +224,95 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Luau systems use script-defined components and resources",
+    "[scripting_luau][system][types][resources]"
+) {
+    const ScriptSource source {
+        .name = "dynamic_types_system.luau",
+        .content = R"(
+            local function tick(
+                health_values: Query<Write<Health>>,
+                state: ResRW<CombatState>
+            )
+                local created = Health.new { current = 7 }
+                state.last_created = created.current
+                state.ticks += 1
+                for health in health_values do
+                    health.current += 5
+                end
+            end
+
+            return module {
+                name = "test.luau_dynamic_types",
+                types = {
+                    Health = {
+                        current = field(i32, 10),
+                    },
+                    CombatState = {
+                        last_created = field(i32, 0),
+                        ticks = field(i32, 0),
+                    },
+                },
+                resources = {
+                    CombatState = {
+                        ticks = 2,
+                    },
+                },
+                systems = {
+                    system(Update, tick),
+                },
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact.has_value());
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module.has_value());
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems.has_value());
+
+    auto health_type =
+        Registry::instance().try_get_type("test.luau_dynamic_types.Health");
+    REQUIRE(health_type.has_value());
+    auto health = Val::default_construct(*health_type);
+    const Entity entity = world.entity();
+    world.add_component(entity, health.ref());
+
+    world.run_schedule(Update);
+
+    auto& registry = Registry::instance();
+    auto& health_cls = registry.get_cls(health_type->id());
+    auto current = health_cls.get_property("current").get(
+        world.get_component(entity, health_type->id())
+    );
+    REQUIRE(current.has_value());
+    CHECK(current->get<int>() == 15);
+
+    auto state_type = Registry::instance().try_get_type(
+        "test.luau_dynamic_types.CombatState"
+    );
+    REQUIRE(state_type.has_value());
+    auto& state_cls = registry.get_cls(state_type->id());
+    const Ref state = world.resource(state_type->id());
+    auto ticks = state_cls.get_property("ticks").get(state);
+    auto last_created = state_cls.get_property("last_created").get(state);
+    REQUIRE(ticks.has_value());
+    REQUIRE(last_created.has_value());
+    CHECK(ticks->get<int>() == 3);
+    CHECK(last_created->get<int>() == 7);
+}
+
+TEST_CASE(
     "Luau World exposes live entities resources queries and commands",
     "[scripting_luau][system][world]"
 ) {

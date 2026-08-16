@@ -105,4 +105,115 @@ TEST_CASE(
     );
 }
 
+TEST_CASE(
+    "Luau compiler extracts script types resources and defaults",
+    "[scripting_luau][compiler][types][resources]"
+) {
+    const ScriptSource source {
+        .name = "combat.luau",
+        .content = R"(
+            local function tick(
+                health: Query<Write<Health>>,
+                config: ResRW<CombatConfig>
+            )
+            end
+
+            return module {
+                name = "game.combat",
+                types = {
+                    Health = {
+                        current = field(i32, 100),
+                        scale = field(f32, 1.5),
+                    },
+                    CombatConfig = {
+                        enabled = field(bool, true),
+                        health = Health,
+                        label = field(str, "combat"),
+                    },
+                },
+                resources = {
+                    CombatConfig = {
+                        enabled = false,
+                        label = "runtime",
+                    },
+                },
+                systems = {
+                    system(Update, tick),
+                },
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    REQUIRE(artifact.has_value());
+    REQUIRE(artifact->declaration.types.size() == 2);
+    const auto& config_type = artifact->declaration.types[0];
+    CHECK(config_type.name == "CombatConfig");
+    CHECK(config_type.qualified_name == "game.combat.CombatConfig");
+    REQUIRE(config_type.fields.size() == 3);
+    CHECK(config_type.fields[0].name == "enabled");
+    CHECK(config_type.fields[0].default_value.get<bool>());
+    CHECK(config_type.fields[1].name == "health");
+    CHECK(config_type.fields[1].type.type_name == "game.combat.Health");
+    CHECK(config_type.fields[1].type.script_type);
+    CHECK_FALSE(config_type.fields[1].has_default);
+    CHECK(config_type.fields[2].name == "label");
+    CHECK(config_type.fields[2].type.type_name == "string");
+    CHECK(config_type.fields[2].default_value.get<std::string>() == "combat");
+
+    const auto& health_type = artifact->declaration.types[1];
+    REQUIRE(health_type.fields.size() == 2);
+    CHECK(health_type.fields[0].name == "current");
+    CHECK(health_type.fields[0].type.type_name == "i32");
+    CHECK(health_type.fields[0].default_value.get<int>() == 100);
+    CHECK(health_type.fields[1].name == "scale");
+    CHECK(health_type.fields[1].default_value.get<float>() == 1.5F);
+
+    REQUIRE(artifact->declaration.resources.size() == 1);
+    const auto& resource = artifact->declaration.resources.front();
+    CHECK(resource.type == "game.combat.CombatConfig");
+    CHECK(resource.init_if_missing);
+    REQUIRE(resource.initial_values.size() == 2);
+    CHECK(resource.initial_values[0].name == "enabled");
+    CHECK_FALSE(resource.initial_values[0].value.get<bool>());
+    CHECK(resource.initial_values[1].name == "label");
+    CHECK(resource.initial_values[1].value.get<std::string>() == "runtime");
+
+    REQUIRE(artifact->declaration.systems.size() == 1);
+    const auto& system = artifact->declaration.systems.front();
+    const auto& query =
+        static_cast<const DynamicQueryParamDecl&>(*system.params[0]);
+    CHECK(query.fields[0].type.type_name == "game.combat.Health");
+    const auto& config =
+        static_cast<const DynamicResourceParamDecl&>(*system.params[1]);
+    CHECK(config.type.type_name == "game.combat.CombatConfig");
+}
+
+TEST_CASE(
+    "Luau compiler rejects incompatible script field defaults",
+    "[scripting_luau][compiler][types]"
+) {
+    const ScriptSource source {
+        .name = "invalid_type.luau",
+        .content = R"(
+            return module {
+                name = "game.invalid",
+                types = {
+                    Health = {
+                        current = field(i32, 1.5),
+                    },
+                },
+                systems = {},
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE_FALSE(artifact.has_value());
+    CHECK(artifact.error().message.find("32-bit integer") != std::string::npos);
+}
+
 } // namespace fei::test

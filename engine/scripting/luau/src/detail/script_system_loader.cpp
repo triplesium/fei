@@ -39,6 +39,11 @@ Status<ScriptError> bind_declared_types(
     const ScriptModuleDecl& declaration
 ) {
     std::unordered_set<TypeId> bound;
+    std::unordered_set<std::string_view> script_types;
+    script_types.reserve(declaration.types.size());
+    for (const auto& type : declaration.types) {
+        script_types.insert(type.qualified_name);
+    }
     for (const auto& system : declaration.systems) {
         for (const auto& param : system.params) {
             if (param->decl_type_id() == type_id<DynamicWorldParamDecl>()) {
@@ -47,6 +52,9 @@ Status<ScriptError> bind_declared_types(
             if (param->decl_type_id() == type_id<DynamicResourceParamDecl>()) {
                 const auto& resource =
                     static_cast<const DynamicResourceParamDecl&>(*param);
+                if (script_types.contains(resource.type.type_name)) {
+                    continue;
+                }
                 auto status =
                     bind_type_ref(runtime, module, resource.type, bound);
                 if (!status) {
@@ -63,12 +71,18 @@ Status<ScriptError> bind_declared_types(
                 if (field.kind == DynamicQueryFieldDeclKind::Entity) {
                     continue;
                 }
+                if (script_types.contains(field.type.type_name)) {
+                    continue;
+                }
                 auto status = bind_type_ref(runtime, module, field.type, bound);
                 if (!status) {
                     return status;
                 }
             }
             for (const auto& filter : query.filters) {
+                if (script_types.contains(filter.type.type_name)) {
+                    continue;
+                }
                 auto status =
                     bind_type_ref(runtime, module, filter.type, bound);
                 if (!status) {

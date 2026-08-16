@@ -70,11 +70,22 @@ int query_descriptor_helper(lua_State* state) {
     return 1;
 }
 
+int field_helper(lua_State* state) {
+    const int argument_count = lua_gettop(state);
+    if (argument_count < 1 || argument_count > 2) {
+        luaL_error(state, "field expects a type and an optional default value");
+    }
+    lua_newtable(state);
+    return 1;
+}
+
 void install_module_helpers(lua_State* state) {
     lua_pushcfunction(state, module_helper, "module");
     lua_setglobal(state, "module");
     lua_pushcfunction(state, system_helper, "system");
     lua_setglobal(state, "system");
+    lua_pushcfunction(state, field_helper, "field");
+    lua_setglobal(state, "field");
 
     const char* query_descriptors[] = {"Read", "Write", "With", "Without"};
     for (const char* name : query_descriptors) {
