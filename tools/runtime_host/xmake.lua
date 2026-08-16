@@ -10,6 +10,7 @@ target("fei-runtime-host-core")
         "fei-project",
         "fei-project-runtime",
         "fei-project-scripting-lua",
+        "fei-project-scripting-luau",
         "fei-rendering",
         "fei-sprite",
         "fei-graphics-opengl",

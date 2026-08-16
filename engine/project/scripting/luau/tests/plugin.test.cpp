@@ -4,6 +4,8 @@
 #include "project/project.hpp"
 #include "project_runtime/runtime.hpp"
 #include "project_scripting_luau/plugin.hpp"
+#include "refl/cls.hpp"
+#include "refl/registry.hpp"
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -36,13 +38,28 @@ class TemporaryMixedScriptProject {
                   "-" + std::to_string(sequence.fetch_add(1)));
         std::filesystem::create_directories(m_root / "assets" / "scripts");
 
+        const bool has_lua =
+            std::ranges::any_of(scripts, [](const auto& script) {
+                return std::filesystem::path {script.path}.extension() ==
+                       ".lua";
+            });
+        const bool has_luau =
+            std::ranges::any_of(scripts, [](const auto& script) {
+                return std::filesystem::path {script.path}.extension() ==
+                       ".luau";
+            });
+
         std::ofstream project_stream(project_file());
         project_stream << "name: Mixed Script Runtime\n"
                           "asset_directory: assets\n"
-                          "runtime:\n  plugins:\n"
-                          "    - project_runtime::LuaScripts\n"
-                          "    - project_runtime::LuauScripts\n"
-                          "scripts:\n";
+                          "runtime:\n  plugins:\n";
+        if (has_lua) {
+            project_stream << "    - project_runtime::LuaScripts\n";
+        }
+        if (has_luau) {
+            project_stream << "    - project_runtime::LuauScripts\n";
+        }
+        project_stream << "scripts:\n";
         for (const auto& script : scripts) {
             project_stream << "  - project://" << script.path << "\n";
             if (script.content) {
@@ -95,16 +112,16 @@ TEST_CASE(
     TemporaryMixedScriptProject directory({
         ScriptFile {
             .path = "scripts/legacy.lua",
-            .content = "-- Lua project entry\n",
+            .content = std::string_view {"-- Lua project entry\n"},
         },
         ScriptFile {
             .path = "scripts/gameplay.luau",
-            .content = R"(
+            .content = std::string_view {R"(
                 return module {
                     name = "project.gameplay",
                     systems = {},
                 }
-            )",
+            )"},
         },
     });
     auto app = load_app(directory);
@@ -133,7 +150,7 @@ TEST_CASE(
     TemporaryMixedScriptProject directory({
         ScriptFile {
             .path = "scripts/broken.luau",
-            .content = "local function (",
+            .content = std::string_view {"local function ("},
         },
     });
     auto app = load_app(directory);
@@ -162,4 +179,96 @@ TEST_CASE(
     REQUIRE(state.scripts.size() == 1);
     CHECK(state.scripts[0].status == project_runtime::LuauScriptStatus::Failed);
     CHECK(state.scripts[0].error.contains("not found"));
+}
+
+TEST_CASE(
+    "Pure Luau project declares initializes and updates ECS state",
+    "[project-runtime][luau][script][types][ecs]"
+) {
+    TemporaryMixedScriptProject directory({
+        ScriptFile {
+            .path = "scripts/gameplay.luau",
+            .content = std::string_view {R"(
+                local function initialize(
+                    world: World,
+                    state: ResRW<ProjectState>
+                )
+                    if state.mover ~= 0 then
+                        return
+                    end
+                    local mover = world:spawn(
+                        Position.new(),
+                        Velocity.new()
+                    )
+                    state.mover = mover:id()
+                end
+
+                local function move(
+                    movers: Query<Write<Position>, Read<Velocity>>,
+                    state: ResRW<ProjectState>
+                )
+                    for position, velocity in movers do
+                        position.x += velocity.x
+                    end
+                    state.ticks += 1
+                end
+
+                return module {
+                    name = "project.pure_luau",
+                    types = {
+                        Position = {
+                            x = field(f32, 1.0),
+                        },
+                        Velocity = {
+                            x = field(f32, 2.0),
+                        },
+                        ProjectState = {
+                            mover = field(entity, 0),
+                            ticks = field(i32, 0),
+                        },
+                    },
+                    resources = {
+                        ProjectState = {},
+                    },
+                    systems = {
+                        system(Update, initialize),
+                        system(Update, move),
+                    },
+                }
+            )"},
+        },
+    });
+    auto app = load_app(directory);
+
+    apply_script_queues(app);
+    const auto& scripts = app.resource<project_runtime::LuauScriptsState>();
+    REQUIRE(scripts.scripts.size() == 1);
+    REQUIRE(
+        scripts.scripts[0].status == project_runtime::LuauScriptStatus::Loaded
+    );
+
+    app.run_schedule(Update);
+
+    auto& registry = Registry::instance();
+    auto position_type = registry.try_get_type("project.pure_luau.Position");
+    auto state_type = registry.try_get_type("project.pure_luau.ProjectState");
+    REQUIRE(position_type.has_value());
+    REQUIRE(state_type.has_value());
+
+    const Ref state = app.world().resource(state_type->id());
+    auto& state_cls = registry.get_cls(state_type->id());
+    auto mover = state_cls.get_property("mover").get(state);
+    auto ticks = state_cls.get_property("ticks").get(state);
+    REQUIRE(mover.has_value());
+    REQUIRE(ticks.has_value());
+    CHECK(ticks->get<int>() == 1);
+
+    const Entity entity = mover->to_number<Entity>();
+    REQUIRE(app.world().has_component(entity, position_type->id()));
+    auto& position_cls = registry.get_cls(position_type->id());
+    auto x = position_cls.get_property("x").get(
+        app.world().get_component(entity, position_type->id())
+    );
+    REQUIRE(x.has_value());
+    CHECK(x->get<float>() == 3.0F);
 }

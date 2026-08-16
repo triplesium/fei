@@ -1,0 +1,9 @@
+name: Luau Scripting Sample
+asset_directory: assets
+
+runtime:
+  plugins:
+    - project_runtime::LuauScripts
+
+scripts:
+  - project://scripts/movement.luau

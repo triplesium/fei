@@ -9,7 +9,6 @@ function add_sample(name)
 end
 
 add_sample("refl")
-add_sample("scripting")
 add_sample("scene")
 target("sample-scene")
     add_deps(

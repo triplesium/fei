@@ -19,7 +19,7 @@ CMakeSettings.json
 *.log
 imgui.ini
 
-assets/
+/assets/
 
 # Generated reflection output
 engine/generated/reflgen.cpp
