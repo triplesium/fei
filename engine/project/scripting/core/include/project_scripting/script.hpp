@@ -87,39 +87,52 @@ ScriptsState<Backend> load_project_scripts(App& app) {
 }
 
 template<typename Backend>
-void update_project_script_states(
-    ResRW<ScriptsState<Backend>> project_scripts,
-    ResRO<typename Backend::Registry> registry,
-    ResRO<Assets<typename Backend::Asset>> assets
+void refresh_project_script_states(
+    ScriptsState<Backend>& project_scripts,
+    const typename Backend::Registry& registry,
+    const Assets<typename Backend::Asset>& assets
 ) {
-    for (auto& script : project_scripts->scripts) {
+    for (auto& script : project_scripts.scripts) {
         if (script.status != ScriptStatus::Queued || !script.asset) {
             continue;
         }
 
-        if (auto module = Backend::find_asset(*registry, script.asset)) {
+        if (auto module = Backend::find_asset(registry, script.asset)) {
             script.module = *module;
             script.status = ScriptStatus::Loaded;
             script.error.clear();
             continue;
         }
 
-        if (auto error = Backend::request_error(*registry, script.asset)) {
+        if (auto error = Backend::request_error(registry, script.asset)) {
             script.status = ScriptStatus::Failed;
             script.error = std::move(*error);
             continue;
         }
 
-        const auto load_state = assets->load_state(script.asset);
+        const auto load_state = assets.load_state(script.asset);
         if (load_state && *load_state == AssetLoadState::Failed) {
             script.status = ScriptStatus::Failed;
-            if (auto error = assets->load_error(script.asset)) {
+            if (auto error = assets.load_error(script.asset)) {
                 script.error = error->message;
             } else {
                 script.error = Backend::asset_load_failure;
             }
         }
     }
+}
+
+template<typename Backend>
+void update_project_script_states(
+    ResRW<ScriptsState<Backend>> project_scripts,
+    ResRO<typename Backend::Registry> registry,
+    ResRO<Assets<typename Backend::Asset>> assets
+) {
+    refresh_project_script_states<Backend>(
+        *project_scripts,
+        *registry,
+        *assets
+    );
 }
 
 } // namespace fei::project_scripting

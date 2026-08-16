@@ -231,7 +231,7 @@ TEST_CASE(
                         ProjectState = {},
                     },
                     systems = {
-                        system(Update, initialize),
+                        system(StartUp, initialize),
                         system(Update, move),
                     },
                 }
@@ -240,13 +240,13 @@ TEST_CASE(
     });
     auto app = load_app(directory);
 
-    apply_script_queues(app);
     const auto& scripts = app.resource<project_runtime::LuauScriptsState>();
     REQUIRE(scripts.scripts.size() == 1);
     REQUIRE(
         scripts.scripts[0].status == project_runtime::LuauScriptStatus::Loaded
     );
 
+    app.startup();
     app.run_schedule(Update);
 
     auto& registry = Registry::instance();

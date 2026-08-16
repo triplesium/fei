@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 
 namespace fei::project_runtime {
 
@@ -41,10 +42,18 @@ Optional<std::string> detail::LuauProjectScriptBackend::request_error(
 }
 
 void LuauScriptsPlugin::setup(App& app) {
-    app.add_resource(
-           project_scripting::load_project_scripts<
-               detail::LuauProjectScriptBackend>(app)
-    )
+    auto scripts = project_scripting::load_project_scripts<
+        detail::LuauProjectScriptBackend>(app);
+    auto& registry = app.resource<LuauScriptSystemRegistry>();
+    auto& assets = app.resource<Assets<LuauScriptAsset>>();
+    registry.apply_queued_requests(
+        app.resource<LuauRuntime>(),
+        app.world(),
+        assets
+    );
+    project_scripting::refresh_project_script_states<
+        detail::LuauProjectScriptBackend>(scripts, registry, assets);
+    app.add_resource(std::move(scripts))
         .add_systems(
             PostUpdate,
             project_scripting::update_project_script_states<

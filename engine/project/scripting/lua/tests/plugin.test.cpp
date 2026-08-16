@@ -3,6 +3,8 @@
 #include "app/app.hpp"
 #include "project/project.hpp"
 #include "project_runtime/runtime.hpp"
+#include "refl/cls.hpp"
+#include "refl/registry.hpp"
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -90,15 +92,60 @@ TEST_CASE(
 
     auto& state = app.resource<project_runtime::LuaScriptsState>();
     REQUIRE(state.scripts.size() == 1);
-    CHECK(state.scripts[0].status == project_runtime::LuaScriptStatus::Queued);
+    CHECK(state.scripts[0].status == project_runtime::LuaScriptStatus::Loaded);
     REQUIRE(state.scripts[0].path);
     CHECK(state.scripts[0].path->as_string() == "project://scripts/game.lua");
-
-    apply_script_queue(app);
-
-    CHECK(state.scripts[0].status == project_runtime::LuaScriptStatus::Loaded);
     CHECK(state.scripts[0].module.has_value());
     CHECK(state.scripts[0].error.empty());
+}
+
+TEST_CASE(
+    "Project Lua startup systems install before App startup",
+    "[project-runtime][lua][script][startup]"
+) {
+    TemporaryScriptProject directory(
+        "scripts/startup.lua",
+        Optional<std::string_view> {R"(
+            plugin "project.lua_startup"
+            types {
+                StartupState = {
+                    runs = field(i32, 0),
+                },
+            }
+            resource(StartupState)
+
+            function initialize(args)
+                args.state.runs = args.state.runs + 1
+            end
+
+            system {
+                name = "initialize",
+                run = initialize,
+                schedule = MainSchedules.StartUp,
+                params = {
+                    state = res.write(StartupState),
+                },
+            }
+        )"}
+    );
+    auto app = load_app(directory);
+
+    const auto& scripts = app.resource<project_runtime::LuaScriptsState>();
+    REQUIRE(scripts.scripts.size() == 1);
+    REQUIRE(
+        scripts.scripts[0].status == project_runtime::LuaScriptStatus::Loaded
+    );
+
+    app.startup();
+
+    auto& registry = Registry::instance();
+    auto state_type = registry.try_get_type("project.lua_startup.StartupState");
+    REQUIRE(state_type.has_value());
+    auto runs = registry.get_cls(state_type->id())
+                    .get_property("runs")
+                    .get(app.world().resource(state_type->id()));
+    REQUIRE(runs.has_value());
+    CHECK(runs->get<int>() == 1);
 }
 
 TEST_CASE(

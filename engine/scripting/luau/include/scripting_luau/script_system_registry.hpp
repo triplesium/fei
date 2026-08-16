@@ -93,24 +93,17 @@ class LuauScriptSystemRegistry {
     );
     Status<LuauScriptError>
     unload(LuauRuntime& runtime, World& world, LuauScriptSystemModuleId module);
-    void apply_queued_requests(
-        LuauRuntime& runtime,
-        World& world,
-        const Assets<LuauScriptAsset>& assets
-    );
-
-    friend void apply_luau_script_system_queue(
-        WorldRef world,
-        ResRW<LuauRuntime> runtime,
-        ResRW<LuauScriptSystemRegistry> scripts,
-        ResRO<Assets<LuauScriptAsset>> assets
-    );
 
   public:
     void queue_source(LuauScriptSource source);
     void queue_asset(Handle<LuauScriptAsset> asset);
     void queue_reload_asset(LuauScriptSystemModuleId module);
     void queue_unload(LuauScriptSystemModuleId module);
+    void apply_queued_requests(
+        LuauRuntime& runtime,
+        World& world,
+        const Assets<LuauScriptAsset>& assets
+    );
 
     Optional<const LoadedLuauScriptSystemModule&>
     get(LuauScriptSystemModuleId module) const;

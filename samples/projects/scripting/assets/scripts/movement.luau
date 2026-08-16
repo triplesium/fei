@@ -41,7 +41,7 @@ return module {
         ScriptingSampleState = {},
     },
     systems = {
-        system(Update, initialize),
+        system(StartUp, initialize),
         system(Update, move),
     },
 }

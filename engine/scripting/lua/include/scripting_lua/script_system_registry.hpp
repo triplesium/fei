@@ -108,24 +108,16 @@ class LuaScriptSystemRegistry {
         LuaScriptSystemModuleId module_id
     );
 
-    void apply_queued_requests(
-        LuaRuntime& runtime,
-        World& world,
-        const Assets<LuaScriptAsset>& assets
-    );
-
-    friend void apply_lua_script_system_queue(
-        WorldRef world,
-        ResRW<LuaRuntime> runtime,
-        ResRW<LuaScriptSystemRegistry> scripts,
-        ResRO<Assets<LuaScriptAsset>> assets
-    );
-
   public:
     void queue_source(LuaScriptSource source);
     void queue_asset(Handle<LuaScriptAsset> asset);
     void queue_reload_asset(LuaScriptSystemModuleId module_id);
     void queue_unload(LuaScriptSystemModuleId module_id);
+    void apply_queued_requests(
+        LuaRuntime& runtime,
+        World& world,
+        const Assets<LuaScriptAsset>& assets
+    );
 
     Optional<const LoadedLuaScriptSystemModule&>
     get(LuaScriptSystemModuleId module_id) const;
