@@ -9,6 +9,7 @@
 #include "asset/source.hpp"
 #include "asset/systems.hpp"
 #include "ecs/system_config.hpp"
+#include "refl/val.hpp"
 #include "task/plugin.hpp"
 
 #include <algorithm>
@@ -38,11 +39,15 @@ struct AssetTypeError {
     std::string message;
 };
 
+FEI_REFLECT(Resource)
 class AssetServer {
   private:
     struct AssetTypeAccess {
         std::function<UntypedHandle(AssetServer&, const AssetPath&)> load;
         std::function<UntypedHandle(AssetServer&, const AssetPath&)> load_async;
+        std::function<Result<Val, AssetTypeError>(const UntypedHandle&)>
+            handle_value;
+        std::function<Optional<AssetId>(Ref)> handle_id;
         std::function<Optional<AssetLoadState>(AssetId)> load_state;
         std::function<Optional<AssetLoadError>(AssetId)> load_error;
         std::function<std::vector<AssetKey>(AssetId)> dependencies;
@@ -54,6 +59,7 @@ class AssetServer {
     std::string m_default_source;
     std::unordered_map<std::string, std::unique_ptr<AssetSource>> m_sources;
     std::unordered_map<TypeId, AssetTypeAccess> m_asset_types;
+    std::unordered_map<TypeId, TypeId> m_asset_handle_types;
 
     [[nodiscard]] Optional<std::filesystem::path>
     imported_artifact_for(const AssetPath& path, std::string_view kind) const {
@@ -249,6 +255,56 @@ class AssetServer {
             );
         }
         return access->second.load_async(*this, path);
+    }
+
+    Result<Val, AssetTypeError>
+    handle_value(const UntypedHandle& handle) const {
+        auto access = m_asset_types.find(handle.asset_type());
+        if (access == m_asset_types.end()) {
+            return failure(
+                AssetTypeError {
+                    .type = handle.asset_type(),
+                    .message = "No asset type registered for type id " +
+                               std::to_string(handle.asset_type().id()),
+                }
+            );
+        }
+        return access->second.handle_value(handle);
+    }
+
+    Result<AssetKey, AssetTypeError> asset_key(Ref handle) const {
+        auto asset_type = m_asset_handle_types.find(handle.type_id());
+        if (asset_type == m_asset_handle_types.end()) {
+            return failure(
+                AssetTypeError {
+                    .type = handle.type_id(),
+                    .message = "Type id " +
+                               std::to_string(handle.type_id().id()) +
+                               " is not a registered asset handle",
+                }
+            );
+        }
+        const auto access = m_asset_types.find(asset_type->second);
+        if (access == m_asset_types.end()) {
+            return failure(
+                AssetTypeError {
+                    .type = asset_type->second,
+                    .message = "No asset type registered for type id " +
+                               std::to_string(asset_type->second.id()),
+                }
+            );
+        }
+        auto id = access->second.handle_id(handle);
+        if (!id) {
+            return failure(
+                AssetTypeError {
+                    .type = handle.type_id(),
+                    .message = "Value does not contain the expected asset "
+                               "handle type",
+                }
+            );
+        }
+        return AssetKey {.type = asset_type->second, .id = *id};
     }
 
     template<typename T>
@@ -800,6 +856,7 @@ class AssetServer {
     template<typename T>
     void register_asset_type_access() {
         auto* app = m_app;
+        m_asset_handle_types[type_id<Handle<T>>()] = type_id<T>();
         m_asset_types[type_id<T>()] = AssetTypeAccess {
             .load =
                 [](AssetServer& server, const AssetPath& path) {
@@ -809,6 +866,27 @@ class AssetServer {
                 [](AssetServer& server, const AssetPath& path) {
                     return server.template load_async<T>(path).untyped();
                 },
+            .handle_value =
+                [](const UntypedHandle& handle) -> Result<Val, AssetTypeError> {
+                auto typed = handle.template try_typed<T>();
+                if (!typed) {
+                    return failure(
+                        AssetTypeError {
+                            .type = handle.asset_type(),
+                            .message = "Untyped asset handle does not contain "
+                                       "the expected asset type",
+                        }
+                    );
+                }
+                return make_val<Handle<T>>(std::move(*typed));
+            },
+            .handle_id = [](Ref handle) -> Optional<AssetId> {
+                const auto* typed = handle.template try_get_const<Handle<T>>();
+                if (typed == nullptr) {
+                    return nullopt;
+                }
+                return typed->id();
+            },
             .load_state = [app](AssetId id) -> Optional<AssetLoadState> {
                 if (!app || !app->template has_resource<Assets<T>>()) {
                     return nullopt;

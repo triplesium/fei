@@ -349,6 +349,20 @@ TEST_CASE(
     REQUIRE(asset);
     CHECK(asset->byte_count == 4);
 
+    auto value = asset_server.handle_value(handle);
+    REQUIRE(value);
+    CHECK(value->type_id() == type_id<Handle<ServerAsset>>());
+    auto key = asset_server.asset_key(value->ref());
+    REQUIRE(key);
+    CHECK(key->type == type_id<ServerAsset>());
+    CHECK(key->id == handle.id());
+    auto non_handle = make_val<int>(7);
+    auto invalid_key = asset_server.asset_key(non_handle.ref());
+    REQUIRE_FALSE(invalid_key);
+    CHECK(
+        invalid_key.error().message.contains("not a registered asset handle")
+    );
+
     auto missing = asset_server.load(
         type_id<UnregisteredAsset>(),
         AssetPath("memory://asset.bin")
@@ -359,6 +373,7 @@ TEST_CASE(
 
     auto& assets = app.resource<Assets<ServerAsset>>();
     typed = nullopt;
+    value = Val {};
     CHECK(assets.unload_unused() == 0);
     handle = UntypedHandle {};
     CHECK(assets.unload_unused() == 1);

@@ -19,6 +19,7 @@
 
 namespace fei {
 
+FEI_REFLECT()
 class Image {
   private:
     std::unique_ptr<unsigned char[]> m_data;

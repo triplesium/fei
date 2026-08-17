@@ -1,9 +1,28 @@
-local function initialize(world: World, state: ResRW<ScriptingSampleState>)
+local function initialize(
+    world: World,
+    assets: ResRW<AssetServer>,
+    state: ResRW<ScriptingSampleState>
+)
     if state.mover ~= 0 then
         return
     end
 
+    local image = assets:load(Image, "textures/awesomeface.png")
+    assert(assets:is_loaded(image))
+
+    world:spawn(
+        Camera2d.new {
+            vertical_size = 6.0,
+        },
+        Transform2d.new()
+    )
+
     local mover = world:spawn(
+        Sprite.new {
+            image = image,
+            size = Vector2.new(1.8, 1.8),
+        },
+        Transform2d.new(),
         ScriptingSamplePosition.new(),
         ScriptingSampleVelocity.new()
     )
@@ -12,13 +31,17 @@ end
 
 local function move(
     movers: Query<
-        Write<ScriptingSamplePosition>,
-        Read<ScriptingSampleVelocity>
+        Write<Transform2d>,
+        Read<ScriptingSampleVelocity>,
+        With<ScriptingSamplePosition>
     >,
     state: ResRW<ScriptingSampleState>
 )
-    for position, velocity in movers do
-        position.x += velocity.x
+    for transform, velocity in movers do
+        transform.position.x += velocity.x
+        if transform.position.x > 3.8 then
+            transform.position.x = -3.8
+        end
     end
     state.ticks += 1
 end
@@ -30,7 +53,7 @@ return module {
             x = field(f32, 1.0),
         },
         ScriptingSampleVelocity = {
-            x = field(f32, 2.0),
+            x = field(f32, 0.01),
         },
         ScriptingSampleState = {
             mover = field(entity, 0),

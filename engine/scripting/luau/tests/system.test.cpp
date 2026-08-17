@@ -1,4 +1,8 @@
 #include "app/app.hpp"
+#include "asset/assets.hpp"
+#include "asset/loader.hpp"
+#include "asset/server.hpp"
+#include "asset/source.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/dynamic/query.hpp"
 #include "ecs/dynamic/world.hpp"
@@ -10,7 +14,11 @@
 #include "scripting_luau/detail/script_system_loader.hpp"
 #include "scripting_luau/runtime.hpp"
 
+#include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <filesystem>
+#include <memory>
+#include <string>
 
 using namespace fei;
 
@@ -95,6 +103,50 @@ struct LuauTestCommandState {
     }
 };
 
+struct LuauTestAsset {
+    int byte_count {0};
+};
+
+struct LuauTestAssetState {
+    Handle<LuauTestAsset> handle;
+    bool loaded {false};
+    bool readonly_rejected {false};
+};
+
+class LuauTestAssetSource : public AssetSource {
+  private:
+    std::array<std::byte, 3> m_bytes {
+        std::byte {1},
+        std::byte {2},
+        std::byte {3},
+    };
+
+  public:
+    std::string name() const override { return "memory"; }
+
+    bool exists(const std::filesystem::path& path) const override {
+        return path.generic_string() == "asset.bin";
+    }
+
+    Result<Reader, std::string>
+    try_get_reader(const std::filesystem::path& path) const override {
+        if (!exists(path)) {
+            return failure(std::string("Luau test asset not found"));
+        }
+        return Reader(m_bytes.data(), m_bytes.size());
+    }
+};
+
+class LuauTestAssetLoader : public AssetLoader<LuauTestAsset> {
+  public:
+    AssetLoadResult<LuauTestAsset>
+    load(Reader& reader, const LoadContext& /*context*/) override {
+        return std::make_unique<LuauTestAsset>(LuauTestAsset {
+            .byte_count = static_cast<int>(reader.size()),
+        });
+    }
+};
+
 void register_luau_system_test_types() {
     auto& registry = Registry::instance();
     registry.register_cls<LuauTestPosition>()
@@ -150,9 +202,98 @@ void register_luau_system_test_types() {
         .add_property("total", &LuauTestCommandState::total)
         .add_method("make_position", &LuauTestCommandState::make_position)
         .add_method("make_error", &LuauTestCommandState::make_error);
+    registry.register_type<LuauTestAsset>();
+    registry.register_cls<LuauTestAssetState>()
+        .add_property("handle", &LuauTestAssetState::handle)
+        .add_property("loaded", &LuauTestAssetState::loaded)
+        .add_property(
+            "readonly_rejected",
+            &LuauTestAssetState::readonly_rejected
+        );
+    registry.register_cls<AssetServer>();
 }
 
 } // namespace
+
+TEST_CASE(
+    "Luau systems load typed assets through AssetServer",
+    "[scripting_luau][system][asset]"
+) {
+    register_luau_system_test_types();
+    const ScriptSource source {
+        .name = "asset_system.luau",
+        .content = R"(
+            local function load_asset(
+                assets: ResRW<AssetServer>,
+                state: ResRW<LuauTestAssetState>
+            )
+                local handle = assets:load(
+                    LuauTestAsset,
+                    "memory://asset.bin"
+                )
+                assert(assets:is_loaded(handle))
+                local cached = assets:load_async(
+                    LuauTestAsset,
+                    "memory://asset.bin"
+                )
+                assert(assets:is_loaded(cached))
+                state.handle = cached
+                state.loaded = true
+            end
+
+            local function reject_readonly_load(
+                assets: ResRO<AssetServer>,
+                state: ResRW<LuauTestAssetState>
+            )
+                local ok, err = pcall(function()
+                    assets:load(LuauTestAsset, "memory://asset.bin")
+                end)
+                assert(not ok)
+                assert(string.find(err, "ResRW<AssetServer>", 1, true))
+                state.readonly_rejected = true
+            end
+
+            return module {
+                name = "test.asset",
+                systems = {
+                    system(Update, load_asset),
+                    system(Update, reject_readonly_load),
+                },
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact);
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module);
+
+    App app;
+    AssetServer server(&app);
+    server.emplace_source<LuauTestAssetSource>();
+    app.add_resource(std::move(server));
+    app.resource<AssetServer>()
+        .add_loader<LuauTestAsset, LuauTestAssetLoader>();
+    app.add_resource(LuauTestAssetState {});
+
+    auto systems = detail::install_luau_script_systems(
+        app.world(),
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems);
+    app.world().sort_systems();
+    app.run_schedule(Update);
+
+    const auto& state = app.resource<LuauTestAssetState>();
+    CHECK(state.loaded);
+    CHECK(state.readonly_rejected);
+    auto asset = app.resource<Assets<LuauTestAsset>>().get(state.handle);
+    REQUIRE(asset);
+    CHECK(asset->byte_count == 3);
+}
 
 TEST_CASE(
     "Luau constructs reflected values and exposes reflected enums",

@@ -3,6 +3,9 @@ asset_directory: assets
 
 runtime:
   plugins:
+    - OpenGLGlfw
+    - Rendering
+    - Sprite
     - project_runtime::LuauScripts
 
 scripts:

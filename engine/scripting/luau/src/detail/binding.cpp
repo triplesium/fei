@@ -6,6 +6,7 @@
 #include "refl/registry.hpp"
 #include "refl/val.hpp"
 #include "scripting/reflection_bridge.hpp"
+#include "scripting_luau/detail/asset_server_binding.hpp"
 #include "scripting_luau/detail/commands_binding.hpp"
 #include "scripting_luau/detail/world_binding.hpp"
 
@@ -398,6 +399,10 @@ int borrowed_index(lua_State* state) {
     }
     if (luau_is_dynamic_world(object.ref.type_id())) {
         return dispatch_luau_world_index(state, key);
+    }
+    if (luau_is_asset_server(object.ref.type_id()) &&
+        push_luau_asset_server_member(state, key)) {
+        return 1;
     }
     auto value = script_get_property(object.ref, key);
     if (value) {
