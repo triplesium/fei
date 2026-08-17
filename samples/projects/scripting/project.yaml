@@ -1,4 +1,4 @@
-name: Luau Scripting Sample
+name: Luau 2D Collect Game
 asset_directory: assets
 
 runtime:
@@ -6,6 +6,8 @@ runtime:
     - OpenGLGlfw
     - Rendering
     - Sprite
+    - Input
+    - Time
     - project_runtime::LuauScripts
 
 scripts:
