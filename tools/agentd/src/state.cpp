@@ -411,8 +411,11 @@ std::string SupervisorState::capabilities_json() const {
          Json {
              {"interfaces", "/api/v1/play/interfaces"},
              {"capture", "/api/v1/play/capture"},
+             {"frame", "/api/v1/play/frame"},
              {"observe", "/api/v1/play/observe"},
              {"step", "/api/v1/play/step"},
+             {"events", "/api/v1/play/events"},
+             {"ui", "/ui/"},
              {"reset", "/api/v1/play/reset"},
          }},
         {"inspections", std::move(inspections)},

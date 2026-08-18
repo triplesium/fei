@@ -3,19 +3,31 @@ target("fei-agentd-core")
     add_headerfiles(
         "src/artifact_store.hpp",
         "src/process.hpp",
+        "src/play_trace_store.hpp",
         "src/project_descriptor.hpp",
         "src/server.hpp",
-        "src/state.hpp"
+        "src/state.hpp",
+        "src/ui_assets.hpp"
     )
     add_files(
         "src/state.cpp",
         "src/server.cpp",
         "src/artifact_store.cpp",
         "src/process.cpp",
-        "src/project_descriptor.cpp"
+        "src/play_trace_store.cpp",
+        "src/project_descriptor.cpp",
+        "src/ui_assets.cpp"
     )
+    add_rules(
+        "utils.bin2obj",
+        {
+            extensions = {".html", ".css", ".js"},
+            symbol_prefix = "_binary_agentd_"
+        }
+    )
+    add_files("ui/index.html", "ui/app.css", "ui/app.js")
     add_includedirs("src", {public = true})
-    add_deps("fei-base", "fei-project", "fei-runtime-protocol")
+    add_deps("fei-asset", "fei-base", "fei-project", "fei-runtime-protocol")
     add_packages("cpp-httplib", "nlohmann_json")
     if is_plat("windows") then
         add_syslinks("ws2_32")

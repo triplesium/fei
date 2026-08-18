@@ -239,6 +239,7 @@ void push_json(lua_State* state, const Json& value, std::size_t depth = 0) {
 struct RunContext {
     const PlayControlBindings& bindings;
     const PlayRunLimits& limits;
+    const PlayRunObserver& observer;
     std::chrono::steady_clock::time_point deadline;
     Json calls = Json::array();
     Json logs = Json::array();
@@ -247,6 +248,19 @@ struct RunContext {
     uint64 ticks {0};
     std::size_t interrupts {0};
 };
+
+template<typename Callback, typename... Arguments>
+void notify_observer(const Callback& callback, Arguments&&... arguments) {
+    if (!callback) {
+        return;
+    }
+    try {
+        callback(std::forward<Arguments>(arguments)...);
+    } catch (...) {
+        // Observability must never alter playtest behavior.
+        return;
+    }
+}
 
 RunContext& context(lua_State* state) {
     return *static_cast<RunContext*>(
@@ -278,6 +292,12 @@ Json invoke_play(
         {"operation", operation},
         {"request", std::move(request)},
     };
+    notify_observer(
+        run.observer.call_started,
+        call_index,
+        std::string_view(operation),
+        std::as_const(trace.at("request"))
+    );
     Result<Json, std::string> response;
     try {
         response = invoke();
@@ -290,6 +310,7 @@ Json invoke_play(
         trace["ok"] = false;
         trace["error"] = error.what();
         run.calls.push_back(std::move(trace));
+        notify_observer(run.observer.call_finished, call_index);
         throw std::runtime_error(operation + " failed: " + error.what());
     }
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -300,11 +321,13 @@ Json invoke_play(
         trace["ok"] = false;
         trace["error"] = response.error();
         run.calls.push_back(std::move(trace));
+        notify_observer(run.observer.call_finished, call_index);
         throw std::runtime_error(operation + " failed: " + response.error());
     }
     trace["ok"] = true;
     trace["response"] = *response;
     run.calls.push_back(std::move(trace));
+    notify_observer(run.observer.call_finished, call_index);
     check_deadline(run);
     return std::move(*response);
 }
@@ -519,7 +542,10 @@ int play_log(lua_State* state) {
         if (lua_gettop(state) != 1) {
             throw std::runtime_error("play.log expects one value");
         }
-        context(state).logs.push_back(luau_json(state, 1, "log value"));
+        auto& run = context(state);
+        auto value = luau_json(state, 1, "log value");
+        run.logs.push_back(value);
+        notify_observer(run.observer.log, std::as_const(value));
         return 0;
     } catch (const std::exception& error) {
         luaL_error(state, "%s", error.what());
@@ -533,9 +559,11 @@ int play_print(lua_State* state) {
         for (int index = 1; index <= lua_gettop(state); ++index) {
             values.push_back(luau_json(state, index, "print value"));
         }
-        context(state).logs.push_back(
-            values.size() == 1 ? std::move(values.front()) : std::move(values)
-        );
+        auto value =
+            values.size() == 1 ? std::move(values.front()) : std::move(values);
+        auto& run = context(state);
+        run.logs.push_back(value);
+        notify_observer(run.observer.log, std::as_const(value));
         return 0;
     } catch (const std::exception& error) {
         luaL_error(state, "%s", error.what());
@@ -653,12 +681,14 @@ Json report(
 Json run_luau_play_script(
     std::string_view source,
     const PlayControlBindings& bindings,
-    const PlayRunLimits& limits
+    const PlayRunLimits& limits,
+    const PlayRunObserver& observer
 ) {
     MemoryBudget memory {.maximum = limits.maximum_memory_bytes};
     RunContext run {
         .bindings = bindings,
         .limits = limits,
+        .observer = observer,
         .deadline = std::chrono::steady_clock::now() + limits.maximum_duration,
     };
     if (source.size() > limits.maximum_source_bytes) {

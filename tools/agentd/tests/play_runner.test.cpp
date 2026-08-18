@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 using namespace fei;
 using namespace fei::agentd;
@@ -100,6 +101,57 @@ return {
     CHECK(report.at("budget").at("calls") == 6);
     CHECK(report.at("budget").at("ticks") == 8);
     CHECK(report.at("logs") == nlohmann::json::array({{"done", 3}}));
+}
+
+TEST_CASE(
+    "Luau play runner reports live calls and logs without trusting observers",
+    "[agentd][play-run][observer]"
+) {
+    std::size_t step_count = 0;
+    std::vector<std::string> events;
+    const auto observer = PlayRunObserver {
+        .call_started =
+            [&events](
+                std::size_t index,
+                std::string_view operation,
+                const nlohmann::json&
+            ) {
+                events.push_back(
+                    "start:" + std::to_string(index) + ":" +
+                    std::string(operation)
+                );
+            },
+        .call_finished =
+            [&events](std::size_t index) {
+                events.push_back("finish:" + std::to_string(index));
+            },
+        .log =
+            [&events](const nlohmann::json& value) {
+                events.push_back("log:" + value.get<std::string>());
+                throw std::runtime_error("observer failure");
+            },
+    };
+
+    const auto report = run_luau_play_script(
+        R"(
+play.log("moving")
+return play.step("game.main", { move = "right" })
+)",
+        test_bindings(step_count),
+        {},
+        observer
+    );
+
+    REQUIRE(report.at("ok").get<bool>());
+    CHECK(
+        events == std::vector<std::string> {
+                      "log:moving",
+                      "start:1:interfaces",
+                      "finish:1",
+                      "start:2:step",
+                      "finish:2",
+                  }
+    );
 }
 
 TEST_CASE(

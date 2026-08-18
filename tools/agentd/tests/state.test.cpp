@@ -93,8 +93,11 @@ TEST_CASE("Supervisor accepts runtime hello and heartbeat", "[agentd][state]") {
         capabilities.at("play").at("interfaces") == "/api/v1/play/interfaces"
     );
     CHECK(capabilities.at("play").at("capture") == "/api/v1/play/capture");
+    CHECK(capabilities.at("play").at("frame") == "/api/v1/play/frame");
     CHECK(capabilities.at("play").at("observe") == "/api/v1/play/observe");
     CHECK(capabilities.at("play").at("step") == "/api/v1/play/step");
+    CHECK(capabilities.at("play").at("events") == "/api/v1/play/events");
+    CHECK(capabilities.at("play").at("ui") == "/ui/");
     REQUIRE(capabilities.at("inspections").size() == 2);
     CHECK(
         capabilities.at("inspections").at(0).at("id") == "ecs.entity.inspect"

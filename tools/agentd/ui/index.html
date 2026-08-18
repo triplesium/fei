@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fei Playtest</title>
+  <link rel="stylesheet" href="/ui/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="identity">
+      <div class="mark">F</div>
+      <div>
+        <div class="eyebrow">FEI PLAYTEST</div>
+        <h1 id="project-name">Connecting…</h1>
+      </div>
+    </div>
+    <div class="runtime-strip">
+      <span id="runtime-dot" class="status-dot waiting"></span>
+      <span id="runtime-status">waiting</span>
+      <span class="divider"></span>
+      <span id="runtime-frame">frame —</span>
+      <button id="restart-runtime" type="button">Restart runtime</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <nav class="mobile-tabs" aria-label="Playtest views">
+      <button class="mobile-tab active" data-mobile-view="game" type="button">Game</button>
+      <button class="mobile-tab" data-mobile-view="timeline" type="button">Timeline</button>
+      <button class="mobile-tab" data-mobile-view="details" type="button">Details</button>
+    </nav>
+
+    <section class="workbench">
+      <aside class="panel trace-panel mobile-panel" data-mobile-panel="timeline">
+        <div class="panel-heading trace-heading">
+          <div>
+            <span class="kicker">LIVE TRACE</span>
+            <h2>Timeline</h2>
+          </div>
+          <span id="event-count" class="event-count">0 events</span>
+        </div>
+        <div class="filters" role="group" aria-label="Timeline filter">
+          <button class="filter active" data-filter="all" type="button">All</button>
+          <button class="filter" data-filter="actions" type="button">Actions</button>
+          <button class="filter" data-filter="errors" type="button">Errors</button>
+        </div>
+        <div id="timeline" class="timeline" aria-live="polite">
+          <div class="empty-state">Waiting for agent activity…</div>
+        </div>
+      </aside>
+
+      <article class="panel game-panel mobile-panel mobile-active" data-mobile-panel="game">
+        <div class="panel-heading">
+          <div>
+            <span class="kicker">GAME VIEW</span>
+            <h2>Current frame</h2>
+          </div>
+          <button id="refresh-frame" class="quiet-button" type="button">Refresh</button>
+        </div>
+        <div id="frame-stage" class="frame-stage">
+          <img id="game-frame" alt="Current game frame">
+          <div id="frame-placeholder" class="frame-placeholder">Waiting for the runtime frame</div>
+          <div id="action-overlay" class="action-overlay" hidden></div>
+        </div>
+        <div class="frame-meta">
+          <span id="frame-dimensions">— × —</span>
+          <span id="frame-message">No frame loaded</span>
+        </div>
+        <div class="current-action">
+          <span id="activity-state" class="state-pill idle">idle</span>
+          <div class="current-action-copy">
+            <strong id="activity-title">No active play operation</strong>
+            <span id="activity-summary">Waiting for agent activity.</span>
+          </div>
+          <span id="activity-meta" class="current-action-meta">—</span>
+        </div>
+      </article>
+
+      <aside id="detail-panel" class="panel detail-panel mobile-panel" data-mobile-panel="details">
+        <div class="detail-heading">
+          <div>
+            <span class="kicker">INSPECTOR</span>
+            <h3 id="detail-title">Following live activity</h3>
+          </div>
+          <div class="detail-actions">
+            <button id="follow-live" class="quiet-button active" type="button">Live</button>
+            <button id="close-details" class="icon-button" type="button" aria-label="Close inspector">×</button>
+          </div>
+        </div>
+        <span id="detail-sequence" class="sequence detail-sequence"></span>
+        <pre id="detail-json" class="json-view detail-json">Request, response, observation changes, script source, and errors appear here.</pre>
+      </aside>
+    </section>
+  </main>
+
+  <script src="/ui/app.js"></script>
+</body>
+</html>

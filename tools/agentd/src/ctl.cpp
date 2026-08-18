@@ -22,6 +22,12 @@ namespace {
 using Json = nlohmann::json;
 using JsonResult = fei::Result<Json, std::string>;
 
+struct PlayTraceSession {
+    std::string trace_id;
+    std::string span_id;
+    std::optional<std::size_t> active_call_index;
+};
+
 std::atomic<bool> running {true};
 
 void handle_signal(int) {
@@ -442,12 +448,91 @@ inspection_payload(httplib::Result response, std::string_view failure) {
     return std::move(document->at("payload"));
 }
 
+httplib::Headers trace_headers(const PlayTraceSession* trace) {
+    if (trace == nullptr) {
+        return {};
+    }
+    httplib::Headers headers {
+        {"X-Fei-Trace-Id", trace->trace_id},
+        {"X-Fei-Parent-Span-Id", trace->span_id},
+    };
+    if (trace->active_call_index) {
+        headers.emplace(
+            "X-Fei-Call-Index",
+            std::to_string(*trace->active_call_index)
+        );
+    }
+    return headers;
+}
+
+std::optional<PlayTraceSession>
+start_play_trace(httplib::Client& client, std::string_view source) {
+    auto response = parse_json_response(
+        client.Post(
+            "/api/v1/play/traces",
+            Json {{"source", source}, {"origin", "fei-ctl play-run"}}.dump(),
+            "application/json"
+        ),
+        "Failed to start play trace"
+    );
+    if (!response) {
+        std::cerr << "Play trace unavailable: " << response.error() << '\n';
+        return std::nullopt;
+    }
+    try {
+        return PlayTraceSession {
+            .trace_id = response->at("trace_id").get<std::string>(),
+            .span_id = response->at("span_id").get<std::string>(),
+        };
+    } catch (const std::exception& error) {
+        std::cerr << "Play trace unavailable: invalid response: "
+                  << error.what() << '\n';
+        return std::nullopt;
+    }
+}
+
+void publish_play_log(
+    httplib::Client& client,
+    const PlayTraceSession& trace,
+    const Json& value
+) {
+    const auto path = "/api/v1/play/traces/" + trace.trace_id + "/events";
+    (void)client.Post(
+        path,
+        Json {
+            {"type", "play_log"},
+            {"parent_span_id", trace.span_id},
+            {"data", value},
+        }
+            .dump(),
+        "application/json"
+    );
+}
+
+void finish_play_trace(
+    httplib::Client& client,
+    const PlayTraceSession& trace,
+    const Json& report
+) {
+    const auto path = "/api/v1/play/traces/" + trace.trace_id + "/finish";
+    (void)client.Post(
+        path,
+        Json {{"span_id", trace.span_id}, {"report", report}}.dump(),
+        "application/json"
+    );
+}
+
 JsonResult request_capture(
     httplib::Client& client,
-    const std::optional<std::string>& output
+    const std::optional<std::string>& output,
+    const PlayTraceSession* trace = nullptr
 ) {
-    auto response =
-        client.Post("/api/v1/play/capture", "{}", "application/json");
+    auto response = client.Post(
+        "/api/v1/play/capture",
+        trace_headers(trace),
+        "{}",
+        "application/json"
+    );
     auto parsed = parse_json_response(
         std::move(response),
         "Failed to capture playtest frame"
@@ -523,15 +608,16 @@ bool capture_frame(httplib::Client& client, const Options& options) {
     return true;
 }
 
-fei::agentd::PlayControlBindings make_play_bindings(httplib::Client& client) {
+fei::agentd::PlayControlBindings
+make_play_bindings(httplib::Client& client, PlayTraceSession* trace = nullptr) {
     return fei::agentd::PlayControlBindings {
-        .interfaces = [&client]() -> JsonResult {
+        .interfaces = [&client, trace]() -> JsonResult {
             return inspection_payload(
-                client.Get("/api/v1/play/interfaces"),
+                client.Get("/api/v1/play/interfaces", trace_headers(trace)),
                 "Failed to discover playtest interfaces"
             );
         },
-        .step = [&client](
+        .step = [&client, trace](
                     std::string_view interface_id,
                     const Json& action,
                     std::optional<fei::uint32> ticks
@@ -546,23 +632,29 @@ fei::agentd::PlayControlBindings make_play_bindings(httplib::Client& client) {
             return inspection_payload(
                 client.Post(
                     "/api/v1/play/step",
+                    trace_headers(trace),
                     request.dump(),
                     "application/json"
                 ),
                 "Failed to execute playtest step"
             );
         },
-        .observe = [&client](std::string_view interface_id) -> JsonResult {
+        .observe = [&client,
+                    trace](std::string_view interface_id) -> JsonResult {
             const auto request = Json {{"interface", interface_id}}.dump();
             return inspection_payload(
-                client
-                    .Post("/api/v1/play/observe", request, "application/json"),
+                client.Post(
+                    "/api/v1/play/observe",
+                    trace_headers(trace),
+                    request,
+                    "application/json"
+                ),
                 "Failed to observe playtest state"
             );
         },
-        .capture =
-            [&client](const std::optional<std::string>& output) -> JsonResult {
-            return request_capture(client, output);
+        .capture = [&client, trace](const std::optional<std::string>& output)
+            -> JsonResult {
+            return request_capture(client, output, trace);
         },
     };
 }
@@ -582,8 +674,36 @@ bool run_play_script(httplib::Client& client, const Options& options) {
         }
     }
 
-    const auto report =
-        fei::agentd::run_luau_play_script(source, make_play_bindings(client));
+    auto trace = start_play_trace(client, source);
+    const auto observer = fei::agentd::PlayRunObserver {
+        .call_started =
+            [&trace](std::size_t index, std::string_view, const Json&) {
+                if (trace) {
+                    trace->active_call_index = index;
+                }
+            },
+        .call_finished =
+            [&trace](std::size_t index) {
+                if (trace && trace->active_call_index == index) {
+                    trace->active_call_index.reset();
+                }
+            },
+        .log =
+            [&client, &trace](const Json& value) {
+                if (trace) {
+                    publish_play_log(client, *trace, value);
+                }
+            },
+    };
+    const auto report = fei::agentd::run_luau_play_script(
+        source,
+        make_play_bindings(client, trace ? &*trace : nullptr),
+        {},
+        observer
+    );
+    if (trace) {
+        finish_play_trace(client, *trace, report);
+    }
     std::cout << report.dump(2) << '\n';
     return report.value("ok", false);
 }
