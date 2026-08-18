@@ -1,5 +1,6 @@
 #include "server.hpp"
 
+#include "artifact_store.hpp"
 #include "runtime_protocol/protocol.hpp"
 #include "state.hpp"
 
@@ -8,6 +9,7 @@
 #include <httplib.h>
 #include <memory>
 #include <nlohmann/json.hpp> // IWYU pragma: keep
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -80,6 +82,34 @@ void submit_inspection(
             std::string("Invalid inspection request: ") + error.what()
         );
     }
+}
+
+void submit_known_inspection(
+    SupervisorState& state,
+    httplib::Response& response,
+    std::string provider,
+    std::string schema,
+    std::string payload_json,
+    std::chrono::milliseconds timeout
+) {
+    auto result = state.request_inspection(
+        std::move(provider),
+        std::move(schema),
+        std::move(payload_json),
+        timeout
+    );
+    if (!result) {
+        const auto status =
+            result.error() == "Runtime inspection timed out" ? 504 : 409;
+        set_error(response, status, std::move(result.error()));
+        return;
+    }
+    auto encoded = runtime_protocol::encode_inspection_response(*result);
+    if (!encoded) {
+        set_error(response, 500, std::move(encoded.error()));
+        return;
+    }
+    set_json(response, 200, std::move(*encoded));
 }
 
 template<typename Decode, typename Accept>
@@ -159,6 +189,217 @@ class AgentServer::Impl {
         );
         m_server->Post(
             "/api/v1/restart",
+            [this](const httplib::Request&, httplib::Response& response) {
+                m_state.request_restart();
+                set_ok(response);
+            }
+        );
+        m_server->Get(
+            "/api/v1/play/interfaces",
+            [this](const httplib::Request&, httplib::Response& response) {
+                submit_known_inspection(
+                    m_state,
+                    response,
+                    "play.interfaces",
+                    "play.interfaces.v1",
+                    "{}",
+                    std::chrono::seconds(5)
+                );
+            }
+        );
+        m_server->Post(
+            "/api/v1/play/capture",
+            [this](
+                const httplib::Request& request,
+                httplib::Response& response
+            ) {
+                Json payload;
+                try {
+                    payload = Json::parse(request.body);
+                    if (!payload.is_object()) {
+                        set_error(
+                            response,
+                            400,
+                            "Playtest capture request must be an object"
+                        );
+                        return;
+                    }
+                } catch (const std::exception& error) {
+                    set_error(
+                        response,
+                        400,
+                        std::string("Invalid playtest capture request: ") +
+                            error.what()
+                    );
+                    return;
+                }
+
+                auto result = m_state.request_inspection(
+                    "play.capture",
+                    "play.capture.v1",
+                    payload.dump(),
+                    std::chrono::seconds(10)
+                );
+                if (!result) {
+                    const auto status =
+                        result.error() == "Runtime inspection timed out" ? 504 :
+                                                                           409;
+                    set_error(response, status, std::move(result.error()));
+                    return;
+                }
+                if (!result->ok) {
+                    set_error(response, 409, result->error_message);
+                    return;
+                }
+                if (result->attachment_content_type != "image/png" ||
+                    result->attachment.empty()) {
+                    set_error(
+                        response,
+                        500,
+                        "Runtime capture did not return a PNG attachment"
+                    );
+                    return;
+                }
+
+                uint64 frame {};
+                uint32 width {};
+                uint32 height {};
+                try {
+                    const auto capture = Json::parse(result->payload_json);
+                    frame = capture.at("frame").get<uint64>();
+                    width = capture.at("width").get<uint32>();
+                    height = capture.at("height").get<uint32>();
+                    if (capture.at("format").get<std::string_view>() != "png" ||
+                        width == 0 || height == 0) {
+                        throw std::runtime_error(
+                            "Runtime capture metadata is invalid"
+                        );
+                    }
+                } catch (const std::exception& error) {
+                    set_error(
+                        response,
+                        500,
+                        std::string("Invalid runtime capture metadata: ") +
+                            error.what()
+                    );
+                    return;
+                }
+
+                auto artifact = m_artifacts.store(
+                    result->attachment_content_type,
+                    std::move(result->attachment)
+                );
+                if (!artifact) {
+                    set_error(response, 500, std::move(artifact.error()));
+                    return;
+                }
+                set_json(
+                    response,
+                    200,
+                    Json {
+                        {"frame", frame},
+                        {"width", width},
+                        {"height", height},
+                        {"format", "png"},
+                        {"content_type", artifact->content_type},
+                        {"bytes", artifact->size},
+                        {"artifact", "/api/v1/artifacts/" + artifact->id},
+                    }
+                        .dump()
+                );
+            }
+        );
+        m_server->Get(
+            R"(/api/v1/artifacts/([A-Za-z0-9-]+))",
+            [this](
+                const httplib::Request& request,
+                httplib::Response& response
+            ) {
+                const auto artifact =
+                    m_artifacts.find(request.matches[1].str());
+                if (!artifact) {
+                    set_error(response, 404, "Artifact was not found");
+                    return;
+                }
+                response.status = 200;
+                response.set_header("Cache-Control", "no-store");
+                response.set_content(
+                    reinterpret_cast<const char*>(artifact->data.data()),
+                    artifact->data.size(),
+                    artifact->metadata.content_type
+                );
+            }
+        );
+        m_server->Post(
+            "/api/v1/play/observe",
+            [this](
+                const httplib::Request& request,
+                httplib::Response& response
+            ) {
+                try {
+                    const auto payload = Json::parse(request.body);
+                    if (!payload.is_object()) {
+                        set_error(
+                            response,
+                            400,
+                            "Playtest observe request must be an object"
+                        );
+                        return;
+                    }
+                    submit_known_inspection(
+                        m_state,
+                        response,
+                        "play.observe",
+                        "play.observe.v1",
+                        payload.dump(),
+                        std::chrono::seconds(5)
+                    );
+                } catch (const std::exception& error) {
+                    set_error(
+                        response,
+                        400,
+                        std::string("Invalid playtest observe request: ") +
+                            error.what()
+                    );
+                }
+            }
+        );
+        m_server->Post(
+            "/api/v1/play/step",
+            [this](
+                const httplib::Request& request,
+                httplib::Response& response
+            ) {
+                try {
+                    const auto payload = Json::parse(request.body);
+                    if (!payload.is_object()) {
+                        set_error(
+                            response,
+                            400,
+                            "Playtest step request must be an object"
+                        );
+                        return;
+                    }
+                    submit_known_inspection(
+                        m_state,
+                        response,
+                        "play.step",
+                        "play.step.v1",
+                        payload.dump(),
+                        std::chrono::seconds(30)
+                    );
+                } catch (const std::exception& error) {
+                    set_error(
+                        response,
+                        400,
+                        std::string("Invalid playtest step request: ") +
+                            error.what()
+                    );
+                }
+            }
+        );
+        m_server->Post(
+            "/api/v1/play/reset",
             [this](const httplib::Request&, httplib::Response& response) {
                 m_state.request_restart();
                 set_ok(response);
@@ -280,6 +521,7 @@ class AgentServer::Impl {
     SupervisorState& m_state;
     uint16 m_port;
     std::unique_ptr<httplib::Server> m_server;
+    ArtifactStore m_artifacts;
     std::thread m_thread;
 };
 

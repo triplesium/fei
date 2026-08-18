@@ -89,6 +89,12 @@ TEST_CASE("Supervisor accepts runtime hello and heartbeat", "[agentd][state]") {
 
     const auto capabilities = nlohmann::json::parse(state.capabilities_json());
     CHECK(capabilities.at("connected") == true);
+    CHECK(
+        capabilities.at("play").at("interfaces") == "/api/v1/play/interfaces"
+    );
+    CHECK(capabilities.at("play").at("capture") == "/api/v1/play/capture");
+    CHECK(capabilities.at("play").at("observe") == "/api/v1/play/observe");
+    CHECK(capabilities.at("play").at("step") == "/api/v1/play/step");
     REQUIRE(capabilities.at("inspections").size() == 2);
     CHECK(
         capabilities.at("inspections").at(0).at("id") == "ecs.entity.inspect"

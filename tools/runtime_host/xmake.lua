@@ -11,6 +11,7 @@ target("fei-runtime-host-core")
         "fei-project-runtime",
         "fei-project-scripting-lua",
         "fei-project-scripting-luau",
+        "fei-window",
         "fei-rendering",
         "fei-sprite",
         "fei-graphics-opengl",
@@ -18,6 +19,7 @@ target("fei-runtime-host-core")
         "fei-runtime-protocol",
         "fei-runtime-inspection-ecs"
     )
+    add_packages("glfw", "nlohmann_json", "stb")
 
 target("fei-runtime-host")
     set_kind("binary")

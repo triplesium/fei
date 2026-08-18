@@ -407,6 +407,14 @@ std::string SupervisorState::capabilities_json() const {
         {"version", runtime_protocol::protocol_version},
         {"session", m_session},
         {"connected", m_connected},
+        {"play",
+         Json {
+             {"interfaces", "/api/v1/play/interfaces"},
+             {"capture", "/api/v1/play/capture"},
+             {"observe", "/api/v1/play/observe"},
+             {"step", "/api/v1/play/step"},
+             {"reset", "/api/v1/play/reset"},
+         }},
         {"inspections", std::move(inspections)},
     }
         .dump();
