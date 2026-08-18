@@ -46,14 +46,15 @@ end
 
 local function move_player(
     input: ResRO<KeyInput>,
+    playtest_input: ResRO<PlaytestInput>,
     time: ResRO<Time>,
     players: Query<
         Write<Transform2d>,
         Read<Player>
     >
 )
-    local direction_x = 0.0
-    local direction_y = 0.0
+    local direction_x = playtest_input.move_x
+    local direction_y = playtest_input.move_y
 
     if input:pressed(KeyCode.Left) or input:pressed(KeyCode.A) then
         direction_x -= 1.0
@@ -124,9 +125,14 @@ return module {
             collectible = field(entity, 0),
             score = field(i32, 0),
         },
+        PlaytestInput = {
+            move_x = field(f32, 0.0),
+            move_y = field(f32, 0.0),
+        },
     },
     resources = {
         GameState = {},
+        PlaytestInput = {},
     },
     systems = {
         system(StartUp, initialize),

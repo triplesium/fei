@@ -1,4 +1,4 @@
-name: Luau 2D Collect Game
+name: Luau 2D Pointer Puzzle Playtest
 asset_directory: assets
 
 runtime:
@@ -11,7 +11,7 @@ runtime:
     - project_runtime::LuauScripts
 
 scripts:
-  - project://scripts/movement.luau
+  - project://scripts/pointer_puzzle_test.luau
 
 playtests:
-  - project://scripts/main.playtest.luau
+  - project://scripts/pointer_puzzle_test.playtest.luau
