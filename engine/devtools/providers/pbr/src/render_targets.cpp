@@ -106,7 +106,7 @@ const std::array<RenderTargetDescriptor, 8>& render_target_descriptors() {
     static const std::array composite_views {
         RenderTargetViewDescriptor {
             .id = "composite",
-            .label = "Rendered Frame",
+            .label = "PBR Composite",
             .blob_capability = c_composite_capability,
             .mode = PreviewMode::ToneMappedColor,
             .geometry_mask = false,

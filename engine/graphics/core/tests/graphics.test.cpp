@@ -108,11 +108,59 @@ class FakeBuffer : public Buffer {
     BitFlags<BufferUsages> usages() const override { return m_desc.usages; }
 };
 
+class FakeTextureReadback : public TextureReadback {
+  public:
+    Optional<TextureReadbackRequest> request;
+    Optional<TextureReadbackFrame> frame;
+
+    bool can_enqueue() const override { return true; }
+    bool enqueue(TextureReadbackRequest value) override {
+        request = std::move(value);
+        return true;
+    }
+    Optional<TextureReadbackFrame> poll() override {
+        auto result = std::move(frame);
+        frame.reset();
+        return result;
+    }
+    void reset() override {
+        request.reset();
+        frame.reset();
+    }
+};
+
+class FakeSwapchain : public Swapchain {
+  public:
+    explicit FakeSwapchain(std::shared_ptr<Texture> texture) :
+        m_framebuffer(
+            std::make_shared<Framebuffer>(FramebufferDescription {
+                .color_targets = {
+                    FramebufferAttachment {.texture = std::move(texture)},
+                },
+            })
+        ) {}
+
+    std::shared_ptr<const Framebuffer> framebuffer() const override {
+        return m_framebuffer;
+    }
+    uint32 width() const override { return 2; }
+    uint32 height() const override { return 1; }
+    PixelFormat color_format() const override {
+        return PixelFormat::Bgra8Unorm;
+    }
+    void resize(uint32, uint32) override {}
+    void present() const override {}
+
+  private:
+    std::shared_ptr<Framebuffer> m_framebuffer;
+};
+
 class FakeGraphicsDevice : public GraphicsDevice {
   public:
     mutable std::vector<TextureViewDescription> texture_view_requests;
     mutable std::uint32_t flush_calls {0};
     mutable std::uint32_t present_calls {0};
+    mutable std::shared_ptr<TextureReadback> next_readback;
 
     std::shared_ptr<ShaderModule>
     create_shader_module(const ShaderDescription&) const override {
@@ -200,7 +248,7 @@ class FakeGraphicsDevice : public GraphicsDevice {
 
     std::shared_ptr<TextureReadback>
     create_texture_readback(uint32 = 3) const override {
-        return nullptr;
+        return next_readback;
     }
 
     void present(const Swapchain&) const override { ++present_calls; }
@@ -208,6 +256,37 @@ class FakeGraphicsDevice : public GraphicsDevice {
 };
 
 } // namespace
+
+TEST_CASE(
+    "GraphicsDevice captures a readable swapchain color attachment",
+    "[graphics][capture]"
+) {
+    auto texture = std::make_shared<FakeTexture>(
+        make_texture_description(2, 1, 1, 1, 1, PixelFormat::Bgra8Unorm)
+    );
+    FakeSwapchain swapchain(texture);
+    auto readback = std::make_shared<FakeTextureReadback>();
+    readback->frame = TextureReadbackFrame {
+        .data = std::vector<byte>(8),
+        .width = 2,
+        .height = 1,
+        .depth = 1,
+        .format = PixelFormat::Bgra8Unorm,
+        .data_origin = TextureDataOrigin::TopLeft,
+    };
+    FakeGraphicsDevice device;
+    device.next_readback = readback;
+
+    auto captured = device.capture_presented_frame(swapchain);
+
+    REQUIRE(captured);
+    REQUIRE(readback->request);
+    CHECK(readback->request->texture == texture);
+    CHECK(readback->request->output_format == PixelFormat::Bgra8Unorm);
+    CHECK(captured->width == 2);
+    CHECK(captured->height == 1);
+    CHECK(captured->format == PixelFormat::Bgra8Unorm);
+}
 
 TEST_CASE(
     "GraphicsDevice is a worker-readable ECS resource",

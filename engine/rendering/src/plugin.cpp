@@ -275,7 +275,11 @@ void RenderingCorePlugin::setup(App& app) {
             FEI_NAMED_SYSTEM(submit_render_frame) |
                 in_set<RenderingSystems::Submit>()
         )
-        .add_systems(RenderLast, present_graphics_runtime | main_thread());
+        .add_systems(
+            RenderLast,
+            present_graphics_runtime | in_set<RenderingSystems::Present>() |
+                main_thread()
+        );
 }
 
 } // namespace fei

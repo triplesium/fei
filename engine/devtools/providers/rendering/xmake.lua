@@ -9,6 +9,7 @@ target("fei-devtools-rendering")
         "fei-graphics",
         "fei-rendering"
     )
+    add_packages("stb")
 
 target("fei-devtools-rendering-tests")
     set_kind("binary")

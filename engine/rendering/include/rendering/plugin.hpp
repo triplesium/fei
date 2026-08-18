@@ -20,6 +20,7 @@ struct RenderingSystems {
     struct PostProcess : SystemSet<PostProcess> {};
     struct Overlay : SystemSet<Overlay> {};
     struct Submit : SystemSet<Submit> {};
+    struct Present : SystemSet<Present> {};
 };
 
 FEI_REFLECT(Plugin)

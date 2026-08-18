@@ -10,7 +10,7 @@
 namespace fei::devtools::pbr {
 
 inline constexpr const char* c_render_targets_capability = "pbr.render_targets";
-inline constexpr const char* c_composite_capability = "rendering.frame";
+inline constexpr const char* c_composite_capability = "pbr.composite";
 inline constexpr const char* c_position_capability = "pbr.gbuffer.position";
 inline constexpr const char* c_normal_capability = "pbr.gbuffer.normal";
 inline constexpr const char* c_roughness_capability = "pbr.gbuffer.roughness";

@@ -105,14 +105,7 @@ class GraphicsDevice {
     virtual void present(const Swapchain& swapchain) const = 0;
 
     [[nodiscard]] virtual Result<TextureReadbackFrame, std::string>
-    capture_presented_frame(const Swapchain&) const {
-        return failure(
-            std::string(
-                "Presented frame capture is not supported by this graphics "
-                "backend"
-            )
-        );
-    }
+    capture_presented_frame(const Swapchain& swapchain) const;
 
     // Transforms the engine's OpenGL-style clip depth to the backend's GPU
     // clip depth. Y orientation is handled by viewport/present policy.

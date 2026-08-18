@@ -96,7 +96,8 @@ void SwapchainWebGpuGlfw::configure() const {
     WGPUSurfaceConfiguration configuration {};
     configuration.device = m_state->device();
     configuration.format = m_surface_format;
-    configuration.usage = WGPUTextureUsage_RenderAttachment;
+    configuration.usage =
+        WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_CopySrc;
     configuration.width = m_width;
     configuration.height = m_height;
     configuration.alphaMode = capabilities.alphaModeCount != 0 ?

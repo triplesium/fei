@@ -1,10 +1,13 @@
 #include "app/app.hpp"
+#include "app/reflection_plugin.hpp"
 #include "asset/server.hpp"
 #include "base/log.hpp"
 #include "core/image.hpp"
 #include "core/plugin.hpp"
 #include "core/time.hpp"
 #include "core/transform.hpp"
+#include "devtools/plugin.hpp"
+#include "devtools_rendering/plugin.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
@@ -30,6 +33,11 @@ enum class GraphicsBackend {
     WebGPU,
 };
 
+struct Options {
+    GraphicsBackend backend {GraphicsBackend::OpenGL};
+    bool devtools {false};
+};
+
 struct DemoSprite {};
 
 GraphicsBackend parse_backend(std::string_view value) {
@@ -48,13 +56,17 @@ GraphicsBackend parse_backend(std::string_view value) {
     );
 }
 
-GraphicsBackend parse_arguments(int argc, char** argv) {
-    GraphicsBackend result = GraphicsBackend::OpenGL;
+Options parse_arguments(int argc, char** argv) {
+    Options result;
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument {argv[index]};
         constexpr std::string_view prefix {"--backend="};
         if (argument.starts_with(prefix)) {
-            result = parse_backend(argument.substr(prefix.size()));
+            result.backend = parse_backend(argument.substr(prefix.size()));
+            continue;
+        }
+        if (argument == "--devtools") {
+            result.devtools = true;
             continue;
         }
         fatal("Unknown sample-sprite argument {}", argument);
@@ -133,6 +145,7 @@ void animate_sprite(
 } // namespace
 
 int main(int argc, char** argv) {
+    const auto options = parse_arguments(argc, argv);
     App app;
     app.add_resource(
         WindowConfig {
@@ -142,11 +155,16 @@ int main(int argc, char** argv) {
         }
     );
     app.add_plugin<AssetsPlugin>();
-    add_graphics_backend(app, parse_arguments(argc, argv));
+    add_graphics_backend(app, options.backend);
     app.add_plugin<CorePlugin>()
         .add_plugin<RenderingPlugin>()
         .add_plugin<SpritePlugin>()
         .add_systems(PreStartUp, setup_sprite_scene)
-        .add_systems(Update, animate_sprite)
-        .run();
+        .add_systems(Update, animate_sprite);
+    if (options.devtools) {
+        app.add_plugin<ReflectionPlugin>()
+            .add_plugin(devtools::CorePlugin {})
+            .add_plugin(devtools::rendering::ProviderPlugin {});
+    }
+    app.run();
 }

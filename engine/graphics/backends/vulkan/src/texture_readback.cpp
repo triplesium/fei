@@ -116,9 +116,13 @@ bool is_supported_request(const TextureReadbackRequest& request) {
     if (!request.texture) {
         return false;
     }
+    const auto format = request.texture->format();
+    const auto supported_format = format == PixelFormat::Rgba8Unorm ||
+                                  format == PixelFormat::Rgba8UnormSrgb ||
+                                  format == PixelFormat::Bgra8Unorm ||
+                                  format == PixelFormat::Bgra8UnormSrgb;
     if (request.texture->type() != TextureType::Texture2D ||
-        request.texture->format() != PixelFormat::Rgba8Unorm ||
-        request.output_format != PixelFormat::Rgba8Unorm) {
+        !supported_format || request.output_format != format) {
         return false;
     }
     if (request.mip_level >= request.texture->mip_level()) {

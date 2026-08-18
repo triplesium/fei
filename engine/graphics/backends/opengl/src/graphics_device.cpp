@@ -694,6 +694,7 @@ GraphicsDeviceOpenGL::capture_presented_frame(
     const Swapchain& swapchain
 ) const {
     assert_context_thread("GraphicsDeviceOpenGL::capture_presented_frame");
+    flush();
     const auto width = swapchain.width();
     const auto height = swapchain.height();
     if (width == 0 || height == 0) {
@@ -733,7 +734,7 @@ GraphicsDeviceOpenGL::capture_presented_frame(
 
     FEI_GL_CALL(glBindFramebuffer(GL_READ_FRAMEBUFFER, 0));
     FEI_GL_CALL(glBindBuffer(GL_PIXEL_PACK_BUFFER, 0));
-    FEI_GL_CALL(glReadBuffer(GL_FRONT));
+    FEI_GL_CALL(glReadBuffer(GL_BACK));
     FEI_GL_CALL(glPixelStorei(GL_PACK_ALIGNMENT, 1));
     FEI_GL_CALL(glReadPixels(
         0,

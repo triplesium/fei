@@ -77,10 +77,16 @@ class TextureReadbackWebGpu final : public TextureReadback {
     }
 
     bool enqueue(TextureReadbackRequest request) override {
-        if (!request.texture ||
-            request.texture->type() != TextureType::Texture2D ||
-            request.texture->format() != PixelFormat::Rgba8Unorm ||
-            request.output_format != PixelFormat::Rgba8Unorm ||
+        if (!request.texture) {
+            return false;
+        }
+        const auto format = request.texture->format();
+        const auto supported_format = format == PixelFormat::Rgba8Unorm ||
+                                      format == PixelFormat::Rgba8UnormSrgb ||
+                                      format == PixelFormat::Bgra8Unorm ||
+                                      format == PixelFormat::Bgra8UnormSrgb;
+        if (request.texture->type() != TextureType::Texture2D ||
+            !supported_format || request.output_format != format ||
             request.mip_level >= request.texture->mip_level() ||
             request.layer >= request.texture->layer() ||
             request.texture->sample_count() != TextureSampleCount::Count1) {
@@ -195,7 +201,7 @@ class TextureReadbackWebGpu final : public TextureReadback {
             .width = width,
             .height = height,
             .depth = 1,
-            .format = PixelFormat::Rgba8Unorm,
+            .format = request.output_format,
             .data_origin = TextureDataOrigin::TopLeft,
             .user_data = request.user_data,
         };
