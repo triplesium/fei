@@ -31,6 +31,7 @@ struct ProjectConfig {
     std::filesystem::path asset_directory {"assets"};
     ProjectRuntimeConfig runtime;
     std::vector<AssetReference> scripts;
+    std::vector<AssetReference> playtests;
 };
 
 class Project {

@@ -9,8 +9,10 @@ target("fei-project-scripting-luau")
         "fei-asset",
         "fei-project",
         "fei-project-scripting",
+        "fei-runtime-protocol",
         "fei-scripting-luau"
     )
+    add_packages("luau", "nlohmann_json")
 
 target("fei-project-scripting-luau-tests")
     set_kind("binary")
@@ -22,3 +24,4 @@ target("fei-project-scripting-luau-tests")
         "fei-project-scripting-lua",
         "fei-project-scripting-luau"
     )
+    add_packages("nlohmann_json")

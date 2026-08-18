@@ -3,9 +3,11 @@
 #include "app/app.hpp"
 #include "project/project.hpp"
 #include "project_runtime/runtime.hpp"
+#include "project_scripting_luau/playtest.hpp"
 #include "project_scripting_luau/plugin.hpp"
 #include "refl/cls.hpp"
 #include "refl/registry.hpp"
+#include "runtime_protocol/playtest.hpp"
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -13,6 +15,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <nlohmann/json.hpp>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -29,7 +33,10 @@ struct ScriptFile {
 
 class TemporaryMixedScriptProject {
   public:
-    explicit TemporaryMixedScriptProject(std::vector<ScriptFile> scripts) {
+    explicit TemporaryMixedScriptProject(
+        std::vector<ScriptFile> scripts,
+        std::vector<ScriptFile> playtests = {}
+    ) {
         static std::atomic<std::uint64_t> sequence {0};
         const auto timestamp =
             std::chrono::steady_clock::now().time_since_epoch().count();
@@ -43,11 +50,14 @@ class TemporaryMixedScriptProject {
                 return std::filesystem::path {script.path}.extension() ==
                        ".lua";
             });
-        const bool has_luau =
-            std::ranges::any_of(scripts, [](const auto& script) {
+        const auto contains_luau = [](const auto& entries) {
+            return std::ranges::any_of(entries, [](const auto& script) {
                 return std::filesystem::path {script.path}.extension() ==
                        ".luau";
             });
+        };
+        const bool has_luau =
+            contains_luau(scripts) || contains_luau(playtests);
 
         std::ofstream project_stream(project_file());
         project_stream << "name: Mixed Script Runtime\n"
@@ -62,13 +72,26 @@ class TemporaryMixedScriptProject {
         project_stream << "scripts:\n";
         for (const auto& script : scripts) {
             project_stream << "  - project://" << script.path << "\n";
-            if (script.content) {
+        }
+        if (!playtests.empty()) {
+            project_stream << "playtests:\n";
+            for (const auto& playtest : playtests) {
+                project_stream << "  - project://" << playtest.path << "\n";
+            }
+        }
+        auto write_files = [this](const auto& entries) {
+            for (const auto& script : entries) {
+                if (!script.content) {
+                    continue;
+                }
                 std::ofstream script_stream(
                     m_root / "assets" / std::filesystem::path(script.path)
                 );
                 script_stream << *script.content;
             }
-        }
+        };
+        write_files(scripts);
+        write_files(playtests);
     }
 
     ~TemporaryMixedScriptProject() {
@@ -141,6 +164,148 @@ TEST_CASE(
     CHECK(luau.scripts[0].status == project_runtime::LuauScriptStatus::Loaded);
     CHECK(lua.scripts[0].module.has_value());
     CHECK(luau.scripts[0].module.has_value());
+}
+
+TEST_CASE(
+    "Project Luau playtests declare actions and observations",
+    "[project-runtime][luau][playtest]"
+) {
+    TemporaryMixedScriptProject directory(
+        {
+            ScriptFile {
+                .path = "scripts/gameplay.luau",
+                .content = std::string_view {R"(
+                    return module {
+                        name = "project.playtest_game",
+                        types = {
+                            Control = {
+                                value = field(i32, 0),
+                            },
+                        },
+                        resources = {
+                            Control = {},
+                        },
+                        systems = {},
+                    }
+                )"},
+            },
+        },
+        {
+            ScriptFile {
+                .path = "scripts/main.playtest.luau",
+                .content = std::string_view {R"(
+                    local function begin_step(ctx, action)
+                        ctx:resource(Control).value = action.value
+                    end
+
+                    local function end_step(ctx)
+                        ctx:resource(Control).value = 0
+                    end
+
+                    local function observe(ctx)
+                        return {
+                            value = ctx:resource(Control).value,
+                        }
+                    end
+
+                    return playtest {
+                        id = "game.main",
+                        label = "Main controls",
+                        types = {
+                            Control = "project.playtest_game.Control",
+                        },
+                        ticks = {
+                            default = 4,
+                            min = 1,
+                            max = 10,
+                            overridable = true,
+                        },
+                        action = {
+                            type = "object",
+                            properties = {
+                                value = {type = "integer"},
+                            },
+                            required = {"value"},
+                        },
+                        observation = {
+                            type = "object",
+                            properties = {
+                                value = {type = "integer"},
+                            },
+                            required = {"value"},
+                        },
+                        begin_step = begin_step,
+                        end_step = end_step,
+                        observe = observe,
+                    }
+                )"},
+            },
+        }
+    );
+    auto project = Project::load(directory.project_file());
+    REQUIRE(project);
+
+    App app;
+    app.add_resource(runtime_protocol::PlaytestRegistry {});
+    configure_project_runtime(app, std::move(*project));
+    app.add_plugin(project_runtime::LuauPlaytestsPlugin {});
+    app.finish();
+
+    auto& registry = app.resource<runtime_protocol::PlaytestRegistry>();
+    const auto* interface = registry.find("game.main");
+    REQUIRE(interface != nullptr);
+    CHECK(interface->descriptor.decision_ticks == 4);
+    CHECK(interface->descriptor.minimum_ticks == 1);
+    CHECK(interface->descriptor.maximum_ticks == 10);
+    CHECK(
+        nlohmann::json::parse(interface->descriptor.action_schema_json)
+            .at("properties")
+            .contains("value")
+    );
+
+    REQUIRE(interface->begin_step(app.world(), R"({"value":7})"));
+    auto observation = interface->observe(app.world());
+    REQUIRE(observation);
+    CHECK(nlohmann::json::parse(*observation).at("value") == 7);
+    REQUIRE(interface->end_step(app.world()));
+
+    observation = interface->observe(app.world());
+    REQUIRE(observation);
+    CHECK(nlohmann::json::parse(*observation).at("value") == 0);
+}
+
+TEST_CASE(
+    "Project Luau playtests require the playtest declaration helper",
+    "[project-runtime][luau][playtest]"
+) {
+    TemporaryMixedScriptProject directory(
+        {
+            ScriptFile {
+                .path = "scripts/gameplay.luau",
+                .content = std::string_view {R"(
+                    return module {
+                        name = "project.invalid_playtest",
+                        systems = {},
+                    }
+                )"},
+            },
+        },
+        {
+            ScriptFile {
+                .path = "scripts/main.playtest.luau",
+                .content = std::string_view {"return {}"},
+            },
+        }
+    );
+    auto project = Project::load(directory.project_file());
+    REQUIRE(project);
+
+    App app;
+    app.add_resource(runtime_protocol::PlaytestRegistry {});
+    configure_project_runtime(app, std::move(*project));
+    app.add_plugin(project_runtime::LuauPlaytestsPlugin {});
+
+    REQUIRE_THROWS_AS(app.finish(), std::runtime_error);
 }
 
 TEST_CASE(
