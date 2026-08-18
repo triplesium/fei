@@ -144,7 +144,7 @@ void ProviderPlugin::setup(App& app) {
     app.add_resource(InputState {});
     app.configure_sets(
            PreUpdate,
-           chain(InputSystems::Update {}, InputSystems::ApplyDevtools {})
+           chain(InputSystems::ApplyVirtual {}, InputSystems::ApplyDevtools {})
     )
         .add_systems(
             PreUpdate,

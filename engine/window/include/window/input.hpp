@@ -5,12 +5,16 @@
 #include "window/window.hpp"
 
 #include <cstdint>
+#include <span>
+#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace fei {
 
 struct InputSystems {
     struct Update : SystemSet<Update> {};
+    struct ApplyVirtual : SystemSet<ApplyVirtual> {};
     struct ApplyDevtools : SystemSet<ApplyDevtools> {};
 };
 FEI_REFLECT()
@@ -35,6 +39,15 @@ constexpr const char* key_code_to_string(KeyCode key_code) noexcept {
 #undef KEY_CODE
     }
     return "Unknown";
+}
+
+constexpr KeyCode key_code_from_string(std::string_view name) noexcept {
+    for (auto key : c_key_codes) {
+        if (name == key_code_to_string(key)) {
+            return key;
+        }
+    }
+    return KeyCode::Unknown;
 }
 
 enum class KeyState : int32_t {
@@ -81,6 +94,31 @@ class KeyInput {
         bool down_last_frame {false};
     };
     std::unordered_map<KeyCode, KeyStateInternal> m_keys;
+};
+
+class VirtualInput {
+  public:
+    void set_exclusive(bool exclusive) { m_exclusive = exclusive; }
+    [[nodiscard]] bool exclusive() const { return m_exclusive; }
+
+    void set_pressed_keys(std::span<const KeyCode> keys) {
+        m_pressed_keys.clear();
+        for (auto key : keys) {
+            if (key != KeyCode::Unknown) {
+                m_pressed_keys.insert(key);
+            }
+        }
+    }
+
+    void clear() { m_pressed_keys.clear(); }
+
+    [[nodiscard]] bool pressed(KeyCode key) const {
+        return m_pressed_keys.contains(key);
+    }
+
+  private:
+    std::unordered_set<KeyCode> m_pressed_keys;
+    bool m_exclusive {false};
 };
 
 enum class MouseButton : int32_t {
@@ -132,6 +170,10 @@ class MouseInput {
 
 void key_input_system(ResRO<Window> win, ResRW<KeyInput> input);
 void mouse_input_system(ResRO<Window> win, ResRW<MouseInput> input);
+void apply_virtual_key_input(
+    ResRO<VirtualInput> virtual_input,
+    ResRW<KeyInput> input
+);
 
 FEI_REFLECT(Plugin)
 class InputPlugin : public Plugin {
@@ -139,10 +181,16 @@ class InputPlugin : public Plugin {
     void setup(App& app) override {
         app.add_resource<KeyInput>();
         app.add_resource<MouseInput>();
+        app.add_resource<VirtualInput>();
+        app.configure_sets(
+            PreUpdate,
+            chain(InputSystems::Update {}, InputSystems::ApplyVirtual {})
+        );
         app.add_systems(
             PreUpdate,
             key_input_system | in_set<InputSystems::Update>(),
-            mouse_input_system | in_set<InputSystems::Update>()
+            mouse_input_system | in_set<InputSystems::Update>(),
+            apply_virtual_key_input | in_set<InputSystems::ApplyVirtual>()
         );
     }
 };

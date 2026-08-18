@@ -33,4 +33,20 @@ void mouse_input_system(ResRO<Window> win, ResRW<MouseInput> input) {
     input->set_position({static_cast<float>(xpos), static_cast<float>(ypos)});
 }
 
+void apply_virtual_key_input(
+    ResRO<VirtualInput> virtual_input,
+    ResRW<KeyInput> input
+) {
+    if (!virtual_input->exclusive()) {
+        return;
+    }
+    for (auto key : c_key_codes) {
+        if (virtual_input->pressed(key)) {
+            input->press(key);
+        } else {
+            input->release(key);
+        }
+    }
+}
+
 } // namespace fei
