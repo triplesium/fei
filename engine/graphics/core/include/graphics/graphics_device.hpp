@@ -1,4 +1,5 @@
 #pragma once
+#include "base/result.hpp"
 #include "ecs/resource_traits.hpp"
 #include "graphics/buffer.hpp"
 #include "graphics/command_buffer.hpp"
@@ -102,6 +103,16 @@ class GraphicsDevice {
     create_texture_readback(uint32 max_in_flight = 3) const = 0;
 
     virtual void present(const Swapchain& swapchain) const = 0;
+
+    [[nodiscard]] virtual Result<TextureReadbackFrame, std::string>
+    capture_presented_frame(const Swapchain&) const {
+        return failure(
+            std::string(
+                "Presented frame capture is not supported by this graphics "
+                "backend"
+            )
+        );
+    }
 
     // Transforms the engine's OpenGL-style clip depth to the backend's GPU
     // clip depth. Y orientation is handled by viewport/present policy.

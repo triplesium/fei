@@ -21,6 +21,7 @@
 #include <cstring>
 #include <deque>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <span>
 #include <thread>
@@ -686,6 +687,75 @@ void GraphicsDeviceOpenGL::present(const Swapchain& swapchain) const {
     FEI_PROFILE_SCOPE("OpenGL Present");
     flush();
     swapchain.present();
+}
+
+Result<TextureReadbackFrame, std::string>
+GraphicsDeviceOpenGL::capture_presented_frame(
+    const Swapchain& swapchain
+) const {
+    assert_context_thread("GraphicsDeviceOpenGL::capture_presented_frame");
+    const auto width = swapchain.width();
+    const auto height = swapchain.height();
+    if (width == 0 || height == 0) {
+        return failure(std::string("Cannot capture an empty swapchain"));
+    }
+    constexpr std::size_t c_channels = 4;
+    if (static_cast<std::size_t>(width) >
+        std::numeric_limits<std::size_t>::max() /
+            static_cast<std::size_t>(height) / c_channels) {
+        return failure(std::string("Swapchain capture dimensions overflow"));
+    }
+
+    GLint previous_read_framebuffer = 0;
+    GLint previous_read_buffer = 0;
+    GLint previous_pack_alignment = 0;
+    GLint previous_pack_buffer = 0;
+    FEI_GL_CALL(
+        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previous_read_framebuffer)
+    );
+    FEI_GL_CALL(glGetIntegerv(GL_READ_BUFFER, &previous_read_buffer));
+    FEI_GL_CALL(glGetIntegerv(GL_PACK_ALIGNMENT, &previous_pack_alignment));
+    FEI_GL_CALL(
+        glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &previous_pack_buffer)
+    );
+
+    TextureReadbackFrame frame {
+        .data = std::vector<byte>(
+            static_cast<std::size_t>(width) * static_cast<std::size_t>(height) *
+            c_channels
+        ),
+        .width = width,
+        .height = height,
+        .depth = 1,
+        .format = PixelFormat::Rgba8Unorm,
+        .data_origin = TextureDataOrigin::BottomLeft,
+    };
+
+    FEI_GL_CALL(glBindFramebuffer(GL_READ_FRAMEBUFFER, 0));
+    FEI_GL_CALL(glBindBuffer(GL_PIXEL_PACK_BUFFER, 0));
+    FEI_GL_CALL(glReadBuffer(GL_FRONT));
+    FEI_GL_CALL(glPixelStorei(GL_PACK_ALIGNMENT, 1));
+    FEI_GL_CALL(glReadPixels(
+        0,
+        0,
+        static_cast<GLsizei>(width),
+        static_cast<GLsizei>(height),
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        frame.data.data()
+    ));
+
+    FEI_GL_CALL(glPixelStorei(GL_PACK_ALIGNMENT, previous_pack_alignment));
+    FEI_GL_CALL(glBindBuffer(
+        GL_PIXEL_PACK_BUFFER,
+        static_cast<GLuint>(previous_pack_buffer)
+    ));
+    FEI_GL_CALL(glBindFramebuffer(
+        GL_READ_FRAMEBUFFER,
+        static_cast<GLuint>(previous_read_framebuffer)
+    ));
+    FEI_GL_CALL(glReadBuffer(static_cast<GLenum>(previous_read_buffer)));
+    return frame;
 }
 
 void GraphicsDeviceOpenGL::flush() const {

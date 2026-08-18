@@ -245,6 +245,8 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
     create_texture_readback(uint32 max_in_flight = 3) const override;
 
     void present(const Swapchain& swapchain) const override;
+    [[nodiscard]] Result<TextureReadbackFrame, std::string>
+    capture_presented_frame(const Swapchain& swapchain) const override;
     void flush() const override;
     [[nodiscard]] std::size_t uniform_buffer_offset_alignment() const override {
         return m_uniform_buffer_offset_alignment;
