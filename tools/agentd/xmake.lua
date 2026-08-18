@@ -1,9 +1,16 @@
 target("fei-agentd-core")
     set_kind("static")
-    add_headerfiles("src/*.hpp")
+    add_headerfiles(
+        "src/artifact_store.hpp",
+        "src/process.hpp",
+        "src/project_descriptor.hpp",
+        "src/server.hpp",
+        "src/state.hpp"
+    )
     add_files(
         "src/state.cpp",
         "src/server.cpp",
+        "src/artifact_store.cpp",
         "src/process.cpp",
         "src/project_descriptor.cpp"
     )
