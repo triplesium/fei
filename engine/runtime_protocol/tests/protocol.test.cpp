@@ -162,6 +162,7 @@ TEST_CASE(
     };
     auto encoded_success = encode_inspection_response(success);
     REQUIRE(encoded_success);
+    CHECK(encoded_success->find("\"attachment\"") == std::string::npos);
     auto decoded_success = decode_inspection_response(*encoded_success);
     REQUIRE(decoded_success);
     CHECK(decoded_success->ok);
@@ -181,4 +182,32 @@ TEST_CASE(
     CHECK_FALSE(decoded_failure->ok);
     CHECK(decoded_failure->error_kind == "not_found");
     CHECK(decoded_failure->error_message == failure_response.error_message);
+}
+
+TEST_CASE(
+    "Inspection responses preserve binary attachments",
+    "[runtime-protocol][inspection][attachment]"
+) {
+    const InspectionResponse source {
+        .session = "session-attachment",
+        .request_id = "inspection-attachment",
+        .ok = true,
+        .payload_json = R"({"frame":7,"format":"png"})",
+        .attachment_content_type = "image/png",
+        .attachment = {
+            byte {0x89},
+            byte {0x50},
+            byte {0x4e},
+            byte {0x47},
+            byte {0x0d},
+        },
+    };
+
+    auto encoded = encode_inspection_response(source);
+    REQUIRE(encoded);
+    auto decoded = decode_inspection_response(*encoded);
+    REQUIRE(decoded);
+    CHECK(decoded->payload_json == R"({"format":"png","frame":7})");
+    CHECK(decoded->attachment_content_type == "image/png");
+    CHECK(decoded->attachment == source.attachment);
 }

@@ -1,10 +1,12 @@
 #pragma once
 
 #include "app/plugin.hpp"
+#include "base/optional.hpp"
 #include "base/result.hpp"
 #include "base/types.hpp"
 #include "runtime_protocol/protocol.hpp"
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <string>
@@ -33,6 +35,7 @@ struct RuntimeProbeConfig {
     std::string build_id;
     std::vector<InspectionCapability> inspections;
     uint32 heartbeat_interval_ms {500};
+    bool manual_inspection_dispatch {false};
     RuntimeInspectionHandler inspection_handler;
 };
 
@@ -53,6 +56,9 @@ class RuntimeProbe {
     ~RuntimeProbe();
 
     void on_frame(World& world);
+    [[nodiscard]] Optional<InspectionRequest>
+    wait_for_inspection(std::chrono::milliseconds timeout);
+    void complete_inspection(InspectionResponse response);
     void stop() noexcept;
 
     [[nodiscard]] RuntimeProbeStatus status() const;

@@ -15,6 +15,8 @@ inline constexpr std::size_t c_max_inspection_request_payload_bytes =
     std::size_t {64} * 1024;
 inline constexpr std::size_t c_max_inspection_response_payload_bytes =
     std::size_t {8} * 1024 * 1024;
+inline constexpr std::size_t c_max_inspection_response_attachment_bytes =
+    std::size_t {16} * 1024 * 1024;
 inline constexpr std::size_t c_max_inspection_contract_schema_bytes =
     std::size_t {64} * 1024;
 
@@ -77,6 +79,8 @@ struct InspectionResponse {
     std::string request_id;
     bool ok {false};
     std::string payload_json {"null"};
+    std::string attachment_content_type;
+    std::vector<byte> attachment;
     std::string error_kind;
     std::string error_message;
 };

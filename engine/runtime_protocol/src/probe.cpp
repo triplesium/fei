@@ -88,6 +88,10 @@ class RuntimeProbe::Impl {
         m_frame.fetch_add(1, std::memory_order_relaxed);
         m_lifecycle.store(RuntimeLifecycle::Running, std::memory_order_relaxed);
 
+        if (m_config.manual_inspection_dispatch) {
+            return;
+        }
+
         std::deque<InspectionRequest> requests;
         {
             std::scoped_lock lock(m_inspection_mutex);
@@ -124,12 +128,31 @@ class RuntimeProbe::Impl {
                         "Inspection handler failed with an unknown exception";
                 }
             }
-            {
-                std::scoped_lock lock(m_inspection_mutex);
-                m_inspection_responses.push_back(std::move(response));
-            }
-            m_wake.notify_all();
+            { complete_inspection(std::move(response)); }
         }
+    }
+
+    Optional<InspectionRequest>
+    wait_for_inspection(std::chrono::milliseconds timeout) {
+        std::unique_lock lock(m_inspection_mutex);
+        (void)m_inspection_ready.wait_for(lock, timeout, [this]() {
+            return !m_inspection_requests.empty() ||
+                   !m_running.load(std::memory_order_relaxed);
+        });
+        if (m_inspection_requests.empty()) {
+            return nullopt;
+        }
+        auto request = std::move(m_inspection_requests.front());
+        m_inspection_requests.pop_front();
+        return request;
+    }
+
+    void complete_inspection(InspectionResponse response) {
+        {
+            std::scoped_lock lock(m_inspection_mutex);
+            m_inspection_responses.push_back(std::move(response));
+        }
+        m_wake.notify_all();
     }
 
     void stop() noexcept {
@@ -141,6 +164,7 @@ class RuntimeProbe::Impl {
             std::memory_order_relaxed
         );
         m_wake.notify_all();
+        m_inspection_ready.notify_all();
         if (m_worker.joinable()) {
             m_worker.join();
         }
@@ -288,6 +312,7 @@ class RuntimeProbe::Impl {
             m_inspection_requests.push_back(std::move(*request));
         }
         m_inspection_in_flight.store(true, std::memory_order_relaxed);
+        m_inspection_ready.notify_one();
         return true;
     }
 
@@ -357,6 +382,7 @@ class RuntimeProbe::Impl {
         }
 
         if (m_connected.load(std::memory_order_relaxed)) {
+            (void)flush_inspection_responses(client);
             send_goodbye(client);
         }
         set_connection(false);
@@ -378,6 +404,7 @@ class RuntimeProbe::Impl {
     std::mutex m_wait_mutex;
     std::condition_variable m_wake;
     std::mutex m_inspection_mutex;
+    std::condition_variable m_inspection_ready;
     std::deque<InspectionRequest> m_inspection_requests;
     std::deque<InspectionResponse> m_inspection_responses;
     std::thread m_worker;
@@ -394,6 +421,15 @@ RuntimeProbe::~RuntimeProbe() = default;
 
 void RuntimeProbe::on_frame(World& world) {
     m_impl->on_frame(world);
+}
+
+Optional<InspectionRequest>
+RuntimeProbe::wait_for_inspection(std::chrono::milliseconds timeout) {
+    return m_impl->wait_for_inspection(timeout);
+}
+
+void RuntimeProbe::complete_inspection(InspectionResponse response) {
+    m_impl->complete_inspection(std::move(response));
 }
 
 void RuntimeProbe::stop() noexcept {

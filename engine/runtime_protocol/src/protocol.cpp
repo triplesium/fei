@@ -1,7 +1,9 @@
 #include "runtime_protocol/protocol.hpp"
 
+#include <algorithm>
 #include <exception>
 #include <nlohmann/json.hpp>
+#include <span>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -10,6 +12,93 @@ namespace fei::runtime_protocol {
 namespace {
 
 using Json = nlohmann::json;
+
+std::string encode_base64(std::span<const byte> bytes) {
+    constexpr std::string_view alphabet =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string encoded;
+    encoded.reserve(((bytes.size() + 2) / 3) * 4);
+    for (std::size_t offset = 0; offset < bytes.size(); offset += 3) {
+        const auto first = std::to_integer<unsigned int>(bytes[offset]);
+        const auto second =
+            offset + 1 < bytes.size() ?
+                std::to_integer<unsigned int>(bytes[offset + 1]) :
+                0;
+        const auto third =
+            offset + 2 < bytes.size() ?
+                std::to_integer<unsigned int>(bytes[offset + 2]) :
+                0;
+        const auto value = (first << 16U) | (second << 8U) | third;
+        encoded.push_back(alphabet[(value >> 18U) & 0x3fU]);
+        encoded.push_back(alphabet[(value >> 12U) & 0x3fU]);
+        encoded.push_back(
+            offset + 1 < bytes.size() ? alphabet[(value >> 6U) & 0x3fU] : '='
+        );
+        encoded.push_back(
+            offset + 2 < bytes.size() ? alphabet[value & 0x3fU] : '='
+        );
+    }
+    return encoded;
+}
+
+int decode_base64_character(char value) {
+    if (value >= 'A' && value <= 'Z') {
+        return value - 'A';
+    }
+    if (value >= 'a' && value <= 'z') {
+        return value - 'a' + 26;
+    }
+    if (value >= '0' && value <= '9') {
+        return value - '0' + 52;
+    }
+    if (value == '+') {
+        return 62;
+    }
+    if (value == '/') {
+        return 63;
+    }
+    return -1;
+}
+
+Result<std::vector<byte>, std::string> decode_base64(std::string_view source) {
+    if (source.size() % 4 != 0) {
+        return failure(std::string("Attachment Base64 length is invalid"));
+    }
+    std::vector<byte> decoded;
+    decoded.reserve((source.size() / 4) * 3);
+    for (std::size_t offset = 0; offset < source.size(); offset += 4) {
+        const bool final_group = offset + 4 == source.size();
+        const auto first = decode_base64_character(source[offset]);
+        const auto second = decode_base64_character(source[offset + 1]);
+        const auto third = source[offset + 2] == '=' ?
+                               -1 :
+                               decode_base64_character(source[offset + 2]);
+        const auto fourth = source[offset + 3] == '=' ?
+                                -1 :
+                                decode_base64_character(source[offset + 3]);
+        if (first < 0 || second < 0 ||
+            (source[offset + 2] != '=' && third < 0) ||
+            (source[offset + 3] != '=' && fourth < 0) ||
+            (source[offset + 2] == '=' && source[offset + 3] != '=') ||
+            (!final_group &&
+             (source[offset + 2] == '=' || source[offset + 3] == '='))) {
+            return failure(std::string("Attachment Base64 data is invalid"));
+        }
+        const auto value =
+            (static_cast<unsigned int>(first) << 18U) |
+            (static_cast<unsigned int>(second) << 12U) |
+            (static_cast<unsigned int>(std::max(third, 0)) << 6U) |
+            static_cast<unsigned int>(std::max(fourth, 0));
+        decoded.push_back(byte((value >> 16U) & 0xffU));
+        if (source[offset + 2] != '=') {
+            decoded.push_back(byte((value >> 8U) & 0xffU));
+        }
+        if (source[offset + 3] != '=') {
+            decoded.push_back(byte(value & 0xffU));
+        }
+    }
+    return decoded;
+}
 
 Result<Json, std::string> parse_message(std::string_view source) {
     try {
@@ -239,6 +328,12 @@ validate_inspection_response_fields(const InspectionResponse& message) {
         return status;
     }
     if (!message.ok) {
+        if (!message.attachment.empty() ||
+            !message.attachment_content_type.empty()) {
+            return failure(
+                std::string("Failed inspection responses cannot attach data")
+            );
+        }
         if (auto status = validate_inspection_identifier(
                 "Inspection error kind",
                 message.error_kind
@@ -251,6 +346,31 @@ validate_inspection_response_fields(const InspectionResponse& message) {
                 std::string("Inspection error message must not be empty")
             );
         }
+    }
+    if (message.attachment.empty() != message.attachment_content_type.empty()) {
+        return failure(
+            std::string(
+                "Inspection response attachment data and content type must "
+                "both be present"
+            )
+        );
+    }
+    if (!message.attachment.empty()) {
+        if (auto status = validate_inspection_identifier(
+                "Inspection response attachment content type",
+                message.attachment_content_type
+            );
+            !status) {
+            return status;
+        }
+    }
+    if (message.attachment.size() >
+        c_max_inspection_response_attachment_bytes) {
+        return failure(
+            std::string("Inspection response attachment exceeds ") +
+            std::to_string(c_max_inspection_response_attachment_bytes) +
+            " bytes"
+        );
     }
     return {};
 }
@@ -569,6 +689,7 @@ encode_inspection_response(const InspectionResponse& message) {
 
     Json payload = nullptr;
     Json error = nullptr;
+    Json attachment = nullptr;
     if (message.ok) {
         auto parsed = parse_inspection_payload(
             message.payload_json,
@@ -579,21 +700,31 @@ encode_inspection_response(const InspectionResponse& message) {
             return failure(std::move(parsed.error()));
         }
         payload = std::move(*parsed);
+        if (!message.attachment.empty()) {
+            attachment = Json {
+                {"content_type", message.attachment_content_type},
+                {"encoding", "base64"},
+                {"data", encode_base64(message.attachment)},
+            };
+        }
     } else {
         error = Json {
             {"kind", message.error_kind},
             {"message", message.error_message},
         };
     }
-    return Json {
+    Json document {
         {"version", message.version},
         {"session", message.session},
         {"request_id", message.request_id},
         {"ok", message.ok},
         {"payload", std::move(payload)},
         {"error", std::move(error)},
+    };
+    if (!attachment.is_null()) {
+        document["attachment"] = std::move(attachment);
     }
-        .dump();
+    return document.dump();
 }
 
 Result<InspectionResponse, std::string>
@@ -609,6 +740,26 @@ decode_inspection_response(std::string_view json) {
                 .ok = ok,
                 .payload_json = message.at("payload").dump(),
             };
+            if (message.contains("attachment") &&
+                !message.at("attachment").is_null()) {
+                const auto& attachment = message.at("attachment");
+                if (!attachment.is_object() ||
+                    attachment.at("encoding").get<std::string_view>() !=
+                        "base64") {
+                    return failure(
+                        std::string("Invalid inspection response attachment")
+                    );
+                }
+                auto decoded = decode_base64(
+                    attachment.at("data").get<std::string_view>()
+                );
+                if (!decoded) {
+                    return failure(std::move(decoded.error()));
+                }
+                result.attachment_content_type =
+                    attachment.at("content_type").get<std::string>();
+                result.attachment = std::move(*decoded);
+            }
             if (!ok) {
                 const auto& error = message.at("error");
                 result.error_kind = error.at("kind").get<std::string>();
