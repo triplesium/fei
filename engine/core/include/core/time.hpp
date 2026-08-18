@@ -1,5 +1,6 @@
 #pragma once
 #include "app/plugin.hpp"
+#include "base/optional.hpp"
 #include "ecs/system_params.hpp"
 #include "refl/reflect.hpp"
 
@@ -17,6 +18,11 @@ struct Time {
     float delta() const;
     float elapsed_time() const { return m_elapsed_time; }
 
+    void set_fixed_delta(float delta);
+    void clear_fixed_delta();
+    void reset_elapsed_time(float elapsed_time = 0.0f);
+    [[nodiscard]] Optional<float> fixed_delta() const { return m_fixed_delta; }
+
     float time_scale {1.0f};
 
   private:
@@ -28,6 +34,7 @@ struct Time {
     };
     float m_delta_time = 0.0f;
     float m_elapsed_time = 0.0f;
+    Optional<float> m_fixed_delta;
 };
 
 enum TimerMode {

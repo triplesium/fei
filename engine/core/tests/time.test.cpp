@@ -1,6 +1,7 @@
 #include "core/time.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <stdexcept>
 
 using namespace fei;
 
@@ -50,4 +51,31 @@ TEST_CASE("Time applies time scale to delta", "[core][time]") {
 
     REQUIRE(time.delta() == 0.0f);
     REQUIRE(time.elapsed_time() >= 0.0f);
+}
+
+TEST_CASE(
+    "Time advances deterministically with a fixed delta",
+    "[core][time]"
+) {
+    Time time;
+    time.set_fixed_delta(0.25f);
+    time.reset_elapsed_time();
+    time.time_scale = 2.0f;
+
+    time.tick();
+    CHECK(time.delta() == 0.5f);
+    CHECK(time.elapsed_time() == 0.25f);
+
+    time.tick();
+    CHECK(time.delta() == 0.5f);
+    CHECK(time.elapsed_time() == 0.5f);
+
+    time.clear_fixed_delta();
+    CHECK_FALSE(time.fixed_delta().has_value());
+}
+
+TEST_CASE("Time rejects invalid manual values", "[core][time]") {
+    Time time;
+    REQUIRE_THROWS_AS(time.set_fixed_delta(0.0f), std::invalid_argument);
+    REQUIRE_THROWS_AS(time.reset_elapsed_time(-1.0f), std::invalid_argument);
 }

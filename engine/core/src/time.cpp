@@ -2,10 +2,19 @@
 
 #include "app/app.hpp"
 
+#include <cmath>
+#include <stdexcept>
+
 namespace fei {
 
 void Time::tick() {
     auto now = std::chrono::steady_clock::now();
+    if (m_fixed_delta) {
+        m_delta_time = *m_fixed_delta * time_scale;
+        m_elapsed_time += *m_fixed_delta;
+        m_last_tick_time = now;
+        return;
+    }
     auto duration = std::chrono::duration_cast<std::chrono::duration<float>>(
                         now - m_last_tick_time
     )
@@ -20,6 +29,35 @@ void Time::tick() {
 
 float Time::delta() const {
     return m_delta_time;
+}
+
+void Time::set_fixed_delta(float delta) {
+    if (!std::isfinite(delta) || delta <= 0.0f) {
+        throw std::invalid_argument(
+            "Fixed time delta must be finite and positive"
+        );
+    }
+    m_fixed_delta = delta;
+    m_last_tick_time = std::chrono::steady_clock::now();
+}
+
+void Time::clear_fixed_delta() {
+    m_fixed_delta.reset();
+    m_last_tick_time = std::chrono::steady_clock::now();
+}
+
+void Time::reset_elapsed_time(float elapsed_time) {
+    if (!std::isfinite(elapsed_time) || elapsed_time < 0.0f) {
+        throw std::invalid_argument(
+            "Elapsed time must be finite and non-negative"
+        );
+    }
+    m_elapsed_time = elapsed_time;
+    m_start_time =
+        std::chrono::steady_clock::now() -
+        std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+            std::chrono::duration<float>(elapsed_time)
+        );
 }
 
 Timer::Timer(float duration_seconds, TimerMode mode) :
