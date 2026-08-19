@@ -11,12 +11,14 @@
 
 namespace fei::ui {
 
+FEI_REFLECT()
 enum class LengthUnit {
     Auto,
     Px,
     Percent,
 };
 
+FEI_REFLECT()
 struct Length {
     float value {0.0f};
     LengthUnit unit {LengthUnit::Auto};
@@ -43,38 +45,51 @@ struct Length {
     return Length::percent(value);
 }
 
+FEI_REFLECT()
 struct Edges {
     Length left;
     Length right;
     Length top;
     Length bottom;
 
+    [[nodiscard]] static constexpr Edges all(Length value) {
+        return {.left = value, .right = value, .top = value, .bottom = value};
+    }
+
+    [[nodiscard]] static constexpr Edges
+    axes(Length horizontal, Length vertical) {
+        return {
+            .left = horizontal,
+            .right = horizontal,
+            .top = vertical,
+            .bottom = vertical,
+        };
+    }
+
     bool operator==(const Edges&) const = default;
 };
 
 [[nodiscard]] constexpr Edges all(Length value) {
-    return {.left = value, .right = value, .top = value, .bottom = value};
+    return Edges::all(value);
 }
 
 [[nodiscard]] constexpr Edges axes(Length horizontal, Length vertical) {
-    return {
-        .left = horizontal,
-        .right = horizontal,
-        .top = vertical,
-        .bottom = vertical,
-    };
+    return Edges::axes(horizontal, vertical);
 }
 
+FEI_REFLECT()
 enum class Display {
     Flex,
     None,
 };
 
+FEI_REFLECT()
 enum class PositionType {
     Relative,
     Absolute,
 };
 
+FEI_REFLECT()
 enum class OverflowAxis {
     Visible,
     Clip,
@@ -82,6 +97,7 @@ enum class OverflowAxis {
     Scroll,
 };
 
+FEI_REFLECT()
 struct Overflow {
     OverflowAxis x {OverflowAxis::Visible};
     OverflowAxis y {OverflowAxis::Visible};
@@ -125,11 +141,13 @@ struct ScrollPosition {
     bool operator==(const ScrollPosition&) const = default;
 };
 
+FEI_REFLECT()
 enum class FlexDirection {
     Row,
     Column,
 };
 
+FEI_REFLECT()
 enum class AlignItems {
     Start,
     Center,
@@ -137,6 +155,7 @@ enum class AlignItems {
     Stretch,
 };
 
+FEI_REFLECT()
 enum class JustifyContent {
     Start,
     Center,
@@ -175,6 +194,7 @@ struct Node {
     Length bottom;
 };
 
+FEI_REFLECT()
 struct ResolvedBorder {
     float left {0.0f};
     float top {0.0f};
@@ -201,6 +221,7 @@ struct BorderRadius {
     }
 };
 
+FEI_REFLECT()
 struct ResolvedBorderRadius {
     float top_left {0.0f};
     float top_right {0.0f};

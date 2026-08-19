@@ -6,6 +6,7 @@
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
 
+#include <algorithm>
 #include <string>
 
 namespace fei {
@@ -129,6 +130,17 @@ bool script_has_method(Ref instance, std::string_view name) {
     return cls && cls->has_method(std::string {name});
 }
 
+bool script_has_static_method(TypeId type, std::string_view name) {
+    auto cls = Registry::instance().try_get_cls(type);
+    if (!cls) {
+        return false;
+    }
+    const auto methods = cls->get_methods(std::string {name});
+    return std::ranges::any_of(methods, [](const Method* method) {
+        return method != nullptr && method->is_static();
+    });
+}
+
 InvokeResult script_invoke_method(
     Ref instance,
     std::string_view name,
@@ -156,6 +168,58 @@ InvokeResult script_invoke_method(
         return failure(std::move(method.error()));
     }
     return method->invoke_variadic(invocation_arguments);
+}
+
+InvokeResult script_invoke_static_method(
+    TypeId type,
+    std::string_view name,
+    const std::vector<Ref>& arguments
+) {
+    auto cls = Registry::instance().try_get_cls(type);
+    if (!cls) {
+        return failure(InvokeFailure::invalid_call(cls.error().message));
+    }
+
+    Method* best = nullptr;
+    int best_score = 0;
+    bool ambiguous = false;
+    for (auto* method : cls->get_methods(std::string {name})) {
+        if (method == nullptr || !method->is_static()) {
+            continue;
+        }
+        const auto score = method->match_score(arguments);
+        if (!score) {
+            continue;
+        }
+        if (best == nullptr || *score < best_score) {
+            best = method;
+            best_score = *score;
+            ambiguous = false;
+        } else if (*score == best_score) {
+            ambiguous = true;
+        }
+    }
+
+    auto reflected_type = Registry::instance().try_get_type(type);
+    const auto type_name =
+        reflected_type ? reflected_type->name() : std::to_string(type.id());
+    if (ambiguous) {
+        return failure(
+            InvokeFailure::invalid_call(
+                "Ambiguous static method '" + type_name + "." +
+                std::string {name} + "'"
+            )
+        );
+    }
+    if (best == nullptr) {
+        return failure(
+            InvokeFailure::invalid_call(
+                "No matching static method '" + type_name + "." +
+                std::string {name} + "' found"
+            )
+        );
+    }
+    return best->invoke_variadic(arguments);
 }
 
 } // namespace fei

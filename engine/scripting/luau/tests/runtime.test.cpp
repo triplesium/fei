@@ -14,6 +14,12 @@ namespace fei::luau_runtime_test::nested {
 
 struct Value {};
 
+struct StaticFactory {
+    int value {0};
+
+    static StaticFactory make(int value) { return {.value = value}; }
+};
+
 enum class Mode {
     Active,
 };
@@ -112,7 +118,57 @@ TEST_CASE(
         *module,
         Registry::instance().get_type(value_type.type_id())
     ));
+    REQUIRE(runtime.bind_module_script_type(
+        *module,
+        Registry::instance().get_type(mode.type_id())
+    ));
     REQUIRE(runtime.bind_module_script_enum(*module, mode));
+    REQUIRE(runtime.seal_module_script_namespaces(*module));
+    CHECK(runtime.call_module_function(*module, "verify"));
+}
+
+TEST_CASE(
+    "Luau runtime invokes reflected static methods through type tokens",
+    "[scripting_luau][runtime][reflection][static]"
+) {
+    auto& type = Registry::instance()
+                     .register_cls<luau_runtime_test::nested::StaticFactory>(
+                         {"fei", "luau_runtime_test", "nested"},
+                         "StaticFactory"
+                     )
+                     .add_property(
+                         "value",
+                         &luau_runtime_test::nested::StaticFactory::value
+                     )
+                     .add_method(
+                         "make",
+                         &luau_runtime_test::nested::StaticFactory::make
+                     );
+    const ScriptSource source {
+        .name = "static_method.luau",
+        .content = R"(
+            local function verify()
+                local value =
+                    luau_runtime_test.nested.StaticFactory.make(23)
+                assert(value.value == 23)
+            end
+
+            return module {
+                name = "static_method",
+                systems = { system(Update, verify) },
+            }
+        )",
+    };
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact);
+
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module);
+    REQUIRE(runtime.bind_module_script_type(
+        *module,
+        Registry::instance().get_type(type.type_id())
+    ));
     REQUIRE(runtime.seal_module_script_namespaces(*module));
     CHECK(runtime.call_module_function(*module, "verify"));
 }

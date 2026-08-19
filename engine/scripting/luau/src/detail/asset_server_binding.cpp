@@ -110,6 +110,25 @@ int asset_server_is_loaded(lua_State* state) {
     return 1;
 }
 
+int asset_server_load_error(lua_State* state) {
+    if (lua_gettop(state) != 2) {
+        luaL_error(state, "AssetServer.load_error expects one asset handle");
+    }
+    const auto& server = check_asset_server(state, 1);
+    auto handle = check_luau_borrowed_ref(state, 2);
+    auto key = server.asset_key(handle.ref);
+    if (!key) {
+        return raise_message(state, key.error().message);
+    }
+    auto error = server.load_error(*key);
+    if (!error) {
+        lua_pushnil(state);
+        return 1;
+    }
+    lua_pushlstring(state, error->message.data(), error->message.size());
+    return 1;
+}
+
 } // namespace
 
 bool luau_is_asset_server(TypeId type) {
@@ -127,6 +146,10 @@ bool push_luau_asset_server_member(lua_State* state, const char* key) {
         std::pair<std::string_view, lua_CFunction> {
             "is_loaded",
             asset_server_is_loaded,
+        },
+        std::pair<std::string_view, lua_CFunction> {
+            "load_error",
+            asset_server_load_error,
         },
     };
     for (const auto& [method_name, function] : methods) {

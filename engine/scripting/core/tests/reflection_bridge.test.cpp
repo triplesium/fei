@@ -1,5 +1,6 @@
 #include "scripting/reflection_bridge.hpp"
 
+#include "refl/cls.hpp"
 #include "refl/registry.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -8,6 +9,12 @@ namespace fei::scripting_test {
 
 struct VisibleType {};
 struct HiddenType {};
+
+struct StaticFactory {
+    int value {0};
+
+    static StaticFactory make(int value) { return {.value = value}; }
+};
 
 } // namespace fei::scripting_test
 
@@ -44,4 +51,28 @@ TEST_CASE(
     registry.add_generated_annotation<scripting_test::HiddenType>("NoScript");
 
     CHECK_FALSE(is_script_visible(type));
+}
+
+TEST_CASE(
+    "Script reflection invokes static methods without an instance",
+    "[scripting][reflection][static]"
+) {
+    auto& registry = Registry::instance();
+    registry
+        .register_cls<scripting_test::StaticFactory>(
+            {"fei", "scripting_test"},
+            "StaticFactory"
+        )
+        .add_property("value", &scripting_test::StaticFactory::value)
+        .add_method("make", &scripting_test::StaticFactory::make);
+
+    const int input = 17;
+    const auto type = type_id<scripting_test::StaticFactory>();
+    REQUIRE(script_has_static_method(type, "make"));
+    REQUIRE_FALSE(script_has_static_method(type, "missing"));
+
+    auto result = script_invoke_static_method(type, "make", {Ref(input)});
+    REQUIRE(result);
+    REQUIRE(result->is_value());
+    CHECK(result->value().get<scripting_test::StaticFactory>().value == 17);
 }

@@ -137,6 +137,7 @@ void push_owned_value(lua_State* state, Val value) {
 Result<Val, std::string>
 value_for_type(lua_State* state, int index, TypeId expected);
 Result<Val, std::string> argument_value(lua_State* state, int index);
+int invoke_static_method(lua_State* state);
 
 int type_new(lua_State* state) {
     const TypeId type = check_luau_type_token(
@@ -230,6 +231,19 @@ int type_token_index(lua_State* state) {
             reflected_type->name().data(),
             reflected_type->name().size()
         );
+        return 1;
+    }
+    if (auto enm = Registry::instance().try_get_enum(type)) {
+        const auto enumerator = enm->enumerators().find(key);
+        if (enumerator != enm->enumerators().end()) {
+            push_owned_value(state, enm->make_val(enumerator->second));
+            return 1;
+        }
+    }
+    if (script_has_static_method(type, key)) {
+        lua_pushstring(state, key);
+        lua_pushvalue(state, 1);
+        lua_pushcclosure(state, invoke_static_method, key, 2);
         return 1;
     }
     return raise_message(
@@ -363,6 +377,37 @@ int push_invoke_result(
         }
     }
     return 0;
+}
+
+int invoke_static_method(lua_State* state) {
+    const char* name = lua_tostring(state, lua_upvalueindex(1));
+    const TypeId type = check_luau_type_token(
+        state,
+        lua_upvalueindex(2),
+        "reflected static method"
+    );
+    std::vector<Val> owned_arguments;
+    owned_arguments.reserve(static_cast<std::size_t>(lua_gettop(state)));
+    std::vector<Ref> refs;
+    refs.reserve(static_cast<std::size_t>(lua_gettop(state)));
+    for (int index = 1; index <= lua_gettop(state); ++index) {
+        if (lua_isuserdata(state, index)) {
+            refs.push_back(check_object(state, index).ref);
+            continue;
+        }
+        auto argument = argument_value(state, index);
+        if (!argument) {
+            return raise_message(state, argument.error());
+        }
+        owned_arguments.push_back(std::move(*argument));
+        refs.push_back(owned_arguments.back().ref());
+    }
+
+    return push_invoke_result(
+        state,
+        script_invoke_static_method(type, name, refs),
+        LuauObject {}
+    );
 }
 
 int invoke_method(lua_State* state) {

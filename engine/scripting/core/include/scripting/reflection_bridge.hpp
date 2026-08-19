@@ -37,8 +37,16 @@ script_set_property(Ref instance, std::string_view name, Ref value);
 
 bool script_has_method(Ref instance, std::string_view name);
 
+bool script_has_static_method(TypeId type, std::string_view name);
+
 InvokeResult script_invoke_method(
     Ref instance,
+    std::string_view name,
+    const std::vector<Ref>& arguments
+);
+
+InvokeResult script_invoke_static_method(
+    TypeId type,
     std::string_view name,
     const std::vector<Ref>& arguments
 );

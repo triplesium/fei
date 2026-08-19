@@ -13,6 +13,7 @@
 
 namespace fei::text {
 
+FEI_REFLECT()
 enum class TextEditKind {
     Insert,
     Backspace,
@@ -26,6 +27,7 @@ enum class TextEditKind {
     CollapseSelection,
 };
 
+FEI_REFLECT()
 struct TextEdit {
     TextEditKind kind {TextEditKind::CollapseSelection};
     std::string value;

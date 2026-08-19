@@ -10,6 +10,7 @@
 
 namespace fei::ui {
 
+FEI_REFLECT()
 enum class NodeImageMode {
     Auto,
     Stretch,

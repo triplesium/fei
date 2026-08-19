@@ -4,6 +4,7 @@
 #include "asset/loader.hpp"
 #include "base/result.hpp"
 #include "base/types.hpp"
+#include "refl/reflect.hpp"
 
 #include <memory>
 #include <span>
@@ -27,6 +28,7 @@ struct RasterizedGlyph {
     std::vector<uint8> pixels;
 };
 
+FEI_REFLECT()
 class Font {
   private:
     struct Impl;

@@ -296,8 +296,22 @@ TEST_CASE(
                     "memory://asset.bin"
                 )
                 assert(assets:is_loaded(cached))
+                assert(assets:load_error(cached) == nil)
                 state.handle = cached
                 state.loaded = true
+
+                local missing = assets:load(
+                    LuauTestAsset,
+                    "memory://missing.bin"
+                )
+                assert(not assets:is_loaded(missing))
+                local load_error = assets:load_error(missing)
+                assert(string.find(
+                    load_error,
+                    "Asset not found",
+                    1,
+                    true
+                ))
             end
 
             local function reject_readonly_load(
@@ -757,8 +771,11 @@ TEST_CASE(
                 commands:entity(state.detached):remove_parent()
                 commands:entity(state.doomed):despawn()
 
+                local spawned_parent = commands:spawn()
                 local spawned = commands:spawn(state:make_position(3))
+                spawned:set_parent(spawned_parent:id())
                 state.spawned = spawned:id()
+                state.total = spawned_parent:id()
                 commands:add_resource(state:make_position(11))
             end
 
@@ -817,6 +834,10 @@ TEST_CASE(
         static_cast<Entity>(world.resource<LuauTestCommandState>().spawned);
     CHECK(world.has_entity(spawned));
     CHECK(world.get_component<LuauTestPosition>(spawned).x == 3);
+    const Entity spawned_parent =
+        static_cast<Entity>(world.resource<LuauTestCommandState>().total);
+    REQUIRE(world.parent(spawned));
+    CHECK(*world.parent(spawned) == spawned_parent);
     REQUIRE(world.has_resource<LuauTestPosition>());
     CHECK(world.resource<LuauTestPosition>().x == 11);
 }

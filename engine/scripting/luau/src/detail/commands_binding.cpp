@@ -140,9 +140,6 @@ int entity_set_parent(lua_State* state) {
         luaL_error(state, "EntityCommands.set_parent expects one parent");
     }
     const auto parent = static_cast<Entity>(luaL_checkinteger(state, 2));
-    if (!entity.world->has_entity(parent)) {
-        luaL_error(state, "Entity %d does not exist", static_cast<int>(parent));
-    }
     if (parent == entity.entity) {
         luaL_error(state, "Entity cannot be its own parent");
     }

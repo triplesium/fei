@@ -31,6 +31,7 @@ struct TextColor {
     Color4F color {1.0f, 1.0f, 1.0f, 1.0f};
 };
 
+FEI_REFLECT()
 enum class LineBreak {
     WordBoundary,
     AnyCharacter,
@@ -38,6 +39,7 @@ enum class LineBreak {
     NoWrap,
 };
 
+FEI_REFLECT()
 enum class Justify {
     Left,
     Center,
