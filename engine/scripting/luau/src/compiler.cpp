@@ -1,8 +1,11 @@
 #include "scripting_luau/compiler.hpp"
 
 #include "app/app.hpp"
+#include "ecs/dynamic/state.hpp"
 #include "ecs/dynamic/system_decl.hpp"
 #include "ecs/fwd.hpp"
+#include "refl/enum.hpp"
+#include "refl/registry.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -235,6 +238,26 @@ compile_param(const AstLocal& param) {
         resource->optional = annotation.optional;
         return DynamicSystemParamDeclPtr {std::move(resource)};
     }
+    if (kind == "State" || kind == "NextState") {
+        const AstTypeReference* value =
+            required_type_argument(*annotation.type, 0);
+        if (value == nullptr || annotation.type->parameters.size != 1) {
+            return failure(declaration_error(
+                "'" + std::string(kind) +
+                "' must have exactly one type argument"
+            ));
+        }
+        if (kind == "State") {
+            auto state = std::make_unique<DynamicStateParamDecl>();
+            state->name = param_name;
+            state->type = dynamic_type_ref(*value);
+            return DynamicSystemParamDeclPtr {std::move(state)};
+        }
+        auto next_state = std::make_unique<DynamicNextStateParamDecl>();
+        next_state->name = param_name;
+        next_state->type = dynamic_type_ref(*value);
+        return DynamicSystemParamDeclPtr {std::move(next_state)};
+    }
     if (kind == "Commands" && annotation.type->parameters.size == 0) {
         auto commands = std::make_unique<DynamicCommandsParamDecl>();
         commands->name = param_name;
@@ -250,7 +273,76 @@ compile_param(const AstLocal& param) {
     ));
 }
 
-Result<ScheduleId, ScriptError> schedule_id(const AstExpr& expression) {
+using RequiredRuntimeTypes = std::unordered_set<TypeId>;
+
+bool append_expression_path(
+    const AstExpr& expression,
+    std::vector<std::string_view>& path
+) {
+    if (const auto* global = expression.as<AstExprGlobal>()) {
+        path.push_back(name_view(global->name));
+        return true;
+    }
+    if (const auto* index = expression.as<AstExprIndexName>()) {
+        if (!append_expression_path(*index->expr, path)) {
+            return false;
+        }
+        path.push_back(name_view(index->index));
+        return true;
+    }
+    return false;
+}
+
+Result<Val, ScriptError> compile_state_value(
+    const AstExpr& expression,
+    RequiredRuntimeTypes& required_runtime_types
+) {
+    std::vector<std::string_view> path;
+    if (!append_expression_path(expression, path) || path.size() < 2) {
+        return failure(
+            declaration_error("state value must be a reflected enum member")
+        );
+    }
+    const std::string_view enumerator = path.back();
+    path.pop_back();
+    std::string type_name;
+    for (std::size_t index = 0; index < path.size(); ++index) {
+        if (index != 0) {
+            type_name.append("::");
+        }
+        type_name.append(path[index]);
+    }
+    auto type =
+        resolve_dynamic_type_ref(DynamicTypeRef {.type_name = type_name});
+    if (!type) {
+        return failure(declaration_error(std::move(type.error().message)));
+    }
+    auto state = resolve_dynamic_state(*type);
+    if (!state) {
+        return failure(declaration_error(std::move(state.error().message)));
+    }
+    auto reflected_enum = Registry::instance().try_get_enum(*type);
+    if (!reflected_enum) {
+        return failure(declaration_error(
+            "state type '" + type_name + "' must be a reflected enum"
+        ));
+    }
+    const auto found =
+        reflected_enum->enumerators().find(std::string {enumerator});
+    if (found == reflected_enum->enumerators().end()) {
+        return failure(declaration_error(
+            "enum '" + type_name + "' has no member '" +
+            std::string {enumerator} + "'"
+        ));
+    }
+    required_runtime_types.insert(*type);
+    return reflected_enum->make_val(found->second);
+}
+
+Result<ScheduleId, ScriptError> schedule_id(
+    const AstExpr& expression,
+    RequiredRuntimeTypes& required_runtime_types
+) {
     std::string_view name;
     if (const auto* global = expression.as<AstExprGlobal>()) {
         name = name_view(global->name);
@@ -274,12 +366,55 @@ Result<ScheduleId, ScriptError> schedule_id(const AstExpr& expression) {
         {"RenderLast", RenderLast},
     };
     const auto found = schedules.find(name);
-    if (found == schedules.end()) {
-        return failure(declaration_error(
-            "unknown main schedule '" + std::string(name) + "'"
-        ));
+    if (found != schedules.end()) {
+        return found->second;
     }
-    return found->second;
+
+    const auto* call = expression.as<AstExprCall>();
+    const auto* callee =
+        call != nullptr ? call->func->as<AstExprGlobal>() : nullptr;
+    const std::string_view schedule_name =
+        callee != nullptr ? name_view(callee->name) : std::string_view {};
+    if (schedule_name == "OnEnter" || schedule_name == "OnExit") {
+        if (call->args.size != 1) {
+            return failure(declaration_error(
+                std::string(schedule_name) + " requires exactly one state value"
+            ));
+        }
+        auto value =
+            compile_state_value(*call->args.data[0], required_runtime_types);
+        if (!value) {
+            return failure(std::move(value.error()));
+        }
+        auto state = resolve_dynamic_state(value->type_id());
+        return schedule_name == "OnEnter" ? state->on_enter(value->ref()) :
+                                            state->on_exit(value->ref());
+    }
+    if (schedule_name == "OnTransition") {
+        if (call->args.size != 2) {
+            return failure(declaration_error(
+                "OnTransition requires exited and entered state values"
+            ));
+        }
+        auto exited =
+            compile_state_value(*call->args.data[0], required_runtime_types);
+        if (!exited) {
+            return failure(std::move(exited.error()));
+        }
+        auto entered =
+            compile_state_value(*call->args.data[1], required_runtime_types);
+        if (!entered) {
+            return failure(std::move(entered.error()));
+        }
+        if (exited->type_id() != entered->type_id()) {
+            return failure(declaration_error(
+                "OnTransition state values must have the same type"
+            ));
+        }
+        auto state = resolve_dynamic_state(exited->type_id());
+        return state->on_transition(exited->ref(), entered->ref());
+    }
+    return failure(declaration_error("unknown schedule declaration"));
 }
 
 const AstExprTable* module_table(const AstExpr& expression) {
@@ -638,6 +773,16 @@ void qualify_system_script_types(
                 for (auto& filter : query.filters) {
                     qualify_script_type_ref(filter.type, script_types);
                 }
+            } else if (
+                param->decl_type_id() == type_id<DynamicStateParamDecl>()
+            ) {
+                auto& state = static_cast<DynamicStateParamDecl&>(*param);
+                qualify_script_type_ref(state.type, script_types);
+            } else if (
+                param->decl_type_id() == type_id<DynamicNextStateParamDecl>()
+            ) {
+                auto& state = static_cast<DynamicNextStateParamDecl&>(*param);
+                qualify_script_type_ref(state.type, script_types);
             }
         }
     };
@@ -688,13 +833,43 @@ bool is_read_only_condition_param(const DynamicSystemParamDecl& param) {
             return field.access == DynamicParamAccess::Read;
         });
     }
+    if (param.decl_type_id() == type_id<DynamicStateParamDecl>()) {
+        return true;
+    }
     return false;
 }
 
 Result<DynamicConditionDecl, ScriptError> compile_condition(
     const AstExpr& expression,
-    const TopLevelFunctions& functions
+    const TopLevelFunctions& functions,
+    RequiredRuntimeTypes& required_runtime_types
 ) {
+    const auto* call = expression.as<AstExprCall>();
+    const auto* callee =
+        call != nullptr ? call->func->as<AstExprGlobal>() : nullptr;
+    if (callee != nullptr && name_view(callee->name) == "in_state") {
+        if (call->args.size != 1) {
+            return failure(
+                declaration_error("in_state requires exactly one state value")
+            );
+        }
+        auto value =
+            compile_state_value(*call->args.data[0], required_runtime_types);
+        if (!value) {
+            return failure(std::move(value.error()));
+        }
+        auto param = std::make_unique<DynamicStateParamDecl>();
+        param->name = "state";
+        param->type.type_id = value->type_id();
+        DynamicConditionDecl result {
+            .kind = DynamicConditionDeclKind::InState,
+            .name = "in_state",
+            .state_value = std::move(*value),
+        };
+        result.params.push_back(std::move(param));
+        return result;
+    }
+
     auto function_ref =
         top_level_function_ref(expression, functions, "run_if argument");
     if (!function_ref) {
@@ -723,7 +898,8 @@ Result<DynamicConditionDecl, ScriptError> compile_condition(
 Result<DynamicSystemDecl, ScriptError> compile_bare_system(
     const AstExpr& expression,
     ScheduleId schedule,
-    const TopLevelFunctions& functions
+    const TopLevelFunctions& functions,
+    RequiredRuntimeTypes& required_runtime_types
 ) {
     struct Modifier {
         std::string_view name;
@@ -775,7 +951,11 @@ Result<DynamicSystemDecl, ScriptError> compile_bare_system(
     for (const auto& modifier : modifiers) {
         for (const AstExpr* argument : modifier.call->args) {
             if (modifier.name == "run_if") {
-                auto condition = compile_condition(*argument, functions);
+                auto condition = compile_condition(
+                    *argument,
+                    functions,
+                    required_runtime_types
+                );
                 if (!condition) {
                     return failure(std::move(condition.error()));
                 }
@@ -807,14 +987,20 @@ struct CompiledSystemGroup {
 Result<CompiledSystemGroup, ScriptError> compile_system_group(
     const AstExpr& expression,
     ScheduleId schedule,
-    const TopLevelFunctions& functions
+    const TopLevelFunctions& functions,
+    RequiredRuntimeTypes& required_runtime_types
 ) {
     const auto* call = expression.as<AstExprCall>();
     const auto* callee =
         call != nullptr ? call->func->as<AstExprGlobal>() : nullptr;
     if (call == nullptr || callee == nullptr ||
         name_view(callee->name) != "chain") {
-        auto system = compile_bare_system(expression, schedule, functions);
+        auto system = compile_bare_system(
+            expression,
+            schedule,
+            functions,
+            required_runtime_types
+        );
         if (!system) {
             return failure(std::move(system.error()));
         }
@@ -834,7 +1020,12 @@ Result<CompiledSystemGroup, ScriptError> compile_system_group(
     std::vector<CompiledSystemGroup> groups;
     groups.reserve(call->args.size);
     for (const AstExpr* argument : call->args) {
-        auto group = compile_system_group(*argument, schedule, functions);
+        auto group = compile_system_group(
+            *argument,
+            schedule,
+            functions,
+            required_runtime_types
+        );
         if (!group) {
             return failure(std::move(group.error()));
         }
@@ -878,7 +1069,8 @@ Result<CompiledSystemGroup, ScriptError> compile_system_group(
 
 Result<DynamicSystemDecl, ScriptError> compile_legacy_system(
     const AstExpr& expression,
-    const TopLevelFunctions& functions
+    const TopLevelFunctions& functions,
+    RequiredRuntimeTypes& required_runtime_types
 ) {
     const auto* call = expression.as<AstExprCall>();
     const auto* callee =
@@ -889,11 +1081,16 @@ Result<DynamicSystemDecl, ScriptError> compile_legacy_system(
             "systems entries must be system(schedule, local_function)"
         ));
     }
-    auto schedule = schedule_id(*call->args.data[0]);
+    auto schedule = schedule_id(*call->args.data[0], required_runtime_types);
     if (!schedule) {
         return failure(std::move(schedule.error()));
     }
-    return compile_bare_system(*call->args.data[1], *schedule, functions);
+    return compile_bare_system(
+        *call->args.data[1],
+        *schedule,
+        functions,
+        required_runtime_types
+    );
 }
 
 Status<ScriptError>
@@ -992,6 +1189,7 @@ compile_luau_script_module(const ScriptSource& source) {
     }
 
     std::unordered_map<const AstLocal*, AstExprFunction*> functions;
+    RequiredRuntimeTypes required_runtime_types;
     const AstExprTable* table = nullptr;
     for (Luau::AstStat* statement : parsed.root->body) {
         if (const auto* function = statement->as<AstStatLocalFunction>()) {
@@ -1077,7 +1275,11 @@ compile_luau_script_module(const ScriptSource& source) {
                     "systems cannot mix legacy entries and schedule groups"
                 ));
             }
-            auto system = compile_legacy_system(*item.value, functions);
+            auto system = compile_legacy_system(
+                *item.value,
+                functions,
+                required_runtime_types
+            );
             if (!system) {
                 return failure(std::move(system.error()));
             }
@@ -1091,7 +1293,7 @@ compile_luau_script_module(const ScriptSource& source) {
                 "schedule groups must use [Schedule] = {...} entries"
             ));
         }
-        auto schedule = schedule_id(*item.key);
+        auto schedule = schedule_id(*item.key, required_runtime_types);
         if (!schedule) {
             return failure(std::move(schedule.error()));
         }
@@ -1112,8 +1314,12 @@ compile_luau_script_module(const ScriptSource& source) {
                     declaration_error("schedule group systems must be an array")
                 );
             }
-            auto system_group =
-                compile_system_group(*system_item.value, *schedule, functions);
+            auto system_group = compile_system_group(
+                *system_item.value,
+                *schedule,
+                functions,
+                required_runtime_types
+            );
             if (!system_group) {
                 return failure(std::move(system_group.error()));
             }
@@ -1128,10 +1334,18 @@ compile_luau_script_module(const ScriptSource& source) {
         return failure(std::move(valid_dependencies.error()));
     }
 
+    std::vector<TypeId> required_types(
+        required_runtime_types.begin(),
+        required_runtime_types.end()
+    );
+    std::ranges::sort(required_types, {}, [](TypeId type) {
+        return type.id();
+    });
     return LuauScriptModuleArtifact {
         .declaration = std::move(declaration),
         .bytecode = Luau::compile(source.content),
         .system_layout = system_layout,
+        .required_runtime_types = std::move(required_types),
     };
 }
 

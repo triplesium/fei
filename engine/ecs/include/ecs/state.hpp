@@ -3,6 +3,7 @@
 #include "base/log.hpp"
 #include "base/optional.hpp"
 #include "ecs/commands.hpp"
+#include "ecs/dynamic/state.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
 #include "ecs/system_set.hpp"
@@ -278,6 +279,77 @@ class NextState {
     Optional<T> m_state;
 };
 
+namespace detail {
+
+template<StateValue T>
+void register_dynamic_state_adapter() {
+    DynamicStateRegistry::instance().add(
+        DynamicStateOps {
+            .value_type = type_id<T>(),
+            .state_resource = type_id<State<T>>(),
+            .next_state_resource = type_id<NextState<T>>(),
+            .initialized =
+                [](const World& world) {
+                    return world.has_resource<State<T>>() &&
+                           world.has_resource<NextState<T>>();
+                },
+            .current = [](World& world) -> Ref {
+                if (!world.has_resource<State<T>>()) {
+                    return {};
+                }
+                const auto& state =
+                    static_cast<const World&>(world).resource<State<T>>();
+                return Ref(state.get());
+            },
+            .set_next = [](World& world,
+                           Ref value) -> Status<DynamicSystemError> {
+                if (value.type_id() != type_id<T>()) {
+                    return failure(
+                        DynamicSystemError {
+                            "NextState value type does not match '" +
+                            type_name(type_id<T>()) + "'"
+                        }
+                    );
+                }
+                if (!world.has_resource<NextState<T>>()) {
+                    return failure(
+                        DynamicSystemError {
+                            "NextState<" + type_name(type_id<T>()) +
+                            "> is not initialized"
+                        }
+                    );
+                }
+                world.resource<NextState<T>>().set(value.get_const<T>());
+                return {};
+            },
+            .clear_next =
+                [](World& world) {
+                    if (world.has_resource<NextState<T>>()) {
+                        world.resource<NextState<T>>().clear();
+                    }
+                },
+            .on_enter =
+                [](Ref value) {
+                    return OnEnter(value.get_const<T>()).id();
+                },
+            .on_exit =
+                [](Ref value) {
+                    return OnExit(value.get_const<T>()).id();
+                },
+            .on_transition =
+                [](Ref exited, Ref entered) {
+                    return OnTransition(
+                               exited.get_const<T>(),
+                               entered.get_const<T>()
+                    )
+                        .id();
+                },
+        }
+    );
+}
+
+} // namespace detail
+
 template<StateValue T>
 void prepare_state_transition(
     ResRW<State<T>> state,
@@ -387,6 +459,7 @@ State<std::remove_cvref_t<T>>& World::init_state(T&& initial_state) {
         "State values must be copyable, equality comparable, and hashable"
     );
 
+    detail::register_dynamic_state_adapter<StateType>();
     if (!has_resource<State<StateType>>()) {
         add_resource(
             State<StateType> {StateType(std::forward<T>(initial_state))}
@@ -405,6 +478,7 @@ State<std::remove_cvref_t<T>>& World::insert_state(T&& state) {
         "State values must be copyable, equality comparable, and hashable"
     );
 
+    detail::register_dynamic_state_adapter<StateType>();
     add_resource(State<StateType> {StateType(std::forward<T>(state))});
     detail::install_state_runtime<StateType>(*this);
     resource_untracked(type_id<NextState<StateType>>())

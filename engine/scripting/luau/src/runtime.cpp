@@ -1,5 +1,7 @@
 #include "scripting_luau/runtime.hpp"
 
+#include "app/app.hpp"
+#include "ecs/dynamic/state.hpp"
 #include "refl/enum.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
@@ -60,6 +62,7 @@ char c_script_namespace_marker;
 char c_system_config_marker;
 char c_system_config_metatable;
 char c_system_chain_marker;
+char c_state_condition_marker;
 
 bool is_system_config(lua_State* state, int index) {
     if (!lua_istable(state, index)) {
@@ -79,6 +82,18 @@ bool is_system_chain(lua_State* state, int index) {
     }
     index = lua_absindex(state, index);
     lua_pushlightuserdata(state, &c_system_chain_marker);
+    lua_rawget(state, index);
+    const bool result = lua_toboolean(state, -1) != 0;
+    lua_pop(state, 1);
+    return result;
+}
+
+bool is_state_condition(lua_State* state, int index) {
+    if (!lua_istable(state, index)) {
+        return false;
+    }
+    index = lua_absindex(state, index);
+    lua_pushlightuserdata(state, &c_state_condition_marker);
     lua_rawget(state, index);
     const bool result = lua_toboolean(state, -1) != 0;
     lua_pop(state, 1);
@@ -119,21 +134,26 @@ int system_config_method(lua_State* state) {
     if (argument_count == 0) {
         luaL_error(
             state,
-            "system configuration method requires at least one function"
+            "system configuration method requires at least one argument"
         );
         return 0;
     }
+    constexpr int run_if_method = 2;
     for (int index = 2; index <= argument_count + 1; ++index) {
-        if (!lua_isfunction(state, index)) {
+        const bool valid =
+            lua_isfunction(state, index) ||
+            (method == run_if_method && is_state_condition(state, index));
+        if (!valid) {
             luaL_error(
                 state,
-                "system configuration arguments must be functions"
+                method == run_if_method ?
+                    "run_if arguments must be conditions" :
+                    "before/after arguments must be functions"
             );
             return 0;
         }
     }
 
-    constexpr int run_if_method = 2;
     if (method == run_if_method) {
         lua_getfield(state, config_index, "conditions");
         if (lua_isnil(state, -1)) {
@@ -188,6 +208,11 @@ void install_system_config_metatables(lua_State* state) {
 std::string luau_error(lua_State* state, std::string fallback) {
     const char* message = lua_tostring(state, -1);
     return message != nullptr ? std::string {message} : std::move(fallback);
+}
+
+int raise_message(lua_State* state, const std::string& message) {
+    luaL_error(state, "%s", message.c_str());
+    return 0;
 }
 
 bool is_script_namespace(lua_State* state, int index) {
@@ -346,6 +371,80 @@ int chain_helper(lua_State* state) {
     return 1;
 }
 
+std::string dynamic_schedule_key(ScheduleId schedule) {
+    return "__fei_schedule_" + std::to_string(schedule);
+}
+
+int state_schedule_helper(lua_State* state) {
+    const int kind = lua_tointeger(state, lua_upvalueindex(1));
+    const int expected_arguments = kind == 2 ? 2 : 1;
+    if (lua_gettop(state) != expected_arguments) {
+        luaL_error(
+            state,
+            kind == 2 ? "OnTransition expects exited and entered state values" :
+                        "OnEnter/OnExit expect one state value"
+        );
+        return 0;
+    }
+
+    auto first = detail::copy_luau_reflected_value(state, 1, "state schedule");
+    if (!first) {
+        return raise_message(state, first.error());
+    }
+    auto ops = resolve_dynamic_state(first->type_id());
+    if (!ops) {
+        return raise_message(state, ops.error().message);
+    }
+
+    ScheduleId schedule {};
+    if (kind == 0) {
+        schedule = ops->on_enter(first->ref());
+    } else if (kind == 1) {
+        schedule = ops->on_exit(first->ref());
+    } else {
+        auto second =
+            detail::copy_luau_reflected_value(state, 2, "OnTransition");
+        if (!second) {
+            return raise_message(state, second.error());
+        }
+        if (second->type_id() != first->type_id()) {
+            return raise_message(
+                state,
+                "OnTransition state values must have the same type"
+            );
+        }
+        schedule = ops->on_transition(first->ref(), second->ref());
+    }
+    const auto key = dynamic_schedule_key(schedule);
+    lua_pushlstring(state, key.data(), key.size());
+    return 1;
+}
+
+int in_state_helper(lua_State* state) {
+    if (lua_gettop(state) != 1) {
+        luaL_error(state, "in_state expects one state value");
+        return 0;
+    }
+    auto value = detail::copy_luau_reflected_value(state, 1, "in_state");
+    if (!value) {
+        return raise_message(state, value.error());
+    }
+    auto ops = resolve_dynamic_state(value->type_id());
+    if (!ops) {
+        return raise_message(state, ops.error().message);
+    }
+
+    lua_newtable(state);
+    const int descriptor = lua_absindex(state, -1);
+    lua_pushlightuserdata(state, &c_state_condition_marker);
+    lua_pushboolean(state, 1);
+    lua_rawset(state, descriptor);
+    lua_pushvalue(state, 1);
+    lua_setfield(state, descriptor, "value");
+    lua_setreadonly(state, descriptor, true);
+    return 1;
+}
+
 int query_descriptor_helper(lua_State* state) {
     luaL_checktype(state, 1, LUA_TUSERDATA);
     const char* kind = lua_tostring(state, lua_upvalueindex(1));
@@ -373,6 +472,19 @@ void install_module_helpers(lua_State* state) {
     lua_setglobal(state, "system");
     lua_pushcfunction(state, chain_helper, "chain");
     lua_setglobal(state, "chain");
+    const char* state_schedules[] = {"OnEnter", "OnExit", "OnTransition"};
+    for (std::size_t index = 0; index < std::size(state_schedules); ++index) {
+        lua_pushinteger(state, static_cast<int>(index));
+        lua_pushcclosure(
+            state,
+            state_schedule_helper,
+            state_schedules[index],
+            1
+        );
+        lua_setglobal(state, state_schedules[index]);
+    }
+    lua_pushcfunction(state, in_state_helper, "in_state");
+    lua_setglobal(state, "in_state");
     lua_pushcfunction(state, field_helper, "field");
     lua_setglobal(state, "field");
 
@@ -464,30 +576,6 @@ LuauRuntime::load_module(const LuauScriptModuleArtifact& artifact) {
     luaL_sandboxthread(thread);
     install_module_helpers(thread);
 
-    if (luau_load(
-            thread,
-            artifact.declaration.source_name.c_str(),
-            artifact.bytecode.data(),
-            artifact.bytecode.size(),
-            0
-        ) != 0) {
-        std::string message = luau_error(thread, "Failed to load Luau module");
-        lua_unref(root, thread_ref);
-        lua_settop(root, root_top);
-        return failure(LuauScriptError {std::move(message)});
-    }
-    if (lua_pcall(thread, 0, 1, 0) != 0) {
-        std::string message = luau_error(thread, "Failed to run Luau module");
-        lua_unref(root, thread_ref);
-        lua_settop(root, root_top);
-        return failure(LuauScriptError {std::move(message)});
-    }
-    if (!lua_istable(thread, -1)) {
-        lua_unref(root, thread_ref);
-        lua_settop(root, root_top);
-        return failure(LuauScriptError {"Luau module must return a table"});
-    }
-
     Impl::Module loaded {.thread = thread, .thread_ref = thread_ref};
     auto fail_loading = [&](
                             LuauScriptError error
@@ -499,6 +587,81 @@ LuauRuntime::load_module(const LuauScriptModuleArtifact& artifact) {
         lua_settop(root, root_top);
         return failure(std::move(error));
     };
+    for (TypeId required_type : artifact.required_runtime_types) {
+        auto type = Registry::instance().try_get_type(required_type);
+        if (!type) {
+            return fail_loading(
+                LuauScriptError {std::move(type.error().message)}
+            );
+        }
+        auto reflected_enum = Registry::instance().try_get_enum(required_type);
+        if (!reflected_enum) {
+            return fail_loading(
+                LuauScriptError {
+                    "Required Luau state type '" + type->name() +
+                    "' is not a reflected enum"
+                }
+            );
+        }
+        auto push_enum = [&](lua_State* state) {
+            lua_newtable(state);
+            for (const auto& [enumerator, underlying_value] :
+                 reflected_enum->enumerators()) {
+                detail::push_luau_owned_value(
+                    state,
+                    reflected_enum->make_val(underlying_value)
+                );
+                lua_setfield(state, -2, enumerator.c_str());
+            }
+            lua_setreadonly(state, -1, true);
+        };
+        Status<LuauScriptError> bound;
+        if (type->has_structured_name()) {
+            bound = set_script_global(loaded, *type, push_enum);
+        } else {
+            const auto& name = type->stripped_name();
+            lua_getglobal(thread, name.c_str());
+            if (!lua_isnil(thread, -1)) {
+                lua_pop(thread, 1);
+                bound = failure(
+                    LuauScriptError {
+                        "Script type name '" + name + "' is already occupied",
+                    }
+                );
+            } else {
+                lua_pop(thread, 1);
+                push_enum(thread);
+                lua_setglobal(thread, name.c_str());
+            }
+        }
+        if (!bound) {
+            return fail_loading(
+                LuauScriptError {std::move(bound.error().message)}
+            );
+        }
+        loaded.script_types.insert(required_type);
+    }
+
+    if (luau_load(
+            thread,
+            artifact.declaration.source_name.c_str(),
+            artifact.bytecode.data(),
+            artifact.bytecode.size(),
+            0
+        ) != 0) {
+        std::string message = luau_error(thread, "Failed to load Luau module");
+        return fail_loading(LuauScriptError {std::move(message)});
+    }
+    if (lua_pcall(thread, 0, 1, 0) != 0) {
+        std::string message = luau_error(thread, "Failed to run Luau module");
+        return fail_loading(LuauScriptError {std::move(message)});
+    }
+    if (!lua_istable(thread, -1)) {
+        return fail_loading(
+            LuauScriptError {"Luau module must return a table"}
+        );
+    }
+
     lua_getfield(thread, -1, "systems");
     if (!lua_istable(thread, -1)) {
         return fail_loading(
@@ -566,8 +729,18 @@ LuauRuntime::load_module(const LuauScriptModuleArtifact& artifact) {
                     conditions_index,
                     static_cast<int>(condition_index + 1)
                 );
-                auto condition_stored =
-                    store_function(system.conditions[condition_index].name, -1);
+                const auto& condition = system.conditions[condition_index];
+                Status<LuauScriptError> condition_stored;
+                if (condition.kind ==
+                    DynamicConditionDeclKind::ScriptFunction) {
+                    condition_stored = store_function(condition.name, -1);
+                } else if (!is_state_condition(thread, -1)) {
+                    condition_stored = failure(
+                        LuauScriptError {
+                            "Luau in_state condition descriptor is invalid"
+                        }
+                    );
+                }
                 lua_pop(thread, 1);
                 if (!condition_stored) {
                     return failure(std::move(condition_stored.error()));
@@ -602,11 +775,16 @@ LuauRuntime::load_module(const LuauScriptModuleArtifact& artifact) {
                 }
             }
 
-            lua_rawgeti(
-                thread,
-                systems_index,
-                static_cast<int>(first_system.schedule)
-            );
+            if (first_system.schedule <= RenderLast) {
+                lua_rawgeti(
+                    thread,
+                    systems_index,
+                    static_cast<int>(first_system.schedule)
+                );
+            } else {
+                const auto key = dynamic_schedule_key(first_system.schedule);
+                lua_getfield(thread, systems_index, key.c_str());
+            }
             if (!lua_istable(thread, -1)) {
                 return fail_loading(
                     LuauScriptError {

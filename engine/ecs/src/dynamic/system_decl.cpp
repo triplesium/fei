@@ -3,6 +3,7 @@
 #include "ecs/dynamic/commands.hpp"
 #include "ecs/dynamic/query.hpp"
 #include "ecs/dynamic/resource.hpp"
+#include "ecs/dynamic/state.hpp"
 #include "ecs/dynamic/world.hpp"
 #include "ecs/fwd.hpp"
 #include "refl/registry.hpp"
@@ -181,6 +182,21 @@ compile_dynamic_world_param(const DynamicWorldParamDecl& decl) {
     return std::move(result);
 }
 
+template<typename Param, typename Decl>
+Result<DynamicSystemParamPtr, DynamicSystemError>
+compile_dynamic_state_param(const Decl& decl) {
+    auto type = resolve_dynamic_type_ref(decl.type);
+    if (!type) {
+        return failure(std::move(type.error()));
+    }
+    auto ops = resolve_dynamic_state(*type);
+    if (!ops) {
+        return failure(std::move(ops.error()));
+    }
+    DynamicSystemParamPtr result = std::make_unique<Param>(*ops);
+    return std::move(result);
+}
+
 void register_builtin_dynamic_system_param_compilers(
     DynamicSystemParamCompilerRegistry& registry
 ) {
@@ -188,6 +204,12 @@ void register_builtin_dynamic_system_param_compilers(
     registry.add<DynamicQueryParamDecl>(&compile_dynamic_query_param);
     registry.add<DynamicCommandsParamDecl>(&compile_dynamic_commands_param);
     registry.add<DynamicWorldParamDecl>(&compile_dynamic_world_param);
+    registry.add<DynamicStateParamDecl>(
+        &compile_dynamic_state_param<DynamicStateParam, DynamicStateParamDecl>
+    );
+    registry.add<DynamicNextStateParamDecl>(&compile_dynamic_state_param<
+                                            DynamicNextStateParam,
+                                            DynamicNextStateParamDecl>);
 }
 
 } // namespace

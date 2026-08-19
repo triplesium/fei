@@ -6,6 +6,7 @@
 #include "ecs/dynamic/system_param.hpp"
 #include "ecs/fwd.hpp"
 #include "refl/type.hpp"
+#include "refl/val.hpp"
 
 #include <functional>
 #include <memory>
@@ -80,9 +81,26 @@ struct DynamicCommandsParamDecl final
 struct DynamicWorldParamDecl final
     : DynamicSystemParamDeclBase<DynamicWorldParamDecl> {};
 
+struct DynamicStateParamDecl final
+    : DynamicSystemParamDeclBase<DynamicStateParamDecl> {
+    DynamicTypeRef type;
+};
+
+struct DynamicNextStateParamDecl final
+    : DynamicSystemParamDeclBase<DynamicNextStateParamDecl> {
+    DynamicTypeRef type;
+};
+
+enum class DynamicConditionDeclKind {
+    ScriptFunction,
+    InState,
+};
+
 struct DynamicConditionDecl {
+    DynamicConditionDeclKind kind {DynamicConditionDeclKind::ScriptFunction};
     std::string name;
     std::vector<DynamicSystemParamDeclPtr> params;
+    Optional<Val> state_value;
 };
 
 struct DynamicSystemDecl {

@@ -6,6 +6,7 @@
 #include "scripting/source.hpp"
 
 #include <string>
+#include <vector>
 
 namespace fei {
 
@@ -20,6 +21,7 @@ struct LuauScriptModuleArtifact {
     LuauSystemDeclarationLayout system_layout {
         LuauSystemDeclarationLayout::Flat
     };
+    std::vector<TypeId> required_runtime_types;
 };
 
 Result<LuauScriptModuleArtifact, ScriptError>

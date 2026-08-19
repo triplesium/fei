@@ -1,6 +1,7 @@
 #include "scripting_luau/detail/binding.hpp"
 
 #include "ecs/dynamic/query.hpp"
+#include "ecs/dynamic/state.hpp"
 #include "refl/callable.hpp"
 #include "refl/cls.hpp"
 #include "refl/registry.hpp"
@@ -391,9 +392,84 @@ int invoke_method(lua_State* state) {
     );
 }
 
+int dynamic_state_get(lua_State* state) {
+    auto borrowed = check_luau_borrowed_ref(state, 1);
+    const auto* dynamic_state = borrowed.ref.try_get_const<DynamicStateRef>();
+    if (dynamic_state == nullptr || borrowed.scope == nullptr) {
+        return raise_message(state, "State.get called with invalid receiver");
+    }
+    Ref value = dynamic_state->get();
+    if (!value) {
+        return raise_message(state, "State value is not initialized");
+    }
+    push_luau_borrowed_ref(state, value, *borrowed.scope, borrowed.token);
+    return 1;
+}
+
+int dynamic_next_state_set(lua_State* state) {
+    auto borrowed = check_luau_borrowed_ref(state, 1);
+    const auto* next_state = borrowed.ref.try_get_const<DynamicNextStateRef>();
+    if (next_state == nullptr) {
+        return raise_message(
+            state,
+            "NextState.set called with invalid receiver"
+        );
+    }
+    auto value = copy_luau_reflected_value(state, 2, "NextState.set");
+    if (!value) {
+        return raise_message(state, value.error());
+    }
+    auto status = next_state->set(value->ref());
+    if (!status) {
+        return raise_message(state, status.error().message);
+    }
+    lua_pushvalue(state, 1);
+    return 1;
+}
+
+int dynamic_next_state_clear(lua_State* state) {
+    auto borrowed = check_luau_borrowed_ref(state, 1);
+    const auto* next_state = borrowed.ref.try_get_const<DynamicNextStateRef>();
+    if (next_state == nullptr) {
+        return raise_message(
+            state,
+            "NextState.clear called with invalid receiver"
+        );
+    }
+    next_state->clear();
+    lua_pushvalue(state, 1);
+    return 1;
+}
+
+bool push_dynamic_state_member(
+    lua_State* state,
+    TypeId type,
+    std::string_view key
+) {
+    if (type == type_id<DynamicStateRef>() && key == "get") {
+        lua_pushcfunction(state, dynamic_state_get, "State.get");
+        return true;
+    }
+    if (type != type_id<DynamicNextStateRef>()) {
+        return false;
+    }
+    if (key == "set") {
+        lua_pushcfunction(state, dynamic_next_state_set, "NextState.set");
+        return true;
+    }
+    if (key == "clear" || key == "reset") {
+        lua_pushcfunction(state, dynamic_next_state_clear, "NextState.clear");
+        return true;
+    }
+    return false;
+}
+
 int borrowed_index(lua_State* state) {
     auto& object = check_object(state, 1);
     const char* key = luaL_checkstring(state, 2);
+    if (push_dynamic_state_member(state, object.ref.type_id(), key)) {
+        return 1;
+    }
     if (luau_is_commands(object.ref.type_id())) {
         return dispatch_luau_commands_index(state, key);
     }
@@ -440,6 +516,21 @@ int borrowed_newindex(lua_State* state) {
         return raise_message(state, assigned.error().message);
     }
     return 0;
+}
+
+int borrowed_equal(lua_State* state) {
+    auto& lhs = check_object(state, 1);
+    auto& rhs = check_object(state, 2);
+    if (lhs.ref.type_id() != rhs.ref.type_id()) {
+        lua_pushboolean(state, false);
+        return 1;
+    }
+    auto type = Registry::instance().try_get_type(lhs.ref.type_id());
+    const auto equal =
+        type ? type->equals(lhs.ref.const_ptr(), rhs.ref.const_ptr()) :
+               Optional<bool> {};
+    lua_pushboolean(state, equal.value_or(false));
+    return 1;
 }
 
 int query_next(lua_State* state) {
@@ -492,6 +583,8 @@ void install_luau_borrowed_object_metatable(lua_State* state) {
         lua_setfield(state, -2, "__index");
         lua_pushcfunction(state, borrowed_newindex, "borrowed.__newindex");
         lua_setfield(state, -2, "__newindex");
+        lua_pushcfunction(state, borrowed_equal, "borrowed.__eq");
+        lua_setfield(state, -2, "__eq");
         lua_pushcfunction(state, borrowed_iter, "borrowed.__iter");
         lua_setfield(state, -2, "__iter");
     }

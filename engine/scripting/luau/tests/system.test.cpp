@@ -6,6 +6,7 @@
 #include "ecs/commands.hpp"
 #include "ecs/dynamic/query.hpp"
 #include "ecs/dynamic/world.hpp"
+#include "ecs/state.hpp"
 #include "ecs/world.hpp"
 #include "refl/cls.hpp"
 #include "refl/registry.hpp"
@@ -81,6 +82,7 @@ struct LuauTestConfig {
     float generated_x {0.0F};
     bool schedule_enabled {true};
     int schedule_order {0};
+    int state_order {0};
 
     void add_execution(int count) { executions += count; }
 
@@ -202,6 +204,7 @@ void register_luau_system_test_types() {
         .add_property("generated_x", &LuauTestConfig::generated_x)
         .add_property("schedule_enabled", &LuauTestConfig::schedule_enabled)
         .add_property("schedule_order", &LuauTestConfig::schedule_order)
+        .add_property("state_order", &LuauTestConfig::state_order)
         .add_method("add_execution", &LuauTestConfig::add_execution)
         .add_method("make_position", &LuauTestConfig::make_position)
         .add_method("result", &LuauTestConfig::result);
@@ -1119,4 +1122,92 @@ TEST_CASE(
     config.schedule_order = 0;
     world.run_schedule(Update);
     CHECK(world.resource<LuauTestConfig>().schedule_order == 13);
+}
+
+TEST_CASE(
+    "Luau systems use reflected C++ states and state schedules",
+    "[scripting_luau][system][state]"
+) {
+    register_luau_system_test_types();
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(LuauTestConfig {});
+    world.init_state(LuauTestMode::Idle);
+
+    const ScriptSource source {
+        .name = "state_schedule.luau",
+        .content = R"(
+            local function update_idle(
+                config: ResRW<LuauTestConfig>,
+                state: State<LuauTestMode>,
+                next_state: NextState<LuauTestMode>
+            )
+                assert(state:get() == LuauTestMode.Idle)
+                config.state_order = config.state_order * 10 + 1
+                next_state:set(LuauTestMode.Active)
+            end
+
+            local function exit_idle(config: ResRW<LuauTestConfig>)
+                config.state_order = config.state_order * 10 + 2
+            end
+
+            local function idle_to_active(config: ResRW<LuauTestConfig>)
+                config.state_order = config.state_order * 10 + 3
+            end
+
+            local function enter_active(
+                config: ResRW<LuauTestConfig>,
+                state: State<LuauTestMode>
+            )
+                assert(state:get() == LuauTestMode.Active)
+                config.state_order = config.state_order * 10 + 4
+            end
+
+            return module {
+                name = "test.state_schedule",
+                systems = {
+                    [Update] = {
+                        update_idle:run_if(in_state(LuauTestMode.Idle)),
+                    },
+                    [OnExit(LuauTestMode.Idle)] = { exit_idle },
+                    [OnTransition(
+                        LuauTestMode.Idle,
+                        LuauTestMode.Active
+                    )] = { idle_to_active },
+                    [OnEnter(LuauTestMode.Active)] = { enter_active },
+                },
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact);
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    std::string module_error;
+    if (!module) {
+        module_error = module.error().message;
+    }
+    INFO(module_error);
+    REQUIRE(module);
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems);
+    world.sort_systems();
+
+    world.run_state_transitions();
+    world.run_schedule(Update);
+    CHECK(world.resource<LuauTestConfig>().state_order == 1);
+
+    world.run_state_transitions();
+    CHECK(world.resource<State<LuauTestMode>>().get() == LuauTestMode::Active);
+    CHECK(world.resource<LuauTestConfig>().state_order == 1234);
+
+    world.run_schedule(Update);
+    CHECK(world.resource<LuauTestConfig>().state_order == 1234);
 }

@@ -1,5 +1,6 @@
 #include "scripting_luau/detail/script_system_loader.hpp"
 
+#include "ecs/dynamic/state.hpp"
 #include "ecs/dynamic/system.hpp"
 #include "refl/registry.hpp"
 #include "scripting/module_install.hpp"
@@ -73,6 +74,22 @@ Status<ScriptError> bind_declared_types(
                 }
                 continue;
             }
+            if (param->decl_type_id() == type_id<DynamicStateParamDecl>() ||
+                param->decl_type_id() == type_id<DynamicNextStateParamDecl>()) {
+                const auto& type =
+                    param->decl_type_id() == type_id<DynamicStateParamDecl>() ?
+                        static_cast<const DynamicStateParamDecl&>(*param).type :
+                        static_cast<const DynamicNextStateParamDecl&>(*param)
+                            .type;
+                if (script_types.contains(type.type_name)) {
+                    continue;
+                }
+                auto status = bind_type_ref(runtime, module, type, bound);
+                if (!status) {
+                    return status;
+                }
+                continue;
+            }
             if (param->decl_type_id() != type_id<DynamicQueryParamDecl>()) {
                 continue;
             }
@@ -128,12 +145,13 @@ Status<ScriptError> bind_declared_types(
         });
     };
     static const std::unordered_set<std::string_view> reserved {
-        "Entity",      "Read",        "Write",        "With",
-        "Without",     "module",      "system",       "MainSchedules",
-        "First",       "PreStartUp",  "StartUp",      "PreUpdate",
-        "Update",      "PostUpdate",  "Last",         "RenderPrepare",
-        "RenderFirst", "RenderStart", "RenderUpdate", "RenderEnd",
-        "RenderLast",
+        "Entity",      "Read",         "Write",         "With",
+        "Without",     "module",       "system",        "chain",
+        "in_state",    "OnEnter",      "OnExit",        "OnTransition",
+        "State",       "NextState",    "MainSchedules", "First",
+        "PreStartUp",  "StartUp",      "PreUpdate",     "Update",
+        "PostUpdate",  "Last",         "RenderPrepare", "RenderFirst",
+        "RenderStart", "RenderUpdate", "RenderEnd",     "RenderLast",
     };
     std::unordered_map<std::string, std::size_t> name_counts;
     for (const auto& [id, type] : Registry::instance().types()) {
@@ -222,6 +240,52 @@ Result<std::vector<SystemHandle>, ScriptError> install_luau_script_systems(
     };
     auto create_condition_executor = [&](const DynamicConditionDecl& condition)
         -> Result<std::unique_ptr<DynamicConditionExecutor>, ScriptError> {
+        if (condition.kind == DynamicConditionDeclKind::InState) {
+            if (!condition.state_value) {
+                return failure(
+                    ScriptError {"in_state condition is missing its value"}
+                );
+            }
+            Val expected = *condition.state_value;
+            return make_script_condition_executor(
+                [expected = std::move(expected)](
+                    const std::vector<Ref>& args
+                ) -> Result<bool, ScriptError> {
+                    if (args.size() != 1) {
+                        return failure(
+                            ScriptError {"in_state condition expected one "
+                                         "State parameter"}
+                        );
+                    }
+                    const auto* state =
+                        args[0].try_get_const<DynamicStateRef>();
+                    if (state == nullptr) {
+                        return failure(
+                            ScriptError {
+                                "in_state condition received an invalid State "
+                                "parameter"
+                            }
+                        );
+                    }
+                    Ref current = state->get();
+                    if (!current || current.type_id() != expected.type_id()) {
+                        return false;
+                    }
+                    auto equal = expected.type()->equals(
+                        current.const_ptr(),
+                        expected.ref().const_ptr()
+                    );
+                    if (!equal) {
+                        return failure(
+                            ScriptError {
+                                "State type is not equality comparable"
+                            }
+                        );
+                    }
+                    return *equal;
+                }
+            );
+        }
         return make_script_condition_executor(
             [&runtime,
              module,
