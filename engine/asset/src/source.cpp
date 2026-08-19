@@ -208,15 +208,16 @@ std::string EmbeddedAssetSource::name() const {
 }
 
 bool EmbeddedAssetSource::exists(const std::filesystem::path& path) const {
-    return EmbeddedAssets::has(path.string());
+    return EmbeddedAssets::has(path.generic_string());
 }
 
 Result<Reader, std::string>
 EmbeddedAssetSource::try_get_reader(const std::filesystem::path& path) const {
-    if (!EmbeddedAssets::has(path.string())) {
-        return failure("No embedded asset found with name: " + path.string());
+    const auto name = path.generic_string();
+    if (!EmbeddedAssets::has(name)) {
+        return failure("No embedded asset found with name: " + name);
     }
-    return EmbeddedAssets::get(path.string()).reader();
+    return EmbeddedAssets::get(name).reader();
 }
 
 } // namespace fei

@@ -1,10 +1,12 @@
 #include "asset/source.hpp"
 
 #include "app/app.hpp"
+#include "asset/embed.hpp"
 #include "asset/plugin.hpp"
 #include "asset/server.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -58,6 +60,25 @@ find_entry(const std::vector<AssetEntry>& entries, const AssetPath& path) {
 }
 
 } // namespace
+
+TEST_CASE(
+    "EmbeddedAssetSource normalizes nested paths",
+    "[asset][source][embedded]"
+) {
+    const std::array data {std::byte {1}, std::byte {2}, std::byte {3}};
+    EmbeddedAssets::add(
+        "source-test/nested.bin",
+        reinterpret_cast<const uint8_t*>(data.data()),
+        reinterpret_cast<const uint8_t*>(data.data() + data.size())
+    );
+    EmbeddedAssetSource source;
+    const auto path = std::filesystem::path("source-test") / "nested.bin";
+
+    REQUIRE(source.exists(path));
+    auto reader = source.try_get_reader(path);
+    REQUIRE(reader);
+    CHECK(reader->size() == data.size());
+}
 
 TEST_CASE(
     "FilesystemAssetSource enumerates source-qualified assets",
