@@ -9,6 +9,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace fei {
 
@@ -168,8 +169,36 @@ class MouseInput {
     std::unordered_map<MouseButton, KeyStateInternal> m_keys;
 };
 
+class MouseScrollInput {
+  public:
+    void set_delta(Vector2 delta) { m_delta = delta; }
+    void scroll(Vector2 delta) { m_delta += delta; }
+    void clear() { m_delta = Vector2::Zero; }
+    [[nodiscard]] Vector2 delta() const { return m_delta; }
+
+  private:
+    Vector2 m_delta;
+};
+
+class CharacterInput {
+  public:
+    void push(char32_t character) { m_characters.push_back(character); }
+    void clear() { m_characters.clear(); }
+    [[nodiscard]] std::span<const char32_t> characters() const {
+        return m_characters;
+    }
+
+  private:
+    std::vector<char32_t> m_characters;
+};
+
 void key_input_system(ResRO<Window> win, ResRW<KeyInput> input);
 void mouse_input_system(ResRO<Window> win, ResRW<MouseInput> input);
+void mouse_scroll_input_system(
+    ResRO<Window> win,
+    ResRW<MouseScrollInput> input
+);
+void character_input_system(ResRO<Window> win, ResRW<CharacterInput> input);
 void apply_virtual_key_input(
     ResRO<VirtualInput> virtual_input,
     ResRW<KeyInput> input
@@ -181,6 +210,8 @@ class InputPlugin : public Plugin {
     void setup(App& app) override {
         app.add_resource<KeyInput>();
         app.add_resource<MouseInput>();
+        app.add_resource<MouseScrollInput>();
+        app.add_resource<CharacterInput>();
         app.add_resource<VirtualInput>();
         app.configure_sets(
             PreUpdate,
@@ -190,6 +221,8 @@ class InputPlugin : public Plugin {
             PreUpdate,
             key_input_system | in_set<InputSystems::Update>(),
             mouse_input_system | in_set<InputSystems::Update>(),
+            mouse_scroll_input_system | in_set<InputSystems::Update>(),
+            character_input_system | in_set<InputSystems::Update>(),
             apply_virtual_key_input | in_set<InputSystems::ApplyVirtual>()
         );
     }

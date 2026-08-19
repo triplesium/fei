@@ -1,8 +1,28 @@
 #include "window/input.hpp"
 
 #include <GLFW/glfw3.h>
+#include <unordered_map>
 
 namespace fei {
+
+namespace {
+
+std::unordered_map<GLFWwindow*, Vector2> g_scroll_deltas;
+std::unordered_map<GLFWwindow*, std::vector<char32_t>> g_characters;
+
+void on_scroll(GLFWwindow* window, double x, double y) {
+    g_scroll_deltas[window] += {
+        static_cast<float>(x),
+        static_cast<float>(y),
+    };
+}
+
+void on_character(GLFWwindow* window, unsigned int codepoint) {
+    g_characters[window].push_back(static_cast<char32_t>(codepoint));
+}
+
+} // namespace
+
 void key_input_system(ResRO<Window> win, ResRW<KeyInput> input) {
     auto glfw_window = win->glfw_window;
     input->clear();
@@ -31,6 +51,37 @@ void mouse_input_system(ResRO<Window> win, ResRW<MouseInput> input) {
     double xpos, ypos;
     glfwGetCursorPos(glfw_window, &xpos, &ypos);
     input->set_position({static_cast<float>(xpos), static_cast<float>(ypos)});
+}
+
+void mouse_scroll_input_system(
+    ResRO<Window> win,
+    ResRW<MouseScrollInput> input
+) {
+    input->clear();
+    if (win->glfw_window == nullptr) {
+        return;
+    }
+    glfwSetScrollCallback(win->glfw_window, on_scroll);
+    const auto item = g_scroll_deltas.find(win->glfw_window);
+    if (item != g_scroll_deltas.end()) {
+        input->set_delta(item->second);
+        item->second = Vector2::Zero;
+    }
+}
+
+void character_input_system(ResRO<Window> win, ResRW<CharacterInput> input) {
+    input->clear();
+    if (win->glfw_window == nullptr) {
+        return;
+    }
+    glfwSetCharCallback(win->glfw_window, on_character);
+    const auto item = g_characters.find(win->glfw_window);
+    if (item != g_characters.end()) {
+        for (const auto character : item->second) {
+            input->push(character);
+        }
+        item->second.clear();
+    }
 }
 
 void apply_virtual_key_input(

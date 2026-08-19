@@ -51,3 +51,16 @@ TEST_CASE("Exclusive virtual input replaces physical keys", "[window][input]") {
     CHECK(world.resource<KeyInput>().pressed(KeyCode::A));
     CHECK_FALSE(world.resource<KeyInput>().pressed(KeyCode::D));
 }
+
+TEST_CASE("CharacterInput stores a frame of Unicode input", "[window][input]") {
+    CharacterInput input;
+    input.push(U'A');
+    input.push(U'\u754c');
+
+    REQUIRE(input.characters().size() == 2);
+    CHECK(input.characters()[0] == U'A');
+    CHECK(input.characters()[1] == U'\u754c');
+
+    input.clear();
+    CHECK(input.characters().empty());
+}
