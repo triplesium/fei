@@ -10,9 +10,7 @@ namespace fei {
 
 FEI_REFLECT(Resource)
 struct Time {
-    Time() :
-        m_last_tick_time(std::chrono::steady_clock::now()),
-        m_start_time(std::chrono::steady_clock::now()) {}
+    Time() : m_last_tick_time(std::chrono::steady_clock::now()) {}
 
     void tick();
     float delta() const;
@@ -20,8 +18,10 @@ struct Time {
 
     void set_fixed_delta(float delta);
     void clear_fixed_delta();
+    void set_max_delta(float delta);
     void reset_elapsed_time(float elapsed_time = 0.0f);
     [[nodiscard]] Optional<float> fixed_delta() const { return m_fixed_delta; }
+    float max_delta() const { return m_max_delta; }
 
     float time_scale {1.0f};
 
@@ -29,12 +29,34 @@ struct Time {
     std::chrono::steady_clock::time_point m_last_tick_time {
         std::chrono::steady_clock::now()
     };
-    std::chrono::steady_clock::time_point m_start_time {
-        std::chrono::steady_clock::now()
-    };
     float m_delta_time = 0.0f;
     float m_elapsed_time = 0.0f;
+    float m_max_delta = 0.25f;
     Optional<float> m_fixed_delta;
+};
+
+FEI_REFLECT(Resource)
+class FixedTime {
+  public:
+    FixedTime() = default;
+    explicit FixedTime(float timestep_seconds);
+
+    float delta() const { return static_cast<float>(m_timestep); }
+    float timestep() const { return static_cast<float>(m_timestep); }
+    float elapsed_time() const { return static_cast<float>(m_elapsed_time); }
+    float overstep() const { return static_cast<float>(m_overstep); }
+    float overstep_fraction() const;
+
+    void set_timestep(float timestep_seconds);
+    void set_timestep_hz(float hz);
+    void accumulate_overstep(float delta_seconds);
+    bool expend();
+    void reset();
+
+  private:
+    double m_timestep {1.0 / 60.0};
+    double m_overstep {0.0};
+    double m_elapsed_time {0.0};
 };
 
 enum TimerMode {

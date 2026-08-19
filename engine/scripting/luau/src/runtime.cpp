@@ -554,19 +554,11 @@ void install_module_helpers(lua_State* state) {
 
     lua_newtable(state);
     const char* schedules[] = {
-        "First",
-        "PreStartUp",
-        "StartUp",
-        "PreUpdate",
-        "Update",
-        "PostUpdate",
-        "Last",
-        "RenderPrepare",
-        "RenderFirst",
-        "RenderStart",
-        "RenderUpdate",
-        "RenderEnd",
-        "RenderLast",
+        "First",       "PreStartUp",       "StartUp",      "PreUpdate",
+        "Update",      "PostUpdate",       "Last",         "RenderPrepare",
+        "RenderFirst", "RenderStart",      "RenderUpdate", "RenderEnd",
+        "RenderLast",  "RunFixedMainLoop", "FixedFirst",   "FixedPreUpdate",
+        "FixedUpdate", "FixedPostUpdate",  "FixedLast",
     };
     for (std::size_t index = 0; index < std::size(schedules); ++index) {
         lua_pushinteger(state, static_cast<int>(index));
@@ -870,7 +862,7 @@ Result<LuauScriptModuleId, LuauScriptError> LuauRuntime::load_module(
                 }
             }
 
-            if (first_system.schedule <= RenderLast) {
+            if (first_system.schedule <= FixedLast) {
                 lua_rawgeti(
                     thread,
                     systems_index,

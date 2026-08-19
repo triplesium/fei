@@ -61,3 +61,44 @@ The graphics backend must therefore keep the worker-thread API safe:
 
 For the current OpenGL backend, worker calls queue pending work into
 `OpenGLDeviceState`; `flush()` drains that queue on the OpenGL context thread.
+
+## Fixed Updates
+
+`RunFixedMainLoop` runs once between `PreUpdate` and `Update`. `TimePlugin`
+uses it to consume `FixedTime::overstep()` and runs the following schedules
+zero or more times per main update:
+
+1. `FixedFirst`
+2. `FixedPreUpdate`
+3. `FixedUpdate`
+4. `FixedPostUpdate`
+5. `FixedLast`
+
+Systems that must run once immediately before or after the fixed loop belong to
+`RunFixedMainLoop` and one of `RunFixedMainLoopSystems::BeforeFixedMainLoop` or
+`RunFixedMainLoopSystems::AfterFixedMainLoop`. Physics, fixed-rate gameplay,
+AI, and networking normally belong to `FixedUpdate`.
+
+`Time` is the scaled, clamped main clock. `FixedTime` stores the fixed
+timestep, elapsed fixed time, and unconsumed overstep. Fixed systems should read
+`FixedTime`; interpolation systems can use `FixedTime::overstep_fraction()`.
+
+## Removed Components
+
+`RemovedComponents<T>` is a stateful system parameter that reports entities
+whose `T` component was removed, including entities despawned while holding
+`T`. Each system has an independent reader cursor:
+
+```cpp
+void cleanup(RemovedComponents<Collider> removed) {
+    while (auto entity = removed.next()) {
+        // Release external state associated with *entity.
+    }
+}
+```
+
+Removal messages use per-component double buffers and remain available for two
+tracker updates. `App` rotates the buffers once per main update. Standalone
+`World` users must call `World::clear_trackers()` themselves. A reader that
+does not run before both buffers rotate can miss removal messages, matching the
+short-lived semantics of regular events.

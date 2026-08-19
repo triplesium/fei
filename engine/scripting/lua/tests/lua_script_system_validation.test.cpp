@@ -1,3 +1,4 @@
+#include "app/app.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/world.hpp"
 #include "lua_test_types.hpp"
@@ -10,6 +11,35 @@
 
 using namespace fei;
 using namespace fei::detail;
+
+TEST_CASE(
+    "Lua script systems accept fixed main schedules",
+    "[scripting][lua][system][schedule]"
+) {
+    auto runtime = make_test_runtime();
+
+    auto module = runtime.load_module(
+        LuaScriptSource {
+            .name = "fixed_schedule.lua",
+            .content = R"(
+                function fixed_tick(args)
+                end
+
+                system {
+                    name = "fixed_tick",
+                    run = fixed_tick,
+                    schedule = MainSchedules.FixedUpdate,
+                }
+            )",
+        }
+    );
+
+    REQUIRE(module);
+    auto decl = runtime.module_decl(*module);
+    REQUIRE(decl);
+    REQUIRE(decl->systems.size() == 1);
+    CHECK(decl->systems.front().schedule == FixedUpdate);
+}
 
 TEST_CASE(
     "Lua script system schedules require MainSchedules enum values",

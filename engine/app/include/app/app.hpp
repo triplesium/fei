@@ -41,7 +41,20 @@ enum MainSchedules : std::uint32_t {
     RenderStart,
     RenderUpdate,
     RenderEnd,
-    RenderLast
+    RenderLast,
+
+    RunFixedMainLoop,
+    FixedFirst,
+    FixedPreUpdate,
+    FixedUpdate,
+    FixedPostUpdate,
+    FixedLast,
+};
+
+struct RunFixedMainLoopSystems {
+    struct BeforeFixedMainLoop : SystemSet<BeforeFixedMainLoop> {};
+    struct FixedMainLoop : SystemSet<FixedMainLoop> {};
+    struct AfterFixedMainLoop : SystemSet<AfterFixedMainLoop> {};
 };
 
 enum class AppLifecycle : std::uint8_t {
@@ -131,6 +144,14 @@ class App {
     App() {
         add_resource<AppStates>();
         add_resource<CommandsQueue>();
+        configure_sets(
+            RunFixedMainLoop,
+            chain(
+                RunFixedMainLoopSystems::BeforeFixedMainLoop {},
+                RunFixedMainLoopSystems::FixedMainLoop {},
+                RunFixedMainLoopSystems::AfterFixedMainLoop {}
+            )
+        );
     }
 
     template<typename E>

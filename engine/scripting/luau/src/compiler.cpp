@@ -412,6 +412,12 @@ Result<ScheduleId, ScriptError> schedule_id(
         {"RenderUpdate", RenderUpdate},
         {"RenderEnd", RenderEnd},
         {"RenderLast", RenderLast},
+        {"RunFixedMainLoop", RunFixedMainLoop},
+        {"FixedFirst", FixedFirst},
+        {"FixedPreUpdate", FixedPreUpdate},
+        {"FixedUpdate", FixedUpdate},
+        {"FixedPostUpdate", FixedPostUpdate},
+        {"FixedLast", FixedLast},
     };
     const auto found = schedules.find(name);
     if (found != schedules.end()) {

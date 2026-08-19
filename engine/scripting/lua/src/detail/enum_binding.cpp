@@ -33,7 +33,13 @@ Enum& register_main_schedules_enum() {
         .add_enumerator("RenderStart", RenderStart)
         .add_enumerator("RenderUpdate", RenderUpdate)
         .add_enumerator("RenderEnd", RenderEnd)
-        .add_enumerator("RenderLast", RenderLast);
+        .add_enumerator("RenderLast", RenderLast)
+        .add_enumerator("RunFixedMainLoop", RunFixedMainLoop)
+        .add_enumerator("FixedFirst", FixedFirst)
+        .add_enumerator("FixedPreUpdate", FixedPreUpdate)
+        .add_enumerator("FixedUpdate", FixedUpdate)
+        .add_enumerator("FixedPostUpdate", FixedPostUpdate)
+        .add_enumerator("FixedLast", FixedLast);
 }
 
 bool push_lua_enum(lua_State* L, const Enum& enm) {

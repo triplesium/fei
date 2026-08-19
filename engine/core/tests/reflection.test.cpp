@@ -19,11 +19,13 @@ TEST_CASE(
     const auto& transform_2d = registry.get_type<Transform2d>();
     const auto& transform_3d = registry.get_type<Transform3d>();
     const auto& time = registry.get_type<Time>();
+    const auto& fixed_time = registry.get_type<FixedTime>();
 
     REQUIRE(transform_2d.has_tag(ComponentTypeTag));
     REQUIRE(transform_3d.has_tag(ComponentTypeTag));
     REQUIRE_FALSE(transform_2d.has_tag(ResourceTypeTag));
     REQUIRE(time.has_tag(ResourceTypeTag));
+    REQUIRE(fixed_time.has_tag(ResourceTypeTag));
     REQUIRE_FALSE(time.has_tag(ComponentTypeTag));
 
     const auto component_types = registry.types_with_tag(ComponentTypeTag);

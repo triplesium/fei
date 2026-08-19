@@ -8,6 +8,33 @@
 namespace fei::test {
 
 TEST_CASE(
+    "Luau compiler resolves fixed main schedules",
+    "[scripting_luau][compiler][schedule]"
+) {
+    const ScriptSource source {
+        .name = "fixed_update.luau",
+        .content = R"(
+            local function fixed_system()
+            end
+
+            return module {
+                name = "game.fixed_update",
+                systems = {
+                    system(MainSchedules.FixedUpdate, fixed_system),
+                },
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    REQUIRE(artifact->declaration.systems.size() == 1);
+    CHECK(artifact->declaration.systems.front().schedule == FixedUpdate);
+}
+
+TEST_CASE(
     "Luau compiler extracts multiple queries and resources from parameters",
     "[scripting_luau][compiler]"
 ) {
