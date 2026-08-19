@@ -55,6 +55,7 @@ add_sample("sprite")
 target("sample-sprite")
     add_deps(
         "fei-devtools",
+        "fei-devtools-input",
         "fei-devtools-rendering",
         "fei-sprite",
         "fei-graphics-vulkan",
