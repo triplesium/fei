@@ -42,6 +42,8 @@ void synchronize_bodies(
     Query<Entity, const Transform2d, const RigidBody2d, const Collider2d>
         bodies,
     Query<Entity, const PhysicsMaterial2d> materials,
+    Query<Entity, const CollisionLayers2d> collision_layers,
+    Query<Entity, const Sensor2d> sensors,
     Query<Entity, const LinearVelocity2d> linear_velocities,
     Query<Entity, const AngularVelocity2d> angular_velocities,
     Query<Entity, PhysicsPose2d> poses,
@@ -51,10 +53,14 @@ void synchronize_bodies(
     for (const auto& [entity, transform, body, collider] : bodies) {
         const bool existed = physics->contains(entity);
         const auto material_item = materials.get(entity);
+        const auto collision_layers_item = collision_layers.get(entity);
         const auto linear_velocity_item = linear_velocities.get(entity);
         const auto angular_velocity_item = angular_velocities.get(entity);
         const auto* material =
             material_item ? &std::get<1>(*material_item) : nullptr;
+        const auto* layers = collision_layers_item ?
+                                 &std::get<1>(*collision_layers_item) :
+                                 nullptr;
         const auto* linear_velocity = linear_velocity_item ?
                                           &std::get<1>(*linear_velocity_item) :
                                           nullptr;
@@ -67,6 +73,8 @@ void synchronize_bodies(
             body,
             collider,
             material,
+            layers,
+            sensors.get(entity).has_value(),
             linear_velocity,
             angular_velocity
         );
@@ -235,16 +243,24 @@ void interpolate_dynamic_transforms(
     }
 }
 
-void emit_collision_events(
+void emit_physics_events(
     ResRO<PhysicsWorld2d> physics,
     EventWriter<CollisionStarted2d> started,
-    EventWriter<CollisionEnded2d> ended
+    EventWriter<CollisionEnded2d> ended,
+    EventWriter<SensorStarted2d> sensor_started,
+    EventWriter<SensorEnded2d> sensor_ended
 ) {
     for (const auto& event : physics->collisions_started()) {
         started.send(event);
     }
     for (const auto& event : physics->collisions_ended()) {
         ended.send(event);
+    }
+    for (const auto& event : physics->sensors_started()) {
+        sensor_started.send(event);
+    }
+    for (const auto& event : physics->sensors_ended()) {
+        sensor_ended.send(event);
     }
 }
 
@@ -260,6 +276,8 @@ void PhysicsPlugin2d::setup(App& app) {
         .add_resource(PhysicsWorld2d {})
         .add_event<CollisionStarted2d>()
         .add_event<CollisionEnded2d>()
+        .add_event<SensorStarted2d>()
+        .add_event<SensorEnded2d>()
         .add_systems(
             FixedPreUpdate,
             chain(cleanup_removed_bodies, synchronize_bodies, apply_teleports) |
@@ -274,7 +292,7 @@ void PhysicsPlugin2d::setup(App& app) {
             chain(
                 advance_pose_history,
                 update_dynamic_physics_poses,
-                emit_collision_events
+                emit_physics_events
             ) | in_set<PhysicsSystems2d::WriteBack>()
         )
         .add_systems(

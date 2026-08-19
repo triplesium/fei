@@ -8,6 +8,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
+#include <cstdint>
 
 using namespace fei;
 
@@ -132,6 +133,183 @@ TEST_CASE(
     app.world().despawn(entity);
     app.update();
     CHECK(app.resource<PhysicsWorld2d>().body_count() == 0);
+}
+
+TEST_CASE(
+    "CollisionLayers2d filters contacts in both directions",
+    "[physics2d][layers]"
+) {
+    App app;
+    app.add_plugin<PhysicsPlugin2d>();
+
+    const auto ground = spawn_body(
+        app.world(),
+        Transform2d {.position = {0.0f, -0.5f}},
+        RigidBody2d {.type = RigidBodyType2d::Static},
+        Collider2d::box({5.0f, 0.5f})
+    );
+    app.world().add_component(
+        ground,
+        CollisionLayers2d {
+            .memberships = std::uint64_t {1} << 0,
+            .filters = std::uint64_t {1} << 1
+        }
+    );
+    const auto box = spawn_body(
+        app.world(),
+        Transform2d {.position = {0.0f, 2.0f}},
+        RigidBody2d {},
+        Collider2d::box({0.5f, 0.5f})
+    );
+    app.world().add_component(
+        box,
+        CollisionLayers2d {
+            .memberships = std::uint64_t {1} << 2,
+            .filters = std::uint64_t {1} << 0
+        }
+    );
+
+    configure_fixed_step(app);
+    std::size_t cursor =
+        app.resource<Events<CollisionStarted2d>>().oldest_event_count();
+    bool collided = false;
+    for (int step = 0; step < 120; ++step) {
+        app.update();
+        EventReader reader(app.resource<Events<CollisionStarted2d>>(), cursor);
+        while (const auto event = reader.next()) {
+            collided = collided ||
+                       ((event->entity_a == ground && event->entity_b == box) ||
+                        (event->entity_a == box && event->entity_b == ground));
+        }
+    }
+
+    CHECK_FALSE(collided);
+    CHECK(app.world().get_component<Transform2d>(box).position.y < -1.0f);
+}
+
+TEST_CASE(
+    "CollisionLayers2d changes are synchronized without recreating bodies",
+    "[physics2d][layers][change]"
+) {
+    App app;
+    app.add_plugin<PhysicsPlugin2d>();
+
+    const auto solid = spawn_body(
+        app.world(),
+        Transform2d {},
+        RigidBody2d {.type = RigidBodyType2d::Static},
+        Collider2d::box({1.0f, 1.0f})
+    );
+    app.world().add_component(
+        solid,
+        CollisionLayers2d {
+            .memberships = std::uint64_t {1} << 0,
+            .filters = std::uint64_t {1} << 1
+        }
+    );
+    const auto visitor = spawn_body(
+        app.world(),
+        Transform2d {},
+        RigidBody2d {},
+        Collider2d::circle(0.5f)
+    );
+    app.world().add_component(
+        visitor,
+        CollisionLayers2d {
+            .memberships = std::uint64_t {1} << 2,
+            .filters = std::uint64_t {1} << 0
+        }
+    );
+
+    configure_fixed_step(app);
+    app.resource<PhysicsSettings2d>().gravity = Vector2::Zero;
+    std::size_t cursor =
+        app.resource<Events<CollisionStarted2d>>().oldest_event_count();
+    app.update();
+
+    app.world()
+        .get_component_rw<CollisionLayers2d>(visitor)
+        .write()
+        .memberships = std::uint64_t {1} << 1;
+    app.update();
+
+    bool collided = false;
+    EventReader reader(app.resource<Events<CollisionStarted2d>>(), cursor);
+    while (const auto event = reader.next()) {
+        collided = collided ||
+                   ((event->entity_a == solid && event->entity_b == visitor) ||
+                    (event->entity_a == visitor && event->entity_b == solid));
+    }
+    CHECK(collided);
+    CHECK(app.resource<PhysicsWorld2d>().body_count() == 2);
+}
+
+TEST_CASE(
+    "Sensor2d reports overlap start and end without blocking",
+    "[physics2d][sensor]"
+) {
+    App app;
+    app.add_plugin<PhysicsPlugin2d>();
+
+    const auto sensor = spawn_body(
+        app.world(),
+        Transform2d {},
+        RigidBody2d {.type = RigidBodyType2d::Static},
+        Collider2d::box({2.0f, 0.25f})
+    );
+    app.world().add_component(sensor, Sensor2d {});
+    const auto visitor = spawn_body(
+        app.world(),
+        Transform2d {.position = {0.0f, 2.0f}},
+        RigidBody2d {},
+        Collider2d::circle(0.25f)
+    );
+
+    configure_fixed_step(app);
+    std::size_t started_cursor =
+        app.resource<Events<SensorStarted2d>>().oldest_event_count();
+    std::size_t ended_cursor =
+        app.resource<Events<SensorEnded2d>>().oldest_event_count();
+    std::size_t collision_cursor =
+        app.resource<Events<CollisionStarted2d>>().oldest_event_count();
+    bool overlap_started = false;
+    bool overlap_ended = false;
+    bool collided = false;
+
+    for (int step = 0; step < 180; ++step) {
+        app.update();
+        EventReader started_reader(
+            app.resource<Events<SensorStarted2d>>(),
+            started_cursor
+        );
+        while (const auto event = started_reader.next()) {
+            overlap_started = overlap_started || (event->sensor == sensor &&
+                                                  event->visitor == visitor);
+        }
+        EventReader ended_reader(
+            app.resource<Events<SensorEnded2d>>(),
+            ended_cursor
+        );
+        while (const auto event = ended_reader.next()) {
+            overlap_ended = overlap_ended || (event->sensor == sensor &&
+                                              event->visitor == visitor);
+        }
+        EventReader collision_reader(
+            app.resource<Events<CollisionStarted2d>>(),
+            collision_cursor
+        );
+        while (const auto event = collision_reader.next()) {
+            collided =
+                collided ||
+                ((event->entity_a == sensor && event->entity_b == visitor) ||
+                 (event->entity_a == visitor && event->entity_b == sensor));
+        }
+    }
+
+    CHECK(overlap_started);
+    CHECK(overlap_ended);
+    CHECK_FALSE(collided);
+    CHECK(app.world().get_component<Transform2d>(visitor).position.y < -1.0f);
 }
 
 TEST_CASE(

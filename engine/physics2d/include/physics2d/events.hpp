@@ -16,4 +16,14 @@ struct CollisionEnded2d {
     Entity entity_b;
 };
 
+struct SensorStarted2d {
+    Entity sensor;
+    Entity visitor;
+};
+
+struct SensorEnded2d {
+    Entity sensor;
+    Entity visitor;
+};
+
 } // namespace fei

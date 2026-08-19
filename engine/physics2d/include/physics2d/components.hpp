@@ -4,6 +4,7 @@
 #include "refl/reflect.hpp"
 
 #include <cstdint>
+#include <limits>
 
 namespace fei {
 
@@ -51,6 +52,22 @@ struct PhysicsMaterial2d {
 
     bool operator==(const PhysicsMaterial2d&) const = default;
 };
+
+// A pair interacts when both sides accept the other's membership bits.
+// A shared non-zero group overrides the bit masks: positive always interacts,
+// negative never interacts.
+FEI_REFLECT(Component)
+struct CollisionLayers2d {
+    std::uint64_t memberships {std::numeric_limits<std::uint64_t>::max()};
+    std::uint64_t filters {std::numeric_limits<std::uint64_t>::max()};
+    std::int32_t group_index {0};
+
+    bool operator==(const CollisionLayers2d&) const = default;
+};
+
+// Generates overlap events without applying a collision response.
+FEI_REFLECT(Component)
+struct Sensor2d {};
 
 FEI_REFLECT(Component)
 struct LinearVelocity2d {

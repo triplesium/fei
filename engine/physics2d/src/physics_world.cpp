@@ -32,6 +32,14 @@ Vector2 from_box2d(b2Vec2 value) {
     return Vector2 {value.x, value.y};
 }
 
+b2Filter to_box2d(const CollisionLayers2d& layers) {
+    auto filter = b2DefaultFilter();
+    filter.categoryBits = layers.memberships;
+    filter.maskBits = layers.filters;
+    filter.groupIndex = static_cast<int>(layers.group_index);
+    return filter;
+}
+
 } // namespace
 
 struct PhysicsWorld2d::Impl {
@@ -41,6 +49,8 @@ struct PhysicsWorld2d::Impl {
         RigidBody2d body;
         Collider2d collider;
         PhysicsMaterial2d material;
+        CollisionLayers2d layers;
+        bool sensor {false};
         Vector2 input_position;
         float input_rotation {0.0f};
     };
@@ -81,6 +91,8 @@ struct PhysicsWorld2d::Impl {
         const RigidBody2d& body,
         const Collider2d& collider,
         const PhysicsMaterial2d& material,
+        const CollisionLayers2d& layers,
+        bool sensor,
         const LinearVelocity2d* linear_velocity,
         const AngularVelocity2d* angular_velocity
     ) {
@@ -105,6 +117,8 @@ struct PhysicsWorld2d::Impl {
             .body = body,
             .collider = collider,
             .material = material,
+            .layers = layers,
+            .sensor = sensor,
             .input_position = transform.position,
             .input_rotation = transform.rotation,
         };
@@ -114,7 +128,11 @@ struct PhysicsWorld2d::Impl {
         shape_definition.material.friction = std::max(material.friction, 0.0f);
         shape_definition.material.restitution =
             std::max(material.restitution, 0.0f);
-        shape_definition.enableContactEvents = true;
+        shape_definition.filter = to_box2d(layers);
+        shape_definition.isSensor = sensor;
+        // Box2D requires both the sensor and its visitor to enable these.
+        shape_definition.enableSensorEvents = true;
+        shape_definition.enableContactEvents = !sensor;
 
         switch (collider.shape) {
             case ColliderShape2d::Box: {
@@ -161,6 +179,8 @@ void PhysicsWorld2d::synchronize_body(
     const RigidBody2d& body,
     const Collider2d& collider,
     const PhysicsMaterial2d* material,
+    const CollisionLayers2d* layers,
+    bool sensor,
     const LinearVelocity2d* linear_velocity,
     const AngularVelocity2d* angular_velocity
 ) {
@@ -171,10 +191,13 @@ void PhysicsWorld2d::synchronize_body(
 
     const PhysicsMaterial2d resolved_material =
         material != nullptr ? *material : PhysicsMaterial2d {};
+    const CollisionLayers2d resolved_layers =
+        layers != nullptr ? *layers : CollisionLayers2d {};
     auto found = m_impl->bodies.find(entity);
     if (found != m_impl->bodies.end() &&
         (found->second.body != body || found->second.collider != collider ||
-         found->second.material != resolved_material)) {
+         found->second.material != resolved_material ||
+         found->second.sensor != sensor)) {
         m_impl->destroy(entity);
         found = m_impl->bodies.end();
     }
@@ -186,10 +209,17 @@ void PhysicsWorld2d::synchronize_body(
             body,
             collider,
             resolved_material,
+            resolved_layers,
+            sensor,
             linear_velocity,
             angular_velocity
         );
         found = m_impl->bodies.emplace(entity, record).first;
+    }
+
+    if (found->second.layers != resolved_layers) {
+        b2Shape_SetFilter(found->second.shape_id, to_box2d(resolved_layers));
+        found->second.layers = resolved_layers;
     }
 
     if (body.type != RigidBodyType2d::Dynamic &&
@@ -333,6 +363,54 @@ std::vector<CollisionEnded2d> PhysicsWorld2d::collisions_ended() const {
         );
     }
     return collisions;
+}
+
+std::vector<SensorStarted2d> PhysicsWorld2d::sensors_started() const {
+    const auto events = b2World_GetSensorEvents(m_impl->world_id);
+    std::vector<SensorStarted2d> overlaps;
+    overlaps.reserve(static_cast<std::size_t>(events.beginCount));
+    for (int index = 0; index < events.beginCount; ++index) {
+        const auto& event = events.beginEvents[index];
+        const auto sensor =
+            m_impl->shape_entities.find(b2StoreShapeId(event.sensorShapeId));
+        const auto visitor =
+            m_impl->shape_entities.find(b2StoreShapeId(event.visitorShapeId));
+        if (sensor == m_impl->shape_entities.end() ||
+            visitor == m_impl->shape_entities.end()) {
+            continue;
+        }
+        overlaps.push_back(
+            SensorStarted2d {
+                .sensor = sensor->second,
+                .visitor = visitor->second,
+            }
+        );
+    }
+    return overlaps;
+}
+
+std::vector<SensorEnded2d> PhysicsWorld2d::sensors_ended() const {
+    const auto events = b2World_GetSensorEvents(m_impl->world_id);
+    std::vector<SensorEnded2d> overlaps;
+    overlaps.reserve(static_cast<std::size_t>(events.endCount));
+    for (int index = 0; index < events.endCount; ++index) {
+        const auto& event = events.endEvents[index];
+        const auto sensor =
+            m_impl->shape_entities.find(b2StoreShapeId(event.sensorShapeId));
+        const auto visitor =
+            m_impl->shape_entities.find(b2StoreShapeId(event.visitorShapeId));
+        if (sensor == m_impl->shape_entities.end() ||
+            visitor == m_impl->shape_entities.end()) {
+            continue;
+        }
+        overlaps.push_back(
+            SensorEnded2d {
+                .sensor = sensor->second,
+                .visitor = visitor->second,
+            }
+        );
+    }
+    return overlaps;
 }
 
 } // namespace fei

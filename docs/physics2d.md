@@ -21,16 +21,53 @@ app.world().add_component(box, LinearVelocity2d {});
 app.world().add_component(box, PhysicsInterpolation2d {});
 ```
 
+Collision filtering and triggers are optional ECS components:
+
+```cpp
+constexpr std::uint64_t player_layer = std::uint64_t {1} << 0;
+constexpr std::uint64_t pickup_layer = std::uint64_t {1} << 1;
+
+app.world().add_component(
+    player,
+    CollisionLayers2d {
+        .memberships = player_layer,
+        .filters = pickup_layer,
+    }
+);
+app.world().add_component(
+    pickup,
+    CollisionLayers2d {
+        .memberships = pickup_layer,
+        .filters = player_layer,
+    }
+);
+app.world().add_component(pickup, Sensor2d {});
+```
+
+Two shapes interact only when each shape's `filters` contains at least one of
+the other shape's `memberships` bits. A shared positive `group_index` forces an
+interaction, while a shared negative value prevents it; zero leaves the bit
+rules in control. Missing `CollisionLayers2d` defaults to all membership and
+filter bits, so existing bodies continue to interact with everything. Layer
+changes are synchronized before the next physics step.
+
+`Sensor2d` turns a collider into a trigger: it participates in layer filtering
+and emits `SensorStarted2d` / `SensorEnded2d`, but never produces a physical
+collision response. Normal solid contacts continue to emit
+`CollisionStarted2d` / `CollisionEnded2d`. Adding or removing `Sensor2d`
+recreates the Box2D body before the next step because Box2D does not allow a
+shape to switch between sensor and solid in place.
+
 Box extents and circle radii are measured in meters. `Transform2d::rotation`
 continues to use degrees; `AngularVelocity2d` uses radians per second to match
 Box2D.
 
-The plugin performs three fixed-step phases:
+The plugin performs four integration phases:
 
 1. `FixedPreUpdate`: remove stale Box2D bodies and synchronize ECS inputs.
 2. `FixedUpdate`: step Box2D using `FixedTime::delta()`.
 3. `FixedPostUpdate`: advance `PreviousPhysicsPose2d` and `PhysicsPose2d`,
-   synchronize velocities, then emit collision events.
+   synchronize velocities, then emit collision and sensor events.
 4. `RunFixedMainLoopSystems::AfterFixedMainLoop`: write the visual
    `Transform2d`. Entities with `PhysicsInterpolation2d` interpolate between
    the two physics poses using `FixedTime::overstep_fraction()`; other dynamic

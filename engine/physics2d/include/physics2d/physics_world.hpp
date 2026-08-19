@@ -44,6 +44,8 @@ class PhysicsWorld2d {
         const RigidBody2d& body,
         const Collider2d& collider,
         const PhysicsMaterial2d* material,
+        const CollisionLayers2d* layers,
+        bool sensor,
         const LinearVelocity2d* linear_velocity,
         const AngularVelocity2d* angular_velocity
     );
@@ -56,6 +58,8 @@ class PhysicsWorld2d {
     [[nodiscard]] std::vector<PhysicsBodyMovement2d> body_movements() const;
     [[nodiscard]] std::vector<CollisionStarted2d> collisions_started() const;
     [[nodiscard]] std::vector<CollisionEnded2d> collisions_ended() const;
+    [[nodiscard]] std::vector<SensorStarted2d> sensors_started() const;
+    [[nodiscard]] std::vector<SensorEnded2d> sensors_ended() const;
 
   private:
     struct Impl;
