@@ -194,6 +194,12 @@ class App {
         return *this;
     }
 
+    template<typename T>
+    App& insert_state(T&& state) {
+        m_world.insert_state(std::forward<T>(state));
+        return *this;
+    }
+
     template<typename R>
     App& add_resource(R&& resource) {
         m_world.add_resource(std::forward<R>(resource));

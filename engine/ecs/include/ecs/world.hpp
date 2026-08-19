@@ -288,6 +288,9 @@ class World {
     template<typename T>
     State<std::remove_cvref_t<T>>& init_state(T&& state);
 
+    template<typename T>
+    State<std::remove_cvref_t<T>>& insert_state(T&& state);
+
     void run_state_transitions();
 
     template<typename T>

@@ -28,7 +28,34 @@ void update_when_playing(ResRW<AppStateTrace> trace) {
     trace->entries.emplace_back("update:playing");
 }
 
+void enter_loading(ResRW<AppStateTrace> trace) {
+    trace->entries.emplace_back("enter:loading");
+}
+
+void record_pre_startup(ResRW<AppStateTrace> trace) {
+    trace->entries.emplace_back("pre-startup");
+}
+
 } // namespace
+
+TEST_CASE("App enters the initial state before PreStartUp", "[app][state]") {
+    StopOnFinishPlugin::setup_count = 0;
+    StopOnFinishPlugin::finish_count = 0;
+
+    App app;
+    app.add_plugin<StopOnFinishPlugin>()
+        .init_state(AppLifecycleState::Loading)
+        .add_resource(AppStateTrace {})
+        .add_systems(on_enter(AppLifecycleState::Loading), enter_loading)
+        .add_systems(PreStartUp, record_pre_startup);
+
+    app.run();
+
+    REQUIRE(
+        app.resource<AppStateTrace>().entries ==
+        std::vector<std::string> {"enter:loading", "pre-startup"}
+    );
+}
 
 TEST_CASE(
     "App applies state transitions between PreUpdate and Update",

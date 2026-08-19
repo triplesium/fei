@@ -3,11 +3,30 @@
 #include "test_types.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <functional>
 #include <string>
 #include <vector>
 
+namespace state_test_types {
+
+struct CollidingState {
+    int value {0};
+
+    bool operator==(const CollidingState&) const = default;
+};
+
+} // namespace state_test_types
+
+template<>
+struct std::hash<state_test_types::CollidingState> {
+    std::size_t operator()(const state_test_types::CollidingState&) const {
+        return 0;
+    }
+};
+
 using namespace fei;
 using namespace fei::ecs_test;
+using state_test_types::CollidingState;
 
 namespace {
 
@@ -15,6 +34,11 @@ enum class GameplayState {
     Loading,
     Playing,
     Paused,
+};
+
+enum class OverlayState {
+    Hidden,
+    Visible,
 };
 
 void request_playing(ResRW<NextState<GameplayState>> next_state) {
@@ -25,17 +49,13 @@ void request_paused(ResRW<NextState<GameplayState>> next_state) {
     next_state->set(GameplayState::Paused);
 }
 
-void request_loading(ResRW<NextState<GameplayState>> next_state) {
-    next_state->set(GameplayState::Loading);
-}
-
 void exit_loading(
     ResRO<State<GameplayState>> state,
     ResRW<ScheduleTrace> trace
 ) {
     trace->entries.emplace_back(
-        state->get() == GameplayState::Loading ? "exit:loading:old" :
-                                                 "exit:loading:new"
+        state->get() == GameplayState::Playing ? "exit:loading:new" :
+                                                 "exit:loading:old"
     );
 }
 
@@ -60,24 +80,25 @@ void loading_to_playing(
     );
 }
 
-void playing_to_paused(ResRW<ScheduleTrace> trace) {
-    trace->entries.emplace_back("transition:playing-paused");
+void exit_loading_observes_overlay(
+    ResRO<State<OverlayState>> overlay,
+    ResRW<ScheduleTrace> trace
+) {
+    trace->entries.emplace_back(
+        overlay->get() == OverlayState::Visible ? "overlay:new" : "overlay:old"
+    );
+}
+
+void queue_overlay_visible(ResRW<NextState<OverlayState>> next_state) {
+    next_state->set(OverlayState::Visible);
 }
 
 } // namespace
 
 TEST_CASE("ECS in_state conditions read the current state", "[ecs][state]") {
-    Registry::instance().register_type<CommandsQueue>();
-    Registry::instance().register_type<ScheduleTrace>();
-    Registry::instance().register_type<State<GameplayState>>();
-    Registry::instance().register_type<NextState<GameplayState>>();
-
     World world;
-    world.add_resource(CommandsQueue {});
     world.add_resource(ScheduleTrace {});
-    world.add_resource(State<GameplayState> {GameplayState::Loading});
-    world.add_resource(NextState<GameplayState> {});
-
+    world.init_state(GameplayState::Loading);
     world.add_systems(
         TestSchedule,
         chain(
@@ -94,10 +115,6 @@ TEST_CASE("ECS in_state conditions read the current state", "[ecs][state]") {
     );
 
     world.run_system_once(request_playing);
-    REQUIRE(
-        world.resource<State<GameplayState>>().get() == GameplayState::Loading
-    );
-
     world.resource<ScheduleTrace>().entries.clear();
     world.run_schedule(TestSchedule);
     REQUIRE(
@@ -105,11 +122,8 @@ TEST_CASE("ECS in_state conditions read the current state", "[ecs][state]") {
         std::vector<std::string> {"first"}
     );
 
-    world.run_system_once(apply_state_transition<GameplayState>);
-    REQUIRE(
-        world.resource<State<GameplayState>>().get() == GameplayState::Playing
-    );
-
+    world.run_state_transitions();
+    world.run_state_transitions();
     world.resource<ScheduleTrace>().entries.clear();
     world.run_schedule(TestSchedule);
     REQUIRE(
@@ -118,43 +132,68 @@ TEST_CASE("ECS in_state conditions read the current state", "[ecs][state]") {
     );
 }
 
-TEST_CASE("ECS world initializes state transition schedules", "[ecs][state]") {
-    Registry::instance().register_type<CommandsQueue>();
-    Registry::instance().register_type<State<GameplayState>>();
-    Registry::instance().register_type<NextState<GameplayState>>();
-
-    World world;
-    auto& state = world.init_state(GameplayState::Loading);
-
-    REQUIRE(state.get() == GameplayState::Loading);
-    REQUIRE(world.has_resource<State<GameplayState>>());
-    REQUIRE(world.has_resource<NextState<GameplayState>>());
-    REQUIRE(world.has_resource<CommandsQueue>());
-
-    world.sort_systems();
-    world.run_system_once(request_playing);
-    world.run_state_transitions();
-
-    REQUIRE(
-        world.resource<State<GameplayState>>().get() == GameplayState::Playing
-    );
-    REQUIRE_FALSE(world.resource<NextState<GameplayState>>().has_value());
-}
-
-TEST_CASE(
-    "ECS state transitions run enter and exit schedules",
-    "[ecs][state]"
-) {
-    Registry::instance().register_type<CommandsQueue>();
-    Registry::instance().register_type<ScheduleTrace>();
-    Registry::instance().register_type<State<GameplayState>>();
-    Registry::instance().register_type<NextState<GameplayState>>();
-
+TEST_CASE("ECS in_state returns false when state is missing", "[ecs][state]") {
     World world;
     world.add_resource(CommandsQueue {});
     world.add_resource(ScheduleTrace {});
-    world.add_resource(State<GameplayState> {GameplayState::Loading});
-    world.add_resource(NextState<GameplayState> {});
+    world.add_systems(
+        TestSchedule,
+        scheduled_first | run_if(in_state(GameplayState::Loading))
+    );
+    world.sort_systems();
+
+    world.run_schedule(TestSchedule);
+
+    REQUIRE(world.resource<ScheduleTrace>().entries.empty());
+}
+
+TEST_CASE("ECS init_state is idempotent", "[ecs][state]") {
+    World world;
+    world.init_state(GameplayState::Loading);
+    world.resource<NextState<GameplayState>>().set(GameplayState::Playing);
+
+    auto& state = world.init_state(GameplayState::Paused);
+
+    REQUIRE(state.get() == GameplayState::Loading);
+    REQUIRE(
+        world.resource<NextState<GameplayState>>().pending() ==
+        Optional<GameplayState> {GameplayState::Playing}
+    );
+}
+
+TEST_CASE("ECS insert_state explicitly replaces state", "[ecs][state]") {
+    World world;
+    world.add_resource(ScheduleTrace {});
+    world.init_state(GameplayState::Loading);
+    world.resource<NextState<GameplayState>>().set(GameplayState::Playing);
+    world.insert_state(GameplayState::Paused);
+    world.add_systems(
+        on_enter(GameplayState::Paused),
+        [](ResRW<ScheduleTrace> trace) {
+            trace->entries.emplace_back("enter:paused");
+        }
+    );
+    world.sort_systems();
+
+    world.run_state_transitions();
+
+    REQUIRE(
+        world.resource<State<GameplayState>>().get() == GameplayState::Paused
+    );
+    REQUIRE_FALSE(world.resource<NextState<GameplayState>>().has_value());
+    REQUIRE(
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"enter:paused"}
+    );
+}
+
+TEST_CASE(
+    "ECS state transitions run exit transition and enter phases",
+    "[ecs][state]"
+) {
+    World world;
+    world.add_resource(ScheduleTrace {});
+    world.init_state(GameplayState::Loading);
     world.add_systems(on_exit(GameplayState::Loading), exit_loading);
     world.add_systems(
         on_transition(GameplayState::Loading, GameplayState::Playing),
@@ -162,125 +201,131 @@ TEST_CASE(
     );
     world.add_systems(on_enter(GameplayState::Playing), enter_playing);
     world.sort_systems();
+    world.run_state_transitions();
 
     world.run_system_once(request_playing);
-    world.run_system_once(apply_state_transition<GameplayState>);
+    world.run_state_transitions();
 
     REQUIRE(
         world.resource<ScheduleTrace>().entries ==
         std::vector<std::string> {
-            "exit:loading:old",
+            "exit:loading:new",
             "transition:loading-playing:new",
             "enter:playing:new"
         }
     );
+}
+
+TEST_CASE(
+    "ECS applies every state before running transition callbacks",
+    "[ecs][state]"
+) {
+    World world;
+    world.add_resource(ScheduleTrace {});
+    world.init_state(GameplayState::Loading);
+    world.init_state(OverlayState::Hidden);
+    world.add_systems(
+        on_exit(GameplayState::Loading),
+        exit_loading_observes_overlay
+    );
+    world.sort_systems();
+    world.run_state_transitions();
+
+    world.resource<NextState<GameplayState>>().set(GameplayState::Playing);
+    world.resource<NextState<OverlayState>>().set(OverlayState::Visible);
+    world.run_state_transitions();
+
     REQUIRE(
-        world.resource<State<GameplayState>>().get() == GameplayState::Playing
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"overlay:new"}
     );
 }
 
 TEST_CASE(
-    "ECS state transitions match specific old and new states",
+    "ECS defers state requests made by transition callbacks",
     "[ecs][state]"
 ) {
-    Registry::instance().register_type<CommandsQueue>();
-    Registry::instance().register_type<ScheduleTrace>();
-    Registry::instance().register_type<State<GameplayState>>();
-    Registry::instance().register_type<NextState<GameplayState>>();
+    World world;
+    world.init_state(GameplayState::Loading);
+    world.init_state(OverlayState::Hidden);
+    world.add_systems(on_enter(GameplayState::Playing), queue_overlay_visible);
+    world.sort_systems();
+    world.run_state_transitions();
 
-    auto configure_transitions = [](World& world) {
-        world.add_resource(CommandsQueue {});
-        world.add_resource(ScheduleTrace {});
-        world.add_resource(State<GameplayState> {GameplayState::Loading});
-        world.add_resource(NextState<GameplayState> {});
-        world.add_systems(
-            on_transition(GameplayState::Loading, GameplayState::Playing),
-            loading_to_playing
-        );
-        world.add_systems(
-            on_transition(GameplayState::Playing, GameplayState::Paused),
-            playing_to_paused
-        );
-        world.sort_systems();
-    };
-
-    World non_matching_world;
-    configure_transitions(non_matching_world);
-
-    non_matching_world.run_system_once(request_paused);
-    non_matching_world.run_system_once(apply_state_transition<GameplayState>);
-
-    REQUIRE(non_matching_world.resource<ScheduleTrace>().entries.empty());
-    REQUIRE(
-        non_matching_world.resource<State<GameplayState>>().get() ==
-        GameplayState::Paused
-    );
-
-    World matching_world;
-    configure_transitions(matching_world);
-
-    matching_world.resource<NextState<GameplayState>>().set(
-        GameplayState::Playing
-    );
-    matching_world.run_system_once(apply_state_transition<GameplayState>);
+    world.resource<NextState<GameplayState>>().set(GameplayState::Playing);
+    world.run_state_transitions();
 
     REQUIRE(
-        matching_world.resource<ScheduleTrace>().entries ==
-        std::vector<std::string> {"transition:loading-playing:new"}
+        world.resource<State<OverlayState>>().get() == OverlayState::Hidden
+    );
+    REQUIRE(world.resource<NextState<OverlayState>>().has_value());
+
+    world.run_state_transitions();
+    REQUIRE(
+        world.resource<State<OverlayState>>().get() == OverlayState::Visible
     );
 }
 
-TEST_CASE("ECS state transitions skip unchanged states", "[ecs][state]") {
-    Registry::instance().register_type<CommandsQueue>();
-    Registry::instance().register_type<ScheduleTrace>();
-    Registry::instance().register_type<State<GameplayState>>();
-    Registry::instance().register_type<NextState<GameplayState>>();
-
+TEST_CASE("ECS skips unchanged state requests", "[ecs][state]") {
     World world;
-    world.add_resource(CommandsQueue {});
     world.add_resource(ScheduleTrace {});
-    world.add_resource(State<GameplayState> {GameplayState::Loading});
-    world.add_resource(NextState<GameplayState> {});
+    world.init_state(GameplayState::Loading);
     world.add_systems(on_exit(GameplayState::Loading), exit_loading);
     world.sort_systems();
+    world.run_state_transitions();
 
-    world.run_system_once(request_loading);
-    world.run_system_once(apply_state_transition<GameplayState>);
+    world.resource<NextState<GameplayState>>().set(GameplayState::Loading);
+    world.run_state_transitions();
 
     REQUIRE(world.resource<ScheduleTrace>().entries.empty());
-    REQUIRE(
-        world.resource<State<GameplayState>>().get() == GameplayState::Loading
-    );
     REQUIRE_FALSE(world.resource<NextState<GameplayState>>().has_value());
 }
 
 TEST_CASE(
-    "ECS state transitions apply the latest pending state and clear it",
+    "ECS applies the latest pending state and clears it",
     "[ecs][state]"
 ) {
     World world;
-    world.add_resource(State<GameplayState> {GameplayState::Loading});
-    world.add_resource(NextState<GameplayState> {});
+    world.init_state(GameplayState::Loading);
+    world.sort_systems();
+    world.run_state_transitions();
 
     world.run_system_once(request_playing);
     world.run_system_once(request_paused);
-
-    REQUIRE(
-        world.resource<State<GameplayState>>().get() == GameplayState::Loading
-    );
-    REQUIRE(world.resource<NextState<GameplayState>>().has_value());
-
-    world.run_system_once(apply_state_transition<GameplayState>);
+    world.run_state_transitions();
 
     REQUIRE(
         world.resource<State<GameplayState>>().get() == GameplayState::Paused
     );
     REQUIRE_FALSE(world.resource<NextState<GameplayState>>().has_value());
+}
 
-    world.run_system_once(apply_state_transition<GameplayState>);
+TEST_CASE("ECS state schedules distinguish colliding hashes", "[ecs][state]") {
+    const CollidingState one {.value = 1};
+    const CollidingState two {.value = 2};
+
+    REQUIRE(on_enter(one) != on_enter(two));
+    REQUIRE(on_exit(one) != on_exit(two));
+    REQUIRE(on_transition(one, two) != on_transition(two, one));
+    REQUIRE(on_enter(one) != on_exit(one));
+
+    World world;
+    world.add_resource(ScheduleTrace {});
+    world.init_state(one);
+    world.add_systems(on_enter(one), [](ResRW<ScheduleTrace> trace) {
+        trace->entries.emplace_back("one");
+    });
+    world.add_systems(on_enter(two), [](ResRW<ScheduleTrace> trace) {
+        trace->entries.emplace_back("two");
+    });
+    world.sort_systems();
+
+    world.run_state_transitions();
+    world.resource<NextState<CollidingState>>().set(two);
+    world.run_state_transitions();
 
     REQUIRE(
-        world.resource<State<GameplayState>>().get() == GameplayState::Paused
+        world.resource<ScheduleTrace>().entries ==
+        std::vector<std::string> {"one", "two"}
     );
-    REQUIRE_FALSE(world.resource<NextState<GameplayState>>().has_value());
 }

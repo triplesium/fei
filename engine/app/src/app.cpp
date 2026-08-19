@@ -184,6 +184,7 @@ void App::startup() {
         return;
     }
 
+    run_profiled_schedule(*this, StateTransitionSchedule, "StateTransition");
     run_profiled_schedule(*this, PreStartUp, "PreStartUp");
     run_profiled_schedule(*this, StartUp, "StartUp");
     for (auto& entry : m_sub_apps) {
