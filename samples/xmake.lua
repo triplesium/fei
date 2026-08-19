@@ -39,6 +39,13 @@ target("sample-gltf")
 add_sample("compute_shader")
 add_sample("schedule")
 add_sample("registered_system")
+
+target("sample-physics2d")
+    set_kind("binary")
+    add_rules("fei.reflect")
+    add_files("physics2d.cpp")
+    add_deps("fei-app", "fei-core", "fei-physics2d")
+
 add_sample("multithreading")
 add_sample("graphics")
 add_sample("rendering")

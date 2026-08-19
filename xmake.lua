@@ -27,6 +27,7 @@ option("shader_spirv_cross_sdk")
 option_end()
 
 add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "fastgltf v0.9.0")
+add_requires("box2d v3.1.1", {configs = {shared = false}})
 add_requires("luau 696", {configs = {shared = false, extern_c = false}})
 add_requires("yaml-cpp")
 add_requires("glfw", {configs = {shared = false}})
