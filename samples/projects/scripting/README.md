@@ -1,14 +1,23 @@
 # Luau 2D playtest projects
 
-This directory contains four independent project configurations that share the
+This directory contains five independent project configurations that share the
 same script and texture asset directory. `project.yaml` is the original collect
-game. The other three projects exercise different playtest action contracts:
+game. Three of the other projects exercise game-specific playtest contracts:
 
 | Project file | Interface | Contract under test |
 | --- | --- | --- |
 | `platformer.project.yaml` | `platformer.main` | Simultaneous analog movement and jump input over multiple ticks |
 | `pointer_puzzle.project.yaml` | `pointer-puzzle.main` | Stateful click selection followed by world-coordinate drag actions |
 | `card_battle.project.yaml` | `card-battle.main` | Semantic turn actions selected from structured game state |
+
+`ui.project.yaml` is an interactive Runtime Host integration sample for Luau,
+UI layout and rendering, reflected text components, standard button behavior,
+the Runtime Host's embedded fallback font, and real mouse input. Hover or click
+the face to exercise pointer interaction.
+
+When running under `fei-agentd`, the built-in `runtime.pointer` playtest
+interface can position the pointer and hold `Left`, `Right`, or `Middle` for a
+bounded step. This makes UI clicks reproducible without desktop automation.
 
 Build the supervisor, CLI, and Runtime Host before launching a project:
 
