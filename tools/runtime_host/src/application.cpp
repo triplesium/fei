@@ -1,5 +1,6 @@
 #include "runtime_host/application.hpp"
 
+#include "asset/embed.hpp"
 #include "base/env.hpp"
 #include "base/log.hpp"
 #include "core/time.hpp"
@@ -34,6 +35,8 @@
 #define STB_IMAGE_WRITE_STATIC
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image_write.h>
+
+EMBED(runtime_host_Cousine_Regular_ttf, "fonts/Cousine-Regular.ttf");
 
 namespace fei::runtime_host {
 namespace {
@@ -188,6 +191,31 @@ std::string keyboard_action_schema() {
         .dump();
 }
 
+std::string pointer_action_schema() {
+    return Json {
+        {"type", "object"},
+        {"additionalProperties", false},
+        {"properties",
+         Json {
+             {"x", Json {{"type", "number"}, {"minimum", 0}}},
+             {"y", Json {{"type", "number"}, {"minimum", 0}}},
+             {"buttons",
+              Json {
+                  {"type", "array"},
+                  {"items",
+                   Json {
+                       {"type", "string"},
+                       {"enum", Json::array({"Left", "Right", "Middle"})},
+                   }},
+                  {"uniqueItems", true},
+                  {"maxItems", 3},
+              }},
+         }},
+        {"required", Json::array({"x", "y", "buttons"})},
+    }
+        .dump();
+}
+
 Status<runtime_protocol::PlaytestError>
 begin_keyboard_step(World& world, std::string_view action_json) {
     if (!world.has_resource<VirtualInput>()) {
@@ -250,7 +278,93 @@ begin_keyboard_step(World& world, std::string_view action_json) {
 
 Status<runtime_protocol::PlaytestError> end_keyboard_step(World& world) {
     if (world.has_resource<VirtualInput>()) {
-        world.resource<VirtualInput>().clear();
+        world.resource<VirtualInput>().clear_keys();
+    }
+    return {};
+}
+
+Status<runtime_protocol::PlaytestError>
+begin_pointer_step(World& world, std::string_view action_json) {
+    if (!world.has_resource<VirtualInput>()) {
+        return failure(
+            runtime_protocol::PlaytestError {
+                .kind = runtime_protocol::PlaytestErrorKind::Unsupported,
+                .message = "The project does not install InputPlugin",
+            }
+        );
+    }
+
+    try {
+        const auto action = Json::parse(action_json);
+        if (!action.is_object() || action.size() != 3 ||
+            !action.contains("x") || !action.at("x").is_number() ||
+            !action.contains("y") || !action.at("y").is_number() ||
+            !action.contains("buttons") || !action.at("buttons").is_array()) {
+            return failure(
+                runtime_protocol::PlaytestError {
+                    .kind = runtime_protocol::PlaytestErrorKind::InvalidAction,
+                    .message = "Pointer action must contain only numeric x, "
+                               "numeric y, and a buttons array",
+                }
+            );
+        }
+        const auto x = action.at("x").get<float>();
+        const auto y = action.at("y").get<float>();
+        if (x < 0.0F || y < 0.0F) {
+            return failure(
+                runtime_protocol::PlaytestError {
+                    .kind = runtime_protocol::PlaytestErrorKind::InvalidAction,
+                    .message = "Pointer coordinates must be non-negative",
+                }
+            );
+        }
+        std::vector<MouseButton> buttons;
+        buttons.reserve(action.at("buttons").size());
+        for (const auto& value : action.at("buttons")) {
+            if (!value.is_string()) {
+                return failure(
+                    runtime_protocol::PlaytestError {
+                        .kind =
+                            runtime_protocol::PlaytestErrorKind::InvalidAction,
+                        .message = "Pointer action buttons must be strings",
+                    }
+                );
+            }
+            const auto name = value.get<std::string>();
+            if (name == "Left") {
+                buttons.push_back(MouseButton::Left);
+            } else if (name == "Right") {
+                buttons.push_back(MouseButton::Right);
+            } else if (name == "Middle") {
+                buttons.push_back(MouseButton::Middle);
+            } else {
+                return failure(
+                    runtime_protocol::PlaytestError {
+                        .kind =
+                            runtime_protocol::PlaytestErrorKind::InvalidAction,
+                        .message = "Unknown pointer button '" + name + "'",
+                    }
+                );
+            }
+        }
+        auto& input = world.resource<VirtualInput>();
+        input.set_mouse_position({x, y});
+        input.set_pressed_mouse_buttons(buttons);
+        return {};
+    } catch (const std::exception& error) {
+        return failure(
+            runtime_protocol::PlaytestError {
+                .kind = runtime_protocol::PlaytestErrorKind::InvalidAction,
+                .message =
+                    std::string("Invalid pointer action: ") + error.what(),
+            }
+        );
+    }
+}
+
+Status<runtime_protocol::PlaytestError> end_pointer_step(World& world) {
+    if (world.has_resource<VirtualInput>()) {
+        world.resource<VirtualInput>().clear_mouse_buttons();
     }
     return {};
 }
@@ -351,6 +465,34 @@ void register_builtin_playtest_interfaces(
                 },
             .begin_step = begin_keyboard_step,
             .end_step = end_keyboard_step,
+        }
+    );
+    if (!registered) {
+        fatal(
+            "Failed to register built-in playtest interface: {}",
+            registered.error().message
+        );
+    }
+
+    registered = registry.add(
+        runtime_protocol::PlaytestInterfaceRegistration {
+            .descriptor =
+                runtime_protocol::PlaytestInterfaceDescriptor {
+                    .id = "runtime.pointer",
+                    .label = "Runtime Pointer",
+                    .description = "Positions a virtual pointer and holds a "
+                                   "discoverable set of mouse buttons for one "
+                                   "playtest step.",
+                    .decision_ticks = 1,
+                    .minimum_ticks = 1,
+                    .maximum_ticks = 120,
+                    .allow_tick_override = true,
+                    .action_schema_json = pointer_action_schema(),
+                    .observation_schema_json =
+                        R"({"type":"object","additionalProperties":false})",
+                },
+            .begin_step = begin_pointer_step,
+            .end_step = end_pointer_step,
         }
     );
     if (!registered) {

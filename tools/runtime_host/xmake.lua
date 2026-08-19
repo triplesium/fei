@@ -2,6 +2,14 @@ target("fei-runtime-host-core")
     set_kind("static")
     add_headerfiles("include/**.hpp")
     add_files("src/application.cpp")
+    add_rules(
+        "utils.bin2obj",
+        {
+            extensions = {".ttf"},
+            symbol_prefix = "_binary_runtime_host_"
+        }
+    )
+    add_files("../../engine/imgui/fonts/Cousine-Regular.ttf", {zeroend = true})
     add_includedirs("include", {public = true})
     add_deps(
         "fei-base",
@@ -14,6 +22,11 @@ target("fei-runtime-host-core")
         "fei-window",
         "fei-rendering",
         "fei-sprite",
+        "fei-input-focus",
+        "fei-text",
+        "fei-ui",
+        "fei-ui-widgets",
+        "fei-ui-rendering",
         "fei-graphics-opengl",
         "fei-graphics-opengl-glfw",
         "fei-runtime-protocol",
