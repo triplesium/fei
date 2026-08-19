@@ -97,6 +97,19 @@ class KeyInput {
     std::unordered_map<KeyCode, KeyStateInternal> m_keys;
 };
 
+FEI_REFLECT()
+enum class MouseButton : int32_t {
+    Left = 0,
+    Right = 1,
+    Middle = 2,
+};
+
+constexpr MouseButton c_mouse_buttons[] = {
+    MouseButton::Left,
+    MouseButton::Right,
+    MouseButton::Middle,
+};
+
 class VirtualInput {
   public:
     void set_exclusive(bool exclusive) { m_exclusive = exclusive; }
@@ -111,23 +124,47 @@ class VirtualInput {
         }
     }
 
-    void clear() { m_pressed_keys.clear(); }
+    void set_mouse_position(Vector2 position) {
+        m_mouse_position = position;
+        m_has_mouse_position = true;
+    }
+
+    void set_pressed_mouse_buttons(std::span<const MouseButton> buttons) {
+        m_pressed_mouse_buttons.clear();
+        m_pressed_mouse_buttons.insert(buttons.begin(), buttons.end());
+    }
+
+    void clear_keys() { m_pressed_keys.clear(); }
+    void clear_mouse_buttons() { m_pressed_mouse_buttons.clear(); }
+    void clear() {
+        clear_keys();
+        clear_mouse_buttons();
+        m_has_mouse_position = false;
+    }
 
     [[nodiscard]] bool pressed(KeyCode key) const {
         return m_pressed_keys.contains(key);
     }
 
+    [[nodiscard]] bool pressed(MouseButton button) const {
+        return m_pressed_mouse_buttons.contains(button);
+    }
+
+    [[nodiscard]] bool has_mouse_position() const {
+        return m_has_mouse_position;
+    }
+
+    [[nodiscard]] Vector2 mouse_position() const { return m_mouse_position; }
+
   private:
     std::unordered_set<KeyCode> m_pressed_keys;
+    std::unordered_set<MouseButton> m_pressed_mouse_buttons;
+    Vector2 m_mouse_position;
+    bool m_has_mouse_position {false};
     bool m_exclusive {false};
 };
 
-enum class MouseButton : int32_t {
-    Left = 0,
-    Right = 1,
-    Middle = 2,
-};
-
+FEI_REFLECT(Resource)
 class MouseInput {
   public:
     MouseInput() {
@@ -137,6 +174,7 @@ class MouseInput {
         }
     }
 
+    // Position is in framebuffer/UI viewport pixels with a top-left origin.
     void set_position(Vector2 position) { m_position = position; }
     Vector2 position() const { return m_position; }
 
@@ -169,6 +207,7 @@ class MouseInput {
     std::unordered_map<MouseButton, KeyStateInternal> m_keys;
 };
 
+FEI_REFLECT(Resource)
 class MouseScrollInput {
   public:
     void set_delta(Vector2 delta) { m_delta = delta; }
@@ -203,6 +242,10 @@ void apply_virtual_key_input(
     ResRO<VirtualInput> virtual_input,
     ResRW<KeyInput> input
 );
+void apply_virtual_mouse_input(
+    ResRO<VirtualInput> virtual_input,
+    ResRW<MouseInput> input
+);
 
 FEI_REFLECT(Plugin)
 class InputPlugin : public Plugin {
@@ -223,7 +266,8 @@ class InputPlugin : public Plugin {
             mouse_input_system | in_set<InputSystems::Update>(),
             mouse_scroll_input_system | in_set<InputSystems::Update>(),
             character_input_system | in_set<InputSystems::Update>(),
-            apply_virtual_key_input | in_set<InputSystems::ApplyVirtual>()
+            apply_virtual_key_input | in_set<InputSystems::ApplyVirtual>(),
+            apply_virtual_mouse_input | in_set<InputSystems::ApplyVirtual>()
         );
     }
 };

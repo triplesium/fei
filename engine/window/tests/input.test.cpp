@@ -52,6 +52,26 @@ TEST_CASE("Exclusive virtual input replaces physical keys", "[window][input]") {
     CHECK_FALSE(world.resource<KeyInput>().pressed(KeyCode::D));
 }
 
+TEST_CASE(
+    "Exclusive virtual input replaces mouse position and buttons",
+    "[window][input][mouse]"
+) {
+    World world;
+    world.add_resource(MouseInput {});
+    world.add_resource(VirtualInput {});
+    auto& virtual_input = world.resource<VirtualInput>();
+    virtual_input.set_exclusive(true);
+    virtual_input.set_mouse_position({120.0F, 75.0F});
+    const std::vector buttons {MouseButton::Left};
+    virtual_input.set_pressed_mouse_buttons(buttons);
+
+    world.run_system_once(apply_virtual_mouse_input);
+
+    CHECK(world.resource<MouseInput>().position() == Vector2 {120.0F, 75.0F});
+    CHECK(world.resource<MouseInput>().pressed(MouseButton::Left));
+    CHECK_FALSE(world.resource<MouseInput>().pressed(MouseButton::Right));
+}
+
 TEST_CASE("CharacterInput stores a frame of Unicode input", "[window][input]") {
     CharacterInput input;
     input.push(U'A');

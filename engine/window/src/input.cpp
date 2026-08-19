@@ -50,6 +50,13 @@ void mouse_input_system(ResRO<Window> win, ResRW<MouseInput> input) {
     }
     double xpos, ypos;
     glfwGetCursorPos(glfw_window, &xpos, &ypos);
+    int logical_width = 0;
+    int logical_height = 0;
+    glfwGetWindowSize(glfw_window, &logical_width, &logical_height);
+    if (logical_width > 0 && logical_height > 0) {
+        xpos *= static_cast<double>(win->width) / logical_width;
+        ypos *= static_cast<double>(win->height) / logical_height;
+    }
     input->set_position({static_cast<float>(xpos), static_cast<float>(ypos)});
 }
 
@@ -96,6 +103,25 @@ void apply_virtual_key_input(
             input->press(key);
         } else {
             input->release(key);
+        }
+    }
+}
+
+void apply_virtual_mouse_input(
+    ResRO<VirtualInput> virtual_input,
+    ResRW<MouseInput> input
+) {
+    if (!virtual_input->exclusive()) {
+        return;
+    }
+    if (virtual_input->has_mouse_position()) {
+        input->set_position(virtual_input->mouse_position());
+    }
+    for (auto button : c_mouse_buttons) {
+        if (virtual_input->pressed(button)) {
+            input->press(button);
+        } else {
+            input->release(button);
         }
     }
 }
