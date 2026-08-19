@@ -24,7 +24,18 @@ struct LuauScriptModuleArtifact {
     std::vector<TypeId> required_runtime_types;
 };
 
+struct LuauScriptLibraryArtifact {
+    std::string source_name;
+    std::string bytecode;
+};
+
+Result<std::vector<std::string>, ScriptError>
+extract_luau_script_imports(const ScriptSource& source);
+
 Result<LuauScriptModuleArtifact, ScriptError>
 compile_luau_script_module(const ScriptSource& source);
+
+Result<LuauScriptLibraryArtifact, ScriptError>
+compile_luau_script_library(const ScriptSource& source);
 
 } // namespace fei

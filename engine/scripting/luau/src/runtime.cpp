@@ -32,7 +32,9 @@ struct LuauRuntime::Impl {
     struct Module {
         lua_State* thread {nullptr};
         int thread_ref {0};
+        int exports_ref {0};
         std::unordered_map<std::string, int> functions;
+        std::unordered_map<std::string, LuauScriptModuleId> imports;
         std::unordered_set<std::string> script_namespace_roots;
         std::unordered_set<TypeId> script_types;
         bool script_namespaces_sealed {false};
@@ -42,6 +44,54 @@ struct LuauRuntime::Impl {
     std::unordered_map<LuauScriptModuleId, Module> modules;
     std::uint64_t next_module_id {1};
     ScriptBorrowScope borrow_scope;
+
+    static int require_module(lua_State* thread) {
+        auto* impl =
+            static_cast<Impl*>(lua_touserdata(thread, lua_upvalueindex(1)));
+        auto* importer =
+            static_cast<Module*>(lua_touserdata(thread, lua_upvalueindex(2)));
+        std::size_t length = 0;
+        const char* value = luaL_checklstring(thread, 1, &length);
+        const std::string specifier {value, length};
+        if (importer == nullptr) {
+            luaL_error(thread, "Luau importer module is not loaded");
+            return 0;
+        }
+        const auto binding = importer->imports.find(specifier);
+        if (binding == importer->imports.end()) {
+            luaL_error(
+                thread,
+                "Luau module has no static import binding for '%s'",
+                specifier.c_str()
+            );
+            return 0;
+        }
+        const auto dependency = impl->modules.find(binding->second);
+        if (dependency == impl->modules.end() ||
+            dependency->second.exports_ref == 0) {
+            luaL_error(
+                thread,
+                "Required Luau module '%s' is not loaded",
+                specifier.c_str()
+            );
+            return 0;
+        }
+        lua_getref(thread, dependency->second.exports_ref);
+        return 1;
+    }
+
+    void install_imports(
+        Module& module,
+        std::span<const LuauScriptImportBinding> imports
+    ) {
+        for (const auto& import : imports) {
+            module.imports.emplace(import.specifier, import.module);
+        }
+        lua_pushlightuserdata(module.thread, this);
+        lua_pushlightuserdata(module.thread, &module);
+        lua_pushcclosure(module.thread, require_module, "require", 2);
+        lua_setglobal(module.thread, "require");
+    }
 
     Impl() : state(luaL_newstate()) {
         luaL_openlibs(state);
@@ -567,8 +617,10 @@ LuauRuntime::run_script(const LuauScriptSource& source) {
     return {};
 }
 
-Result<LuauScriptModuleId, LuauScriptError>
-LuauRuntime::load_module(const LuauScriptModuleArtifact& artifact) {
+Result<LuauScriptModuleId, LuauScriptError> LuauRuntime::load_module(
+    const LuauScriptModuleArtifact& artifact,
+    std::span<const LuauScriptImportBinding> imports
+) {
     lua_State* root = m_impl->state;
     const int root_top = lua_gettop(root);
     lua_State* thread = lua_newthread(root);
@@ -577,7 +629,14 @@ LuauRuntime::load_module(const LuauScriptModuleArtifact& artifact) {
     luaL_sandboxthread(thread);
     install_module_helpers(thread);
 
-    Impl::Module loaded {.thread = thread, .thread_ref = thread_ref};
+    const auto id = static_cast<LuauScriptModuleId>(m_impl->next_module_id++);
+    auto [loaded_entry, inserted] = m_impl->modules.emplace(
+        id,
+        Impl::Module {.thread = thread, .thread_ref = thread_ref}
+    );
+    (void)inserted;
+    auto& loaded = loaded_entry->second;
+    m_impl->install_imports(loaded, imports);
     auto fail_loading = [&](
                             LuauScriptError error
                         ) -> Result<LuauScriptModuleId, LuauScriptError> {
@@ -585,6 +644,7 @@ LuauRuntime::load_module(const LuauScriptModuleArtifact& artifact) {
             lua_unref(root, entry.second);
         }
         lua_unref(root, thread_ref);
+        m_impl->modules.erase(id);
         lua_settop(root, root_top);
         return failure(std::move(error));
     };
@@ -884,8 +944,59 @@ LuauRuntime::load_module(const LuauScriptModuleArtifact& artifact) {
     }
     lua_settop(thread, 0);
 
+    lua_settop(root, root_top);
+    return id;
+}
+
+Result<LuauScriptModuleId, LuauScriptError> LuauRuntime::load_library(
+    const LuauScriptLibraryArtifact& artifact,
+    std::span<const LuauScriptImportBinding> imports
+) {
+    lua_State* root = m_impl->state;
+    const int root_top = lua_gettop(root);
+    lua_State* thread = lua_newthread(root);
+    const int thread_ref = lua_ref(root, -1);
+    lua_pop(root, 1);
+    luaL_sandboxthread(thread);
+
     const auto id = static_cast<LuauScriptModuleId>(m_impl->next_module_id++);
-    m_impl->modules.emplace(id, std::move(loaded));
+    auto [loaded_entry, inserted] = m_impl->modules.emplace(
+        id,
+        Impl::Module {.thread = thread, .thread_ref = thread_ref}
+    );
+    (void)inserted;
+    auto& loaded = loaded_entry->second;
+    m_impl->install_imports(loaded, imports);
+    auto fail_loading = [&](
+                            LuauScriptError error
+                        ) -> Result<LuauScriptModuleId, LuauScriptError> {
+        lua_unref(root, thread_ref);
+        m_impl->modules.erase(id);
+        lua_settop(root, root_top);
+        return failure(std::move(error));
+    };
+
+    if (luau_load(
+            thread,
+            artifact.source_name.c_str(),
+            artifact.bytecode.data(),
+            artifact.bytecode.size(),
+            0
+        ) != 0) {
+        std::string message = luau_error(thread, "Failed to load Luau library");
+        return fail_loading(LuauScriptError {std::move(message)});
+    }
+    if (lua_pcall(thread, 0, 1, 0) != 0) {
+        std::string message = luau_error(thread, "Failed to run Luau library");
+        return fail_loading(LuauScriptError {std::move(message)});
+    }
+    if (!lua_istable(thread, -1)) {
+        return fail_loading(
+            LuauScriptError {"Luau library must return a table"}
+        );
+    }
+    loaded.exports_ref = lua_ref(thread, -1);
+    lua_pop(thread, 1);
     lua_settop(root, root_top);
     return id;
 }
@@ -897,6 +1008,9 @@ Status<LuauScriptError> LuauRuntime::unload_module(LuauScriptModuleId module) {
     }
     for (const auto& entry : found->second.functions) {
         lua_unref(m_impl->state, entry.second);
+    }
+    if (found->second.exports_ref != 0) {
+        lua_unref(m_impl->state, found->second.exports_ref);
     }
     lua_unref(m_impl->state, found->second.thread_ref);
     m_impl->modules.erase(found);

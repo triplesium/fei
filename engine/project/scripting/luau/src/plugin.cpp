@@ -49,7 +49,8 @@ void LuauScriptsPlugin::setup(App& app) {
     registry.apply_queued_requests(
         app.resource<LuauRuntime>(),
         app.world(),
-        assets
+        assets,
+        &app.resource<AssetServer>()
     );
     project_scripting::refresh_project_script_states<
         detail::LuauProjectScriptBackend>(scripts, registry, assets);

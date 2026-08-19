@@ -25,6 +25,11 @@ enum class LuauScriptModuleId : std::uint64_t {
 inline constexpr LuauScriptModuleId invalid_luau_script_module_id =
     LuauScriptModuleId::Invalid;
 
+struct LuauScriptImportBinding {
+    std::string specifier;
+    LuauScriptModuleId module {invalid_luau_script_module_id};
+};
+
 class LuauRuntime {
   private:
     struct Impl;
@@ -40,8 +45,14 @@ class LuauRuntime {
     LuauRuntime& operator=(LuauRuntime&&) noexcept;
 
     Status<LuauScriptError> run_script(const LuauScriptSource& source);
-    Result<LuauScriptModuleId, LuauScriptError>
-    load_module(const LuauScriptModuleArtifact& artifact);
+    Result<LuauScriptModuleId, LuauScriptError> load_module(
+        const LuauScriptModuleArtifact& artifact,
+        std::span<const LuauScriptImportBinding> imports = {}
+    );
+    Result<LuauScriptModuleId, LuauScriptError> load_library(
+        const LuauScriptLibraryArtifact& artifact,
+        std::span<const LuauScriptImportBinding> imports = {}
+    );
     Status<LuauScriptError> unload_module(LuauScriptModuleId module);
     Status<LuauScriptError> bind_module_type(
         LuauScriptModuleId module,

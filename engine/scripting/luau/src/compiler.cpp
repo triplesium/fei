@@ -45,6 +45,40 @@ using Luau::AstTypeOptional;
 using Luau::AstTypeReference;
 using Luau::AstTypeUnion;
 
+class LuauImportVisitor final : public Luau::AstVisitor {
+  public:
+    std::vector<std::string> imports;
+    Optional<ScriptError> error;
+
+    bool visit(AstExprCall* expression) override {
+        const auto* global = expression->func->as<AstExprGlobal>();
+        if (global == nullptr || global->name.value == nullptr ||
+            std::string_view {global->name.value} != "require") {
+            return true;
+        }
+        if (expression->args.size != 1) {
+            error = ScriptError {
+                "Invalid Luau import at line " +
+                    std::to_string(expression->location.begin.line + 1) +
+                    ": require expects exactly one string literal",
+            };
+            return false;
+        }
+        const auto* specifier =
+            expression->args.data[0]->as<AstExprConstantString>();
+        if (specifier == nullptr) {
+            error = ScriptError {
+                "Invalid Luau import at line " +
+                    std::to_string(expression->location.begin.line + 1) +
+                    ": require path must be a string literal",
+            };
+            return false;
+        }
+        imports.emplace_back(specifier->value.data, specifier->value.size);
+        return true;
+    }
+};
+
 ScriptError declaration_error(std::string message) {
     return ScriptError {
         "Invalid Luau script declaration: " + std::move(message)
@@ -1316,6 +1350,35 @@ validate_system_dependencies(const std::vector<DynamicSystemDecl>& systems) {
 
 } // namespace
 
+Result<std::vector<std::string>, ScriptError>
+extract_luau_script_imports(const ScriptSource& source) {
+    Luau::Allocator allocator;
+    Luau::AstNameTable names {allocator};
+    Luau::ParseResult parsed = Luau::Parser::parse(
+        source.content.data(),
+        source.content.size(),
+        names,
+        allocator
+    );
+    if (!parsed.errors.empty()) {
+        const Luau::ParseError& error = parsed.errors.front();
+        return failure(
+            ScriptError {
+                source.name + ":" +
+                    std::to_string(error.getLocation().begin.line + 1) + ": " +
+                    error.getMessage(),
+            }
+        );
+    }
+
+    LuauImportVisitor visitor;
+    parsed.root->visit(&visitor);
+    if (visitor.error) {
+        return failure(std::move(*visitor.error));
+    }
+    return std::move(visitor.imports);
+}
+
 Result<LuauScriptModuleArtifact, ScriptError>
 compile_luau_script_module(const ScriptSource& source) {
     Luau::Allocator allocator;
@@ -1518,6 +1581,18 @@ compile_luau_script_module(const ScriptSource& source) {
         .bytecode = Luau::compile(source.content),
         .system_layout = system_layout,
         .required_runtime_types = std::move(required_types),
+    };
+}
+
+Result<LuauScriptLibraryArtifact, ScriptError>
+compile_luau_script_library(const ScriptSource& source) {
+    auto imports = extract_luau_script_imports(source);
+    if (!imports) {
+        return failure(std::move(imports.error()));
+    }
+    return LuauScriptLibraryArtifact {
+        .source_name = source.name,
+        .bytecode = Luau::compile(source.content),
     };
 }
 

@@ -10,12 +10,15 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace fei {
 
 class World;
 class WorldRef;
+class AssetServer;
 
 template<typename T>
 class ResRO;
@@ -42,6 +45,7 @@ enum class LuauScriptSystemRequestKind {
 struct LoadedLuauScriptSystemModule {
     LuauScriptModuleId module {invalid_luau_script_module_id};
     std::vector<SystemHandle> systems;
+    std::vector<AssetId> dependencies;
     LuauScriptSystemModuleSourceKind source_kind {
         LuauScriptSystemModuleSourceKind::Source
     };
@@ -58,6 +62,12 @@ struct LuauScriptSystemRequestError {
 
 class LuauScriptSystemRegistry {
   private:
+    struct LoadedLibrary {
+        LuauScriptModuleId module {invalid_luau_script_module_id};
+        Handle<LuauScriptAsset> asset;
+        std::vector<AssetId> dependencies;
+    };
+
     struct QueuedRequest {
         LuauScriptSystemRequestKind kind {
             LuauScriptSystemRequestKind::LoadSource
@@ -68,6 +78,10 @@ class LuauScriptSystemRegistry {
     };
 
     std::vector<LoadedLuauScriptSystemModule> m_modules;
+    std::unordered_map<AssetId, LoadedLibrary> m_libraries;
+    std::unordered_set<AssetId> m_entry_assets;
+    std::unordered_map<AssetId, std::unordered_set<AssetId>>
+        m_reverse_dependencies;
     std::vector<QueuedRequest> m_queued_requests;
     std::vector<LuauScriptSystemRequestError> m_queue_errors;
 
@@ -83,13 +97,22 @@ class LuauScriptSystemRegistry {
         LuauRuntime& runtime,
         World& world,
         const Assets<LuauScriptAsset>& assets,
+        AssetServer* asset_server,
         Handle<LuauScriptAsset> asset
     );
     Status<LuauScriptError> reload_asset(
         LuauRuntime& runtime,
         World& world,
         const Assets<LuauScriptAsset>& assets,
+        AssetServer* asset_server,
         LuauScriptSystemModuleId module
+    );
+    Result<LuauScriptModuleId, LuauScriptError> load_library_asset(
+        LuauRuntime& runtime,
+        const Assets<LuauScriptAsset>& assets,
+        AssetServer& asset_server,
+        Handle<LuauScriptAsset> asset,
+        std::vector<AssetId>& loading_stack
     );
     Status<LuauScriptError>
     unload(LuauRuntime& runtime, World& world, LuauScriptSystemModuleId module);
@@ -102,7 +125,8 @@ class LuauScriptSystemRegistry {
     void apply_queued_requests(
         LuauRuntime& runtime,
         World& world,
-        const Assets<LuauScriptAsset>& assets
+        const Assets<LuauScriptAsset>& assets,
+        AssetServer* asset_server = nullptr
     );
 
     Optional<const LoadedLuauScriptSystemModule&>
@@ -126,7 +150,8 @@ void apply_luau_script_system_queue(
     WorldRef world,
     ResRW<LuauRuntime> runtime,
     ResRW<LuauScriptSystemRegistry> scripts,
-    ResRO<Assets<LuauScriptAsset>> assets
+    ResRO<Assets<LuauScriptAsset>> assets,
+    ResRW<AssetServer> asset_server
 );
 
 } // namespace fei

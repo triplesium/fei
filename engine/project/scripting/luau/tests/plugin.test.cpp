@@ -35,7 +35,8 @@ class TemporaryMixedScriptProject {
   public:
     explicit TemporaryMixedScriptProject(
         std::vector<ScriptFile> scripts,
-        std::vector<ScriptFile> playtests = {}
+        std::vector<ScriptFile> playtests = {},
+        std::vector<ScriptFile> libraries = {}
     ) {
         static std::atomic<std::uint64_t> sequence {0};
         const auto timestamp =
@@ -56,8 +57,9 @@ class TemporaryMixedScriptProject {
                        ".luau";
             });
         };
-        const bool has_luau =
-            contains_luau(scripts) || contains_luau(playtests);
+        const bool has_luau = contains_luau(scripts) ||
+                              contains_luau(playtests) ||
+                              contains_luau(libraries);
 
         std::ofstream project_stream(project_file());
         project_stream << "name: Mixed Script Runtime\n"
@@ -84,14 +86,16 @@ class TemporaryMixedScriptProject {
                 if (!script.content) {
                     continue;
                 }
-                std::ofstream script_stream(
-                    m_root / "assets" / std::filesystem::path(script.path)
-                );
+                const auto path =
+                    m_root / "assets" / std::filesystem::path(script.path);
+                std::filesystem::create_directories(path.parent_path());
+                std::ofstream script_stream(path);
                 script_stream << *script.content;
             }
         };
         write_files(scripts);
         write_files(playtests);
+        write_files(libraries);
     }
 
     ~TemporaryMixedScriptProject() {
@@ -164,6 +168,230 @@ TEST_CASE(
     CHECK(luau.scripts[0].status == project_runtime::LuauScriptStatus::Loaded);
     CHECK(lua.scripts[0].module.has_value());
     CHECK(luau.scripts[0].module.has_value());
+}
+
+TEST_CASE(
+    "Project Luau scripts require cached library modules",
+    "[project-runtime][luau][script][require]"
+) {
+    TemporaryMixedScriptProject directory(
+        {
+            ScriptFile {
+                .path = "scripts/gameplay.luau",
+                .content = std::string_view {R"(
+                    local first = require("./lib/counter")
+                    local second = require("./lib/../lib/counter.luau")
+
+                    local function tick(state: ResRW<RequireState>)
+                        state.value = first.next() * 10 + second.next()
+                    end
+
+                    return module {
+                        name = "project.require_test",
+                        types = {
+                            RequireState = {
+                                value = field(i32, 0),
+                            },
+                        },
+                        resources = {
+                            RequireState = {},
+                        },
+                        systems = {
+                            [Update] = { tick },
+                        },
+                    }
+                )"},
+            },
+        },
+        {},
+        {
+            ScriptFile {
+                .path = "scripts/lib/counter.luau",
+                .content = std::string_view {R"(
+                    local value = 0
+                    return {
+                        next = function()
+                            value += 1
+                            return value
+                        end,
+                    }
+                )"},
+            },
+        }
+    );
+    auto app = load_app(directory);
+
+    const auto& scripts = app.resource<project_runtime::LuauScriptsState>();
+    REQUIRE(scripts.scripts.size() == 1);
+    REQUIRE(
+        scripts.scripts[0].status == project_runtime::LuauScriptStatus::Loaded
+    );
+
+    app.run_schedule(Update);
+    auto state_type =
+        Registry::instance().try_get_type("project.require_test.RequireState");
+    REQUIRE(state_type);
+    Ref state = app.world().resource(state_type->id());
+    auto value = Registry::instance()
+                     .get_cls(state_type->id())
+                     .get_property("value")
+                     .get(state);
+    REQUIRE(value);
+    CHECK(value->get<int>() == 12);
+}
+
+TEST_CASE(
+    "Project Luau scripts reject circular library imports",
+    "[project-runtime][luau][script][require][cycle]"
+) {
+    TemporaryMixedScriptProject directory(
+        {
+            ScriptFile {
+                .path = "scripts/gameplay.luau",
+                .content = std::string_view {R"(
+                    local first = require("./lib/first")
+                    return module {
+                        name = "project.require_cycle",
+                        systems = {},
+                    }
+                )"},
+            },
+        },
+        {},
+        {
+            ScriptFile {
+                .path = "scripts/lib/first.luau",
+                .content = std::string_view {R"(
+                    local second = require("./second")
+                    return { second = second }
+                )"},
+            },
+            ScriptFile {
+                .path = "scripts/lib/second.luau",
+                .content = std::string_view {R"(
+                    local first = require("./first")
+                    return { first = first }
+                )"},
+            },
+        }
+    );
+    auto app = load_app(directory);
+
+    const auto& scripts = app.resource<project_runtime::LuauScriptsState>();
+    REQUIRE(scripts.scripts.size() == 1);
+    CHECK(
+        scripts.scripts[0].status == project_runtime::LuauScriptStatus::Failed
+    );
+    CHECK(scripts.scripts[0].error.contains("Circular Luau module dependency"));
+    CHECK(scripts.scripts[0].error.contains("first.luau"));
+    CHECK(scripts.scripts[0].error.contains("second.luau"));
+}
+
+TEST_CASE(
+    "Project Luau scripts report invalid library imports",
+    "[project-runtime][luau][script][require][error]"
+) {
+    SECTION("missing library") {
+        TemporaryMixedScriptProject directory({
+            ScriptFile {
+                .path = "scripts/gameplay.luau",
+                .content = std::string_view {R"(
+                    local missing = require("./missing")
+                    return module {
+                        name = "project.missing_import",
+                        systems = {},
+                    }
+                )"},
+            },
+        });
+        auto app = load_app(directory);
+        const auto& scripts = app.resource<project_runtime::LuauScriptsState>();
+        REQUIRE(scripts.scripts.size() == 1);
+        CHECK(
+            scripts.scripts[0].status ==
+            project_runtime::LuauScriptStatus::Failed
+        );
+        CHECK(scripts.scripts[0].error.contains("not found"));
+    }
+
+    SECTION("dynamic import") {
+        TemporaryMixedScriptProject directory({
+            ScriptFile {
+                .path = "scripts/gameplay.luau",
+                .content = std::string_view {R"(
+                    local name = "missing"
+                    local missing = require("./" .. name)
+                    return module {
+                        name = "project.dynamic_import",
+                        systems = {},
+                    }
+                )"},
+            },
+        });
+        auto app = load_app(directory);
+        const auto& scripts = app.resource<project_runtime::LuauScriptsState>();
+        REQUIRE(scripts.scripts.size() == 1);
+        CHECK(
+            scripts.scripts[0].status ==
+            project_runtime::LuauScriptStatus::Failed
+        );
+        CHECK(scripts.scripts[0].error.contains("string literal"));
+    }
+
+    SECTION("path escape") {
+        TemporaryMixedScriptProject directory({
+            ScriptFile {
+                .path = "scripts/gameplay.luau",
+                .content = std::string_view {R"(
+                    local outside = require("../../outside")
+                    return module {
+                        name = "project.escaped_import",
+                        systems = {},
+                    }
+                )"},
+            },
+        });
+        auto app = load_app(directory);
+        const auto& scripts = app.resource<project_runtime::LuauScriptsState>();
+        REQUIRE(scripts.scripts.size() == 1);
+        CHECK(
+            scripts.scripts[0].status ==
+            project_runtime::LuauScriptStatus::Failed
+        );
+        CHECK(scripts.scripts[0].error.contains("escapes its asset source"));
+    }
+
+    SECTION("non-table export") {
+        TemporaryMixedScriptProject directory(
+            {
+                ScriptFile {
+                    .path = "scripts/gameplay.luau",
+                    .content = std::string_view {R"(
+                        local invalid = require("./invalid")
+                        return module {
+                            name = "project.invalid_export",
+                            systems = {},
+                        }
+                    )"},
+                },
+            },
+            {},
+            {
+                ScriptFile {
+                    .path = "scripts/invalid.luau",
+                    .content = std::string_view {"return 42"},
+                },
+            }
+        );
+        auto app = load_app(directory);
+        const auto& scripts = app.resource<project_runtime::LuauScriptsState>();
+        REQUIRE(scripts.scripts.size() == 1);
+        CHECK(
+            scripts.scripts[0].status ==
+            project_runtime::LuauScriptStatus::Failed
+        );
+        CHECK(scripts.scripts[0].error.contains("must return a table"));
+    }
 }
 
 TEST_CASE(

@@ -2,6 +2,7 @@
 
 #include "app/app.hpp"
 #include "asset/assets.hpp"
+#include "asset/server.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/world.hpp"
 #include "refl/cls.hpp"
@@ -32,6 +33,7 @@ void add_luau_script_system_resources(World& world) {
     world.add_resource(CommandsQueue {});
     world.add_resource(LuauRuntime {});
     world.add_resource(Assets<LuauScriptAsset>(nullptr));
+    world.add_resource(AssetServer(nullptr));
     world.add_resource(LuauScriptSystemRegistry {});
 }
 
