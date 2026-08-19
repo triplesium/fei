@@ -11,6 +11,7 @@ struct PhysicsSystems2d {
     struct Sync : SystemSet<Sync> {};
     struct Step : SystemSet<Step> {};
     struct WriteBack : SystemSet<WriteBack> {};
+    struct Interpolate : SystemSet<Interpolate> {};
 };
 
 FEI_REFLECT(Plugin)

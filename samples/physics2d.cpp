@@ -24,6 +24,7 @@ Entity spawn_box(World& world) {
     world.add_component(entity, RigidBody2d {});
     world.add_component(entity, Collider2d::box({0.5f, 0.5f}));
     world.add_component(entity, LinearVelocity2d {});
+    world.add_component(entity, PhysicsInterpolation2d {});
     return entity;
 }
 

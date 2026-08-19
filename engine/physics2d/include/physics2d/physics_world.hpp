@@ -47,6 +47,7 @@ class PhysicsWorld2d {
         const LinearVelocity2d* linear_velocity,
         const AngularVelocity2d* angular_velocity
     );
+    bool teleport(Entity entity, Vector2 position, float rotation_degrees);
     void remove_body(Entity entity);
     [[nodiscard]] bool contains(Entity entity) const;
     [[nodiscard]] std::size_t body_count() const;

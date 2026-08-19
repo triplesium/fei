@@ -26,10 +26,15 @@ Entity spawn_body(
     return entity;
 }
 
-void configure_fixed_step(App& app) {
+void configure_fixed_step(
+    App& app,
+    float frame_delta = 1.0f / 60.0f,
+    float fixed_timestep = 1.0f / 60.0f
+) {
     app.finish();
-    app.resource<Time>().set_fixed_delta(1.0f / 60.0f);
-    app.resource<FixedTime>().set_timestep_hz(60.0f);
+    app.resource<Time>().set_max_delta(10.0f);
+    app.resource<Time>().set_fixed_delta(frame_delta);
+    app.resource<FixedTime>().set_timestep(fixed_timestep);
 }
 
 } // namespace
@@ -127,4 +132,151 @@ TEST_CASE(
     app.world().despawn(entity);
     app.update();
     CHECK(app.resource<PhysicsWorld2d>().body_count() == 0);
+}
+
+TEST_CASE(
+    "PhysicsPlugin2d interpolates dynamic poses after the fixed loop",
+    "[physics2d][interpolation]"
+) {
+    App app;
+    app.add_plugin<PhysicsPlugin2d>();
+
+    const auto entity = spawn_body(
+        app.world(),
+        Transform2d {},
+        RigidBody2d {},
+        Collider2d::box({0.5f, 0.5f})
+    );
+    app.world().add_component(entity, LinearVelocity2d {.value = {1.0f, 0.0f}});
+    app.world().add_component(entity, PhysicsInterpolation2d {});
+    configure_fixed_step(app, 1.5f, 1.0f);
+    app.resource<PhysicsSettings2d>().gravity = Vector2::Zero;
+
+    app.update();
+    CHECK(
+        app.world().get_component<PreviousPhysicsPose2d>(entity).position.x ==
+        Catch::Approx(0.0f)
+    );
+    CHECK(
+        app.world().get_component<PhysicsPose2d>(entity).position.x ==
+        Catch::Approx(1.0f).margin(0.01f)
+    );
+    CHECK(
+        app.world().get_component<Transform2d>(entity).position.x ==
+        Catch::Approx(0.5f).margin(0.01f)
+    );
+
+    app.resource<Time>().set_fixed_delta(0.25f);
+    app.update();
+    CHECK(
+        app.world().get_component<PhysicsPose2d>(entity).position.x ==
+        Catch::Approx(1.0f).margin(0.01f)
+    );
+    CHECK(
+        app.world().get_component<Transform2d>(entity).position.x ==
+        Catch::Approx(0.75f).margin(0.01f)
+    );
+
+    app.resource<Time>().set_fixed_delta(1.75f);
+    app.update();
+    CHECK(
+        app.world().get_component<PreviousPhysicsPose2d>(entity).position.x ==
+        Catch::Approx(2.0f).margin(0.01f)
+    );
+    CHECK(
+        app.world().get_component<PhysicsPose2d>(entity).position.x ==
+        Catch::Approx(3.0f).margin(0.01f)
+    );
+    CHECK(
+        app.world().get_component<Transform2d>(entity).position.x ==
+        Catch::Approx(2.5f).margin(0.01f)
+    );
+}
+
+TEST_CASE(
+    "PhysicsPlugin2d displays the latest pose without interpolation",
+    "[physics2d][interpolation]"
+) {
+    App app;
+    app.add_plugin<PhysicsPlugin2d>();
+
+    const auto entity = spawn_body(
+        app.world(),
+        Transform2d {},
+        RigidBody2d {},
+        Collider2d::circle(0.5f)
+    );
+    app.world().add_component(entity, LinearVelocity2d {.value = {1.0f, 0.0f}});
+    configure_fixed_step(app, 1.5f, 1.0f);
+    app.resource<PhysicsSettings2d>().gravity = Vector2::Zero;
+
+    app.update();
+    CHECK(
+        app.world().get_component<Transform2d>(entity).position.x ==
+        Catch::Approx(1.0f).margin(0.01f)
+    );
+}
+
+TEST_CASE(
+    "PhysicsPlugin2d interpolates rotation along the shortest arc",
+    "[physics2d][interpolation][rotation]"
+) {
+    App app;
+    app.add_plugin<PhysicsPlugin2d>();
+
+    const auto entity = spawn_body(
+        app.world(),
+        Transform2d {.rotation = 359.0f},
+        RigidBody2d {},
+        Collider2d::circle(0.5f)
+    );
+    app.world().add_component(entity, PhysicsPose2d {.rotation = 1.0f});
+    app.world().add_component(
+        entity,
+        PreviousPhysicsPose2d {.rotation = 359.0f}
+    );
+    app.world().add_component(entity, PhysicsInterpolation2d {});
+    configure_fixed_step(app, 0.5f, 1.0f);
+
+    app.update();
+    CHECK(
+        app.world().get_component<Transform2d>(entity).rotation ==
+        Catch::Approx(0.0f).margin(0.001f)
+    );
+}
+
+TEST_CASE(
+    "PhysicsPlugin2d teleport resets both interpolation samples",
+    "[physics2d][interpolation][teleport]"
+) {
+    App app;
+    app.add_plugin<PhysicsPlugin2d>();
+
+    const auto entity = spawn_body(
+        app.world(),
+        Transform2d {},
+        RigidBody2d {},
+        Collider2d::box({0.5f, 0.5f})
+    );
+    app.world().add_component(entity, PhysicsInterpolation2d {});
+    configure_fixed_step(app, 1.5f, 1.0f);
+    app.resource<PhysicsSettings2d>().gravity = Vector2::Zero;
+    app.update();
+
+    app.world().add_component(
+        entity,
+        PhysicsTeleport2d {.position = {10.0f, 2.0f}, .rotation = 90.0f}
+    );
+    app.resource<Time>().set_fixed_delta(1.0f);
+    app.update();
+
+    const auto& previous =
+        app.world().get_component<PreviousPhysicsPose2d>(entity);
+    const auto& current = app.world().get_component<PhysicsPose2d>(entity);
+    const auto& displayed = app.world().get_component<Transform2d>(entity);
+    CHECK(previous.position == Vector2 {10.0f, 2.0f});
+    CHECK(current.position == Vector2 {10.0f, 2.0f});
+    CHECK(displayed.position == Vector2 {10.0f, 2.0f});
+    CHECK(displayed.rotation == Catch::Approx(90.0f));
+    CHECK_FALSE(app.world().has_component<PhysicsTeleport2d>(entity));
 }

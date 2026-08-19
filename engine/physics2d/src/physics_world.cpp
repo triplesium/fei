@@ -221,6 +221,25 @@ void PhysicsWorld2d::synchronize_body(
     }
 }
 
+bool PhysicsWorld2d::teleport(
+    Entity entity,
+    Vector2 position,
+    float rotation_degrees
+) {
+    auto found = m_impl->bodies.find(entity);
+    if (found == m_impl->bodies.end()) {
+        return false;
+    }
+    b2Body_SetTransform(
+        found->second.body_id,
+        to_box2d(position),
+        b2MakeRot(rotation_degrees * DEG2RAD)
+    );
+    found->second.input_position = position;
+    found->second.input_rotation = rotation_degrees;
+    return true;
+}
+
 void PhysicsWorld2d::remove_body(Entity entity) {
     m_impl->destroy(entity);
 }

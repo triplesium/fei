@@ -67,4 +67,33 @@ struct AngularVelocity2d {
     bool operator==(const AngularVelocity2d&) const = default;
 };
 
+FEI_REFLECT(Component)
+struct PhysicsPose2d {
+    Vector2 position {Vector2::Zero};
+    // Degrees, matching Transform2d.
+    float rotation {0.0f};
+
+    bool operator==(const PhysicsPose2d&) const = default;
+};
+
+FEI_REFLECT(Component)
+struct PreviousPhysicsPose2d {
+    Vector2 position {Vector2::Zero};
+    // Degrees, matching Transform2d.
+    float rotation {0.0f};
+
+    bool operator==(const PreviousPhysicsPose2d&) const = default;
+};
+
+FEI_REFLECT(Component)
+struct PhysicsInterpolation2d {};
+
+// A one-shot request consumed before the next Box2D step. Resetting both pose
+// samples prevents interpolation from sweeping through the old position.
+FEI_REFLECT(Component)
+struct PhysicsTeleport2d {
+    Vector2 position {Vector2::Zero};
+    float rotation {0.0f};
+};
+
 } // namespace fei
