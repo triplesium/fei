@@ -5,6 +5,7 @@
 #include "refl/type.hpp"
 #include "refl/val.hpp"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -40,11 +41,25 @@ struct ScriptResourceDecl {
     bool init_if_missing {true};
 };
 
+struct ScriptStateValueDecl {
+    std::string name;
+    std::uint64_t id {0};
+};
+
+struct ScriptStateDecl {
+    std::string name;
+    std::string qualified_name;
+    TypeId type_id;
+    std::string initial;
+    std::vector<ScriptStateValueDecl> values;
+};
+
 struct ScriptModuleDecl {
     std::string name;
     std::string source_name;
     std::vector<ScriptTypeDecl> types;
     std::vector<ScriptResourceDecl> resources;
+    std::vector<ScriptStateDecl> states;
     std::vector<DynamicSystemDecl> systems;
 };
 

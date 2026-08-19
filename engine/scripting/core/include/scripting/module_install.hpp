@@ -57,6 +57,9 @@ ensure_script_module_types(const ScriptModuleDecl& decl);
 Status<ScriptError>
 install_script_module_resources(World& world, const ScriptModuleDecl& decl);
 
+Status<ScriptError>
+install_script_module_states(World& world, const ScriptModuleDecl& decl);
+
 Result<SystemAccess, ScriptError>
 script_system_access_for_decl(const DynamicSystemDecl& decl);
 

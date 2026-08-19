@@ -217,6 +217,34 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Luau compiler validates script-defined state declarations",
+    "[scripting_luau][compiler][state]"
+) {
+    const ScriptSource source {
+        .name = "invalid_state.luau",
+        .content = R"(
+            return module {
+                name = "game.invalid_state",
+                states = {
+                    GameState = {
+                        initial = "Missing",
+                        values = { "Menu", "Playing" },
+                    },
+                },
+                systems = {},
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE_FALSE(artifact);
+    CHECK(
+        artifact.error().message.find("is not present in values") !=
+        std::string::npos
+    );
+}
+
+TEST_CASE(
     "Luau compiler extracts Bevy-style system configuration chains",
     "[scripting_luau][compiler][schedule]"
 ) {

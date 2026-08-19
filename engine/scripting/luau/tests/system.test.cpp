@@ -1211,3 +1211,169 @@ TEST_CASE(
     world.run_schedule(Update);
     CHECK(world.resource<LuauTestConfig>().state_order == 1234);
 }
+
+TEST_CASE(
+    "Luau modules declare states without resetting them on reload",
+    "[scripting_luau][system][state][reload]"
+) {
+    register_luau_system_test_types();
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(LuauTestConfig {});
+
+    const ScriptSource source {
+        .name = "script_state.luau",
+        .content = R"(
+            local function enter_boot(config: ResRW<LuauTestConfig>)
+                config.state_order = config.state_order * 10 + 1
+            end
+
+            local function update_boot(
+                config: ResRW<LuauTestConfig>,
+                state: State<GameFlow>,
+                next_state: NextState<GameFlow>
+            )
+                assert(state:get() == GameFlow.Boot)
+                config.state_order = config.state_order * 10 + 2
+                next_state:set(GameFlow.Running)
+            end
+
+            local function exit_boot(config: ResRW<LuauTestConfig>)
+                config.state_order = config.state_order * 10 + 3
+            end
+
+            local function boot_to_running(config: ResRW<LuauTestConfig>)
+                config.state_order = config.state_order * 10 + 4
+            end
+
+            local function enter_running(config: ResRW<LuauTestConfig>)
+                config.state_order = config.state_order * 10 + 5
+            end
+
+            return module {
+                name = "test.script_state",
+                states = {
+                    GameFlow = {
+                        initial = "Boot",
+                        values = { "Boot", "Running", "Paused" },
+                    },
+                },
+                systems = {
+                    [Update] = {
+                        update_boot:run_if(in_state(GameFlow.Boot)),
+                    },
+                    [OnEnter(GameFlow.Boot)] = { enter_boot },
+                    [OnExit(GameFlow.Boot)] = { exit_boot },
+                    [OnTransition(
+                        GameFlow.Boot,
+                        GameFlow.Running
+                    )] = { boot_to_running },
+                    [OnEnter(GameFlow.Running)] = { enter_running },
+                },
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    std::string artifact_error;
+    if (!artifact) {
+        artifact_error = artifact.error().message;
+    }
+    INFO(artifact_error);
+    REQUIRE(artifact);
+    REQUIRE(artifact->declaration.states.size() == 1);
+    CHECK(artifact->declaration.states[0].name == "GameFlow");
+    CHECK(artifact->declaration.states[0].initial == "Boot");
+    REQUIRE(artifact->declaration.states[0].values.size() == 3);
+
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module);
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems);
+    world.sort_systems();
+
+    world.run_state_transitions();
+    CHECK(world.resource<LuauTestConfig>().state_order == 1);
+    world.run_schedule(Update);
+    CHECK(world.resource<LuauTestConfig>().state_order == 12);
+    world.run_state_transitions();
+    CHECK(world.resource<LuauTestConfig>().state_order == 12345);
+
+    const ScriptSource reloaded_source {
+        .name = "script_state_reload.luau",
+        .content = R"(
+            local function verify_running(
+                config: ResRW<LuauTestConfig>,
+                state: State<GameFlow>
+            )
+                assert(state:get() == GameFlow.Running)
+                config.state_order = config.state_order * 10 + 6
+            end
+
+            return module {
+                name = "test.script_state",
+                states = {
+                    GameFlow = {
+                        initial = "Paused",
+                        values = { "Paused", "Running", "Boot" },
+                    },
+                },
+                systems = {
+                    [Update] = { verify_running },
+                },
+            }
+        )",
+    };
+    auto reloaded_artifact = compile_luau_script_module(reloaded_source);
+    REQUIRE(reloaded_artifact);
+    auto reloaded_module = runtime.load_module(*reloaded_artifact);
+    REQUIRE(reloaded_module);
+    auto reloaded_systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *reloaded_module,
+        reloaded_artifact->declaration
+    );
+    REQUIRE(reloaded_systems);
+    REQUIRE(remove_script_module_systems(world, *systems));
+    world.sort_systems();
+    world.run_schedule(Update);
+    CHECK(world.resource<LuauTestConfig>().state_order == 123456);
+
+    const ScriptSource invalid_reload {
+        .name = "script_state_invalid_reload.luau",
+        .content = R"(
+            return module {
+                name = "test.script_state",
+                states = {
+                    GameFlow = {
+                        initial = "Boot",
+                        values = { "Boot", "Paused" },
+                    },
+                },
+                systems = {},
+            }
+        )",
+    };
+    auto invalid_artifact = compile_luau_script_module(invalid_reload);
+    REQUIRE(invalid_artifact);
+    auto invalid_module = runtime.load_module(*invalid_artifact);
+    REQUIRE(invalid_module);
+    auto invalid_systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *invalid_module,
+        invalid_artifact->declaration
+    );
+    REQUIRE_FALSE(invalid_systems);
+    CHECK(
+        invalid_systems.error().message.find("currently active") !=
+        std::string::npos
+    );
+}

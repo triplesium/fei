@@ -6,8 +6,10 @@
 #include "ecs/fwd.hpp"
 #include "refl/enum.hpp"
 #include "refl/registry.hpp"
+#include "scripting/state.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <iterator>
 #include <limits>
@@ -273,7 +275,14 @@ compile_param(const AstLocal& param) {
     ));
 }
 
-using RequiredRuntimeTypes = std::unordered_set<TypeId>;
+struct RequiredRuntimeTypes {
+    std::unordered_set<TypeId> reflected_types;
+    std::unordered_map<std::string, const ScriptStateDecl*> script_states;
+
+    void insert(TypeId type) { reflected_types.insert(type); }
+    auto begin() const { return reflected_types.begin(); }
+    auto end() const { return reflected_types.end(); }
+};
 
 bool append_expression_path(
     const AstExpr& expression,
@@ -311,6 +320,11 @@ Result<Val, ScriptError> compile_state_value(
             type_name.append("::");
         }
         type_name.append(path[index]);
+    }
+    if (const auto script_state =
+            required_runtime_types.script_states.find(type_name);
+        script_state != required_runtime_types.script_states.end()) {
+        return make_script_state_value(*script_state->second, enumerator);
     }
     auto type =
         resolve_dynamic_type_ref(DynamicTypeRef {.type_name = type_name});
@@ -678,6 +692,139 @@ compile_types(const AstExprTable& table, const std::string& module_name) {
         result.push_back(std::move(type));
     }
     std::ranges::sort(result, {}, &ScriptTypeDecl::name);
+    return result;
+}
+
+Result<std::vector<ScriptStateDecl>, ScriptError>
+compile_states(const AstExprTable& table, const std::string& module_name) {
+    const auto valid_identifier = [](std::string_view name) {
+        if (name.empty() ||
+            (std::isalpha(static_cast<unsigned char>(name.front())) == 0 &&
+             name.front() != '_')) {
+            return false;
+        }
+        return std::ranges::all_of(name.substr(1), [](char character) {
+            return std::isalnum(static_cast<unsigned char>(character)) != 0 ||
+                   character == '_';
+        });
+    };
+    std::vector<ScriptStateDecl> result;
+    result.reserve(table.items.size);
+    std::unordered_set<std::string> state_names;
+    for (const auto& item : table.items) {
+        auto name = record_name(item, "states");
+        if (!name) {
+            return failure(std::move(name.error()));
+        }
+        if (!state_names.insert(*name).second) {
+            return failure(declaration_error(
+                "duplicate script-defined state '" + *name + "'"
+            ));
+        }
+        const auto* state_table = item.value->as<AstExprTable>();
+        if (state_table == nullptr) {
+            return failure(declaration_error(
+                "state '" + *name + "' declaration must be a table"
+            ));
+        }
+        std::unordered_set<std::string> state_fields;
+        for (const auto& field_item : state_table->items) {
+            auto field = record_name(field_item, "state declaration");
+            if (!field) {
+                return failure(std::move(field.error()));
+            }
+            if (*field != "initial" && *field != "values") {
+                return failure(declaration_error(
+                    "unknown field '" + *field + "' in state '" + *name + "'"
+                ));
+            }
+            if (!state_fields.insert(*field).second) {
+                return failure(declaration_error(
+                    "duplicate field '" + *field + "' in state '" + *name + "'"
+                ));
+            }
+        }
+        const auto initial_value = state_table->getRecord("initial");
+        const auto* initial =
+            initial_value ? (*initial_value)->as<AstExprConstantString>() :
+                            nullptr;
+        if (initial == nullptr || initial->value.size == 0) {
+            return failure(declaration_error(
+                "state '" + *name +
+                "' requires a non-empty string 'initial' field"
+            ));
+        }
+        const auto values_value = state_table->getRecord("values");
+        const auto* values =
+            values_value ? (*values_value)->as<AstExprTable>() : nullptr;
+        if (values == nullptr || values->items.size == 0) {
+            return failure(declaration_error(
+                "state '" + *name + "' requires a non-empty 'values' array"
+            ));
+        }
+
+        ScriptStateDecl state {
+            .name = *name,
+            .qualified_name = module_name + "." + *name,
+            .type_id = TypeId {module_name + "." + *name},
+            .initial = std::string {initial->value.data, initial->value.size},
+        };
+        std::unordered_set<std::string> value_names;
+        std::unordered_set<std::uint64_t> value_ids;
+        for (const auto& value_item : values->items) {
+            if (value_item.kind != AstExprTable::Item::List) {
+                return failure(declaration_error(
+                    "state '" + *name + "' values must be a string array"
+                ));
+            }
+            const auto* text = value_item.value->as<AstExprConstantString>();
+            if (text == nullptr || text->value.size == 0) {
+                return failure(declaration_error(
+                    "state '" + *name + "' values must be non-empty strings"
+                ));
+            }
+            std::string value_name {text->value.data, text->value.size};
+            if (!valid_identifier(value_name)) {
+                return failure(declaration_error(
+                    "state value '" + value_name + "' in state '" + *name +
+                    "' must be a valid identifier"
+                ));
+            }
+            if (!value_names.insert(value_name).second) {
+                return failure(declaration_error(
+                    "duplicate value '" + value_name + "' in state '" + *name +
+                    "'"
+                ));
+            }
+            const auto value_id =
+                stable_name_hash(state.qualified_name + "." + value_name);
+            if (!value_ids.insert(value_id).second) {
+                return failure(declaration_error(
+                    "state value hash collision in state '" + *name + "'"
+                ));
+            }
+            state.values.push_back(
+                ScriptStateValueDecl {
+                    .name = std::move(value_name),
+                    .id = value_id,
+                }
+            );
+        }
+        if (!value_names.contains(state.initial)) {
+            return failure(declaration_error(
+                "state '" + *name + "' initial value '" + state.initial +
+                "' is not present in values"
+            ));
+        }
+        result.push_back(std::move(state));
+    }
+    std::ranges::sort(result, {}, &ScriptStateDecl::name);
+    for (const auto& state : result) {
+        auto ensured = ensure_script_state_type(state);
+        if (!ensured) {
+            return failure(declaration_error(ensured.error().message));
+        }
+    }
     return result;
 }
 
@@ -1235,6 +1382,31 @@ compile_luau_script_module(const ScriptSource& source) {
     for (const auto& type : declaration.types) {
         script_type_names.insert(type.name);
         script_type_names_by_local.emplace(type.name, type.qualified_name);
+    }
+    const std::optional<AstExpr*> states_value = table->getRecord("states");
+    const auto* states =
+        states_value ? (*states_value)->as<AstExprTable>() : nullptr;
+    if (states_value && states == nullptr) {
+        return failure(
+            declaration_error("module field 'states' must be a table")
+        );
+    }
+    if (states != nullptr) {
+        auto compiled = compile_states(*states, declaration.name);
+        if (!compiled) {
+            return failure(std::move(compiled.error()));
+        }
+        declaration.states = std::move(*compiled);
+    }
+    for (const auto& state : declaration.states) {
+        if (script_type_names.contains(state.name)) {
+            return failure(declaration_error(
+                "script-defined state '" + state.name +
+                "' conflicts with a script-defined type"
+            ));
+        }
+        script_type_names_by_local.emplace(state.name, state.qualified_name);
+        required_runtime_types.script_states.emplace(state.name, &state);
     }
     const std::optional<AstExpr*> resources_value =
         table->getRecord("resources");

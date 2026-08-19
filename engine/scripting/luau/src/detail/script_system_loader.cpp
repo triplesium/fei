@@ -56,6 +56,10 @@ Status<ScriptError> bind_declared_types(
     for (const auto& type : declaration.types) {
         script_types.insert(type.qualified_name);
     }
+    for (const auto& state : declaration.states) {
+        script_types.insert(state.qualified_name);
+        bound.insert(state.type_id);
+    }
     auto bind_params = [&](const auto& params) -> Status<ScriptError> {
         for (const auto& param : params) {
             if (param->decl_type_id() == type_id<DynamicWorldParamDecl>()) {

@@ -8,6 +8,7 @@
 #include "refl/ref.hpp"
 #include "refl/type.hpp"
 
+#include <functional>
 #include <shared_mutex>
 #include <unordered_map>
 
@@ -17,13 +18,13 @@ struct DynamicStateOps {
     TypeId value_type;
     TypeId state_resource;
     TypeId next_state_resource;
-    bool (*initialized)(const World&) {nullptr};
-    Ref (*current)(World&) {nullptr};
-    Status<DynamicSystemError> (*set_next)(World&, Ref) {nullptr};
-    void (*clear_next)(World&) {nullptr};
-    ScheduleId (*on_enter)(Ref) {nullptr};
-    ScheduleId (*on_exit)(Ref) {nullptr};
-    ScheduleId (*on_transition)(Ref, Ref) {nullptr};
+    std::function<bool(const World&)> initialized;
+    std::function<Ref(World&)> current;
+    std::function<Status<DynamicSystemError>(World&, Ref)> set_next;
+    std::function<void(World&)> clear_next;
+    std::function<ScheduleId(Ref)> on_enter;
+    std::function<ScheduleId(Ref)> on_exit;
+    std::function<ScheduleId(Ref, Ref)> on_transition;
 };
 
 class DynamicStateRegistry {

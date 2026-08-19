@@ -224,6 +224,114 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "LuauScriptSystemRegistry preserves script states across asset reloads",
+    "[scripting_luau][system][registry][state]"
+) {
+    register_luau_registry_test_types();
+    World world;
+    add_luau_script_system_resources(world);
+    world.add_resource(LuauRegistryCounter {});
+
+    auto script = luau_assets(world).emplace(R"(
+        local function leave_idle(
+            counter: ResRW<LuauRegistryCounter>,
+            next_state: NextState<FlowState>
+        )
+            counter.value += 1
+            next_state:set(FlowState.Active)
+        end
+
+        local function enter_active(counter: ResRW<LuauRegistryCounter>)
+            counter.value += 10
+        end
+
+        return module {
+            name = "registry.script_state",
+            states = {
+                FlowState = {
+                    initial = "Idle",
+                    values = { "Idle", "Active" },
+                },
+            },
+            systems = {
+                [Update] = {
+                    leave_idle:run_if(in_state(FlowState.Idle)),
+                },
+                [OnEnter(FlowState.Active)] = { enter_active },
+            },
+        }
+    )");
+
+    auto& scripts = luau_scripts(world);
+    scripts.queue_asset(script);
+    apply_luau_script_queue(world);
+    REQUIRE(scripts.queue_errors().empty());
+    auto module_id = scripts.find_asset(script);
+    REQUIRE(module_id);
+
+    world.run_state_transitions();
+    world.run_schedule(Update);
+    world.run_state_transitions();
+    CHECK(world.resource<LuauRegistryCounter>().value == 11);
+
+    auto script_asset = luau_assets(world).modify(script);
+    REQUIRE(script_asset);
+    script_asset->set_content(R"(
+        local function verify_active(
+            counter: ResRW<LuauRegistryCounter>,
+            state: State<FlowState>
+        )
+            assert(state:get() == FlowState.Active)
+            counter.value += 100
+        end
+
+        return module {
+            name = "registry.script_state",
+            states = {
+                FlowState = {
+                    initial = "Idle",
+                    values = { "Active", "Idle" },
+                },
+            },
+            systems = {
+                [Update] = { verify_active },
+            },
+        }
+    )");
+    scripts.queue_reload_asset(*module_id);
+    apply_luau_script_queue(world);
+    REQUIRE(scripts.queue_errors().empty());
+
+    world.run_schedule(Update);
+    CHECK(world.resource<LuauRegistryCounter>().value == 111);
+
+    script_asset = luau_assets(world).modify(script);
+    REQUIRE(script_asset);
+    script_asset->set_content(R"(
+        return module {
+            name = "registry.script_state",
+            states = {
+                FlowState = {
+                    initial = "Idle",
+                    values = { "Idle" },
+                },
+            },
+            systems = {},
+        }
+    )");
+    scripts.queue_reload_asset(*module_id);
+    apply_luau_script_queue(world);
+    REQUIRE(scripts.queue_errors().size() == 1);
+    CHECK(
+        scripts.queue_errors()[0].error.message.find("currently active") !=
+        std::string::npos
+    );
+
+    world.run_schedule(Update);
+    CHECK(world.resource<LuauRegistryCounter>().value == 211);
+}
+
+TEST_CASE(
     "LuauScriptingPlugin installs the script lifecycle",
     "[scripting_luau][plugin][registry]"
 ) {

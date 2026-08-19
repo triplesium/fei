@@ -7,6 +7,7 @@
 #include "refl/registry.hpp"
 #include "refl/val.hpp"
 #include "scripting/reflection_bridge.hpp"
+#include "scripting/state.hpp"
 #include "scripting_luau/detail/asset_server_binding.hpp"
 #include "scripting_luau/detail/commands_binding.hpp"
 #include "scripting_luau/detail/world_binding.hpp"
@@ -470,6 +471,9 @@ int borrowed_index(lua_State* state) {
     if (push_dynamic_state_member(state, object.ref.type_id(), key)) {
         return 1;
     }
+    if (is_script_state_type(object.ref.type_id())) {
+        return raise_message(state, "script state values have no members");
+    }
     if (luau_is_commands(object.ref.type_id())) {
         return dispatch_luau_commands_index(state, key);
     }
@@ -495,6 +499,9 @@ int borrowed_index(lua_State* state) {
 
 int borrowed_newindex(lua_State* state) {
     auto& object = check_object(state, 1);
+    if (is_script_state_type(object.ref.type_id())) {
+        return raise_message(state, "script state values are immutable");
+    }
     if (object.ref.is_const()) {
         luaL_error(state, "attempt to mutate a read-only ECS borrow");
     }

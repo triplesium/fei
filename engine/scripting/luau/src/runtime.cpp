@@ -6,6 +6,7 @@
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
 #include "scripting/reflection_bridge.hpp"
+#include "scripting/state.hpp"
 #include "scripting_luau/detail/binding.hpp"
 
 #include <cctype>
@@ -640,6 +641,40 @@ LuauRuntime::load_module(const LuauScriptModuleArtifact& artifact) {
             );
         }
         loaded.script_types.insert(required_type);
+    }
+    for (const auto& script_state : artifact.declaration.states) {
+        auto ensured = ensure_script_state_type(script_state);
+        if (!ensured) {
+            return fail_loading(
+                LuauScriptError {std::move(ensured.error().message)}
+            );
+        }
+        lua_getglobal(thread, script_state.name.c_str());
+        if (!lua_isnil(thread, -1)) {
+            lua_pop(thread, 1);
+            return fail_loading(
+                LuauScriptError {
+                    "Script state name '" + script_state.name +
+                    "' is already occupied"
+                }
+            );
+        }
+        lua_pop(thread, 1);
+        lua_newtable(thread);
+        for (const auto& value : script_state.values) {
+            auto state_value =
+                make_script_state_value(script_state, value.name);
+            if (!state_value) {
+                return fail_loading(
+                    LuauScriptError {std::move(state_value.error().message)}
+                );
+            }
+            detail::push_luau_owned_value(thread, std::move(*state_value));
+            lua_setfield(thread, -2, value.name.c_str());
+        }
+        lua_setreadonly(thread, -1, true);
+        lua_setglobal(thread, script_state.name.c_str());
+        loaded.script_types.insert(script_state.type_id);
     }
 
     if (luau_load(

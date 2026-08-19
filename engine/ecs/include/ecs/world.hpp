@@ -250,6 +250,17 @@ class World {
         return m_resources.get_mut(type_id);
     }
 
+    template<typename T>
+    std::remove_cvref_t<T>& add_keyed_resource(TypeId resource_id, T&& val) {
+        using U = std::remove_cvref_t<T>;
+        m_resources.template emplace<U, U>(
+            resource_id,
+            increment_change_tick(),
+            std::forward<T>(val)
+        );
+        return m_resources.get_mut(resource_id).template get<U>();
+    }
+
     template<typename T, typename U>
     T& add_resource_as(U&& val) {
         using Stored = std::remove_cvref_t<U>;

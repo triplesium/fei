@@ -5,6 +5,7 @@
 #include "refl/cls.hpp"
 #include "refl/dynamic_type.hpp"
 #include "refl/registry.hpp"
+#include "scripting/state.hpp"
 
 #include <cstddef>
 #include <unordered_map>
@@ -537,6 +538,11 @@ Result<std::vector<SystemHandle>, ScriptError> install_script_module(
         if (!bound) {
             return failure(std::move(bound.error()));
         }
+    }
+
+    auto states = install_script_module_states(world, decl);
+    if (!states) {
+        return failure(std::move(states.error()));
     }
 
     auto resources = install_script_module_resources(world, decl);
