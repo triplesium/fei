@@ -186,6 +186,7 @@ void World::raw_remove_component(Entity entity, TypeId type_id) {
         std::find(old_components.begin(), old_components.end(), type_id) !=
         old_components.end()
     );
+    m_removed_components.send(type_id, entity);
 
     auto new_components = old_components;
     new_components.erase(
@@ -305,6 +306,9 @@ void World::despawn(Entity entity) {
 void World::raw_despawn(Entity entity) {
     auto location = m_entities.get_location(entity);
     auto& archetype = m_archetypes.get(location.archetype_id);
+    for (auto component : archetype.components()) {
+        m_removed_components.send(component, entity);
+    }
     if (auto moved_entity = archetype.remove_row(location.row)) {
         m_entities.set_location(*moved_entity, location);
     }

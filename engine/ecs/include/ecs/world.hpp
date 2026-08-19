@@ -6,6 +6,7 @@
 #include "ecs/entity.hpp"
 #include "ecs/fwd.hpp"
 #include "ecs/hierarchy.hpp"
+#include "ecs/removal_detection.hpp"
 #include "ecs/resource.hpp"
 #include "ecs/schedule.hpp"
 #include "ecs/system.hpp"
@@ -55,6 +56,7 @@ class World {
     SystemId m_next_registered_system_id {0};
     std::size_t m_registered_system_execution_depth {0};
     std::atomic<Tick> m_change_tick {0};
+    RemovedComponentEvents m_removed_components;
 
   public:
     World() = default;
@@ -68,7 +70,8 @@ class World {
         m_schedules(std::move(other.m_schedules)),
         m_registered_systems(std::move(other.m_registered_systems)),
         m_next_registered_system_id(other.m_next_registered_system_id),
-        m_change_tick(other.read_change_tick()) {}
+        m_change_tick(other.read_change_tick()),
+        m_removed_components(std::move(other.m_removed_components)) {}
 
     World& operator=(World&& other) noexcept {
         if (this != &other) {
@@ -84,6 +87,7 @@ class World {
                 other.read_change_tick(),
                 std::memory_order_relaxed
             );
+            m_removed_components = std::move(other.m_removed_components);
         }
         return *this;
     }
@@ -167,6 +171,13 @@ class World {
     bool has_parent(Entity child) const;
     Optional<Entity> parent(Entity child) const;
     void despawn(Entity entity);
+
+    void clear_trackers() { m_removed_components.update(); }
+
+    [[nodiscard]] const RemovedComponentBuffer*
+    removed_components(TypeId component) const {
+        return m_removed_components.get(component);
+    }
 
     SystemHandle add_system(ScheduleId schedule, SystemConfig config) {
         return m_schedules.add_system(schedule, std::move(config));

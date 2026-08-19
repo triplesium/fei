@@ -20,6 +20,8 @@ template<typename T>
 class ResRW;
 
 class WorldRef;
+template<typename T>
+class RemovedComponents;
 class Commands;
 struct CommandsQueue;
 
@@ -204,6 +206,11 @@ struct SystemParamAccess<Optional<ResRO<T>>> {
 template<>
 struct SystemParamAccess<WorldRef> {
     static void add(SystemAccess& access) { access.world_exclusive = true; }
+};
+
+template<typename T>
+struct SystemParamAccess<RemovedComponents<T>> {
+    static void add(SystemAccess&) {}
 };
 
 template<>

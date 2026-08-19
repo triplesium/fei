@@ -202,6 +202,10 @@ void App::update() {
         return;
     }
 
+    // Keep removal messages alive across update/render boundaries, then rotate
+    // their double buffers at the start of the next main update.
+    m_world.clear_trackers();
+
     run_profiled_schedule(*this, First, "First");
     run_profiled_schedule(*this, PreUpdate, "PreUpdate");
     run_profiled_schedule(*this, StateTransition, "StateTransition");
