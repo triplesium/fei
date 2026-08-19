@@ -18,6 +18,13 @@ class DynamicSystemExecutor {
     execute(const std::vector<Ref>& args) = 0;
 };
 
+class DynamicConditionExecutor {
+  public:
+    virtual ~DynamicConditionExecutor() = default;
+    virtual Result<bool, DynamicSystemError>
+    evaluate(const std::vector<Ref>& args) = 0;
+};
+
 class DynamicSystem : public System {
   private:
     std::string m_name;
@@ -36,6 +43,26 @@ class DynamicSystem : public System {
 
   protected:
     void execute(World& world, SystemTicks system_ticks) override;
+};
+
+class DynamicCondition : public Condition {
+  private:
+    std::string m_name;
+    DynamicSystemParams m_params;
+    std::unique_ptr<DynamicConditionExecutor> m_executor;
+    SystemAccess m_access;
+
+  public:
+    DynamicCondition(
+        std::string name,
+        DynamicSystemParams params,
+        std::unique_ptr<DynamicConditionExecutor> executor
+    );
+
+    const SystemAccess& access() const override { return m_access; }
+
+  protected:
+    bool evaluate(World& world, SystemTicks system_ticks) override;
 };
 
 } // namespace fei

@@ -31,15 +31,25 @@ using ScriptSystemExecutorFactory =
     std::function<Result<std::unique_ptr<DynamicSystemExecutor>, ScriptError>(
         const DynamicSystemDecl&
     )>;
+using ScriptConditionExecutorFactory = std::function<
+    Result<std::unique_ptr<DynamicConditionExecutor>, ScriptError>(
+        const DynamicConditionDecl&
+    )>;
 using ScriptSystemCall =
     std::function<Status<ScriptError>(const std::vector<Ref>&)>;
+using ScriptConditionCall =
+    std::function<Result<bool, ScriptError>(const std::vector<Ref>&)>;
 
 struct ScriptSystemInstallOptions {
     bool main_thread_only {false};
+    ScriptConditionExecutorFactory create_condition_executor;
 };
 
 std::unique_ptr<DynamicSystemExecutor>
 make_script_system_executor(ScriptSystemCall call);
+
+std::unique_ptr<DynamicConditionExecutor>
+make_script_condition_executor(ScriptConditionCall call);
 
 Result<ScriptTypeBindings, ScriptError>
 ensure_script_module_types(const ScriptModuleDecl& decl);

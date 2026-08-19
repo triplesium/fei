@@ -216,4 +216,174 @@ TEST_CASE(
     CHECK(artifact.error().message.find("32-bit integer") != std::string::npos);
 }
 
+TEST_CASE(
+    "Luau compiler extracts Bevy-style system configuration chains",
+    "[scripting_luau][compiler][schedule]"
+) {
+    const ScriptSource source {
+        .name = "configured_systems.luau",
+        .content = R"(
+            local function first()
+            end
+
+            local function enabled(): boolean
+                return true
+            end
+
+            local function second()
+            end
+
+            local function third()
+            end
+
+            return module {
+                name = "configured",
+                systems = {
+                    [Update] = {
+                        third,
+                        second
+                            :after(first)
+                            :before(third)
+                            :run_if(enabled),
+                        first,
+                    },
+                },
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    REQUIRE(artifact);
+    CHECK(
+        artifact->system_layout == LuauSystemDeclarationLayout::ScheduleGroups
+    );
+    REQUIRE(artifact->declaration.systems.size() == 3);
+    const auto& second = artifact->declaration.systems[1];
+    CHECK(second.name == "second");
+    CHECK(second.schedule == Update);
+    CHECK(second.after == std::vector<std::string> {"first"});
+    CHECK(second.before == std::vector<std::string> {"third"});
+    REQUIRE(second.conditions.size() == 1);
+    CHECK(second.conditions[0].name == "enabled");
+}
+
+TEST_CASE(
+    "Luau compiler validates configured system scheduling",
+    "[scripting_luau][compiler][schedule][error]"
+) {
+    const std::vector<std::pair<std::string, std::string>> invalid_sources {
+        {
+            R"(
+                local function first() end
+                local function missing() end
+                return module {
+                    name = "missing",
+                    systems = { [Update] = { first:after(missing) } },
+                }
+            )",
+            "unregistered system",
+        },
+        {
+            R"(
+                local function first() end
+                local function second() end
+                return module {
+                    name = "cycle",
+                    systems = {
+                        [Update] = {
+                            first:after(second),
+                            second:after(first),
+                        },
+                    },
+                }
+            )",
+            "cycle detected",
+        },
+        {
+            R"(
+                local function tick() end
+                return module {
+                    name = "short_chain",
+                    systems = { [Update] = { chain(tick) } },
+                }
+            )",
+            "at least two",
+        },
+        {
+            R"(
+                local function writable(config: ResRW<Config>): boolean
+                    return true
+                end
+                local function tick() end
+                return module {
+                    name = "writable",
+                    systems = {
+                        [Update] = { tick:run_if(writable) },
+                    },
+                }
+            )",
+            "read-only",
+        },
+    };
+
+    for (const auto& [content, expected] : invalid_sources) {
+        auto artifact = compile_luau_script_module(
+            ScriptSource {.name = "invalid.luau", .content = content}
+        );
+        REQUIRE_FALSE(artifact);
+        CHECK(artifact.error().message.find(expected) != std::string::npos);
+    }
+}
+
+TEST_CASE(
+    "Luau compiler expands nested system chains",
+    "[scripting_luau][compiler][schedule][chain]"
+) {
+    const ScriptSource source {
+        .name = "system_chain.luau",
+        .content = R"(
+            local function first() end
+            local function enabled(): boolean return true end
+            local function second() end
+            local function third() end
+            local function independent() end
+
+            return module {
+                name = "system.chain",
+                systems = {
+                    [Update] = {
+                        chain(
+                            first,
+                            chain(second:run_if(enabled), third)
+                        ),
+                        independent,
+                    },
+                },
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    REQUIRE(artifact);
+    const auto& systems = artifact->declaration.systems;
+    REQUIRE(systems.size() == 4);
+    CHECK(systems[0].name == "first");
+    CHECK(systems[0].before == std::vector<std::string> {"second"});
+    CHECK(systems[1].name == "second");
+    CHECK(systems[1].before == std::vector<std::string> {"third"});
+    REQUIRE(systems[1].conditions.size() == 1);
+    CHECK(systems[1].conditions[0].name == "enabled");
+    CHECK(systems[2].name == "third");
+    CHECK(systems[2].before.empty());
+    CHECK(systems[3].name == "independent");
+    CHECK(systems[3].before.empty());
+    CHECK(systems[3].after.empty());
+}
+
 } // namespace fei::test

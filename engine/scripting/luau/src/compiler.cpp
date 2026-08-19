@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <limits>
 #include <Luau/Ast.h>
 #include <Luau/Compiler.h>
@@ -622,25 +623,262 @@ void qualify_system_script_types(
     DynamicSystemDecl& system,
     const std::unordered_map<std::string, std::string>& script_types
 ) {
-    for (auto& param : system.params) {
-        if (param->decl_type_id() == type_id<DynamicResourceParamDecl>()) {
-            auto& resource = static_cast<DynamicResourceParamDecl&>(*param);
-            qualify_script_type_ref(resource.type, script_types);
-        } else if (param->decl_type_id() == type_id<DynamicQueryParamDecl>()) {
-            auto& query = static_cast<DynamicQueryParamDecl&>(*param);
-            for (auto& field : query.fields) {
-                qualify_script_type_ref(field.type, script_types);
-            }
-            for (auto& filter : query.filters) {
-                qualify_script_type_ref(filter.type, script_types);
+    auto qualify_params = [&](auto& params) {
+        for (auto& param : params) {
+            if (param->decl_type_id() == type_id<DynamicResourceParamDecl>()) {
+                auto& resource = static_cast<DynamicResourceParamDecl&>(*param);
+                qualify_script_type_ref(resource.type, script_types);
+            } else if (
+                param->decl_type_id() == type_id<DynamicQueryParamDecl>()
+            ) {
+                auto& query = static_cast<DynamicQueryParamDecl&>(*param);
+                for (auto& field : query.fields) {
+                    qualify_script_type_ref(field.type, script_types);
+                }
+                for (auto& filter : query.filters) {
+                    qualify_script_type_ref(filter.type, script_types);
+                }
             }
         }
+    };
+    qualify_params(system.params);
+    for (auto& condition : system.conditions) {
+        qualify_params(condition.params);
     }
 }
 
-Result<DynamicSystemDecl, ScriptError> compile_system(
+using TopLevelFunctions = std::unordered_map<const AstLocal*, AstExprFunction*>;
+
+Result<std::vector<DynamicSystemParamDeclPtr>, ScriptError>
+compile_function_params(const AstExprFunction& function) {
+    std::vector<DynamicSystemParamDeclPtr> params;
+    params.reserve(function.args.size);
+    for (const AstLocal* param : function.args) {
+        auto compiled = compile_param(*param);
+        if (!compiled) {
+            return failure(std::move(compiled.error()));
+        }
+        params.push_back(std::move(*compiled));
+    }
+    return params;
+}
+
+Result<const AstExprLocal*, ScriptError> top_level_function_ref(
     const AstExpr& expression,
-    const std::unordered_map<const AstLocal*, AstExprFunction*>& functions
+    const TopLevelFunctions& functions,
+    std::string_view context
+) {
+    const auto* function_ref = expression.as<AstExprLocal>();
+    if (function_ref == nullptr || !functions.contains(function_ref->local)) {
+        return failure(declaration_error(
+            std::string(context) + " must name a top-level local function"
+        ));
+    }
+    return function_ref;
+}
+
+bool is_read_only_condition_param(const DynamicSystemParamDecl& param) {
+    if (param.decl_type_id() == type_id<DynamicResourceParamDecl>()) {
+        return static_cast<const DynamicResourceParamDecl&>(param).access ==
+               DynamicParamAccess::Read;
+    }
+    if (param.decl_type_id() == type_id<DynamicQueryParamDecl>()) {
+        const auto& query = static_cast<const DynamicQueryParamDecl&>(param);
+        return std::ranges::all_of(query.fields, [](const auto& field) {
+            return field.access == DynamicParamAccess::Read;
+        });
+    }
+    return false;
+}
+
+Result<DynamicConditionDecl, ScriptError> compile_condition(
+    const AstExpr& expression,
+    const TopLevelFunctions& functions
+) {
+    auto function_ref =
+        top_level_function_ref(expression, functions, "run_if argument");
+    if (!function_ref) {
+        return failure(std::move(function_ref.error()));
+    }
+    const auto* function = functions.at((*function_ref)->local);
+    auto params = compile_function_params(*function);
+    if (!params) {
+        return failure(std::move(params.error()));
+    }
+    if (!std::ranges::all_of(*params, [](const auto& param) {
+            return param && is_read_only_condition_param(*param);
+        })) {
+        return failure(declaration_error(
+            "condition '" +
+            std::string(name_view((*function_ref)->local->name)) +
+            "' may only use read-only resource and query parameters"
+        ));
+    }
+    return DynamicConditionDecl {
+        .name = std::string(name_view((*function_ref)->local->name)),
+        .params = std::move(*params),
+    };
+}
+
+Result<DynamicSystemDecl, ScriptError> compile_bare_system(
+    const AstExpr& expression,
+    ScheduleId schedule,
+    const TopLevelFunctions& functions
+) {
+    struct Modifier {
+        std::string_view name;
+        const AstExprCall* call {nullptr};
+    };
+
+    const AstExpr* base = &expression;
+    std::vector<Modifier> modifiers;
+    while (const auto* call = base->as<AstExprCall>()) {
+        const auto* method = call->func->as<AstExprIndexName>();
+        if (method == nullptr || !call->self) {
+            break;
+        }
+        const std::string_view method_name = name_view(method->index);
+        if (method_name != "before" && method_name != "after" &&
+            method_name != "run_if") {
+            return failure(declaration_error(
+                "unsupported system configuration method '" +
+                std::string(method_name) + "'"
+            ));
+        }
+        if (call->args.size == 0) {
+            return failure(declaration_error(
+                "system configuration method '" + std::string(method_name) +
+                "' requires at least one function"
+            ));
+        }
+        modifiers.push_back(Modifier {.name = method_name, .call = call});
+        base = method->expr;
+    }
+    std::ranges::reverse(modifiers);
+
+    auto function_ref =
+        top_level_function_ref(*base, functions, "system entry");
+    if (!function_ref) {
+        return failure(std::move(function_ref.error()));
+    }
+    const auto* function = functions.at((*function_ref)->local);
+    auto params = compile_function_params(*function);
+    if (!params) {
+        return failure(std::move(params.error()));
+    }
+    DynamicSystemDecl result {
+        .name = std::string(name_view((*function_ref)->local->name)),
+        .params = std::move(*params),
+        .schedule = schedule,
+    };
+
+    for (const auto& modifier : modifiers) {
+        for (const AstExpr* argument : modifier.call->args) {
+            if (modifier.name == "run_if") {
+                auto condition = compile_condition(*argument, functions);
+                if (!condition) {
+                    return failure(std::move(condition.error()));
+                }
+                result.conditions.push_back(std::move(*condition));
+                continue;
+            }
+            auto target = top_level_function_ref(
+                *argument,
+                functions,
+                std::string(modifier.name) + " argument"
+            );
+            if (!target) {
+                return failure(std::move(target.error()));
+            }
+            auto& dependencies =
+                modifier.name == "before" ? result.before : result.after;
+            dependencies.emplace_back(name_view((*target)->local->name));
+        }
+    }
+    return result;
+}
+
+struct CompiledSystemGroup {
+    std::vector<DynamicSystemDecl> systems;
+    std::vector<std::string> first;
+    std::vector<std::string> last;
+};
+
+Result<CompiledSystemGroup, ScriptError> compile_system_group(
+    const AstExpr& expression,
+    ScheduleId schedule,
+    const TopLevelFunctions& functions
+) {
+    const auto* call = expression.as<AstExprCall>();
+    const auto* callee =
+        call != nullptr ? call->func->as<AstExprGlobal>() : nullptr;
+    if (call == nullptr || callee == nullptr ||
+        name_view(callee->name) != "chain") {
+        auto system = compile_bare_system(expression, schedule, functions);
+        if (!system) {
+            return failure(std::move(system.error()));
+        }
+        const std::string name = system->name;
+        CompiledSystemGroup result;
+        result.systems.push_back(std::move(*system));
+        result.first.push_back(name);
+        result.last.push_back(name);
+        return result;
+    }
+    if (call->args.size < 2) {
+        return failure(
+            declaration_error("chain requires at least two system groups")
+        );
+    }
+
+    std::vector<CompiledSystemGroup> groups;
+    groups.reserve(call->args.size);
+    for (const AstExpr* argument : call->args) {
+        auto group = compile_system_group(*argument, schedule, functions);
+        if (!group) {
+            return failure(std::move(group.error()));
+        }
+        groups.push_back(std::move(*group));
+    }
+    for (std::size_t index = 0; index + 1 < groups.size(); ++index) {
+        auto& former = groups[index];
+        const auto& latter = groups[index + 1];
+        for (const auto& source_name : former.last) {
+            auto source = std::ranges::find(
+                former.systems,
+                source_name,
+                &DynamicSystemDecl::name
+            );
+            if (source == former.systems.end()) {
+                return failure(declaration_error(
+                    "chain failed to resolve system '" + source_name + "'"
+                ));
+            }
+            source->before.insert(
+                source->before.end(),
+                latter.first.begin(),
+                latter.first.end()
+            );
+        }
+    }
+
+    CompiledSystemGroup result {
+        .first = groups.front().first,
+        .last = groups.back().last,
+    };
+    for (auto& group : groups) {
+        result.systems.insert(
+            result.systems.end(),
+            std::make_move_iterator(group.systems.begin()),
+            std::make_move_iterator(group.systems.end())
+        );
+    }
+    return result;
+}
+
+Result<DynamicSystemDecl, ScriptError> compile_legacy_system(
+    const AstExpr& expression,
+    const TopLevelFunctions& functions
 ) {
     const auto* call = expression.as<AstExprCall>();
     const auto* callee =
@@ -651,32 +889,85 @@ Result<DynamicSystemDecl, ScriptError> compile_system(
             "systems entries must be system(schedule, local_function)"
         ));
     }
-    const auto* function_ref = call->args.data[1]->as<AstExprLocal>();
-    const auto found = function_ref != nullptr ?
-                           functions.find(function_ref->local) :
-                           functions.end();
-    if (found == functions.end()) {
-        return failure(declaration_error(
-            "system's second argument must name a top-level local function"
-        ));
-    }
-
     auto schedule = schedule_id(*call->args.data[0]);
     if (!schedule) {
         return failure(std::move(schedule.error()));
     }
-    DynamicSystemDecl result {
-        .name = std::string(name_view(function_ref->local->name)),
-        .schedule = *schedule,
-    };
-    for (const AstLocal* param : found->second->args) {
-        auto compiled = compile_param(*param);
-        if (!compiled) {
-            return failure(std::move(compiled.error()));
+    return compile_bare_system(*call->args.data[1], *schedule, functions);
+}
+
+Status<ScriptError>
+validate_system_dependencies(const std::vector<DynamicSystemDecl>& systems) {
+    for (std::size_t index = 0; index < systems.size(); ++index) {
+        for (std::size_t other = index + 1; other < systems.size(); ++other) {
+            if (systems[index].schedule == systems[other].schedule &&
+                systems[index].name == systems[other].name) {
+                return failure(declaration_error(
+                    "system '" + systems[index].name +
+                    "' is registered more than once in the same schedule"
+                ));
+            }
         }
-        result.params.push_back(std::move(*compiled));
     }
-    return result;
+
+    std::vector<std::vector<std::size_t>> edges(systems.size());
+    auto target_index =
+        [&](std::size_t source,
+            const std::string& name) -> Result<std::size_t, ScriptError> {
+        for (std::size_t index = 0; index < systems.size(); ++index) {
+            if (systems[index].schedule == systems[source].schedule &&
+                systems[index].name == name) {
+                return index;
+            }
+        }
+        return failure(declaration_error(
+            "system '" + systems[source].name +
+            "' references unregistered system '" + name +
+            "' in the same schedule"
+        ));
+    };
+    for (std::size_t source = 0; source < systems.size(); ++source) {
+        for (const auto& name : systems[source].before) {
+            auto target = target_index(source, name);
+            if (!target) {
+                return failure(std::move(target.error()));
+            }
+            edges[source].push_back(*target);
+        }
+        for (const auto& name : systems[source].after) {
+            auto target = target_index(source, name);
+            if (!target) {
+                return failure(std::move(target.error()));
+            }
+            edges[*target].push_back(source);
+        }
+    }
+
+    std::vector<int> state(systems.size());
+    auto visit = [&](auto&& self, std::size_t node) -> bool {
+        if (state[node] == 1) {
+            return false;
+        }
+        if (state[node] == 2) {
+            return true;
+        }
+        state[node] = 1;
+        for (auto target : edges[node]) {
+            if (!self(self, target)) {
+                return false;
+            }
+        }
+        state[node] = 2;
+        return true;
+    };
+    for (std::size_t index = 0; index < systems.size(); ++index) {
+        if (!visit(visit, index)) {
+            return failure(declaration_error(
+                "cycle detected in script system dependencies"
+            ));
+        }
+    }
+    return {};
 }
 
 } // namespace
@@ -772,21 +1063,75 @@ compile_luau_script_module(const ScriptSource& source) {
             declaration_error("module field 'systems' must be a table")
         );
     }
+    LuauSystemDeclarationLayout system_layout =
+        LuauSystemDeclarationLayout::Flat;
+    if (systems->items.size > 0 &&
+        systems->items.data[0].kind != AstExprTable::Item::List) {
+        system_layout = LuauSystemDeclarationLayout::ScheduleGroups;
+    }
+    std::unordered_set<ScheduleId> declared_schedules;
     for (const AstExprTable::Item& item : systems->items) {
-        if (item.kind != AstExprTable::Item::List) {
-            return failure(declaration_error("systems must be an array"));
+        if (system_layout == LuauSystemDeclarationLayout::Flat) {
+            if (item.kind != AstExprTable::Item::List) {
+                return failure(declaration_error(
+                    "systems cannot mix legacy entries and schedule groups"
+                ));
+            }
+            auto system = compile_legacy_system(*item.value, functions);
+            if (!system) {
+                return failure(std::move(system.error()));
+            }
+            qualify_system_script_types(*system, script_type_names_by_local);
+            declaration.systems.push_back(std::move(*system));
+            continue;
         }
-        auto system = compile_system(*item.value, functions);
-        if (!system) {
-            return failure(std::move(system.error()));
+
+        if (item.kind != AstExprTable::Item::General || item.key == nullptr) {
+            return failure(declaration_error(
+                "schedule groups must use [Schedule] = {...} entries"
+            ));
         }
-        qualify_system_script_types(*system, script_type_names_by_local);
-        declaration.systems.push_back(std::move(*system));
+        auto schedule = schedule_id(*item.key);
+        if (!schedule) {
+            return failure(std::move(schedule.error()));
+        }
+        if (!declared_schedules.insert(*schedule).second) {
+            return failure(
+                declaration_error("schedule group is declared more than once")
+            );
+        }
+        const auto* group = item.value->as<AstExprTable>();
+        if (group == nullptr) {
+            return failure(
+                declaration_error("schedule group must be a system array")
+            );
+        }
+        for (const auto& system_item : group->items) {
+            if (system_item.kind != AstExprTable::Item::List) {
+                return failure(
+                    declaration_error("schedule group systems must be an array")
+                );
+            }
+            auto system_group =
+                compile_system_group(*system_item.value, *schedule, functions);
+            if (!system_group) {
+                return failure(std::move(system_group.error()));
+            }
+            for (auto& system : system_group->systems) {
+                qualify_system_script_types(system, script_type_names_by_local);
+                declaration.systems.push_back(std::move(system));
+            }
+        }
+    }
+    auto valid_dependencies = validate_system_dependencies(declaration.systems);
+    if (!valid_dependencies) {
+        return failure(std::move(valid_dependencies.error()));
     }
 
     return LuauScriptModuleArtifact {
         .declaration = std::move(declaration),
         .bytecode = Luau::compile(source.content),
+        .system_layout = system_layout,
     };
 }
 

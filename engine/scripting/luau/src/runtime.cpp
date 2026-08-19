@@ -8,6 +8,8 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <functional>
+#include <iterator>
 #include <lua.h>
 #include <luacode.h>
 #include <lualib.h>
@@ -17,6 +19,11 @@
 #include <utility>
 
 namespace fei {
+namespace {
+
+void install_system_config_metatables(lua_State* state);
+
+} // namespace
 
 struct LuauRuntime::Impl {
     struct Module {
@@ -36,6 +43,7 @@ struct LuauRuntime::Impl {
     Impl() : state(luaL_newstate()) {
         luaL_openlibs(state);
         detail::install_luau_borrowed_object_metatable(state);
+        install_system_config_metatables(state);
         luaL_sandbox(state);
     }
 
@@ -49,6 +57,133 @@ struct LuauRuntime::Impl {
 namespace {
 
 char c_script_namespace_marker;
+char c_system_config_marker;
+char c_system_config_metatable;
+char c_system_chain_marker;
+
+bool is_system_config(lua_State* state, int index) {
+    if (!lua_istable(state, index)) {
+        return false;
+    }
+    index = lua_absindex(state, index);
+    lua_pushlightuserdata(state, &c_system_config_marker);
+    lua_rawget(state, index);
+    const bool result = lua_toboolean(state, -1) != 0;
+    lua_pop(state, 1);
+    return result;
+}
+
+bool is_system_chain(lua_State* state, int index) {
+    if (!lua_istable(state, index)) {
+        return false;
+    }
+    index = lua_absindex(state, index);
+    lua_pushlightuserdata(state, &c_system_chain_marker);
+    lua_rawget(state, index);
+    const bool result = lua_toboolean(state, -1) != 0;
+    lua_pop(state, 1);
+    return result;
+}
+
+void push_system_config_metatable(lua_State* state) {
+    lua_pushlightuserdata(state, &c_system_config_metatable);
+    lua_rawget(state, LUA_REGISTRYINDEX);
+}
+
+int system_config_method(lua_State* state) {
+    const int call_argument_count = lua_gettop(state);
+    const int method = lua_tointeger(state, lua_upvalueindex(1));
+    int config_index = 0;
+    if (lua_isfunction(state, 1)) {
+        lua_newtable(state);
+        config_index = lua_absindex(state, -1);
+        lua_pushlightuserdata(state, &c_system_config_marker);
+        lua_pushboolean(state, 1);
+        lua_rawset(state, config_index);
+        lua_pushvalue(state, 1);
+        lua_setfield(state, config_index, "run");
+        push_system_config_metatable(state);
+        lua_setmetatable(state, config_index);
+    } else if (is_system_config(state, 1)) {
+        lua_pushvalue(state, 1);
+        config_index = lua_absindex(state, -1);
+    } else {
+        luaL_error(
+            state,
+            "system configuration methods require a function or descriptor"
+        );
+        return 0;
+    }
+
+    const int argument_count = call_argument_count - 1;
+    if (argument_count == 0) {
+        luaL_error(
+            state,
+            "system configuration method requires at least one function"
+        );
+        return 0;
+    }
+    for (int index = 2; index <= argument_count + 1; ++index) {
+        if (!lua_isfunction(state, index)) {
+            luaL_error(
+                state,
+                "system configuration arguments must be functions"
+            );
+            return 0;
+        }
+    }
+
+    constexpr int run_if_method = 2;
+    if (method == run_if_method) {
+        lua_getfield(state, config_index, "conditions");
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            lua_newtable(state);
+            lua_pushvalue(state, -1);
+            lua_setfield(state, config_index, "conditions");
+        }
+        const int conditions_index = lua_absindex(state, -1);
+        auto condition_count =
+            static_cast<int>(lua_objlen(state, conditions_index));
+        for (int index = 2; index <= argument_count + 1; ++index) {
+            lua_pushvalue(state, index);
+            lua_rawseti(state, conditions_index, ++condition_count);
+        }
+        lua_pop(state, 1);
+    }
+    lua_pushvalue(state, config_index);
+    return 1;
+}
+
+void install_system_config_metatables(lua_State* state) {
+    const int base_top = lua_gettop(state);
+    lua_newtable(state);
+    const int methods_index = lua_absindex(state, -1);
+    const char* methods[] = {"before", "after", "run_if"};
+    for (std::size_t index = 0; index < std::size(methods); ++index) {
+        lua_pushinteger(state, static_cast<int>(index));
+        lua_pushcclosure(state, system_config_method, methods[index], 1);
+        lua_setfield(state, methods_index, methods[index]);
+    }
+    lua_setreadonly(state, methods_index, true);
+
+    lua_newtable(state);
+    lua_pushvalue(state, methods_index);
+    lua_setfield(state, -2, "__index");
+    lua_setreadonly(state, -1, true);
+    lua_pushlightuserdata(state, &c_system_config_metatable);
+    lua_pushvalue(state, -2);
+    lua_rawset(state, LUA_REGISTRYINDEX);
+    lua_pop(state, 1);
+
+    lua_pushcfunction(state, system_config_method, "system_config_target");
+    lua_newtable(state);
+    lua_pushvalue(state, methods_index);
+    lua_setfield(state, -2, "__index");
+    lua_setreadonly(state, -1, true);
+    lua_setmetatable(state, -2);
+    lua_settop(state, base_top);
+}
 
 std::string luau_error(lua_State* state, std::string fallback) {
     const char* message = lua_tostring(state, -1);
@@ -173,8 +308,41 @@ int module_helper(lua_State* state) {
 }
 
 int system_helper(lua_State* state) {
-    luaL_checktype(state, 2, LUA_TFUNCTION);
+    if (!lua_isfunction(state, 2) && !is_system_config(state, 2)) {
+        luaL_error(state, "system expects a function or configured system");
+        return 0;
+    }
     lua_pushvalue(state, 2);
+    return 1;
+}
+
+int chain_helper(lua_State* state) {
+    const int argument_count = lua_gettop(state);
+    if (argument_count < 2) {
+        luaL_error(state, "chain expects at least two system groups");
+        return 0;
+    }
+    for (int index = 1; index <= argument_count; ++index) {
+        if (!lua_isfunction(state, index) && !is_system_config(state, index) &&
+            !is_system_chain(state, index)) {
+            luaL_error(
+                state,
+                "chain arguments must be systems or nested chains"
+            );
+            return 0;
+        }
+    }
+
+    lua_newtable(state);
+    const int chain_index = lua_absindex(state, -1);
+    lua_pushlightuserdata(state, &c_system_chain_marker);
+    lua_pushboolean(state, 1);
+    lua_rawset(state, chain_index);
+    for (int index = 1; index <= argument_count; ++index) {
+        lua_pushvalue(state, index);
+        lua_rawseti(state, chain_index, index);
+    }
+    lua_setreadonly(state, chain_index, true);
     return 1;
 }
 
@@ -203,6 +371,8 @@ void install_module_helpers(lua_State* state) {
     lua_setglobal(state, "module");
     lua_pushcfunction(state, system_helper, "system");
     lua_setglobal(state, "system");
+    lua_pushcfunction(state, chain_helper, "chain");
+    lua_setglobal(state, "chain");
     lua_pushcfunction(state, field_helper, "field");
     lua_setglobal(state, "field");
 
@@ -319,32 +489,185 @@ LuauRuntime::load_module(const LuauScriptModuleArtifact& artifact) {
     }
 
     Impl::Module loaded {.thread = thread, .thread_ref = thread_ref};
-    lua_getfield(thread, -1, "systems");
-    if (!lua_istable(thread, -1)) {
+    auto fail_loading = [&](
+                            LuauScriptError error
+                        ) -> Result<LuauScriptModuleId, LuauScriptError> {
+        for (const auto& entry : loaded.functions) {
+            lua_unref(root, entry.second);
+        }
         lua_unref(root, thread_ref);
         lua_settop(root, root_top);
-        return failure(
+        return failure(std::move(error));
+    };
+    lua_getfield(thread, -1, "systems");
+    if (!lua_istable(thread, -1)) {
+        return fail_loading(
             LuauScriptError {"Luau module systems field must be a table"}
         );
     }
-    for (std::size_t index = 0; index < artifact.declaration.systems.size();
-         ++index) {
-        lua_rawgeti(thread, -1, static_cast<int>(index + 1));
-        if (!lua_isfunction(thread, -1)) {
-            lua_unref(root, thread_ref);
-            lua_settop(root, root_top);
+    const int systems_index = lua_absindex(thread, -1);
+    auto store_function = [&](const std::string& name,
+                              int index) -> Status<LuauScriptError> {
+        if (!lua_isfunction(thread, index)) {
             return failure(
                 LuauScriptError {
-                    "Luau module system entry does not contain a function",
+                    "Luau module function '" + name + "' is not a function"
                 }
             );
         }
+        if (loaded.functions.contains(name)) {
+            return {};
+        }
+        lua_pushvalue(thread, index);
         const int function_ref = lua_ref(thread, -1);
         lua_pop(thread, 1);
-        loaded.functions.emplace(
-            artifact.declaration.systems[index].name,
-            function_ref
-        );
+        loaded.functions.emplace(name, function_ref);
+        return {};
+    };
+
+    auto store_system_entry = [&](const DynamicSystemDecl& system,
+                                  int entry_index) -> Status<LuauScriptError> {
+        entry_index = lua_absindex(thread, entry_index);
+        int run_index = entry_index;
+        if (is_system_config(thread, entry_index)) {
+            lua_getfield(thread, entry_index, "run");
+            run_index = lua_absindex(thread, -1);
+        }
+        auto stored = store_function(system.name, run_index);
+        if (!stored) {
+            return failure(std::move(stored.error()));
+        }
+        if (run_index != entry_index) {
+            lua_pop(thread, 1);
+        }
+
+        if (!system.conditions.empty()) {
+            if (!is_system_config(thread, entry_index)) {
+                return failure(
+                    LuauScriptError {
+                        "Luau configured system entry is not a descriptor"
+                    }
+                );
+            }
+            lua_getfield(thread, entry_index, "conditions");
+            if (!lua_istable(thread, -1) ||
+                lua_objlen(thread, -1) != system.conditions.size()) {
+                return failure(
+                    LuauScriptError {"Luau system condition descriptors do not "
+                                     "match the declaration"}
+                );
+            }
+            const int conditions_index = lua_absindex(thread, -1);
+            for (std::size_t condition_index = 0;
+                 condition_index < system.conditions.size();
+                 ++condition_index) {
+                lua_rawgeti(
+                    thread,
+                    conditions_index,
+                    static_cast<int>(condition_index + 1)
+                );
+                auto condition_stored =
+                    store_function(system.conditions[condition_index].name, -1);
+                lua_pop(thread, 1);
+                if (!condition_stored) {
+                    return failure(std::move(condition_stored.error()));
+                }
+            }
+            lua_pop(thread, 1);
+        }
+        return {};
+    };
+
+    if (artifact.system_layout == LuauSystemDeclarationLayout::Flat) {
+        for (std::size_t index = 0; index < artifact.declaration.systems.size();
+             ++index) {
+            lua_rawgeti(thread, systems_index, static_cast<int>(index + 1));
+            auto stored =
+                store_system_entry(artifact.declaration.systems[index], -1);
+            lua_pop(thread, 1);
+            if (!stored) {
+                return fail_loading(std::move(stored.error()));
+            }
+        }
+    } else {
+        std::unordered_set<ScheduleId> loaded_schedules;
+        for (const auto& first_system : artifact.declaration.systems) {
+            if (!loaded_schedules.insert(first_system.schedule).second) {
+                continue;
+            }
+            std::vector<const DynamicSystemDecl*> schedule_systems;
+            for (const auto& system : artifact.declaration.systems) {
+                if (system.schedule == first_system.schedule) {
+                    schedule_systems.push_back(&system);
+                }
+            }
+
+            lua_rawgeti(
+                thread,
+                systems_index,
+                static_cast<int>(first_system.schedule)
+            );
+            if (!lua_istable(thread, -1)) {
+                return fail_loading(
+                    LuauScriptError {
+                        "Luau module schedule group is not a table"
+                    }
+                );
+            }
+            const int schedule_group_index = lua_absindex(thread, -1);
+            std::size_t next_system = 0;
+            std::function<Status<LuauScriptError>(int)> load_entry;
+            load_entry = [&](int entry_index) -> Status<LuauScriptError> {
+                entry_index = lua_absindex(thread, entry_index);
+                if (is_system_chain(thread, entry_index)) {
+                    const auto entry_count = lua_objlen(thread, entry_index);
+                    for (int index = 0; index < entry_count; ++index) {
+                        lua_rawgeti(thread, entry_index, index + 1);
+                        auto loaded = load_entry(-1);
+                        lua_pop(thread, 1);
+                        if (!loaded) {
+                            return failure(std::move(loaded.error()));
+                        }
+                    }
+                    return {};
+                }
+                if (next_system >= schedule_systems.size()) {
+                    return failure(
+                        LuauScriptError {"Luau schedule group contains more "
+                                         "systems than its "
+                                         "declaration"}
+                    );
+                }
+                auto stored = store_system_entry(
+                    *schedule_systems[next_system],
+                    entry_index
+                );
+                if (!stored) {
+                    return failure(std::move(stored.error()));
+                }
+                ++next_system;
+                return {};
+            };
+
+            const auto entry_count = lua_objlen(thread, schedule_group_index);
+            for (int index = 0; index < entry_count; ++index) {
+                lua_rawgeti(thread, schedule_group_index, index + 1);
+                auto loaded = load_entry(-1);
+                lua_pop(thread, 1);
+                if (!loaded) {
+                    return fail_loading(std::move(loaded.error()));
+                }
+            }
+            if (next_system != schedule_systems.size()) {
+                return fail_loading(
+                    LuauScriptError {
+                        "Luau schedule group contains fewer systems than its "
+                        "declaration"
+                    }
+                );
+            }
+            lua_pop(thread, 1);
+        }
     }
     lua_settop(thread, 0);
 
@@ -518,6 +841,53 @@ Status<LuauScriptError> LuauRuntime::call_module_function(
     }
     scope.end(token);
     return {};
+}
+
+Result<bool, LuauScriptError> LuauRuntime::call_module_condition(
+    LuauScriptModuleId module,
+    const std::string& function_name,
+    std::span<const Ref> args
+) {
+    const auto found = m_impl->modules.find(module);
+    if (found == m_impl->modules.end()) {
+        return failure(LuauScriptError {"Luau module not found"});
+    }
+    const auto function = found->second.functions.find(function_name);
+    if (function == found->second.functions.end()) {
+        return failure(
+            LuauScriptError {
+                "Luau module condition '" + function_name + "' not found"
+            }
+        );
+    }
+
+    lua_State* thread = found->second.thread;
+    auto& scope = m_impl->borrow_scope;
+    const auto token = scope.begin();
+    lua_getref(thread, function->second);
+    for (Ref arg : args) {
+        detail::push_luau_borrowed_ref(thread, arg, scope, token);
+    }
+    if (lua_pcall(thread, static_cast<int>(args.size()), 1, 0) != 0) {
+        std::string message =
+            luau_error(thread, "Failed to call Luau condition");
+        scope.end(token);
+        lua_settop(thread, 0);
+        return failure(LuauScriptError {std::move(message)});
+    }
+    if (!lua_isboolean(thread, -1)) {
+        scope.end(token);
+        lua_settop(thread, 0);
+        return failure(
+            LuauScriptError {
+                "Luau condition '" + function_name + "' must return a boolean"
+            }
+        );
+    }
+    const bool result = lua_toboolean(thread, -1) != 0;
+    lua_pop(thread, 1);
+    scope.end(token);
+    return result;
 }
 
 } // namespace fei

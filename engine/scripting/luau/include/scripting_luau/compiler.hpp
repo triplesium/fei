@@ -9,9 +9,17 @@
 
 namespace fei {
 
+enum class LuauSystemDeclarationLayout {
+    Flat,
+    ScheduleGroups,
+};
+
 struct LuauScriptModuleArtifact {
     ScriptModuleDecl declaration;
     std::string bytecode;
+    LuauSystemDeclarationLayout system_layout {
+        LuauSystemDeclarationLayout::Flat
+    };
 };
 
 Result<LuauScriptModuleArtifact, ScriptError>

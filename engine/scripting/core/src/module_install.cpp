@@ -32,6 +32,26 @@ class CallbackScriptSystemExecutor final : public DynamicSystemExecutor {
     }
 };
 
+class CallbackScriptConditionExecutor final : public DynamicConditionExecutor {
+  private:
+    ScriptConditionCall m_call;
+
+  public:
+    explicit CallbackScriptConditionExecutor(ScriptConditionCall call) :
+        m_call(std::move(call)) {}
+
+    Result<bool, DynamicSystemError>
+    evaluate(const std::vector<Ref>& args) override {
+        auto result = m_call(args);
+        if (!result) {
+            return failure(
+                DynamicSystemError {std::move(result.error().message)}
+            );
+        }
+        return *result;
+    }
+};
+
 Result<TypeId, ScriptError> resolve_script_type_ref(
     const ScriptTypeRef& type_ref,
     const std::unordered_map<std::string, TypeId>& script_types
@@ -233,6 +253,11 @@ make_script_system_executor(ScriptSystemCall call) {
     return std::make_unique<CallbackScriptSystemExecutor>(std::move(call));
 }
 
+std::unique_ptr<DynamicConditionExecutor>
+make_script_condition_executor(ScriptConditionCall call) {
+    return std::make_unique<CallbackScriptConditionExecutor>(std::move(call));
+}
+
 Result<ScriptTypeBindings, ScriptError>
 ensure_script_module_types(const ScriptModuleDecl& decl) {
     auto ordered = order_script_type_decls(decl);
@@ -356,6 +381,7 @@ Result<std::vector<SystemHandle>, ScriptError> install_script_module_systems(
         const DynamicSystemDecl* decl {nullptr};
         DynamicSystemParams params;
         std::unique_ptr<DynamicSystemExecutor> executor;
+        std::vector<std::unique_ptr<Condition>> conditions;
     };
 
     std::vector<CompiledScriptSystem> compiled_systems;
@@ -375,17 +401,52 @@ Result<std::vector<SystemHandle>, ScriptError> install_script_module_systems(
         if (!*executor) {
             return failure(ScriptError {"Script system executor is null"});
         }
+        std::vector<std::unique_ptr<Condition>> conditions;
+        conditions.reserve(system.conditions.size());
+        for (const auto& condition : system.conditions) {
+            if (!options.create_condition_executor) {
+                return failure(
+                    ScriptError {
+                        "Script condition executor factory is not configured"
+                    }
+                );
+            }
+            auto condition_params = compile_dynamic_condition_params(condition);
+            if (!condition_params) {
+                return failure(
+                    ScriptError {std::move(condition_params.error().message)}
+                );
+            }
+            auto condition_executor =
+                options.create_condition_executor(condition);
+            if (!condition_executor) {
+                return failure(std::move(condition_executor.error()));
+            }
+            if (!*condition_executor) {
+                return failure(
+                    ScriptError {"Script condition executor is null"}
+                );
+            }
+            conditions.push_back(
+                std::make_unique<DynamicCondition>(
+                    condition.name,
+                    std::move(*condition_params),
+                    std::move(*condition_executor)
+                )
+            );
+        }
         compiled_systems.push_back(
             CompiledScriptSystem {
                 .decl = &system,
                 .params = std::move(*params),
                 .executor = std::move(*executor),
+                .conditions = std::move(conditions),
             }
         );
     }
 
-    std::vector<SystemHandle> handles;
-    handles.reserve(compiled_systems.size());
+    std::vector<SystemConfig> configs;
+    configs.reserve(compiled_systems.size());
     for (auto& system : compiled_systems) {
         auto dynamic_system = std::make_unique<DynamicSystem>(
             system.decl->name,
@@ -393,11 +454,69 @@ Result<std::vector<SystemHandle>, ScriptError> install_script_module_systems(
             std::move(system.executor)
         );
         SystemConfig config(std::move(dynamic_system));
+        config.conditions = std::move(system.conditions);
         config.profile = script_system_profile_for_decl(decl, *system.decl);
         config.main_thread_only = options.main_thread_only;
-        handles.push_back(
-            world.add_system(system.decl->schedule, std::move(config))
-        );
+        configs.push_back(std::move(config));
+    }
+
+    auto dependency_index =
+        [&](const DynamicSystemDecl& source,
+            std::string_view target_name) -> Result<std::size_t, ScriptError> {
+        Optional<std::size_t> result;
+        for (std::size_t index = 0; index < decl.systems.size(); ++index) {
+            const auto& target = decl.systems[index];
+            if (target.schedule != source.schedule ||
+                target.name != target_name) {
+                continue;
+            }
+            if (result) {
+                return failure(
+                    ScriptError {
+                        "Ambiguous script system dependency '" +
+                        std::string(target_name) + "'"
+                    }
+                );
+            }
+            result = index;
+        }
+        if (!result) {
+            return failure(
+                ScriptError {
+                    "Script system '" + source.name +
+                    "' references missing dependency '" +
+                    std::string(target_name) + "' in the same schedule"
+                }
+            );
+        }
+        return *result;
+    };
+
+    for (std::size_t index = 0; index < decl.systems.size(); ++index) {
+        const auto& system = decl.systems[index];
+        for (const auto& target_name : system.before) {
+            auto target = dependency_index(system, target_name);
+            if (!target) {
+                return failure(std::move(target.error()));
+            }
+            configs[index].dependencies.before.insert(configs[*target].id);
+        }
+        for (const auto& target_name : system.after) {
+            auto target = dependency_index(system, target_name);
+            if (!target) {
+                return failure(std::move(target.error()));
+            }
+            configs[index].dependencies.after.insert(configs[*target].id);
+        }
+    }
+
+    std::vector<SystemHandle> handles;
+    handles.reserve(compiled_systems.size());
+    for (std::size_t index = 0; index < configs.size(); ++index) {
+        handles.push_back(world.add_system(
+            decl.systems[index].schedule,
+            std::move(configs[index])
+        ));
     }
     return handles;
 }

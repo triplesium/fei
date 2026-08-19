@@ -68,6 +68,11 @@ class LuauRuntime {
         const std::string& function_name,
         std::span<const Ref> args
     );
+    Result<bool, LuauScriptError> call_module_condition(
+        LuauScriptModuleId module,
+        const std::string& function_name,
+        std::span<const Ref> args
+    );
 };
 
 } // namespace fei

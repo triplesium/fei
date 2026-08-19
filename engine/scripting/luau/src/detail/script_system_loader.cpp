@@ -55,8 +55,8 @@ Status<ScriptError> bind_declared_types(
     for (const auto& type : declaration.types) {
         script_types.insert(type.qualified_name);
     }
-    for (const auto& system : declaration.systems) {
-        for (const auto& param : system.params) {
+    auto bind_params = [&](const auto& params) -> Status<ScriptError> {
+        for (const auto& param : params) {
             if (param->decl_type_id() == type_id<DynamicWorldParamDecl>()) {
                 continue;
             }
@@ -99,6 +99,19 @@ Status<ScriptError> bind_declared_types(
                 if (!status) {
                     return status;
                 }
+            }
+        }
+        return {};
+    };
+    for (const auto& system : declaration.systems) {
+        auto status = bind_params(system.params);
+        if (!status) {
+            return status;
+        }
+        for (const auto& condition : system.conditions) {
+            status = bind_params(condition.params);
+            if (!status) {
+                return status;
             }
         }
     }
@@ -207,12 +220,25 @@ Result<std::vector<SystemHandle>, ScriptError> install_luau_script_systems(
             }
         );
     };
+    auto create_condition_executor = [&](const DynamicConditionDecl& condition)
+        -> Result<std::unique_ptr<DynamicConditionExecutor>, ScriptError> {
+        return make_script_condition_executor(
+            [&runtime,
+             module,
+             name = condition.name](const std::vector<Ref>& args) {
+                return runtime.call_module_condition(module, name, args);
+            }
+        );
+    };
     return install_script_module(
         world,
         declaration,
         bind_type,
         create_executor,
-        ScriptSystemInstallOptions {.main_thread_only = true}
+        ScriptSystemInstallOptions {
+            .main_thread_only = true,
+            .create_condition_executor = create_condition_executor,
+        }
     );
 }
 

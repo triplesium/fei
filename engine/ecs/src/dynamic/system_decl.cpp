@@ -250,11 +250,12 @@ compile_dynamic_system_param(const DynamicSystemParamDecl& param) {
     return DynamicSystemParamCompilerRegistry::instance().compile(param);
 }
 
-Result<DynamicSystemParams, DynamicSystemError>
-compile_dynamic_system_params(const DynamicSystemDecl& decl) {
+static Result<DynamicSystemParams, DynamicSystemError> compile_dynamic_params(
+    const std::vector<DynamicSystemParamDeclPtr>& declarations
+) {
     DynamicSystemParams params;
-    params.reserve(decl.params.size());
-    for (const auto& param : decl.params) {
+    params.reserve(declarations.size());
+    for (const auto& param : declarations) {
         if (!param) {
             return failure(
                 DynamicSystemError {"Dynamic system param decl is null"}
@@ -267,6 +268,16 @@ compile_dynamic_system_params(const DynamicSystemDecl& decl) {
         params.push_back(std::move(*compiled));
     }
     return std::move(params);
+}
+
+Result<DynamicSystemParams, DynamicSystemError>
+compile_dynamic_system_params(const DynamicSystemDecl& decl) {
+    return compile_dynamic_params(decl.params);
+}
+
+Result<DynamicSystemParams, DynamicSystemError>
+compile_dynamic_condition_params(const DynamicConditionDecl& decl) {
+    return compile_dynamic_params(decl.params);
 }
 
 } // namespace fei

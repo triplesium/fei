@@ -80,10 +80,18 @@ struct DynamicCommandsParamDecl final
 struct DynamicWorldParamDecl final
     : DynamicSystemParamDeclBase<DynamicWorldParamDecl> {};
 
+struct DynamicConditionDecl {
+    std::string name;
+    std::vector<DynamicSystemParamDeclPtr> params;
+};
+
 struct DynamicSystemDecl {
     std::string name;
     std::vector<DynamicSystemParamDeclPtr> params;
     ScheduleId schedule {};
+    std::vector<std::string> before;
+    std::vector<std::string> after;
+    std::vector<DynamicConditionDecl> conditions;
 };
 
 class DynamicSystemParamCompilerRegistry {
@@ -122,5 +130,8 @@ compile_dynamic_system_param(const DynamicSystemParamDecl& param);
 
 Result<DynamicSystemParams, DynamicSystemError>
 compile_dynamic_system_params(const DynamicSystemDecl& decl);
+
+Result<DynamicSystemParams, DynamicSystemError>
+compile_dynamic_condition_params(const DynamicConditionDecl& decl);
 
 } // namespace fei

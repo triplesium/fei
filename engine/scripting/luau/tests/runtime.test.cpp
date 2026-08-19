@@ -116,3 +116,50 @@ TEST_CASE(
     REQUIRE(runtime.seal_module_script_namespaces(*module));
     CHECK(runtime.call_module_function(*module, "verify"));
 }
+
+TEST_CASE(
+    "Luau runtime flattens nested system chains",
+    "[scripting_luau][runtime][schedule][chain]"
+) {
+    const ScriptSource source {
+        .name = "configured_runtime.luau",
+        .content = R"(
+            local function enabled(): boolean
+                return true
+            end
+
+            local function first()
+            end
+
+            local function tick()
+            end
+
+            local function last()
+            end
+
+            return module {
+                name = "configured.runtime",
+                systems = {
+                    [Update] = {
+                        chain(
+                            first,
+                            chain(tick:run_if(enabled), last)
+                        ),
+                    },
+                },
+            }
+        )",
+    };
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact);
+
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module);
+    CHECK(runtime.call_module_function(*module, "first"));
+    CHECK(runtime.call_module_function(*module, "tick"));
+    CHECK(runtime.call_module_function(*module, "last"));
+    auto enabled = runtime.call_module_condition(*module, "enabled", {});
+    REQUIRE(enabled);
+    CHECK(*enabled);
+}

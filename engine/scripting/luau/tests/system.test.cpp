@@ -79,6 +79,8 @@ struct LuauTestConfig {
     int executions {0};
     int obstacle_total {0};
     float generated_x {0.0F};
+    bool schedule_enabled {true};
+    int schedule_order {0};
 
     void add_execution(int count) { executions += count; }
 
@@ -198,6 +200,8 @@ void register_luau_system_test_types() {
         .add_property("executions", &LuauTestConfig::executions)
         .add_property("obstacle_total", &LuauTestConfig::obstacle_total)
         .add_property("generated_x", &LuauTestConfig::generated_x)
+        .add_property("schedule_enabled", &LuauTestConfig::schedule_enabled)
+        .add_property("schedule_order", &LuauTestConfig::schedule_order)
         .add_method("add_execution", &LuauTestConfig::add_execution)
         .add_method("make_position", &LuauTestConfig::make_position)
         .add_method("result", &LuauTestConfig::result);
@@ -1050,4 +1054,69 @@ TEST_CASE(
     CHECK(
         query_mutation.error().message.find("read-only") != std::string::npos
     );
+}
+
+TEST_CASE(
+    "Luau system chains honor dependencies and run conditions",
+    "[scripting_luau][system][schedule][chain]"
+) {
+    register_luau_system_test_types();
+    const ScriptSource source {
+        .name = "configured_schedule.luau",
+        .content = R"(
+            local function first(config: ResRW<LuauTestConfig>)
+                config.schedule_order = config.schedule_order * 10 + 1
+            end
+
+            local function enabled(config: ResRO<LuauTestConfig>): boolean
+                return config.schedule_enabled
+            end
+
+            local function second(config: ResRW<LuauTestConfig>)
+                config.schedule_order = config.schedule_order * 10 + 2
+            end
+
+            local function third(config: ResRW<LuauTestConfig>)
+                config.schedule_order = config.schedule_order * 10 + 3
+            end
+
+            return module {
+                name = "configured.schedule",
+                systems = {
+                    [Update] = {
+                        chain(
+                            first,
+                            second:run_if(enabled),
+                            third
+                        ),
+                    },
+                },
+            }
+        )",
+    };
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact);
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module);
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(LuauTestConfig {});
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems);
+
+    world.run_schedule(Update);
+    CHECK(world.resource<LuauTestConfig>().schedule_order == 123);
+
+    auto& config = world.resource<LuauTestConfig>();
+    config.schedule_enabled = false;
+    config.schedule_order = 0;
+    world.run_schedule(Update);
+    CHECK(world.resource<LuauTestConfig>().schedule_order == 13);
 }
