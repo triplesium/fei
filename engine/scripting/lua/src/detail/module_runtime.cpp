@@ -119,7 +119,7 @@ Status<LuaScriptError> LuaRuntime::bind_module_type(
     lua_rawgeti(L, LUA_REGISTRYINDEX, it->second.environment_ref);
     int env_index = lua_gettop(L);
 
-    luaL_getmetatable(L, type.stripped_name().c_str());
+    luaL_getmetatable(L, type.name().c_str());
     if (lua_isnil(L, -1)) {
         std::string message =
             "Lua type metatable not found for '" + type.name() + "'";

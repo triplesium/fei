@@ -54,6 +54,47 @@ Type& Registry::register_type(
     return m_types.at(id);
 }
 
+Type& Registry::set_structured_type_name(
+    TypeId id,
+    std::initializer_list<std::string_view> namespace_path,
+    std::string_view local_name
+) {
+    auto& registered = get_type(id);
+    if (local_name.empty()) {
+        fatal("Type '{}' has an empty local name", registered.name());
+    }
+
+    std::vector<std::string> path;
+    path.reserve(namespace_path.size());
+    for (const auto component : namespace_path) {
+        if (component.empty() ||
+            component.find("::") != std::string_view::npos) {
+            fatal(
+                "Type '{}' has invalid namespace component '{}'",
+                registered.name(),
+                component
+            );
+        }
+        path.emplace_back(component);
+    }
+
+    if (registered.m_has_structured_name) {
+        if (registered.m_namespace_path != path ||
+            registered.m_local_name != local_name) {
+            fatal(
+                "Type '{}' has conflicting structured names",
+                registered.name()
+            );
+        }
+        return registered;
+    }
+
+    registered.m_namespace_path = std::move(path);
+    registered.m_local_name = local_name;
+    registered.m_has_structured_name = true;
+    return registered;
+}
+
 Type& Registry::get_type(TypeId id) {
     auto result = try_get_type(id);
     if (!result) {

@@ -160,7 +160,7 @@ void LuaRuntime::register_lua_type(Type& type) {
         }
     };
 
-    if (luaL_newmetatable(L, type.stripped_name().c_str())) {
+    if (luaL_newmetatable(L, type.name().c_str())) {
         // Stack: [mt]; push id
         lua_pushinteger(L, to_lua_integer(id.id()));
         // Stack: [mt, id]; push c closure & pop id as its argument
@@ -204,13 +204,8 @@ void LuaRuntime::register_lua_type(Type& type) {
         register_operator(LuaOperator::Sub);
         register_operator(LuaOperator::Mul);
         register_operator(LuaOperator::Div);
-
-        // Stack: [mt]
-        lua_setglobal(L, type.stripped_name().c_str());
-        // Stack: []
-    } else {
-        lua_pop(L, 1);
     }
+    lua_pop(L, 1);
 }
 
 namespace {
@@ -218,7 +213,7 @@ namespace {
 int push_lua_object(lua_State* L, const Type& type, Val value) {
     auto* ud = lua_newuserdata(L, sizeof(LuaObject));
     new (ud) LuaObject(std::move(value));
-    luaL_getmetatable(L, type.stripped_name().c_str());
+    luaL_getmetatable(L, type.name().c_str());
     lua_setmetatable(L, -2);
     return 1;
 }

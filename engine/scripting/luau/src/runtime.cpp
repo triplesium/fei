@@ -1,7 +1,9 @@
 #include "scripting_luau/runtime.hpp"
 
 #include "refl/enum.hpp"
+#include "refl/registry.hpp"
 #include "refl/type.hpp"
+#include "scripting/reflection_bridge.hpp"
 #include "scripting_luau/detail/binding.hpp"
 
 #include <cctype>
@@ -11,6 +13,7 @@
 #include <lualib.h>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace fei {
@@ -20,6 +23,9 @@ struct LuauRuntime::Impl {
         lua_State* thread {nullptr};
         int thread_ref {0};
         std::unordered_map<std::string, int> functions;
+        std::unordered_set<std::string> script_namespace_roots;
+        std::unordered_set<TypeId> script_types;
+        bool script_namespaces_sealed {false};
     };
 
     lua_State* state {nullptr};
@@ -42,9 +48,122 @@ struct LuauRuntime::Impl {
 
 namespace {
 
+char c_script_namespace_marker;
+
 std::string luau_error(lua_State* state, std::string fallback) {
     const char* message = lua_tostring(state, -1);
     return message != nullptr ? std::string {message} : std::move(fallback);
+}
+
+bool is_script_namespace(lua_State* state, int index) {
+    index = lua_absindex(state, index);
+    lua_pushlightuserdata(state, &c_script_namespace_marker);
+    lua_rawget(state, index);
+    const bool result = lua_toboolean(state, -1) != 0;
+    lua_pop(state, 1);
+    return result;
+}
+
+void push_script_namespace(lua_State* state) {
+    lua_newtable(state);
+    lua_pushlightuserdata(state, &c_script_namespace_marker);
+    lua_pushboolean(state, 1);
+    lua_rawset(state, -3);
+}
+
+template<typename Module, typename PushValue>
+Status<LuauScriptError>
+set_script_global(Module& module, const Type& type, PushValue push_value) {
+    if (module.script_namespaces_sealed) {
+        return failure(
+            LuauScriptError {"Luau script namespaces are already sealed"}
+        );
+    }
+
+    auto* state = module.thread;
+    const int base_top = lua_gettop(state);
+    const auto name = script_type_name(type);
+    if (name.namespace_path.empty()) {
+        lua_getglobal(state, std::string(name.local_name).c_str());
+        if (!lua_isnil(state, -1)) {
+            lua_settop(state, base_top);
+            return failure(
+                LuauScriptError {
+                    "Script type path '" + script_type_path(type) +
+                        "' is already occupied",
+                }
+            );
+        }
+        lua_pop(state, 1);
+        push_value(state);
+        lua_setglobal(state, std::string(name.local_name).c_str());
+        return {};
+    }
+
+    const auto& root = name.namespace_path.front();
+    lua_getglobal(state, root.c_str());
+    if (lua_isnil(state, -1)) {
+        lua_pop(state, 1);
+        push_script_namespace(state);
+        lua_pushvalue(state, -1);
+        lua_setglobal(state, root.c_str());
+        module.script_namespace_roots.insert(root);
+    } else if (!lua_istable(state, -1) || !is_script_namespace(state, -1)) {
+        lua_settop(state, base_top);
+        return failure(
+            LuauScriptError {
+                "Script namespace '" + root + "' is already occupied",
+            }
+        );
+    }
+
+    for (std::size_t index = 1; index < name.namespace_path.size(); ++index) {
+        const auto& component = name.namespace_path[index];
+        lua_getfield(state, -1, component.c_str());
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            push_script_namespace(state);
+            lua_pushvalue(state, -1);
+            lua_setfield(state, -3, component.c_str());
+        } else if (!lua_istable(state, -1) || !is_script_namespace(state, -1)) {
+            lua_settop(state, base_top);
+            return failure(
+                LuauScriptError {
+                    "Script namespace component '" + component +
+                        "' is already occupied",
+                }
+            );
+        }
+        lua_remove(state, -2);
+    }
+
+    lua_getfield(state, -1, std::string(name.local_name).c_str());
+    if (!lua_isnil(state, -1)) {
+        lua_settop(state, base_top);
+        return failure(
+            LuauScriptError {
+                "Script type path '" + script_type_path(type) +
+                    "' is already occupied",
+            }
+        );
+    }
+    lua_pop(state, 1);
+    push_value(state);
+    lua_setfield(state, -2, std::string(name.local_name).c_str());
+    lua_settop(state, base_top);
+    return {};
+}
+
+void seal_script_namespace(lua_State* state, int index) {
+    index = lua_absindex(state, index);
+    lua_pushnil(state);
+    while (lua_next(state, index) != 0) {
+        if (lua_istable(state, -1) && is_script_namespace(state, -1)) {
+            seal_script_namespace(state, -1);
+        }
+        lua_pop(state, 1);
+    }
+    lua_setreadonly(state, index, true);
 }
 
 int module_helper(lua_State* state) {
@@ -263,6 +382,26 @@ Status<LuauScriptError> LuauRuntime::bind_module_type(
     return {};
 }
 
+Status<LuauScriptError> LuauRuntime::bind_module_script_type(
+    LuauScriptModuleId module,
+    const Type& type
+) {
+    const auto found = m_impl->modules.find(module);
+    if (found == m_impl->modules.end()) {
+        return failure(LuauScriptError {"Luau module not found"});
+    }
+    if (found->second.script_types.contains(type.id())) {
+        return {};
+    }
+    auto status = set_script_global(found->second, type, [&](lua_State* state) {
+        detail::push_luau_type_token(state, type.id());
+    });
+    if (status) {
+        found->second.script_types.insert(type.id());
+    }
+    return status;
+}
+
 Status<LuauScriptError> LuauRuntime::bind_module_enum(
     LuauScriptModuleId module,
     const std::string& name,
@@ -280,6 +419,62 @@ Status<LuauScriptError> LuauRuntime::bind_module_enum(
     }
     lua_setreadonly(thread, -1, true);
     lua_setglobal(thread, name.c_str());
+    return {};
+}
+
+Status<LuauScriptError> LuauRuntime::bind_module_script_enum(
+    LuauScriptModuleId module,
+    const Enum& enm
+) {
+    const auto found = m_impl->modules.find(module);
+    if (found == m_impl->modules.end()) {
+        return failure(LuauScriptError {"Luau module not found"});
+    }
+    auto type = Registry::instance().try_get_type(enm.type_id());
+    if (!type) {
+        return failure(LuauScriptError {std::move(type.error().message)});
+    }
+    if (found->second.script_types.contains(type->id())) {
+        return {};
+    }
+    auto status =
+        set_script_global(found->second, *type, [&](lua_State* state) {
+            lua_newtable(state);
+            for (const auto& [enumerator, underlying_value] :
+                 enm.enumerators()) {
+                detail::push_luau_owned_value(
+                    state,
+                    enm.make_val(underlying_value)
+                );
+                lua_setfield(state, -2, enumerator.c_str());
+            }
+            lua_setreadonly(state, -1, true);
+        });
+    if (status) {
+        found->second.script_types.insert(type->id());
+    }
+    return status;
+}
+
+Status<LuauScriptError>
+LuauRuntime::seal_module_script_namespaces(LuauScriptModuleId module) {
+    const auto found = m_impl->modules.find(module);
+    if (found == m_impl->modules.end()) {
+        return failure(LuauScriptError {"Luau module not found"});
+    }
+    auto& loaded = found->second;
+    if (loaded.script_namespaces_sealed) {
+        return {};
+    }
+    for (const auto& root : loaded.script_namespace_roots) {
+        lua_getglobal(loaded.thread, root.c_str());
+        if (lua_istable(loaded.thread, -1) &&
+            is_script_namespace(loaded.thread, -1)) {
+            seal_script_namespace(loaded.thread, -1);
+        }
+        lua_pop(loaded.thread, 1);
+    }
+    loaded.script_namespaces_sealed = true;
     return {};
 }
 

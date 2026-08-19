@@ -8,7 +8,7 @@
 
 namespace fei::refl_test {
 
-FEI_REFLECT(Plugin(name = rendering, phase = runtime))
+FEI_REFLECT(Example(name = rendering, phase = runtime))
 struct ReflectedTaggedType {
     int value;
 };

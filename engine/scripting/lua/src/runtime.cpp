@@ -5,6 +5,7 @@
 #include "refl/enum.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
+#include "scripting/reflection_bridge.hpp"
 #include "scripting_lua/detail/commands_binding.hpp"
 #include "scripting_lua/detail/enum_binding.hpp"
 #include "scripting_lua/detail/query_binding.hpp"
@@ -16,6 +17,102 @@
 #include <vector>
 
 namespace fei {
+namespace {
+
+char c_script_namespace_marker;
+
+bool is_script_namespace(lua_State* state, int index) {
+    index = lua_absindex(state, index);
+    lua_pushlightuserdata(state, &c_script_namespace_marker);
+    lua_rawget(state, index);
+    const bool result = lua_toboolean(state, -1) != 0;
+    lua_pop(state, 1);
+    return result;
+}
+
+void push_script_namespace(lua_State* state) {
+    lua_newtable(state);
+    lua_pushlightuserdata(state, &c_script_namespace_marker);
+    lua_pushboolean(state, 1);
+    lua_rawset(state, -3);
+}
+
+template<typename PushValue>
+Status<LuaScriptError>
+set_script_global(lua_State* state, const Type& type, PushValue push_value) {
+    const int base_top = lua_gettop(state);
+    const auto name = script_type_name(type);
+    if (name.namespace_path.empty()) {
+        lua_getglobal(state, std::string(name.local_name).c_str());
+        if (!lua_isnil(state, -1)) {
+            lua_settop(state, base_top);
+            return failure(
+                LuaScriptError {
+                    "Script type path '" + script_type_path(type) +
+                        "' is already occupied",
+                }
+            );
+        }
+        lua_pop(state, 1);
+        push_value();
+        lua_setglobal(state, std::string(name.local_name).c_str());
+        return {};
+    }
+
+    const auto& root = name.namespace_path.front();
+    lua_getglobal(state, root.c_str());
+    if (lua_isnil(state, -1)) {
+        lua_pop(state, 1);
+        push_script_namespace(state);
+        lua_pushvalue(state, -1);
+        lua_setglobal(state, root.c_str());
+    } else if (!lua_istable(state, -1) || !is_script_namespace(state, -1)) {
+        lua_settop(state, base_top);
+        return failure(
+            LuaScriptError {
+                "Script namespace '" + root + "' is already occupied",
+            }
+        );
+    }
+
+    for (std::size_t index = 1; index < name.namespace_path.size(); ++index) {
+        const auto& component = name.namespace_path[index];
+        lua_getfield(state, -1, component.c_str());
+        if (lua_isnil(state, -1)) {
+            lua_pop(state, 1);
+            push_script_namespace(state);
+            lua_pushvalue(state, -1);
+            lua_setfield(state, -3, component.c_str());
+        } else if (!lua_istable(state, -1) || !is_script_namespace(state, -1)) {
+            lua_settop(state, base_top);
+            return failure(
+                LuaScriptError {
+                    "Script namespace component '" + component +
+                        "' is already occupied",
+                }
+            );
+        }
+        lua_remove(state, -2);
+    }
+
+    lua_getfield(state, -1, std::string(name.local_name).c_str());
+    if (!lua_isnil(state, -1)) {
+        lua_settop(state, base_top);
+        return failure(
+            LuaScriptError {
+                "Script type path '" + script_type_path(type) +
+                    "' is already occupied",
+            }
+        );
+    }
+    lua_pop(state, 1);
+    push_value();
+    lua_setfield(state, -2, std::string(name.local_name).c_str());
+    lua_settop(state, base_top);
+    return {};
+}
+
+} // namespace
 
 LuaRuntime::LuaRuntime() : m_state(luaL_newstate()) {
     luaL_openlibs(m_state);
@@ -34,6 +131,15 @@ LuaRuntime::~LuaRuntime() {
 
 void LuaRuntime::bind_type(Type& type) {
     register_lua_type(type);
+    luaL_getmetatable(m_state, type.name().c_str());
+    lua_setglobal(m_state, type.stripped_name().c_str());
+}
+
+Status<LuaScriptError> LuaRuntime::bind_script_type(Type& type) {
+    register_lua_type(type);
+    return set_script_global(m_state, type, [&] {
+        luaL_getmetatable(m_state, type.name().c_str());
+    });
 }
 
 void LuaRuntime::unbind_type(Type& type) {
@@ -44,6 +150,16 @@ void LuaRuntime::unbind_type(Type& type) {
 
 void LuaRuntime::bind_enum(const Enum& enm) {
     detail::register_lua_enum(m_state, enm);
+}
+
+Status<LuaScriptError> LuaRuntime::bind_script_enum(const Enum& enm) {
+    auto type = Registry::instance().try_get_type(enm.type_id());
+    if (!type) {
+        return failure(LuaScriptError {std::move(type.error().message)});
+    }
+    return set_script_global(m_state, *type, [&] {
+        detail::push_lua_enum(m_state, enm);
+    });
 }
 
 void LuaRuntime::unbind_enum(const Enum& enm) {

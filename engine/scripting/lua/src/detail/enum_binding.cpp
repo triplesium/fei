@@ -36,11 +36,11 @@ Enum& register_main_schedules_enum() {
         .add_enumerator("RenderLast", RenderLast);
 }
 
-void register_lua_enum(lua_State* L, const Enum& enm) {
+bool push_lua_enum(lua_State* L, const Enum& enm) {
     auto type = Registry::instance().try_get_type(enm.type_id());
     if (!type) {
         error("Cannot register enum in Lua: {}", type.error().message);
-        return;
+        return false;
     }
     lua_newtable(L);
     for (const auto& [name, underlying_value] : enm.enumerators()) {
@@ -54,6 +54,14 @@ void register_lua_enum(lua_State* L, const Enum& enm) {
         lua_setfield(L, -2, "__enum_value");
 
         lua_settable(L, -3);
+    }
+    return true;
+}
+
+void register_lua_enum(lua_State* L, const Enum& enm) {
+    auto type = Registry::instance().try_get_type(enm.type_id());
+    if (!type || !push_lua_enum(L, enm)) {
+        return;
     }
     lua_setglobal(L, type->stripped_name().c_str());
 }

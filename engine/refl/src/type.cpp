@@ -23,6 +23,9 @@ bool Type::is_floating_point() const {
 }
 
 std::string Type::stripped_name() const {
+    if (m_has_structured_name) {
+        return m_local_name;
+    }
     auto pos = m_name.find_last_of("::");
     return (pos == std::string::npos) ? m_name : m_name.substr(pos + 1);
 }

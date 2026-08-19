@@ -5,10 +5,24 @@
 #include "refl/ref.hpp"
 #include "refl/val.hpp"
 
+#include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
 namespace fei {
+
+class Type;
+
+struct ScriptTypeName {
+    std::span<const std::string> namespace_path;
+    std::string_view local_name;
+};
+
+bool is_script_visible(const Type& type);
+ScriptTypeName script_type_name(const Type& type);
+std::string
+script_type_path(const Type& type, std::string_view separator = ".");
 
 Result<Val, InvokeFailure> script_default_construct(TypeId type);
 

@@ -37,6 +37,8 @@ struct MethodInfo : MemberInfo {
 
 struct ClassInfo {
     std::string name;
+    std::vector<std::string> namespace_path;
+    std::string local_name;
     std::string source_file;
     std::vector<ReflectionTag> tags;
     std::vector<MemberInfo> properties;
@@ -53,6 +55,8 @@ struct EnumValueInfo {
 
 struct EnumInfo {
     std::string name;
+    std::vector<std::string> namespace_path;
+    std::string local_name;
     std::string source_file;
     std::vector<ReflectionTag> tags;
     std::string underlying_type;

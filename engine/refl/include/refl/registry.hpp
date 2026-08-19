@@ -13,6 +13,7 @@
 #include <concepts>
 #include <cstring>
 #include <functional>
+#include <initializer_list>
 #include <map>
 #include <memory>
 #include <set>
@@ -308,6 +309,11 @@ class Registry {
         std::size_t align,
         TypeOps ops
     );
+    Type& set_structured_type_name(
+        TypeId id,
+        std::initializer_list<std::string_view> namespace_path,
+        std::string_view local_name
+    );
     Type& get_type(TypeId id);
     Result<Type&, RegistryError> try_get_type(TypeId id);
     Result<Type&, RegistryError> try_get_type_exact(std::string_view name);
@@ -359,6 +365,15 @@ class Registry {
         register_type<T>();
         TypeId id = type_id<T>();
         return add_cls(id);
+    }
+
+    template<typename T>
+    Cls& register_cls(
+        std::initializer_list<std::string_view> namespace_path,
+        std::string_view local_name
+    ) {
+        register_type<T>(namespace_path, local_name);
+        return add_cls(type_id<T>());
     }
 
     template<typename T>
@@ -429,6 +444,20 @@ class Registry {
         register_type<T>();
         TypeId id = type_id<T>();
         auto& enm = add_enum(id);
+        enm.set_construct_func([](void* dest, std::int64_t underlying_value) {
+            new (dest) T(static_cast<T>(underlying_value));
+        });
+        return enm;
+    }
+
+    template<typename T>
+    Enum& register_enum(
+        std::initializer_list<std::string_view> namespace_path,
+        std::string_view local_name
+    ) {
+        static_assert(std::is_enum_v<T>, "T must be an enum type");
+        register_type<T>(namespace_path, local_name);
+        auto& enm = add_enum(type_id<T>());
         enm.set_construct_func([](void* dest, std::int64_t underlying_value) {
             new (dest) T(static_cast<T>(underlying_value));
         });
@@ -585,6 +614,19 @@ class Registry {
         }
         register_generic_type_for<U>();
         return *registered;
+    }
+
+    template<typename T>
+    Type& register_type(
+        std::initializer_list<std::string_view> namespace_path,
+        std::string_view local_name
+    ) {
+        auto& registered = register_type<T>();
+        return set_structured_type_name(
+            registered.id(),
+            namespace_path,
+            local_name
+        );
     }
 
     template<typename T>

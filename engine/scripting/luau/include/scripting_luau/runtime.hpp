@@ -48,11 +48,17 @@ class LuauRuntime {
         const std::string& name,
         const Type& type
     );
+    Status<LuauScriptError>
+    bind_module_script_type(LuauScriptModuleId module, const Type& type);
     Status<LuauScriptError> bind_module_enum(
         LuauScriptModuleId module,
         const std::string& name,
         const Enum& enm
     );
+    Status<LuauScriptError>
+    bind_module_script_enum(LuauScriptModuleId module, const Enum& enm);
+    Status<LuauScriptError>
+    seal_module_script_namespaces(LuauScriptModuleId module);
     Status<LuauScriptError> call_module_function(
         LuauScriptModuleId module,
         const std::string& function_name

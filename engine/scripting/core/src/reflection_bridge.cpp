@@ -26,6 +26,37 @@ Result<Cls&, InvokeFailure> script_class(Ref instance) {
 
 } // namespace
 
+bool is_script_visible(const Type& type) {
+    return type.has_structured_name() && !type.has_annotation("NoScript");
+}
+
+ScriptTypeName script_type_name(const Type& type) {
+    auto namespace_path = type.namespace_path();
+    if (!namespace_path.empty() && namespace_path.front() == "fei") {
+        namespace_path = namespace_path.subspan(1);
+    }
+    return {
+        .namespace_path = namespace_path,
+        .local_name = type.local_name(),
+    };
+}
+
+std::string script_type_path(const Type& type, std::string_view separator) {
+    const auto name = script_type_name(type);
+    std::string result;
+    for (const auto& component : name.namespace_path) {
+        if (!result.empty()) {
+            result += separator;
+        }
+        result += component;
+    }
+    if (!result.empty()) {
+        result += separator;
+    }
+    result += name.local_name;
+    return result;
+}
+
 Result<Val, InvokeFailure> script_default_construct(TypeId type_id) {
     auto type = Registry::instance().try_get_type(type_id);
     if (!type) {

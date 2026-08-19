@@ -233,6 +233,15 @@ resolve_dynamic_type_ref(const DynamicTypeRef& type_ref) {
     if (type) {
         return type->id();
     }
+    if (type_ref.type_name.contains("::") &&
+        !type_ref.type_name.starts_with("fei::")) {
+        auto rooted = Registry::instance().try_get_type_exact(
+            "fei::" + type_ref.type_name
+        );
+        if (rooted) {
+            return rooted->id();
+        }
+    }
     return failure(DynamicSystemError {std::move(type.error().message)});
 }
 

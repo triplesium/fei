@@ -22,6 +22,14 @@
 
 using namespace fei;
 
+namespace fei::luau_system_test {
+
+struct Config {
+    int value {0};
+};
+
+} // namespace fei::luau_system_test
+
 namespace {
 
 struct LuauTestPosition {
@@ -214,6 +222,50 @@ void register_luau_system_test_types() {
 }
 
 } // namespace
+
+TEST_CASE(
+    "Luau system loader exposes structured reflected names by default",
+    "[scripting_luau][system][namespace]"
+) {
+    auto& registry = Registry::instance();
+    registry
+        .register_cls<luau_system_test::Config>(
+            {"fei", "luau_system_test"},
+            "Config"
+        )
+        .add_property("value", &luau_system_test::Config::value);
+    const ScriptSource source {
+        .name = "structured_name.luau",
+        .content = R"(
+            local function verify(config: ResRO<luau_system_test.Config>)
+                assert(luau_system_test.Config ~= nil)
+                assert(config.value == 7)
+            end
+
+            return module {
+                name = "test.structured_name",
+                systems = { system(Update, verify) },
+            }
+        )",
+    };
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact);
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module);
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(luau_system_test::Config {.value = 7});
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems);
+    world.run_schedule(Update);
+    CHECK(remove_script_module_systems(world, *systems));
+}
 
 TEST_CASE(
     "Luau systems load typed assets through AssetServer",

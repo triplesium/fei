@@ -158,13 +158,18 @@ TEST_CASE("Generated reflection tags preserve values", "[refl][type][tag]") {
     register_generated_reflection();
 
     auto& reflected_type = registry.get_type(type_id<ReflectedTaggedType>());
-    constexpr TypeTagId plugin_tag {"Plugin"};
-    constexpr TypeTagId plugin_name_tag {"Plugin.name"};
-    constexpr TypeTagId plugin_phase_tag {"Plugin.phase"};
+    REQUIRE(reflected_type.has_structured_name());
+    REQUIRE(reflected_type.namespace_path().size() == 2);
+    CHECK(reflected_type.namespace_path()[0] == "fei");
+    CHECK(reflected_type.namespace_path()[1] == "refl_test");
+    CHECK(reflected_type.local_name() == "ReflectedTaggedType");
+    constexpr TypeTagId plugin_tag {"Example"};
+    constexpr TypeTagId plugin_name_tag {"Example.name"};
+    constexpr TypeTagId plugin_phase_tag {"Example.phase"};
 
-    const auto plugin = reflected_type.annotation("Plugin");
+    const auto plugin = reflected_type.annotation("Example");
     REQUIRE(plugin);
-    CHECK(plugin->name() == "Plugin");
+    CHECK(plugin->name() == "Example");
     REQUIRE(plugin->value("name"));
     CHECK(*plugin->value("name") == "rendering");
     REQUIRE(plugin->value("phase"));
@@ -182,6 +187,11 @@ TEST_CASE("Generated reflection tags preserve values", "[refl][type][tag]") {
     CHECK(*reflected_type.tag_value(plugin_phase_tag) == "runtime");
 
     auto& reflected_enum = registry.get_type(type_id<ReflectedTaggedEnum>());
+    REQUIRE(reflected_enum.has_structured_name());
+    REQUIRE(reflected_enum.namespace_path().size() == 2);
+    CHECK(reflected_enum.namespace_path()[0] == "fei");
+    CHECK(reflected_enum.namespace_path()[1] == "refl_test");
+    CHECK(reflected_enum.local_name() == "ReflectedTaggedEnum");
     constexpr TypeTagId category_tag {"Category"};
     constexpr TypeTagId category_name_tag {"Category.name"};
     const auto category = reflected_enum.annotation("Category");
@@ -194,7 +204,7 @@ TEST_CASE("Generated reflection tags preserve values", "[refl][type][tag]") {
     REQUIRE(reflected_enum.tag_value(category_name_tag));
     CHECK(*reflected_enum.tag_value(category_name_tag) == "example");
 
-    const auto plugin_types = registry.types_with_annotation("Plugin");
+    const auto plugin_types = registry.types_with_annotation("Example");
     CHECK(
         std::ranges::find(plugin_types, type_id<ReflectedTaggedType>()) !=
         plugin_types.end()

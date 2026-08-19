@@ -1,8 +1,8 @@
 #pragma once
 #include "base/result.hpp"
 #include "refl/val.hpp"
-#include "scripting/source.hpp"
 #include "scripting/borrow_scope.hpp"
+#include "scripting/source.hpp"
 #include "scripting_lua/module_decl.hpp"
 
 #include <chrono>
@@ -82,6 +82,7 @@ class LuaRuntime {
     }
 
     void bind_type(Type& type);
+    Status<LuaScriptError> bind_script_type(Type& type);
     Status<LuaScriptError> bind_module_type(
         LuaScriptModuleId module,
         const std::string& name,
@@ -89,6 +90,7 @@ class LuaRuntime {
     );
     void unbind_type(Type& type);
     void bind_enum(const Enum& enm);
+    Status<LuaScriptError> bind_script_enum(const Enum& enm);
     void unbind_enum(const Enum& enm);
     void set_global(const std::string& name, const Val& val);
     void set_global(const std::string& name, const Ref& ref);

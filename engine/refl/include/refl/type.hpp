@@ -155,6 +155,9 @@ class Type {
 
   private:
     std::string m_name;
+    std::vector<std::string> m_namespace_path;
+    std::string m_local_name;
+    bool m_has_structured_name {false};
     TypeId m_id;
     std::size_t m_size;
     std::size_t m_align;
@@ -241,6 +244,14 @@ class Type {
         m_ops(ops) {}
 
     const std::string& name() const { return m_name; }
+    std::span<const std::string> namespace_path() const {
+        return m_namespace_path;
+    }
+    std::string_view local_name() const {
+        return m_has_structured_name ? std::string_view {m_local_name} :
+                                       std::string_view {m_name};
+    }
+    bool has_structured_name() const { return m_has_structured_name; }
     TypeId hash() const { return m_id; }
     TypeId id() const { return m_id; }
     std::size_t size() const { return m_size; }

@@ -59,6 +59,21 @@ joined_param_types(const std::vector<ParamInfo>& parameters) {
     return result;
 }
 
+void write_structured_type_name(
+    std::ostream& out,
+    const std::vector<std::string>& namespace_path,
+    std::string_view local_name
+) {
+    out << "({";
+    for (std::size_t index = 0; index < namespace_path.size(); ++index) {
+        if (index != 0) {
+            out << ", ";
+        }
+        out << "\"" << namespace_path[index] << "\"";
+    }
+    out << "}, \"" << local_name << "\")";
+}
+
 [[nodiscard]] bool
 has_annotation(const std::vector<ReflectionTag>& tags, std::string_view name) {
     return std::ranges::any_of(tags, [name](const ReflectionTag& tag) {
@@ -173,7 +188,9 @@ void generate_cpp_file(
         }
         const auto generated_plugin_name = plugin_name(cls);
 
-        out << "registry.register_cls<" << cls.name << ">()\n";
+        out << "registry.register_cls<" << cls.name << ">";
+        write_structured_type_name(out, cls.namespace_path, cls.local_name);
+        out << "\n";
         for (const auto& prop : cls.properties) {
             if (prop.access == "public") {
                 out << "    .add_property(\"" << prop.name << "\", &"
@@ -229,7 +246,13 @@ void generate_cpp_file(
                 enum_info.name
             );
         }
-        out << "registry.register_enum<" << enum_info.name << ">()\n";
+        out << "registry.register_enum<" << enum_info.name << ">";
+        write_structured_type_name(
+            out,
+            enum_info.namespace_path,
+            enum_info.local_name
+        );
+        out << "\n";
         for (const auto& enum_value : enum_info.values) {
             out << "    .add_enumerator(\"" << enum_value.name
                 << "\", static_cast<std::int64_t>(" << enum_info.name

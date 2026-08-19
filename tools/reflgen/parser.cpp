@@ -527,6 +527,23 @@ cursor_access(CXCursor cursor, std::string_view fallback) {
     return parent_name + "::" + current;
 }
 
+[[nodiscard]] std::vector<std::string> namespace_path(CXCursor cursor) {
+    std::vector<std::string> result;
+    auto parent = clang_getCursorSemanticParent(cursor);
+    while (!clang_Cursor_isNull(parent) &&
+           clang_getCursorKind(parent) != CXCursor_TranslationUnit) {
+        if (clang_getCursorKind(parent) == CXCursor_Namespace) {
+            auto name = cursor_spelling(parent);
+            if (!name.empty()) {
+                result.push_back(std::move(name));
+            }
+        }
+        parent = clang_getCursorSemanticParent(parent);
+    }
+    std::ranges::reverse(result);
+    return result;
+}
+
 [[nodiscard]] bool is_builtin_or_preserved_kind(CXTypeKind kind) {
     switch (kind) {
         case CXType_Void:
@@ -762,6 +779,8 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
 
     auto enum_info = EnumInfo {
         .name = qualified_name(cursor),
+        .namespace_path = namespace_path(cursor),
+        .local_name = enum_name,
         .source_file = context.header_path,
         .tags = std::move(*tags),
         .underlying_type =
@@ -820,6 +839,8 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
 
     ClassInfo class_info {
         .name = std::move(qualified_class_name),
+        .namespace_path = namespace_path(cursor),
+        .local_name = display_name.empty() ? class_name : display_name,
         .source_file = context.header_path,
         .tags = std::move(*tags),
     };

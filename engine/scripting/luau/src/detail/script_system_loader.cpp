@@ -3,6 +3,7 @@
 #include "ecs/dynamic/system.hpp"
 #include "refl/registry.hpp"
 #include "scripting/module_install.hpp"
+#include "scripting/reflection_bridge.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -29,6 +30,16 @@ Status<ScriptError> bind_type_ref(
     auto type = Registry::instance().try_get_type(*resolved);
     if (!type) {
         return failure(ScriptError {std::move(type.error().message)});
+    }
+    if (type->has_structured_name()) {
+        if (!is_script_visible(*type)) {
+            return failure(
+                ScriptError {
+                    "Type '" + type->name() + "' is not visible to scripts",
+                }
+            );
+        }
+        return runtime.bind_module_script_type(module, *type);
     }
     return runtime.bind_module_type(module, type_ref.type_name, *type);
 }
@@ -117,10 +128,23 @@ Status<ScriptError> bind_declared_types(
         ++name_counts[type.stripped_name()];
     }
     for (auto& [id, type] : Registry::instance().types()) {
+        if (bound.contains(id) || Registry::instance().enums().contains(id)) {
+            continue;
+        }
+        if (type.has_structured_name()) {
+            if (!is_script_visible(type)) {
+                continue;
+            }
+            auto status = runtime.bind_module_script_type(module, type);
+            if (!status) {
+                return status;
+            }
+            bound.insert(id);
+            continue;
+        }
         const auto& name = type.stripped_name();
-        if (bound.contains(id) || name_counts[name] != 1 ||
-            Registry::instance().enums().contains(id) ||
-            reserved.contains(name) || !valid_identifier(name)) {
+        if (name_counts[name] != 1 || reserved.contains(name) ||
+            !valid_identifier(name)) {
             continue;
         }
         auto status = runtime.bind_module_type(module, name, type);
@@ -134,6 +158,16 @@ Status<ScriptError> bind_declared_types(
         if (!type) {
             return failure(ScriptError {std::move(type.error().message)});
         }
+        if (type->has_structured_name()) {
+            if (!is_script_visible(*type)) {
+                continue;
+            }
+            auto status = runtime.bind_module_script_enum(module, enm);
+            if (!status) {
+                return status;
+            }
+            continue;
+        }
         const auto& name = type->stripped_name();
         if (name_counts[name] != 1 || reserved.contains(name) ||
             !valid_identifier(name)) {
@@ -144,7 +178,7 @@ Status<ScriptError> bind_declared_types(
             return status;
         }
     }
-    return {};
+    return runtime.seal_module_script_namespaces(module);
 }
 
 } // namespace

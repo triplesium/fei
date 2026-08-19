@@ -54,7 +54,7 @@ bool lua_is_enum_value(lua_State* L, int idx) {
 }
 
 bool lua_is_type_registered(lua_State* L, const Type& type) {
-    luaL_getmetatable(L, type.stripped_name().c_str());
+    luaL_getmetatable(L, type.name().c_str());
     bool is_registered = !lua_isnil(L, -1);
     lua_pop(L, 1);
     return is_registered;
@@ -253,13 +253,13 @@ void lua_push_val(lua_State* L, const Val& val) {
             luaL_error(
                 L,
                 "Type %s is not registered in Lua",
-                type.stripped_name().c_str()
+                type.name().c_str()
             );
             lua_pushnil(L);
             return;
         }
         new (lua_newuserdata(L, sizeof(LuaObject))) LuaObject(val);
-        luaL_setmetatable(L, type.stripped_name().c_str());
+        luaL_setmetatable(L, type.name().c_str());
     }
 }
 
@@ -286,13 +286,13 @@ void lua_push_ref(lua_State* L, Ref ref) {
             luaL_error(
                 L,
                 "Type %s is not registered in Lua",
-                type->stripped_name().c_str()
+                type->name().c_str()
             );
             lua_pushnil(L);
             return;
         }
         new (lua_newuserdata(L, sizeof(LuaObject))) LuaObject(ref);
-        luaL_setmetatable(L, type->stripped_name().c_str());
+        luaL_setmetatable(L, type->name().c_str());
     }
 }
 
@@ -324,13 +324,13 @@ void lua_push_borrowed_ref(
             luaL_error(
                 L,
                 "Type %s is not registered in Lua",
-                type->stripped_name().c_str()
+                type->name().c_str()
             );
             return;
         }
         new (lua_newuserdata(L, sizeof(LuaObject)))
             LuaObject(ref, scope, token);
-        luaL_setmetatable(L, type->stripped_name().c_str());
+        luaL_setmetatable(L, type->name().c_str());
     }
 }
 

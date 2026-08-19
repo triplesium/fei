@@ -1,6 +1,7 @@
 #include "core/transform.hpp"
 #include "lua_test_types.hpp"
 #include "math/vector.hpp"
+#include "refl/cls.hpp"
 #include "refl/dynamic_array.hpp"
 #include "refl/dynamic_map.hpp"
 #include "refl/ref_utils.hpp"
@@ -15,6 +16,12 @@
 #include <set>
 #include <string>
 #include <vector>
+
+namespace fei::lua_runtime_test::nested {
+
+struct Value {};
+
+} // namespace fei::lua_runtime_test::nested
 
 using namespace fei;
 
@@ -708,4 +715,20 @@ TEST_CASE("LuaRuntime reports missing class metadata to Lua", "[scripting]") {
 
     REQUIRE(receiver.value == 64);
     REQUIRE(receiver.method_calls == 1);
+}
+
+TEST_CASE(
+    "LuaRuntime binds reflected types through namespaces",
+    "[scripting][lua][namespace]"
+) {
+    auto& registry = Registry::instance();
+    auto& cls = registry.register_cls<lua_runtime_test::nested::Value>(
+        {"fei", "lua_runtime_test", "nested"},
+        "Value"
+    );
+    LuaRuntime runtime;
+    REQUIRE(runtime.bind_script_type(registry.get_type(cls.type_id())));
+    REQUIRE(runtime.run_script(R"(
+        assert(lua_runtime_test.nested.Value ~= nil)
+    )"));
 }
