@@ -46,7 +46,7 @@ TEST_CASE("App enters the initial state before PreStartUp", "[app][state]") {
     app.add_plugin<StopOnFinishPlugin>()
         .init_state(AppLifecycleState::Loading)
         .add_resource(AppStateTrace {})
-        .add_systems(on_enter(AppLifecycleState::Loading), enter_loading)
+        .add_systems(OnEnter(AppLifecycleState::Loading), enter_loading)
         .add_systems(PreStartUp, record_pre_startup);
 
     app.run();

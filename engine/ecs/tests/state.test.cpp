@@ -168,7 +168,7 @@ TEST_CASE("ECS insert_state explicitly replaces state", "[ecs][state]") {
     world.resource<NextState<GameplayState>>().set(GameplayState::Playing);
     world.insert_state(GameplayState::Paused);
     world.add_systems(
-        on_enter(GameplayState::Paused),
+        OnEnter(GameplayState::Paused),
         [](ResRW<ScheduleTrace> trace) {
             trace->entries.emplace_back("enter:paused");
         }
@@ -194,12 +194,12 @@ TEST_CASE(
     World world;
     world.add_resource(ScheduleTrace {});
     world.init_state(GameplayState::Loading);
-    world.add_systems(on_exit(GameplayState::Loading), exit_loading);
+    world.add_systems(OnExit(GameplayState::Loading), exit_loading);
     world.add_systems(
-        on_transition(GameplayState::Loading, GameplayState::Playing),
+        OnTransition(GameplayState::Loading, GameplayState::Playing),
         loading_to_playing
     );
-    world.add_systems(on_enter(GameplayState::Playing), enter_playing);
+    world.add_systems(OnEnter(GameplayState::Playing), enter_playing);
     world.sort_systems();
     world.run_state_transitions();
 
@@ -225,7 +225,7 @@ TEST_CASE(
     world.init_state(GameplayState::Loading);
     world.init_state(OverlayState::Hidden);
     world.add_systems(
-        on_exit(GameplayState::Loading),
+        OnExit(GameplayState::Loading),
         exit_loading_observes_overlay
     );
     world.sort_systems();
@@ -248,7 +248,7 @@ TEST_CASE(
     World world;
     world.init_state(GameplayState::Loading);
     world.init_state(OverlayState::Hidden);
-    world.add_systems(on_enter(GameplayState::Playing), queue_overlay_visible);
+    world.add_systems(OnEnter(GameplayState::Playing), queue_overlay_visible);
     world.sort_systems();
     world.run_state_transitions();
 
@@ -270,7 +270,7 @@ TEST_CASE("ECS skips unchanged state requests", "[ecs][state]") {
     World world;
     world.add_resource(ScheduleTrace {});
     world.init_state(GameplayState::Loading);
-    world.add_systems(on_exit(GameplayState::Loading), exit_loading);
+    world.add_systems(OnExit(GameplayState::Loading), exit_loading);
     world.sort_systems();
     world.run_state_transitions();
 
@@ -304,18 +304,18 @@ TEST_CASE("ECS state schedules distinguish colliding hashes", "[ecs][state]") {
     const CollidingState one {.value = 1};
     const CollidingState two {.value = 2};
 
-    REQUIRE(on_enter(one) != on_enter(two));
-    REQUIRE(on_exit(one) != on_exit(two));
-    REQUIRE(on_transition(one, two) != on_transition(two, one));
-    REQUIRE(on_enter(one) != on_exit(one));
+    REQUIRE(OnEnter(one).id() != OnEnter(two).id());
+    REQUIRE(OnExit(one).id() != OnExit(two).id());
+    REQUIRE(OnTransition(one, two).id() != OnTransition(two, one).id());
+    REQUIRE(OnEnter(one).id() != OnExit(one).id());
 
     World world;
     world.add_resource(ScheduleTrace {});
     world.init_state(one);
-    world.add_systems(on_enter(one), [](ResRW<ScheduleTrace> trace) {
+    world.add_systems(OnEnter(one), [](ResRW<ScheduleTrace> trace) {
         trace->entries.emplace_back("one");
     });
-    world.add_systems(on_enter(two), [](ResRW<ScheduleTrace> trace) {
+    world.add_systems(OnEnter(two), [](ResRW<ScheduleTrace> trace) {
         trace->entries.emplace_back("two");
     });
     world.sort_systems();

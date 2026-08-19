@@ -17,7 +17,7 @@ void register_main_schedule_profile_names() {
     register_profile_schedule_name(PreStartUp, "PreStartUp");
     register_profile_schedule_name(StartUp, "StartUp");
     register_profile_schedule_name(PreUpdate, "PreUpdate");
-    register_profile_schedule_name(StateTransitionSchedule, "StateTransition");
+    register_profile_schedule_name(StateTransition, "StateTransition");
     register_profile_schedule_name(Update, "Update");
     register_profile_schedule_name(PostUpdate, "PostUpdate");
     register_profile_schedule_name(Last, "Last");
@@ -184,7 +184,7 @@ void App::startup() {
         return;
     }
 
-    run_profiled_schedule(*this, StateTransitionSchedule, "StateTransition");
+    run_profiled_schedule(*this, StateTransition, "StateTransition");
     run_profiled_schedule(*this, PreStartUp, "PreStartUp");
     run_profiled_schedule(*this, StartUp, "StartUp");
     for (auto& entry : m_sub_apps) {
@@ -204,7 +204,7 @@ void App::update() {
 
     run_profiled_schedule(*this, First, "First");
     run_profiled_schedule(*this, PreUpdate, "PreUpdate");
-    run_profiled_schedule(*this, StateTransitionSchedule, "StateTransition");
+    run_profiled_schedule(*this, StateTransition, "StateTransition");
     run_profiled_schedule(*this, Update, "Update");
     run_profiled_schedule(*this, PostUpdate, "PostUpdate");
     run_profiled_schedule(*this, Last, "Last");

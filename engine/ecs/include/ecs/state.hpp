@@ -19,8 +19,8 @@
 
 namespace fei {
 
-inline constexpr ScheduleId StateTransitionSchedule =
-    stable_type_hash("fei::StateTransitionSchedule");
+inline constexpr ScheduleId StateTransition =
+    stable_type_hash("fei::StateTransition");
 
 template<typename T>
 class State;
@@ -56,7 +56,21 @@ inline ScheduleId allocate_state_schedule_id() {
 }
 
 template<StateValue T>
-ScheduleId intern_single_state_schedule(const T& state) {
+ScheduleId intern_enter_schedule(const T& state) {
+    static std::mutex mutex;
+    static std::unordered_map<T, ScheduleId> schedules;
+
+    std::scoped_lock lock(mutex);
+    if (auto found = schedules.find(state); found != schedules.end()) {
+        return found->second;
+    }
+    auto id = allocate_state_schedule_id();
+    schedules.emplace(state, id);
+    return id;
+}
+
+template<StateValue T>
+ScheduleId intern_exit_schedule(const T& state) {
     static std::mutex mutex;
     static std::unordered_map<T, ScheduleId> schedules;
 
@@ -164,40 +178,43 @@ class StateTransitionContext {
 } // namespace detail
 
 template<StateValue T>
-ScheduleId on_enter(const T& state) {
-    return detail::intern_single_state_schedule<T>(state);
-}
+class OnEnter {
+  private:
+    ScheduleId m_id;
+
+  public:
+    explicit OnEnter(const T& state) :
+        m_id(detail::intern_enter_schedule(state)) {}
+
+    ScheduleId id() const { return m_id; }
+    operator ScheduleId() const { return m_id; }
+};
 
 template<StateValue T>
-ScheduleId on_exit(const T& state) {
-    struct ExitStateValue {
-        T value;
+class OnExit {
+  private:
+    ScheduleId m_id;
 
-        bool operator==(const ExitStateValue&) const = default;
-    };
-    struct ExitStateValueHash {
-        std::size_t operator()(const ExitStateValue& value) const {
-            return std::hash<T> {}(value.value);
-        }
-    };
+  public:
+    explicit OnExit(const T& state) :
+        m_id(detail::intern_exit_schedule(state)) {}
 
-    static std::mutex mutex;
-    static std::unordered_map<ExitStateValue, ScheduleId, ExitStateValueHash>
-        schedules;
-    ExitStateValue key {.value = state};
-    std::scoped_lock lock(mutex);
-    if (auto found = schedules.find(key); found != schedules.end()) {
-        return found->second;
-    }
-    auto id = detail::allocate_state_schedule_id();
-    schedules.emplace(std::move(key), id);
-    return id;
-}
+    ScheduleId id() const { return m_id; }
+    operator ScheduleId() const { return m_id; }
+};
 
 template<StateValue T>
-ScheduleId on_transition(const T& from, const T& to) {
-    return detail::intern_transition_schedule(from, to);
-}
+class OnTransition {
+  private:
+    ScheduleId m_id;
+
+  public:
+    OnTransition(const T& exited, const T& entered) :
+        m_id(detail::intern_transition_schedule(exited, entered)) {}
+
+    ScheduleId id() const { return m_id; }
+    operator ScheduleId() const { return m_id; }
+};
 
 template<StateValue T>
 void prepare_state_transition(
@@ -291,7 +308,7 @@ void run_state_exit(
     ResRO<detail::StateTransitionContext<T>> transition
 ) {
     if (transition->active() && transition->exited()) {
-        world->run_schedule(on_exit(*transition->exited()));
+        world->run_schedule(OnExit(*transition->exited()));
     }
 }
 
@@ -302,7 +319,7 @@ void run_state_transition(
 ) {
     if (transition->active() && transition->exited() && transition->entered()) {
         world->run_schedule(
-            on_transition(*transition->exited(), *transition->entered())
+            OnTransition(*transition->exited(), *transition->entered())
         );
     }
 }
@@ -313,7 +330,7 @@ void run_state_enter(
     ResRO<detail::StateTransitionContext<T>> transition
 ) {
     if (transition->active() && transition->entered()) {
-        world->run_schedule(on_enter(*transition->entered()));
+        world->run_schedule(OnEnter(*transition->entered()));
     }
 }
 
@@ -343,7 +360,7 @@ void install_state_runtime(World& world) {
         world.add_resource(CommandsQueue {});
     }
     world.configure_sets(
-        StateTransitionSchedule,
+        StateTransition,
         chain(
             StateTransitionSystems::Apply {},
             StateTransitionSystems::Exit {},
@@ -352,7 +369,7 @@ void install_state_runtime(World& world) {
         )
     );
     world.add_systems(
-        StateTransitionSchedule,
+        StateTransition,
         prepare_state_transition<T> | in_set<StateTransitionSystems::Apply>(),
         run_state_exit<T> | in_set<StateTransitionSystems::Exit>(),
         run_state_transition<T> | in_set<StateTransitionSystems::Transition>(),
@@ -401,7 +418,7 @@ State<std::remove_cvref_t<T>>& World::insert_state(T&& state) {
 }
 
 inline void World::run_state_transitions() {
-    run_schedule(StateTransitionSchedule);
+    run_schedule(StateTransition);
 }
 
 } // namespace fei
