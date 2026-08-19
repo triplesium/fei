@@ -1,9 +1,9 @@
-function add_sample(name)
+function add_sample(name, source)
     target("sample-" .. name)
         set_kind("binary")
         add_rules("fei.reflect")
         add_headerfiles("common.hpp")
-        add_files(name .. ".cpp")
+        add_files((source or name) .. ".cpp")
         add_deps("fei-refl", "fei-ecs", "fei-app", "fei-window", "fei-core", "fei-asset", "fei-graphics-opengl", "fei-graphics-opengl-glfw", "fei-graphics", "fei-rendering", "fei-imgui", "fei-pbr", "fei-scene", "fei-scripting-lua")
         add_packages("glfw", "glad", "imgui", "stb")
 end
@@ -61,4 +61,32 @@ target("sample-sprite")
         "fei-graphics-vulkan-glfw",
         "fei-graphics-webgpu",
         "fei-graphics-webgpu-glfw"
+    )
+
+add_sample("ui")
+target("sample-ui")
+    add_deps(
+        "fei-devtools",
+        "fei-devtools-input",
+        "fei-devtools-rendering",
+        "fei-input-focus",
+        "fei-sprite",
+        "fei-text",
+        "fei-ui",
+        "fei-ui-widgets",
+        "fei-ui-rendering"
+    )
+
+add_sample("ui-widgets", "ui_widgets")
+target("sample-ui-widgets")
+    add_deps(
+        "fei-devtools",
+        "fei-devtools-input",
+        "fei-devtools-rendering",
+        "fei-input-focus",
+        "fei-sprite",
+        "fei-text",
+        "fei-ui",
+        "fei-ui-widgets",
+        "fei-ui-rendering"
     )
