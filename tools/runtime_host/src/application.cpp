@@ -1,21 +1,35 @@
 #include "runtime_host/application.hpp"
 
 #include "asset/embed.hpp"
+#include "asset/server.hpp"
 #include "base/env.hpp"
 #include "base/log.hpp"
 #include "core/time.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics/swapchain.hpp"
+#include "physics2d/physics_world.hpp"
+#include "project/project.hpp"
 #include "project_runtime/runtime.hpp"
 #include "project_scripting_luau/playtest.hpp"
+#include "project_scripting_luau/plugin.hpp"
 #include "rendering/render_app.hpp"
+#include "runtime_host/quick_save.hpp"
 #include "runtime_inspection/provider.hpp"
 #include "runtime_inspection/registry.hpp"
 #include "runtime_inspection_ecs/entity.hpp"
 #include "runtime_inspection_ecs/query.hpp"
 #include "runtime_inspection_ecs/world_summary.hpp"
+#include "runtime_inspection_snapshot/checkpoint.hpp"
 #include "runtime_protocol/playtest.hpp"
 #include "runtime_protocol/probe.hpp"
+#include "scripting_luau/runtime.hpp"
+#include "snapshot_runtime/adapters.hpp"
+#include "snapshot_runtime_asset/adapters.hpp"
+#include "snapshot_runtime_luau/adapters.hpp"
+#include "snapshot_runtime_physics2d/adapters.hpp"
+#include "snapshot_runtime_rendering/adapters.hpp"
+#include "snapshot_runtime_ui/adapters.hpp"
+#include "ui/surface.hpp"
 #include "window/input.hpp"
 #include "window/window.hpp"
 
@@ -51,6 +65,10 @@ constexpr std::string_view c_playtest_observe_id {"play.observe"};
 constexpr std::string_view c_playtest_observe_schema {"play.observe.v1"};
 constexpr std::string_view c_playtest_step_id {"play.step"};
 constexpr std::string_view c_playtest_step_schema {"play.step.v1"};
+constexpr std::string_view c_checkpoint_restore_id {"play.checkpoint.restore"};
+constexpr std::string_view c_checkpoint_restore_schema {
+    "play.checkpoint.restore.v1"
+};
 constexpr float c_playtest_fixed_delta = 1.0f / 60.0f;
 
 struct EncodedFrameCapture {
@@ -722,6 +740,14 @@ RuntimeHostApplication::RuntimeHostApplication(Project project) {
             registration.error().message
         );
     }
+    registration = runtime_inspection::checkpoint::
+        register_checkpoint_inspection_providers(inspection_registry);
+    if (!registration) {
+        fatal(
+            "Failed to register runtime inspection provider: {}",
+            registration.error().message
+        );
+    }
     inspection_registry.freeze();
     runtime_probe_config.inspections.reserve(
         inspection_registry.descriptors().size()
@@ -748,13 +774,18 @@ RuntimeHostApplication::RuntimeHostApplication(Project project) {
 
     m_app.add_resource(std::move(inspection_registry))
         .add_resource(std::move(playtest_registry))
+        .add_resource(snapshot::CheckpointStore {})
+        .add_resource(QuickSaveRequests {})
+        .add_resource(QuickSaveHotkeyLatch {})
         .add_resource(
             WindowConfig {
                 .width = 1600,
                 .height = 900,
                 .title = "Fei Runtime Host",
             }
-        );
+        )
+        .add_systems(Last, request_quick_save_hotkeys);
+    m_app.add_plugin<snapshot_runtime::SnapshotRuntimePlugin>();
     validate_project_plugins(project.config().runtime);
     configure_project_runtime(m_app, std::move(project));
     if (has_luau_playtests) {
@@ -778,6 +809,22 @@ void RuntimeHostApplication::shutdown() noexcept {
 
 void RuntimeHostApplication::update_frame() {
     m_app.update();
+    const auto quick_save = process_quick_save_requests(m_app.world());
+    switch (quick_save.kind) {
+        case QuickSaveOutcomeKind::Saved:
+        case QuickSaveOutcomeKind::Restored:
+            info("{}", quick_save.message);
+            break;
+        case QuickSaveOutcomeKind::Failed:
+            warn("{}", quick_save.message);
+            break;
+        case QuickSaveOutcomeKind::None:
+            break;
+    }
+    if (quick_save.kind == QuickSaveOutcomeKind::Restored &&
+        m_app.has_sub_app<RenderApp>()) {
+        m_app.sub_app<RenderApp>().invalidate_source();
+    }
     m_app.render();
 }
 
@@ -795,6 +842,122 @@ void RuntimeHostApplication::run() {
 
     try {
         m_app.startup();
+        auto& checkpoint_store = m_app.resource<snapshot::CheckpointStore>();
+        auto& snapshot_registry = checkpoint_store.registry();
+        snapshot_registry.resource<AppStates>(snapshot::ResourcePolicy::Ignore);
+        snapshot_registry.resource<CommandsQueue>(
+            snapshot::ResourcePolicy::Ignore
+        );
+        snapshot_registry.resource<runtime_inspection::InspectionRegistry>(
+            snapshot::ResourcePolicy::Ignore
+        );
+        snapshot_registry.resource<runtime_protocol::PlaytestRegistry>(
+            snapshot::ResourcePolicy::Ignore
+        );
+        snapshot_registry.resource<runtime_protocol::RuntimeProbe>(
+            snapshot::ResourcePolicy::Ignore
+        );
+        snapshot_registry.resource<snapshot::CheckpointStore>(
+            snapshot::ResourcePolicy::Ignore
+        );
+        snapshot_registry.resource<QuickSaveRequests>(
+            snapshot::ResourcePolicy::Ignore
+        );
+        snapshot_registry.resource<QuickSaveHotkeyLatch>(
+            snapshot::ResourcePolicy::Ignore
+        );
+        snapshot_registry.resource<Project>(snapshot::ResourcePolicy::Ignore);
+        snapshot_registry.resource<Window>(snapshot::ResourcePolicy::Ignore);
+        snapshot_registry.resource<WindowConfig>(
+            snapshot::ResourcePolicy::Ignore
+        );
+        if (auto configured = snapshot_runtime::configure_builtin_adapters(
+                m_app.world(),
+                snapshot_registry
+            );
+            !configured) {
+            throw std::runtime_error(
+                "Failed to configure snapshot runtime adapters: " +
+                configured.error().message
+            );
+        }
+        if (m_app.has_resource<AssetServer>()) {
+            if (auto configured =
+                    snapshot_runtime_asset::configure_asset_adapters(
+                        m_app.world(),
+                        snapshot_registry
+                    );
+                !configured) {
+                throw std::runtime_error(
+                    "Failed to configure asset snapshot adapters: " +
+                    configured.error().message
+                );
+            }
+        }
+        if (m_app.has_sub_app<RenderApp>()) {
+            if (auto configured =
+                    snapshot_runtime_rendering::configure_rendering_adapters(
+                        m_app.world(),
+                        snapshot_registry
+                    );
+                !configured) {
+                throw std::runtime_error(
+                    "Failed to configure rendering snapshot adapters: " +
+                    configured.error().message
+                );
+            }
+        }
+        if (m_app.has_resource<PhysicsWorld2d>()) {
+            if (auto configured =
+                    snapshot_runtime_physics2d::configure_physics2d_adapters(
+                        m_app.world(),
+                        snapshot_registry
+                    );
+                !configured) {
+                throw std::runtime_error(
+                    "Failed to configure Physics2d snapshot adapters: " +
+                    configured.error().message
+                );
+            }
+        }
+        if (m_app.has_resource<ui::Surface>()) {
+            if (auto configured = snapshot_runtime_ui::configure_ui_adapters(
+                    m_app.world(),
+                    snapshot_registry
+                );
+                !configured) {
+                throw std::runtime_error(
+                    "Failed to configure UI snapshot adapters: " +
+                    configured.error().message
+                );
+            }
+        }
+        if (m_app.has_resource<LuauRuntime>()) {
+            if (auto configured =
+                    snapshot_runtime_luau::configure_luau_adapters(
+                        m_app.world(),
+                        snapshot_registry
+                    );
+                !configured) {
+                throw std::runtime_error(
+                    "Failed to configure Luau snapshot adapters: " +
+                    configured.error().message
+                );
+            }
+            if (m_app.has_resource<project_runtime::LuauScriptsState>()) {
+                snapshot_registry.resource<project_runtime::LuauScriptsState>(
+                    snapshot::ResourcePolicy::Ignore
+                );
+            }
+            const auto playtest_runtime_type =
+                project_runtime::luau_playtest_runtime_resource_type();
+            if (m_app.world().has_resource(playtest_runtime_type)) {
+                snapshot_registry.set_resource_policy(
+                    playtest_runtime_type,
+                    snapshot::ResourcePolicy::Ignore
+                );
+            }
+        }
         auto& probe = m_app.resource<runtime_protocol::RuntimeProbe>();
         const auto supervised = probe.status().enabled;
         if (supervised && m_app.has_resource<Time>()) {
@@ -845,6 +1008,11 @@ void RuntimeHostApplication::run() {
                     }
                 );
             }
+
+            // Captures are observational and must represent the current Main
+            // World, not the previously presented frame in the threaded
+            // render pipeline. This refresh runs render schedules only.
+            m_app.render();
 
             Result<TextureReadbackFrame, std::string> captured = failure(
                 std::string("The Render App does not expose a main swapchain")
@@ -1196,6 +1364,16 @@ void RuntimeHostApplication::run() {
                     result = inspect_runtime(m_app.world(), request);
                 }
                 if (result) {
+                    if (request.provider == c_checkpoint_restore_id &&
+                        request.schema == c_checkpoint_restore_schema &&
+                        m_app.has_sub_app<RenderApp>()) {
+                        // A supervised runtime is paused between play steps.
+                        // Re-extract and present the restored World without
+                        // running game schedules or consuming a simulation
+                        // tick, so the next capture reflects the checkpoint.
+                        m_app.sub_app<RenderApp>().invalidate_source();
+                        m_app.render();
+                    }
                     response.ok = true;
                     response.payload_json = std::move(*result);
                 } else {

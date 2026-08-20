@@ -1,7 +1,7 @@
 target("fei-runtime-host-core")
     set_kind("static")
     add_headerfiles("include/**.hpp")
-    add_files("src/application.cpp")
+    add_files("src/application.cpp", "src/quick_save.cpp")
     add_rules(
         "utils.bin2obj",
         {
@@ -30,7 +30,14 @@ target("fei-runtime-host-core")
         "fei-graphics-opengl",
         "fei-graphics-opengl-glfw",
         "fei-runtime-protocol",
-        "fei-runtime-inspection-ecs"
+        "fei-runtime-inspection-ecs",
+        "fei-runtime-inspection-snapshot",
+        "fei-snapshot-runtime",
+        "fei-snapshot-runtime-asset",
+        "fei-snapshot-runtime-luau",
+        "fei-snapshot-runtime-physics2d",
+        "fei-snapshot-runtime-rendering",
+        "fei-snapshot-runtime-ui"
     )
     add_packages("glfw", "nlohmann_json", "stb")
 
@@ -41,3 +48,10 @@ target("fei-runtime-host")
     add_files("src/main.cpp")
     add_deps("fei-runtime-host-core", "fei-project")
     add_packages("glfw", "glad")
+
+target("fei-runtime-host-tests")
+    set_kind("binary")
+    set_default(false)
+    add_rules("fei.test")
+    add_files("tests/*.cpp")
+    add_deps("fei-runtime-host-core")
