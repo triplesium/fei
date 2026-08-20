@@ -442,7 +442,11 @@ RuntimeProbeStatus RuntimeProbe::status() const {
 
 void RuntimeProbePlugin::setup(App& app) {
     app.add_resource(RuntimeProbe(std::move(m_config)))
-        .add_systems(Last, advance_runtime_probe);
+        .add_systems(
+            PreUpdate,
+            advance_runtime_probe |
+                in_set<RuntimeProbeSystems::InspectionBoundary>()
+        );
 }
 
 void RuntimeProbePlugin::cleanup(App& app) noexcept {

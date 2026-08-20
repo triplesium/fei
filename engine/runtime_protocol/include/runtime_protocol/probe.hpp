@@ -4,6 +4,7 @@
 #include "base/optional.hpp"
 #include "base/result.hpp"
 #include "base/types.hpp"
+#include "ecs/system_config.hpp"
 #include "runtime_protocol/protocol.hpp"
 
 #include <chrono>
@@ -44,6 +45,13 @@ struct RuntimeProbeStatus {
     bool connected {false};
     uint64 frame {0};
     std::string last_error;
+};
+
+struct RuntimeProbeSystems {
+    // Inspection commands execute here, after First (including time update)
+    // and before fixed/gameplay schedules. Systems that also run in PreUpdate
+    // can explicitly order themselves relative to this boundary.
+    struct InspectionBoundary : SystemSet<InspectionBoundary> {};
 };
 
 class RuntimeProbe {
