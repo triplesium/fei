@@ -40,6 +40,12 @@ add_sample("compute_shader")
 add_sample("schedule")
 add_sample("registered_system")
 
+target("sample-snapshot-game")
+    set_kind("binary")
+    add_files("snapshot_game.cpp")
+    add_extrafiles("snapshot_game.luau")
+    add_deps("fei-snapshot-runtime-luau")
+
 target("sample-physics2d")
     set_kind("binary")
     add_rules("fei.reflect")
