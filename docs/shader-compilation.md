@@ -134,3 +134,30 @@ xmake f --shader_targets=webgpu
 
 When `opengl` is absent, the SPIRV-Cross package is not declared and neither
 `fei-shader`, `fei-shader-webgpu`, nor `fei-rendering` links it.
+
+## Slang on WebAssembly
+
+Native builds continue to use `shader_slang_sdk`. A WASM build instead uses the
+repository's `fei-slang-wasm` Xmake package, pinned to Slang `2026.14.1`. Xmake
+remains the build entry point and drives Slang's upstream CMake project using
+the same Emscripten toolchain as the engine.
+
+Slang cross compilation has two package stages:
+
+1. `fei-slang-generators` builds `all-generators` for the build machine through
+   a `{host = true}` dependency.
+2. `fei-slang-wasm` passes those executables through `SLANG_GENERATORS_PATH`,
+   builds the `slang` target as static Emscripten archives, and exports the
+   archives and public headers to `fei-shader`.
+
+Both Slang and engine consumers use WebAssembly exceptions. The final link also
+enables memory growth. Optional Slang tools, tests, RHI, DXIL, glslang, Dawn,
+Tint, LLVM, and native runtime components are disabled for this development
+configuration. Configure it with:
+
+```text
+xmake f -p wasm --shader_targets=webgpu
+```
+
+The Emscripten toolchain is an Xmake package, so a separate system `emcmake`
+invocation is not part of the workflow.

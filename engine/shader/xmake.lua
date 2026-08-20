@@ -1,4 +1,28 @@
-local function add_system_slang_sdk(target, public)
+local slang_wasm_links = {
+    "slang-compiler",
+    "compiler-core",
+    "core",
+    "cmark-gfm",
+    "miniz",
+    "lz4",
+}
+
+local function add_slang(target, public)
+    if is_plat("wasm") then
+        target:add("packages", "fei-slang-wasm", {public = public})
+        local linkgroup_args = table.copy(slang_wasm_links)
+        table.insert(linkgroup_args, {group = true, public = public})
+        target:add("linkgroups", table.unpack(linkgroup_args))
+        target:add("cxflags", "-fwasm-exceptions", {force = true, public = public})
+        target:add(
+            "ldflags",
+            "-fwasm-exceptions",
+            "-sALLOW_MEMORY_GROWTH",
+            {force = true, public = public}
+        )
+        return
+    end
+
     local slang_sdk = get_config("shader_slang_sdk")
     if not slang_sdk or #slang_sdk == 0 then
         return
@@ -26,6 +50,10 @@ local function add_system_slang_sdk(target, public)
 end
 
 local function require_system_slang_sdk()
+    if is_plat("wasm") then
+        return
+    end
+
     local slang_sdk = get_config("shader_slang_sdk")
     if not slang_sdk or #slang_sdk == 0 then
         os.raise("Slang SDK is required; configure shader_slang_sdk with the SDK path")
@@ -91,7 +119,7 @@ target("fei-shader")
     add_includedirs("include", {public = true})
     add_deps("fei-base", "fei-asset", "fei-graphics")
     on_load(function(target)
-        add_system_slang_sdk(target, true)
+        add_slang(target, true)
     end)
     before_build(function()
         require_system_slang_sdk()
@@ -139,5 +167,5 @@ target("fei-shader-tests")
     add_files("tests/*.cpp")
     add_deps("fei-shader", "fei-shader-opengl")
     on_load(function(target)
-        add_system_slang_sdk(target, false)
+        add_slang(target, false)
     end)

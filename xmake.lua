@@ -32,6 +32,17 @@ option("shader_targets")
     set_description("Comma-separated runtime shader targets to build")
 option_end()
 
+includes("packages")
+
+if is_plat("wasm") then
+    add_requires("emscripten 6.0.0")
+    add_requires(
+        "fei-slang-wasm 2026.14.1",
+        {configs = {toolchains = "fei-emcc@emscripten"}}
+    )
+    set_toolchains("fei-emcc@emscripten")
+end
+
 add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "fastgltf v0.9.0")
 add_requires("box2d v3.1.1", {configs = {shared = false}})
 add_requires("luau 696", {configs = {shared = false, extern_c = false}})
