@@ -1,0 +1,18 @@
+name: Luau Rendered Checkpoint Arena
+asset_directory: assets
+
+runtime:
+  plugins:
+    - OpenGLGlfw
+    - Rendering
+    - Sprite
+    - Input
+    - Time
+    - ui::rendering::UiRendering
+    - project_runtime::LuauScripts
+
+scripts:
+  - project://scripts/checkpoint_render.luau
+
+playtests:
+  - project://scripts/checkpoint_render.playtest.luau
