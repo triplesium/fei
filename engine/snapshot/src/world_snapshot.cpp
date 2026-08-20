@@ -690,7 +690,21 @@ Result<CheckpointInfo, SnapshotError> CheckpointStore::create(
     if (!captured) {
         return failure(std::move(captured.error()));
     }
-    const auto byte_size = snapshot_size(*captured);
+    return insert(name, std::move(*captured));
+}
+
+Result<CheckpointInfo, SnapshotError>
+CheckpointStore::insert(std::string name, WorldSnapshot snapshot) {
+    if (!valid_checkpoint_name(name)) {
+        return failure(make_error(
+            SnapshotError::Kind::InvalidCheckpointName,
+            "name",
+            "Checkpoint name must contain 1-64 ASCII letters, digits, '_' or "
+            "'-'"
+        ));
+    }
+
+    const auto byte_size = snapshot_size(snapshot);
     if (byte_size > m_limits.max_bytes) {
         return failure(make_error(
             SnapshotError::Kind::CheckpointTooLarge,
@@ -740,15 +754,15 @@ Result<CheckpointInfo, SnapshotError> CheckpointStore::create(
     }
 
     const auto revision = m_next_revision++;
-    const auto entity_count = captured->entities.size();
-    const auto resource_count = captured->resources.size();
+    const auto entity_count = snapshot.entities.size();
+    const auto resource_count = snapshot.resources.size();
     if (existing != m_entries.end()) {
         m_total_bytes -= existing->second.byte_size;
     }
     m_entries.insert_or_assign(
         name,
         Entry {
-            .snapshot = std::move(*captured),
+            .snapshot = std::move(snapshot),
             .revision = revision,
             .byte_size = byte_size,
         }

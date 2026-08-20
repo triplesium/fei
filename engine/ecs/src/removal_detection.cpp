@@ -30,6 +30,29 @@ void RemovedComponentBuffer::remap_entities(
     remap(m_current);
 }
 
+RemovedComponentBuffer::SnapshotState
+RemovedComponentBuffer::snapshot_state() const {
+    return SnapshotState {
+        .previous = m_previous.entities,
+        .previous_start = m_previous.start_count,
+        .current = m_current.entities,
+        .current_start = m_current.start_count,
+        .event_count = m_event_count,
+    };
+}
+
+void RemovedComponentBuffer::restore_snapshot_state(SnapshotState state) {
+    m_previous = Sequence {
+        .entities = std::move(state.previous),
+        .start_count = state.previous_start,
+    };
+    m_current = Sequence {
+        .entities = std::move(state.current),
+        .start_count = state.current_start,
+    };
+    m_event_count = state.event_count;
+}
+
 Optional<Entity> RemovedComponentBuffer::get(std::size_t event_id) const {
     if (event_id < oldest_event_count() || event_id >= m_event_count) {
         return nullopt;

@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <map>
 #include <string>
@@ -23,6 +24,8 @@ namespace fei {
 class World;
 
 namespace snapshot {
+
+struct SnapshotArchiveMetadata;
 
 using SnapshotEntityId = std::uint64_t;
 
@@ -83,6 +86,10 @@ struct SnapshotError {
         CheckpointNotFound,
         CheckpointLimitReached,
         CheckpointTooLarge,
+        ArchiveIoFailed,
+        ArchiveFormatFailed,
+        IncompatibleArchive,
+        PersistentStateUnsupported,
     };
 
     Kind kind {};
@@ -256,6 +263,18 @@ class CheckpointStore {
     bool erase(std::string_view name);
     std::size_t clear();
 
+    Result<CheckpointInfo, SnapshotError> export_file(
+        std::string_view name,
+        const std::filesystem::path& path,
+        const SnapshotArchiveMetadata& metadata
+    ) const;
+
+    Result<CheckpointInfo, SnapshotError> import_file(
+        std::string name,
+        const std::filesystem::path& path,
+        const SnapshotArchiveMetadata& expected
+    );
+
     void set_limits(CheckpointLimits limits);
     [[nodiscard]] const CheckpointLimits& limits() const { return m_limits; }
     [[nodiscard]] std::size_t total_bytes() const { return m_total_bytes; }
@@ -272,6 +291,9 @@ class CheckpointStore {
     std::uint64_t m_next_revision {1};
     CheckpointLimits m_limits;
     std::size_t m_total_bytes {};
+
+    Result<CheckpointInfo, SnapshotError>
+    insert(std::string name, WorldSnapshot snapshot);
 };
 
 Result<WorldSnapshot, SnapshotError>

@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace fei {
@@ -22,9 +23,20 @@ class RemovedComponentBuffer {
     std::size_t m_event_count {0};
 
   public:
+    struct SnapshotState {
+        std::vector<Entity> previous;
+        std::size_t previous_start {};
+        std::vector<Entity> current;
+        std::size_t current_start {};
+        std::size_t event_count {};
+    };
+
     void send(Entity entity);
     void update();
     void remap_entities(const std::unordered_map<Entity, Entity>& entities);
+
+    [[nodiscard]] SnapshotState snapshot_state() const;
+    void restore_snapshot_state(SnapshotState state);
 
     [[nodiscard]] std::size_t oldest_event_count() const {
         return m_previous.start_count;
@@ -48,6 +60,14 @@ class RemovedComponentEvents {
     void remap_entities(const std::unordered_map<Entity, Entity>& entities);
 
     [[nodiscard]] const RemovedComponentBuffer* get(TypeId component) const;
+
+    const std::unordered_map<TypeId, RemovedComponentBuffer>& buffers() const {
+        return m_buffers;
+    }
+
+    void set_buffer(TypeId component, RemovedComponentBuffer buffer) {
+        m_buffers.insert_or_assign(component, std::move(buffer));
+    }
 
     [[nodiscard]] std::size_t byte_size() const {
         std::size_t result = 0;
