@@ -13,7 +13,7 @@ class MainThreadExecutor::State {
   public:
     std::thread::id owner_thread {std::this_thread::get_id()};
     std::mutex mutex;
-    std::deque<std::move_only_function<void()>> tasks;
+    std::deque<MoveOnlyFunction<void()>> tasks;
     bool closed {false};
 };
 
@@ -30,7 +30,7 @@ bool MainThreadExecutor::run_one() const {
         );
     }
 
-    std::move_only_function<void()> task;
+    MoveOnlyFunction<void()> task;
     {
         std::scoped_lock lock(m_state->mutex);
         if (m_state->tasks.empty()) {
@@ -64,7 +64,7 @@ void MainThreadExecutor::close() const noexcept {
     m_state->closed = true;
 }
 
-void MainThreadExecutor::enqueue(std::move_only_function<void()> task) const {
+void MainThreadExecutor::enqueue(MoveOnlyFunction<void()> task) const {
     std::scoped_lock lock(m_state->mutex);
     if (m_state->closed) {
         throw std::runtime_error("MainThreadExecutor is closed");

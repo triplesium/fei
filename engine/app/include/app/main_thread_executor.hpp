@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base/move_only_function.hpp"
+
 #include <cstddef>
 #include <functional>
 #include <future>
@@ -57,7 +59,7 @@ class MainThreadExecutor {
     class State;
     std::shared_ptr<State> m_state;
 
-    void enqueue(std::move_only_function<void()> task) const;
+    void enqueue(MoveOnlyFunction<void()> task) const;
 };
 
 } // namespace fei

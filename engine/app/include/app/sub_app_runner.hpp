@@ -1,10 +1,10 @@
 #pragma once
 
 #include "app/sub_app.hpp"
+#include "base/move_only_function.hpp"
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 
 namespace fei {
@@ -18,7 +18,7 @@ enum class SubAppExecutionMode : std::uint8_t {
 // through sub_app() is synchronized by the runner implementation.
 class SubAppRunner {
   public:
-    using ExecutionTask = std::move_only_function<void(SubApp&)>;
+    using ExecutionTask = MoveOnlyFunction<void(SubApp&)>;
 
     SubAppRunner() = default;
     SubAppRunner(const SubAppRunner&) = delete;

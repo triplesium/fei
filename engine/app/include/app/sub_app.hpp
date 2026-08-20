@@ -1,5 +1,6 @@
 #pragma once
 
+#include "base/move_only_function.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_set.hpp"
 #include "ecs/world.hpp"
@@ -7,7 +8,6 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <utility>
 #include <vector>
 
@@ -32,8 +32,8 @@ struct SubAppSourceContext {
 
 class SubApp {
   public:
-    using ExtractFn = std::move_only_function<void(World&, World&)>;
-    using ShutdownFn = std::move_only_function<void(World&)>;
+    using ExtractFn = MoveOnlyFunction<void(World&, World&)>;
+    using ShutdownFn = MoveOnlyFunction<void(World&)>;
 
     SubApp();
     SubApp(const SubApp&) = delete;

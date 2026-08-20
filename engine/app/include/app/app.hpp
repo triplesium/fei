@@ -1,7 +1,9 @@
 #pragma once
+
 #include "app/plugin_group.hpp"
 #include "app/sub_app_runner.hpp"
 #include "base/log.hpp"
+#include "base/move_only_function.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/event.hpp"
 #include "ecs/state.hpp"
@@ -97,7 +99,7 @@ class App {
     struct LabeledSubApp {
         TypeId label;
         std::unique_ptr<SubAppRunner> runner;
-        std::move_only_function<SubAppSource(World&)> source_selector;
+        MoveOnlyFunction<SubAppSource(World&)> source_selector;
     };
 
     // Declared first so the Main World outlives plugins and SubApps. Render

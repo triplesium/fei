@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base/move_only_function.hpp"
+
 #include "app/app.hpp"
 #include "app/sub_app_runner.hpp"
 #include "ecs/change_detection.hpp"
@@ -25,7 +27,7 @@ using RenderRunner = SubAppRunner;
 using InlineRenderRunner = InlineSubAppRunner;
 using ThreadedRenderRunner = ThreadedSubAppRunner;
 using RenderRunnerFactory =
-    std::move_only_function<std::unique_ptr<RenderRunner>(SubApp)>;
+    MoveOnlyFunction<std::unique_ptr<RenderRunner>(SubApp)>;
 
 inline constexpr ScheduleId RenderExtract =
     stable_type_hash("fei::RenderExtract");

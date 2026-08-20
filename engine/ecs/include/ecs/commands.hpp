@@ -1,5 +1,6 @@
 #pragma once
 
+#include "base/move_only_function.hpp"
 #include "ecs/fwd.hpp"
 #include "ecs/system.hpp"
 #include "ecs/world.hpp"
@@ -41,7 +42,7 @@ using ScheduleCommand = std::variant<
     ReplaceScheduleSystemCommand>;
 
 struct CommandsQueue {
-    using BatchCommand = std::move_only_function<void(World&)>;
+    using BatchCommand = MoveOnlyFunction<void(World&)>;
 
     std::queue<BatchCommand> after_batch_commands;
     std::vector<ScheduleCommand> after_schedule_commands;

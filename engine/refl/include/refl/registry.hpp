@@ -571,7 +571,7 @@ class Registry {
                     };
             };
             ops.destroy = [](const void*, void* ptr) noexcept {
-                static_cast<U*>(ptr)->~U();
+                std::destroy_at(static_cast<U*>(ptr));
             };
             if constexpr (OpsInfo::copy_assignable) {
                 ops.copy_assign = [](const void*, void* dest, const void* src) {
