@@ -1,0 +1,6 @@
+target("fei-graphics-webgpu-browser")
+    set_kind("static")
+    add_headerfiles("include/**.hpp")
+    add_files("src/*.cpp")
+    add_includedirs("include", {public = true})
+    add_deps("fei-graphics", "fei-graphics-webgpu")

@@ -3,9 +3,13 @@
 #include "base/log.hpp"
 #include "mipmap_generator.hpp"
 
+#ifdef __EMSCRIPTEN__
+#    include <emscripten.h>
+#else
+#    include <thread>
+#    include <webgpu/wgpu.h>
+#endif
 #include <string>
-#include <thread>
-#include <webgpu/wgpu.h>
 
 namespace fei {
 
@@ -23,8 +27,12 @@ std::string to_string(WGPUStringView value) {
 
 void wait_for(WGPUInstance instance, const bool& completed) {
     while (!completed) {
+#ifdef __EMSCRIPTEN__
+        emscripten_sleep(0);
+#else
         wgpuInstanceProcessEvents(instance);
         std::this_thread::yield();
+#endif
     }
 }
 
@@ -228,8 +236,12 @@ MipmapGeneratorWebGpu& WebGpuDeviceState::mipmap_generator() const {
 }
 
 void WebGpuDeviceState::poll(bool wait) const {
+#ifdef __EMSCRIPTEN__
+    static_cast<void>(wait);
+#else
     wgpuDevicePoll(m_device, wait, nullptr);
     wgpuInstanceProcessEvents(m_instance);
+#endif
 }
 
 void check_webgpu_error_scope(
@@ -243,10 +255,7 @@ void check_webgpu_error_scope(
         .userdata1 = &result,
     };
     wgpuDevicePopErrorScope(state.device(), callback);
-    while (!result.completed) {
-        state.poll();
-        std::this_thread::yield();
-    }
+    wait_for(state.instance(), result.completed);
     if (result.status != WGPUPopErrorScopeStatus_Success ||
         result.type != WGPUErrorType_NoError) {
         fatal("{} failed: {}", operation, result.message);

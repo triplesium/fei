@@ -20,7 +20,7 @@ namespace fei {
 namespace {
 
 struct MapRequest {
-    WGPUMapAsyncStatus status {WGPUMapAsyncStatus_Unknown};
+    WGPUMapAsyncStatus status {WGPUMapAsyncStatus_Force32};
     bool completed {false};
 };
 

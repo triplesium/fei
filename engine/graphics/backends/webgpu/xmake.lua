@@ -1,4 +1,6 @@
-add_requires("wgpu-native v27.0.4+0")
+if not is_plat("wasm") then
+    add_requires("wgpu-native v27.0.4+0")
+end
 
 target("fei-graphics-webgpu")
     set_kind("static")
@@ -7,7 +9,16 @@ target("fei-graphics-webgpu")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
     add_deps("fei-graphics", "fei-profiling")
-    add_packages("wgpu-native", {public = true})
+    if is_plat("wasm") then
+        add_cxflags("--use-port=emdawnwebgpu", {force = true, public = true})
+        add_ldflags(
+            "--use-port=emdawnwebgpu",
+            "-sASYNCIFY",
+            {force = true, public = true}
+        )
+    else
+        add_packages("wgpu-native", {public = true})
+    end
 
 target("fei-graphics-webgpu-tests")
     set_kind("binary")

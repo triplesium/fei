@@ -43,12 +43,16 @@ if is_plat("wasm") then
     set_toolchains("fei-emcc@emscripten")
 end
 
-add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "fastgltf v0.9.0")
-add_requires("box2d v3.1.1", {configs = {shared = false}})
-add_requires("luau 696", {configs = {shared = false, extern_c = false}})
-add_requires("yaml-cpp")
-add_requires("glfw", {configs = {shared = false}})
-add_requires("imgui v1.92.7-docking", {configs = {glfw = true, opengl3 = false}})
+if is_plat("wasm") then
+    add_requires("catch2", "nlohmann_json", "yaml-cpp")
+else
+    add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "fastgltf v0.9.0")
+    add_requires("box2d v3.1.1", {configs = {shared = false}})
+    add_requires("luau 696", {configs = {shared = false, extern_c = false}})
+    add_requires("yaml-cpp")
+    add_requires("glfw", {configs = {shared = false}})
+    add_requires("imgui v1.92.7-docking", {configs = {glfw = true, opengl3 = false}})
+end
 if has_config("tracy") then
     add_requires(
         "tracy v0.13.0",
@@ -152,7 +156,12 @@ rule_end()
 
 add_cxxflags("cl::/Zc:preprocessor")
 
-includes("tools")
-includes("engine")
-includes("samples")
-includes("tests")
+if is_plat("wasm") then
+    includes("tools/reflgen")
+    includes("engine")
+else
+    includes("tools")
+    includes("engine")
+    includes("samples")
+    includes("tests")
+end

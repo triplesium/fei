@@ -161,3 +161,22 @@ xmake f -p wasm --shader_targets=webgpu
 
 The Emscripten toolchain is an Xmake package, so a separate system `emcmake`
 invocation is not part of the workflow.
+
+The WASM configuration declares a reduced engine target graph. Desktop tools,
+samples, OpenGL, Vulkan, GLFW, ImGui, glTF importing, and their packages are not
+loaded. In particular, `glad`, `wgpu-native`, `glfw3webgpu`, `fastgltf`, and
+`simdjson` are not resolved for this platform.
+
+Browser WebGPU uses Emscripten's `emdawnwebgpu` port through
+`--use-port=emdawnwebgpu`. The shared surface swapchain lives in
+`fei-graphics-webgpu`; `fei-graphics-webgpu-browser` supplies canvas surface
+creation and uses `#canvas` by default. The development configuration enables
+Asyncify so the existing synchronous engine bootstrap can yield while browser
+adapter and device requests complete.
+
+The principal development targets can be built independently:
+
+```text
+xmake build -y fei-graphics-webgpu-browser
+xmake build -y fei-shader-webgpu
+```

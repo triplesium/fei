@@ -43,7 +43,11 @@ package("llvm-libclang")
     end)
 package_end()
 
-add_requires("cli11", "llvm-libclang")
+if is_plat("wasm") then
+    add_requires("cli11", "llvm-libclang", {host = true})
+else
+    add_requires("cli11", "llvm-libclang")
+end
 
 task("reflgen")
     on_run(function ()
@@ -61,6 +65,17 @@ target("fei-reflgen")
     set_kind("binary")
     set_default(false)
     set_policy("build.fence", true)
+    if is_plat("wasm") then
+        set_plat(os.host())
+        set_arch(os.arch())
+        if is_host("windows") then
+            set_toolchains("msvc")
+        elseif is_host("macosx") then
+            set_toolchains("clang")
+        else
+            set_toolchains("gcc")
+        end
+    end
     add_files("*.cpp")
     add_headerfiles("*.hpp")
     add_packages("llvm-libclang", "cli11")
