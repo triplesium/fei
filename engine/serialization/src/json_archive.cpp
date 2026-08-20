@@ -26,11 +26,11 @@ Result<SerializedNode, JsonError> json_to_node(const Json& json) {
     if (json.is_boolean()) {
         return SerializedNode::boolean(json.get<bool>());
     }
-    if (json.is_number_integer()) {
-        return SerializedNode::signed_integer(json.get<std::int64_t>());
-    }
     if (json.is_number_unsigned()) {
         return SerializedNode::unsigned_integer(json.get<std::uint64_t>());
+    }
+    if (json.is_number_integer()) {
+        return SerializedNode::signed_integer(json.get<std::int64_t>());
     }
     if (json.is_number_float()) {
         return SerializedNode::floating(json.get<double>());

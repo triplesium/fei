@@ -182,6 +182,11 @@ TEST_CASE("SerializedNode round trips through JSON", "[serialization][json]") {
     REQUIRE(object->size() == 2);
     REQUIRE((*object)[0].name == "name");
     REQUIRE(*(*object)[0].value.try_string() == "example");
+    const auto* values = (*object)[1].value.try_array();
+    REQUIRE(values != nullptr);
+    REQUIRE(values->size() == 3);
+    CHECK(*(*values)[0].try_signed_integer() == -2);
+    CHECK(*(*values)[1].try_unsigned_integer() == 4);
 }
 
 TEST_CASE(
