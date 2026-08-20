@@ -30,12 +30,12 @@ class MoveOnlyFunction<Return(Args...)> {
 
     template<typename Function>
         requires(
-            !std::same_as<std::remove_cvref_t<Function>, MoveOnlyFunction> &&
+            !std::same_as<std::decay_t<Function>, MoveOnlyFunction> &&
             std::is_invocable_r_v<Return, Function&, Args...>
         )
     MoveOnlyFunction(Function&& function) :
         m_function(
-            std::make_unique<Model<std::remove_cvref_t<Function>>>(
+            std::make_unique<Model<std::decay_t<Function>>>(
                 std::forward<Function>(function)
             )
         ) {}
@@ -52,7 +52,7 @@ class MoveOnlyFunction<Return(Args...)> {
 
     template<typename Function>
         requires(
-            !std::same_as<std::remove_cvref_t<Function>, MoveOnlyFunction> &&
+            !std::same_as<std::decay_t<Function>, MoveOnlyFunction> &&
             std::is_invocable_r_v<Return, Function&, Args...>
         )
     MoveOnlyFunction& operator=(Function&& function) {
