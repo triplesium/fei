@@ -3,6 +3,7 @@
 #include "ecs/system_config.hpp"
 #include "graphics/backend.hpp"
 #include "graphics_webgpu_glfw/runtime.hpp"
+#include "shader_webgpu/plugin.hpp"
 #include "window/window.hpp"
 
 #ifndef GLFW_INCLUDE_NONE
@@ -56,7 +57,7 @@ void install_graphics_bootstrap(App& app) {
 } // namespace
 
 void WebGpuGlfwPlugin::dependencies(PluginDependencies& dependencies) const {
-    dependencies.require(WindowPlugin(
+    dependencies.require<WebGpuShaderPlugin>().require(WindowPlugin(
         std::vector<GlfwWindowHint> {
             GlfwWindowHint {
                 .hint = GLFW_CLIENT_API,

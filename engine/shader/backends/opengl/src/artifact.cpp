@@ -1,4 +1,4 @@
-#include "shader_artifact.hpp"
+#include "artifact.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -769,7 +769,7 @@ std::string compile_opengl_glsl(const SpirvCrossCompiler& cross) {
 } // namespace
 
 ShaderArtifactGenerationOutput
-generate_shader_artifacts(const ShaderArtifactGenerationInput& input) {
+generate_opengl_shader_artifacts(const ShaderArtifactGenerationInput& input) {
     auto logical_names =
         make_logical_resource_names(input.logical_resource_names);
     SpirvCrossCompiler compiler(spirv_words(input.spirv));
@@ -781,12 +781,12 @@ generate_shader_artifacts(const ShaderArtifactGenerationInput& input) {
     rewrite_opengl_storage_buffer_blocks(glsl, resources);
 
     return ShaderArtifactGenerationOutput {
-        .opengl_source = std::move(glsl),
+        .source = std::move(glsl),
         .resources = std::move(resources),
     };
 }
 
-std::string shader_artifact_cache_identity() {
+std::string opengl_shader_artifact_cache_identity() {
     constexpr std::string_view artifact_version = "fei-shader-artifact-v4";
     auto* spirv_cross_version = spvc_get_commit_revision_and_timestamp();
     if (spirv_cross_version == nullptr) {

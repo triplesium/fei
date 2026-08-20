@@ -4,6 +4,7 @@
 #include "ecs/system_config.hpp"
 #include "graphics/backend.hpp"
 #include "graphics_vulkan_glfw/runtime.hpp"
+#include "shader_vulkan/plugin.hpp"
 #include "window/window.hpp"
 
 #ifndef GLFW_INCLUDE_NONE
@@ -91,7 +92,7 @@ void install_graphics_bootstrap(App& app) {
 } // namespace
 
 void VulkanGlfwPlugin::dependencies(PluginDependencies& dependencies) const {
-    dependencies.require(WindowPlugin(
+    dependencies.require<VulkanShaderPlugin>().require(WindowPlugin(
         std::vector<GlfwWindowHint> {
             GlfwWindowHint {
                 .hint = GLFW_CLIENT_API,

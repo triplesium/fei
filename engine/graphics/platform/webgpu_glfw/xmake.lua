@@ -7,7 +7,7 @@ target("fei-graphics-webgpu-glfw")
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
-    add_deps("fei-graphics", "fei-graphics-webgpu", "fei-window")
+    add_deps("fei-graphics", "fei-graphics-webgpu", "fei-shader-webgpu", "fei-window")
     add_packages("glfw", "wgpu-native", "glfw3webgpu")
 
 target("fei-graphics-webgpu-glfw-tests")

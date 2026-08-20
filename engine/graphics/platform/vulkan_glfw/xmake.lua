@@ -8,6 +8,7 @@ target("fei-graphics-vulkan-glfw")
     add_deps(
         "fei-graphics",
         "fei-graphics-vulkan",
+        "fei-shader-vulkan",
         "fei-window",
         "fei-profiling"
     )

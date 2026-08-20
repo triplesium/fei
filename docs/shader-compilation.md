@@ -1,9 +1,10 @@
 # Shader Compilation Pipeline
 
-Fei uses Slang as its shader frontend and SPIR-V as the common intermediate
-representation. A single compile produces the SPIR-V used by Vulkan, the GLSL
-used by OpenGL, and backend-independent resource metadata used to validate and
-bind resource layouts.
+Fei uses Slang as its shader frontend and reflection source. Runtime shader
+compilation targets the active graphics backend: Vulkan receives SPIR-V,
+WebGPU receives WGSL, and OpenGL receives GLSL generated from SPIR-V by
+SPIRV-Cross. Vulkan and WebGPU do not invoke or link SPIRV-Cross when OpenGL
+shader support is disabled.
 
 ## Compilation Chain
 
@@ -12,41 +13,33 @@ Slang source, entry point, stage, and defines
                     |
                     v
         Slang compile, link, and reflection
-                    |
-                    +---- imported-file dependency snapshots
-                    |
-                    v
-       SPIR-V + logical resource names
-                    |
-                    v
-          shader artifact generation
-            /                   \
-           v                     v
-SPIRV-Cross reflection    SPIRV-Cross GLSL
-           \                     /
-            v                   v
-       resource metadata + final backend names
-                    |
-                    v
-             ShaderDescription
-        (SPIR-V, GLSL, resources, stage)
-             /                 \
-            v                   v
-     Vulkan pipeline       OpenGL pipeline
+          /                 |                 \
+         v                  v                  v
+ Vulkan: SPIR-V       WebGPU: WGSL       OpenGL: SPIR-V
+         |                  |                  |
+         |                  |                  v
+         |                  |            SPIRV-Cross GLSL
+         |                  |                  |
+         +------------------+------------------+
+                            |
+                            v
+                  target ShaderDescription
+               + imported dependency snapshots
 ```
 
-`SlangLibraryShaderCompiler::compile()` performs the chain:
+`SlangLibraryShaderCompiler::compile()` performs the shared Slang chain, while
+the selected backend compiler supplies target policy and optional artifact
+generation:
 
-1. `compile_slang_to_spirv()` loads and links the requested Slang module and
-   entry point. It emits SPIR-V, records imported dependencies, and obtains
-   logical resource names from the linked Slang program layout.
-2. `generate_shader_artifacts()` reflects the SPIR-V resource kind, descriptor
-   set, binding, and array size. It also generates OpenGL GLSL with
-   SPIRV-Cross.
-3. Artifact generation reconciles the reflected resources with identifiers in
-   the final GLSL source.
-4. The compiler returns a `ShaderDescription` containing both shader forms and
-   the shared `ShaderResourceBinding` list.
+1. `compile_slang()` loads and links the requested Slang module and entry point
+   for the requested `ShaderCompileTarget`.
+2. Slang reflection produces resource kind, descriptor set, binding, array
+   size, and logical name for every target.
+3. Vulkan returns SPIR-V directly and WebGPU returns WGSL directly.
+4. OpenGL alone invokes `generate_opengl_shader_artifacts()` to generate GLSL
+   and reconcile Slang's logical resource names with final GLSL identifiers.
+5. The compiler returns a target-specific `ShaderDescription`; code fields for
+   other backends remain empty.
 
 Vulkan primarily identifies resources by descriptor set and binding. OpenGL
 has no equivalent descriptor-set interface, so its pipeline maps each layout
@@ -68,12 +61,11 @@ and must not be treated as interchangeable.
 
 The mapping is built in this order:
 
-1. Slang reflection records `(set, binding) -> logical name` from the linked
-   program layout.
-2. SPIRV-Cross reflects each SPIR-V resource and provides its descriptor
-   identity, kind, array shape, and IR name.
-3. Artifact generation joins the two results by `(set, binding)`. The logical
-   name becomes `ShaderResourceBinding::name`; the SPIR-V name is the fallback.
+1. Slang reflection records the logical name, kind, set, binding, and array
+   size from the target-specific linked program layout.
+2. Vulkan and WebGPU use this metadata without further reflection.
+3. For OpenGL, artifact generation joins the Slang result to SPIRV-Cross by
+   `(set, binding)`.
 4. SPIRV-Cross prepares the OpenGL identifiers. Combined image-sampler pairs
    can add multiple values to `backend_names` for one logical texture.
 5. After GLSL generation, uniform block names are read from the final source.
@@ -110,10 +102,35 @@ intended uniform buffer unbound.
 
 `ShaderVariantCompiler` caches the complete `ShaderDescription`, including GLSL
 and resource-name metadata. Any change that affects generated shader text or
-name mapping must therefore bump `shader_artifact_cache_identity()`. Otherwise
-an older artifact can keep using stale backend names after the compiler code is
-fixed.
+name mapping must therefore bump `opengl_shader_artifact_cache_identity()`.
+Otherwise an older artifact can keep using stale backend names after the
+compiler code is fixed.
 
 The imported-namespace regression in
-`engine/rendering/tests/shader_compiler.test.cpp` verifies that a uniform block's
+`engine/shader/tests/compiler.test.cpp` verifies that a uniform block's
 stored OpenGL name is the sanitized identifier present in the generated GLSL.
+
+## Build-Time Targets
+
+Shader compilation is split into four targets:
+
+- `fei-shader` owns shader assets, Slang compilation, reflection, dependency
+  snapshots, and the artifact cache.
+- `fei-shader-opengl` supplies SPIRV-Cross-based GLSL generation.
+- `fei-shader-vulkan` selects direct SPIR-V output.
+- `fei-shader-webgpu` selects direct WGSL output.
+
+The graphics platform plugins install the matching shader compiler provider,
+so applications do not need to select it separately. `fei-rendering` consumes
+only `fei-shader` and the provider interface.
+
+`shader_targets` controls which backend targets are enabled by default. Its
+default is `opengl,vulkan,webgpu`. For example, a WebGPU-only development build
+can configure:
+
+```text
+xmake f --shader_targets=webgpu
+```
+
+When `opengl` is absent, the SPIRV-Cross package is not declared and neither
+`fei-shader`, `fei-shader-webgpu`, nor `fei-rendering` links it.

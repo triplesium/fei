@@ -1,5 +1,6 @@
 #include "graphics/resource.hpp"
-#include "rendering/shader_compiler.hpp"
+#include "shader/compiler.hpp"
+#include "shader_opengl/plugin.hpp"
 
 #include <algorithm>
 #include <array>
@@ -187,7 +188,7 @@ PbrShaderCase pbr_shader_case(std::string_view shader_name) {
 
 const ShaderVariantCompileOutput&
 compile_pbr_shader_output(std::string_view shader_name) {
-    static SlangLibraryShaderCompiler compiler;
+    static OpenGLShaderCompiler compiler(ShaderCompileTarget::All);
     static ShaderVariantCompiler variant_compiler(
         compiler,
         RuntimeShaderCompilerConfig {
@@ -228,7 +229,7 @@ const ShaderDescription& compile_pbr_shader(std::string_view shader_name) {
 
 ShaderDescription
 compile_pbr_shader_with_defs(std::string_view shader_name, ShaderDefs defs) {
-    static SlangLibraryShaderCompiler compiler;
+    static OpenGLShaderCompiler compiler(ShaderCompileTarget::All);
     static ShaderVariantCompiler variant_compiler(
         compiler,
         RuntimeShaderCompilerConfig {

@@ -26,6 +26,12 @@ option("shader_spirv_cross_sdk")
     set_description("Path to a Vulkan/SPIRV-Cross SDK used by shader artifact generation")
 option_end()
 
+option("shader_targets")
+    set_default("opengl,vulkan,webgpu")
+    set_showmenu(true)
+    set_description("Comma-separated runtime shader targets to build")
+option_end()
+
 add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "fastgltf v0.9.0")
 add_requires("box2d v3.1.1", {configs = {shared = false}})
 add_requires("luau 696", {configs = {shared = false, extern_c = false}})

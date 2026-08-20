@@ -17,6 +17,8 @@
 #include "rendering/shader_cache.hpp"
 #include "rendering/view.hpp"
 #include "rendering/visibility.hpp"
+#include "shader_opengl/plugin.hpp"
+#include "shader_vulkan/plugin.hpp"
 #include "test_graphics_device.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -134,7 +136,10 @@ TEST_CASE(
     install_render_app(app);
     app.sub_app<RenderApp>().add_resource_as<GraphicsDevice>(
         FakeGraphicsDevice {}
-    );
+    ).add_resource(GraphicsBackendCapabilities {
+        .backend = GraphicsBackendKind::OpenGL,
+    });
+    app.add_plugin<OpenGLShaderPlugin>();
     app.add_plugin<RenderingPlugin>();
     app.finish();
 
@@ -142,7 +147,7 @@ TEST_CASE(
 
     auto& render_world = app.sub_app<RenderApp>().world();
     REQUIRE(render_world.has_local_resource<GraphicsDevice>());
-    REQUIRE(render_world.has_local_resource<SlangLibraryShaderCompiler>());
+    REQUIRE(render_world.has_local_resource<ShaderCompiler>());
     REQUIRE(render_world.has_local_resource<ShaderVariantCompiler>());
     REQUIRE(render_world.has_local_resource<PipelineCache>());
     REQUIRE(render_world.has_local_resource<RenderFrameContext>());
@@ -157,7 +162,7 @@ TEST_CASE(
     REQUIRE(render_world.has_local_resource<RenderAssets<GpuMesh>>());
 
     REQUIRE_FALSE(app.world().has_local_resource<PipelineCache>());
-    REQUIRE_FALSE(app.world().has_local_resource<SlangLibraryShaderCompiler>());
+    REQUIRE_FALSE(app.world().has_local_resource<ShaderCompiler>());
     REQUIRE_FALSE(app.world().has_local_resource<ShaderVariantCompiler>());
     REQUIRE_FALSE(app.world().has_local_resource<RenderFrameContext>());
     REQUIRE_FALSE(app.world().has_local_resource<RenderQueue>());
@@ -246,6 +251,7 @@ TEST_CASE(
 
     App app;
     app.add_plugin<AssetsPlugin>()
+        .add_plugin<VulkanShaderPlugin>()
         .add_resource_as<GraphicsBackendBootstrap>(
             BoxedGraphicsBackendBootstrap(
                 std::make_unique<FakeGraphicsBootstrap>(state)
@@ -264,6 +270,10 @@ TEST_CASE(
     REQUIRE(render_world.has_local_resource<GraphicsRuntime>());
     REQUIRE(render_world.has_local_resource<GraphicsDevice>());
     REQUIRE(render_world.has_local_resource<MainSwapchain>());
+    REQUIRE(
+        render_world.resource<ShaderVariantCompiler>().config().target ==
+        ShaderCompileTarget::Vulkan
+    );
     REQUIRE_FALSE(app.has_resource<GraphicsRuntime>());
     REQUIRE_FALSE(app.has_resource<GraphicsDevice>());
     REQUIRE_FALSE(app.has_resource<MainSwapchain>());

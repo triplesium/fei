@@ -3,7 +3,8 @@
 #include "asset/assets.hpp"
 #include "asset/server.hpp"
 #include "graphics/enums.hpp"
-#include "rendering/shader.hpp"
+#include "shader/shader.hpp"
+#include "shader_opengl/plugin.hpp"
 #include "test_graphics_device.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -626,7 +627,7 @@ float4 fragment_main() : SV_Target0
     );
     std::filesystem::remove_all(root / "shaders");
 
-    SlangLibraryShaderCompiler compiler;
+    OpenGLShaderCompiler compiler(ShaderCompileTarget::All);
     ShaderVariantCompiler variant_compiler(
         compiler,
         RuntimeShaderCompilerConfig {.shader_sources = registry}

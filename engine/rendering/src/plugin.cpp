@@ -26,11 +26,11 @@
 #include "rendering/render_frame.hpp"
 #include "rendering/render_queue.hpp"
 #include "rendering/resource_set_cache.hpp"
-#include "rendering/shader.hpp"
 #include "rendering/shader_cache.hpp"
-#include "rendering/shader_compiler.hpp"
 #include "rendering/view.hpp"
 #include "rendering/visibility.hpp"
+#include "shader/compiler.hpp"
+#include "shader/shader.hpp"
 
 #include <memory>
 #include <stdexcept>
@@ -46,6 +46,23 @@ std::filesystem::path default_shader_cache_root() {
 #else
     return std::filesystem::current_path() / "build" / "cache" / "shaders";
 #endif
+}
+
+ShaderCompileTarget shader_compile_target(const SubApp& render_app) {
+    if (!render_app.has_resource<GraphicsBackendCapabilities>()) {
+        return ShaderCompileTarget::All;
+    }
+    switch (render_app.resource<GraphicsBackendCapabilities>().backend) {
+        case GraphicsBackendKind::OpenGL:
+            return ShaderCompileTarget::OpenGL;
+        case GraphicsBackendKind::Vulkan:
+            return ShaderCompileTarget::Vulkan;
+        case GraphicsBackendKind::WebGpu:
+            return ShaderCompileTarget::WebGpu;
+        case GraphicsBackendKind::Unknown:
+            return ShaderCompileTarget::All;
+    }
+    return ShaderCompileTarget::All;
 }
 
 void validate_backend_execution_mode(SubAppExecutionMode execution_mode) {
@@ -195,11 +212,21 @@ void RenderingCorePlugin::setup(App& app) {
     render_app.add_shutdown(shutdown_graphics_runtime);
 
     app.resource<AssetServer>().emplace_source<ShaderAssetSource>();
-    render_app.add_resource(SlangLibraryShaderCompiler {});
+    if (!app.has_resource<ShaderCompilerProvider>()) {
+        throw std::runtime_error(
+            "RenderingPlugin requires a shader compiler provider; install a "
+            "graphics backend plugin first"
+        );
+    }
+    auto shader_compiler = app.resource<ShaderCompilerProvider>().create();
+    render_app.add_resource_as<ShaderCompiler>(
+        BoxedShaderCompiler(std::move(shader_compiler))
+    );
     render_app.add_resource(ShaderVariantCompiler(
-        render_app.resource<SlangLibraryShaderCompiler>(),
+        render_app.resource<ShaderCompiler>(),
         RuntimeShaderCompilerConfig {
             .cache_root = default_shader_cache_root(),
+            .target = shader_compile_target(render_app),
         }
     ));
 

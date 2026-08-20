@@ -36,7 +36,7 @@
 #include "pbr/vxgi.hpp"
 #include "profiling/profiling.hpp"
 #include "rendering/plugin.hpp"
-#include "rendering/shader.hpp"
+#include "shader/shader.hpp"
 #include "scene/plugin.hpp"
 #include "scripting_lua/asset.hpp"
 #include "scripting_lua/plugin.hpp"

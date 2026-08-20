@@ -1,6 +1,6 @@
-#include "shader_artifact_cache.hpp"
+#include "artifact_cache.hpp"
 
-#include "rendering/shader_compiler.hpp"
+#include "shader/compiler.hpp"
 
 #include <algorithm>
 #include <array>
@@ -212,6 +212,7 @@ std::optional<std::uint64_t> shader_cache_key(
     hasher.add(request.source_root.generic_string());
     hasher.add(static_cast<std::uint8_t>(request.stage));
     hasher.add(request.entry);
+    hasher.add(static_cast<std::uint8_t>(request.target));
     hasher.add(static_cast<std::uint64_t>(request.search_roots.size()));
     for (const auto& root : request.search_roots) {
         hasher.add(root.generic_string());

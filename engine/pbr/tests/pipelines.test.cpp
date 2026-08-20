@@ -11,7 +11,7 @@
 #include "pbr/pipeline_specializer.hpp"
 #include "rendering/material.hpp"
 #include "rendering/mesh/mesh.hpp"
-#include "rendering/shader.hpp"
+#include "shader/shader.hpp"
 #include "rendering/shader_cache.hpp"
 
 #include <algorithm>

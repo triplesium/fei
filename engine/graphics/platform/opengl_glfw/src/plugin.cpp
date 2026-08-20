@@ -3,6 +3,7 @@
 #include "ecs/system_config.hpp"
 #include "graphics/backend.hpp"
 #include "graphics_opengl_glfw/runtime.hpp"
+#include "shader_opengl/plugin.hpp"
 #include "window/window.hpp"
 
 #include <algorithm>
@@ -54,7 +55,7 @@ void install_graphics_bootstrap(App& app) {
 } // namespace
 
 void OpenGLGlfwPlugin::dependencies(PluginDependencies& dependencies) const {
-    dependencies.require(WindowPlugin(
+    dependencies.require<OpenGLShaderPlugin>().require(WindowPlugin(
         std::vector<GlfwWindowHint> {
             GlfwWindowHint {
                 .hint = GLFW_CLIENT_API,

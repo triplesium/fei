@@ -27,7 +27,7 @@
 #include "rendering/mesh/mesh.hpp"
 #include "rendering/mesh/mesh_factory.hpp"
 #include "rendering/plugin.hpp"
-#include "rendering/shader.hpp"
+#include "shader/shader.hpp"
 #include "window/input.hpp"
 
 #include <imgui.h>

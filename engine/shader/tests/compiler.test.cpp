@@ -1,4 +1,5 @@
-#include "rendering/shader_compiler.hpp"
+#include "shader/compiler.hpp"
+#include "shader_opengl/plugin.hpp"
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -78,7 +79,7 @@ float4 fragment_main() : SV_Target0
         },
     };
 
-    SlangLibraryShaderCompiler compiler;
+    OpenGLShaderCompiler compiler(ShaderCompileTarget::All);
 
     auto output = compiler.compile(request);
 
@@ -159,9 +160,10 @@ float4 fragment_main() : SV_Target0
         .logical_path = "shader.slang",
         .stage = ShaderStages::Fragment,
         .entry = "fragment_main",
+        .target = ShaderCompileTarget::Vulkan,
     };
 
-    SlangLibraryShaderCompiler compiler;
+    OpenGLShaderCompiler compiler(ShaderCompileTarget::All);
 
     auto output = compiler.compile(request);
 
@@ -170,7 +172,7 @@ float4 fragment_main() : SV_Target0
         INFO(output.error().diagnostics);
     }
     REQUIRE(output.has_value());
-    REQUIRE(output->description.resources.size() == 3);
+    REQUIRE(output->description.resources.size() == 8);
 
     const auto& material = require_resource(output->description, "material");
     CHECK(material.kind == ResourceKind::UniformBuffer);
@@ -181,6 +183,11 @@ float4 fragment_main() : SV_Target0
     CHECK(albedo.kind == ResourceKind::TextureReadOnly);
     CHECK(albedo.set == 2);
     CHECK(albedo.binding == 1);
+
+    const auto& normal = require_resource(output->description, "normal_map");
+    CHECK(normal.kind == ResourceKind::TextureReadOnly);
+    CHECK(normal.set == 2);
+    CHECK(normal.binding == 2);
 
     const auto& material_sampler =
         require_resource(output->description, "sampler");
@@ -220,7 +227,7 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID)
         .entry = "compute_main",
     };
 
-    SlangLibraryShaderCompiler compiler;
+    OpenGLShaderCompiler compiler(ShaderCompileTarget::All);
 
     auto output = compiler.compile(request);
 
@@ -283,7 +290,7 @@ void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID)
         .entry = "compute_main",
     };
 
-    SlangLibraryShaderCompiler compiler;
+    OpenGLShaderCompiler compiler(ShaderCompileTarget::All);
     auto output = compiler.compile(request);
 
     if (!output) {
@@ -335,7 +342,7 @@ float4 fragment_main() : SV_Target0
         .entry = "fragment_main",
     };
 
-    SlangLibraryShaderCompiler compiler;
+    OpenGLShaderCompiler compiler(ShaderCompileTarget::All);
     auto output = compiler.compile(request);
 
     if (!output) {
@@ -389,7 +396,7 @@ void geometry_main(
         .entry = "geometry_main",
     };
 
-    SlangLibraryShaderCompiler compiler;
+    OpenGLShaderCompiler compiler(ShaderCompileTarget::All);
     auto output = compiler.compile(request);
 
     if (!output) {
@@ -448,7 +455,7 @@ float4 fragment_main() : SV_Target0
         .entry = "fragment_main",
     };
 
-    SlangLibraryShaderCompiler compiler;
+    OpenGLShaderCompiler compiler(ShaderCompileTarget::All);
     auto output = compiler.compile(request);
 
     if (!output) {
@@ -515,7 +522,7 @@ float4 fragment_main() : SV_Target0
         .entry = "fragment_main",
     };
 
-    SlangLibraryShaderCompiler compiler;
+    OpenGLShaderCompiler compiler(ShaderCompileTarget::All);
 
     auto output = compiler.compile(request);
 
@@ -547,5 +554,94 @@ float4 fragment_main() : SV_Target0
             output->dependencies.end(),
             module_include_path.lexically_normal()
         ) != output->dependencies.end()
+    );
+}
+
+TEST_CASE(
+    "SlangLibraryShaderCompiler generates only the requested backend code",
+    "[rendering][shader-compiler][slang][target]"
+) {
+    auto root = std::filesystem::current_path() / "build" / "test" /
+                "slang-library-shader-compiler-target";
+    std::filesystem::remove_all(root);
+    auto source_path = root / "shader.slang";
+    write_text_file(
+        source_path,
+        R"(
+layout(set = 0, binding = 0) StructuredBuffer<uint> input_buffer;
+layout(set = 0, binding = 1) RWStructuredBuffer<uint> output_buffer;
+layout(set = 0, binding = 2) Texture2D<float4> input_textures[3];
+layout(set = 0, binding = 5, rgba32f) RWTexture2D<float4> output_texture;
+layout(set = 0, binding = 6) SamplerState input_sampler;
+
+[shader("compute")]
+[numthreads(1, 1, 1)]
+void compute_main(uint3 dispatch_thread_id : SV_DispatchThreadID)
+{
+    uint index = dispatch_thread_id.x;
+    output_buffer[index] = input_buffer[index];
+    output_texture[dispatch_thread_id.xy] =
+        input_textures[0].SampleLevel(input_sampler, float2(0.5), 0.0);
+}
+)"
+    );
+
+    auto request = ShaderCompileRequest {
+        .source_path = source_path,
+        .source_root = root,
+        .logical_path = "shader.slang",
+        .stage = ShaderStages::Compute,
+        .entry = "compute_main",
+        .target = ShaderCompileTarget::Vulkan,
+    };
+    OpenGLShaderCompiler compiler(ShaderCompileTarget::All);
+
+    auto vulkan = compiler.compile(request);
+    if (!vulkan) {
+        INFO(vulkan.error().message);
+        INFO(vulkan.error().diagnostics);
+    }
+    REQUIRE(vulkan.has_value());
+    CHECK_FALSE(vulkan->description.spirv.empty());
+    CHECK(vulkan->description.wgsl.empty());
+    CHECK(vulkan->description.source.empty());
+    CHECK(
+        require_resource(vulkan->description, "input_buffer").kind ==
+        ResourceKind::StorageBufferReadOnly
+    );
+    CHECK(
+        require_resource(vulkan->description, "output_buffer").kind ==
+        ResourceKind::StorageBufferReadWrite
+    );
+    const auto& input_textures =
+        require_resource(vulkan->description, "input_textures");
+    CHECK(input_textures.kind == ResourceKind::TextureReadOnly);
+    CHECK(input_textures.array_size == 3);
+    CHECK(
+        require_resource(vulkan->description, "output_texture").kind ==
+        ResourceKind::TextureReadWrite
+    );
+    CHECK(
+        require_resource(vulkan->description, "input_sampler").kind ==
+        ResourceKind::Sampler
+    );
+
+    request.target = ShaderCompileTarget::WebGpu;
+    auto webgpu = compiler.compile(request);
+    if (!webgpu) {
+        INFO(webgpu.error().message);
+        INFO(webgpu.error().diagnostics);
+    }
+    REQUIRE(webgpu.has_value());
+    CHECK(webgpu->description.spirv.empty());
+    CHECK_FALSE(webgpu->description.wgsl.empty());
+    CHECK(webgpu->description.source.empty());
+    CHECK(
+        require_resource(webgpu->description, "input_buffer").kind ==
+        ResourceKind::StorageBufferReadOnly
+    );
+    CHECK(
+        require_resource(webgpu->description, "output_texture").kind ==
+        ResourceKind::TextureReadWrite
     );
 }

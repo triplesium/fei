@@ -12,7 +12,7 @@
 #include "rendering/gpu_image.hpp"
 #include "rendering/material.hpp"
 #include "rendering/render_asset.hpp"
-#include "rendering/shader.hpp"
+#include "shader/shader.hpp"
 
 #include <memory>
 #include <vector>

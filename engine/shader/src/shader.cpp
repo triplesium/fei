@@ -1,4 +1,4 @@
-#include "rendering/shader.hpp"
+#include "shader/shader.hpp"
 
 #include <algorithm>
 #include <filesystem>

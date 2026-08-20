@@ -8,8 +8,8 @@
 #include "graphics/shader_defs.hpp"
 #include "graphics/shader_module.hpp"
 #include "rendering/extract.hpp"
-#include "rendering/shader.hpp"
-#include "rendering/shader_compiler.hpp"
+#include "shader/compiler.hpp"
+#include "shader/shader.hpp"
 
 #include <chrono>
 #include <filesystem>

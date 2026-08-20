@@ -1,21 +1,20 @@
-#include "rendering/shader_compiler.hpp"
+#include "shader/compiler.hpp"
 
+#include "artifact_cache.hpp"
 #include "base/log.hpp"
-#include "rendering/shader.hpp"
-#include "shader_artifact.hpp"
-#include "shader_artifact_cache.hpp"
+#include "shader/shader.hpp"
 
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <exception>
 #include <fstream>
 #include <iterator>
 #include <optional>
 #include <slang-com-ptr.h>
 #include <slang.h>
+#include <stdexcept>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -26,6 +25,14 @@ namespace {
 
 ShaderCompileError shader_compile_error(std::string message) {
     return ShaderCompileError {.message = std::move(message)};
+}
+
+bool shader_compile_target_enabled(
+    ShaderCompileTarget compiler_target,
+    ShaderCompileTarget requested_target
+) {
+    return compiler_target == ShaderCompileTarget::All ||
+           compiler_target == requested_target;
 }
 
 std::filesystem::path
@@ -184,6 +191,7 @@ make_runtime_shader_compile_request(
         .entry = std::move(entry),
         .defs = std::move(normalized_defs),
         .source_snapshot = std::move(source_snapshot),
+        .target = config.target,
     };
 }
 
@@ -366,33 +374,79 @@ std::string slang_variable_name(slang::VariableLayoutReflection& variable) {
     return name == nullptr ? std::string {} : std::string {name};
 }
 
-void append_slang_logical_resource_name(
-    std::vector<ShaderArtifactLogicalResourceName>& names,
+std::optional<ResourceKind>
+slang_resource_kind(slang::VariableLayoutReflection& parameter) {
+    auto* type_layout = parameter.getTypeLayout();
+    if (type_layout == nullptr) {
+        return std::nullopt;
+    }
+    type_layout = type_layout->unwrapArray();
+
+    const auto kind = type_layout->getKind();
+    if (kind == slang::TypeReflection::Kind::ConstantBuffer ||
+        parameter.getCategory() == slang::ParameterCategory::ConstantBuffer) {
+        return ResourceKind::UniformBuffer;
+    }
+    if (kind == slang::TypeReflection::Kind::SamplerState ||
+        parameter.getCategory() == slang::ParameterCategory::SamplerState) {
+        return ResourceKind::Sampler;
+    }
+
+    const auto shape =
+        type_layout->getResourceShape() & SLANG_RESOURCE_BASE_SHAPE_MASK;
+    const bool buffer =
+        shape == SLANG_STRUCTURED_BUFFER ||
+        shape == SLANG_BYTE_ADDRESS_BUFFER ||
+        kind == slang::TypeReflection::Kind::ShaderStorageBuffer;
+    const auto access = type_layout->getResourceAccess();
+    const bool writable = access != SLANG_RESOURCE_ACCESS_NONE &&
+                          access != SLANG_RESOURCE_ACCESS_READ;
+    if (buffer) {
+        return writable ? ResourceKind::StorageBufferReadWrite :
+                          ResourceKind::StorageBufferReadOnly;
+    }
+    if (kind == slang::TypeReflection::Kind::Resource ||
+        shape != SLANG_RESOURCE_NONE) {
+        return writable ? ResourceKind::TextureReadWrite :
+                          ResourceKind::TextureReadOnly;
+    }
+    return std::nullopt;
+}
+
+void append_slang_resource_binding(
+    std::vector<ShaderResourceBinding>& bindings,
     std::string name,
+    ResourceKind kind,
     uint32_t set,
-    uint32_t binding
+    uint32_t binding,
+    uint32_t array_size = 1
 ) {
     if (name.empty()) {
         return;
     }
 
     auto it = std::find_if(
-        names.begin(),
-        names.end(),
-        [&](const ShaderArtifactLogicalResourceName& resource) {
+        bindings.begin(),
+        bindings.end(),
+        [&](const ShaderResourceBinding& resource) {
             return resource.set == set && resource.binding == binding &&
                    resource.name == name;
         }
     );
-    if (it != names.end()) {
+    if (it != bindings.end()) {
         return;
     }
 
-    names.push_back(
-        ShaderArtifactLogicalResourceName {
+    auto backend_name = name;
+    bindings.push_back(
+        ShaderResourceBinding {
             .name = std::move(name),
+            .backend_name = backend_name,
+            .backend_names = {std::move(backend_name)},
+            .kind = kind,
             .set = set,
             .binding = binding,
+            .array_size = array_size,
         }
     );
 }
@@ -444,8 +498,8 @@ bool slang_parameter_block_set(
     return false;
 }
 
-void append_slang_parameter_block_logical_resource_names(
-    std::vector<ShaderArtifactLogicalResourceName>& names,
+void append_slang_parameter_block_resource_bindings(
+    std::vector<ShaderResourceBinding>& bindings,
     slang::VariableLayoutReflection& parameter
 ) {
     uint32_t set = 0;
@@ -464,9 +518,10 @@ void append_slang_parameter_block_logical_resource_names(
 
     uint32_t binding = 0;
     if (has_slang_ordinary_data(*element_layout)) {
-        append_slang_logical_resource_name(
-            names,
+        append_slang_resource_binding(
+            bindings,
             slang_variable_name(parameter),
+            ResourceKind::UniformBuffer,
             set,
             binding
         );
@@ -480,22 +535,27 @@ void append_slang_parameter_block_logical_resource_names(
             continue;
         }
 
-        append_slang_logical_resource_name(
-            names,
-            slang_variable_name(*field),
-            set,
-            binding
-        );
-
         auto* field_type_layout = field->getTypeLayout();
-        binding += field_type_layout == nullptr ?
-                       1 :
-                       slang_descriptor_binding_count(*field_type_layout);
+        const auto binding_count =
+            field_type_layout == nullptr ?
+                1 :
+                slang_descriptor_binding_count(*field_type_layout);
+        if (auto kind = slang_resource_kind(*field)) {
+            append_slang_resource_binding(
+                bindings,
+                slang_variable_name(*field),
+                *kind,
+                set,
+                binding,
+                binding_count
+            );
+        }
+        binding += binding_count;
     }
 }
 
-void append_slang_global_parameter_block_logical_resource_names(
-    std::vector<ShaderArtifactLogicalResourceName>& names,
+void append_slang_global_parameter_block_resource_bindings(
+    std::vector<ShaderResourceBinding>& bindings,
     slang::ProgramLayout& layout
 ) {
     auto* global_params = layout.getGlobalParamsTypeLayout();
@@ -509,12 +569,12 @@ void append_slang_global_parameter_block_logical_resource_names(
         if (field == nullptr || !is_slang_parameter_block(*field)) {
             continue;
         }
-        append_slang_parameter_block_logical_resource_names(names, *field);
+        append_slang_parameter_block_resource_bindings(bindings, *field);
     }
 }
 
-Result<std::vector<ShaderArtifactLogicalResourceName>, ShaderCompileError>
-slang_logical_resource_names(slang::IComponentType& linked_program) {
+Result<std::vector<ShaderResourceBinding>, ShaderCompileError>
+slang_resource_bindings(slang::IComponentType& linked_program) {
     Slang::ComPtr<slang::IBlob> layout_diagnostics;
     auto* layout = linked_program.getLayout(0, layout_diagnostics.writeRef());
     if (layout == nullptr) {
@@ -524,9 +584,9 @@ slang_logical_resource_names(slang::IComponentType& linked_program) {
         ));
     }
 
-    std::vector<ShaderArtifactLogicalResourceName> names;
+    std::vector<ShaderResourceBinding> bindings;
     const auto parameter_count = layout->getParameterCount();
-    names.reserve(parameter_count);
+    bindings.reserve(parameter_count);
     for (unsigned i = 0; i < parameter_count; ++i) {
         auto* parameter = layout->getParameterByIndex(i);
         if (parameter == nullptr) {
@@ -534,8 +594,8 @@ slang_logical_resource_names(slang::IComponentType& linked_program) {
         }
 
         if (is_slang_parameter_block(*parameter)) {
-            append_slang_parameter_block_logical_resource_names(
-                names,
+            append_slang_parameter_block_resource_bindings(
+                bindings,
                 *parameter
             );
             continue;
@@ -552,17 +612,26 @@ slang_logical_resource_names(slang::IComponentType& linked_program) {
             continue;
         }
 
-        append_slang_logical_resource_name(
-            names,
+        auto kind = slang_resource_kind(*parameter);
+        if (!kind) {
+            continue;
+        }
+        auto* type_layout = parameter->getTypeLayout();
+        append_slang_resource_binding(
+            bindings,
             slang_variable_name(*parameter),
+            *kind,
             static_cast<uint32_t>(space),
-            static_cast<uint32_t>(binding)
+            static_cast<uint32_t>(binding),
+            type_layout == nullptr ?
+                1 :
+                slang_descriptor_binding_count(*type_layout)
         );
     }
 
-    append_slang_global_parameter_block_logical_resource_names(names, *layout);
+    append_slang_global_parameter_block_resource_bindings(bindings, *layout);
 
-    return names;
+    return bindings;
 }
 
 struct SlangMacroStorage {
@@ -629,7 +698,7 @@ find_slang_entry_point(
 struct SlangCompileOutput {
     std::vector<std::byte> spirv;
     std::string wgsl;
-    std::vector<ShaderArtifactLogicalResourceName> logical_resource_names;
+    std::vector<ShaderResourceBinding> resources;
     std::vector<std::filesystem::path> dependencies;
     std::vector<ShaderDependencySnapshot> dependency_snapshots;
 };
@@ -879,7 +948,7 @@ Slang::ComPtr<TrackingSlangFileSystem> make_tracking_slang_file_system(
 }
 
 Result<SlangCompileOutput, ShaderCompileError>
-compile_slang_to_spirv(const ShaderCompileRequest& request) {
+compile_slang(const ShaderCompileRequest& request) {
     std::string source = request.source;
     if (source.empty()) {
         if (request.source_snapshot) {
@@ -909,11 +978,23 @@ compile_slang_to_spirv(const ShaderCompileRequest& request) {
         );
     }
 
+    const bool primary_is_wgsl = request.target == ShaderCompileTarget::WebGpu;
     slang::TargetDesc target_desc {};
-    target_desc.format = SLANG_SPIRV;
-    target_desc.profile = global_session->findProfile("glsl_450");
+    target_desc.format = primary_is_wgsl ? SLANG_WGSL : SLANG_SPIRV;
+    if (!primary_is_wgsl) {
+        target_desc.profile = global_session->findProfile("glsl_450");
+    }
 
-    auto macros = make_slang_macro_storage(request.defs);
+    auto primary_defs = request.defs;
+    if (primary_is_wgsl) {
+        std::erase_if(primary_defs, [](const ShaderDefVal& def) {
+            return def.name == "FEI_SHADER_TARGET_WGSL";
+        });
+        primary_defs.push_back(
+            ShaderDefVal::bool_def("FEI_SHADER_TARGET_WGSL")
+        );
+    }
+    auto macros = make_slang_macro_storage(std::move(primary_defs));
     auto search_roots = request.search_roots;
     if (search_roots.empty() && !request.source_root.empty()) {
         search_roots.push_back(request.source_root);
@@ -1008,19 +1089,31 @@ compile_slang_to_spirv(const ShaderCompileRequest& request) {
     );
     if (SLANG_FAILED(result) || !code) {
         return failure(slang_compile_error(
-            "Slang failed to generate SPIR-V",
+            primary_is_wgsl ? "Slang failed to generate WGSL" :
+                              "Slang failed to generate SPIR-V",
             code_diagnostics
         ));
     }
 
-    auto spirv = blob_bytes(code);
-    if (!spirv) {
-        return failure(std::move(spirv).error());
+    std::vector<std::byte> spirv;
+    std::string wgsl;
+    if (primary_is_wgsl) {
+        wgsl = blob_text(code);
+        if (!wgsl.empty() && wgsl.back() == '\0') {
+            wgsl.pop_back();
+        }
+        use_write_only_storage_texture_access(wgsl);
+    } else {
+        auto bytes = blob_bytes(code);
+        if (!bytes) {
+            return failure(std::move(bytes).error());
+        }
+        spirv = std::move(bytes).value();
     }
 
-    auto logical_resource_names = slang_logical_resource_names(*linked_program);
-    if (!logical_resource_names) {
-        return failure(std::move(logical_resource_names).error());
+    auto resources = slang_resource_bindings(*linked_program);
+    if (!resources) {
+        return failure(std::move(resources).error());
     }
 
     auto compile_wgsl = [&]() -> std::string {
@@ -1144,8 +1237,10 @@ compile_slang_to_spirv(const ShaderCompileRequest& request) {
         return wgsl;
     };
 
-    auto wgsl = request.stage == ShaderStages::Geometry ? std::string {} :
-                                                          compile_wgsl();
+    if (request.target == ShaderCompileTarget::All &&
+        request.stage != ShaderStages::Geometry) {
+        wgsl = compile_wgsl();
+    }
 
     std::vector<std::filesystem::path> dependencies;
     insert_unique_dependency(dependencies, request.source_path);
@@ -1161,26 +1256,32 @@ compile_slang_to_spirv(const ShaderCompileRequest& request) {
     );
 
     return SlangCompileOutput {
-        .spirv = std::move(spirv).value(),
+        .spirv = std::move(spirv),
         .wgsl = std::move(wgsl),
-        .logical_resource_names = std::move(logical_resource_names).value(),
+        .resources = std::move(resources).value(),
         .dependencies = std::move(dependencies),
         .dependency_snapshots = std::move(dependency_snapshots),
     };
 }
 
-Result<ShaderArtifactGenerationOutput, ShaderCompileError>
-generate_backend_artifacts(ShaderArtifactGenerationInput input) {
-    try {
-        return generate_shader_artifacts(input);
-    } catch (const std::exception& e) {
-        return failure(shader_compile_error(
-            std::string("Shader artifact generation failed: ") + e.what()
-        ));
+} // namespace
+
+BoxedShaderCompiler::BoxedShaderCompiler(
+    std::unique_ptr<ShaderCompiler> compiler
+) : m_compiler(std::move(compiler)) {
+    if (!m_compiler) {
+        throw std::invalid_argument("BoxedShaderCompiler requires a compiler");
     }
 }
 
-} // namespace
+std::string BoxedShaderCompiler::cache_identity() const {
+    return m_compiler->cache_identity();
+}
+
+Result<ShaderCompileOutput, ShaderCompileError>
+BoxedShaderCompiler::compile(ShaderCompileRequest request) {
+    return m_compiler->compile(std::move(request));
+}
 
 ShaderVariantCompiler::ShaderVariantCompiler(
     ShaderCompiler& compiler,
@@ -1344,31 +1445,74 @@ Result<ShaderDescription, ShaderCompileError> ShaderVariantCompiler::compile(
     return std::move(value.description);
 }
 
+SlangLibraryShaderCompiler::SlangLibraryShaderCompiler(
+    ShaderCompileTarget target,
+    ShaderArtifactGenerator* artifact_generator
+) : m_target(target), m_artifact_generator(artifact_generator) {}
+
 std::string SlangLibraryShaderCompiler::cache_identity() const {
     auto* build_tag = spGetBuildTagString();
     if (build_tag == nullptr) {
         return {};
     }
-    return std::string(build_tag) + '|' + shader_artifact_cache_identity();
+    std::string identity = std::string(build_tag) + "|fei-shader-compiler-v5";
+    if (m_artifact_generator != nullptr) {
+        identity += '|' + m_artifact_generator->cache_identity();
+    }
+    return identity;
 }
 
 Result<ShaderCompileOutput, ShaderCompileError>
 SlangLibraryShaderCompiler::compile(ShaderCompileRequest request) {
     request.defs = normalized_shader_defs(std::move(request.defs));
+    if (!shader_compile_target_enabled(m_target, request.target)) {
+        return failure(shader_compile_error(
+            "Requested shader target is disabled in this build"
+        ));
+    }
+    if (request.target == ShaderCompileTarget::WebGpu &&
+        request.stage == ShaderStages::Geometry) {
+        return failure(
+            shader_compile_error("WebGPU does not support geometry shaders")
+        );
+    }
 
-    auto slang = compile_slang_to_spirv(request);
+    auto slang = compile_slang(request);
     if (!slang) {
         return failure(std::move(slang).error());
     }
 
-    auto artifacts = generate_backend_artifacts(
-        ShaderArtifactGenerationInput {
-            .spirv = slang->spirv,
-            .logical_resource_names = slang->logical_resource_names,
+    std::string opengl_source;
+    auto resources = std::move(slang->resources);
+    if (request.target == ShaderCompileTarget::All ||
+        request.target == ShaderCompileTarget::OpenGL) {
+        if (m_artifact_generator == nullptr) {
+            return failure(shader_compile_error(
+                "OpenGL shader generation is unavailable for this compiler"
+            ));
         }
-    );
-    if (!artifacts) {
-        return failure(std::move(artifacts).error());
+        std::vector<ShaderArtifactLogicalResourceName> logical_resource_names;
+        logical_resource_names.reserve(resources.size());
+        for (const auto& resource : resources) {
+            logical_resource_names.push_back(
+                ShaderArtifactLogicalResourceName {
+                    .name = resource.name,
+                    .set = resource.set,
+                    .binding = resource.binding,
+                }
+            );
+        }
+        auto artifacts = m_artifact_generator->generate(
+            ShaderArtifactGenerationInput {
+                .spirv = slang->spirv,
+                .logical_resource_names = std::move(logical_resource_names),
+            }
+        );
+        if (!artifacts) {
+            return failure(std::move(artifacts).error());
+        }
+        opengl_source = std::move(artifacts->source);
+        resources = std::move(artifacts->resources);
     }
 
     auto dependencies = std::move(slang->dependencies);
@@ -1377,11 +1521,11 @@ SlangLibraryShaderCompiler::compile(ShaderCompileRequest request) {
         .description =
             ShaderDescription {
                 .stage = request.stage,
-                .source = std::move(artifacts->opengl_source),
+                .source = std::move(opengl_source),
                 .wgsl = std::move(slang->wgsl),
                 .spirv = std::move(slang->spirv),
                 .path = request.logical_path.string(),
-                .resources = std::move(artifacts->resources),
+                .resources = std::move(resources),
                 .defs = std::move(request.defs),
             },
         .dependencies = std::move(dependencies),
