@@ -4,7 +4,6 @@
 #include "app/sub_app_runner.hpp"
 #include "base/log.hpp"
 #include "base/move_only_function.hpp"
-#include "ecs/commands.hpp"
 #include "ecs/event.hpp"
 #include "ecs/state.hpp"
 #include "ecs/system_params.hpp"
@@ -27,6 +26,9 @@
 namespace fei {
 
 class PluginId;
+class App;
+
+using AppRunner = MoveOnlyFunction<void(App&&)>;
 
 enum MainSchedules : std::uint32_t {
     First,
@@ -111,6 +113,7 @@ class App {
     bool m_plugin_registry_frozen {false};
     std::unordered_set<TypeId> m_events;
     std::vector<LabeledSubApp> m_sub_apps;
+    AppRunner m_runner;
 
     App& add_boxed_plugin(
         TypeId plugin_type,
@@ -143,18 +146,11 @@ class App {
     }
 
   public:
-    App() {
-        add_resource<AppStates>();
-        add_resource<CommandsQueue>();
-        configure_sets(
-            RunFixedMainLoop,
-            chain(
-                RunFixedMainLoopSystems::BeforeFixedMainLoop {},
-                RunFixedMainLoopSystems::FixedMainLoop {},
-                RunFixedMainLoopSystems::AfterFixedMainLoop {}
-            )
-        );
-    }
+    App();
+    App(const App&) = delete;
+    App& operator=(const App&) = delete;
+    App(App&&) noexcept = default;
+    App& operator=(App&&) noexcept = default;
 
     template<typename E>
     App& add_event() {
@@ -410,6 +406,8 @@ class App {
         return *this;
     }
 
+    App& set_runner(AppRunner runner);
+
     void run_schedule(ScheduleId schedule) { m_world.run_schedule(schedule); }
 
     void finish();
@@ -420,6 +418,7 @@ class App {
     void run();
 
   private:
+    static void run_default(App&& app);
     SubAppSource resolve_sub_app_source(LabeledSubApp& entry);
 
     AppLifecycle m_lifecycle {AppLifecycle::Building};

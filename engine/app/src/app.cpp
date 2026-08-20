@@ -1,6 +1,7 @@
 #include "app/app.hpp"
 
 #include "base/env.hpp"
+#include "ecs/commands.hpp"
 #include "profiling/profiling.hpp"
 
 #include <chrono>
@@ -41,6 +42,27 @@ void run_profiled_schedule(App& app, ScheduleId schedule, const char* name) {
 }
 
 } // namespace
+
+App::App() : m_runner(run_default) {
+    add_resource<AppStates>();
+    add_resource<CommandsQueue>();
+    configure_sets(
+        RunFixedMainLoop,
+        chain(
+            RunFixedMainLoopSystems::BeforeFixedMainLoop {},
+            RunFixedMainLoopSystems::FixedMainLoop {},
+            RunFixedMainLoopSystems::AfterFixedMainLoop {}
+        )
+    );
+}
+
+App& App::set_runner(AppRunner runner) {
+    if (!runner) {
+        throw std::invalid_argument("App runner cannot be empty");
+    }
+    m_runner = std::move(runner);
+    return *this;
+}
 
 App& App::add_plugins(PluginGroupBuilder builder) {
     builder.finish(*this);
@@ -264,11 +286,7 @@ void App::shutdown() noexcept {
     m_lifecycle = AppLifecycle::Stopped;
 }
 
-void App::run() {
-    if (m_lifecycle == AppLifecycle::Stopped) {
-        return;
-    }
-
+void App::run_default(App&& app) {
     const auto exit_after_seconds =
         read_environment_variable<double>("FEI_EXIT_AFTER_SECONDS");
     const auto exit_after_frames =
@@ -277,14 +295,14 @@ void App::run() {
     std::uint64_t frame_count = 0;
 
     try {
-        startup();
+        app.startup();
         bool should_stop = false;
         while (!should_stop) {
-            update();
-            render();
+            app.update();
+            app.render();
             ++frame_count;
 
-            auto& app_states = m_world.resource<AppStates>();
+            auto& app_states = app.resource<AppStates>();
             if (exit_after_frames && frame_count >= *exit_after_frames) {
                 app_states.should_stop = true;
             }
@@ -299,9 +317,24 @@ void App::run() {
             should_stop = app_states.should_stop;
         }
     } catch (...) {
-        shutdown();
+        app.shutdown();
         throw;
     }
-    shutdown();
+    app.shutdown();
+}
+
+void App::run() {
+    if (m_lifecycle == AppLifecycle::Stopped) {
+        return;
+    }
+    if (m_lifecycle == AppLifecycle::Building) {
+        finish();
+    }
+    if (!m_runner) {
+        throw std::logic_error("App runner has already been consumed");
+    }
+
+    auto runner = std::move(m_runner);
+    runner(std::move(*this));
 }
 } // namespace fei
