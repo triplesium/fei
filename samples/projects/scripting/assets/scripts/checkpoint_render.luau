@@ -67,6 +67,23 @@ local function initialize(
         CheckpointArenaActor.new {kind = 2, health = 6}
     )
 
+    local physics_probe = commands:spawn(
+        Sprite.new {
+            image = enemy_image,
+            size = Vector2.new(0.38, 0.38),
+            color = Color4F.new(0.45, 0.9, 1.0, 1.0),
+            layer = 3,
+        },
+        Transform2d.new {position = Vector2.new(-1.25, 1.65)},
+        RigidBody2d.new {
+            gravity_scale = 0.15,
+            fixed_rotation = true,
+        },
+        Collider2d.circle(0.19),
+        LinearVelocity2d.new {value = Vector2.new(0.65, 0.0)},
+        CheckpointArenaPhysicsProbe.new()
+    )
+
     local ui_root = commands:spawn(
         ui.Node.new {
             width = ui.Length.percent(100.0),
@@ -213,6 +230,7 @@ local function initialize(
     state.initialized = 1
     state.player = player:id()
     state.enemy = enemy:id()
+    state.physics_probe = physics_probe:id()
     state.enemy_alive = 1
 end
 
@@ -392,6 +410,7 @@ return module {
             initialized = field(i32, 0),
             player = field(entity, 0),
             enemy = field(optional(entity), nil),
+            physics_probe = field(entity, 0),
             enemy_alive = field(i32, 0),
             turn = field(i32, 0),
             actions = field(i32, 0),
@@ -405,6 +424,7 @@ return module {
         ArenaStatusLabel = {},
         ArenaEnemyHealthFill = {},
         ArenaVictoryPanel = {},
+        CheckpointArenaPhysicsProbe = {},
     },
     resources = {
         CheckpointArenaState = {},

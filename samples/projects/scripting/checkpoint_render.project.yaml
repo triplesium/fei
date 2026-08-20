@@ -8,6 +8,7 @@ runtime:
     - Sprite
     - Input
     - Time
+    - PhysicsPlugin2d
     - ui::rendering::UiRendering
     - project_runtime::LuauScripts
 

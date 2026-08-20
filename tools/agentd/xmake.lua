@@ -67,11 +67,12 @@ target("fei-agentd-checkpoint-e2e-tests")
     set_kind("binary")
     set_default(false)
     add_rules("fei.test")
-    add_files("tests/e2e/checkpoint.test.cpp")
+    add_files("tests/e2e/*.test.cpp")
     add_deps(
         "fei-agentd-core",
         "fei-ctl",
-        "fei-snapshot-runtime-fixture"
+        "fei-snapshot-runtime-fixture",
+        "fei-runtime-host"
     )
     add_packages("cpp-httplib", "nlohmann_json")
     after_load(function(target)
@@ -79,14 +80,24 @@ target("fei-agentd-checkpoint-e2e-tests")
         local fixture_path = path.absolute(fixture:targetfile()):gsub("\\", "/")
         local ctl = target:dep("fei-ctl")
         local ctl_path = path.absolute(ctl:targetfile()):gsub("\\", "/")
+        local runtime_host = target:dep("fei-runtime-host")
+        local runtime_host_path =
+            path.absolute(runtime_host:targetfile()):gsub("\\", "/")
         local project_path = path.join(
             os.projectdir(),
             "tests/fixtures/checkpoint_project/project.yaml"
+        ):gsub("\\", "/")
+        local checkpoint_render_project_path = path.join(
+            os.projectdir(),
+            "samples/projects/scripting/checkpoint_render.project.yaml"
         ):gsub("\\", "/")
         target:add(
             "defines",
             "FEI_SNAPSHOT_RUNTIME_FIXTURE_PATH=\"" .. fixture_path .. "\"",
             "FEI_CTL_PATH=\"" .. ctl_path .. "\"",
-            "FEI_CHECKPOINT_PROJECT_PATH=\"" .. project_path .. "\""
+            "FEI_CHECKPOINT_PROJECT_PATH=\"" .. project_path .. "\"",
+            "FEI_RUNTIME_HOST_PATH=\"" .. runtime_host_path .. "\"",
+            "FEI_CHECKPOINT_RENDER_PROJECT_PATH=\"" ..
+                checkpoint_render_project_path .. "\""
         )
     end)

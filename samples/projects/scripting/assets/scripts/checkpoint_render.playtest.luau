@@ -54,6 +54,10 @@ local function observe(ctx)
     local player_transform = player_entity:get(Transform2d)
     local player_actor = player_entity:get(CheckpointArenaActor)
     local player_controller = player_entity:get(CheckpointArenaPlayer)
+    local physics_probe = ctx:entity(state.physics_probe)
+    assert(physics_probe ~= nil, "checkpoint arena physics probe is missing")
+    local physics_transform = physics_probe:get(Transform2d)
+    local physics_velocity = physics_probe:get(LinearVelocity2d)
 
     local enemy_health = 0
     local enemy_x = 0.0
@@ -74,6 +78,12 @@ local function observe(ctx)
             grounded = player_controller.grounded ~= 0,
             health = player_actor.health,
         },
+        physics = {
+            x = physics_transform.position.x,
+            y = physics_transform.position.y,
+            velocity_x = physics_velocity.value.x,
+            velocity_y = physics_velocity.value.y,
+        },
         enemy = {
             alive = state.enemy_alive ~= 0,
             x = enemy_x,
@@ -93,6 +103,8 @@ return playtest {
         CheckpointArenaActor = "sample.checkpoint_render.CheckpointArenaActor",
         CheckpointArenaPlayer = "sample.checkpoint_render.CheckpointArenaPlayer",
         CheckpointArenaState = "sample.checkpoint_render.CheckpointArenaState",
+        CheckpointArenaPhysicsProbe =
+            "sample.checkpoint_render.CheckpointArenaPhysicsProbe",
     },
 
     ticks = {
@@ -142,9 +154,27 @@ return playtest {
                 },
                 additionalProperties = false,
             },
+            physics = {
+                type = "object",
+                properties = {
+                    x = {type = "number"},
+                    y = {type = "number"},
+                    velocity_x = {type = "number"},
+                    velocity_y = {type = "number"},
+                },
+                required = {"x", "y", "velocity_x", "velocity_y"},
+                additionalProperties = false,
+            },
             enemy = {type = "object"},
         },
-        required = {"turn", "actions", "score", "player", "enemy"},
+        required = {
+            "turn",
+            "actions",
+            "score",
+            "player",
+            "physics",
+            "enemy",
+        },
         additionalProperties = false,
     },
 
