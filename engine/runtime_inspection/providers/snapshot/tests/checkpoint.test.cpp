@@ -6,6 +6,8 @@
 #include "runtime_inspection/registry.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <filesystem>
 #include <nlohmann/json.hpp>
 
 using namespace fei;
@@ -50,6 +52,51 @@ Entity find_position_entity(const World& world) {
     }
     return {};
 }
+
+snapshot::SnapshotArchiveMetadata archive_metadata() {
+    return {
+        .project = "checkpoint-inspection-test",
+        .engine_build = "test-build-1",
+        .runtime_signature = "test-runtime",
+        .script_hash = "no-scripts",
+    };
+}
+
+void install_archive_resources(World& world) {
+    world.add_resource(snapshot::CheckpointStore {});
+    world.add_resource(archive_metadata());
+    auto& snapshot_registry =
+        world.resource<snapshot::CheckpointStore>().registry();
+    snapshot_registry.resource<snapshot::CheckpointStore>(
+        snapshot::ResourcePolicy::Ignore
+    );
+    snapshot_registry.resource<snapshot::SnapshotArchiveMetadata>(
+        snapshot::ResourcePolicy::Ignore
+    );
+}
+
+class CheckpointTempDirectory {
+  private:
+    std::filesystem::path m_path;
+
+  public:
+    CheckpointTempDirectory() {
+        const auto suffix =
+            std::chrono::steady_clock::now().time_since_epoch().count();
+        m_path = std::filesystem::temp_directory_path() /
+                 ("fei-checkpoint-inspection-" + std::to_string(suffix));
+        std::filesystem::create_directories(m_path);
+    }
+
+    ~CheckpointTempDirectory() {
+        std::error_code error;
+        std::filesystem::remove_all(m_path, error);
+    }
+
+    std::filesystem::path file(std::string_view name) const {
+        return m_path / name;
+    }
+};
 
 } // namespace
 
@@ -239,4 +286,127 @@ TEST_CASE(
     );
     REQUIRE_FALSE(non_empty_list);
     CHECK(non_empty_list.error().kind == InspectionErrorKind::InvalidRequest);
+}
+
+TEST_CASE(
+    "Checkpoint inspection providers export and import disk archives",
+    "[runtime-inspection][snapshot][checkpoint][archive]"
+) {
+    register_types();
+    CheckpointTempDirectory temporary;
+    const auto path = temporary.file("turn-0.fei-snapshot.json");
+
+    World source;
+    install_archive_resources(source);
+    const auto original = source.entity();
+    source.add_component(original, Position {.x = 23});
+
+    InspectionRegistry registry;
+    REQUIRE(register_checkpoint_inspection_providers(registry));
+    registry.freeze();
+    REQUIRE(registry.dispatch(
+        source,
+        invocation(
+            CreateCheckpointProvider::id,
+            CreateCheckpointProvider::schema,
+            R"({"name":"turn-0","strict":true})"
+        )
+    ));
+
+    const auto file_request =
+        nlohmann::json {{"name", "turn-0"}, {"path", path.string()}}.dump();
+    auto exported = registry.dispatch(
+        source,
+        invocation(
+            ExportCheckpointProvider::id,
+            ExportCheckpointProvider::schema,
+            file_request
+        )
+    );
+    REQUIRE(exported);
+    const auto exported_json = nlohmann::json::parse(*exported);
+    CHECK(exported_json.at("name") == "turn-0");
+    CHECK(exported_json.at("entity_count") == 1);
+    CHECK(exported_json.at("file_size").get<std::size_t>() > 0);
+    CHECK(std::filesystem::exists(path));
+
+    World changed_topology;
+    install_archive_resources(changed_topology);
+    changed_topology.add_systems(0x7a10, [] {
+    });
+    const auto topology_mismatch = registry.dispatch(
+        changed_topology,
+        invocation(
+            ImportCheckpointProvider::id,
+            ImportCheckpointProvider::schema,
+            file_request
+        )
+    );
+    REQUIRE_FALSE(topology_mismatch);
+    CHECK(topology_mismatch.error().kind == InspectionErrorKind::Conflict);
+    CHECK(
+        topology_mismatch.error().message.find("runtime_signature") !=
+        std::string::npos
+    );
+
+    World target;
+    install_archive_resources(target);
+    const auto import_request =
+        nlohmann::json {{"name", "from-disk"}, {"path", path.string()}}.dump();
+    auto imported = registry.dispatch(
+        target,
+        invocation(
+            ImportCheckpointProvider::id,
+            ImportCheckpointProvider::schema,
+            import_request
+        )
+    );
+    REQUIRE(imported);
+    CHECK(nlohmann::json::parse(*imported).at("name") == "from-disk");
+
+    REQUIRE(registry.dispatch(
+        target,
+        invocation(
+            RestoreCheckpointProvider::id,
+            RestoreCheckpointProvider::schema,
+            R"({"name":"from-disk"})"
+        )
+    ));
+    const auto restored = find_position_entity(target);
+    REQUIRE(target.has_entity(restored));
+    CHECK(target.get_component<Position>(restored).x == 23);
+
+    target.resource<snapshot::SnapshotArchiveMetadata>().engine_build =
+        "different-build";
+    const auto incompatible = registry.dispatch(
+        target,
+        invocation(
+            ImportCheckpointProvider::id,
+            ImportCheckpointProvider::schema,
+            import_request
+        )
+    );
+    REQUIRE_FALSE(incompatible);
+    CHECK(incompatible.error().kind == InspectionErrorKind::Conflict);
+    CHECK(
+        incompatible.error().message.find("engine_build") != std::string::npos
+    );
+
+    target.resource<snapshot::SnapshotArchiveMetadata>().engine_build =
+        archive_metadata().engine_build;
+    target.resource<snapshot::SnapshotArchiveMetadata>().script_hash =
+        "changed-scripts";
+    const auto changed_scripts = registry.dispatch(
+        target,
+        invocation(
+            ImportCheckpointProvider::id,
+            ImportCheckpointProvider::schema,
+            import_request
+        )
+    );
+    REQUIRE_FALSE(changed_scripts);
+    CHECK(changed_scripts.error().kind == InspectionErrorKind::Conflict);
+    CHECK(
+        changed_scripts.error().message.find("script_hash") != std::string::npos
+    );
 }

@@ -4,6 +4,7 @@
 #include "serialization/json_archive.hpp"
 #include "serialization/node.hpp"
 
+#include <filesystem>
 #include <string>
 #include <utility>
 
@@ -30,7 +31,11 @@ InspectionError snapshot_error(const snapshot::SnapshotError& error) {
         case snapshot::SnapshotError::Kind::InvalidEntityReference:
         case snapshot::SnapshotError::Kind::SerializeFailed:
         case snapshot::SnapshotError::Kind::StrictAuditFailed:
+        case snapshot::SnapshotError::Kind::PersistentStateUnsupported:
             kind = InspectionErrorKind::Unsupported;
+            break;
+        case snapshot::SnapshotError::Kind::ArchiveFormatFailed:
+            kind = InspectionErrorKind::InvalidRequest;
             break;
         default:
             kind = InspectionErrorKind::Conflict;
@@ -40,6 +45,70 @@ InspectionError snapshot_error(const snapshot::SnapshotError& error) {
         .kind = kind,
         .message = error.path.empty() ? error.message :
                                         error.path + ": " + error.message,
+    };
+}
+
+Result<CheckpointFileRequest, InspectionError>
+parse_checkpoint_file_request(std::string_view request_json) {
+    auto node = serialization::read_json(request_json);
+    if (!node) {
+        return failure(
+            InspectionError {
+                .kind = InspectionErrorKind::InvalidRequest,
+                .message = std::move(node.error().message),
+            }
+        );
+    }
+    const auto* object = node->try_object();
+    if (object == nullptr || object->size() != 2) {
+        return failure(
+            InspectionError {
+                .kind = InspectionErrorKind::InvalidRequest,
+                .message = "Checkpoint file request requires a name and path",
+            }
+        );
+    }
+    const auto* name = serialization::find_field(*object, "name");
+    const auto* path = serialization::find_field(*object, "path");
+    if (name == nullptr || !name->value.is_string()) {
+        return failure(
+            InspectionError {
+                .kind = InspectionErrorKind::InvalidRequest,
+                .message = "Checkpoint name must be a string",
+            }
+        );
+    }
+    if (path == nullptr || !path->value.is_string() ||
+        path->value.try_string()->empty()) {
+        return failure(
+            InspectionError {
+                .kind = InspectionErrorKind::InvalidRequest,
+                .message = "Checkpoint archive path must be a non-empty string",
+            }
+        );
+    }
+    if (path->value.try_string()->size() > 4096) {
+        return failure(
+            InspectionError {
+                .kind = InspectionErrorKind::InvalidRequest,
+                .message = "Checkpoint archive path must not exceed 4096 bytes",
+            }
+        );
+    }
+    for (const auto& field : *object) {
+        if (field.name != "name" && field.name != "path") {
+            return failure(
+                InspectionError {
+                    .kind = InspectionErrorKind::InvalidRequest,
+                    .message = "Unknown checkpoint file request field '" +
+                               field.name + "'",
+                }
+            );
+        }
+    }
+    return CheckpointFileRequest {
+        .name = *name->value.try_string(),
+        .path = *path->value.try_string(),
     };
 }
 
@@ -148,6 +217,21 @@ SerializedNode checkpoint_info_node(const snapshot::CheckpointInfo& info) {
     });
 }
 
+SerializedNode
+checkpoint_file_response_node(const CheckpointFileResponse& response) {
+    auto object = *checkpoint_info_node(response.checkpoint).try_object();
+    object.push_back(
+        SerializedField {"path", SerializedNode::string(response.path)}
+    );
+    object.push_back(
+        SerializedField {
+            "file_size",
+            SerializedNode::unsigned_integer(response.file_size),
+        }
+    );
+    return SerializedNode::object(std::move(object));
+}
+
 SerializedNode audit_entry_node(const snapshot::SnapshotAuditEntry& entry) {
     return SerializedNode::object({
         SerializedField {"type", SerializedNode::string(entry.type_name)},
@@ -208,6 +292,47 @@ checkpoint_store(const World& world) {
     return world.resource<snapshot::CheckpointStore>();
 }
 
+Result<snapshot::SnapshotArchiveMetadata, InspectionError>
+archive_metadata(const World& world) {
+    if (!world.has_resource<snapshot::SnapshotArchiveMetadata>()) {
+        return failure(
+            InspectionError {
+                .kind = InspectionErrorKind::Unsupported,
+                .message = "Runtime snapshot archive metadata is not installed",
+            }
+        );
+    }
+    auto metadata = world.resource<snapshot::SnapshotArchiveMetadata>();
+    auto runtime_signature = snapshot::runtime_compatibility_signature(world);
+    if (!runtime_signature) {
+        return failure(snapshot_error(runtime_signature.error()));
+    }
+    metadata.runtime_signature += ":" + *runtime_signature;
+    return metadata;
+}
+
+Result<CheckpointFileResponse, InspectionError> file_response(
+    snapshot::CheckpointInfo checkpoint,
+    const std::filesystem::path& path
+) {
+    std::error_code error;
+    const auto size = std::filesystem::file_size(path, error);
+    if (error) {
+        return failure(
+            InspectionError {
+                .kind = InspectionErrorKind::Internal,
+                .message = "Failed to inspect snapshot archive '" +
+                           path.string() + "': " + error.message(),
+            }
+        );
+    }
+    return CheckpointFileResponse {
+        .checkpoint = std::move(checkpoint),
+        .path = path.string(),
+        .file_size = static_cast<std::size_t>(size),
+    };
+}
+
 } // namespace
 
 Result<CreateCheckpointProvider::Response, InspectionError>
@@ -224,6 +349,48 @@ CreateCheckpointProvider::inspect(
         return failure(snapshot_error(result.error()));
     }
     return std::move(*result);
+}
+
+Result<ExportCheckpointProvider::Response, InspectionError>
+ExportCheckpointProvider::inspect(
+    World& world,
+    const CheckpointFileRequest& request
+) const {
+    auto store = checkpoint_store(world);
+    if (!store) {
+        return failure(std::move(store.error()));
+    }
+    auto metadata = archive_metadata(static_cast<const World&>(world));
+    if (!metadata) {
+        return failure(std::move(metadata.error()));
+    }
+    const std::filesystem::path path {request.path};
+    auto exported = store->export_file(request.name, path, *metadata);
+    if (!exported) {
+        return failure(snapshot_error(exported.error()));
+    }
+    return file_response(std::move(*exported), path);
+}
+
+Result<ImportCheckpointProvider::Response, InspectionError>
+ImportCheckpointProvider::inspect(
+    World& world,
+    const CheckpointFileRequest& request
+) const {
+    auto store = checkpoint_store(world);
+    if (!store) {
+        return failure(std::move(store.error()));
+    }
+    auto metadata = archive_metadata(static_cast<const World&>(world));
+    if (!metadata) {
+        return failure(std::move(metadata.error()));
+    }
+    const std::filesystem::path path {request.path};
+    auto imported = store->import_file(request.name, path, *metadata);
+    if (!imported) {
+        return failure(snapshot_error(imported.error()));
+    }
+    return file_response(std::move(*imported), path);
 }
 
 Result<DeleteCheckpointProvider::Response, InspectionError>
@@ -312,6 +479,32 @@ create_checkpoint_json(World& world, std::string_view request_json) {
         return failure(std::move(response.error()));
     }
     return encode_node(checkpoint_info_node(*response));
+}
+
+Result<std::string, InspectionError>
+export_checkpoint_json(World& world, std::string_view request_json) {
+    auto request = parse_checkpoint_file_request(request_json);
+    if (!request) {
+        return failure(std::move(request.error()));
+    }
+    auto response = ExportCheckpointProvider {}.inspect(world, *request);
+    if (!response) {
+        return failure(std::move(response.error()));
+    }
+    return encode_node(checkpoint_file_response_node(*response));
+}
+
+Result<std::string, InspectionError>
+import_checkpoint_json(World& world, std::string_view request_json) {
+    auto request = parse_checkpoint_file_request(request_json);
+    if (!request) {
+        return failure(std::move(request.error()));
+    }
+    auto response = ImportCheckpointProvider {}.inspect(world, *request);
+    if (!response) {
+        return failure(std::move(response.error()));
+    }
+    return encode_node(checkpoint_file_response_node(*response));
 }
 
 Result<std::string, InspectionError>
@@ -452,6 +645,22 @@ register_checkpoint_inspection_providers(InspectionRegistry& registry) {
     auto status = registry.add<CreateCheckpointProvider>(
         [](World& world, std::string_view payload_json) {
             return create_checkpoint_json(world, payload_json);
+        }
+    );
+    if (!status) {
+        return status;
+    }
+    status = registry.add<ExportCheckpointProvider>(
+        [](World& world, std::string_view payload_json) {
+            return export_checkpoint_json(world, payload_json);
+        }
+    );
+    if (!status) {
+        return status;
+    }
+    status = registry.add<ImportCheckpointProvider>(
+        [](World& world, std::string_view payload_json) {
+            return import_checkpoint_json(world, payload_json);
         }
     );
     if (!status) {

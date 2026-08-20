@@ -3,7 +3,7 @@
 #include "base/result.hpp"
 #include "runtime_inspection/provider.hpp"
 #include "runtime_inspection/registry.hpp"
-#include "snapshot/world_snapshot.hpp"
+#include "snapshot/archive.hpp"
 
 #include <cstddef>
 #include <string>
@@ -26,6 +26,17 @@ struct CheckpointListRequest {};
 struct CheckpointAuditRequest {};
 
 struct CheckpointClearRequest {};
+
+struct CheckpointFileRequest {
+    std::string name;
+    std::string path;
+};
+
+struct CheckpointFileResponse {
+    snapshot::CheckpointInfo checkpoint;
+    std::string path;
+    std::size_t file_size {};
+};
 
 struct CheckpointRestoreResponse {
     std::string name;
@@ -74,6 +85,72 @@ class CreateCheckpointProvider {
             "byte_size":{"type":"integer","minimum":0}
         }
     })json"};
+
+    [[nodiscard]] Result<Response, InspectionError>
+    inspect(World& world, const Request& request) const;
+};
+
+class ExportCheckpointProvider {
+  public:
+    using Request = CheckpointFileRequest;
+    using Response = CheckpointFileResponse;
+
+    static constexpr std::string_view id {"play.checkpoint.export"};
+    static constexpr std::string_view label {"Export Play Checkpoint"};
+    static constexpr std::string_view description {
+        "Persist a named in-memory checkpoint to a local snapshot archive."
+    };
+    static constexpr std::string_view schema {"play.checkpoint.export.v1"};
+    static constexpr bool read_only {false};
+    static constexpr InspectionCost cost {InspectionCost::Moderate};
+    static constexpr std::string_view request_schema_json {R"json({
+        "type":"object",
+        "additionalProperties":false,
+        "required":["name","path"],
+        "properties":{
+            "name":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,64}$"},
+            "path":{"type":"string","minLength":1,"maxLength":4096}
+        }
+    })json"};
+    static constexpr std::string_view response_schema_json {R"json({
+        "type":"object",
+        "additionalProperties":false,
+        "required":["name","revision","entity_count","resource_count","byte_size","path","file_size"],
+        "properties":{
+            "name":{"type":"string"},
+            "revision":{"type":"integer","minimum":1},
+            "entity_count":{"type":"integer","minimum":0},
+            "resource_count":{"type":"integer","minimum":0},
+            "byte_size":{"type":"integer","minimum":0},
+            "path":{"type":"string"},
+            "file_size":{"type":"integer","minimum":0}
+        }
+    })json"};
+
+    [[nodiscard]] Result<Response, InspectionError>
+    inspect(World& world, const Request& request) const;
+};
+
+class ImportCheckpointProvider {
+  public:
+    using Request = CheckpointFileRequest;
+    using Response = CheckpointFileResponse;
+
+    static constexpr std::string_view id {"play.checkpoint.import"};
+    static constexpr std::string_view label {"Import Play Checkpoint"};
+    static constexpr std::string_view description {
+        "Load a compatible local snapshot archive into the in-memory "
+        "checkpoint store."
+    };
+    static constexpr std::string_view schema {"play.checkpoint.import.v1"};
+    static constexpr bool read_only {false};
+    static constexpr InspectionCost cost {InspectionCost::Moderate};
+    static constexpr std::string_view request_schema_json {
+        ExportCheckpointProvider::request_schema_json
+    };
+    static constexpr std::string_view response_schema_json {
+        ExportCheckpointProvider::response_schema_json
+    };
 
     [[nodiscard]] Result<Response, InspectionError>
     inspect(World& world, const Request& request) const;
@@ -213,6 +290,8 @@ class ClearCheckpointsProvider {
 };
 
 static_assert(InspectionProvider<CreateCheckpointProvider>);
+static_assert(InspectionProvider<ExportCheckpointProvider>);
+static_assert(InspectionProvider<ImportCheckpointProvider>);
 static_assert(InspectionProvider<ListCheckpointsProvider>);
 static_assert(InspectionProvider<RestoreCheckpointProvider>);
 static_assert(InspectionProvider<AuditCheckpointProvider>);
@@ -221,6 +300,12 @@ static_assert(InspectionProvider<ClearCheckpointsProvider>);
 
 [[nodiscard]] Result<std::string, InspectionError>
 create_checkpoint_json(World& world, std::string_view request_json);
+
+[[nodiscard]] Result<std::string, InspectionError>
+export_checkpoint_json(World& world, std::string_view request_json);
+
+[[nodiscard]] Result<std::string, InspectionError>
+import_checkpoint_json(World& world, std::string_view request_json);
 
 [[nodiscard]] Result<std::string, InspectionError>
 list_checkpoints_json(World& world, std::string_view request_json);
