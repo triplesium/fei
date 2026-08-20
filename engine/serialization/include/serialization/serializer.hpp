@@ -57,6 +57,9 @@ struct DeserializeError {
     std::string message;
 };
 
+struct SerializeOptions;
+struct DeserializeOptions;
+
 struct ValueCodec {
     using Encode = std::function<Result<SerializedNode, SerializeError>(
         Ref value,
@@ -66,9 +69,22 @@ struct ValueCodec {
         const SerializedNode& node,
         std::string_view path
     )>;
+    using ContextualEncode =
+        std::function<Result<SerializedNode, SerializeError>(
+            Ref value,
+            std::string_view path,
+            const SerializeOptions& options
+        )>;
+    using ContextualDecode = std::function<Result<Val, DeserializeError>(
+        const SerializedNode& node,
+        std::string_view path,
+        const DeserializeOptions& options
+    )>;
 
     Encode encode;
     Decode decode;
+    ContextualEncode encode_with_options;
+    ContextualDecode decode_with_options;
 };
 
 class ValueCodecRegistry {

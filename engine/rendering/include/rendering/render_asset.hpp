@@ -79,6 +79,8 @@ struct ExtractedAssets {
     std::unordered_set<AssetId> removed;
     std::unordered_set<AssetId> modified;
     std::unordered_set<AssetId> added;
+    std::unordered_set<AssetId> known;
+    std::uint64_t source_revision {0};
     bool initialized {false};
 
     Optional<const T&> get(AssetId id) const {
@@ -99,6 +101,7 @@ template<typename Source>
 void extract_render_assets(
     Extract<Optional<EventReaderRO<AssetEvent<Source>>>> events,
     Extract<Optional<ResRO<Assets<Source>>>> assets,
+    ResRO<SubAppSourceContext> source,
     ResRW<ExtractedAssets<Source>> extracted_assets
 ) {
     const auto& source_assets = assets.get();
@@ -110,15 +113,28 @@ void extract_render_assets(
     auto removed = std::move(extracted_assets->removed);
     auto modified = std::move(extracted_assets->modified);
     auto added = std::move(extracted_assets->added);
+    auto known = std::move(extracted_assets->known);
     for (const auto& entry : extracted_assets->extracted) {
         if ((*source_assets)->get(entry.id)) {
             need_extracting.insert(entry.id);
         }
     }
-    if (!extracted_assets->initialized) {
+    const auto source_changed =
+        !extracted_assets->initialized ||
+        extracted_assets->source_revision != source->revision;
+    if (source_changed) {
+        std::unordered_set<AssetId> current;
         for (const auto id : (*source_assets)->loaded_ids()) {
+            current.insert(id);
             need_extracting.insert(id);
+            added.insert(id);
         }
+        for (const auto id : known) {
+            if (!current.contains(id)) {
+                removed.insert(id);
+            }
+        }
+        known = std::move(current);
     }
 
     auto& source_events = events.get();
@@ -129,22 +145,26 @@ void extract_render_assets(
             switch (type) {
                 case AssetEventType::Added: {
                     need_extracting.insert(id);
+                    known.insert(id);
                     break;
                 }
                 case AssetEventType::Modified: {
                     need_extracting.insert(id);
                     modified.insert(id);
+                    known.insert(id);
                     break;
                 }
                 case AssetEventType::Removed: {
                     removed.insert(id);
                     need_extracting.erase(id);
                     modified.erase(id);
+                    known.erase(id);
                     break;
                 }
                 case AssetEventType::Failed: {
                     need_extracting.erase(id);
                     modified.erase(id);
+                    known.erase(id);
                     break;
                 }
             }
@@ -167,6 +187,8 @@ void extract_render_assets(
         .removed = std::move(removed),
         .modified = std::move(modified),
         .added = std::move(added),
+        .known = std::move(known),
+        .source_revision = source->revision,
         .initialized = true,
     };
 }

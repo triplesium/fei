@@ -20,6 +20,14 @@ namespace fei {
 
 namespace {
 
+void begin_physics_step(ResRW<PhysicsStepState2d> state) {
+    state->checkpoint_safe = false;
+}
+
+void end_physics_step(ResRW<PhysicsStepState2d> state) {
+    state->checkpoint_safe = true;
+}
+
 void cleanup_removed_bodies(
     ResRW<PhysicsWorld2d> physics,
     RemovedComponents<RigidBody2d> removed_bodies,
@@ -274,12 +282,18 @@ void PhysicsPlugin2d::dependencies(PluginDependencies& dependencies) const {
 void PhysicsPlugin2d::setup(App& app) {
     app.add_resource(PhysicsSettings2d {})
         .add_resource(PhysicsWorld2d {})
+        .add_resource(PhysicsStepState2d {})
         .add_event<CollisionStarted2d>()
         .add_event<CollisionEnded2d>()
         .add_event<SensorStarted2d>()
         .add_event<SensorEnded2d>()
+        .configure_sets(
+            FixedPreUpdate,
+            chain(PhysicsSystems2d::BoundaryBegin {}, PhysicsSystems2d::Sync {})
+        )
         .add_systems(
             FixedPreUpdate,
+            begin_physics_step | in_set<PhysicsSystems2d::BoundaryBegin>(),
             chain(cleanup_removed_bodies, synchronize_bodies, apply_teleports) |
                 in_set<PhysicsSystems2d::Sync>()
         )
@@ -294,6 +308,17 @@ void PhysicsPlugin2d::setup(App& app) {
                 update_dynamic_physics_poses,
                 emit_physics_events
             ) | in_set<PhysicsSystems2d::WriteBack>()
+        )
+        .configure_sets(
+            FixedPostUpdate,
+            chain(
+                PhysicsSystems2d::WriteBack {},
+                PhysicsSystems2d::BoundaryEnd {}
+            )
+        )
+        .add_systems(
+            FixedPostUpdate,
+            end_physics_step | in_set<PhysicsSystems2d::BoundaryEnd>()
         )
         .add_systems(
             RunFixedMainLoop,

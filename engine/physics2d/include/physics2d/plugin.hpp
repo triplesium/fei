@@ -8,10 +8,17 @@ namespace fei {
 class App;
 
 struct PhysicsSystems2d {
+    struct BoundaryBegin : SystemSet<BoundaryBegin> {};
     struct Sync : SystemSet<Sync> {};
     struct Step : SystemSet<Step> {};
     struct WriteBack : SystemSet<WriteBack> {};
+    struct BoundaryEnd : SystemSet<BoundaryEnd> {};
     struct Interpolate : SystemSet<Interpolate> {};
+};
+
+FEI_REFLECT(Resource)
+struct PhysicsStepState2d {
+    bool checkpoint_safe {true};
 };
 
 FEI_REFLECT(Plugin)

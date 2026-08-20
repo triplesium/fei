@@ -29,6 +29,25 @@ float Time::delta() const {
     return m_delta_time;
 }
 
+TimeSnapshotState Time::snapshot_state() const {
+    return TimeSnapshotState {
+        .delta = m_delta_time,
+        .elapsed = m_elapsed_time,
+        .max_delta = m_max_delta,
+        .fixed_delta = m_fixed_delta,
+        .time_scale = time_scale,
+    };
+}
+
+void Time::restore_snapshot_state(const TimeSnapshotState& state) {
+    m_delta_time = state.delta;
+    m_elapsed_time = state.elapsed;
+    m_max_delta = state.max_delta;
+    m_fixed_delta = state.fixed_delta;
+    time_scale = state.time_scale;
+    m_last_tick_time = std::chrono::steady_clock::now();
+}
+
 void Time::set_fixed_delta(float delta) {
     if (!std::isfinite(delta) || delta <= 0.0f) {
         throw std::invalid_argument(
@@ -109,6 +128,20 @@ bool FixedTime::expend() {
 void FixedTime::reset() {
     m_overstep = 0.0;
     m_elapsed_time = 0.0;
+}
+
+FixedTimeSnapshotState FixedTime::snapshot_state() const {
+    return FixedTimeSnapshotState {
+        .timestep = m_timestep,
+        .overstep = m_overstep,
+        .elapsed = m_elapsed_time,
+    };
+}
+
+void FixedTime::restore_snapshot_state(const FixedTimeSnapshotState& state) {
+    m_timestep = state.timestep;
+    m_overstep = state.overstep;
+    m_elapsed_time = state.elapsed;
 }
 
 Timer::Timer(float duration_seconds, TimerMode mode) :

@@ -128,6 +128,12 @@ class SubApp {
     SubApp& add_extract(ExtractFn extract);
     SubApp& set_post_extract(ExtractFn extract);
     void extract(World& source_world, SubAppSourceId source_id = 0);
+
+    // Marks an in-place reconstructed source as logically new. The next
+    // extraction resets cached source-dependent state even when its World
+    // address and source id have not changed.
+    void invalidate_source() { m_source_initialized = false; }
+
     SubApp& add_post_update(ExtractFn post_update);
     SubApp& add_post_update_cleanup(ExtractFn cleanup);
     void post_update(World& main_world);

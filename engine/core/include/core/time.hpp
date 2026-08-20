@@ -8,6 +8,20 @@
 
 namespace fei {
 
+struct TimeSnapshotState {
+    float delta {};
+    float elapsed {};
+    float max_delta {0.25F};
+    Optional<float> fixed_delta;
+    float time_scale {1.0F};
+};
+
+struct FixedTimeSnapshotState {
+    double timestep {1.0 / 60.0};
+    double overstep {};
+    double elapsed {};
+};
+
 FEI_REFLECT(Resource)
 struct Time {
     Time() : m_last_tick_time(std::chrono::steady_clock::now()) {}
@@ -22,6 +36,8 @@ struct Time {
     void reset_elapsed_time(float elapsed_time = 0.0f);
     [[nodiscard]] Optional<float> fixed_delta() const { return m_fixed_delta; }
     float max_delta() const { return m_max_delta; }
+    [[nodiscard]] TimeSnapshotState snapshot_state() const;
+    void restore_snapshot_state(const TimeSnapshotState& state);
 
     float time_scale {1.0f};
 
@@ -52,6 +68,8 @@ class FixedTime {
     void accumulate_overstep(float delta_seconds);
     bool expend();
     void reset();
+    [[nodiscard]] FixedTimeSnapshotState snapshot_state() const;
+    void restore_snapshot_state(const FixedTimeSnapshotState& state);
 
   private:
     double m_timestep {1.0 / 60.0};

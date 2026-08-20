@@ -8,6 +8,7 @@
 
 namespace fei {
 
+FEI_REFLECT()
 enum class RigidBodyType2d : std::uint8_t {
     Static,
     Kinematic,
@@ -26,6 +27,7 @@ struct RigidBody2d {
     bool operator==(const RigidBody2d&) const = default;
 };
 
+FEI_REFLECT()
 enum class ColliderShape2d : std::uint8_t {
     Box,
     Circle,

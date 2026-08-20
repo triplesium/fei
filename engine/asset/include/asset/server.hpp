@@ -39,15 +39,25 @@ struct AssetTypeError {
     std::string message;
 };
 
+struct AssetTypeRegistration {
+    TypeId asset_type;
+    TypeId handle_type;
+    TypeId assets_resource_type;
+    TypeId events_resource_type;
+};
+
 FEI_REFLECT(Resource)
 class AssetServer {
   private:
     struct AssetTypeAccess {
+        AssetTypeRegistration registration;
         std::function<UntypedHandle(AssetServer&, const AssetPath&)> load;
         std::function<UntypedHandle(AssetServer&, const AssetPath&)> load_async;
         std::function<Result<Val, AssetTypeError>(const UntypedHandle&)>
             handle_value;
+        std::function<Val()> empty_handle_value;
         std::function<Optional<AssetId>(Ref)> handle_id;
+        std::function<Optional<AssetPath>(AssetId)> path;
         std::function<Optional<AssetLoadState>(AssetId)> load_state;
         std::function<Optional<AssetLoadError>(AssetId)> load_error;
         std::function<std::vector<AssetKey>(AssetId)> dependencies;
@@ -227,6 +237,29 @@ class AssetServer {
         return m_asset_types.contains(type);
     }
 
+    [[nodiscard]] Optional<AssetTypeRegistration>
+    asset_type_registration(TypeId type) const {
+        const auto access = m_asset_types.find(type);
+        return access == m_asset_types.end() ? nullopt :
+                                               Optional<AssetTypeRegistration> {
+                                                   access->second.registration,
+                                               };
+    }
+
+    [[nodiscard]] std::vector<AssetTypeRegistration>
+    registered_asset_types() const {
+        std::vector<AssetTypeRegistration> registrations;
+        registrations.reserve(m_asset_types.size());
+        for (const auto& [type, access] : m_asset_types) {
+            (void)type;
+            registrations.push_back(access.registration);
+        }
+        std::ranges::sort(registrations, {}, [](const auto& registration) {
+            return registration.asset_type.id();
+        });
+        return registrations;
+    }
+
     Result<UntypedHandle, AssetTypeError>
     load(TypeId type, const AssetPath& path) {
         auto access = m_asset_types.find(type);
@@ -272,6 +305,20 @@ class AssetServer {
         return access->second.handle_value(handle);
     }
 
+    Result<Val, AssetTypeError> empty_handle_value(TypeId asset_type) const {
+        const auto access = m_asset_types.find(asset_type);
+        if (access == m_asset_types.end()) {
+            return failure(
+                AssetTypeError {
+                    .type = asset_type,
+                    .message = "No asset type registered for type id " +
+                               std::to_string(asset_type.id()),
+                }
+            );
+        }
+        return access->second.empty_handle_value();
+    }
+
     Result<AssetKey, AssetTypeError> asset_key(Ref handle) const {
         auto asset_type = m_asset_handle_types.find(handle.type_id());
         if (asset_type == m_asset_handle_types.end()) {
@@ -305,6 +352,12 @@ class AssetServer {
             );
         }
         return AssetKey {.type = asset_type->second, .id = *id};
+    }
+
+    [[nodiscard]] Optional<AssetPath> asset_path(AssetKey key) const {
+        const auto access = m_asset_types.find(key.type);
+        return access == m_asset_types.end() ? nullopt :
+                                               access->second.path(key.id);
     }
 
     template<typename T>
@@ -858,6 +911,13 @@ class AssetServer {
         auto* app = m_app;
         m_asset_handle_types[type_id<Handle<T>>()] = type_id<T>();
         m_asset_types[type_id<T>()] = AssetTypeAccess {
+            .registration =
+                {
+                    .asset_type = type_id<T>(),
+                    .handle_type = type_id<Handle<T>>(),
+                    .assets_resource_type = type_id<Assets<T>>(),
+                    .events_resource_type = type_id<Events<AssetEvent<T>>>(),
+                },
             .load =
                 [](AssetServer& server, const AssetPath& path) {
                     return server.template load<T>(path).untyped();
@@ -880,12 +940,23 @@ class AssetServer {
                 }
                 return make_val<Handle<T>>(std::move(*typed));
             },
+            .empty_handle_value =
+                [] {
+                    return make_val<Handle<T>>();
+                },
             .handle_id = [](Ref handle) -> Optional<AssetId> {
                 const auto* typed = handle.template try_get_const<Handle<T>>();
                 if (typed == nullptr) {
                     return nullopt;
                 }
                 return typed->id();
+            },
+            .path = [app](AssetId id) -> Optional<AssetPath> {
+                if (!app || !app->template has_resource<Assets<T>>()) {
+                    return nullopt;
+                }
+                auto path = app->template resource<Assets<T>>().path(id);
+                return path ? Optional<AssetPath> {*path} : nullopt;
             },
             .load_state = [app](AssetId id) -> Optional<AssetLoadState> {
                 if (!app || !app->template has_resource<Assets<T>>()) {

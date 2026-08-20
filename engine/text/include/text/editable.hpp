@@ -65,6 +65,7 @@ struct EditableText {
     void queue(TextEdit edit) { pending_edits.push_back(std::move(edit)); }
 };
 
+FEI_REFLECT()
 struct TextChanged {
     Entity entity;
     std::string value;

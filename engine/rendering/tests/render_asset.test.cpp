@@ -143,6 +143,49 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "render source invalidation rescans assets before events are published",
+    "[rendering][render-asset][source]"
+) {
+    App app;
+    Assets<SourceAsset> source_assets(nullptr);
+    auto first =
+        source_assets.add(std::make_unique<SourceAsset>(SourceAsset {11}));
+
+    app.add_resource(Events<AssetEvent<SourceAsset>> {});
+    app.add_resource(std::move(source_assets));
+    install_render_app(app);
+    app.sub_app<RenderApp>()
+        .add_resource(ExtractedAssets<SourceAsset> {})
+        .add_systems(RenderExtract, extract_render_assets<SourceAsset>);
+
+    app.render();
+    app.sub_app<RenderApp>()
+        .resource<ExtractedAssets<SourceAsset>>()
+        .extracted.clear();
+
+    auto second = app.resource<Assets<SourceAsset>>().add(
+        std::make_unique<SourceAsset>(SourceAsset {23})
+    );
+    app.resource<Assets<SourceAsset>>().unload(first.id());
+
+    app.render();
+    CHECK(app.sub_app<RenderApp>()
+              .resource<ExtractedAssets<SourceAsset>>()
+              .extracted.empty());
+
+    app.sub_app<RenderApp>().invalidate_source();
+    app.render();
+
+    const auto& extracted =
+        app.sub_app<RenderApp>().resource<ExtractedAssets<SourceAsset>>();
+    REQUIRE(extracted.extracted.size() == 1);
+    CHECK(extracted.extracted.front().id == second.id());
+    CHECK(extracted.extracted.front().asset->value == 23);
+    CHECK(extracted.removed.contains(first.id()));
+    CHECK(extracted.added.contains(second.id()));
+}
+
+TEST_CASE(
     "prepare_assets removes stale assets and replaces extracted assets",
     "[rendering][render-asset]"
 ) {

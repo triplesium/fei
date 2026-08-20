@@ -306,6 +306,36 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Sub app source invalidation resets in-place extraction state",
+    "[app][sub-app][source]"
+) {
+    struct SourceTrace {
+        std::vector<SubAppSourceContext> contexts;
+    };
+
+    World source;
+    SubApp sub_app;
+    sub_app.add_resource(SourceTrace {})
+        .set_pre_extract([](World&, World& sub) {
+            sub.resource<SourceTrace>().contexts.push_back(
+                sub.resource<SubAppSourceContext>()
+            );
+        });
+
+    sub_app.extract(source);
+    sub_app.extract(source);
+    sub_app.invalidate_source();
+    sub_app.extract(source);
+
+    const auto& contexts = sub_app.resource<SourceTrace>().contexts;
+    REQUIRE(contexts.size() == 3);
+    REQUIRE(contexts[0].changed);
+    REQUIRE_FALSE(contexts[1].changed);
+    REQUIRE(contexts[2].changed);
+    REQUIRE(contexts[2].revision == contexts[1].revision + 1);
+}
+
+TEST_CASE(
     "Sub app extraction runs pre and post hooks in order",
     "[app][sub-app]"
 ) {

@@ -3,6 +3,7 @@
 #include "asset/importer.hpp"
 #include "base/log.hpp"
 #include "core/image.hpp"
+#include "core/random.hpp"
 #include "core/text.hpp"
 #include "core/time.hpp"
 #include "core/transform_plugin.hpp"

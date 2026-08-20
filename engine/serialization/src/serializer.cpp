@@ -910,6 +910,9 @@ Result<SerializedNode, SerializeError> serialize_value(
     const auto type_id = value.type_id();
     if (options.codecs) {
         if (const auto* codec = options.codecs->find(type_id)) {
+            if (codec->encode_with_options) {
+                return codec->encode_with_options(value, path, options);
+            }
             return codec->encode(value, path);
         }
     }
@@ -2011,6 +2014,9 @@ Result<Val, DeserializeError> deserialize_value(
 ) {
     if (options.codecs) {
         if (const auto* codec = options.codecs->find(type_id)) {
+            if (codec->decode_with_options) {
+                return codec->decode_with_options(node, path, options);
+            }
             return codec->decode(node, path);
         }
     }
@@ -2048,7 +2054,11 @@ Result<Val, DeserializeError> deserialize_value(
 } // namespace
 
 bool ValueCodecRegistry::register_codec(TypeId type, ValueCodec codec) {
-    if (!codec.encode || !codec.decode) {
+    const auto can_encode = static_cast<bool>(codec.encode) ||
+                            static_cast<bool>(codec.encode_with_options);
+    const auto can_decode = static_cast<bool>(codec.decode) ||
+                            static_cast<bool>(codec.decode_with_options);
+    if (!can_encode || !can_decode) {
         return false;
     }
     return m_codecs.emplace(type, std::move(codec)).second;
