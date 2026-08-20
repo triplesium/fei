@@ -8,6 +8,7 @@
 #include "runtime_inspection/registry.hpp"
 #include "runtime_inspection_snapshot/checkpoint.hpp"
 #include "runtime_protocol/probe.hpp"
+#include "snapshot/archive.hpp"
 #include "snapshot/world_snapshot.hpp"
 
 #include <chrono>
@@ -457,6 +458,9 @@ int main(int argc, char** argv) {
     checkpoints.registry().resource<fei::snapshot::CheckpointStore>(
         fei::snapshot::ResourcePolicy::Ignore
     );
+    checkpoints.registry().resource<fei::snapshot::SnapshotArchiveMetadata>(
+        fei::snapshot::ResourcePolicy::Ignore
+    );
 
     fei::runtime_inspection::InspectionRegistry inspections;
     auto registered = fei::runtime_inspection::checkpoint::
@@ -477,7 +481,7 @@ int main(int argc, char** argv) {
     fei::runtime_protocol::RuntimeProbeConfig probe {
         .project = project->config().name,
         .project_file = project->project_file().generic_string(),
-        .build_id = "snapshot-runtime-fixture-v3",
+        .build_id = "snapshot-runtime-fixture-v4",
         .heartbeat_interval_ms = 100,
         .inspection_handler = inspect_runtime,
     };
@@ -501,6 +505,14 @@ int main(int argc, char** argv) {
     }
 
     app.add_resource(std::move(checkpoints));
+    app.add_resource(
+        fei::snapshot::SnapshotArchiveMetadata {
+            .project = project->config().name,
+            .engine_build = "snapshot-runtime-fixture-v4",
+            .runtime_signature = "checkpoint-runtime-fixture-v1",
+            .script_hash = "no-scripts",
+        }
+    );
     app.add_resource(std::move(inspections));
     app.add_plugin<fei::ReflectionPlugin>();
     app.add_plugin(

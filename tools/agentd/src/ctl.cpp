@@ -6,6 +6,7 @@
 #include <csignal>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <httplib.h>
 #include <iostream>
@@ -42,6 +43,7 @@ struct Options {
     std::optional<std::string> payload;
     std::optional<std::string> interface_id;
     std::optional<std::string> output;
+    std::optional<std::string> input;
     std::optional<std::string> eval;
     std::optional<std::string> checkpoint_name;
     std::optional<std::uint32_t> entity;
@@ -69,6 +71,10 @@ void print_help() {
               << "       fei-ctl [--port PORT] checkpoint-audit\n"
               << "       fei-ctl [--port PORT] checkpoint-delete NAME\n"
               << "       fei-ctl [--port PORT] checkpoint-clear\n"
+              << "       fei-ctl [--port PORT] checkpoint-export NAME "
+                 "--output FILE\n"
+              << "       fei-ctl [--port PORT] checkpoint-import NAME "
+                 "--input FILE\n"
               << "       fei-ctl [--port PORT] checkpoint-list\n"
               << "       fei-ctl [--port PORT] checkpoint-restore NAME\n";
 }
@@ -152,6 +158,14 @@ bool parse_options(int argc, char** argv, Options& options) {
             options.output = argv[index];
             continue;
         }
+        if (argument == "--input") {
+            if (++index >= argc) {
+                std::cerr << "--input requires a value\n";
+                return false;
+            }
+            options.input = argv[index];
+            continue;
+        }
         if (argument == "--eval") {
             if (++index >= argc) {
                 std::cerr << "--eval requires a value\n";
@@ -178,6 +192,8 @@ bool parse_options(int argc, char** argv, Options& options) {
              argument == "checkpoint-create" ||
              argument == "checkpoint-audit" ||
              argument == "checkpoint-delete" ||
+             argument == "checkpoint-export" ||
+             argument == "checkpoint-import" ||
              argument == "checkpoint-clear" || argument == "checkpoint-list" ||
              argument == "checkpoint-restore")) {
             options.command = argument;
@@ -190,7 +206,9 @@ bool parse_options(int argc, char** argv, Options& options) {
         }
         if ((options.command == "checkpoint-create" ||
              options.command == "checkpoint-restore" ||
-             options.command == "checkpoint-delete") &&
+             options.command == "checkpoint-delete" ||
+             options.command == "checkpoint-export" ||
+             options.command == "checkpoint-import") &&
             !options.checkpoint_name) {
             options.checkpoint_name = argument;
             continue;
@@ -216,8 +234,8 @@ bool parse_options(int argc, char** argv, Options& options) {
             std::cerr << "inspect requires --entity or --payload\n";
             return false;
         }
-        if (options.interface_id || options.output || options.eval ||
-            options.read_stdin) {
+        if (options.interface_id || options.output || options.input ||
+            options.eval || options.read_stdin) {
             std::cerr << "Unexpected inspect option\n";
             return false;
         }
@@ -227,7 +245,8 @@ bool parse_options(int argc, char** argv, Options& options) {
             return false;
         }
         if (options.entity || options.payload || options.schema ||
-            options.interface_id || options.eval || options.read_stdin) {
+            options.interface_id || options.input || options.eval ||
+            options.read_stdin) {
             std::cerr << "play-capture accepts only --output\n";
             return false;
         }
@@ -237,7 +256,8 @@ bool parse_options(int argc, char** argv, Options& options) {
             return false;
         }
         if (options.entity || options.payload || options.schema ||
-            options.output || options.eval || options.read_stdin) {
+            options.output || options.input || options.eval ||
+            options.read_stdin) {
             std::cerr << "play-observe accepts only --interface\n";
             return false;
         }
@@ -247,7 +267,8 @@ bool parse_options(int argc, char** argv, Options& options) {
             return false;
         }
         if (options.entity || options.schema || options.interface_id ||
-            options.output || options.eval || options.read_stdin) {
+            options.output || options.input || options.eval ||
+            options.read_stdin) {
             std::cerr << "play-step accepts only --payload\n";
             return false;
         }
@@ -257,8 +278,32 @@ bool parse_options(int argc, char** argv, Options& options) {
             return false;
         }
         if (options.entity || options.payload || options.schema ||
-            options.interface_id || options.output) {
+            options.interface_id || options.output || options.input) {
             std::cerr << "play-run accepts only --eval or --stdin\n";
+            return false;
+        }
+    } else if (
+        options.command == "checkpoint-export" ||
+        options.command == "checkpoint-import"
+    ) {
+        if (!options.checkpoint_name) {
+            std::cerr << options.command << " requires a checkpoint name\n";
+            return false;
+        }
+        const auto export_command = options.command == "checkpoint-export";
+        if ((export_command && !options.output) ||
+            (!export_command && !options.input)) {
+            std::cerr << options.command << " requires "
+                      << (export_command ? "--output" : "--input") << '\n';
+            return false;
+        }
+        if (options.entity || options.payload || options.schema ||
+            options.interface_id || options.eval || options.read_stdin ||
+            options.strict || (export_command && options.input) ||
+            (!export_command && options.output)) {
+            std::cerr << options.command
+                      << " accepts only a checkpoint name and "
+                      << (export_command ? "--output" : "--input") << '\n';
             return false;
         }
     } else if (
@@ -271,8 +316,8 @@ bool parse_options(int argc, char** argv, Options& options) {
             return false;
         }
         if (options.entity || options.payload || options.schema ||
-            options.interface_id || options.output || options.eval ||
-            options.read_stdin) {
+            options.interface_id || options.output || options.input ||
+            options.eval || options.read_stdin) {
             std::cerr << options.command << " accepts only a checkpoint name\n";
             return false;
         }
@@ -286,8 +331,8 @@ bool parse_options(int argc, char** argv, Options& options) {
         options.command == "checkpoint-clear"
     ) {
         if (options.entity || options.payload || options.schema ||
-            options.interface_id || options.output || options.eval ||
-            options.read_stdin || options.checkpoint_name) {
+            options.interface_id || options.output || options.input ||
+            options.eval || options.read_stdin || options.checkpoint_name) {
             std::cerr << options.command << " accepts no options\n";
             return false;
         }
@@ -297,8 +342,9 @@ bool parse_options(int argc, char** argv, Options& options) {
         }
     } else if (
         options.entity || options.payload || options.schema ||
-        options.interface_id || options.output || options.eval ||
-        options.read_stdin || options.checkpoint_name || options.strict
+        options.interface_id || options.output || options.input ||
+        options.eval || options.read_stdin || options.checkpoint_name ||
+        options.strict
     ) {
         std::cerr << "Unexpected command option\n";
         return false;
@@ -453,6 +499,33 @@ bool inspect_checkpoint(
                               Json {{"name", *name}, {"strict", strict}}.dump()
                           ) :
                           std::optional<std::string>("{}");
+    return inspect_runtime(client, request);
+}
+
+bool inspect_checkpoint_file(
+    httplib::Client& client,
+    std::string provider,
+    const std::string& name,
+    const std::string& path
+) {
+    std::error_code error;
+    auto absolute = std::filesystem::absolute(path, error);
+    if (error) {
+        std::cerr << "Failed to resolve checkpoint archive path: "
+                  << error.message() << '\n';
+        return false;
+    }
+    absolute = absolute.lexically_normal();
+
+    Options request;
+    request.command = "inspect";
+    request.provider = std::move(provider);
+    request.payload =
+        Json {
+            {"name", name},
+            {"path", absolute.generic_string()},
+        }
+            .dump();
     return inspect_runtime(client, request);
 }
 
@@ -859,6 +932,26 @@ int main(int argc, char** argv) {
                    client,
                    "play.checkpoint.list",
                    std::nullopt
+               ) ?
+                   0 :
+                   1;
+    }
+    if (options.command == "checkpoint-export") {
+        return inspect_checkpoint_file(
+                   client,
+                   "play.checkpoint.export",
+                   *options.checkpoint_name,
+                   *options.output
+               ) ?
+                   0 :
+                   1;
+    }
+    if (options.command == "checkpoint-import") {
+        return inspect_checkpoint_file(
+                   client,
+                   "play.checkpoint.import",
+                   *options.checkpoint_name,
+                   *options.input
                ) ?
                    0 :
                    1;

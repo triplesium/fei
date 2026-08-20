@@ -7,12 +7,15 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <filesystem>
 #include <httplib.h>
+#include <iterator>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 using namespace fei;
 using namespace fei::agentd;
@@ -45,6 +48,29 @@ inspection_payload(httplib::Result response, std::string_view operation) {
         );
     }
 }
+
+class CheckpointArchiveFile {
+  private:
+    std::filesystem::path m_directory;
+
+  public:
+    CheckpointArchiveFile() {
+        const auto suffix =
+            std::chrono::steady_clock::now().time_since_epoch().count();
+        m_directory = std::filesystem::temp_directory_path() /
+                      ("fei-agentd-checkpoint-e2e-" + std::to_string(suffix));
+        std::filesystem::create_directories(m_directory);
+    }
+
+    ~CheckpointArchiveFile() {
+        std::error_code error;
+        std::filesystem::remove_all(m_directory, error);
+    }
+
+    std::filesystem::path path() const {
+        return m_directory / "before-combat.fei-snapshot.json";
+    }
+};
 
 } // namespace
 
@@ -187,4 +213,95 @@ return {
     CHECK(observation.at("player").at("health") == 10);
     CHECK(observation.at("enemy").at("alive") == true);
     CHECK(observation.at("enemy").at("health") == 7);
+
+    CheckpointArchiveFile archive;
+    auto run_ctl = [&](std::vector<std::string> arguments) {
+        std::vector<std::string> command {
+            FEI_CTL_PATH,
+            "--port",
+            std::to_string(port),
+        };
+        command.insert(
+            command.end(),
+            std::make_move_iterator(arguments.begin()),
+            std::make_move_iterator(arguments.end())
+        );
+        RuntimeProcess process;
+        if (!process.start(ProcessLaunch {.arguments = std::move(command)})) {
+            return false;
+        }
+        const auto deadline =
+            std::chrono::steady_clock::now() + std::chrono::seconds(40);
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (const auto code = process.poll()) {
+                return *code == 0;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        process.terminate();
+        return false;
+    };
+
+    REQUIRE(run_ctl({
+        "checkpoint-export",
+        "before-combat",
+        "--output",
+        archive.path().string(),
+    }));
+    REQUIRE(std::filesystem::is_regular_file(archive.path()));
+
+    runtime.terminate();
+    state.mark_process_exited(1);
+    REQUIRE(runtime.start(
+        ProcessLaunch {
+            .arguments =
+                {
+                    FEI_SNAPSHOT_RUNTIME_FIXTURE_PATH,
+                    FEI_CHECKPOINT_PROJECT_PATH,
+                },
+            .environment = {
+                {"FEI_AGENTD_PORT", std::to_string(port)},
+                {"FEI_RUNTIME_SESSION", state.session()},
+            },
+        }
+    ));
+    state.mark_process_started(runtime.process_id());
+
+    const auto reconnect_deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    connected = false;
+    while (std::chrono::steady_clock::now() < reconnect_deadline) {
+        const auto status = Json::parse(state.status_json());
+        if (status.at("runtime").at("connection") == "connected") {
+            connected = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    REQUIRE(connected);
+
+    REQUIRE(run_ctl({
+        "checkpoint-import",
+        "before-combat",
+        "--input",
+        archive.path().string(),
+    }));
+    REQUIRE(run_ctl({"checkpoint-restore", "before-combat"}));
+
+    auto restored_state = inspection_payload(
+        client.Post(
+            "/api/v1/play/observe",
+            Json {{"interface", "game.combat"}}.dump(),
+            "application/json"
+        ),
+        "restored play.observe"
+    );
+    REQUIRE(restored_state);
+    const auto& restored = restored_state->at("observation");
+    CHECK(restored.at("turn") == 0);
+    CHECK(restored.at("simulation_tick") == 0);
+    CHECK(restored.at("score") == 0);
+    CHECK(restored.at("player").at("health") == 10);
+    CHECK(restored.at("enemy").at("alive") == true);
+    CHECK(restored.at("enemy").at("health") == 7);
 }
