@@ -180,3 +180,9 @@ The principal development targets can be built independently:
 xmake build -y fei-graphics-webgpu-browser
 xmake build -y fei-shader-webgpu
 ```
+
+`App::run()` delegates lifecycle control to an `AppRunner`. The default runner
+keeps the native blocking loop, while `BrowserPlugin` replaces it with an
+Emscripten `requestAnimationFrame` loop and transfers the `App` into
+browser-owned storage. `WebGpuBrowserPlugin` depends on that plugin and keeps
+the canvas pixel size synchronized with its CSS size and device pixel ratio.
