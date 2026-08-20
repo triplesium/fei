@@ -575,7 +575,7 @@ TEST_CASE(
     world.run_schedule(Update);
     REQUIRE(
         world.get_component<ScriptTestReceiver>(matched).value ==
-        1 + static_cast<int>(matched)
+        1 + static_cast<int>(matched.value)
     );
 }
 

@@ -221,7 +221,7 @@ TEST_CASE(
     auto mesh_set = make_resource_set();
     auto material_set = make_resource_set();
     auto item = make_mesh_draw_item(
-        42,
+        Entity {42},
         static_cast<CachedRenderPipelineId>(7),
         view_set,
         256,
@@ -232,7 +232,7 @@ TEST_CASE(
         3.5f
     );
 
-    REQUIRE(item.entity == 42);
+    REQUIRE(item.entity == Entity {42});
     REQUIRE(item.pipeline == static_cast<CachedRenderPipelineId>(7));
     REQUIRE(item.view_set == view_set);
     REQUIRE(item.view_uniform_dynamic_offset == 256);

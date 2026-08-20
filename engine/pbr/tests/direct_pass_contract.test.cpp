@@ -357,7 +357,7 @@ TEST_CASE(
     phase.lighting_set = create_set();
     phase.items.push_back(
         MeshDrawItem {
-            .entity = 1,
+            .entity = Entity {1},
             .pipeline = pipeline,
             .view_set = create_set(),
             .mesh_set = create_set(),

@@ -24,12 +24,18 @@ class RemovedComponentBuffer {
   public:
     void send(Entity entity);
     void update();
+    void remap_entities(const std::unordered_map<Entity, Entity>& entities);
 
     [[nodiscard]] std::size_t oldest_event_count() const {
         return m_previous.start_count;
     }
 
     [[nodiscard]] Optional<Entity> get(std::size_t event_id) const;
+
+    [[nodiscard]] std::size_t byte_size() const {
+        return (m_previous.entities.size() + m_current.entities.size()) *
+               sizeof(Entity);
+    }
 };
 
 class RemovedComponentEvents {
@@ -39,8 +45,17 @@ class RemovedComponentEvents {
   public:
     void send(TypeId component, Entity entity);
     void update();
+    void remap_entities(const std::unordered_map<Entity, Entity>& entities);
 
     [[nodiscard]] const RemovedComponentBuffer* get(TypeId component) const;
+
+    [[nodiscard]] std::size_t byte_size() const {
+        std::size_t result = 0;
+        for (const auto& [_, buffer] : m_buffers) {
+            result += sizeof(TypeId) + buffer.byte_size();
+        }
+        return result;
+    }
 };
 
 } // namespace fei

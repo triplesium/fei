@@ -152,10 +152,13 @@ TEST_CASE(
     REQUIRE(response.capability == "ecs.query");
     auto json = nlohmann::json::parse(response.json);
     REQUIRE(json.at("matched") == 1);
-    REQUIRE(json.at("rows").at(0).at("entity") == user);
+    REQUIRE(json.at("rows").at(0).at("entity") == user.value);
 
     EntityInspectRequest inspect_body {.entity = user};
     auto inspect_json = encode_json(Ref(inspect_body));
+    if (!inspect_json) {
+        FAIL(inspect_json.error());
+    }
     REQUIRE(inspect_json);
     const auto inspect_request_entity = app.world().entity();
     app.world().add_component(
@@ -168,13 +171,18 @@ TEST_CASE(
     );
 
     app.run_schedule(PostUpdate);
+    if (app.world().has_component<ErrorResponse>(inspect_request_entity)) {
+        FAIL(app.world()
+                 .get_component<ErrorResponse>(inspect_request_entity)
+                 .message);
+    }
     REQUIRE(app.world().has_component<JsonResponse>(inspect_request_entity));
     const auto& inspect_response =
         app.world().get_component<JsonResponse>(inspect_request_entity);
     REQUIRE(inspect_response.token == 43);
     REQUIRE(inspect_response.capability == "ecs.entity.inspect");
     auto inspected = nlohmann::json::parse(inspect_response.json);
-    REQUIRE(inspected.at("entity") == user);
+    REQUIRE(inspected.at("entity") == user.value);
     REQUIRE(inspected.at("component_count") == 1);
     REQUIRE(inspected.at("components").at(0).at("serialized") == true);
 

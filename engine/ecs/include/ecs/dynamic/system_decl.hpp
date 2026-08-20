@@ -36,7 +36,17 @@ struct DynamicQueryFieldDecl {
 };
 
 struct DynamicQueryFilterDecl {
+    enum class Kind {
+        With,
+        Without,
+        Added,
+        Changed,
+        Or,
+    };
+
+    Kind kind {Kind::With};
     DynamicTypeRef type;
+    std::vector<DynamicQueryFilterDecl> filters;
     bool required {true};
 };
 
@@ -89,6 +99,24 @@ struct DynamicStateParamDecl final
 struct DynamicNextStateParamDecl final
     : DynamicSystemParamDeclBase<DynamicNextStateParamDecl> {
     DynamicTypeRef type;
+};
+
+struct DynamicRemovedComponentsParamDecl final
+    : DynamicSystemParamDeclBase<DynamicRemovedComponentsParamDecl> {
+    DynamicTypeRef type;
+};
+
+enum class DynamicEventParamDeclKind {
+    Writer,
+    Reader,
+    ReaderRO,
+};
+
+struct DynamicEventParamDecl final
+    : DynamicSystemParamDeclBase<DynamicEventParamDecl> {
+    DynamicTypeRef type;
+    DynamicEventParamDeclKind kind {DynamicEventParamDeclKind::ReaderRO};
+    bool optional {false};
 };
 
 enum class DynamicConditionDeclKind {

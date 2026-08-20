@@ -244,6 +244,40 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Luau compiler extracts optional entity fields",
+    "[scripting_luau][compiler][types][optional]"
+) {
+    const ScriptSource source {
+        .name = "optional_entity.luau",
+        .content = R"(
+            return module {
+                name = "game.optional_entity",
+                types = {
+                    TargetState = {
+                        target = field(optional(entity), nil),
+                    },
+                },
+                resources = {
+                    TargetState = {},
+                },
+                systems = {},
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact.has_value());
+    REQUIRE(artifact->declaration.types.size() == 1);
+    REQUIRE(artifact->declaration.types[0].fields.size() == 1);
+    const auto& target = artifact->declaration.types[0].fields[0];
+    CHECK(target.type.type_name == "entity");
+    REQUIRE(target.type.type_id.has_value());
+    CHECK(*target.type.type_id == type_id<Entity>());
+    CHECK(target.type.optional);
+    CHECK_FALSE(target.has_default);
+}
+
+TEST_CASE(
     "Luau compiler validates script-defined state declarations",
     "[scripting_luau][compiler][state]"
 ) {
@@ -439,6 +473,179 @@ TEST_CASE(
     CHECK(systems[3].name == "independent");
     CHECK(systems[3].before.empty());
     CHECK(systems[3].after.empty());
+}
+
+TEST_CASE(
+    "Luau compiler rejects snapshot-unsafe hidden state",
+    "[scripting_luau][compiler][snapshot]"
+) {
+    const std::vector<std::pair<std::string_view, std::string_view>>
+        invalid_sources {
+            {
+                R"(
+                    counter = 0
+                    local function tick() end
+                    return module {
+                        name = "global",
+                        systems = { system(Update, tick) },
+                    }
+                )",
+                "assignment to global 'counter'",
+            },
+            {
+                R"(
+                    function tick() end
+                    return module {
+                        name = "global_function",
+                        systems = { system(Update, tick) },
+                    }
+                )",
+                "assignment to global 'tick'",
+            },
+            {
+                R"(
+                    local counter = 0
+                    local function tick()
+                        counter += 1
+                    end
+                    return module {
+                        name = "captured",
+                        systems = { system(Update, tick) },
+                    }
+                )",
+                "mutation of module state 'counter'",
+            },
+            {
+                R"(
+                    local cache = { value = 0 }
+                    local function tick()
+                        cache.value = cache.value + 1
+                    end
+                    return module {
+                        name = "captured_table",
+                        systems = { system(Update, tick) },
+                    }
+                )",
+                "mutation of module state 'cache'",
+            },
+            {
+                R"(
+                    local cache = {}
+                    local function tick()
+                        table.insert(cache, 1)
+                    end
+                    return module {
+                        name = "captured_table_call",
+                        systems = { system(Update, tick) },
+                    }
+                )",
+                "cannot mutate captured module state",
+            },
+            {
+                R"(
+                    local cache = { value = 0 }
+                    local function tick()
+                        local alias = cache
+                        alias.value += 1
+                    end
+                    return module {
+                        name = "captured_alias",
+                        systems = { system(Update, tick) },
+                    }
+                )",
+                "mutation of module state 'alias'",
+            },
+            {
+                R"(
+                    local cache = { value = 0 }
+                    local function mutate(value)
+                        value.value += 1
+                    end
+                    local function tick()
+                        mutate(cache)
+                    end
+                    return module {
+                        name = "captured_indirect_call",
+                        systems = { system(Update, tick) },
+                    }
+                )",
+                "captured module state cannot be passed to a call",
+            },
+            {
+                R"(
+                    local function tick()
+                        math.snapshot_unsafe_value = 1
+                    end
+                    return module {
+                        name = "global_member",
+                        systems = { system(Update, tick) },
+                    }
+                )",
+                "assignment to global 'math'",
+            },
+            {
+                R"(
+                    local function tick()
+                        local value = math.random()
+                    end
+                    return module {
+                        name = "random",
+                        systems = { system(Update, tick) },
+                    }
+                )",
+                "nondeterministic API 'math.random'",
+            },
+        };
+
+    for (const auto& [content, expected] : invalid_sources) {
+        auto artifact = compile_luau_script_module(
+            ScriptSource {
+                .name = "snapshot_unsafe.luau",
+                .content = std::string(content),
+            }
+        );
+        REQUIRE_FALSE(artifact);
+        CHECK(artifact.error().message.find(expected) != std::string::npos);
+    }
+
+    const ScriptSource safe_nested_capture {
+        .name = "safe_nested_capture.luau",
+        .content = R"(
+            local function tick()
+                local total = 0
+                local function add(value: number)
+                    total += value
+                end
+                add(2)
+                assert(total == 2)
+            end
+            return module {
+                name = "safe_nested_capture",
+                systems = { system(Update, tick) },
+            }
+        )",
+    };
+    CHECK(compile_luau_script_module(safe_nested_capture));
+
+    auto library = compile_luau_script_library(
+        ScriptSource {
+            .name = "stateful_library.luau",
+            .content = R"(
+                local value = 0
+                return {
+                    next = function()
+                        value += 1
+                        return value
+                    end,
+                }
+            )",
+        }
+    );
+    REQUIRE_FALSE(library);
+    CHECK(
+        library.error().message.find("mutation of module state 'value'") !=
+        std::string::npos
+    );
 }
 
 } // namespace fei::test

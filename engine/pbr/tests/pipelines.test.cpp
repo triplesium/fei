@@ -318,11 +318,11 @@ TEST_CASE(
     auto mesh = create_gpu_mesh(RenderPrimitive::Triangles);
     TestPipelineSpecializer specializer {11, CullMode::Back};
 
-    auto first_id = pipelines.request(1, material, mesh, specializer);
-    auto second_id = pipelines.request(2, material, mesh, specializer);
+    auto first_id = pipelines.request(Entity {1}, material, mesh, specializer);
+    auto second_id = pipelines.request(Entity {2}, material, mesh, specializer);
 
     REQUIRE(first_id == second_id);
-    auto found_id = pipelines.find(1, material, mesh, specializer);
+    auto found_id = pipelines.find(Entity {1}, material, mesh, specializer);
     REQUIRE(found_id);
     REQUIRE(*found_id == first_id);
     REQUIRE(device.render_pipeline_descriptions.empty());
@@ -359,13 +359,13 @@ TEST_CASE(
     TestPipelineSpecializer specializer {11, CullMode::Back};
 
     auto triangle_id = pipelines.request(
-        1,
+        Entity {1},
         material,
         create_gpu_mesh(RenderPrimitive::Triangles),
         specializer
     );
     auto line_id = pipelines.request(
-        2,
+        Entity {2},
         material,
         create_gpu_mesh(RenderPrimitive::Lines),
         specializer
@@ -410,13 +410,13 @@ TEST_CASE(
     auto mesh = create_gpu_mesh(RenderPrimitive::Triangles);
 
     auto back_id = pipelines.request(
-        1,
+        Entity {1},
         material,
         mesh,
         TestPipelineSpecializer {11, CullMode::Back}
     );
     auto front_id = pipelines.request(
-        2,
+        Entity {2},
         material,
         mesh,
         TestPipelineSpecializer {12, CullMode::Front}
@@ -461,7 +461,7 @@ TEST_CASE(
     auto mesh = create_gpu_mesh(RenderPrimitive::Triangles);
 
     auto depth_id = pipelines.request(
-        1,
+        Entity {1},
         material,
         mesh,
         TestPipelineSpecializer {
@@ -471,7 +471,7 @@ TEST_CASE(
         }
     );
     auto deferred_id = pipelines.request(
-        2,
+        Entity {2},
         material,
         mesh,
         TestPipelineSpecializer {
@@ -512,7 +512,7 @@ TEST_CASE(
     auto mesh = create_gpu_mesh(RenderPrimitive::Triangles);
     TestPipelineSpecializer specializer {11, CullMode::Back};
 
-    CHECK(pipelines.find(1, material, mesh, specializer) == nullopt);
+    CHECK(pipelines.find(Entity {1}, material, mesh, specializer) == nullopt);
     pipeline_cache.process_queued_pipelines();
 
     CHECK(device.render_pipeline_descriptions.empty());
@@ -541,7 +541,7 @@ TEST_CASE(
         create_default_shader_material(device, create_layout(device));
     auto mesh = create_gpu_mesh(RenderPrimitive::Triangles);
 
-    pipelines.request(1, material, mesh, PipelineSpecializer {});
+    pipelines.request(Entity {1}, material, mesh, PipelineSpecializer {});
     pipeline_cache.process_queued_pipelines();
 
     REQUIRE(device.render_pipeline_descriptions.size() == 1);
@@ -807,7 +807,7 @@ TEST_CASE(
     );
     auto mesh = create_gpu_mesh(RenderPrimitive::Triangles);
 
-    pipelines.request(1, material, mesh, PipelineSpecializer {});
+    pipelines.request(Entity {1}, material, mesh, PipelineSpecializer {});
 
     REQUIRE(device.shader_descriptions.size() == 2);
     CHECK(has_shader_def(
@@ -881,7 +881,7 @@ TEST_CASE(
         }
     );
 
-    pipelines.request(1, material, mesh, PipelineSpecializer {});
+    pipelines.request(Entity {1}, material, mesh, PipelineSpecializer {});
 
     REQUIRE(device.shader_descriptions.size() == 2);
     const auto& vertex_shader_desc = device.shader_descriptions[0];
@@ -955,7 +955,7 @@ TEST_CASE(
     auto mesh = create_gpu_mesh(RenderPrimitive::Triangles);
 
     pipelines.request(
-        1,
+        Entity {1},
         material,
         mesh,
         TestPipelineSpecializer {

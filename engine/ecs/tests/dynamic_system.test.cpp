@@ -1,5 +1,7 @@
 #include "ecs/dynamic/commands.hpp"
+#include "ecs/dynamic/events.hpp"
 #include "ecs/dynamic/query.hpp"
+#include "ecs/dynamic/removed_components.hpp"
 #include "ecs/dynamic/resource.hpp"
 #include "ecs/dynamic/system.hpp"
 #include "ecs/dynamic/system_decl.hpp"
@@ -430,4 +432,120 @@ TEST_CASE(
     REQUIRE(executor_ptr->rows == 1);
     REQUIRE(world.resource<GameConfig>().max_entities == 10);
     REQUIRE(world.get_component<Position>(entity) == Position(5.0f, 4.0f));
+}
+
+TEST_CASE(
+    "ECS dynamic query change filters apply per row",
+    "[ecs][dynamic][query][change_detection]"
+) {
+    register_components();
+    World world;
+    world.increment_change_tick();
+    const auto added_entity = world.entity();
+    world.add_component(added_entity, Position(1.0F, 2.0F));
+    const auto old_entity = world.entity();
+    world.add_component(old_entity, Position(3.0F, 4.0F));
+    auto& old_ticks = world.archetypes()
+                          .get(world.entity_location(old_entity)->archetype_id)
+                          .component_ticks(
+                              type_id<Position>(),
+                              world.entity_location(old_entity)->row
+                          );
+    old_ticks.added = 0;
+    old_ticks.changed = 0;
+
+    DynamicQuery added(
+        "added",
+        {DynamicQueryField {
+            .name = "entity",
+            .type = type_id<Entity>(),
+            .kind = DynamicQueryFieldKind::Entity,
+        }},
+        {DynamicQueryFilter {
+            .kind = DynamicQueryFilter::Kind::Added,
+            .type = type_id<Position>(),
+        }}
+    );
+    REQUIRE(added.access().read_components.contains(type_id<Position>()));
+    REQUIRE(added.prepare(
+        world,
+        SystemTicks {.last_run = 0, .this_run = world.read_change_tick()}
+    ));
+    REQUIRE(added.size() == 1);
+    DynamicQueryCursor cursor;
+    DynamicQueryRow row;
+    REQUIRE(added.next(cursor, row));
+    REQUIRE(added.field(row, 0).get_const<Entity>() == added_entity);
+
+    DynamicQuery changed(
+        "changed",
+        {DynamicQueryField {
+            .name = "entity",
+            .type = type_id<Entity>(),
+            .kind = DynamicQueryFieldKind::Entity,
+        }},
+        {DynamicQueryFilter {
+            .kind = DynamicQueryFilter::Kind::Changed,
+            .type = type_id<Position>(),
+        }}
+    );
+    const auto last_run = world.read_change_tick();
+    world.get_component_rw<Position>(old_entity)->x = 8.0F;
+    REQUIRE(changed.prepare(
+        world,
+        SystemTicks {
+            .last_run = last_run,
+            .this_run = world.read_change_tick(),
+        }
+    ));
+    REQUIRE(changed.size() == 1);
+}
+
+TEST_CASE(
+    "ECS dynamic cursor params checkpoint and validate their types",
+    "[ecs][dynamic][runtime_state]"
+) {
+    register_components();
+    World world;
+    const auto first = world.entity();
+    const auto second = world.entity();
+    world.add_component(first, Position {});
+    world.add_component(second, Position {});
+    world.remove_component<Position>(first);
+    world.remove_component<Position>(second);
+
+    DynamicRemovedComponents removed("removed", type_id<Position>());
+    REQUIRE(removed.prepare(
+        world,
+        SystemTicks {.last_run = 0, .this_run = world.read_change_tick()}
+    ));
+    const auto first_removed = removed.next();
+    REQUIRE(first_removed);
+    REQUIRE(*first_removed == first);
+    auto removed_state = removed.capture_runtime_state();
+    REQUIRE(removed_state);
+    REQUIRE(removed_state->kind == SystemParamRuntimeStateKind::Counter);
+    removed.clear();
+    REQUIRE_FALSE(removed.next());
+    REQUIRE(removed.restore_runtime_state(*removed_state));
+    const auto second_removed = removed.next();
+    REQUIRE(second_removed);
+    REQUIRE(*second_removed == second);
+
+    DynamicEventParam reader(
+        "events",
+        type_id<Velocity>(),
+        DynamicEventParamKind::ReaderRO
+    );
+    REQUIRE_FALSE(reader.validate_runtime_state(*removed_state));
+
+    DynamicEventParam writer(
+        "events",
+        type_id<Velocity>(),
+        DynamicEventParamKind::Writer
+    );
+    auto writer_state = writer.capture_runtime_state();
+    REQUIRE(writer_state);
+    REQUIRE(writer_state->kind == SystemParamRuntimeStateKind::Stateless);
+    REQUIRE_FALSE(reader.validate_runtime_state(*writer_state));
 }

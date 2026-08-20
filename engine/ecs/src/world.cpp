@@ -21,6 +21,7 @@ RegisteredSystemId World::register_system(std::unique_ptr<System> system) {
     if (!inserted) {
         fatal("Registered system id {} is already in use", id);
     }
+    ++m_registered_system_generation;
     return RegisteredSystemId {.value = id};
 }
 
@@ -68,6 +69,135 @@ Status<RegisteredSystemError> World::unregister_system(RegisteredSystemId id) {
         return failure(RegisteredSystemError::AlreadyRunning);
     }
     m_registered_systems.erase(it);
+    ++m_registered_system_generation;
+    return {};
+}
+
+Result<WorldRuntimeState, RuntimeStateError>
+World::capture_runtime_state() const {
+    if (has_resource<CommandsQueue>()) {
+        const auto& commands = resource<CommandsQueue>();
+        if (!commands.empty()) {
+            return failure(
+                RuntimeStateError {
+                    .path = "commands",
+                    .message = "CommandsQueue must be empty at a checkpoint "
+                               "boundary",
+                }
+            );
+        }
+    }
+
+    auto schedules = m_schedules.capture_runtime_state();
+    if (!schedules) {
+        return failure(std::move(schedules.error()));
+    }
+    WorldRuntimeState result {
+        .change_tick = read_change_tick(),
+        .schedules = std::move(*schedules),
+        .registered_system_generation = m_registered_system_generation,
+        .removed_components = m_removed_components,
+    };
+    std::vector<SystemId> ids;
+    ids.reserve(m_registered_systems.size());
+    for (const auto& [id, _] : m_registered_systems) {
+        ids.push_back(id);
+    }
+    std::ranges::sort(ids);
+    result.registered_systems.reserve(ids.size());
+    for (const auto id : ids) {
+        auto system =
+            m_registered_systems.at(id).system->capture_runtime_state();
+        if (!system) {
+            auto error = std::move(system.error());
+            error.path =
+                "registered_systems[" + std::to_string(id) + "]." + error.path;
+            return failure(std::move(error));
+        }
+        result.registered_systems.push_back(
+            RegisteredSystemRuntimeState {
+                .id = id,
+                .system = std::move(*system),
+            }
+        );
+    }
+    return result;
+}
+
+Status<RuntimeStateError>
+World::validate_runtime_state(const WorldRuntimeState& state) const {
+    if (has_resource<CommandsQueue>() && !resource<CommandsQueue>().empty()) {
+        return failure(
+            RuntimeStateError {
+                .path = "commands",
+                .message = "CommandsQueue must be empty before restore",
+            }
+        );
+    }
+    auto valid = m_schedules.validate_runtime_state(state.schedules);
+    if (!valid) {
+        return valid;
+    }
+    if (state.registered_system_generation != m_registered_system_generation) {
+        return failure(
+            RuntimeStateError {
+                .path = "registered_system_generation",
+                .message = "Registered systems changed since checkpoint",
+            }
+        );
+    }
+    if (state.registered_systems.size() != m_registered_systems.size()) {
+        return failure(
+            RuntimeStateError {
+                .path = "registered_systems",
+                .message = "Registered system count changed since checkpoint",
+            }
+        );
+    }
+    for (const auto& snapshot : state.registered_systems) {
+        const auto found = m_registered_systems.find(snapshot.id);
+        if (found == m_registered_systems.end()) {
+            return failure(
+                RuntimeStateError {
+                    .path = "registered_systems[" +
+                            std::to_string(snapshot.id) + "]",
+                    .message = "Registered system no longer exists",
+                }
+            );
+        }
+        valid = found->second.system->validate_runtime_state(snapshot.system);
+        if (!valid) {
+            auto error = std::move(valid.error());
+            error.path = "registered_systems[" + std::to_string(snapshot.id) +
+                         "]." + error.path;
+            return failure(std::move(error));
+        }
+    }
+    return {};
+}
+
+Status<RuntimeStateError>
+World::restore_runtime_state(const WorldRuntimeState& state) {
+    auto valid = validate_runtime_state(state);
+    if (!valid) {
+        return valid;
+    }
+    auto restored = m_schedules.restore_runtime_state(state.schedules);
+    if (!restored) {
+        return restored;
+    }
+    for (const auto& snapshot : state.registered_systems) {
+        restored = m_registered_systems.at(snapshot.id)
+                       .system->restore_runtime_state(snapshot.system);
+        if (!restored) {
+            auto error = std::move(restored.error());
+            error.path = "registered_systems[" + std::to_string(snapshot.id) +
+                         "]." + error.path;
+            return failure(std::move(error));
+        }
+    }
+    m_change_tick.store(state.change_tick, std::memory_order_relaxed);
+    m_removed_components = state.removed_components;
     return {};
 }
 

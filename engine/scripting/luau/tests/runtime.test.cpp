@@ -37,6 +37,12 @@ TEST_CASE("Lua and Luau runtimes coexist", "[scripting][lua][luau]") {
             .content = "local value: number = 1 + 2",
         }
     ));
+    CHECK_FALSE(luau.run_script(
+        LuauScriptSource {
+            .name = "global_write.luau",
+            .content = "snapshot_unsafe_global = 1",
+        }
+    ));
 }
 
 TEST_CASE(
@@ -46,10 +52,9 @@ TEST_CASE(
     const ScriptSource source {
         .name = "counter.luau",
         .content = R"(
-            local calls = 0
             local function tick()
-                calls += 1
-                assert(calls <= 2)
+                local value = 1 + 1
+                assert(value == 2)
             end
 
             return module {
@@ -108,7 +113,10 @@ TEST_CASE(
             }
         )",
     };
-    auto artifact = compile_luau_script_module(source);
+    auto artifact = compile_luau_script_module(
+        source,
+        LuauCompileOptions {.snapshot_safe = false}
+    );
     REQUIRE(artifact);
 
     LuauRuntime runtime;

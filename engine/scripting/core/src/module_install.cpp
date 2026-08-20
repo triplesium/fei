@@ -17,10 +17,15 @@ namespace {
 class CallbackScriptSystemExecutor final : public DynamicSystemExecutor {
   private:
     ScriptSystemCall m_call;
+    bool m_checkpoint_safe_stateless {false};
 
   public:
-    explicit CallbackScriptSystemExecutor(ScriptSystemCall call) :
-        m_call(std::move(call)) {}
+    CallbackScriptSystemExecutor(
+        ScriptSystemCall call,
+        bool checkpoint_safe_stateless
+    ) :
+        m_call(std::move(call)),
+        m_checkpoint_safe_stateless(checkpoint_safe_stateless) {}
 
     Status<DynamicSystemError> execute(const std::vector<Ref>& args) override {
         auto status = m_call(args);
@@ -31,15 +36,24 @@ class CallbackScriptSystemExecutor final : public DynamicSystemExecutor {
         }
         return {};
     }
+
+    bool checkpoint_safe_stateless() const override {
+        return m_checkpoint_safe_stateless;
+    }
 };
 
 class CallbackScriptConditionExecutor final : public DynamicConditionExecutor {
   private:
     ScriptConditionCall m_call;
+    bool m_checkpoint_safe_stateless {false};
 
   public:
-    explicit CallbackScriptConditionExecutor(ScriptConditionCall call) :
-        m_call(std::move(call)) {}
+    CallbackScriptConditionExecutor(
+        ScriptConditionCall call,
+        bool checkpoint_safe_stateless
+    ) :
+        m_call(std::move(call)),
+        m_checkpoint_safe_stateless(checkpoint_safe_stateless) {}
 
     Result<bool, DynamicSystemError>
     evaluate(const std::vector<Ref>& args) override {
@@ -51,29 +65,51 @@ class CallbackScriptConditionExecutor final : public DynamicConditionExecutor {
         }
         return *result;
     }
+
+    bool checkpoint_safe_stateless() const override {
+        return m_checkpoint_safe_stateless;
+    }
 };
 
 Result<TypeId, ScriptError> resolve_script_type_ref(
     const ScriptTypeRef& type_ref,
     const std::unordered_map<std::string, TypeId>& script_types
 ) {
+    TypeId resolved;
     if (type_ref.type_id) {
-        return *type_ref.type_id;
-    }
-    if (auto it = script_types.find(type_ref.type_name);
-        it != script_types.end()) {
-        return it->second;
+        if (*type_ref.type_id == type_id<Entity>()) {
+            resolved = Registry::instance().register_type<Entity>().id();
+        } else {
+            resolved = *type_ref.type_id;
+        }
+    } else if (
+        auto it = script_types.find(type_ref.type_name);
+        it != script_types.end()
+    ) {
+        resolved = it->second;
+    } else {
+        auto type = resolve_dynamic_type_ref(
+            DynamicTypeRef {
+                .type_name = type_ref.type_name,
+            }
+        );
+        if (!type) {
+            return failure(ScriptError {std::move(type.error().message)});
+        }
+        resolved = *type;
     }
 
-    auto type = resolve_dynamic_type_ref(
-        DynamicTypeRef {
-            .type_name = type_ref.type_name,
+    if (!type_ref.optional) {
+        return resolved;
+    }
+    if (resolved == type_id<Entity>()) {
+        return Registry::instance().register_type<Optional<Entity>>().id();
+    }
+    return failure(
+        ScriptError {
+            "Optional script fields currently support only Entity values",
         }
     );
-    if (!type) {
-        return failure(ScriptError {std::move(type.error().message)});
-    }
-    return *type;
 }
 
 Status<ScriptError> append_script_type_decl(
@@ -249,14 +285,24 @@ Status<ScriptError> apply_script_resource_initial_values(
 
 } // namespace
 
-std::unique_ptr<DynamicSystemExecutor>
-make_script_system_executor(ScriptSystemCall call) {
-    return std::make_unique<CallbackScriptSystemExecutor>(std::move(call));
+std::unique_ptr<DynamicSystemExecutor> make_script_system_executor(
+    ScriptSystemCall call,
+    bool checkpoint_safe_stateless
+) {
+    return std::make_unique<CallbackScriptSystemExecutor>(
+        std::move(call),
+        checkpoint_safe_stateless
+    );
 }
 
-std::unique_ptr<DynamicConditionExecutor>
-make_script_condition_executor(ScriptConditionCall call) {
-    return std::make_unique<CallbackScriptConditionExecutor>(std::move(call));
+std::unique_ptr<DynamicConditionExecutor> make_script_condition_executor(
+    ScriptConditionCall call,
+    bool checkpoint_safe_stateless
+) {
+    return std::make_unique<CallbackScriptConditionExecutor>(
+        std::move(call),
+        checkpoint_safe_stateless
+    );
 }
 
 Result<ScriptTypeBindings, ScriptError>

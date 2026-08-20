@@ -116,7 +116,7 @@ check_world_entity(lua_State* state, int index, bool require_existing = true) {
         luaL_error(
             state,
             "Entity %d does not exist",
-            static_cast<int>(entity->entity)
+            static_cast<int>(entity->entity.value)
         );
     }
     return *entity;
@@ -183,7 +183,7 @@ bool would_create_cycle(World& world, Entity child, Entity parent) {
 
 int world_entity_id(lua_State* state) {
     auto& entity = check_world_entity(state, 1, false);
-    lua_pushinteger(state, static_cast<lua_Integer>(entity.entity));
+    lua_pushinteger(state, static_cast<lua_Integer>(entity.entity.value));
     return 1;
 }
 
@@ -264,7 +264,7 @@ int world_entity_remove(lua_State* state) {
             luaL_error(
                 state,
                 "Entity %d does not have component '%s'",
-                static_cast<int>(entity.entity),
+                static_cast<int>(entity.entity.value),
                 type_name(type).c_str()
             );
         }
@@ -290,7 +290,7 @@ int world_entity_parent(lua_State* state) {
     auto& entity = check_world_entity(state, 1);
     auto parent = entity.world->world().parent(entity.entity);
     if (parent) {
-        lua_pushinteger(state, static_cast<lua_Integer>(*parent));
+        lua_pushinteger(state, static_cast<lua_Integer>(parent->value));
     } else {
         lua_pushnil(state);
     }
@@ -308,7 +308,7 @@ int world_entity_children(lua_State* state) {
     const auto& children = world.get_component<Children>(entity.entity);
     int index = 1;
     for (Entity child : children) {
-        lua_pushinteger(state, static_cast<lua_Integer>(child));
+        lua_pushinteger(state, static_cast<lua_Integer>(child.value));
         lua_rawseti(state, -2, index++);
     }
     return 1;
@@ -317,10 +317,16 @@ int world_entity_children(lua_State* state) {
 int world_entity_set_parent(lua_State* state) {
     require_arg_count(state, 2, "WorldEntity.set_parent");
     auto& entity = check_world_entity(state, 1);
-    const auto parent = static_cast<Entity>(luaL_checkinteger(state, 2));
+    const Entity parent {
+        static_cast<std::uint32_t>(luaL_checkinteger(state, 2)),
+    };
     auto& world = entity.world->world();
     if (!world.has_entity(parent)) {
-        luaL_error(state, "Entity %d does not exist", static_cast<int>(parent));
+        luaL_error(
+            state,
+            "Entity %d does not exist",
+            static_cast<int>(parent.value)
+        );
     }
     if (would_create_cycle(world, entity.entity, parent)) {
         luaL_error(state, "Entity hierarchy cannot contain a cycle");
@@ -397,6 +403,48 @@ TypeId descriptor_type(lua_State* state, int index, std::string_view context) {
     return type;
 }
 
+DynamicQueryFilter parse_world_query_filter(lua_State* state, int index) {
+    index = lua_absindex(state, index);
+    const std::string kind = descriptor_kind(state, index);
+    if (kind == "or" || kind == "Or") {
+        DynamicQueryFilter result {.kind = DynamicQueryFilter::Kind::Or};
+        const int count = static_cast<int>(lua_objlen(state, index));
+        if (count == 0) {
+            luaL_error(state, "World.query Or filter cannot be empty");
+        }
+        result.filters.reserve(static_cast<std::size_t>(count));
+        for (int child = 1; child <= count; ++child) {
+            lua_rawgeti(state, index, child);
+            luaL_checktype(state, -1, LUA_TTABLE);
+            result.filters.push_back(parse_world_query_filter(state, -1));
+            lua_pop(state, 1);
+        }
+        return result;
+    }
+
+    auto filter_kind = DynamicQueryFilter::Kind::With;
+    bool required = true;
+    if (kind == "without" || kind == "Without") {
+        filter_kind = DynamicQueryFilter::Kind::Without;
+        required = false;
+    } else if (kind == "added" || kind == "Added") {
+        filter_kind = DynamicQueryFilter::Kind::Added;
+    } else if (kind == "changed" || kind == "Changed") {
+        filter_kind = DynamicQueryFilter::Kind::Changed;
+    } else if (kind != "with" && kind != "With") {
+        luaL_error(
+            state,
+            "World.query has unsupported filter descriptor '%s'",
+            kind.c_str()
+        );
+    }
+    return DynamicQueryFilter {
+        .kind = filter_kind,
+        .type = descriptor_type(state, index, "World.query filter"),
+        .required = required,
+    };
+}
+
 LuauWorldQuery parse_world_query(
     lua_State* state,
     const LuauWorldBorrow& borrowed,
@@ -410,29 +458,33 @@ LuauWorldQuery parse_world_query(
         lua_rawgeti(state, index, item_index);
         luaL_checktype(state, -1, LUA_TTABLE);
         const std::string kind = descriptor_kind(state, -1);
-        if (kind == "entity") {
+        if (kind == "entity" || kind == "Entity") {
             fields.push_back(
                 DynamicQueryField {
                     .name = "entity",
                     .kind = DynamicQueryFieldKind::Entity,
                 }
             );
-        } else if (kind == "read" || kind == "write") {
+        } else if (
+            kind == "read" || kind == "Read" || kind == "write" ||
+            kind == "Write"
+        ) {
             fields.push_back(
                 DynamicQueryField {
                     .name = "field" + std::to_string(fields.size()),
                     .type = descriptor_type(state, -1, "World.query field"),
-                    .access = kind == "write" ? DynamicParamAccess::Write :
-                                                DynamicParamAccess::Read,
+                    .access = kind == "write" || kind == "Write" ?
+                                  DynamicParamAccess::Write :
+                                  DynamicParamAccess::Read,
                 }
             );
-        } else if (kind == "with" || kind == "without") {
-            filters.push_back(
-                DynamicQueryFilter {
-                    .type = descriptor_type(state, -1, "World.query filter"),
-                    .required = kind == "with",
-                }
-            );
+        } else if (
+            kind == "with" || kind == "With" || kind == "without" ||
+            kind == "Without" || kind == "added" || kind == "Added" ||
+            kind == "changed" || kind == "Changed" || kind == "or" ||
+            kind == "Or"
+        ) {
+            filters.push_back(parse_world_query_filter(state, -1));
         } else {
             luaL_error(
                 state,
@@ -473,7 +525,7 @@ int push_query_row(
             const Ref entity = query.query.field(row, index);
             lua_pushinteger(
                 state,
-                static_cast<lua_Integer>(entity.get_const<Entity>())
+                static_cast<lua_Integer>(entity.get_const<Entity>().value)
             );
         } else {
             push_luau_borrowed_ref(
@@ -568,7 +620,9 @@ int world_query_index(lua_State* state) {
 int world_has_entity(lua_State* state) {
     require_arg_count(state, 2, "World.has_entity");
     auto borrowed = check_world(state, 1);
-    const auto entity = static_cast<Entity>(luaL_checkinteger(state, 2));
+    const Entity entity {
+        static_cast<std::uint32_t>(luaL_checkinteger(state, 2)),
+    };
     lua_pushboolean(state, borrowed.world->world().has_entity(entity));
     return 1;
 }
@@ -576,7 +630,9 @@ int world_has_entity(lua_State* state) {
 int world_entity(lua_State* state) {
     require_arg_count(state, 2, "World.entity");
     auto borrowed = check_world(state, 1);
-    const auto entity = static_cast<Entity>(luaL_checkinteger(state, 2));
+    const Entity entity {
+        static_cast<std::uint32_t>(luaL_checkinteger(state, 2)),
+    };
     if (!borrowed.world->world().has_entity(entity)) {
         lua_pushnil(state);
         return 1;

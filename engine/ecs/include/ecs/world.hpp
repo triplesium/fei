@@ -54,6 +54,7 @@ class World {
     Schedules m_schedules;
     std::unordered_map<SystemId, RegisteredSystem> m_registered_systems;
     SystemId m_next_registered_system_id {0};
+    std::uint64_t m_registered_system_generation {0};
     std::size_t m_registered_system_execution_depth {0};
     std::atomic<Tick> m_change_tick {0};
     RemovedComponentEvents m_removed_components;
@@ -70,6 +71,7 @@ class World {
         m_schedules(std::move(other.m_schedules)),
         m_registered_systems(std::move(other.m_registered_systems)),
         m_next_registered_system_id(other.m_next_registered_system_id),
+        m_registered_system_generation(other.m_registered_system_generation),
         m_change_tick(other.read_change_tick()),
         m_removed_components(std::move(other.m_removed_components)) {}
 
@@ -82,6 +84,8 @@ class World {
             m_schedules = std::move(other.m_schedules);
             m_registered_systems = std::move(other.m_registered_systems);
             m_next_registered_system_id = other.m_next_registered_system_id;
+            m_registered_system_generation =
+                other.m_registered_system_generation;
             m_registered_system_execution_depth = 0;
             m_change_tick.store(
                 other.read_change_tick(),
@@ -166,6 +170,12 @@ class World {
         return m_change_tick.fetch_add(1, std::memory_order_relaxed) + 1;
     }
 
+    Result<WorldRuntimeState, RuntimeStateError> capture_runtime_state() const;
+    Status<RuntimeStateError>
+    validate_runtime_state(const WorldRuntimeState& state) const;
+    Status<RuntimeStateError>
+    restore_runtime_state(const WorldRuntimeState& state);
+
     void set_parent(Entity child, Entity parent);
     void remove_parent(Entity child);
     bool has_parent(Entity child) const;
@@ -223,6 +233,24 @@ class World {
 
     std::size_t worker_threads() const { return m_schedules.worker_threads(); }
 
+    // Snapshot restore uses these swaps to stage a new entity graph while the
+    // previous graph remains available for lossless rollback. They exchange
+    // storage only; schedules and unrelated resources stay with each World.
+    void swap_entity_state(World& other) noexcept {
+        using std::swap;
+        swap(m_entities, other.m_entities);
+        swap(m_archetypes, other.m_archetypes);
+        swap(m_removed_components, other.m_removed_components);
+    }
+
+    void swap_resource(TypeId type, World& other) {
+        m_resources.swap_entry(type, other.m_resources);
+    }
+
+    const std::vector<TypeId>& resource_types() const {
+        return m_resources.types();
+    }
+
     RegisteredSystemId register_system(std::unique_ptr<System> system);
 
     template<typename F>
@@ -231,6 +259,16 @@ class World {
         using Func = std::decay_t<F>;
         return register_system(
             std::make_unique<FunctionSystem<Func>>(std::forward<F>(func))
+        );
+    }
+
+    template<typename F>
+        requires IntoSystem<std::decay_t<F>> &&
+                 std::copy_constructible<std::decay_t<F>>
+    RegisteredSystemId register_checkpointed_system(F&& func) {
+        using Func = std::decay_t<F>;
+        return register_system(
+            std::make_unique<FunctionSystem<Func, true>>(std::forward<F>(func))
         );
     }
 

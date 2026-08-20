@@ -15,6 +15,12 @@ enum class LuauSystemDeclarationLayout {
     ScheduleGroups,
 };
 
+struct LuauCompileOptions {
+    // Project scripts default to snapshot-safe behavior. The opt-out exists
+    // for low-level VM tests and tooling that never participates in rollback.
+    bool snapshot_safe {true};
+};
+
 struct LuauScriptModuleArtifact {
     ScriptModuleDecl declaration;
     std::string bytecode;
@@ -32,10 +38,16 @@ struct LuauScriptLibraryArtifact {
 Result<std::vector<std::string>, ScriptError>
 extract_luau_script_imports(const ScriptSource& source);
 
-Result<LuauScriptModuleArtifact, ScriptError>
-compile_luau_script_module(const ScriptSource& source);
+Status<ScriptError> validate_luau_snapshot_safety(const ScriptSource& source);
 
-Result<LuauScriptLibraryArtifact, ScriptError>
-compile_luau_script_library(const ScriptSource& source);
+Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
+    const ScriptSource& source,
+    LuauCompileOptions options = {}
+);
+
+Result<LuauScriptLibraryArtifact, ScriptError> compile_luau_script_library(
+    const ScriptSource& source,
+    LuauCompileOptions options = {}
+);
 
 } // namespace fei

@@ -61,25 +61,25 @@ TEST_CASE(
     "[rendering][visibility]"
 ) {
     ViewVisibleEntities visible_entities;
-    auto primary = ViewId::from_source(1);
+    auto primary = ViewId::from_source(Entity {1});
     ViewId shadow_cascade {
-        .source = 1,
+        .source = Entity {1},
         .auxiliary = 2,
         .subview = 0,
     };
     ViewId next_shadow_cascade {
-        .source = 1,
+        .source = Entity {1},
         .auxiliary = 2,
         .subview = 1,
     };
 
-    visible_entities.get_or_insert(primary).add(10);
-    visible_entities.get_or_insert(shadow_cascade).add(20);
-    visible_entities.get_or_insert(next_shadow_cascade).add(30);
+    visible_entities.get_or_insert(primary).add(Entity {10});
+    visible_entities.get_or_insert(shadow_cascade).add(Entity {20});
+    visible_entities.get_or_insert(next_shadow_cascade).add(Entity {30});
 
-    REQUIRE(visible_entities.get(primary)->contains(10));
-    REQUIRE_FALSE(visible_entities.get(primary)->contains(20));
-    REQUIRE(visible_entities.get(shadow_cascade)->contains(20));
-    REQUIRE_FALSE(visible_entities.get(shadow_cascade)->contains(30));
-    REQUIRE(visible_entities.get(next_shadow_cascade)->contains(30));
+    REQUIRE(visible_entities.get(primary)->contains(Entity {10}));
+    REQUIRE_FALSE(visible_entities.get(primary)->contains(Entity {20}));
+    REQUIRE(visible_entities.get(shadow_cascade)->contains(Entity {20}));
+    REQUIRE_FALSE(visible_entities.get(shadow_cascade)->contains(Entity {30}));
+    REQUIRE(visible_entities.get(next_shadow_cascade)->contains(Entity {30}));
 }

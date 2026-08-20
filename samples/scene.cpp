@@ -202,7 +202,7 @@ void draw_lighting_controls(
               light_component,
               transform_component,
               ui_state_component] : query_directional_lights) {
-            ImGui::PushID(static_cast<int>(entity));
+            ImGui::PushID(static_cast<int>(entity.value));
             if (ImGui::TreeNodeEx(
                     "Directional Light",
                     ImGuiTreeNodeFlags_DefaultOpen
@@ -240,7 +240,7 @@ void draw_lighting_controls(
         }
         for (auto [entity, light_component, transform_component] :
              query_point_lights) {
-            ImGui::PushID(static_cast<int>(entity));
+            ImGui::PushID(static_cast<int>(entity.value));
             if (ImGui::TreeNode("Point Light")) {
                 auto& light = light_component.write();
                 auto& transform = transform_component.write();
@@ -280,7 +280,7 @@ void draw_indirect_lighting_controls(
             ImGui::TextDisabled("No environment map lights");
         }
         for (auto [entity, light_component] : query_environment_lights) {
-            ImGui::PushID(static_cast<int>(entity));
+            ImGui::PushID(static_cast<int>(entity.value));
             auto& light = light_component.write();
             ImGui::Checkbox("Enable IBL", &light.enabled);
             ImGui::BeginDisabled(!light.enabled);

@@ -26,15 +26,19 @@ void check_vector(Vector2 actual, float x, float y) {
     check_near(actual.y, y);
 }
 
+constexpr Entity test_entity(uint32 value) {
+    return Entity {value};
+}
+
 } // namespace
 
 TEST_CASE("UI root fills its viewport", "[ui][layout]") {
     ui::Surface surface;
-    surface.upsert(1, ui::Node {});
+    surface.upsert(test_entity(1), ui::Node {});
 
-    surface.compute(1, {1280.0f, 720.0f});
+    surface.compute(test_entity(1), {1280.0f, 720.0f});
 
-    const auto* root = surface.get(1);
+    const auto* root = surface.get(test_entity(1));
     REQUIRE(root);
     check_vector(root->position, 0.0f, 0.0f);
     check_vector(root->size, 1280.0f, 720.0f);
@@ -44,7 +48,7 @@ TEST_CASE("UI root fills its viewport", "[ui][layout]") {
 TEST_CASE("UI border participates in the border-box layout", "[ui][layout]") {
     ui::Surface surface;
     surface.upsert(
-        1,
+        test_entity(1),
         ui::Node {
             .border = ui::all(ui::px(4.0f)),
             .padding = ui::all(ui::px(6.0f)),
@@ -52,14 +56,14 @@ TEST_CASE("UI border participates in the border-box layout", "[ui][layout]") {
         Vector2::Zero,
         ui::BorderRadius::all(ui::px(20.0f))
     );
-    surface.upsert(2, ui::Node {.flex_grow = 1.0f});
+    surface.upsert(test_entity(2), ui::Node {.flex_grow = 1.0f});
     const std::array children {Entity {2}};
-    surface.set_children(1, children);
+    surface.set_children(test_entity(1), children);
 
-    surface.compute(1, {100.0f, 60.0f});
+    surface.compute(test_entity(1), {100.0f, 60.0f});
 
-    const auto* root = surface.get(1);
-    const auto* child = surface.get(2);
+    const auto* root = surface.get(test_entity(1));
+    const auto* child = surface.get(test_entity(2));
     REQUIRE(root);
     REQUIRE(child);
     check_vector(root->content_size, 80.0f, 40.0f);
@@ -72,21 +76,21 @@ TEST_CASE("UI border participates in the border-box layout", "[ui][layout]") {
 TEST_CASE("UI column lays out fixed children with a gap", "[ui][layout]") {
     ui::Surface surface;
     surface.upsert(
-        1,
+        test_entity(1),
         ui::Node {
             .padding = ui::all(ui::px(10.0f)),
             .gap = ui::px(5.0f),
         }
     );
-    surface.upsert(2, ui::Node {.height = ui::px(20.0f)});
-    surface.upsert(3, ui::Node {.height = ui::px(30.0f)});
+    surface.upsert(test_entity(2), ui::Node {.height = ui::px(20.0f)});
+    surface.upsert(test_entity(3), ui::Node {.height = ui::px(30.0f)});
     const std::array children {Entity {2}, Entity {3}};
-    surface.set_children(1, children);
+    surface.set_children(test_entity(1), children);
 
-    surface.compute(1, {200.0f, 100.0f});
+    surface.compute(test_entity(1), {200.0f, 100.0f});
 
-    const auto* first = surface.get(2);
-    const auto* second = surface.get(3);
+    const auto* first = surface.get(test_entity(2));
+    const auto* second = surface.get(test_entity(3));
     REQUIRE(first);
     REQUIRE(second);
     check_vector(first->position, 10.0f, 10.0f);
@@ -98,26 +102,26 @@ TEST_CASE("UI column lays out fixed children with a gap", "[ui][layout]") {
 TEST_CASE("UI scroll position offsets and clamps content", "[ui][layout]") {
     ui::Surface surface;
     surface.upsert(
-        1,
+        test_entity(1),
         ui::Node {.overflow = ui::Overflow::scroll_y()},
         ui::ContentSize {},
         ui::BorderRadius {},
         ui::ScrollPosition {.offset = {0.0f, 500.0f}}
     );
     surface.upsert(
-        2,
+        test_entity(2),
         ui::Node {
             .height = ui::px(300.0f),
             .flex_shrink = 0.0f,
         }
     );
     const std::array children {Entity {2}};
-    surface.set_children(1, children);
+    surface.set_children(test_entity(1), children);
 
-    surface.compute(1, {100.0f, 100.0f});
+    surface.compute(test_entity(1), {100.0f, 100.0f});
 
-    const auto* area = surface.get(1);
-    const auto* content = surface.get(2);
+    const auto* area = surface.get(test_entity(1));
+    const auto* content = surface.get(test_entity(2));
     REQUIRE(area);
     REQUIRE(content);
     check_vector(area->scroll_content_size, 100.0f, 300.0f);
@@ -127,16 +131,19 @@ TEST_CASE("UI scroll position offsets and clamps content", "[ui][layout]") {
 
 TEST_CASE("UI row distributes remaining space by flex grow", "[ui][layout]") {
     ui::Surface surface;
-    surface.upsert(1, ui::Node {.flex_direction = ui::FlexDirection::Row});
-    surface.upsert(2, ui::Node {.flex_grow = 1.0f});
-    surface.upsert(3, ui::Node {.flex_grow = 3.0f});
+    surface.upsert(
+        test_entity(1),
+        ui::Node {.flex_direction = ui::FlexDirection::Row}
+    );
+    surface.upsert(test_entity(2), ui::Node {.flex_grow = 1.0f});
+    surface.upsert(test_entity(3), ui::Node {.flex_grow = 3.0f});
     const std::array children {Entity {2}, Entity {3}};
-    surface.set_children(1, children);
+    surface.set_children(test_entity(1), children);
 
-    surface.compute(1, {400.0f, 100.0f});
+    surface.compute(test_entity(1), {400.0f, 100.0f});
 
-    const auto* first = surface.get(2);
-    const auto* second = surface.get(3);
+    const auto* first = surface.get(test_entity(2));
+    const auto* second = surface.get(test_entity(3));
     REQUIRE(first);
     REQUIRE(second);
     check_vector(first->size, 100.0f, 100.0f);
@@ -150,21 +157,21 @@ TEST_CASE(
 ) {
     ui::Surface surface;
     surface.upsert(
-        1,
+        test_entity(1),
         ui::Node {
             .padding = ui::axes(ui::px(20.0f), ui::px(10.0f)),
             .flex_direction = ui::FlexDirection::Row,
         }
     );
-    surface.upsert(2, ui::Node {.width = ui::percent(25.0f)});
-    surface.upsert(3, ui::Node {.flex_grow = 1.0f});
+    surface.upsert(test_entity(2), ui::Node {.width = ui::percent(25.0f)});
+    surface.upsert(test_entity(3), ui::Node {.flex_grow = 1.0f});
     const std::array children {Entity {2}, Entity {3}};
-    surface.set_children(1, children);
+    surface.set_children(test_entity(1), children);
 
-    surface.compute(1, {440.0f, 120.0f});
+    surface.compute(test_entity(1), {440.0f, 120.0f});
 
-    const auto* sidebar = surface.get(2);
-    const auto* content = surface.get(3);
+    const auto* sidebar = surface.get(test_entity(2));
+    const auto* content = surface.get(test_entity(3));
     REQUIRE(sidebar);
     REQUIRE(content);
     check_vector(sidebar->position, 20.0f, 10.0f);
@@ -175,10 +182,10 @@ TEST_CASE(
 
 TEST_CASE("UI absolute nodes do not participate in flex flow", "[ui][layout]") {
     ui::Surface surface;
-    surface.upsert(1, ui::Node {});
-    surface.upsert(2, ui::Node {.height = ui::px(40.0f)});
+    surface.upsert(test_entity(1), ui::Node {});
+    surface.upsert(test_entity(2), ui::Node {.height = ui::px(40.0f)});
     surface.upsert(
-        3,
+        test_entity(3),
         ui::Node {
             .position_type = ui::PositionType::Absolute,
             .width = ui::px(50.0f),
@@ -188,12 +195,12 @@ TEST_CASE("UI absolute nodes do not participate in flex flow", "[ui][layout]") {
         }
     );
     const std::array children {Entity {2}, Entity {3}};
-    surface.set_children(1, children);
+    surface.set_children(test_entity(1), children);
 
-    surface.compute(1, {200.0f, 100.0f});
+    surface.compute(test_entity(1), {200.0f, 100.0f});
 
-    const auto* flow = surface.get(2);
-    const auto* absolute = surface.get(3);
+    const auto* flow = surface.get(test_entity(2));
+    const auto* absolute = surface.get(test_entity(3));
     REQUIRE(flow);
     REQUIRE(absolute);
     check_vector(flow->position, 0.0f, 0.0f);
@@ -208,23 +215,23 @@ TEST_CASE(
 ) {
     ui::Surface surface;
     surface.upsert(
-        1,
+        test_entity(1),
         ui::Node {
             .flex_direction = ui::FlexDirection::Row,
             .align_items = ui::AlignItems::Start,
         }
     );
     surface.upsert(
-        2,
+        test_entity(2),
         ui::Node {.width = ui::px(100.0f)},
         Vector2 {200.0f, 100.0f}
     );
     const std::array children {Entity {2}};
-    surface.set_children(1, children);
+    surface.set_children(test_entity(1), children);
 
-    surface.compute(1, {300.0f, 200.0f});
+    surface.compute(test_entity(1), {300.0f, 200.0f});
 
-    const auto* image = surface.get(2);
+    const auto* image = surface.get(test_entity(2));
     REQUIRE(image);
     check_vector(image->size, 100.0f, 50.0f);
 }
@@ -380,7 +387,7 @@ TEST_CASE("UI text and layout stay cached until inputs change", "[ui][text]") {
 
 TEST_CASE("UI text measure changes Flex sibling placement", "[ui][text]") {
     ui::Surface surface;
-    surface.upsert(1, ui::Node {});
+    surface.upsert(test_entity(1), ui::Node {});
     const text::TextMeasureInfo info {
         .min = {10.0f, 10.0f},
         .max = {25.0f, 10.0f},
@@ -395,7 +402,7 @@ TEST_CASE("UI text measure changes Flex sibling placement", "[ui][text]") {
         },
     };
     surface.upsert(
-        2,
+        test_entity(2),
         ui::Node {},
         ui::ContentSize {
             .measure = ui::TextMeasure {
@@ -404,14 +411,18 @@ TEST_CASE("UI text measure changes Flex sibling placement", "[ui][text]") {
             },
         }
     );
-    surface.upsert(3, ui::Node {.height = ui::px(10.0f)}, Vector2::Zero);
+    surface.upsert(
+        test_entity(3),
+        ui::Node {.height = ui::px(10.0f)},
+        Vector2::Zero
+    );
     const std::array children {Entity {2}, Entity {3}};
-    surface.set_children(1, children);
+    surface.set_children(test_entity(1), children);
 
-    surface.compute(1, {15.0f, 100.0f});
+    surface.compute(test_entity(1), {15.0f, 100.0f});
 
-    const auto* text_node = surface.get(2);
-    const auto* sibling = surface.get(3);
+    const auto* text_node = surface.get(test_entity(2));
+    const auto* sibling = surface.get(test_entity(3));
     REQUIRE(text_node);
     REQUIRE(sibling);
     check_vector(text_node->size, 15.0f, 20.0f);

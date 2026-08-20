@@ -10,6 +10,7 @@
 #include "runtime_protocol/playtest.hpp"
 #include "scripting/borrow_scope.hpp"
 #include "scripting/source.hpp"
+#include "scripting_luau/compiler.hpp"
 #include "scripting_luau/detail/binding.hpp"
 
 #include <algorithm>
@@ -647,6 +648,15 @@ class LuauPlaytestRuntime {
 
     Result<LoadedPlaytestDeclaration, PlaytestError>
     load(const ScriptSource& source) {
+        auto snapshot_safe = validate_luau_snapshot_safety(source);
+        if (!snapshot_safe) {
+            return failure(
+                PlaytestError {
+                    .kind = PlaytestErrorKind::InvalidAction,
+                    .message = std::move(snapshot_safe.error().message),
+                }
+            );
+        }
         auto* root = m_impl->state;
         const int root_top = lua_gettop(root);
         lua_State* thread = lua_newthread(root);
@@ -892,6 +902,10 @@ class LuauPlaytestRuntime {
 };
 
 } // namespace
+
+TypeId luau_playtest_runtime_resource_type() {
+    return type_id<LuauPlaytestRuntime>();
+}
 
 void LuauPlaytestsPlugin::setup(App& app) {
     if (!app.has_resource<runtime_protocol::PlaytestRegistry>()) {

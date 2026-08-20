@@ -183,7 +183,7 @@ TEST_CASE(
                     local second = require("./lib/../lib/counter.luau")
 
                     local function tick(state: ResRW<RequireState>)
-                        state.value = first.next() * 10 + second.next()
+                        state.value = first.next(0) * 10 + second.next(1)
                     end
 
                     return module {
@@ -208,11 +208,9 @@ TEST_CASE(
             ScriptFile {
                 .path = "scripts/lib/counter.luau",
                 .content = std::string_view {R"(
-                    local value = 0
                     return {
-                        next = function()
-                            value += 1
-                            return value
+                        next = function(value: number)
+                            return value + 1
                         end,
                     }
                 )"},
@@ -479,6 +477,9 @@ TEST_CASE(
     app.add_plugin(project_runtime::LuauPlaytestsPlugin {});
     app.finish();
 
+    CHECK(app.world().has_resource(
+        project_runtime::luau_playtest_runtime_resource_type()
+    ));
     auto& registry = app.resource<runtime_protocol::PlaytestRegistry>();
     const auto* interface = registry.find("game.main");
     REQUIRE(interface != nullptr);
@@ -522,6 +523,50 @@ TEST_CASE(
             ScriptFile {
                 .path = "scripts/main.playtest.luau",
                 .content = std::string_view {"return {}"},
+            },
+        }
+    );
+    auto project = Project::load(directory.project_file());
+    REQUIRE(project);
+
+    App app;
+    app.add_resource(runtime_protocol::PlaytestRegistry {});
+    configure_project_runtime(app, std::move(*project));
+    app.add_plugin(project_runtime::LuauPlaytestsPlugin {});
+
+    REQUIRE_THROWS_AS(app.finish(), std::runtime_error);
+}
+
+TEST_CASE(
+    "Project Luau playtests reject hidden persistent state",
+    "[project-runtime][luau][playtest][snapshot]"
+) {
+    TemporaryMixedScriptProject directory(
+        {
+            ScriptFile {
+                .path = "scripts/gameplay.luau",
+                .content = std::string_view {R"(
+                    return module {
+                        name = "project.snapshot_safe_playtest",
+                        systems = {},
+                    }
+                )"},
+            },
+        },
+        {
+            ScriptFile {
+                .path = "scripts/main.playtest.luau",
+                .content = std::string_view {R"(
+                    local observations = 0
+                    local function observe()
+                        observations += 1
+                        return {}
+                    end
+                    return playtest {
+                        id = "game.unsafe",
+                        observe = observe,
+                    }
+                )"},
             },
         }
     );
@@ -656,7 +701,7 @@ TEST_CASE(
     REQUIRE(ticks.has_value());
     CHECK(ticks->get<int>() == 1);
 
-    const Entity entity = mover->to_number<Entity>();
+    const Entity entity = mover->get<Entity>();
     REQUIRE(app.world().has_component(entity, position_type->id()));
     auto& position_cls = registry.get_cls(position_type->id());
     auto x = position_cls.get_property("x").get(

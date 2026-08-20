@@ -30,20 +30,28 @@ namespace {
 using Luau::AstExpr;
 using Luau::AstExprCall;
 using Luau::AstExprConstantBool;
+using Luau::AstExprConstantNil;
 using Luau::AstExprConstantNumber;
 using Luau::AstExprConstantString;
 using Luau::AstExprFunction;
 using Luau::AstExprGlobal;
+using Luau::AstExprIndexExpr;
 using Luau::AstExprIndexName;
 using Luau::AstExprLocal;
 using Luau::AstExprTable;
 using Luau::AstLocal;
+using Luau::AstStatAssign;
+using Luau::AstStatCompoundAssign;
+using Luau::AstStatFunction;
+using Luau::AstStatLocal;
 using Luau::AstStatLocalFunction;
 using Luau::AstStatReturn;
 using Luau::AstType;
 using Luau::AstTypeOptional;
 using Luau::AstTypeReference;
 using Luau::AstTypeUnion;
+
+std::string_view name_view(Luau::AstName name);
 
 class LuauImportVisitor final : public Luau::AstVisitor {
   public:
@@ -78,6 +86,237 @@ class LuauImportVisitor final : public Luau::AstVisitor {
         return true;
     }
 };
+
+const AstExpr* assignment_root(const AstExpr& expression) {
+    if (const auto* index = expression.as<AstExprIndexName>()) {
+        return assignment_root(*index->expr);
+    }
+    if (const auto* index = expression.as<AstExprIndexExpr>()) {
+        return assignment_root(*index->expr);
+    }
+    return &expression;
+}
+
+class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
+  public:
+    Optional<ScriptError> error;
+    std::string source_name;
+
+    explicit LuauSnapshotSafetyVisitor(std::string source) :
+        source_name(std::move(source)) {}
+
+    bool visit(AstStatAssign* statement) override {
+        for (AstExpr* target : statement->vars) {
+            if (!validate_assignment(*target)) {
+                return false;
+            }
+        }
+        const auto count =
+            std::min(statement->vars.size, statement->values.size);
+        for (std::size_t index = 0; index < count; ++index) {
+            update_alias(
+                *statement->vars.data[index],
+                *statement->values.data[index]
+            );
+        }
+        return true;
+    }
+
+    bool visit(AstStatLocal* statement) override {
+        const auto count =
+            std::min(statement->vars.size, statement->values.size);
+        for (std::size_t index = 0; index < count; ++index) {
+            if (references_module_state(*statement->values.data[index])) {
+                m_module_state_aliases.insert(statement->vars.data[index]);
+            }
+        }
+        return true;
+    }
+
+    bool visit(AstStatCompoundAssign* statement) override {
+        return validate_assignment(*statement->var);
+    }
+
+    bool visit(AstStatFunction* statement) override {
+        return validate_assignment(*statement->name);
+    }
+
+    bool visit(AstExprIndexName* expression) override {
+        std::vector<std::string_view> path;
+        if (!append_path(*expression, path)) {
+            return true;
+        }
+        if ((path.size() == 2 && path[0] == "math" &&
+             (path[1] == "random" || path[1] == "randomseed")) ||
+            (path.size() == 2 && path[0] == "os" &&
+             (path[1] == "clock" || path[1] == "time" || path[1] == "date" ||
+              path[1] == "difftime"))) {
+            reject(
+                expression->location,
+                "nondeterministic API '" + join_path(path) +
+                    "' is unavailable; keep deterministic state in ECS"
+            );
+            return false;
+        }
+        return true;
+    }
+
+    bool visit(AstExprCall* expression) override {
+        if (expression->self) {
+            const auto* method = expression->func->as<AstExprIndexName>();
+            if (method != nullptr && references_module_state(*method->expr)) {
+                reject(
+                    expression->location,
+                    "method calls cannot mutate captured module state"
+                );
+                return false;
+            }
+        }
+
+        std::vector<std::string_view> path;
+        static const std::unordered_set<std::string_view> mutating_calls {
+            "table.clear",
+            "table.insert",
+            "table.move",
+            "table.remove",
+            "table.sort",
+            "rawset",
+        };
+        if (append_path(*expression->func, path)) {
+            const auto name = join_path(path);
+            if (mutating_calls.contains(name) && expression->args.size > 0 &&
+                references_module_state(*expression->args.data[0])) {
+                reject(
+                    expression->location,
+                    "call to '" + name + "' cannot mutate captured module state"
+                );
+                return false;
+            }
+        }
+        for (AstExpr* argument : expression->args) {
+            if (references_module_state(*argument)) {
+                reject(
+                    expression->location,
+                    "captured module state cannot be passed to a call"
+                );
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool visit(Luau::AstExprGlobal* expression) override {
+        const auto name = name_view(expression->name);
+        if (name == "_G" || name == "getfenv" || name == "setfenv" ||
+            name == "tick" || name == "time" || name == "elapsedTime") {
+            reject(
+                expression->location,
+                "snapshot-unsafe global '" + std::string(name) +
+                    "' is unavailable"
+            );
+            return false;
+        }
+        return true;
+    }
+
+  private:
+    std::unordered_set<const AstLocal*> m_module_state_aliases;
+
+    static bool append_path(
+        const AstExpr& expression,
+        std::vector<std::string_view>& path
+    ) {
+        if (const auto* global = expression.as<Luau::AstExprGlobal>()) {
+            path.push_back(name_view(global->name));
+            return true;
+        }
+        if (const auto* index = expression.as<AstExprIndexName>()) {
+            if (!append_path(*index->expr, path)) {
+                return false;
+            }
+            path.push_back(name_view(index->index));
+            return true;
+        }
+        return false;
+    }
+
+    static std::string join_path(const std::vector<std::string_view>& path) {
+        std::string result;
+        for (const auto component : path) {
+            if (!result.empty()) {
+                result.push_back('.');
+            }
+            result.append(component);
+        }
+        return result;
+    }
+
+    bool validate_assignment(const AstExpr& target) {
+        const auto* root = assignment_root(target);
+        if (const auto* global = root->as<Luau::AstExprGlobal>()) {
+            reject(
+                target.location,
+                "assignment to global '" +
+                    std::string(name_view(global->name)) + "' is not allowed"
+            );
+            return false;
+        }
+        if (references_module_state(*root)) {
+            const auto* local = root->as<AstExprLocal>();
+            reject(
+                target.location,
+                "mutation of module state '" +
+                    std::string(name_view(local->local->name)) +
+                    "' is not allowed; store persistent state in an ECS "
+                    "resource or component"
+            );
+            return false;
+        }
+        return true;
+    }
+
+    bool references_module_state(const AstExpr& expression) const {
+        const auto* root = assignment_root(expression);
+        const auto* local = root->as<AstExprLocal>();
+        return local != nullptr &&
+               ((local->upvalue && local->local->functionDepth == 0) ||
+                m_module_state_aliases.contains(local->local));
+    }
+
+    void update_alias(const AstExpr& target, const AstExpr& value) {
+        const auto* local = target.as<AstExprLocal>();
+        if (local == nullptr || local->upvalue) {
+            return;
+        }
+        if (references_module_state(value)) {
+            m_module_state_aliases.insert(local->local);
+        } else {
+            m_module_state_aliases.erase(local->local);
+        }
+    }
+
+    void reject(const Luau::Location& location, std::string message) {
+        if (error) {
+            return;
+        }
+        error = ScriptError {
+            source_name + ":" + std::to_string(location.begin.line + 1) +
+                ": snapshot-unsafe Luau: " + std::move(message),
+        };
+    }
+};
+
+Status<ScriptError> validate_parsed_luau_snapshot_safety(
+    const ScriptSource& source,
+    Luau::AstStatBlock& root
+) {
+    LuauSnapshotSafetyVisitor visitor {source.name};
+    root.visit(&visitor);
+    if (visitor.error) {
+        return failure(std::move(*visitor.error));
+    }
+    return {};
+}
 
 ScriptError declaration_error(std::string message) {
     return ScriptError {
@@ -126,6 +365,39 @@ append_query_item(DynamicQueryParamDecl& query, const AstTypeReference& item) {
         return {};
     }
 
+    if (kind == "Or") {
+        if (item.parameters.size == 0) {
+            return failure(declaration_error(
+                "'Or' must have at least one filter type argument"
+            ));
+        }
+        DynamicQueryFilterDecl filter {
+            .kind = DynamicQueryFilterDecl::Kind::Or,
+        };
+        for (const Luau::AstTypeOrPack& argument : item.parameters) {
+            const AstTypeReference* child = type_reference(argument.type);
+            if (child == nullptr) {
+                return failure(
+                    declaration_error("Or arguments must be named filter types")
+                );
+            }
+            DynamicQueryParamDecl nested;
+            auto status = append_query_item(nested, *child);
+            if (!status) {
+                return status;
+            }
+            if (!nested.fields.empty() || nested.filters.size() != 1) {
+                return failure(declaration_error(
+                    "Or arguments must be With<T>, Without<T>, Added<T>, "
+                    "Changed<T>, or Or<...>"
+                ));
+            }
+            filter.filters.push_back(std::move(nested.filters.front()));
+        }
+        query.filters.push_back(std::move(filter));
+        return {};
+    }
+
     const AstTypeReference* value = required_type_argument(item, 0);
     if (value == nullptr || item.parameters.size != 1) {
         return failure(declaration_error(
@@ -144,9 +416,19 @@ append_query_item(DynamicQueryParamDecl& query, const AstTypeReference& item) {
         );
         return {};
     }
-    if (kind == "With" || kind == "Without") {
+    if (kind == "With" || kind == "Without" || kind == "Added" ||
+        kind == "Changed") {
+        auto filter_kind = DynamicQueryFilterDecl::Kind::With;
+        if (kind == "Without") {
+            filter_kind = DynamicQueryFilterDecl::Kind::Without;
+        } else if (kind == "Added") {
+            filter_kind = DynamicQueryFilterDecl::Kind::Added;
+        } else if (kind == "Changed") {
+            filter_kind = DynamicQueryFilterDecl::Kind::Changed;
+        }
         query.filters.push_back(
             DynamicQueryFilterDecl {
+                .kind = filter_kind,
                 .type = dynamic_type_ref(*value),
                 .required = kind == "With",
             }
@@ -197,7 +479,7 @@ compile_query(const AstTypeReference& annotation, std::string param_name) {
                 required_type_argument(annotation, index);
             if (filter == nullptr) {
                 return failure(declaration_error(
-                    "Filtered arguments must be With<T> or Without<T>"
+                    "Filtered arguments must be query filter types"
                 ));
             }
             auto status = append_query_item(*result, *filter);
@@ -293,6 +575,47 @@ compile_param(const AstLocal& param) {
         next_state->name = param_name;
         next_state->type = dynamic_type_ref(*value);
         return DynamicSystemParamDeclPtr {std::move(next_state)};
+    }
+    if (kind == "RemovedComponents") {
+        const AstTypeReference* value =
+            required_type_argument(*annotation.type, 0);
+        if (value == nullptr || annotation.type->parameters.size != 1) {
+            return failure(declaration_error(
+                "'RemovedComponents' must have exactly one type argument"
+            ));
+        }
+        auto removed = std::make_unique<DynamicRemovedComponentsParamDecl>();
+        removed->name = param_name;
+        removed->type = dynamic_type_ref(*value);
+        return DynamicSystemParamDeclPtr {std::move(removed)};
+    }
+    if (kind == "EventWriter" || kind == "EventReader" ||
+        kind == "EventReaderRO") {
+        const AstTypeReference* value =
+            required_type_argument(*annotation.type, 0);
+        if (value == nullptr || annotation.type->parameters.size != 1) {
+            return failure(declaration_error(
+                "'" + std::string(kind) +
+                "' must have exactly one type argument"
+            ));
+        }
+        if (annotation.optional && kind != "EventReaderRO") {
+            return failure(
+                declaration_error("only EventReaderRO<T> may be optional")
+            );
+        }
+        auto event = std::make_unique<DynamicEventParamDecl>();
+        event->name = param_name;
+        event->type = dynamic_type_ref(*value);
+        event->optional = annotation.optional;
+        if (kind == "EventWriter") {
+            event->kind = DynamicEventParamDeclKind::Writer;
+        } else if (kind == "EventReader") {
+            event->kind = DynamicEventParamDeclKind::Reader;
+        } else {
+            event->kind = DynamicEventParamDeclKind::ReaderRO;
+        }
+        return DynamicSystemParamDeclPtr {std::move(event)};
     }
     if (kind == "Commands" && annotation.type->parameters.size == 0) {
         auto commands = std::make_unique<DynamicCommandsParamDecl>();
@@ -550,7 +873,17 @@ compile_number_default(double number, std::string_view type_name) {
         }
         return make_val<int>(static_cast<int>(number));
     }
-    if (type_name == "u32" || type_name == "entity") {
+    if (type_name == "entity") {
+        if (std::trunc(number) != number || number < 0.0 ||
+            number >
+                static_cast<double>(std::numeric_limits<Entity>::max().value)) {
+            return failure(declaration_error(
+                "entity field default must be a 32-bit unsigned integer"
+            ));
+        }
+        return make_val<Entity>(Entity {static_cast<std::uint32_t>(number)});
+    }
+    if (type_name == "u32") {
         if (std::trunc(number) != number || number < 0.0 ||
             number >
                 static_cast<double>(std::numeric_limits<unsigned int>::max())) {
@@ -629,17 +962,37 @@ Result<ScriptFieldDecl, ScriptError> compile_type_field(
     const AstExpr* default_expression = nullptr;
     if (const auto* call = expression.as<AstExprCall>()) {
         const auto* callee = call->func->as<AstExprGlobal>();
-        if (callee == nullptr || name_view(callee->name) != "field" ||
-            call->args.size < 1 || call->args.size > 2) {
+        if (callee != nullptr && name_view(callee->name) == "field") {
+            if (call->args.size < 1 || call->args.size > 2) {
+                return failure(declaration_error(
+                    "type field '" + name +
+                    "' must be a type or field(type, optional_default)"
+                ));
+            }
+            type_expression = call->args.data[0];
+            if (call->args.size == 2) {
+                default_expression = call->args.data[1];
+            }
+        } else if (callee == nullptr || name_view(callee->name) != "optional") {
             return failure(declaration_error(
                 "type field '" + name +
                 "' must be a type or field(type, optional_default)"
             ));
         }
-        type_expression = call->args.data[0];
-        if (call->args.size == 2) {
-            default_expression = call->args.data[1];
+    }
+
+    bool optional = false;
+    if (const auto* call = type_expression->as<AstExprCall>()) {
+        const auto* callee = call->func->as<AstExprGlobal>();
+        if (callee == nullptr || name_view(callee->name) != "optional" ||
+            call->args.size != 1) {
+            return failure(declaration_error(
+                "type field '" + name +
+                "' optional type must use optional(type)"
+            ));
         }
+        optional = true;
+        type_expression = call->args.data[0];
     }
 
     auto type_name = field_type_name(*type_expression);
@@ -647,6 +1000,12 @@ Result<ScriptFieldDecl, ScriptError> compile_type_field(
         return failure(std::move(type_name.error()));
     }
     *type_name = normalize_primitive_name(std::move(*type_name));
+    const bool entity_type = *type_name == "entity";
+    if (optional && !entity_type) {
+        return failure(declaration_error(
+            "optional script fields currently support only entity values"
+        ));
+    }
     const bool script_type = script_type_names.contains(*type_name);
     if (script_type) {
         *type_name = module_name + "." + *type_name;
@@ -656,10 +1015,21 @@ Result<ScriptFieldDecl, ScriptError> compile_type_field(
         .name = std::move(name),
         .type = ScriptTypeRef {
             .type_name = std::move(*type_name),
+            .type_id =
+                entity_type ? Optional<TypeId> {type_id<Entity>()} : nullopt,
             .script_type = script_type,
+            .optional = optional,
         },
     };
     if (default_expression != nullptr) {
+        if (default_expression->is<AstExprConstantNil>()) {
+            if (!optional) {
+                return failure(
+                    declaration_error("nil defaults require an optional field")
+                );
+            }
+            return result;
+        }
         if (script_type) {
             return failure(declaration_error(
                 "script-defined type fields do not support literal defaults"
@@ -670,7 +1040,9 @@ Result<ScriptFieldDecl, ScriptError> compile_type_field(
         if (!value) {
             return failure(std::move(value.error()));
         }
-        result.default_value = std::move(*value);
+        result.default_value =
+            optional ? make_val<Optional<Entity>>(value->get<Entity>()) :
+                       std::move(*value);
         result.has_default = true;
     }
     return result;
@@ -957,8 +1329,16 @@ void qualify_system_script_types(
                 for (auto& field : query.fields) {
                     qualify_script_type_ref(field.type, script_types);
                 }
-                for (auto& filter : query.filters) {
+                const auto qualify_filter =
+                    [&](const auto& self,
+                        DynamicQueryFilterDecl& filter) -> void {
                     qualify_script_type_ref(filter.type, script_types);
+                    for (auto& child : filter.filters) {
+                        self(self, child);
+                    }
+                };
+                for (auto& filter : query.filters) {
+                    qualify_filter(qualify_filter, filter);
                 }
             } else if (
                 param->decl_type_id() == type_id<DynamicStateParamDecl>()
@@ -970,6 +1350,18 @@ void qualify_system_script_types(
             ) {
                 auto& state = static_cast<DynamicNextStateParamDecl&>(*param);
                 qualify_script_type_ref(state.type, script_types);
+            } else if (
+                param->decl_type_id() ==
+                type_id<DynamicRemovedComponentsParamDecl>()
+            ) {
+                auto& removed =
+                    static_cast<DynamicRemovedComponentsParamDecl&>(*param);
+                qualify_script_type_ref(removed.type, script_types);
+            } else if (
+                param->decl_type_id() == type_id<DynamicEventParamDecl>()
+            ) {
+                auto& event = static_cast<DynamicEventParamDecl&>(*param);
+                qualify_script_type_ref(event.type, script_types);
             }
         }
     };
@@ -1356,6 +1748,28 @@ validate_system_dependencies(const std::vector<DynamicSystemDecl>& systems) {
 
 } // namespace
 
+Status<ScriptError> validate_luau_snapshot_safety(const ScriptSource& source) {
+    Luau::Allocator allocator;
+    Luau::AstNameTable names {allocator};
+    Luau::ParseResult parsed = Luau::Parser::parse(
+        source.content.data(),
+        source.content.size(),
+        names,
+        allocator
+    );
+    if (!parsed.errors.empty()) {
+        const Luau::ParseError& error = parsed.errors.front();
+        return failure(
+            ScriptError {
+                source.name + ":" +
+                    std::to_string(error.getLocation().begin.line + 1) + ": " +
+                    error.getMessage(),
+            }
+        );
+    }
+    return validate_parsed_luau_snapshot_safety(source, *parsed.root);
+}
+
 Result<std::vector<std::string>, ScriptError>
 extract_luau_script_imports(const ScriptSource& source) {
     Luau::Allocator allocator;
@@ -1385,8 +1799,10 @@ extract_luau_script_imports(const ScriptSource& source) {
     return std::move(visitor.imports);
 }
 
-Result<LuauScriptModuleArtifact, ScriptError>
-compile_luau_script_module(const ScriptSource& source) {
+Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
+    const ScriptSource& source,
+    LuauCompileOptions options
+) {
     Luau::Allocator allocator;
     Luau::AstNameTable names {allocator};
     Luau::ParseResult parsed = Luau::Parser::parse(
@@ -1402,6 +1818,13 @@ compile_luau_script_module(const ScriptSource& source) {
             std::to_string(error.getLocation().begin.line + 1) + ": " +
             error.getMessage()
         ));
+    }
+    if (options.snapshot_safe) {
+        auto snapshot_safe =
+            validate_parsed_luau_snapshot_safety(source, *parsed.root);
+        if (!snapshot_safe) {
+            return failure(std::move(snapshot_safe.error()));
+        }
     }
 
     std::unordered_map<const AstLocal*, AstExprFunction*> functions;
@@ -1590,8 +2013,35 @@ compile_luau_script_module(const ScriptSource& source) {
     };
 }
 
-Result<LuauScriptLibraryArtifact, ScriptError>
-compile_luau_script_library(const ScriptSource& source) {
+Result<LuauScriptLibraryArtifact, ScriptError> compile_luau_script_library(
+    const ScriptSource& source,
+    LuauCompileOptions options
+) {
+    Luau::Allocator allocator;
+    Luau::AstNameTable names {allocator};
+    Luau::ParseResult parsed = Luau::Parser::parse(
+        source.content.data(),
+        source.content.size(),
+        names,
+        allocator
+    );
+    if (!parsed.errors.empty()) {
+        const Luau::ParseError& error = parsed.errors.front();
+        return failure(
+            ScriptError {
+                source.name + ":" +
+                    std::to_string(error.getLocation().begin.line + 1) + ": " +
+                    error.getMessage(),
+            }
+        );
+    }
+    if (options.snapshot_safe) {
+        auto snapshot_safe =
+            validate_parsed_luau_snapshot_safety(source, *parsed.root);
+        if (!snapshot_safe) {
+            return failure(std::move(snapshot_safe.error()));
+        }
+    }
     auto imports = extract_luau_script_imports(source);
     if (!imports) {
         return failure(std::move(imports.error()));

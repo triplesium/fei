@@ -507,10 +507,35 @@ int query_descriptor_helper(lua_State* state) {
     return 1;
 }
 
+int query_or_descriptor_helper(lua_State* state) {
+    const int count = lua_gettop(state);
+    if (count == 0) {
+        luaL_error(state, "Or expects at least one query filter");
+    }
+    lua_newtable(state);
+    const int descriptor = lua_absindex(state, -1);
+    lua_pushstring(state, "or");
+    lua_setfield(state, descriptor, "kind");
+    for (int index = 1; index <= count; ++index) {
+        luaL_checktype(state, index, LUA_TTABLE);
+        lua_pushvalue(state, index);
+        lua_rawseti(state, descriptor, index);
+    }
+    return 1;
+}
+
 int field_helper(lua_State* state) {
     const int argument_count = lua_gettop(state);
     if (argument_count < 1 || argument_count > 2) {
         luaL_error(state, "field expects a type and an optional default value");
+    }
+    lua_newtable(state);
+    return 1;
+}
+
+int optional_helper(lua_State* state) {
+    if (lua_gettop(state) != 1) {
+        luaL_error(state, "optional expects exactly one type");
     }
     lua_newtable(state);
     return 1;
@@ -538,8 +563,17 @@ void install_module_helpers(lua_State* state) {
     lua_setglobal(state, "in_state");
     lua_pushcfunction(state, field_helper, "field");
     lua_setglobal(state, "field");
+    lua_pushcfunction(state, optional_helper, "optional");
+    lua_setglobal(state, "optional");
 
-    const char* query_descriptors[] = {"Read", "Write", "With", "Without"};
+    const char* query_descriptors[] = {
+        "Read",
+        "Write",
+        "With",
+        "Without",
+        "Added",
+        "Changed",
+    };
     for (const char* name : query_descriptors) {
         std::string kind {name};
         kind[0] = static_cast<char>(std::tolower(kind[0]));
@@ -547,6 +581,8 @@ void install_module_helpers(lua_State* state) {
         lua_pushcclosure(state, query_descriptor_helper, name, 1);
         lua_setglobal(state, name);
     }
+    lua_pushcfunction(state, query_or_descriptor_helper, "Or");
+    lua_setglobal(state, "Or");
     lua_newtable(state);
     lua_pushstring(state, "entity");
     lua_setfield(state, -2, "kind");

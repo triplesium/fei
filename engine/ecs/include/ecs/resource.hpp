@@ -5,6 +5,7 @@
 #include "refl/type.hpp"
 #include "refl/val.hpp"
 
+#include <algorithm>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
@@ -180,6 +181,34 @@ class Resources {
             return it->second.ref(it->second.value);
         }
         return {};
+    }
+
+    const std::vector<TypeId>& types() const { return m_insertion_order; }
+
+    void swap_entry(TypeId type_id, Resources& other) {
+        if (this == &other) {
+            return;
+        }
+
+        auto remove_order = [type_id](std::vector<TypeId>& order) {
+            const auto found = std::ranges::find(order, type_id);
+            if (found != order.end()) {
+                order.erase(found);
+            }
+        };
+
+        auto own = m_resources.extract(type_id);
+        auto theirs = other.m_resources.extract(type_id);
+        remove_order(m_insertion_order);
+        remove_order(other.m_insertion_order);
+        if (!theirs.empty()) {
+            m_resources.insert(std::move(theirs));
+            m_insertion_order.push_back(type_id);
+        }
+        if (!own.empty()) {
+            other.m_resources.insert(std::move(own));
+            other.m_insertion_order.push_back(type_id);
+        }
     }
 
     ComponentTicks& ticks(TypeId type_id) {

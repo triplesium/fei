@@ -15,6 +15,7 @@ struct ScriptTypeRef {
     std::string type_name;
     Optional<TypeId> type_id;
     bool script_type {false};
+    bool optional {false};
 };
 
 struct ScriptFieldDecl {

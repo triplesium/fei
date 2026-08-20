@@ -148,7 +148,7 @@ TEST_CASE(
     auto filtered = world.entity();
     world.add_component(filtered, ScriptTestReceiver(100));
     world.add_component(filtered, ScriptTestError {.code = 1});
-    world.add_resource(ScriptTestReceiver(static_cast<int>(filtered)));
+    world.add_resource(ScriptTestReceiver(static_cast<int>(filtered.value)));
 
     auto handles = install_lua_script_systems(world, runtime, *module, *decl);
     REQUIRE(handles);
@@ -159,7 +159,7 @@ TEST_CASE(
     const auto& output =
         static_cast<const World&>(world).resource<ScriptTestReceiver>();
     REQUIRE(output.value == 26);
-    auto spawned = static_cast<Entity>(output.method_calls);
+    const Entity spawned {static_cast<std::uint32_t>(output.method_calls)};
     REQUIRE(world.has_entity(spawned));
     REQUIRE(world.get_component<ScriptTestReceiver>(matched).value == 11);
     REQUIRE(world.get_component<ScriptTestReceiver>(spawned).value == 15);

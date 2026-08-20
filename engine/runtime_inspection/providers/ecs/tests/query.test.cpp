@@ -198,7 +198,7 @@ TEST_CASE(
     REQUIRE(response);
     const auto json = nlohmann::json::parse(*response);
     REQUIRE(json.at("matched") == 1);
-    REQUIRE(json.at("rows").at(0).at("entity") == entity);
+    REQUIRE(json.at("rows").at(0).at("entity") == entity.value);
 }
 
 TEST_CASE(

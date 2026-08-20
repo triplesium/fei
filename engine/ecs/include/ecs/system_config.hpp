@@ -91,11 +91,55 @@ struct SystemConfig {
         );
     }
     template<IntoCondition F>
+        requires std::copy_constructible<std::decay_t<F>>
+    void add_checkpointed_condition(F&& condition) {
+        using ConditionType = std::decay_t<F>;
+        conditions.push_back(
+            std::make_unique<FunctionCondition<ConditionType, true>>(
+                std::forward<F>(condition)
+            )
+        );
+    }
+    template<IntoCondition F>
     SystemConfig&& run_if(F&& condition) && {
         add_condition(std::forward<F>(condition));
         return std::move(*this);
     }
+    template<IntoCondition F>
+        requires std::copy_constructible<std::decay_t<F>>
+    SystemConfig&& run_if_checkpointed(F&& condition) && {
+        add_checkpointed_condition(std::forward<F>(condition));
+        return std::move(*this);
+    }
 };
+
+// Explicitly snapshots the callable object by copy. Owned value captures are
+// restored; referenced or pointed-to state remains external and needs its own
+// checkpoint policy.
+template<IntoSystem F>
+    requires std::copy_constructible<std::decay_t<F>>
+SystemConfig checkpointed_system(F&& system) {
+    using Func = std::decay_t<F>;
+    return SystemConfig(
+        std::make_unique<FunctionSystem<Func, true>>(std::forward<F>(system))
+    );
+}
+
+template<NamedIntoSystem F>
+    requires std::copy_constructible<typename std::remove_cvref_t<F>::FuncType>
+SystemConfig checkpointed_system(F&& named) {
+    using Named = std::remove_cvref_t<F>;
+    using Func = typename Named::FuncType;
+    auto profile =
+        SystemProfileInfo::from_source_location(named.name, named.location);
+    auto config = SystemConfig(
+        std::make_unique<FunctionSystem<Func, true>>(
+            std::forward<F>(named).func
+        )
+    );
+    config.profile = std::move(profile);
+    return config;
+}
 
 struct SystemConfigs {
     std::vector<SystemConfig> systems;

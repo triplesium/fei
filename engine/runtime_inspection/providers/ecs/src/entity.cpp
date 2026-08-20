@@ -6,7 +6,9 @@
 #include "serialization/json_archive.hpp"
 #include "serialization/serializer.hpp"
 
+#include <cstdint>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -16,6 +18,60 @@ namespace {
 
 using serialization::SerializedField;
 using serialization::SerializedNode;
+
+const serialization::ValueCodecRegistry& entity_value_codecs() {
+    static const auto codecs = [] {
+        serialization::ValueCodecRegistry result;
+        result.register_codec<Entity>(serialization::ValueCodec {
+            .encode = [](Ref value, std::string_view)
+                -> Result<SerializedNode, serialization::SerializeError> {
+                return SerializedNode::unsigned_integer(
+                    value.get_const<Entity>().value
+                );
+            },
+            .decode = [](const SerializedNode& node, std::string_view path)
+                -> Result<Val, serialization::DeserializeError> {
+                std::uint64_t value {};
+                if (const auto* unsigned_value = node.try_unsigned_integer()) {
+                    value = *unsigned_value;
+                } else if (
+                    const auto* signed_value = node.try_signed_integer();
+                    signed_value && *signed_value >= 0
+                ) {
+                    value = static_cast<std::uint64_t>(*signed_value);
+                } else {
+                    return failure(
+                        serialization::DeserializeError {
+                            .kind = serialization::DeserializeError::Kind::
+                                InvalidNode,
+                            .type = type_id<Entity>(),
+                            .path = std::string(path),
+                            .message =
+                                "Expected a non-negative integer for Entity",
+                        }
+                    );
+                }
+
+                if (value > std::numeric_limits<std::uint32_t>::max()) {
+                    return failure(
+                        serialization::DeserializeError {
+                            .kind = serialization::DeserializeError::Kind::
+                                NumberOutOfRange,
+                            .type = type_id<Entity>(),
+                            .path = std::string(path),
+                            .message = "Entity integer is out of range",
+                        }
+                    );
+                }
+                return make_val<Entity>(
+                    Entity {static_cast<std::uint32_t>(value)}
+                );
+            },
+        });
+        return result;
+    }();
+    return codecs;
+}
 
 std::string format_type_id(TypeId id) {
     std::ostringstream stream;
@@ -46,8 +102,9 @@ inspect_component(const Archetype& archetype, std::size_t row, TypeId type_id) {
         name = reflected_type->name();
     }
 
-    constexpr serialization::SerializeOptions options {
+    const serialization::SerializeOptions options {
         .include_type_tag = false,
+        .codecs = &entity_value_codecs(),
     };
     auto value = serialization::serialize(
         archetype.get_component(type_id, row),
@@ -114,7 +171,7 @@ Result<EntitySnapshot, InspectionError> EntityInspectionProvider::inspect(
         return failure(
             InspectionError {
                 .kind = InspectionErrorKind::NotFound,
-                .message = "Entity " + std::to_string(request.entity) +
+                .message = "Entity " + std::to_string(request.entity.value) +
                            " does not exist",
             }
         );
@@ -150,7 +207,7 @@ encode_entity_snapshot_json(const EntitySnapshot& snapshot) {
         },
         SerializedField {
             "entity",
-            SerializedNode::unsigned_integer(snapshot.entity),
+            SerializedNode::unsigned_integer(snapshot.entity.value),
         },
         SerializedField {
             "archetype_id",
@@ -199,10 +256,11 @@ inspect_entity_json(const World& world, std::string_view request_json) {
             }
         );
     }
-    constexpr serialization::DeserializeOptions options {
+    const serialization::DeserializeOptions options {
         .object_fields = serialization::ObjectFieldPolicy::Strict,
         .enum_input = serialization::EnumInputPolicy::NameOnly,
         .allow_type_tag = false,
+        .codecs = &entity_value_codecs(),
     };
     auto value = serialization::deserialize(
         type_id<EntityInspectRequest>(),

@@ -216,8 +216,9 @@ Result<QueryRowSnapshot, InspectionError> make_row(
                 InspectionError {
                     .kind = InspectionErrorKind::Unsupported,
                     .message = "Failed to serialize component '" + type.name +
-                               "' on entity " + std::to_string(match.entity) +
-                               " at " + value.error().path + ": " +
+                               "' on entity " +
+                               std::to_string(match.entity.value) + " at " +
+                               value.error().path + ": " +
                                value.error().message,
                 }
             );
@@ -249,7 +250,7 @@ SerializedNode row_node(const QueryRowSnapshot& row) {
     return SerializedNode::object({
         SerializedField {
             "entity",
-            SerializedNode::unsigned_integer(row.entity),
+            SerializedNode::unsigned_integer(row.entity.value),
         },
         SerializedField {"components", row.components},
     });

@@ -84,7 +84,7 @@ TEST_CASE(
     auto json = encode_entity_snapshot_json(*snapshot);
     REQUIRE(json);
     const auto document = nlohmann::json::parse(*json);
-    CHECK(document.at("entity") == entity);
+    CHECK(document.at("entity") == entity.value);
     CHECK(document.at("component_count") == 2);
 }
 
@@ -116,7 +116,7 @@ TEST_CASE(
     auto response = inspect_entity_json(world, R"({"entity":0})");
     REQUIRE(response);
     const auto json = nlohmann::json::parse(*response);
-    CHECK(json.at("entity") == entity);
+    CHECK(json.at("entity") == entity.value);
     CHECK(json.at("component_count") == 1);
 
     auto invalid = inspect_entity_json(world, R"({"entity":"zero"})");
@@ -145,5 +145,5 @@ TEST_CASE(
     );
     REQUIRE(response);
     const auto json = nlohmann::json::parse(*response);
-    CHECK(json.at("entity") == entity);
+    CHECK(json.at("entity") == entity.value);
 }

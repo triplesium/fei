@@ -138,9 +138,15 @@ int lua_entity_commands_set_parent(lua_State* L) {
         return 0;
     }
 
-    auto parent = static_cast<Entity>(luaL_checkinteger(L, 2));
+    const Entity parent {
+        static_cast<std::uint32_t>(luaL_checkinteger(L, 2)),
+    };
     if (!entity_commands->world->has_entity(parent)) {
-        luaL_error(L, "Entity %d does not exist", static_cast<int>(parent));
+        luaL_error(
+            L,
+            "Entity %d does not exist",
+            static_cast<int>(parent.value)
+        );
         return 0;
     }
     if (parent == entity_commands->entity) {
@@ -195,7 +201,7 @@ int lua_entity_commands_despawn(lua_State* L) {
 
 int lua_entity_commands_id(lua_State* L) {
     auto* entity_commands = check_lua_entity_commands(L, 1);
-    lua_pushinteger(L, static_cast<lua_Integer>(entity_commands->entity));
+    lua_pushinteger(L, static_cast<lua_Integer>(entity_commands->entity.value));
     return 1;
 }
 
@@ -270,9 +276,15 @@ int lua_commands_spawn(lua_State* L) {
 int lua_commands_entity(lua_State* L) {
     auto* commands = check_lua_commands(L, 1);
     auto& world = detail::DynamicCommandsWorldAccess::get(*commands);
-    auto entity = static_cast<Entity>(luaL_checkinteger(L, 2));
+    const Entity entity {
+        static_cast<std::uint32_t>(luaL_checkinteger(L, 2)),
+    };
     if (!world.has_entity(entity)) {
-        luaL_error(L, "Entity %d does not exist", static_cast<int>(entity));
+        luaL_error(
+            L,
+            "Entity %d does not exist",
+            static_cast<int>(entity.value)
+        );
         return 0;
     }
     push_lua_entity_commands(L, world, entity);

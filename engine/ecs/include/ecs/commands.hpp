@@ -119,6 +119,11 @@ struct CommandsQueue {
         executing_after_batch = false;
     }
 
+    [[nodiscard]] bool empty() const {
+        return after_batch_commands.empty() &&
+               after_schedule_commands.empty() && !executing_after_batch;
+    }
+
   private:
     static void
     execute_schedule_command(World& world, AddScheduleSystemCommand& command) {
@@ -353,6 +358,43 @@ struct SystemParamTraits<Commands> {
 
     static void queue_deferred(State& state, CommandsQueue& target) {
         target.append(std::move(state));
+    }
+
+    static Result<SystemParamRuntimeState, RuntimeStateError>
+    capture_runtime_state(const State& state) {
+        if (!state.empty()) {
+            return failure(
+                RuntimeStateError {
+                    .message = "Deferred Commands must be empty at a "
+                               "checkpoint boundary",
+                }
+            );
+        }
+        return SystemParamRuntimeState {
+            .kind = SystemParamRuntimeStateKind::Deferred,
+        };
+    }
+
+    static Status<RuntimeStateError>
+    validate_runtime_state(const SystemParamRuntimeState& state) {
+        if (state.kind != SystemParamRuntimeStateKind::Deferred) {
+            return failure(
+                RuntimeStateError {
+                    .message = "Expected deferred Commands runtime state",
+                }
+            );
+        }
+        return {};
+    }
+
+    static Status<RuntimeStateError>
+    restore_runtime_state(State& target, const SystemParamRuntimeState& state) {
+        auto valid = validate_runtime_state(state);
+        if (!valid) {
+            return valid;
+        }
+        target.clear();
+        return {};
     }
 };
 static_assert(SystemParam<Commands>);

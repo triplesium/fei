@@ -266,7 +266,8 @@ Result<std::vector<SystemHandle>, ScriptError> install_luau_script_systems(
              module,
              name = system.name](const std::vector<Ref>& args) {
                 return runtime.call_module_function(module, name, args);
-            }
+            },
+            true
         );
     };
     auto create_condition_executor = [&](const DynamicConditionDecl& condition)
@@ -279,9 +280,8 @@ Result<std::vector<SystemHandle>, ScriptError> install_luau_script_systems(
             }
             Val expected = *condition.state_value;
             return make_script_condition_executor(
-                [expected = std::move(expected)](
-                    const std::vector<Ref>& args
-                ) -> Result<bool, ScriptError> {
+                [expected = std::move(expected)](const std::vector<Ref>& args)
+                    -> Result<bool, ScriptError> {
                     if (args.size() != 1) {
                         return failure(
                             ScriptError {"in_state condition expected one "
@@ -314,7 +314,8 @@ Result<std::vector<SystemHandle>, ScriptError> install_luau_script_systems(
                         );
                     }
                     return *equal;
-                }
+                },
+                true
             );
         }
         return make_script_condition_executor(
@@ -322,7 +323,8 @@ Result<std::vector<SystemHandle>, ScriptError> install_luau_script_systems(
              module,
              name = condition.name](const std::vector<Ref>& args) {
                 return runtime.call_module_condition(module, name, args);
-            }
+            },
+            true
         );
     };
     return install_script_module(

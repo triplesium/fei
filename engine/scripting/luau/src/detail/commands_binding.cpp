@@ -139,7 +139,9 @@ int entity_set_parent(lua_State* state) {
     if (lua_gettop(state) != 2) {
         luaL_error(state, "EntityCommands.set_parent expects one parent");
     }
-    const auto parent = static_cast<Entity>(luaL_checkinteger(state, 2));
+    const Entity parent {
+        static_cast<std::uint32_t>(luaL_checkinteger(state, 2)),
+    };
     if (parent == entity.entity) {
         luaL_error(state, "Entity cannot be its own parent");
     }
@@ -175,7 +177,7 @@ int entity_despawn(lua_State* state) {
 
 int entity_id(lua_State* state) {
     auto& entity = check_entity_commands(state, 1);
-    lua_pushinteger(state, static_cast<lua_Integer>(entity.entity));
+    lua_pushinteger(state, static_cast<lua_Integer>(entity.entity.value));
     return 1;
 }
 
@@ -230,9 +232,15 @@ int commands_entity(lua_State* state) {
     auto borrowed = check_luau_borrowed_ref(state, 1);
     auto& commands = check_commands(state, 1);
     auto& world = DynamicCommandsWorldAccess::get(commands);
-    const auto entity = static_cast<Entity>(luaL_checkinteger(state, 2));
+    const Entity entity {
+        static_cast<std::uint32_t>(luaL_checkinteger(state, 2)),
+    };
     if (!world.has_entity(entity)) {
-        luaL_error(state, "Entity %d does not exist", static_cast<int>(entity));
+        luaL_error(
+            state,
+            "Entity %d does not exist",
+            static_cast<int>(entity.value)
+        );
     }
     push_entity_commands(
         state,

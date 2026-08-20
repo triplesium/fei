@@ -19,6 +19,8 @@ struct ComponentTicks {
     Tick added {0};
     Tick changed {0};
 
+    bool operator==(const ComponentTicks&) const = default;
+
     static ComponentTicks added_at(Tick tick) {
         return ComponentTicks {.added = tick, .changed = tick};
     }

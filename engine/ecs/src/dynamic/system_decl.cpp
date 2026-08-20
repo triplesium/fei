@@ -1,7 +1,9 @@
 #include "ecs/dynamic/system_decl.hpp"
 
 #include "ecs/dynamic/commands.hpp"
+#include "ecs/dynamic/events.hpp"
 #include "ecs/dynamic/query.hpp"
+#include "ecs/dynamic/removed_components.hpp"
 #include "ecs/dynamic/resource.hpp"
 #include "ecs/dynamic/state.hpp"
 #include "ecs/dynamic/world.hpp"
@@ -120,9 +122,30 @@ compile_dynamic_query_param(const DynamicQueryParamDecl& decl) {
         );
     }
 
-    std::vector<DynamicQueryFilter> filters;
-    filters.reserve(decl.filters.size());
-    for (const auto& filter_decl : decl.filters) {
+    const auto compile_filter = [&](const auto& self,
+                                    const DynamicQueryFilterDecl& filter_decl)
+        -> Result<DynamicQueryFilter, DynamicSystemError> {
+        using DeclKind = DynamicQueryFilterDecl::Kind;
+        using Kind = DynamicQueryFilter::Kind;
+        if (filter_decl.kind == DeclKind::Or) {
+            if (filter_decl.filters.empty()) {
+                return failure(
+                    DynamicSystemError {
+                        "Or query filter must contain at least one filter",
+                    }
+                );
+            }
+            DynamicQueryFilter result {.kind = Kind::Or};
+            result.filters.reserve(filter_decl.filters.size());
+            for (const auto& child : filter_decl.filters) {
+                auto compiled = self(self, child);
+                if (!compiled) {
+                    return failure(std::move(compiled.error()));
+                }
+                result.filters.push_back(std::move(*compiled));
+            }
+            return result;
+        }
         if (filter_decl.type.type_name.empty() && !filter_decl.type.type_id) {
             return failure(
                 DynamicSystemError {"Query dynamic system filter missing type"}
@@ -133,12 +156,38 @@ compile_dynamic_query_param(const DynamicQueryParamDecl& decl) {
         if (!type) {
             return failure(std::move(type.error()));
         }
-        filters.push_back(
-            DynamicQueryFilter {
-                .type = *type,
-                .required = filter_decl.required,
-            }
-        );
+        Kind kind = Kind::With;
+        switch (filter_decl.kind) {
+            case DeclKind::With:
+                kind = Kind::With;
+                break;
+            case DeclKind::Without:
+                kind = Kind::Without;
+                break;
+            case DeclKind::Added:
+                kind = Kind::Added;
+                break;
+            case DeclKind::Changed:
+                kind = Kind::Changed;
+                break;
+            case DeclKind::Or:
+                break;
+        }
+        return DynamicQueryFilter {
+            .kind = kind,
+            .type = *type,
+            .required = filter_decl.required,
+        };
+    };
+
+    std::vector<DynamicQueryFilter> filters;
+    filters.reserve(decl.filters.size());
+    for (const auto& filter_decl : decl.filters) {
+        auto filter = compile_filter(compile_filter, filter_decl);
+        if (!filter) {
+            return failure(std::move(filter.error()));
+        }
+        filters.push_back(std::move(*filter));
     }
 
     if (fields.empty()) {
@@ -182,6 +231,46 @@ compile_dynamic_world_param(const DynamicWorldParamDecl& decl) {
     return std::move(result);
 }
 
+Result<DynamicSystemParamPtr, DynamicSystemError>
+compile_dynamic_removed_components_param(
+    const DynamicRemovedComponentsParamDecl& decl
+) {
+    auto type = resolve_dynamic_type_ref(decl.type);
+    if (!type) {
+        return failure(std::move(type.error()));
+    }
+    DynamicSystemParamPtr result =
+        std::make_unique<DynamicRemovedComponents>(decl.name, *type);
+    return result;
+}
+
+Result<DynamicSystemParamPtr, DynamicSystemError>
+compile_dynamic_event_param(const DynamicEventParamDecl& decl) {
+    auto type = resolve_dynamic_type_ref(decl.type);
+    if (!type) {
+        return failure(std::move(type.error()));
+    }
+    auto kind = DynamicEventParamKind::ReaderRO;
+    switch (decl.kind) {
+        case DynamicEventParamDeclKind::Writer:
+            kind = DynamicEventParamKind::Writer;
+            break;
+        case DynamicEventParamDeclKind::Reader:
+            kind = DynamicEventParamKind::Reader;
+            break;
+        case DynamicEventParamDeclKind::ReaderRO:
+            kind = DynamicEventParamKind::ReaderRO;
+            break;
+    }
+    DynamicSystemParamPtr result = std::make_unique<DynamicEventParam>(
+        decl.name,
+        *type,
+        kind,
+        decl.optional
+    );
+    return result;
+}
+
 template<typename Param, typename Decl>
 Result<DynamicSystemParamPtr, DynamicSystemError>
 compile_dynamic_state_param(const Decl& decl) {
@@ -210,6 +299,10 @@ void register_builtin_dynamic_system_param_compilers(
     registry.add<DynamicNextStateParamDecl>(&compile_dynamic_state_param<
                                             DynamicNextStateParam,
                                             DynamicNextStateParamDecl>);
+    registry.add<DynamicRemovedComponentsParamDecl>(
+        &compile_dynamic_removed_components_param
+    );
+    registry.add<DynamicEventParamDecl>(&compile_dynamic_event_param);
 }
 
 } // namespace

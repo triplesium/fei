@@ -1,8 +1,10 @@
 #pragma once
 #include "base/log.hpp"
 #include "base/optional.hpp"
+#include "base/result.hpp"
 #include "base/thread_pool.hpp"
 #include "ecs/fwd.hpp"
+#include "ecs/runtime_state.hpp"
 #include "ecs/system.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_set.hpp"
@@ -128,6 +130,13 @@ class Schedule {
 
     ScheduleDebugInfo debug_info(ScheduleId schedule);
 
+    Result<ScheduleRuntimeState, RuntimeStateError>
+    capture_runtime_state(ScheduleId schedule) const;
+    Status<RuntimeStateError>
+    validate_runtime_state(const ScheduleRuntimeState& state) const;
+    Status<RuntimeStateError>
+    restore_runtime_state(const ScheduleRuntimeState& state);
+
   private:
     void ensure_execution_plan();
     void rebuild_execution_plan();
@@ -208,6 +217,7 @@ class Schedules {
   private:
     std::unordered_map<ScheduleId, Schedule> m_schedules;
     std::unique_ptr<ThreadPool> m_thread_pool;
+    std::uint64_t m_topology_generation {0};
 
   public:
     Schedules();
@@ -226,7 +236,8 @@ class Schedules {
         auto& target = m_schedules[schedule];
         std::vector<SystemHandle> handles;
         (
-            [schedule,
+            [this,
+             schedule,
              &target,
              config = SystemConfigs(std::forward<decltype(configs)>(configs)),
              &handles]() mutable {
@@ -236,6 +247,9 @@ class Schedules {
                     handles.push_back(
                         SystemHandle {.schedule = schedule, .id = id}
                     );
+                }
+                if (!ids.empty()) {
+                    ++m_topology_generation;
                 }
             }(),
             ...);
@@ -252,6 +266,7 @@ class Schedules {
         m_schedules[schedule].configure_sets(
             std::forward<decltype(configs)>(configs)...
         );
+        ++m_topology_generation;
     }
 
     void sort_systems() {
@@ -265,10 +280,18 @@ class Schedules {
 
     void set_apply_deferred(ScheduleId schedule, bool enabled) {
         m_schedules[schedule].set_apply_deferred(enabled);
+        ++m_topology_generation;
     }
 
     void run_systems(ScheduleId schedule, World& world);
     Optional<ScheduleDebugInfo> debug_info(ScheduleId schedule);
+
+    Result<SchedulesRuntimeState, RuntimeStateError>
+    capture_runtime_state() const;
+    Status<RuntimeStateError>
+    validate_runtime_state(const SchedulesRuntimeState& state) const;
+    Status<RuntimeStateError>
+    restore_runtime_state(const SchedulesRuntimeState& state);
 };
 
 } // namespace fei

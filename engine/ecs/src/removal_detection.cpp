@@ -15,6 +15,21 @@ void RemovedComponentBuffer::update() {
     m_current.start_count = m_event_count;
 }
 
+void RemovedComponentBuffer::remap_entities(
+    const std::unordered_map<Entity, Entity>& entities
+) {
+    auto remap = [&entities](Sequence& sequence) {
+        for (auto& entity : sequence.entities) {
+            if (const auto found = entities.find(entity);
+                found != entities.end()) {
+                entity = found->second;
+            }
+        }
+    };
+    remap(m_previous);
+    remap(m_current);
+}
+
 Optional<Entity> RemovedComponentBuffer::get(std::size_t event_id) const {
     if (event_id < oldest_event_count() || event_id >= m_event_count) {
         return nullopt;
@@ -35,6 +50,14 @@ void RemovedComponentEvents::send(TypeId component, Entity entity) {
 void RemovedComponentEvents::update() {
     for (auto& [_, buffer] : m_buffers) {
         buffer.update();
+    }
+}
+
+void RemovedComponentEvents::remap_entities(
+    const std::unordered_map<Entity, Entity>& entities
+) {
+    for (auto& [_, buffer] : m_buffers) {
+        buffer.remap_entities(entities);
     }
 }
 

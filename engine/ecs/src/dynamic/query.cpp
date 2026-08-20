@@ -3,6 +3,7 @@
 #include "ecs/archetype.hpp"
 #include "ecs/world.hpp"
 
+#include <algorithm>
 #include <utility>
 
 namespace fei {
@@ -26,6 +27,19 @@ SystemAccess DynamicQuery::access() const {
         } else {
             result.read_components.insert(field.type);
         }
+    }
+    const auto add_filter_access =
+        [&](const auto& self, const DynamicQueryFilter& filter) -> void {
+        if (filter.kind == DynamicQueryFilter::Kind::Added ||
+            filter.kind == DynamicQueryFilter::Kind::Changed) {
+            result.read_components.insert(filter.type);
+        }
+        for (const auto& child : filter.filters) {
+            self(self, child);
+        }
+    };
+    for (const auto& filter : m_filters) {
+        add_filter_access(add_filter_access, filter);
     }
     return result;
 }
@@ -59,12 +73,21 @@ bool DynamicQuery::next(
     while (cursor.archetype_index < m_matching_archetypes.size()) {
         auto archetype_id = m_matching_archetypes[cursor.archetype_index];
         const auto& archetype = m_world->archetypes().get(archetype_id);
-        if (cursor.row < archetype.size()) {
+        while (cursor.row < archetype.size()) {
+            const auto candidate = cursor.row++;
+            const bool row_matches = std::ranges::all_of(
+                m_filters,
+                [&](const DynamicQueryFilter& filter) {
+                    return matches_row(filter, archetype_id, candidate);
+                }
+            );
+            if (!row_matches) {
+                continue;
+            }
             row = DynamicQueryRow {
                 .archetype = archetype_id,
-                .row = cursor.row,
+                .row = candidate,
             };
-            ++cursor.row;
             return true;
         }
 
@@ -107,8 +130,10 @@ std::size_t DynamicQuery::size() const {
     }
 
     std::size_t count = 0;
-    for (auto archetype_id : m_matching_archetypes) {
-        count += m_world->archetypes().get(archetype_id).size();
+    DynamicQueryCursor cursor;
+    DynamicQueryRow row;
+    while (next(cursor, row)) {
+        ++count;
     }
     return count;
 }
@@ -124,11 +149,91 @@ bool DynamicQuery::matches(ArchetypeId archetype_id) const {
         }
     }
     for (const auto& filter : m_filters) {
-        if (archetype.has_component(filter.type) != filter.required) {
+        if (!matches_archetype(filter, archetype_id)) {
             return false;
         }
     }
     return true;
+}
+
+std::uint64_t DynamicQuery::runtime_state_type() const {
+    auto result = DynamicSystemParam::runtime_state_type();
+    const auto mix = [&](std::uint64_t value) {
+        result ^=
+            value + 0x9e3779b97f4a7c15ULL + (result << 6U) + (result >> 2U);
+    };
+    for (const auto& field : m_fields) {
+        mix(field.type.id());
+        mix(static_cast<std::uint64_t>(field.kind));
+        mix(static_cast<std::uint64_t>(field.access));
+    }
+    const auto mix_filter = [&](const auto& self,
+                                const DynamicQueryFilter& filter) -> void {
+        mix(static_cast<std::uint64_t>(filter.kind));
+        mix(filter.type.id());
+        mix(static_cast<std::uint64_t>(filter.required));
+        for (const auto& child : filter.filters) {
+            self(self, child);
+        }
+    };
+    for (const auto& filter : m_filters) {
+        mix_filter(mix_filter, filter);
+    }
+    return result;
+}
+
+bool DynamicQuery::matches_archetype(
+    const DynamicQueryFilter& filter,
+    ArchetypeId archetype_id
+) const {
+    const auto& archetype = m_world->archetypes().get(archetype_id);
+    switch (filter.kind) {
+        case DynamicQueryFilter::Kind::With:
+            return archetype.has_component(filter.type) == filter.required;
+        case DynamicQueryFilter::Kind::Added:
+        case DynamicQueryFilter::Kind::Changed:
+            return archetype.has_component(filter.type);
+        case DynamicQueryFilter::Kind::Without:
+            return !archetype.has_component(filter.type);
+        case DynamicQueryFilter::Kind::Or:
+            return std::ranges::any_of(
+                filter.filters,
+                [&](const DynamicQueryFilter& child) {
+                    return matches_archetype(child, archetype_id);
+                }
+            );
+    }
+    return false;
+}
+
+bool DynamicQuery::matches_row(
+    const DynamicQueryFilter& filter,
+    ArchetypeId archetype_id,
+    std::size_t row
+) const {
+    const auto& archetype = m_world->archetypes().get(archetype_id);
+    switch (filter.kind) {
+        case DynamicQueryFilter::Kind::With:
+            return archetype.has_component(filter.type) == filter.required;
+        case DynamicQueryFilter::Kind::Without:
+            return !archetype.has_component(filter.type);
+        case DynamicQueryFilter::Kind::Added:
+            return archetype.has_component(filter.type) &&
+                   archetype.component_ticks(filter.type, row)
+                       .is_added(m_system_ticks);
+        case DynamicQueryFilter::Kind::Changed:
+            return archetype.has_component(filter.type) &&
+                   archetype.component_ticks(filter.type, row)
+                       .is_changed(m_system_ticks);
+        case DynamicQueryFilter::Kind::Or:
+            return std::ranges::any_of(
+                filter.filters,
+                [&](const DynamicQueryFilter& child) {
+                    return matches_row(child, archetype_id, row);
+                }
+            );
+    }
+    return false;
 }
 
 } // namespace fei

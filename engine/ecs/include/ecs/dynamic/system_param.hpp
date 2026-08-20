@@ -2,6 +2,7 @@
 
 #include "base/result.hpp"
 #include "ecs/change_detection.hpp"
+#include "ecs/runtime_state.hpp"
 #include "ecs/system_access.hpp"
 #include "refl/ref.hpp"
 
@@ -26,6 +27,13 @@ class DynamicSystemParam {
     virtual Result<Ref, DynamicSystemError>
     prepare(World& world, SystemTicks system_ticks) = 0;
     virtual void finish() {}
+    virtual Result<SystemParamRuntimeState, RuntimeStateError>
+    capture_runtime_state() const;
+    virtual Status<RuntimeStateError>
+    validate_runtime_state(const SystemParamRuntimeState& state) const;
+    virtual Status<RuntimeStateError>
+    restore_runtime_state(const SystemParamRuntimeState& state);
+    virtual std::uint64_t runtime_state_type() const;
 };
 
 using DynamicSystemParamPtr = std::unique_ptr<DynamicSystemParam>;

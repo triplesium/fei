@@ -22,6 +22,16 @@ struct FunctionTraits<ReturnType (ClassType::*)(Args...) const> {
     using arg_type = std::tuple_element_t<i, std::tuple<Args...>>;
 };
 
+template<typename ClassType, typename ReturnType, typename... Args>
+struct FunctionTraits<ReturnType (ClassType::*)(Args...)> {
+    using return_type = ReturnType;
+    constexpr static auto arg_size = sizeof...(Args);
+
+    using args_tuple = std::tuple<Args...>;
+    template<size_t i>
+    using arg_type = std::tuple_element_t<i, std::tuple<Args...>>;
+};
+
 template<typename ReturnType, typename... Args>
 struct FunctionTraits<ReturnType(Args...)> {
     using return_type = ReturnType;

@@ -3,8 +3,11 @@
 #include "app/plugin.hpp"
 #include "project/plugin.hpp"
 #include "project_scripting_luau/plugin.hpp"
+#include "refl/type.hpp"
 
 namespace fei::project_runtime {
+
+[[nodiscard]] TypeId luau_playtest_runtime_resource_type();
 
 class LuauPlaytestsPlugin : public Plugin {
   public:

@@ -147,8 +147,11 @@ TEST_CASE(
     auto health_type =
         Registry::instance().try_get_type("game.commands.Health");
     REQUIRE(health_type);
-    auto spawned =
-        static_cast<Entity>(world.resource<ScriptTestReceiver>().value - 100);
+    const Entity spawned {
+        static_cast<std::uint32_t>(
+            world.resource<ScriptTestReceiver>().value - 100
+        ),
+    };
     REQUIRE(world.has_entity(spawned));
     REQUIRE(world.has_component(spawned, health_type->id()));
 
@@ -214,7 +217,7 @@ TEST_CASE(
     auto target = world.entity();
     world.add_component(target, ScriptTestError {.code = 3});
     ScriptTestReceiver receiver;
-    receiver.value = static_cast<int>(target);
+    receiver.value = static_cast<int>(target.value);
     world.add_resource(receiver);
 
     auto handles = install_lua_script_systems(world, runtime, *module, *decl);
@@ -223,7 +226,10 @@ TEST_CASE(
 
     world.run_schedule(Update);
 
-    REQUIRE(world.resource<ScriptTestReceiver>().value == target + 100);
+    REQUIRE(
+        world.resource<ScriptTestReceiver>().value ==
+        static_cast<int>(target.value) + 100
+    );
     REQUIRE_FALSE(world.has_component<ScriptTestError>(target));
 }
 
@@ -355,7 +361,9 @@ TEST_CASE(
     auto doomed = world.entity();
     ScriptTestReceiver receiver;
     receiver.value = static_cast<int>(
-        parent * 1'000'000 + child * 10'000 + detached * 100 + doomed
+        static_cast<int>(parent.value) * 1'000'000 +
+        static_cast<int>(child.value) * 10'000 +
+        static_cast<int>(detached.value) * 100 + static_cast<int>(doomed.value)
     );
     world.add_resource(receiver);
 
@@ -366,7 +374,7 @@ TEST_CASE(
     world.run_schedule(Update);
 
     auto receiver_value = world.resource<ScriptTestReceiver>().value;
-    auto child_value = static_cast<int>(child);
+    auto child_value = static_cast<int>(child.value);
     REQUIRE(receiver_value == child_value);
     REQUIRE(world.has_parent(child));
     auto actual_parent = world.parent(child);

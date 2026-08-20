@@ -98,10 +98,12 @@ SystemId SystemConfig::next_id = 0;
 Schedules::Schedules() : m_thread_pool(std::make_unique<ThreadPool>()) {}
 
 SystemHandle Schedules::add_system(ScheduleId schedule, SystemConfig config) {
-    return SystemHandle {
+    auto handle = SystemHandle {
         .schedule = schedule,
         .id = m_schedules[schedule].add_system(std::move(config))
     };
+    ++m_topology_generation;
+    return handle;
 }
 
 bool Schedules::remove_system(SystemHandle handle) {
@@ -109,7 +111,11 @@ bool Schedules::remove_system(SystemHandle handle) {
     if (it == m_schedules.end()) {
         return false;
     }
-    return it->second.remove_system(handle.id);
+    const auto removed = it->second.remove_system(handle.id);
+    if (removed) {
+        ++m_topology_generation;
+    }
+    return removed;
 }
 
 bool Schedules::replace_system(SystemHandle handle, SystemConfig config) {
@@ -117,7 +123,12 @@ bool Schedules::replace_system(SystemHandle handle, SystemConfig config) {
     if (it == m_schedules.end()) {
         return false;
     }
-    return it->second.replace_system(handle.id, std::move(config));
+    const auto replaced =
+        it->second.replace_system(handle.id, std::move(config));
+    if (replaced) {
+        ++m_topology_generation;
+    }
+    return replaced;
 }
 
 void ScheduleGraph::sort() {
@@ -165,6 +176,206 @@ Optional<ScheduleDebugInfo> Schedules::debug_info(ScheduleId schedule) {
         return nullopt;
     }
     return it->second.debug_info(schedule);
+}
+
+Result<ScheduleRuntimeState, RuntimeStateError>
+Schedule::capture_runtime_state(ScheduleId schedule) const {
+    ScheduleRuntimeState result {.id = schedule};
+    std::vector<SystemId> ids;
+    ids.reserve(m_systems.size());
+    for (const auto& [id, _] : m_systems) {
+        ids.push_back(id);
+    }
+    std::ranges::sort(ids);
+    result.systems.reserve(ids.size());
+    for (const auto id : ids) {
+        const auto& config = m_systems.at(id);
+        auto system = config.system->capture_runtime_state();
+        if (!system) {
+            auto error = std::move(system.error());
+            error.path = "systems[" + std::to_string(id) + "]." + error.path;
+            return failure(std::move(error));
+        }
+        ScheduledSystemRuntimeState state {
+            .id = id,
+            .system = std::move(*system),
+        };
+        state.conditions.reserve(config.conditions.size());
+        for (std::size_t index = 0; index < config.conditions.size(); ++index) {
+            auto condition = config.conditions[index]->capture_runtime_state();
+            if (!condition) {
+                auto error = std::move(condition.error());
+                error.path = "systems[" + std::to_string(id) + "].conditions[" +
+                             std::to_string(index) + "]." + error.path;
+                return failure(std::move(error));
+            }
+            state.conditions.push_back(std::move(*condition));
+        }
+        result.systems.push_back(std::move(state));
+    }
+    return result;
+}
+
+Status<RuntimeStateError>
+Schedule::validate_runtime_state(const ScheduleRuntimeState& state) const {
+    if (state.systems.size() != m_systems.size()) {
+        return failure(
+            RuntimeStateError {
+                .path = "systems",
+                .message = "Schedule system count changed since checkpoint",
+            }
+        );
+    }
+    for (const auto& snapshot : state.systems) {
+        const auto found = m_systems.find(snapshot.id);
+        if (found == m_systems.end()) {
+            return failure(
+                RuntimeStateError {
+                    .path = "systems[" + std::to_string(snapshot.id) + "]",
+                    .message = "Scheduled system no longer exists",
+                }
+            );
+        }
+        const auto& config = found->second;
+        if (snapshot.conditions.size() != config.conditions.size()) {
+            return failure(
+                RuntimeStateError {
+                    .path = "systems[" + std::to_string(snapshot.id) +
+                            "].conditions",
+                    .message =
+                        "System condition count changed since checkpoint",
+                }
+            );
+        }
+        auto valid = config.system->validate_runtime_state(snapshot.system);
+        if (!valid) {
+            auto error = std::move(valid.error());
+            error.path =
+                "systems[" + std::to_string(snapshot.id) + "]." + error.path;
+            return failure(std::move(error));
+        }
+        for (std::size_t index = 0; index < snapshot.conditions.size();
+             ++index) {
+            valid = config.conditions[index]->validate_runtime_state(
+                snapshot.conditions[index]
+            );
+            if (!valid) {
+                auto error = std::move(valid.error());
+                error.path = "systems[" + std::to_string(snapshot.id) +
+                             "].conditions[" + std::to_string(index) + "]." +
+                             error.path;
+                return failure(std::move(error));
+            }
+        }
+    }
+    return {};
+}
+
+Status<RuntimeStateError>
+Schedule::restore_runtime_state(const ScheduleRuntimeState& state) {
+    auto valid = validate_runtime_state(state);
+    if (!valid) {
+        return valid;
+    }
+    for (const auto& snapshot : state.systems) {
+        auto& config = m_systems.at(snapshot.id);
+        auto restored = config.system->restore_runtime_state(snapshot.system);
+        if (!restored) {
+            return restored;
+        }
+        for (std::size_t index = 0; index < snapshot.conditions.size();
+             ++index) {
+            restored = config.conditions[index]->restore_runtime_state(
+                snapshot.conditions[index]
+            );
+            if (!restored) {
+                return restored;
+            }
+        }
+    }
+    return {};
+}
+
+Result<SchedulesRuntimeState, RuntimeStateError>
+Schedules::capture_runtime_state() const {
+    SchedulesRuntimeState result {
+        .topology_generation = m_topology_generation,
+    };
+    std::vector<ScheduleId> ids;
+    ids.reserve(m_schedules.size());
+    for (const auto& [id, _] : m_schedules) {
+        ids.push_back(id);
+    }
+    std::ranges::sort(ids);
+    result.schedules.reserve(ids.size());
+    for (const auto id : ids) {
+        auto state = m_schedules.at(id).capture_runtime_state(id);
+        if (!state) {
+            auto error = std::move(state.error());
+            error.path = "schedules[" + std::to_string(id) + "]." + error.path;
+            return failure(std::move(error));
+        }
+        result.schedules.push_back(std::move(*state));
+    }
+    return result;
+}
+
+Status<RuntimeStateError>
+Schedules::validate_runtime_state(const SchedulesRuntimeState& state) const {
+    if (state.topology_generation != m_topology_generation) {
+        return failure(
+            RuntimeStateError {
+                .path = "topology_generation",
+                .message = "Schedule topology changed since checkpoint",
+            }
+        );
+    }
+    if (state.schedules.size() != m_schedules.size()) {
+        return failure(
+            RuntimeStateError {
+                .path = "schedules",
+                .message = "Schedule count changed since checkpoint",
+            }
+        );
+    }
+    for (const auto& snapshot : state.schedules) {
+        const auto found = m_schedules.find(snapshot.id);
+        if (found == m_schedules.end()) {
+            return failure(
+                RuntimeStateError {
+                    .path = "schedules[" + std::to_string(snapshot.id) + "]",
+                    .message = "Schedule no longer exists",
+                }
+            );
+        }
+        auto valid = found->second.validate_runtime_state(snapshot);
+        if (!valid) {
+            auto error = std::move(valid.error());
+            error.path =
+                "schedules[" + std::to_string(snapshot.id) + "]." + error.path;
+            return failure(std::move(error));
+        }
+    }
+    return {};
+}
+
+Status<RuntimeStateError>
+Schedules::restore_runtime_state(const SchedulesRuntimeState& state) {
+    auto valid = validate_runtime_state(state);
+    if (!valid) {
+        return valid;
+    }
+    for (const auto& snapshot : state.schedules) {
+        auto restored =
+            m_schedules.at(snapshot.id).restore_runtime_state(snapshot);
+        if (!restored) {
+            auto error = std::move(restored.error());
+            error.path =
+                "schedules[" + std::to_string(snapshot.id) + "]." + error.path;
+            return failure(std::move(error));
+        }
+    }
+    return {};
 }
 
 void Schedules::set_worker_threads(std::size_t thread_count) {

@@ -5,6 +5,7 @@
 
 #include <concepts>
 #include <cstddef>
+#include <utility>
 #include <vector>
 
 namespace fei {
@@ -33,7 +34,48 @@ struct EventSequence {
 template<typename T>
 class Events {
   public:
+    struct SnapshotState {
+        std::vector<T> previous;
+        std::size_t previous_start {};
+        std::vector<T> current;
+        std::size_t current_start {};
+        std::size_t event_count {};
+    };
+
     Events() = default;
+    Events(const Events& other)
+        requires std::copy_constructible<T>
+        :
+        m_events_a(other.m_events_a), m_events_b(other.m_events_b),
+        m_event_count(other.m_event_count) {
+        rebind_event_ids();
+    }
+    Events& operator=(const Events& other)
+        requires std::copy_constructible<T>
+    {
+        if (this != &other) {
+            m_events_a = other.m_events_a;
+            m_events_b = other.m_events_b;
+            m_event_count = other.m_event_count;
+            rebind_event_ids();
+        }
+        return *this;
+    }
+    Events(Events&& other) noexcept :
+        m_events_a(std::move(other.m_events_a)),
+        m_events_b(std::move(other.m_events_b)),
+        m_event_count(other.m_event_count) {
+        rebind_event_ids();
+    }
+    Events& operator=(Events&& other) noexcept {
+        if (this != &other) {
+            m_events_a = std::move(other.m_events_a);
+            m_events_b = std::move(other.m_events_b);
+            m_event_count = other.m_event_count;
+            rebind_event_ids();
+        }
+        return *this;
+    }
 
     EventId<T> send(T event) {
         EventId id {
@@ -75,6 +117,52 @@ class Events {
     }
 
     size_t oldest_event_count() const { return m_events_a.start_event_count; }
+
+    [[nodiscard]] const EventSequence<T>& previous_sequence() const {
+        return m_events_a;
+    }
+
+    [[nodiscard]] const EventSequence<T>& current_sequence() const {
+        return m_events_b;
+    }
+
+    [[nodiscard]] std::size_t event_count() const { return m_event_count; }
+
+    void restore_snapshot_state(SnapshotState state) {
+        m_events_a = EventSequence<T> {
+            .start_event_count = state.previous_start,
+        };
+        m_events_a.events.reserve(state.previous.size());
+        for (std::size_t index = 0; index < state.previous.size(); ++index) {
+            m_events_a.events.push_back(
+                EventInstance<T> {
+                    .id =
+                        EventId<T> {
+                            .id = state.previous_start + index,
+                            .events = this,
+                        },
+                    .event = std::move(state.previous[index]),
+                }
+            );
+        }
+        m_events_b = EventSequence<T> {
+            .start_event_count = state.current_start,
+        };
+        m_events_b.events.reserve(state.current.size());
+        for (std::size_t index = 0; index < state.current.size(); ++index) {
+            m_events_b.events.push_back(
+                EventInstance<T> {
+                    .id =
+                        EventId<T> {
+                            .id = state.current_start + index,
+                            .events = this,
+                        },
+                    .event = std::move(state.current[index]),
+                }
+            );
+        }
+        m_event_count = state.event_count;
+    }
 
     EventSequence<T>& sequence(size_t id) {
         if (id < m_events_b.start_event_count) {
@@ -118,6 +206,20 @@ class Events {
     }
 
   private:
+    void rebind_event_ids() {
+        auto rebind = [this](EventSequence<T>& sequence) {
+            for (std::size_t index = 0; index < sequence.events.size();
+                 ++index) {
+                sequence.events[index].id = EventId<T> {
+                    .id = sequence.start_event_count + index,
+                    .events = this,
+                };
+            }
+        };
+        rebind(m_events_a);
+        rebind(m_events_b);
+    }
+
     EventSequence<T> m_events_a;
     EventSequence<T> m_events_b;
     size_t m_event_count {0};

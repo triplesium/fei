@@ -27,7 +27,17 @@ struct DynamicQueryField {
 };
 
 struct DynamicQueryFilter {
+    enum class Kind {
+        With,
+        Without,
+        Added,
+        Changed,
+        Or,
+    };
+
+    Kind kind {Kind::With};
     TypeId type;
+    std::vector<DynamicQueryFilter> filters;
     bool required {true};
 };
 
@@ -70,10 +80,20 @@ class DynamicQuery final : public DynamicSystemParam {
 
     const std::vector<DynamicQueryField>& fields() const { return m_fields; }
     std::size_t size() const;
+    std::uint64_t runtime_state_type() const override;
 
   private:
     void refresh(World& world);
     bool matches(ArchetypeId archetype_id) const;
+    bool matches_archetype(
+        const DynamicQueryFilter& filter,
+        ArchetypeId archetype_id
+    ) const;
+    bool matches_row(
+        const DynamicQueryFilter& filter,
+        ArchetypeId archetype_id,
+        std::size_t row
+    ) const;
 };
 
 } // namespace fei

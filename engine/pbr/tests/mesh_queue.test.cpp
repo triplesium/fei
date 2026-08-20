@@ -105,7 +105,7 @@ void insert_mesh_uniform(
         mesh_uniforms.resource_set = create_resource_set(device);
     }
     mesh_uniforms.entries[entity] = MeshUniforms::Entry {
-        .dynamic_offset = static_cast<uint32>(entity) * 256,
+        .dynamic_offset = entity.value * 256,
     };
 }
 
@@ -172,13 +172,13 @@ TEST_CASE(
         )
     );
 
-    insert_mesh_uniform(mesh_uniforms, device, 1);
-    insert_mesh_uniform(mesh_uniforms, device, 2);
-    insert_mesh_uniform(mesh_uniforms, device, 3);
+    insert_mesh_uniform(mesh_uniforms, device, Entity {1});
+    insert_mesh_uniform(mesh_uniforms, device, Entity {2});
+    insert_mesh_uniform(mesh_uniforms, device, Entity {3});
 
     std::vector<QueueEntry> query {
         QueueEntry {
-            .entity = 1,
+            .entity = Entity {1},
             .mesh = Mesh3d {.mesh = queued_mesh},
             .material =
                 MeshMaterial3d<StandardMaterial> {
@@ -186,7 +186,7 @@ TEST_CASE(
                 },
         },
         QueueEntry {
-            .entity = 2,
+            .entity = Entity {2},
             .mesh = Mesh3d {.mesh = filtered_mesh},
             .material =
                 MeshMaterial3d<StandardMaterial> {
@@ -194,7 +194,7 @@ TEST_CASE(
                 },
         },
         QueueEntry {
-            .entity = 3,
+            .entity = Entity {3},
             .mesh = Mesh3d {.mesh = missing_mesh},
             .material =
                 MeshMaterial3d<StandardMaterial> {
@@ -202,7 +202,7 @@ TEST_CASE(
                 },
         },
         QueueEntry {
-            .entity = 4,
+            .entity = Entity {4},
             .mesh = Mesh3d {.mesh = missing_uniform_mesh},
             .material = MeshMaterial3d<StandardMaterial> {
                 .material = queued_material,
@@ -225,12 +225,12 @@ TEST_CASE(
            const Mesh3d&,
            const MeshMaterial3d<StandardMaterial>&,
            const Transform3d&) {
-            return entity != 2;
+            return entity != Entity {2};
         }
     );
 
     REQUIRE(phase.items.size() == 1);
-    CHECK(phase.items[0].entity == 1);
+    CHECK(phase.items[0].entity == Entity {1});
     CHECK(phase.items[0].view_set == view_set);
     CHECK(phase.items[0].view_uniform_dynamic_offset == 128);
     CHECK(phase.items[0].mesh_set == mesh_uniforms.resource_set);

@@ -7,6 +7,7 @@
 #include "scripting/module_install.hpp"
 #include "scripting_luau/compiler.hpp"
 #include "scripting_luau/detail/script_system_loader.hpp"
+#include "scripting_luau/snapshot_state.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -39,6 +40,10 @@ load_luau_script_system_module(
     const LuauScriptSource& source,
     std::span<const LuauScriptImportBinding> imports = {}
 ) {
+    const std::unordered_set<TypeId> resources_before(
+        world.resource_types().begin(),
+        world.resource_types().end()
+    );
     auto artifact = compile_luau_script_module(source);
     if (!artifact) {
         return failure(std::move(artifact.error()));
@@ -57,9 +62,27 @@ load_luau_script_system_module(
         runtime.unload_module(*module);
         return failure(std::move(systems.error()));
     }
+    std::vector<TypeId> snapshot_resources;
+    for (const auto type : world.resource_types()) {
+        if (!resources_before.contains(type)) {
+            snapshot_resources.push_back(type);
+        }
+    }
+    for (const auto& resource : artifact->declaration.resources) {
+        auto type = Registry::instance().try_get_type(resource.type);
+        if (type) {
+            snapshot_resources.push_back(type->id());
+        }
+    }
+    std::ranges::sort(snapshot_resources, {}, &TypeId::id);
+    snapshot_resources.erase(
+        std::ranges::unique(snapshot_resources).begin(),
+        snapshot_resources.end()
+    );
     return LoadedLuauScriptSystemModule {
         .module = *module,
         .systems = std::move(*systems),
+        .snapshot_resources = std::move(snapshot_resources),
     };
 }
 
@@ -167,6 +190,8 @@ void LuauScriptSystemRegistry::apply_queued_requests(
                 auto loaded = load_source(runtime, world, request.source);
                 if (!loaded) {
                     record_error(request, std::move(loaded.error()));
+                } else {
+                    ++m_snapshot_generation;
                 }
                 break;
             }
@@ -183,6 +208,8 @@ void LuauScriptSystemRegistry::apply_queued_requests(
                 );
                 if (!loaded) {
                     record_error(request, std::move(loaded.error()));
+                } else {
+                    ++m_snapshot_generation;
                 }
                 break;
             }
@@ -204,6 +231,8 @@ void LuauScriptSystemRegistry::apply_queued_requests(
                 );
                 if (!reloaded) {
                     record_error(request, std::move(reloaded.error()));
+                } else {
+                    ++m_snapshot_generation;
                 }
                 break;
             }
@@ -211,10 +240,15 @@ void LuauScriptSystemRegistry::apply_queued_requests(
                 auto unloaded = unload(runtime, world, request.module);
                 if (!unloaded) {
                     record_error(request, std::move(unloaded.error()));
+                } else {
+                    ++m_snapshot_generation;
                 }
                 break;
             }
         }
+    }
+    if (world.has_resource<LuauSnapshotState>()) {
+        world.resource<LuauSnapshotState>().generation = m_snapshot_generation;
     }
 }
 
@@ -387,6 +421,7 @@ Status<LuauScriptError> LuauScriptSystemRegistry::reload_asset(
 
     module->module = loaded->module;
     module->systems = std::move(loaded->systems);
+    module->snapshot_resources = std::move(loaded->snapshot_resources);
     for (AssetId dependency : module->dependencies) {
         m_reverse_dependencies[dependency].erase(asset.id());
     }
@@ -562,6 +597,23 @@ bool LuauScriptSystemRegistry::is_loaded(
 ) const {
     auto loaded = get(module);
     return loaded && loaded->state == LuauScriptSystemModuleState::Loaded;
+}
+
+std::vector<TypeId> LuauScriptSystemRegistry::snapshot_resource_types() const {
+    std::vector<TypeId> result;
+    for (const auto& module : m_modules) {
+        if (module.state != LuauScriptSystemModuleState::Loaded) {
+            continue;
+        }
+        result.insert(
+            result.end(),
+            module.snapshot_resources.begin(),
+            module.snapshot_resources.end()
+        );
+    }
+    std::ranges::sort(result, {}, &TypeId::id);
+    result.erase(std::ranges::unique(result).begin(), result.end());
+    return result;
 }
 
 Optional<LoadedLuauScriptSystemModule&>

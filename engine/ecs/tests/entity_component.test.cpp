@@ -9,12 +9,24 @@
 using namespace fei;
 using namespace fei::ecs_test;
 
+static_assert(!std::is_same_v<Entity, std::uint32_t>);
+static_assert(std::is_trivially_copyable_v<Entity>);
+static_assert(sizeof(Entity) == sizeof(std::uint32_t));
+
+static_assert(
+    std::is_same_v<
+        decltype(std::declval<World&>().get_component<Position>(Entity {})),
+        const Position&>
+);
 static_assert(std::is_same_v<
-              decltype(std::declval<World&>().get_component<Position>(0)),
+              decltype(std::declval<const World&>()
+                           .get_component<Position>(Entity {})),
               const Position&>);
-static_assert(std::is_same_v<
-              decltype(std::declval<const World&>().get_component<Position>(0)),
-              const Position&>);
+
+TEST_CASE("Entity has a distinct reflected type", "[ecs][entity][reflection]") {
+    CHECK(type_id<Entity>() != type_id<std::uint32_t>());
+    CHECK(Entity {42}.value == 42);
+}
 
 TEST_CASE("ECS manages entity lifetime", "[ecs][entity]") {
     register_components();
@@ -35,6 +47,12 @@ TEST_CASE("ECS manages entity lifetime", "[ecs][entity]") {
 
         world.despawn(entity);
         REQUIRE_FALSE(world.has_entity(entity));
+    }
+
+    SECTION("Explicit materialization advances future entity ids") {
+        world.materialize_entity(Entity {42});
+        REQUIRE(world.has_entity(Entity {42}));
+        CHECK(world.entity() == Entity {43});
     }
 
     SECTION("Despawning a non-last entity keeps moved entity locations valid") {

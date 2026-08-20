@@ -18,7 +18,7 @@ struct EntityLocation {
 class Entities {
   private:
     std::vector<EntityLocation> m_locations;
-    std::atomic<Entity> m_next_entity {0};
+    std::atomic<std::uint32_t> m_next_entity {0};
 
   public:
     Entities() = default;
@@ -41,33 +41,41 @@ class Entities {
     }
 
     Entity reserve() {
-        return m_next_entity.fetch_add(1, std::memory_order_relaxed);
+        return Entity {
+            m_next_entity.fetch_add(1, std::memory_order_relaxed),
+        };
     }
 
     void materialize(Entity entity) {
-        if (entity >= m_locations.size()) {
-            m_locations.resize(static_cast<std::size_t>(entity) + 1);
+        if (entity.value >= m_locations.size()) {
+            m_locations.resize(static_cast<std::size_t>(entity.value) + 1);
         }
+        auto next = m_next_entity.load(std::memory_order_relaxed);
+        while (next <= entity.value && !m_next_entity.compare_exchange_weak(
+                                           next,
+                                           entity.value + 1,
+                                           std::memory_order_relaxed
+                                       )) {}
     }
 
     void set_location(Entity entity, EntityLocation location) {
-        FEI_ASSERT(entity < m_locations.size());
-        m_locations[entity] = location;
+        FEI_ASSERT(entity.value < m_locations.size());
+        m_locations[entity.value] = location;
     }
 
     EntityLocation get_location(Entity entity) const {
-        FEI_ASSERT(entity < m_locations.size());
-        return m_locations[entity];
+        FEI_ASSERT(entity.value < m_locations.size());
+        return m_locations[entity.value];
     }
 
     bool contains(Entity entity) const {
-        return entity < m_locations.size() &&
-               m_locations[entity].archetype_id != 0;
+        return entity.value < m_locations.size() &&
+               m_locations[entity.value].archetype_id != 0;
     }
 
     void remove_entity(Entity entity) {
         FEI_ASSERT(contains(entity));
-        m_locations[entity] = EntityLocation {0, 0};
+        m_locations[entity.value] = EntityLocation {0, 0};
     }
 };
 

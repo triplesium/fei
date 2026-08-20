@@ -1,9 +1,12 @@
 #include "scripting_luau/detail/binding.hpp"
 
+#include "ecs/dynamic/events.hpp"
 #include "ecs/dynamic/query.hpp"
+#include "ecs/dynamic/removed_components.hpp"
 #include "ecs/dynamic/state.hpp"
 #include "refl/callable.hpp"
 #include "refl/cls.hpp"
+#include "refl/container_adapter.hpp"
 #include "refl/registry.hpp"
 #include "refl/val.hpp"
 #include "scripting/reflection_bridge.hpp"
@@ -42,6 +45,18 @@ struct LuauQueryIterator {
     ScriptBorrowToken token;
 };
 
+struct LuauRemovedComponentsIterator {
+    DynamicRemovedComponents* removed {nullptr};
+    ScriptBorrowScope* scope {nullptr};
+    ScriptBorrowToken token;
+};
+
+struct LuauDynamicEventIterator {
+    DynamicEventParam* reader {nullptr};
+    ScriptBorrowScope* scope {nullptr};
+    ScriptBorrowToken token;
+};
+
 struct LuauTypeToken {
     TypeId type;
 };
@@ -72,7 +87,9 @@ int raise_message(lua_State* state, const std::string& message) {
 
 bool push_primitive(lua_State* state, Ref ref) {
     const TypeId id = ref.type_id();
-    if (id == type_id<bool>()) {
+    if (id == type_id<Entity>()) {
+        lua_pushunsigned(state, ref.get_const<Entity>().value);
+    } else if (id == type_id<bool>()) {
         lua_pushboolean(state, ref.get_const<bool>());
     } else if (id == type_id<std::string>()) {
         const auto& value = ref.get_const<std::string>();
@@ -116,7 +133,30 @@ void push_object(
 void push_ref(lua_State* state, Ref ref, const LuauObject& parent) {
     if (!ref) {
         lua_pushnil(state);
-    } else if (!push_primitive(state, ref)) {
+        return;
+    }
+    auto adapter =
+        Registry::instance().try_get_container_adapter(ref.type_id());
+    if (adapter && adapter->kind() == ContainerKind::Optional) {
+        auto* indexed = adapter->indexed();
+        auto size = adapter->size(ref);
+        if (!indexed || !size) {
+            luaL_error(state, "Invalid reflected optional value");
+            return;
+        }
+        if (*size == 0) {
+            lua_pushnil(state);
+            return;
+        }
+        auto value = indexed->at(ref, 0);
+        if (!value) {
+            luaL_error(state, "%s", value.error().message.c_str());
+            return;
+        }
+        push_ref(state, *value, parent);
+        return;
+    }
+    if (!push_primitive(state, ref)) {
         push_object(state, ref, parent.owner, parent.scope, parent.token);
     }
 }
@@ -130,8 +170,11 @@ void push_owned_value(lua_State* state, Val value) {
         return;
     }
     auto owner = std::make_shared<Val>(std::move(value));
-    Ref ref = owner->ref();
-    push_object(state, ref, std::move(owner), nullptr, {});
+    LuauObject parent {
+        .ref = owner->ref(),
+        .owner = owner,
+    };
+    push_ref(state, parent.ref, parent);
 }
 
 Result<Val, std::string>
@@ -254,6 +297,39 @@ int type_token_index(lua_State* state) {
 
 Result<Val, std::string>
 value_for_type(lua_State* state, int index, TypeId expected) {
+    auto adapter = Registry::instance().try_get_container_adapter(expected);
+    if (adapter && adapter->kind() == ContainerKind::Optional) {
+        auto type = Registry::instance().try_get_type(expected);
+        if (!type) {
+            return failure(type.error().message);
+        }
+        Val optional = Val::default_construct(*type);
+        if (lua_isnil(state, index)) {
+            return optional;
+        }
+        auto* indexed = adapter->indexed();
+        if (indexed == nullptr) {
+            return failure(
+                std::string {
+                    "Reflected optional does not support indexed access"
+                }
+            );
+        }
+        auto value = value_for_type(state, index, indexed->element_type());
+        if (!value) {
+            return failure(std::move(value.error()));
+        }
+        auto appended = indexed->append(optional.ref(), value->ref());
+        if (!appended) {
+            return failure(std::move(appended.error().message));
+        }
+        return optional;
+    }
+    if (expected == type_id<Entity>() && lua_isnumber(state, index)) {
+        return make_val<Entity>(Entity {
+            static_cast<std::uint32_t>(lua_tounsigned(state, index)),
+        });
+    }
     if (expected == type_id<bool>() && lua_isboolean(state, index)) {
         return make_val<bool>(lua_toboolean(state, index) != 0);
     }
@@ -510,10 +586,131 @@ bool push_dynamic_state_member(
     return false;
 }
 
+int dynamic_removed_next(lua_State* state) {
+    auto borrowed = check_luau_borrowed_ref(state, 1);
+    auto* removed = borrowed.ref.try_get<DynamicRemovedComponents>();
+    if (removed == nullptr) {
+        return raise_message(state, "RemovedComponents.next invalid receiver");
+    }
+    auto entity = removed->next();
+    if (!entity) {
+        return 0;
+    }
+    lua_pushunsigned(state, entity->value);
+    return 1;
+}
+
+int dynamic_removed_clear(lua_State* state) {
+    auto borrowed = check_luau_borrowed_ref(state, 1);
+    auto* removed = borrowed.ref.try_get<DynamicRemovedComponents>();
+    if (removed == nullptr) {
+        return raise_message(state, "RemovedComponents.clear invalid receiver");
+    }
+    removed->clear();
+    return 0;
+}
+
+bool push_dynamic_removed_member(
+    lua_State* state,
+    TypeId type,
+    std::string_view key
+) {
+    if (type != type_id<DynamicRemovedComponents>()) {
+        return false;
+    }
+    if (key == "next" || key == "removed") {
+        lua_pushcfunction(
+            state,
+            dynamic_removed_next,
+            "RemovedComponents.next"
+        );
+        return true;
+    }
+    if (key == "clear") {
+        lua_pushcfunction(
+            state,
+            dynamic_removed_clear,
+            "RemovedComponents.clear"
+        );
+        return true;
+    }
+    return false;
+}
+
+int dynamic_event_send(lua_State* state) {
+    auto borrowed = check_luau_borrowed_ref(state, 1);
+    auto* writer = borrowed.ref.try_get<DynamicEventParam>();
+    if (writer == nullptr || writer->kind() != DynamicEventParamKind::Writer) {
+        return raise_message(state, "EventWriter.send invalid receiver");
+    }
+    auto payload = copy_luau_reflected_value(state, 2, "EventWriter.send");
+    if (!payload) {
+        return raise_message(state, payload.error());
+    }
+    auto sent = writer->send(std::move(*payload));
+    if (!sent) {
+        return raise_message(state, sent.error().message);
+    }
+    return 0;
+}
+
+int dynamic_event_next(lua_State* state) {
+    auto borrowed = check_luau_borrowed_ref(state, 1);
+    auto* reader = borrowed.ref.try_get<DynamicEventParam>();
+    if (reader == nullptr || reader->kind() == DynamicEventParamKind::Writer) {
+        return raise_message(state, "EventReader.next invalid receiver");
+    }
+    auto event = reader->next();
+    if (!event) {
+        return 0;
+    }
+    push_luau_borrowed_ref(state, *event, *borrowed.scope, borrowed.token);
+    return 1;
+}
+
+int dynamic_event_reset(lua_State* state) {
+    auto borrowed = check_luau_borrowed_ref(state, 1);
+    auto* reader = borrowed.ref.try_get<DynamicEventParam>();
+    if (reader == nullptr || reader->kind() == DynamicEventParamKind::Writer) {
+        return raise_message(state, "EventReader.reset invalid receiver");
+    }
+    reader->reset();
+    return 0;
+}
+
+bool push_dynamic_event_member(
+    lua_State* state,
+    TypeId type,
+    std::string_view key
+) {
+    if (type != type_id<DynamicEventParam>()) {
+        return false;
+    }
+    if (key == "send") {
+        lua_pushcfunction(state, dynamic_event_send, "EventWriter.send");
+        return true;
+    }
+    if (key == "next") {
+        lua_pushcfunction(state, dynamic_event_next, "EventReader.next");
+        return true;
+    }
+    if (key == "reset") {
+        lua_pushcfunction(state, dynamic_event_reset, "EventReader.reset");
+        return true;
+    }
+    return false;
+}
+
 int borrowed_index(lua_State* state) {
     auto& object = check_object(state, 1);
     const char* key = luaL_checkstring(state, 2);
     if (push_dynamic_state_member(state, object.ref.type_id(), key)) {
+        return 1;
+    }
+    if (push_dynamic_removed_member(state, object.ref.type_id(), key)) {
+        return 1;
+    }
+    if (push_dynamic_event_member(state, object.ref.type_id(), key)) {
         return 1;
     }
     if (is_script_state_type(object.ref.type_id())) {
@@ -585,6 +782,15 @@ int borrowed_equal(lua_State* state) {
     return 1;
 }
 
+int borrowed_call(lua_State* state) {
+    auto& object = check_object(state, 1);
+    auto* event = object.ref.try_get<DynamicEventParam>();
+    if (event != nullptr && event->kind() == DynamicEventParamKind::Writer) {
+        return dynamic_event_send(state);
+    }
+    luaL_error(state, "value is not callable");
+}
+
 int query_next(lua_State* state) {
     auto* iterator = static_cast<LuauQueryIterator*>(
         lua_touserdata(state, lua_upvalueindex(1))
@@ -610,21 +816,90 @@ int query_next(lua_State* state) {
     return static_cast<int>(fields.size());
 }
 
+int removed_components_iterator_next(lua_State* state) {
+    auto* iterator = static_cast<LuauRemovedComponentsIterator*>(
+        lua_touserdata(state, lua_upvalueindex(1))
+    );
+    if (iterator == nullptr ||
+        !borrow_is_valid(iterator->scope, iterator->token)) {
+        luaL_error(state, "attempt to iterate an expired ECS borrow");
+    }
+    auto entity = iterator->removed->next();
+    if (!entity) {
+        return 0;
+    }
+    lua_pushunsigned(state, entity->value);
+    return 1;
+}
+
+int dynamic_event_iterator_next(lua_State* state) {
+    auto* iterator = static_cast<LuauDynamicEventIterator*>(
+        lua_touserdata(state, lua_upvalueindex(1))
+    );
+    if (iterator == nullptr ||
+        !borrow_is_valid(iterator->scope, iterator->token)) {
+        luaL_error(state, "attempt to iterate an expired ECS borrow");
+    }
+    auto event = iterator->reader->next();
+    if (!event) {
+        return 0;
+    }
+    push_luau_borrowed_ref(state, *event, *iterator->scope, iterator->token);
+    return 1;
+}
+
 int borrowed_iter(lua_State* state) {
     auto& object = check_object(state, 1);
     auto* query = object.ref.try_get<DynamicQuery>();
-    if (query == nullptr) {
-        luaL_error(state, "only DynamicQuery values are iterable");
+    if (query != nullptr) {
+        auto* iterator = new (lua_newuserdata(state, sizeof(LuauQueryIterator)))
+            LuauQueryIterator {
+                .query = query,
+                .scope = object.scope,
+                .token = object.token,
+            };
+        static_cast<void>(iterator);
+        lua_pushcclosure(state, query_next, "DynamicQuery.next", 1);
+        return 1;
     }
-    auto* iterator = new (lua_newuserdata(state, sizeof(LuauQueryIterator)))
-        LuauQueryIterator {
-            .query = query,
-            .scope = object.scope,
-            .token = object.token,
-        };
-    static_cast<void>(iterator);
-    lua_pushcclosure(state, query_next, "DynamicQuery.next", 1);
-    return 1;
+    auto* removed = object.ref.try_get<DynamicRemovedComponents>();
+    if (removed != nullptr) {
+        auto* iterator =
+            new (lua_newuserdata(state, sizeof(LuauRemovedComponentsIterator)))
+                LuauRemovedComponentsIterator {
+                    .removed = removed,
+                    .scope = object.scope,
+                    .token = object.token,
+                };
+        static_cast<void>(iterator);
+        lua_pushcclosure(
+            state,
+            removed_components_iterator_next,
+            "RemovedComponents.next",
+            1
+        );
+        return 1;
+    }
+    auto* event_reader = object.ref.try_get<DynamicEventParam>();
+    if (event_reader != nullptr &&
+        event_reader->kind() != DynamicEventParamKind::Writer) {
+        auto* iterator =
+            new (lua_newuserdata(state, sizeof(LuauDynamicEventIterator)))
+                LuauDynamicEventIterator {
+                    .reader = event_reader,
+                    .scope = object.scope,
+                    .token = object.token,
+                };
+        static_cast<void>(iterator);
+        lua_pushcclosure(
+            state,
+            dynamic_event_iterator_next,
+            "EventReader.next",
+            1
+        );
+        return 1;
+    }
+    luaL_error(state, "value is not iterable");
 }
 
 } // namespace
@@ -637,6 +912,8 @@ void install_luau_borrowed_object_metatable(lua_State* state) {
         lua_setfield(state, -2, "__newindex");
         lua_pushcfunction(state, borrowed_equal, "borrowed.__eq");
         lua_setfield(state, -2, "__eq");
+        lua_pushcfunction(state, borrowed_call, "borrowed.__call");
+        lua_setfield(state, -2, "__call");
         lua_pushcfunction(state, borrowed_iter, "borrowed.__iter");
         lua_setfield(state, -2, "__iter");
     }

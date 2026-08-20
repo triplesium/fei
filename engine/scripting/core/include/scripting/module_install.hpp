@@ -45,11 +45,15 @@ struct ScriptSystemInstallOptions {
     ScriptConditionExecutorFactory create_condition_executor;
 };
 
-std::unique_ptr<DynamicSystemExecutor>
-make_script_system_executor(ScriptSystemCall call);
+std::unique_ptr<DynamicSystemExecutor> make_script_system_executor(
+    ScriptSystemCall call,
+    bool checkpoint_safe_stateless = false
+);
 
-std::unique_ptr<DynamicConditionExecutor>
-make_script_condition_executor(ScriptConditionCall call);
+std::unique_ptr<DynamicConditionExecutor> make_script_condition_executor(
+    ScriptConditionCall call,
+    bool checkpoint_safe_stateless = false
+);
 
 Result<ScriptTypeBindings, ScriptError>
 ensure_script_module_types(const ScriptModuleDecl& decl);

@@ -408,7 +408,10 @@ TEST_CASE(
         )",
     };
 
-    auto artifact = compile_luau_script_module(source);
+    auto artifact = compile_luau_script_module(
+        source,
+        LuauCompileOptions {.snapshot_safe = false}
+    );
     REQUIRE(artifact.has_value());
     LuauRuntime runtime;
     auto module = runtime.load_module(*artifact);
@@ -430,7 +433,7 @@ TEST_CASE(
     CHECK(state.positional_x == 5.0F);
     CHECK(state.initialized_x == 7.25F);
     CHECK(state.mode == LuauTestMode::Active);
-    const Entity spawned = static_cast<Entity>(state.spawned);
+    const Entity spawned {static_cast<std::uint32_t>(state.spawned)};
     REQUIRE(world.has_component<LuauTestNested>(spawned));
     const auto& nested = world.get_component<LuauTestNested>(spawned);
     CHECK(nested.position.x == 7.25F);
@@ -602,7 +605,7 @@ TEST_CASE(
     const Entity doomed = world.entity();
     world.add_component(doomed, LuauTestVelocity {.x = 2});
     world.add_resource(
-        LuauTestCommandState {.doomed = static_cast<int>(doomed)}
+        LuauTestCommandState {.doomed = static_cast<int>(doomed.value)}
     );
 
     auto systems = detail::install_luau_script_systems(
@@ -616,13 +619,86 @@ TEST_CASE(
 
     const auto& state =
         static_cast<const World&>(world).resource<LuauTestCommandState>();
-    const Entity spawned = static_cast<Entity>(state.spawned);
+    const Entity spawned {static_cast<std::uint32_t>(state.spawned)};
     CHECK(state.total == 26);
     CHECK(world.get_component<LuauTestPosition>(matched).x == 11);
     CHECK(world.get_component<LuauTestPosition>(spawned).x == 15);
     CHECK_FALSE(world.has_entity(doomed));
     REQUIRE(world.has_resource<LuauTestError>());
     CHECK(world.resource<LuauTestError>().code == 26);
+}
+
+TEST_CASE(
+    "Luau optional entity fields use nil semantics",
+    "[scripting_luau][system][types][optional][entity]"
+) {
+    const ScriptSource source {
+        .name = "optional_entity_system.luau",
+        .content = R"(
+            local function tick(
+                entities: Query<Entity>,
+                state: ResRW<TargetState>
+            )
+                assert(state.target == nil)
+                for entity in entities do
+                    state.target = entity
+                    assert(state.target == entity)
+                    state.observed = state.target
+                    state.target = nil
+                    assert(state.target == nil)
+                    break
+                end
+            end
+
+            return module {
+                name = "test.luau_optional_entity",
+                types = {
+                    TargetState = {
+                        observed = field(entity, 0),
+                        target = field(optional(entity), nil),
+                    },
+                },
+                resources = {
+                    TargetState = {},
+                },
+                systems = {
+                    system(Update, tick),
+                },
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact.has_value());
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module.has_value());
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    const Entity entity = world.entity();
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems.has_value());
+
+    world.run_schedule(Update);
+
+    auto type = Registry::instance().try_get_type(
+        "test.luau_optional_entity.TargetState"
+    );
+    REQUIRE(type.has_value());
+    auto& cls = Registry::instance().get_cls(type->id());
+    const Ref state = world.resource(type->id());
+    auto observed = cls.get_property("observed").get(state);
+    auto target = cls.get_property("target").get(state);
+    REQUIRE(observed.has_value());
+    REQUIRE(target.has_value());
+    CHECK(observed->get_const<Entity>() == entity);
+    CHECK(target->get_const<Optional<Entity>>() == nullopt);
 }
 
 TEST_CASE(
@@ -719,7 +795,10 @@ TEST_CASE(
             }
         )",
     };
-    auto artifact = compile_luau_script_module(source);
+    auto artifact = compile_luau_script_module(
+        source,
+        LuauCompileOptions {.snapshot_safe = false}
+    );
     REQUIRE(artifact.has_value());
     LuauRuntime runtime;
     auto module = runtime.load_module(*artifact);
@@ -805,10 +884,10 @@ TEST_CASE(
     world.set_parent(detached, parent);
     world.add_resource(
         LuauTestCommandState {
-            .target = static_cast<int>(target),
-            .parent = static_cast<int>(parent),
-            .detached = static_cast<int>(detached),
-            .doomed = static_cast<int>(doomed),
+            .target = static_cast<int>(target.value),
+            .parent = static_cast<int>(parent.value),
+            .detached = static_cast<int>(detached.value),
+            .doomed = static_cast<int>(doomed.value),
         }
     );
 
@@ -830,12 +909,18 @@ TEST_CASE(
     CHECK_FALSE(world.has_parent(detached));
     CHECK_FALSE(world.has_entity(doomed));
 
-    const Entity spawned =
-        static_cast<Entity>(world.resource<LuauTestCommandState>().spawned);
+    const Entity spawned {
+        static_cast<std::uint32_t>(
+            world.resource<LuauTestCommandState>().spawned
+        ),
+    };
     CHECK(world.has_entity(spawned));
     CHECK(world.get_component<LuauTestPosition>(spawned).x == 3);
-    const Entity spawned_parent =
-        static_cast<Entity>(world.resource<LuauTestCommandState>().total);
+    const Entity spawned_parent {
+        static_cast<std::uint32_t>(
+            world.resource<LuauTestCommandState>().total
+        ),
+    };
     REQUIRE(world.parent(spawned));
     CHECK(*world.parent(spawned) == spawned_parent);
     REQUIRE(world.has_resource<LuauTestPosition>());
@@ -1004,7 +1089,10 @@ TEST_CASE(
         )",
     };
 
-    auto artifact = compile_luau_script_module(source);
+    auto artifact = compile_luau_script_module(
+        source,
+        LuauCompileOptions {.snapshot_safe = false}
+    );
     REQUIRE(artifact.has_value());
     LuauRuntime runtime;
     auto module = runtime.load_module(*artifact);
@@ -1078,6 +1166,60 @@ TEST_CASE(
     CHECK(
         query_mutation.error().message.find("read-only") != std::string::npos
     );
+}
+
+TEST_CASE(
+    "Luau RemovedComponents clear discards unread removals",
+    "[scripting_luau][system][removed_components]"
+) {
+    register_luau_system_test_types();
+    const ScriptSource source {
+        .name = "removed_components.luau",
+        .content = R"(
+            local function discard_removed(
+                removed: RemovedComponents<LuauTestPosition>,
+                config: ResRW<LuauTestConfig>
+            )
+                removed:clear()
+                for _entity in removed do
+                    config.executions += 100
+                end
+                config.executions += 1
+            end
+
+            return module {
+                name = "test.removed_components",
+                systems = {
+                    [Update] = { discard_removed },
+                },
+            }
+        )",
+    };
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact);
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module);
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(LuauTestConfig {});
+    const auto entity = world.entity();
+    world.add_component(entity, LuauTestPosition {});
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems);
+    world.sort_systems();
+
+    world.run_schedule(Update);
+    REQUIRE(world.resource<LuauTestConfig>().executions == 1);
+    world.remove_component<LuauTestPosition>(entity);
+    world.run_schedule(Update);
+    CHECK(world.resource<LuauTestConfig>().executions == 2);
 }
 
 TEST_CASE(

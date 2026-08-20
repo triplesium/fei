@@ -51,6 +51,7 @@ struct LoadedLuauScriptSystemModule {
     };
     LuauScriptSystemModuleState state {LuauScriptSystemModuleState::Loaded};
     Handle<LuauScriptAsset> asset;
+    std::vector<TypeId> snapshot_resources;
 };
 
 struct LuauScriptSystemRequestError {
@@ -84,6 +85,7 @@ class LuauScriptSystemRegistry {
         m_reverse_dependencies;
     std::vector<QueuedRequest> m_queued_requests;
     std::vector<LuauScriptSystemRequestError> m_queue_errors;
+    std::uint64_t m_snapshot_generation {};
 
     Optional<LoadedLuauScriptSystemModule&>
     find_module(LuauScriptSystemModuleId module);
@@ -144,6 +146,8 @@ class LuauScriptSystemRegistry {
     }
     void clear_queue_errors() { m_queue_errors.clear(); }
     std::size_t size() const { return m_modules.size(); }
+    std::uint64_t snapshot_generation() const { return m_snapshot_generation; }
+    std::vector<TypeId> snapshot_resource_types() const;
 };
 
 void apply_luau_script_system_queue(

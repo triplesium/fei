@@ -88,7 +88,7 @@ check_lua_world_entity(lua_State* L, int idx, bool require_existing = true) {
         luaL_error(
             L,
             "Entity %d does not exist",
-            static_cast<int>(entity->entity)
+            static_cast<int>(entity->entity.value)
         );
         return nullptr;
     }
@@ -139,7 +139,7 @@ bool would_create_cycle(World& world, Entity child, Entity parent) {
 
 int lua_world_entity_id(lua_State* L) {
     auto* entity = check_lua_world_entity(L, 1, false);
-    lua_pushinteger(L, static_cast<lua_Integer>(entity->entity));
+    lua_pushinteger(L, static_cast<lua_Integer>(entity->entity.value));
     return 1;
 }
 
@@ -216,7 +216,7 @@ int lua_world_entity_remove(lua_State* L) {
             return luaL_error(
                 L,
                 "Entity %d does not have component '%s'",
-                static_cast<int>(entity->entity),
+                static_cast<int>(entity->entity.value),
                 type_name(type).c_str()
             );
         }
@@ -248,7 +248,7 @@ int lua_world_entity_parent(lua_State* L) {
     if (!parent) {
         lua_pushnil(L);
     } else {
-        lua_pushinteger(L, static_cast<lua_Integer>(*parent));
+        lua_pushinteger(L, static_cast<lua_Integer>(parent->value));
     }
     return 1;
 }
@@ -267,7 +267,7 @@ int lua_world_entity_children(lua_State* L) {
     const auto& children = world.get_component<Children>(entity->entity);
     std::size_t index = 1;
     for (auto child : children) {
-        lua_pushinteger(L, static_cast<lua_Integer>(child));
+        lua_pushinteger(L, static_cast<lua_Integer>(child.value));
         lua_rawseti(L, -2, static_cast<lua_Integer>(index++));
     }
     return 1;
@@ -281,13 +281,15 @@ int lua_world_entity_set_parent(lua_State* L) {
             "WorldEntity.set_parent expects exactly one parent"
         );
     }
-    auto parent = static_cast<Entity>(luaL_checkinteger(L, 2));
+    const Entity parent {
+        static_cast<std::uint32_t>(luaL_checkinteger(L, 2)),
+    };
     auto& world = entity->context->world();
     if (!world.has_entity(parent)) {
         return luaL_error(
             L,
             "Entity %d does not exist",
-            static_cast<int>(parent)
+            static_cast<int>(parent.value)
         );
     }
     if (would_create_cycle(world, entity->entity, parent)) {
@@ -553,7 +555,7 @@ void push_query_row(
         if (field.kind == LuaWorldQueryFieldKind::Entity) {
             lua_pushinteger(
                 L,
-                static_cast<lua_Integer>(archetype.entities()[row])
+                static_cast<lua_Integer>(archetype.entities()[row].value)
             );
         } else {
             archetype.component_ticks(field.type, row)
@@ -720,7 +722,9 @@ int lua_world_has_entity(lua_State* L) {
     if (lua_gettop(L) != 2) {
         return luaL_error(L, "World.has_entity expects exactly one entity");
     }
-    auto entity = static_cast<Entity>(luaL_checkinteger(L, 2));
+    const Entity entity {
+        static_cast<std::uint32_t>(luaL_checkinteger(L, 2)),
+    };
     lua_pushboolean(L, context->world().has_entity(entity));
     return 1;
 }
@@ -730,7 +734,9 @@ int lua_world_entity(lua_State* L) {
     if (lua_gettop(L) != 2) {
         return luaL_error(L, "World.entity expects exactly one entity");
     }
-    auto entity = static_cast<Entity>(luaL_checkinteger(L, 2));
+    const Entity entity {
+        static_cast<std::uint32_t>(luaL_checkinteger(L, 2)),
+    };
     if (!context->world().has_entity(entity)) {
         lua_pushnil(L);
         return 1;
