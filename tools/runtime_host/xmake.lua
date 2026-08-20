@@ -1,7 +1,11 @@
 target("fei-runtime-host-core")
     set_kind("static")
     add_headerfiles("include/**.hpp")
-    add_files("src/application.cpp", "src/quick_save.cpp")
+    add_files(
+        "src/application.cpp",
+        "src/quick_save.cpp",
+        "src/snapshot_archive.cpp"
+    )
     add_rules(
         "utils.bin2obj",
         {

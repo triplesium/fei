@@ -14,6 +14,7 @@
 #include "project_scripting_luau/plugin.hpp"
 #include "rendering/render_app.hpp"
 #include "runtime_host/quick_save.hpp"
+#include "runtime_host/snapshot_archive.hpp"
 #include "runtime_inspection/provider.hpp"
 #include "runtime_inspection/registry.hpp"
 #include "runtime_inspection_ecs/entity.hpp"
@@ -698,9 +699,29 @@ void validate_project_plugins(const ProjectRuntimeConfig& runtime) {
 
 RuntimeHostApplication::RuntimeHostApplication(Project project) {
     const bool has_luau_playtests = !project.config().playtests.empty();
+    auto engine_build = read_environment_variable("FEI_RUNTIME_BUILD_ID");
+    if (!engine_build) {
+        auto detected_build = current_runtime_build_id();
+        if (!detected_build) {
+            throw std::runtime_error(
+                "Failed to identify the runtime build: " +
+                detected_build.error()
+            );
+        }
+        engine_build = std::move(*detected_build);
+    }
+    auto archive_metadata =
+        make_snapshot_archive_metadata(project, std::move(*engine_build));
+    if (!archive_metadata) {
+        throw std::runtime_error(
+            "Failed to prepare snapshot archive metadata: " +
+            archive_metadata.error()
+        );
+    }
     runtime_protocol::RuntimeProbeConfig runtime_probe_config {
         .project = project.config().name,
         .project_file = project.project_file().generic_string(),
+        .build_id = archive_metadata->engine_build,
         .inspection_handler = inspect_runtime,
     };
     runtime_inspection::InspectionRegistry inspection_registry;
@@ -774,6 +795,7 @@ RuntimeHostApplication::RuntimeHostApplication(Project project) {
 
     m_app.add_resource(std::move(inspection_registry))
         .add_resource(std::move(playtest_registry))
+        .add_resource(std::move(*archive_metadata))
         .add_resource(snapshot::CheckpointStore {})
         .add_resource(QuickSaveRequests {})
         .add_resource(QuickSaveHotkeyLatch {})
@@ -858,6 +880,9 @@ void RuntimeHostApplication::run() {
             snapshot::ResourcePolicy::Ignore
         );
         snapshot_registry.resource<snapshot::CheckpointStore>(
+            snapshot::ResourcePolicy::Ignore
+        );
+        snapshot_registry.resource<snapshot::SnapshotArchiveMetadata>(
             snapshot::ResourcePolicy::Ignore
         );
         snapshot_registry.resource<QuickSaveRequests>(
