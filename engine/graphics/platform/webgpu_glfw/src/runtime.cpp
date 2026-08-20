@@ -2,7 +2,7 @@
 
 #include "graphics_webgpu/context.hpp"
 #include "graphics_webgpu/graphics_device.hpp"
-#include "graphics_webgpu_glfw/swapchain.hpp"
+#include "graphics_webgpu/swapchain.hpp"
 
 #ifndef GLFW_INCLUDE_NONE
 #    define GLFW_INCLUDE_NONE
@@ -52,7 +52,7 @@ class WebGpuGlfwRuntime::Impl {
             }
         ),
         swapchain(
-            std::make_shared<SwapchainWebGpuGlfw>(
+            std::make_shared<SwapchainWebGpu>(
                 device.state(),
                 surface,
                 description.surface_size.width,
@@ -63,7 +63,7 @@ class WebGpuGlfwRuntime::Impl {
     WGPUInstance instance {nullptr};
     WGPUSurface surface {nullptr};
     GraphicsDeviceWebGpu device;
-    std::shared_ptr<SwapchainWebGpuGlfw> swapchain;
+    std::shared_ptr<SwapchainWebGpu> swapchain;
 };
 
 WebGpuGlfwRuntime::WebGpuGlfwRuntime(

@@ -9,15 +9,15 @@
 
 namespace fei {
 
-class SwapchainWebGpuGlfw final : public Swapchain {
+class SwapchainWebGpu final : public Swapchain {
   public:
-    SwapchainWebGpuGlfw(
+    SwapchainWebGpu(
         std::shared_ptr<WebGpuDeviceState> state,
         WGPUSurface surface,
         uint32 width,
         uint32 height
     );
-    ~SwapchainWebGpuGlfw() override;
+    ~SwapchainWebGpu() override;
 
     std::shared_ptr<const Framebuffer> framebuffer() const override;
     uint32 width() const override;

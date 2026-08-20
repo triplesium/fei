@@ -1,4 +1,4 @@
-#include "graphics_webgpu_glfw/swapchain.hpp"
+#include "graphics_webgpu/swapchain.hpp"
 
 #include "base/log.hpp"
 #include "graphics/framebuffer.hpp"
@@ -47,7 +47,7 @@ swapchain_texture_description(uint32 width, uint32 height, PixelFormat format) {
 
 } // namespace
 
-SwapchainWebGpuGlfw::SwapchainWebGpuGlfw(
+SwapchainWebGpu::SwapchainWebGpu(
     std::shared_ptr<WebGpuDeviceState> state,
     WGPUSurface surface,
     uint32 width,
@@ -56,12 +56,12 @@ SwapchainWebGpuGlfw::SwapchainWebGpuGlfw(
     m_state(std::move(state)), m_surface(surface), m_width(width),
     m_height(height) {
     if (!m_state || m_surface == nullptr) {
-        fatal("SwapchainWebGpuGlfw requires a device state and surface");
+        fatal("SwapchainWebGpu requires a device state and surface");
     }
     configure();
 }
 
-SwapchainWebGpuGlfw::~SwapchainWebGpuGlfw() {
+SwapchainWebGpu::~SwapchainWebGpu() {
     std::scoped_lock lock(m_mutex);
     m_framebuffer.reset();
     if (m_configured) {
@@ -72,7 +72,7 @@ SwapchainWebGpuGlfw::~SwapchainWebGpuGlfw() {
     }
 }
 
-void SwapchainWebGpuGlfw::configure() const {
+void SwapchainWebGpu::configure() const {
     m_framebuffer.reset();
     if (m_width == 0 || m_height == 0) {
         if (m_configured) {
@@ -109,7 +109,7 @@ void SwapchainWebGpuGlfw::configure() const {
     m_configured = true;
 }
 
-bool SwapchainWebGpuGlfw::acquire() const {
+bool SwapchainWebGpu::acquire() const {
     if (m_framebuffer) {
         return true;
     }
@@ -166,28 +166,28 @@ bool SwapchainWebGpuGlfw::acquire() const {
     return true;
 }
 
-std::shared_ptr<const Framebuffer> SwapchainWebGpuGlfw::framebuffer() const {
+std::shared_ptr<const Framebuffer> SwapchainWebGpu::framebuffer() const {
     std::scoped_lock lock(m_mutex);
     acquire();
     return m_framebuffer;
 }
 
-uint32 SwapchainWebGpuGlfw::width() const {
+uint32 SwapchainWebGpu::width() const {
     std::scoped_lock lock(m_mutex);
     return m_width;
 }
 
-uint32 SwapchainWebGpuGlfw::height() const {
+uint32 SwapchainWebGpu::height() const {
     std::scoped_lock lock(m_mutex);
     return m_height;
 }
 
-PixelFormat SwapchainWebGpuGlfw::color_format() const {
+PixelFormat SwapchainWebGpu::color_format() const {
     std::scoped_lock lock(m_mutex);
     return m_color_format;
 }
 
-void SwapchainWebGpuGlfw::resize(uint32 width, uint32 height) {
+void SwapchainWebGpu::resize(uint32 width, uint32 height) {
     std::scoped_lock lock(m_mutex);
     if (m_width == width && m_height == height) {
         return;
@@ -197,7 +197,7 @@ void SwapchainWebGpuGlfw::resize(uint32 width, uint32 height) {
     configure();
 }
 
-void SwapchainWebGpuGlfw::present() const {
+void SwapchainWebGpu::present() const {
     std::scoped_lock lock(m_mutex);
     if (!m_framebuffer) {
         return;
