@@ -43,8 +43,10 @@ struct Options {
     std::optional<std::string> interface_id;
     std::optional<std::string> output;
     std::optional<std::string> eval;
+    std::optional<std::string> checkpoint_name;
     std::optional<std::uint32_t> entity;
     bool read_stdin {false};
+    bool strict {false};
     bool show_help {false};
 };
 
@@ -61,7 +63,14 @@ void print_help() {
                  "INTERFACE\n"
               << "       fei-ctl [--port PORT] play-step --payload JSON\n"
               << "       fei-ctl [--port PORT] play-run --eval CODE\n"
-              << "       fei-ctl [--port PORT] play-run --stdin\n";
+              << "       fei-ctl [--port PORT] play-run --stdin\n"
+              << "       fei-ctl [--port PORT] checkpoint-create NAME "
+                 "[--strict]\n"
+              << "       fei-ctl [--port PORT] checkpoint-audit\n"
+              << "       fei-ctl [--port PORT] checkpoint-delete NAME\n"
+              << "       fei-ctl [--port PORT] checkpoint-clear\n"
+              << "       fei-ctl [--port PORT] checkpoint-list\n"
+              << "       fei-ctl [--port PORT] checkpoint-restore NAME\n";
 }
 
 bool parse_options(int argc, char** argv, Options& options) {
@@ -155,19 +164,35 @@ bool parse_options(int argc, char** argv, Options& options) {
             options.read_stdin = true;
             continue;
         }
+        if (argument == "--strict") {
+            options.strict = true;
+            continue;
+        }
         if (!command_seen &&
             (argument == "project" || argument == "status" ||
              argument == "watch" || argument == "restart" ||
              argument == "capabilities" || argument == "inspect" ||
              argument == "play-interfaces" || argument == "play-capture" ||
              argument == "play-observe" || argument == "play-step" ||
-             argument == "play-reset" || argument == "play-run")) {
+             argument == "play-reset" || argument == "play-run" ||
+             argument == "checkpoint-create" ||
+             argument == "checkpoint-audit" ||
+             argument == "checkpoint-delete" ||
+             argument == "checkpoint-clear" || argument == "checkpoint-list" ||
+             argument == "checkpoint-restore")) {
             options.command = argument;
             command_seen = true;
             continue;
         }
         if (options.command == "inspect" && options.provider.empty()) {
             options.provider = argument;
+            continue;
+        }
+        if ((options.command == "checkpoint-create" ||
+             options.command == "checkpoint-restore" ||
+             options.command == "checkpoint-delete") &&
+            !options.checkpoint_name) {
+            options.checkpoint_name = argument;
             continue;
         }
         {
@@ -237,9 +262,43 @@ bool parse_options(int argc, char** argv, Options& options) {
             return false;
         }
     } else if (
+        options.command == "checkpoint-create" ||
+        options.command == "checkpoint-restore" ||
+        options.command == "checkpoint-delete"
+    ) {
+        if (!options.checkpoint_name) {
+            std::cerr << options.command << " requires a checkpoint name\n";
+            return false;
+        }
+        if (options.entity || options.payload || options.schema ||
+            options.interface_id || options.output || options.eval ||
+            options.read_stdin) {
+            std::cerr << options.command << " accepts only a checkpoint name\n";
+            return false;
+        }
+        if (options.strict && options.command != "checkpoint-create") {
+            std::cerr << "--strict is only valid for checkpoint-create\n";
+            return false;
+        }
+    } else if (
+        options.command == "checkpoint-list" ||
+        options.command == "checkpoint-audit" ||
+        options.command == "checkpoint-clear"
+    ) {
+        if (options.entity || options.payload || options.schema ||
+            options.interface_id || options.output || options.eval ||
+            options.read_stdin || options.checkpoint_name) {
+            std::cerr << options.command << " accepts no options\n";
+            return false;
+        }
+        if (options.strict) {
+            std::cerr << options.command << " does not accept --strict\n";
+            return false;
+        }
+    } else if (
         options.entity || options.payload || options.schema ||
         options.interface_id || options.output || options.eval ||
-        options.read_stdin
+        options.read_stdin || options.checkpoint_name || options.strict
     ) {
         std::cerr << "Unexpected command option\n";
         return false;
@@ -378,6 +437,23 @@ bool inspect_runtime(httplib::Client& client, const Options& options) {
         std::cout << response->body << '\n';
         return false;
     }
+}
+
+bool inspect_checkpoint(
+    httplib::Client& client,
+    std::string provider,
+    const std::optional<std::string>& name,
+    bool strict = false
+) {
+    Options request;
+    request.command = "inspect";
+    request.provider = std::move(provider);
+    request.payload = name ?
+                          std::optional<std::string>(
+                              Json {{"name", *name}, {"strict", strict}}.dump()
+                          ) :
+                          std::optional<std::string>("{}");
+    return inspect_runtime(client, request);
 }
 
 bool print_response(httplib::Result response, std::string_view failure) {
@@ -656,6 +732,29 @@ make_play_bindings(httplib::Client& client, PlayTraceSession* trace = nullptr) {
             -> JsonResult {
             return request_capture(client, output, trace);
         },
+        .checkpoint =
+            [&client, trace](std::string_view name, bool strict) -> JsonResult {
+            return inspection_payload(
+                client.Post(
+                    "/api/v1/play/checkpoint",
+                    trace_headers(trace),
+                    Json {{"name", name}, {"strict", strict}}.dump(),
+                    "application/json"
+                ),
+                "Failed to create playtest checkpoint"
+            );
+        },
+        .restore = [&client, trace](std::string_view name) -> JsonResult {
+            return inspection_payload(
+                client.Post(
+                    "/api/v1/play/restore",
+                    trace_headers(trace),
+                    Json {{"name", name}}.dump(),
+                    "application/json"
+                ),
+                "Failed to restore playtest checkpoint"
+            );
+        },
     };
 }
 
@@ -744,6 +843,61 @@ int main(int argc, char** argv) {
     }
     if (options.command == "inspect") {
         return inspect_runtime(client, options) ? 0 : 1;
+    }
+    if (options.command == "checkpoint-create") {
+        return inspect_checkpoint(
+                   client,
+                   "play.checkpoint.create",
+                   options.checkpoint_name,
+                   options.strict
+               ) ?
+                   0 :
+                   1;
+    }
+    if (options.command == "checkpoint-list") {
+        return inspect_checkpoint(
+                   client,
+                   "play.checkpoint.list",
+                   std::nullopt
+               ) ?
+                   0 :
+                   1;
+    }
+    if (options.command == "checkpoint-audit") {
+        return inspect_checkpoint(
+                   client,
+                   "play.checkpoint.audit",
+                   std::nullopt
+               ) ?
+                   0 :
+                   1;
+    }
+    if (options.command == "checkpoint-delete") {
+        return inspect_checkpoint(
+                   client,
+                   "play.checkpoint.delete",
+                   options.checkpoint_name
+               ) ?
+                   0 :
+                   1;
+    }
+    if (options.command == "checkpoint-clear") {
+        return inspect_checkpoint(
+                   client,
+                   "play.checkpoint.clear",
+                   std::nullopt
+               ) ?
+                   0 :
+                   1;
+    }
+    if (options.command == "checkpoint-restore") {
+        return inspect_checkpoint(
+                   client,
+                   "play.checkpoint.restore",
+                   options.checkpoint_name
+               ) ?
+                   0 :
+                   1;
     }
     if (options.command == "play-interfaces") {
         return print_response(

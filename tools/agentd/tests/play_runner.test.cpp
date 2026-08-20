@@ -63,6 +63,21 @@ PlayControlBindings test_bindings(std::size_t& step_count) {
             }
             return result;
         },
+        .checkpoint = [](std::string_view name,
+                         bool strict) -> Result<nlohmann::json, std::string> {
+            return nlohmann::json {
+                {"name", name},
+                {"strict", strict},
+                {"revision", 1},
+            };
+        },
+        .restore =
+            [](std::string_view name) -> Result<nlohmann::json, std::string> {
+            return nlohmann::json {
+                {"name", name},
+                {"restored_entity_count", 2},
+            };
+        },
     };
 }
 
@@ -101,6 +116,39 @@ return {
     CHECK(report.at("budget").at("calls") == 6);
     CHECK(report.at("budget").at("ticks") == 8);
     CHECK(report.at("logs") == nlohmann::json::array({{"done", 3}}));
+}
+
+TEST_CASE(
+    "Luau play runner exposes bounded checkpoint and restore controls",
+    "[agentd][play-run][checkpoint]"
+) {
+    std::size_t step_count = 0;
+    const auto report = run_luau_play_script(
+        R"(
+local saved = play.checkpoint("turn-0", true)
+local restored = play.restore("turn-0")
+return {
+    saved_name = saved.name,
+    strict = saved.strict,
+    restored = restored.restored_entity_count,
+}
+)",
+        test_bindings(step_count)
+    );
+
+    INFO(report.dump(2));
+    REQUIRE(report.at("ok").get<bool>());
+    CHECK(
+        report.at("result") == nlohmann::json {
+                                   {"saved_name", "turn-0"},
+                                   {"strict", true},
+                                   {"restored", 2},
+                               }
+    );
+    REQUIRE(report.at("calls").size() == 2);
+    CHECK(report.at("calls").at(0).at("operation") == "checkpoint");
+    CHECK(report.at("calls").at(1).at("operation") == "restore");
+    CHECK(report.at("budget").at("ticks") == 0);
 }
 
 TEST_CASE(

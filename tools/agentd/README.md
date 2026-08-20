@@ -105,25 +105,36 @@ branching, loops, steps, and captures in one CLI process:
 ```powershell
 @'
 local before = play.observe("game.main")
+play.checkpoint("before-move", true)
 if before.player.x < 100 then
     play.step("game.main", { move = "right" }, 10)
 else
     play.step("game.main", { move = "left" })
 end
+local first_attempt = play.observe("game.main")
+play.restore("before-move")
+play.step("game.main", { move = "left" })
 local capture = play.capture("after.png")
-return { state = play.observe("game.main"), capture = capture }
+return {
+    first_attempt = first_attempt,
+    retry = play.observe("game.main"),
+    capture = capture,
+}
 '@ | fei-ctl --port 8091 play-run --stdin
 ```
 
 The control API consists of `play.interfaces()`,
 `play.step(interface, action, ticks?)`, `play.observe(interface)`,
-`play.capture(output?)`, and `play.log(value)`; `print(...)` is also captured
-as structured log output. Results include the returned JSON-compatible value,
-logs, an ordered HTTP call trace, and consumed budgets. Source size, Luau VM
-memory, wall-clock duration, VM interrupts, HTTP calls, and accumulated game
-ticks are bounded. Filesystem and process APIs are not exposed to the script;
-the only supported file write is an explicit output path passed to
-`play.capture`.
+`play.checkpoint(name, strict?)`, `play.restore(name)`,
+`play.capture(output?)`, and `play.log(value)`; `print(...)` is also captured as
+structured log output. Checkpoints live in the supervised runtime and restore
+the registered ECS world state without restarting the process. Restored ticks
+still count toward the control script's accumulated execution budget. Results
+include the returned JSON-compatible value, logs, an ordered HTTP call trace,
+and consumed budgets. Source size, Luau VM memory, wall-clock duration, VM
+interrupts, HTTP calls, and accumulated game ticks are bounded. Filesystem and
+process APIs are not exposed to the script; the only supported file write is an
+explicit output path passed to `play.capture`.
 
 Luau projects can list declarative playtest modules in `project.yaml`:
 

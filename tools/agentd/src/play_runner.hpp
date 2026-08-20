@@ -26,6 +26,10 @@ struct PlayControlBindings {
     std::function<
         Result<nlohmann::json, std::string>(const std::optional<std::string>&)>
         capture;
+    std::function<Result<nlohmann::json, std::string>(std::string_view, bool)>
+        checkpoint;
+    std::function<Result<nlohmann::json, std::string>(std::string_view)>
+        restore;
 };
 
 struct PlayRunLimits {

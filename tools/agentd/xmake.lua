@@ -62,3 +62,31 @@ target("fei-agentd-tests")
     add_files("tests/*.cpp")
     add_deps("fei-agentd-core", "fei-play-runner")
     add_packages("nlohmann_json")
+
+target("fei-agentd-checkpoint-e2e-tests")
+    set_kind("binary")
+    set_default(false)
+    add_rules("fei.test")
+    add_files("tests/e2e/checkpoint.test.cpp")
+    add_deps(
+        "fei-agentd-core",
+        "fei-ctl",
+        "fei-snapshot-runtime-fixture"
+    )
+    add_packages("cpp-httplib", "nlohmann_json")
+    after_load(function(target)
+        local fixture = target:dep("fei-snapshot-runtime-fixture")
+        local fixture_path = path.absolute(fixture:targetfile()):gsub("\\", "/")
+        local ctl = target:dep("fei-ctl")
+        local ctl_path = path.absolute(ctl:targetfile()):gsub("\\", "/")
+        local project_path = path.join(
+            os.projectdir(),
+            "tests/fixtures/checkpoint_project/project.yaml"
+        ):gsub("\\", "/")
+        target:add(
+            "defines",
+            "FEI_SNAPSHOT_RUNTIME_FIXTURE_PATH=\"" .. fixture_path .. "\"",
+            "FEI_CTL_PATH=\"" .. ctl_path .. "\"",
+            "FEI_CHECKPOINT_PROJECT_PATH=\"" .. project_path .. "\""
+        )
+    end)

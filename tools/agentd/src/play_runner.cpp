@@ -537,6 +537,70 @@ int play_capture(lua_State* state) {
     }
 }
 
+int play_checkpoint(lua_State* state) {
+    try {
+        const auto argument_count = lua_gettop(state);
+        if (argument_count < 1 || argument_count > 2) {
+            throw std::runtime_error(
+                "play.checkpoint expects a name and optional strict flag"
+            );
+        }
+        auto name = string_argument(state, 1, "checkpoint name");
+        bool strict = false;
+        if (argument_count == 2) {
+            if (!lua_isboolean(state, 2)) {
+                throw std::runtime_error("strict must be a boolean");
+            }
+            strict = lua_toboolean(state, 2) != 0;
+        }
+        auto& run = context(state);
+        auto response = invoke_play(
+            run,
+            "checkpoint",
+            Json {{"name", name}, {"strict", strict}},
+            [&run, &name, strict]() {
+                if (!run.bindings.checkpoint) {
+                    return Result<Json, std::string>(failure(
+                        std::string("checkpoint binding is unavailable")
+                    ));
+                }
+                return run.bindings.checkpoint(name, strict);
+            }
+        );
+        push_json(state, response);
+        return 1;
+    } catch (const std::exception& error) {
+        luaL_error(state, "%s", error.what());
+        return 0;
+    }
+}
+
+int play_restore(lua_State* state) {
+    try {
+        if (lua_gettop(state) != 1) {
+            throw std::runtime_error(
+                "play.restore expects one checkpoint name"
+            );
+        }
+        auto name = string_argument(state, 1, "checkpoint name");
+        auto& run = context(state);
+        auto response =
+            invoke_play(run, "restore", Json {{"name", name}}, [&run, &name]() {
+                if (!run.bindings.restore) {
+                    return Result<Json, std::string>(
+                        failure(std::string("restore binding is unavailable"))
+                    );
+                }
+                return run.bindings.restore(name);
+            });
+        push_json(state, response);
+        return 1;
+    } catch (const std::exception& error) {
+        luaL_error(state, "%s", error.what());
+        return 0;
+    }
+}
+
 int play_log(lua_State* state) {
     try {
         if (lua_gettop(state) != 1) {
@@ -629,6 +693,8 @@ void install_play_api(lua_State* state, RunContext& run) {
              {"step", play_step},
              {"observe", play_observe},
              {"capture", play_capture},
+             {"checkpoint", play_checkpoint},
+             {"restore", play_restore},
              {"log", play_log},
          }) {
         push_bound_function(state, run, function, name);

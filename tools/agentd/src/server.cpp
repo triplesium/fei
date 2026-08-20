@@ -947,6 +947,86 @@ class AgentServer::Impl {
             }
         );
         m_server->Post(
+            "/api/v1/play/checkpoint",
+            [this](
+                const httplib::Request& request,
+                httplib::Response& response
+            ) {
+                try {
+                    const auto payload = Json::parse(request.body);
+                    if (!payload.is_object()) {
+                        set_error(
+                            response,
+                            400,
+                            "Playtest checkpoint request must be an object"
+                        );
+                        return;
+                    }
+                    auto span = begin_play_span(request, "checkpoint", payload);
+                    if (!span) {
+                        set_error(response, 400, std::move(span.error()));
+                        return;
+                    }
+                    submit_known_inspection(
+                        m_state,
+                        response,
+                        "play.checkpoint.create",
+                        "play.checkpoint.create.v1",
+                        payload.dump(),
+                        std::chrono::seconds(30)
+                    );
+                    finish_play_span(*span, "checkpoint", response);
+                } catch (const std::exception& error) {
+                    set_error(
+                        response,
+                        400,
+                        std::string("Invalid playtest checkpoint request: ") +
+                            error.what()
+                    );
+                }
+            }
+        );
+        m_server->Post(
+            "/api/v1/play/restore",
+            [this](
+                const httplib::Request& request,
+                httplib::Response& response
+            ) {
+                try {
+                    const auto payload = Json::parse(request.body);
+                    if (!payload.is_object()) {
+                        set_error(
+                            response,
+                            400,
+                            "Playtest restore request must be an object"
+                        );
+                        return;
+                    }
+                    auto span = begin_play_span(request, "restore", payload);
+                    if (!span) {
+                        set_error(response, 400, std::move(span.error()));
+                        return;
+                    }
+                    submit_known_inspection(
+                        m_state,
+                        response,
+                        "play.checkpoint.restore",
+                        "play.checkpoint.restore.v1",
+                        payload.dump(),
+                        std::chrono::seconds(30)
+                    );
+                    finish_play_span(*span, "restore", response);
+                } catch (const std::exception& error) {
+                    set_error(
+                        response,
+                        400,
+                        std::string("Invalid playtest restore request: ") +
+                            error.what()
+                    );
+                }
+            }
+        );
+        m_server->Post(
             "/api/v1/play/reset",
             [this](const httplib::Request&, httplib::Response& response) {
                 m_state.request_restart();
