@@ -85,12 +85,46 @@ if is_plat("windows") then
 end
 
 local project_dir = os.scriptdir():gsub("\\", "/")
-add_defines("FEI_ASSETS_PATH=\"" .. project_dir .. "/assets\"")
+if is_plat("wasm") then
+    add_defines("FEI_ASSETS_PATH=\"/fei/assets\"")
+else
+    add_defines("FEI_ASSETS_PATH=\"" .. project_dir .. "/assets\"")
+end
 add_defines("FEI_SHADER_ASSETS_PATH=\"" .. project_dir .. "/build/generated/shaders\"")
 add_defines("FEI_SHADER_CACHE_PATH=\"" .. project_dir .. "/build/cache/shaders\"")
 add_defines("FEI_PROFILE_OUTPUT_PATH=\"" .. project_dir .. "/build/profile/latest\"")
 
 local shader_sources = {}
+
+function add_asset_bundle(prefix, root)
+    if not prefix or #prefix == 0 then
+        raise("asset bundle prefix is required")
+    end
+    if not root or #root == 0 then
+        raise("asset bundle root is required")
+    end
+
+    add_values(
+        "fei.asset_bundles",
+        prefix:gsub("\\", "/") .. "=" ..
+            path.absolute(root):gsub("\\", "/")
+    )
+end
+
+local function target_asset_bundles(target)
+    local bundles = {}
+    for _, entry in ipairs(table.wrap(target:values("fei.asset_bundles"))) do
+        local separator = entry:find("=", 1, true)
+        if not separator then
+            raise("invalid asset bundle: " .. entry)
+        end
+        table.insert(bundles, {
+            prefix = entry:sub(1, separator - 1),
+            root = entry:sub(separator + 1),
+        })
+    end
+    return bundles
+end
 
 function add_shader_source(prefix, root)
     if not prefix or #prefix == 0 then
@@ -108,28 +142,116 @@ function add_shader_source(prefix, root)
     })
 end
 
-local function shader_sources_define_value()
+local function shader_runtime_root(source, target)
+    if target:is_plat("wasm") then
+        return "/fei/shaders/" .. source.prefix
+    end
+    return source.root
+end
+
+local function shader_sources_define_value(target)
     table.sort(shader_sources, function(a, b)
         return a.prefix < b.prefix
     end)
 
     local entries = {}
     for _, source in ipairs(shader_sources) do
-        table.insert(entries, source.prefix .. "=" .. source.root)
+        table.insert(
+            entries,
+            source.prefix .. "=" .. shader_runtime_root(source, target)
+        )
     end
     return table.concat(entries, ";")
 end
 
 rule("fei.shader_sources")
     after_load(function(target)
-        local sources = shader_sources_define_value()
+        local sources = shader_sources_define_value(target)
         if sources and #sources > 0 then
             target:add("defines", "FEI_SHADER_SOURCES=\"" .. sources .. "\"")
         end
+        if target:is_plat("wasm") and target:kind() == "binary" then
+            for _, source in ipairs(shader_sources) do
+                target:add(
+                    "ldflags",
+                    "--preload-file=" .. source.root .. "@" ..
+                        shader_runtime_root(source, target),
+                    {force = true}
+                )
+                target:add("extrafiles", path.join(source.root, "**.slang"))
+            end
+        end
+    end)
+    before_build(function(target)
+        if not target:is_plat("wasm") or target:kind() ~= "binary" then
+            return
+        end
+
+        import("core.project.depend")
+        local source_files = {}
+        for _, source in ipairs(shader_sources) do
+            table.join2(
+                source_files,
+                os.files(path.join(source.root, "**.slang"))
+            )
+        end
+        table.sort(source_files)
+
+        depend.on_changed(function()
+            os.rm(target:targetfile())
+        end, {
+            dependfile = target:dependfile(
+                path.join(target:autogendir(), "shader_sources")
+            ),
+            files = source_files,
+            values = source_files,
+        })
     end)
 rule_end()
 
 add_rules("fei.shader_sources")
+
+rule("fei.asset_bundles")
+    after_load(function(target)
+        if not target:is_plat("wasm") or target:kind() ~= "binary" then
+            return
+        end
+
+        for _, bundle in ipairs(target_asset_bundles(target)) do
+            target:add(
+                "ldflags",
+                "--preload-file=" .. bundle.root .. "@/fei/assets/" ..
+                    bundle.prefix,
+                {force = true}
+            )
+            target:add("extrafiles", path.join(bundle.root, "**"))
+        end
+    end)
+    before_build(function(target)
+        if not target:is_plat("wasm") or target:kind() ~= "binary" then
+            return
+        end
+
+        import("core.project.depend")
+        local asset_files = {}
+        for _, bundle in ipairs(target_asset_bundles(target)) do
+            table.join2(asset_files, os.files(path.join(bundle.root, "**")))
+        end
+        table.sort(asset_files)
+
+        depend.on_changed(function()
+            os.rm(target:targetfile())
+        end, {
+            dependfile = target:dependfile(
+                path.join(target:autogendir(), "asset_bundles")
+            ),
+            files = asset_files,
+            values = asset_files,
+        })
+    end)
+rule_end()
+
+add_rules("fei.asset_bundles")
 
 rule("fei.executable_startup")
     on_load(function(target)

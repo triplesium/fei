@@ -52,6 +52,16 @@ void AssetsPlugin::setup(App& app) {
     auto import_cache_root = m_config.import_cache_root.empty() ?
                                  default_import_cache_root(project_asset_root) :
                                  m_config.import_cache_root;
+#ifdef __EMSCRIPTEN__
+    std::error_code asset_root_error;
+    std::filesystem::create_directories(project_asset_root, asset_root_error);
+    if (asset_root_error) {
+        warn(
+            "Failed to create browser asset root: {}",
+            asset_root_error.message()
+        );
+    }
+#endif
     AssetDatabase database(project_asset_root, import_cache_root);
     if (auto status = database.scan(); !status) {
         warn("Failed to scan project asset metadata: {}", status.error());
