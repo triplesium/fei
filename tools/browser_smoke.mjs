@@ -21,9 +21,11 @@ if (!outputRoot || !Number.isFinite(timeoutMs) || timeoutMs <= 0 || !["ui", "pro
 }
 
 const mimeTypes = new Map([
+    [".css", "text/css; charset=utf-8"],
     [".data", "application/octet-stream"],
     [".html", "text/html; charset=utf-8"],
     [".js", "text/javascript; charset=utf-8"],
+    [".ttf", "font/ttf"],
     [".wasm", "application/wasm"],
 ]);
 
@@ -352,11 +354,18 @@ async function runSmokeTest(client, url, selectedScenario) {
             openFolderAvailable: typeof window.showDirectoryPicker === "function",
             openFolderDisabled: document.querySelector("#open-folder").disabled,
             playDisabled: document.querySelector("#play").disabled,
-            editorDisabled: document.querySelector("#source-editor").disabled,
+            editorDisabled: document.querySelector("#source-editor").dataset.disabled === "true",
+            gameRatio: (() => {
+                const rect = document.querySelector(".runtime-stage").getBoundingClientRect();
+                return rect.width / rect.height;
+            })(),
         })`);
         if (!unopened.openFolderAvailable || unopened.openFolderDisabled ||
             !unopened.playDisabled || !unopened.editorDisabled) {
             throw new Error("the editor did not enter the expected unopened local-folder state");
+        }
+        if (Math.abs(unopened.gameRatio - 16 / 9) > 0.02) {
+            throw new Error(`the editor Game viewport is not 16:9 (${unopened.gameRatio})`);
         }
         const project = await evaluate(client, "window.feiEditorAgent.invoke({type: 'project.list'})");
         if (project.ok || !project.error?.message.includes("Open a local project folder")) {
