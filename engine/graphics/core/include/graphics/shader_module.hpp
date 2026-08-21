@@ -1,9 +1,11 @@
 #pragma once
+#include "base/result.hpp"
 #include "graphics/enums.hpp"
 #include "graphics/resource.hpp"
 #include "graphics/shader_defs.hpp"
 
 #include <cstddef>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -28,6 +30,13 @@ struct ShaderDescription {
     std::vector<ShaderResourceBinding> resources;
     ShaderDefs defs;
 };
+
+struct ShaderResourceLayoutError {
+    std::string message;
+};
+
+Result<std::vector<ResourceLayoutDescription>, ShaderResourceLayoutError>
+reflect_resource_layouts(std::span<const ShaderDescription> shaders);
 
 class ShaderModule {
   private:
