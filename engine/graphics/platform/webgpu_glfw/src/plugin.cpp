@@ -5,6 +5,7 @@
 #include "graphics_webgpu_glfw/runtime.hpp"
 #include "shader_webgpu/plugin.hpp"
 #include "window/window.hpp"
+#include "window_glfw/window.hpp"
 
 #ifndef GLFW_INCLUDE_NONE
 #    define GLFW_INCLUDE_NONE
@@ -30,13 +31,14 @@ void sync_graphics_surface_size(
 
 void install_graphics_bootstrap(App& app) {
     const auto& window = app.resource<Window>();
+    const auto& glfw = app.resource<GlfwWindow>();
     const auto surface_size = GraphicsSurfaceSize {
         .width = window_extent(window.width),
         .height = window_extent(window.height),
     };
     auto bootstrap =
         std::make_unique<WebGpuGlfwBootstrap>(WebGpuGlfwBootstrapDescription {
-            .window = window.glfw_window,
+            .window = glfw.handle,
             .surface_size = surface_size,
         });
     app.add_resource(bootstrap->capabilities())
@@ -57,7 +59,7 @@ void install_graphics_bootstrap(App& app) {
 } // namespace
 
 void WebGpuGlfwPlugin::dependencies(PluginDependencies& dependencies) const {
-    dependencies.require<WebGpuShaderPlugin>().require(WindowPlugin(
+    dependencies.require<WebGpuShaderPlugin>().require(GlfwWindowPlugin(
         std::vector<GlfwWindowHint> {
             GlfwWindowHint {
                 .hint = GLFW_CLIENT_API,

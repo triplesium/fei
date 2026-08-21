@@ -2,12 +2,12 @@
 
 #include "app/app.hpp"
 #include "ecs/world.hpp"
+#include "input/input.hpp"
 #include "input_focus/focus.hpp"
 #include "input_focus/tab_navigation.hpp"
 #include "ui/plugin.hpp"
 #include "ui_widgets/plugin.hpp"
 #include "ui_widgets/value_change.hpp"
-#include "input/input.hpp"
 #include "window/window.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -29,9 +29,7 @@ struct SliderWorld {
         ui_widgets::SliderStep step = {.value = 0.1f},
         ui_widgets::Slider slider_component = {}
     ) {
-        world.add_resource(
-            Window {.glfw_window = nullptr, .width = 200, .height = 120}
-        );
+        world.add_resource(Window {.width = 200, .height = 120});
         world.add_resource(KeyInput {});
         world.add_resource(MouseInput {});
         world.add_resource(Events<ui_widgets::SetSliderValue> {});
@@ -450,9 +448,7 @@ TEST_CASE(
 
 TEST_CASE("SliderPlugin inserts required components", "[ui_widgets][slider]") {
     App app;
-    app.add_resource(
-        Window {.glfw_window = nullptr, .width = 200, .height = 120}
-    );
+    app.add_resource(Window {.width = 200, .height = 120});
     app.add_plugin<ui_widgets::SliderPlugin>();
     app.finish();
 

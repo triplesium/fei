@@ -5,7 +5,7 @@
 #include "graphics/plugin.hpp"
 #include "graphics_opengl_glfw/plugin.hpp"
 #include "input/input.hpp"
-#include "window/input.hpp"
+#include "window_glfw/input.hpp"
 
 class SamplePlugin : public fei::Plugin {
   public:

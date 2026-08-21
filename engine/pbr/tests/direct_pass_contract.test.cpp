@@ -209,7 +209,6 @@ std::shared_ptr<ContractSwapchain>
 setup_present_resources(PassTestWorld& test) {
     test.world.add_resource(
         Window {
-            .glfw_window = nullptr,
             .width = 1280,
             .height = 720,
         }
@@ -286,7 +285,6 @@ TEST_CASE(
     PassTestWorld test;
     test.world.add_resource(
         Window {
-            .glfw_window = nullptr,
             .width = 1280,
             .height = 720,
         }
@@ -326,7 +324,6 @@ TEST_CASE(
     PassTestWorld test;
     test.world.add_resource(
         Window {
-            .glfw_window = nullptr,
             .width = 1280,
             .height = 720,
         }
@@ -525,7 +522,6 @@ TEST_CASE(
     PassTestWorld test;
     test.world.add_resource(
         Window {
-            .glfw_window = nullptr,
             .width = 1280,
             .height = 720,
         }

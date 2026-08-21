@@ -42,7 +42,7 @@
 #include "scripting_lua/plugin.hpp"
 #include "scripting_lua/script_system_registry.hpp"
 #include "shader/shader.hpp"
-#include "window/input.hpp"
+#include "window_glfw/input.hpp"
 
 #include <algorithm>
 #include <cstdio>

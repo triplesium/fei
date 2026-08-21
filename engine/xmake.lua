@@ -5,7 +5,7 @@ if is_plat("wasm") then
     includes("ecs")
     includes("app")
     includes("input")
-    includes("browser")
+    includes("window")
     includes("task")
     includes("serialization")
     includes("asset")

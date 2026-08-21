@@ -58,7 +58,6 @@ struct ComplexUiWorld {
     ComplexUiWorld() {
         app.add_resource(
                Window {
-                   .glfw_window = nullptr,
                    .width = 640,
                    .height = 480,
                }

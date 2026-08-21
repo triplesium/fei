@@ -27,7 +27,7 @@
 #include "pbr/skybox.hpp"
 #include "rendering/plugin.hpp"
 #include "scene/scene.hpp"
-#include "window/input.hpp"
+#include "window_glfw/input.hpp"
 
 #include <cstdio>
 #include <string_view>

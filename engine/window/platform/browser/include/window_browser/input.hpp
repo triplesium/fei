@@ -5,10 +5,11 @@
 namespace fei {
 
 FEI_REFLECT(Plugin)
-class WebGpuBrowserPlugin final : public Plugin {
+class BrowserInputPlugin final : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
+    void cleanup(App& app) noexcept override;
 };
 
 } // namespace fei

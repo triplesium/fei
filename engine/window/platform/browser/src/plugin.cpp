@@ -1,7 +1,7 @@
-#include "browser/plugin.hpp"
+#include "window_browser/plugin.hpp"
 
 #include "app/app.hpp"
-#include "browser/runner.hpp"
+#include "window_browser/runner.hpp"
 
 namespace fei {
 

@@ -2,12 +2,12 @@
 
 #include "app/app.hpp"
 #include "ecs/world.hpp"
+#include "input/input.hpp"
 #include "input_focus/focus.hpp"
 #include "input_focus/tab_navigation.hpp"
 #include "ui/plugin.hpp"
 #include "ui_widgets/plugin.hpp"
 #include "ui_widgets/value_change.hpp"
-#include "input/input.hpp"
 #include "window/window.hpp"
 
 #include <array>
@@ -23,9 +23,7 @@ struct RadioWorld {
     std::array<Entity, 3> buttons;
 
     RadioWorld() {
-        world.add_resource(
-            Window {.glfw_window = nullptr, .width = 240, .height = 120}
-        );
+        world.add_resource(Window {.width = 240, .height = 120});
         world.add_resource(MouseInput {});
         world.add_resource(KeyInput {});
         world.add_resource(Events<ui_widgets::ValueChange<bool>> {});
@@ -266,9 +264,7 @@ TEST_CASE(
     "[ui_widgets][radio]"
 ) {
     App app;
-    app.add_resource(
-        Window {.glfw_window = nullptr, .width = 200, .height = 120}
-    );
+    app.add_resource(Window {.width = 200, .height = 120});
     app.add_plugin<ui_widgets::RadioGroupPlugin>();
     app.finish();
 

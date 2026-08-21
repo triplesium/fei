@@ -9,7 +9,7 @@ target("fei-graphics-vulkan-glfw")
         "fei-graphics",
         "fei-graphics-vulkan",
         "fei-shader-vulkan",
-        "fei-window",
+        "fei-window-glfw",
         "fei-profiling"
     )
     add_packages("glfw", "vulkansdk")

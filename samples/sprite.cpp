@@ -18,6 +18,7 @@
 #include "sprite/components.hpp"
 #include "sprite/plugin.hpp"
 #include "window/window.hpp"
+#include "window_glfw/window.hpp"
 
 #include <array>
 #include <cstddef>
@@ -148,7 +149,7 @@ int main(int argc, char** argv) {
     const auto options = parse_arguments(argc, argv);
     App app;
     app.add_resource(
-        WindowConfig {
+        GlfwWindowConfig {
             .width = 800,
             .height = 450,
             .title = "Fei Sprite Sample",

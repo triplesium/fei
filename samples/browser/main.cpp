@@ -2,7 +2,6 @@
 #include "asset/assets.hpp"
 #include "asset/server.hpp"
 #include "base/log.hpp"
-#include "browser/input.hpp"
 #include "core/image.hpp"
 #include "core/plugin.hpp"
 #include "core/text.hpp"
@@ -19,6 +18,7 @@
 #include "sprite/components.hpp"
 #include "sprite/plugin.hpp"
 #include "sprite/renderer.hpp"
+#include "window_browser/input.hpp"
 
 #include <algorithm>
 #include <cmath>

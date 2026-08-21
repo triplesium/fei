@@ -20,6 +20,7 @@
 #include "rendering/render_frame.hpp"
 #include "rendering/shader_cache.hpp"
 #include "window/window.hpp"
+#include "window_glfw/window.hpp"
 
 #include <cstddef>
 #include <imgui.h>
@@ -55,7 +56,7 @@ struct ImGuiLifecycle {
 };
 
 void setup_imgui_platform(
-    ResRO<Window> window,
+    ResRO<GlfwWindow> window,
     ResRO<ImGuiPluginConfig> plugin_config,
     ResRW<ImGuiLifecycle> lifecycle
 ) {
@@ -86,7 +87,7 @@ void setup_imgui_platform(
     }
 
     ImGui::StyleColorsDark();
-    if (!ImGui_ImplGlfw_InitForOther(window->glfw_window, true)) {
+    if (!ImGui_ImplGlfw_InitForOther(window->handle, true)) {
         fatal("ImGuiPlugin failed to initialize the GLFW platform backend");
     }
     lifecycle->platform_initialized = true;
@@ -169,9 +170,10 @@ void render_imgui_overlay(
 } // namespace
 
 void ImGuiPlugin::setup(App& app) {
-    if (!app.has_resource<Window>()) {
+    if (!app.has_resource<GlfwWindow>()) {
         fatal(
-            "ImGuiPlugin requires Window; install a GLFW graphics plugin first"
+            "ImGuiPlugin requires GlfwWindow; install a GLFW graphics plugin "
+            "first"
         );
     }
     if (!app.has_plugin<RenderingPlugin>()) {

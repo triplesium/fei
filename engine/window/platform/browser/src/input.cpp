@@ -1,8 +1,8 @@
-#include "browser/input.hpp"
+#include "window_browser/input.hpp"
 
 #include "app/app.hpp"
-#include "browser/plugin.hpp"
 #include "input/input.hpp"
+#include "window_browser/window.hpp"
 
 #include <array>
 #include <cstring>
@@ -381,29 +381,24 @@ void uninstall_browser_input_callbacks(const std::string& selector) {
 
 } // namespace
 
-BrowserInputPlugin::BrowserInputPlugin(std::string canvas_selector) :
-    m_canvas_selector(std::move(canvas_selector)) {
-    if (m_canvas_selector.empty()) {
-        throw std::invalid_argument(
-            "BrowserInputPlugin requires a canvas selector"
-        );
-    }
-}
-
 void BrowserInputPlugin::dependencies(PluginDependencies& dependencies) const {
-    dependencies.require<BrowserPlugin>().require<InputPlugin>();
+    dependencies.require<BrowserWindowPlugin>().require<InputPlugin>();
 }
 
 void BrowserInputPlugin::setup(App& app) {
-    install_browser_input_callbacks(m_canvas_selector);
+    install_browser_input_callbacks(app.resource<BrowserCanvas>().selector);
     app.add_systems(
         PreUpdate,
         collect_browser_input | in_set<InputSystems::Collect>()
     );
 }
 
-void BrowserInputPlugin::cleanup(App&) noexcept {
-    uninstall_browser_input_callbacks(m_canvas_selector);
+void BrowserInputPlugin::cleanup(App& app) noexcept {
+    if (app.has_resource<BrowserCanvas>()) {
+        uninstall_browser_input_callbacks(
+            app.resource<BrowserCanvas>().selector
+        );
+    }
 }
 
 } // namespace fei

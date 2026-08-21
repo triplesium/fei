@@ -1,8 +1,9 @@
-#include "window/input.hpp"
+#include "window_glfw/input.hpp"
 
 #include "app/app.hpp"
 #include "input/input.hpp"
 #include "window/window.hpp"
+#include "window_glfw/window.hpp"
 
 #include <GLFW/glfw3.h>
 #include <unordered_map>
@@ -79,6 +80,7 @@ void on_focus(GLFWwindow* window, int focused) {
 
 void collect_glfw_input(
     ResRO<Window> window,
+    ResRO<GlfwWindow> glfw,
     EventWriter<KeyEvent> key_events,
     EventWriter<MouseButtonEvent> mouse_button_events,
     EventWriter<MouseMoveEvent> mouse_move_events,
@@ -86,7 +88,7 @@ void collect_glfw_input(
     EventWriter<CharacterEvent> character_events,
     EventWriter<InputFocusLost> focus_lost_events
 ) {
-    auto& queue = g_input_queues[window->glfw_window];
+    auto& queue = g_input_queues[glfw->handle];
     for (auto& event : queue.keys) {
         key_events.send(std::move(event));
     }
@@ -105,7 +107,7 @@ void collect_glfw_input(
         double logical_height = 0.0;
         int glfw_width = 0;
         int glfw_height = 0;
-        glfwGetWindowSize(window->glfw_window, &glfw_width, &glfw_height);
+        glfwGetWindowSize(glfw->handle, &glfw_width, &glfw_height);
         logical_width = static_cast<double>(glfw_width);
         logical_height = static_cast<double>(glfw_height);
         auto position = queue.cursor;
@@ -152,11 +154,11 @@ void uninstall_glfw_input_callbacks(GLFWwindow* window) {
 } // namespace
 
 void GlfwInputPlugin::dependencies(PluginDependencies& dependencies) const {
-    dependencies.require<InputPlugin>().require<WindowPlugin>();
+    dependencies.require<InputPlugin>().require<GlfwWindowPlugin>();
 }
 
 void GlfwInputPlugin::setup(App& app) {
-    install_glfw_input_callbacks(app.resource<Window>().glfw_window);
+    install_glfw_input_callbacks(app.resource<GlfwWindow>().handle);
     app.add_systems(
         PreUpdate,
         collect_glfw_input | in_set<InputSystems::Collect>()
@@ -164,8 +166,8 @@ void GlfwInputPlugin::setup(App& app) {
 }
 
 void GlfwInputPlugin::cleanup(App& app) noexcept {
-    if (app.has_resource<Window>()) {
-        uninstall_glfw_input_callbacks(app.resource<Window>().glfw_window);
+    if (app.has_resource<GlfwWindow>()) {
+        uninstall_glfw_input_callbacks(app.resource<GlfwWindow>().handle);
     }
 }
 

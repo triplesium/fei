@@ -2,9 +2,9 @@
 
 #include "app/app.hpp"
 #include "ecs/world.hpp"
+#include "input/input.hpp"
 #include "ui/plugin.hpp"
 #include "ui_widgets/plugin.hpp"
-#include "input/input.hpp"
 #include "window/window.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -125,9 +125,7 @@ TEST_CASE(
     "[ui_widgets][scroll]"
 ) {
     App app;
-    app.add_resource(
-        Window {.glfw_window = nullptr, .width = 200, .height = 120}
-    );
+    app.add_resource(Window {.width = 200, .height = 120});
     app.add_plugin<ui_widgets::ScrollAreaPlugin>();
     app.finish();
 

@@ -1,12 +1,15 @@
-target("fei-graphics-webgpu-browser")
+target("fei-window-browser")
     set_kind("static")
     add_rules("fei.reflect")
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
     add_deps(
-        "fei-window-browser",
-        "fei-graphics",
-        "fei-graphics-webgpu",
-        "fei-shader-webgpu"
+        "fei-base",
+        "fei-refl",
+        "fei-ecs",
+        "fei-app",
+        "fei-math",
+        "fei-input",
+        "fei-window"
     )

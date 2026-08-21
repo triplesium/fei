@@ -21,9 +21,7 @@ struct PopoverWorld {
         Vector2 anchor_position,
         ui_widgets::PopoverPlacement placement = {}
     ) {
-        world.add_resource(
-            Window {.glfw_window = nullptr, .width = 300, .height = 200}
-        );
+        world.add_resource(Window {.width = 300, .height = 200});
         root = world.entity();
         world.add_component(root, ui::Node {});
         world.add_component(

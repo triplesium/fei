@@ -4,7 +4,7 @@ target("fei-graphics-opengl-glfw")
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
-    add_deps("fei-graphics", "fei-graphics-opengl", "fei-shader-opengl", "fei-window", "fei-profiling")
+    add_deps("fei-graphics", "fei-graphics-opengl", "fei-shader-opengl", "fei-window-glfw", "fei-profiling")
     add_packages("glfw", "glad")
 
 target("fei-graphics-opengl-glfw-tests")

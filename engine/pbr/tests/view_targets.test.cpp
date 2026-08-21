@@ -15,7 +15,6 @@ TEST_CASE(
     world.add_resource_as<GraphicsDevice>(FakeGraphicsDevice {});
     world.add_resource(
         Window {
-            .glfw_window = nullptr,
             .width = 1280,
             .height = 720,
         }

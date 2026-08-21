@@ -6,6 +6,7 @@
 #include "graphics_vulkan_glfw/runtime.hpp"
 #include "shader_vulkan/plugin.hpp"
 #include "window/window.hpp"
+#include "window_glfw/window.hpp"
 
 #ifndef GLFW_INCLUDE_NONE
 #    define GLFW_INCLUDE_NONE
@@ -62,6 +63,7 @@ void install_graphics_bootstrap(App& app) {
     append_unique(required_device_extensions, vulkan_swapchain_extension);
 
     const auto& window = app.resource<Window>();
+    const auto& glfw = app.resource<GlfwWindow>();
     const auto surface_size = GraphicsSurfaceSize {
         .width = window_extent(window.width),
         .height = window_extent(window.height),
@@ -71,7 +73,7 @@ void install_graphics_bootstrap(App& app) {
             .required_instance_extensions =
                 std::move(required_instance_extensions),
             .required_device_extensions = std::move(required_device_extensions),
-            .window = window.glfw_window,
+            .window = glfw.handle,
             .surface_size = surface_size,
         });
     app.add_resource(bootstrap->capabilities())
@@ -92,7 +94,7 @@ void install_graphics_bootstrap(App& app) {
 } // namespace
 
 void VulkanGlfwPlugin::dependencies(PluginDependencies& dependencies) const {
-    dependencies.require<VulkanShaderPlugin>().require(WindowPlugin(
+    dependencies.require<VulkanShaderPlugin>().require(GlfwWindowPlugin(
         std::vector<GlfwWindowHint> {
             GlfwWindowHint {
                 .hint = GLFW_CLIENT_API,

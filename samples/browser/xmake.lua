@@ -6,6 +6,7 @@ target("sample-browser")
         "fei-core",
         "fei-input",
         "fei-sprite",
+        "fei-window-browser",
         "fei-graphics-webgpu-browser"
     )
     add_ldflags(

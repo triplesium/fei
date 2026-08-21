@@ -1,10 +1,10 @@
 #include "ui/interaction.hpp"
 
 #include "ecs/world.hpp"
+#include "input/input.hpp"
 #include "input_focus/focus.hpp"
 #include "input_focus/tab_navigation.hpp"
 #include "ui/plugin.hpp"
-#include "input/input.hpp"
 #include "window/window.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -20,9 +20,7 @@ struct InteractionWorld {
     Entity top;
 
     InteractionWorld() {
-        world.add_resource(
-            Window {.glfw_window = nullptr, .width = 200, .height = 120}
-        );
+        world.add_resource(Window {.width = 200, .height = 120});
         world.add_resource(MouseInput {});
         world.add_resource(KeyInput {});
         world.add_resource(input_focus::InputFocus {});

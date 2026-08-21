@@ -2,11 +2,11 @@
 
 #include "app/app.hpp"
 #include "ecs/world.hpp"
+#include "input/input.hpp"
 #include "input_focus/focus.hpp"
 #include "ui/plugin.hpp"
 #include "ui_widgets/plugin.hpp"
 #include "ui_widgets/value_change.hpp"
-#include "input/input.hpp"
 #include "window/window.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -20,9 +20,7 @@ struct CheckboxWorld {
     Entity checkbox;
 
     CheckboxWorld() {
-        world.add_resource(
-            Window {.glfw_window = nullptr, .width = 200, .height = 120}
-        );
+        world.add_resource(Window {.width = 200, .height = 120});
         world.add_resource(MouseInput {});
         world.add_resource(KeyInput {});
         world.add_resource(Events<ui_widgets::ValueChange<bool>> {});
@@ -265,9 +263,7 @@ TEST_CASE(
     "[ui_widgets][checkbox]"
 ) {
     App app;
-    app.add_resource(
-        Window {.glfw_window = nullptr, .width = 200, .height = 120}
-    );
+    app.add_resource(Window {.width = 200, .height = 120});
     app.add_plugin<ui_widgets::CheckboxPlugin>();
     app.finish();
 

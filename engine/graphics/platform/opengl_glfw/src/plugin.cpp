@@ -5,6 +5,7 @@
 #include "graphics_opengl_glfw/runtime.hpp"
 #include "shader_opengl/plugin.hpp"
 #include "window/window.hpp"
+#include "window_glfw/window.hpp"
 
 #include <algorithm>
 #include <GLFW/glfw3.h>
@@ -28,13 +29,14 @@ void sync_graphics_surface_size(
 
 void install_graphics_bootstrap(App& app) {
     const auto& window = app.resource<Window>();
+    const auto& glfw = app.resource<GlfwWindow>();
     const auto surface_size = GraphicsSurfaceSize {
         .width = positive_window_extent(window.width),
         .height = positive_window_extent(window.height),
     };
     auto bootstrap =
         std::make_unique<OpenGLGlfwBootstrap>(OpenGLGlfwBootstrapDescription {
-            .window = window.glfw_window,
+            .window = glfw.handle,
             .surface_size = surface_size,
         });
     app.add_resource(bootstrap->capabilities())
@@ -55,7 +57,7 @@ void install_graphics_bootstrap(App& app) {
 } // namespace
 
 void OpenGLGlfwPlugin::dependencies(PluginDependencies& dependencies) const {
-    dependencies.require<OpenGLShaderPlugin>().require(WindowPlugin(
+    dependencies.require<OpenGLShaderPlugin>().require(GlfwWindowPlugin(
         std::vector<GlfwWindowHint> {
             GlfwWindowHint {
                 .hint = GLFW_CLIENT_API,

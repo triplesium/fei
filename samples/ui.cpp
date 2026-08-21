@@ -31,6 +31,7 @@
 #include "ui_widgets/text_input.hpp"
 #include "ui_widgets/tooltip.hpp"
 #include "window/window.hpp"
+#include "window_glfw/window.hpp"
 
 #include <algorithm>
 #include <string_view>
@@ -796,7 +797,7 @@ int main(int argc, char** argv) {
     const auto options = parse_arguments(argc, argv);
     App app;
     app.add_resource(
-        WindowConfig {
+        GlfwWindowConfig {
             .width = 960,
             .height = 540,
             .title = "Fei UI Sample",

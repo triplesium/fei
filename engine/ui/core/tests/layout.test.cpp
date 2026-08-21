@@ -241,9 +241,7 @@ TEST_CASE(
     "[ui][layout]"
 ) {
     App app;
-    app.add_resource(
-        Window {.glfw_window = nullptr, .width = 320, .height = 180}
-    );
+    app.add_resource(Window {.width = 320, .height = 180});
     app.add_plugin<ui::UiPlugin>();
     app.finish();
 
@@ -275,9 +273,7 @@ TEST_CASE(
 
 TEST_CASE("UI image assets update intrinsic content size", "[ui][image]") {
     App app;
-    app.add_resource(
-        Window {.glfw_window = nullptr, .width = 320, .height = 180}
-    );
+    app.add_resource(Window {.width = 320, .height = 180});
     app.add_plugin<ui::UiPlugin>();
     app.finish();
 
@@ -309,9 +305,7 @@ TEST_CASE("UI image assets update intrinsic content size", "[ui][image]") {
 
 TEST_CASE("UI text inserts its required layout components", "[ui][text]") {
     App app;
-    app.add_resource(
-        Window {.glfw_window = nullptr, .width = 320, .height = 180}
-    );
+    app.add_resource(Window {.width = 320, .height = 180});
     app.add_plugin<ui::UiPlugin>();
     app.finish();
 
@@ -332,9 +326,7 @@ TEST_CASE("UI text inserts its required layout components", "[ui][text]") {
 
 TEST_CASE("UI text and layout stay cached until inputs change", "[ui][text]") {
     App app;
-    app.add_resource(
-        Window {.glfw_window = nullptr, .width = 320, .height = 180}
-    );
+    app.add_resource(Window {.width = 320, .height = 180});
     app.add_plugin<ui::UiPlugin>();
     app.finish();
 
@@ -431,9 +423,7 @@ TEST_CASE("UI text measure changes Flex sibling placement", "[ui][text]") {
 
 TEST_CASE("UI stack orders parents before z-sorted siblings", "[ui][stack]") {
     App app;
-    app.add_resource(
-        Window {.glfw_window = nullptr, .width = 320, .height = 180}
-    );
+    app.add_resource(Window {.width = 320, .height = 180});
     app.add_plugin<ui::UiPlugin>();
     app.finish();
 
@@ -464,9 +454,7 @@ TEST_CASE("UI stack orders parents before z-sorted siblings", "[ui][stack]") {
 
 TEST_CASE("UI stack hides descendants of display-none nodes", "[ui][stack]") {
     App app;
-    app.add_resource(
-        Window {.glfw_window = nullptr, .width = 320, .height = 180}
-    );
+    app.add_resource(Window {.width = 320, .height = 180});
     app.add_plugin<ui::UiPlugin>();
     app.finish();
 
@@ -495,9 +483,7 @@ TEST_CASE("UI stack hides descendants of display-none nodes", "[ui][stack]") {
 
 TEST_CASE("UI clipping propagates and intersects by axis", "[ui][clipping]") {
     App app;
-    app.add_resource(
-        Window {.glfw_window = nullptr, .width = 200, .height = 100}
-    );
+    app.add_resource(Window {.width = 200, .height = 100});
     app.add_plugin<ui::UiPlugin>();
     app.finish();
 

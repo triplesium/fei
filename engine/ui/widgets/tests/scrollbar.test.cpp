@@ -2,9 +2,9 @@
 
 #include "app/app.hpp"
 #include "ecs/world.hpp"
+#include "input/input.hpp"
 #include "ui/plugin.hpp"
 #include "ui_widgets/plugin.hpp"
-#include "input/input.hpp"
 #include "window/window.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -25,9 +25,7 @@ struct ScrollbarWorld {
             ui_widgets::ControlOrientation::Vertical,
         float min_thumb_length = 8.0f
     ) {
-        world.add_resource(
-            Window {.glfw_window = nullptr, .width = 200, .height = 160}
-        );
+        world.add_resource(Window {.width = 200, .height = 160});
         world.add_resource(MouseInput {});
 
         target = world.entity();
@@ -231,9 +229,7 @@ TEST_CASE(
     "[ui_widgets][scrollbar]"
 ) {
     App app;
-    app.add_resource(
-        Window {.glfw_window = nullptr, .width = 200, .height = 120}
-    );
+    app.add_resource(Window {.width = 200, .height = 120});
     app.add_plugin<ui_widgets::ScrollbarPlugin>();
     app.finish();
 
