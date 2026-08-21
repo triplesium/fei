@@ -2,6 +2,7 @@
 #include "asset/assets.hpp"
 #include "asset/server.hpp"
 #include "base/log.hpp"
+#include "browser/input.hpp"
 #include "core/image.hpp"
 #include "core/plugin.hpp"
 #include "core/text.hpp"
@@ -12,12 +13,14 @@
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
 #include "graphics_webgpu_browser/plugin.hpp"
+#include "input/input.hpp"
 #include "rendering/plugin.hpp"
 #include "rendering/render_app.hpp"
 #include "sprite/components.hpp"
 #include "sprite/plugin.hpp"
 #include "sprite/renderer.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <emscripten.h>
 #include <string_view>
@@ -39,6 +42,17 @@ void set_browser_status(const char* status) {
             console.log("[fei] " + status);
         },
         status
+    );
+}
+
+void set_browser_input_status(const char* status, float sprite_x) {
+    EM_ASM(
+        {
+            document.documentElement.dataset.feiInput = UTF8ToString($0);
+            document.documentElement.dataset.feiSpriteX = $1.toString();
+        },
+        status,
+        sprite_x
     );
 }
 
@@ -78,11 +92,48 @@ void setup_browser_scene(
 
 void animate_browser_sprite(
     Query<Transform2d>::Filter<With<BrowserSprite>> query,
-    ResRO<Time> time
+    ResRO<Time> time,
+    ResRO<KeyInput> keys,
+    ResRO<MouseInput> mouse,
+    ResRO<MouseScrollInput> scroll
 ) {
     for (auto [transform] : query) {
-        transform->position.x = std::sin(time->elapsed_time()) * 0.35F;
+        float direction = 0.0F;
+        if (keys->pressed(KeyCode::Left) || keys->pressed(KeyCode::A)) {
+            direction -= 1.0F;
+        }
+        if (keys->pressed(KeyCode::Right) || keys->pressed(KeyCode::D)) {
+            direction += 1.0F;
+        }
+        transform->position.x = std::clamp(
+            transform->position.x + direction * time->delta() * 1.5F,
+            -2.5F,
+            2.5F
+        );
+        transform->position.y = std::sin(time->elapsed_time()) * 0.2F;
         transform->rotation = time->elapsed_time() * 35.0F;
+
+        if (keys->just_pressed(KeyCode::Right)) {
+            set_browser_input_status("Right:pressed", transform->position.x);
+        }
+        if (keys->just_released(KeyCode::Right)) {
+            set_browser_input_status("Right:released", transform->position.x);
+        }
+        if (mouse->just_pressed(MouseButton::Left)) {
+            set_browser_input_status(
+                "MouseLeft:pressed",
+                transform->position.x
+            );
+        }
+        if (mouse->just_released(MouseButton::Left)) {
+            set_browser_input_status(
+                "MouseLeft:released",
+                transform->position.x
+            );
+        }
+        if (scroll->delta() != Vector2::Zero) {
+            set_browser_input_status("Wheel", transform->position.x);
+        }
     }
 }
 
@@ -101,6 +152,7 @@ class BrowserSamplePlugin final : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {
         dependencies.require<WebGpuBrowserPlugin>()
+            .require<BrowserInputPlugin>()
             .require<CorePlugin>()
             .require<SpritePlugin>();
     }

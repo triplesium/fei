@@ -4,6 +4,7 @@ target("sample-browser")
     add_files("main.cpp")
     add_deps(
         "fei-core",
+        "fei-input",
         "fei-sprite",
         "fei-graphics-webgpu-browser"
     )
