@@ -71,6 +71,20 @@ StatementMacros:
   - Q_UNUSED
   - QT_REQUIRE_VERSION
   - FEI_REFLECT
+WhitespaceSensitiveMacros:
+  - BOOST_PP_STRINGIZE
+  - CF_SWIFT_NAME
+  - NS_SWIFT_NAME
+  - PP_STRINGIZE
+  - STRINGIZE
+  - EM_ASM
+  - EM_ASM_INT
+  - EM_ASM_DOUBLE
+  - EM_ASM_PTR
+  - MAIN_THREAD_EM_ASM
+  - MAIN_THREAD_EM_ASM_INT
+  - MAIN_THREAD_EM_ASM_DOUBLE
+  - MAIN_THREAD_EM_ASM_PTR
 SpaceAfterCStyleCast: false
 SpaceAfterLogicalNot: false
 SpaceAfterTemplateKeyword: false
