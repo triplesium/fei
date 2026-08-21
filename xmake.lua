@@ -44,7 +44,14 @@ if is_plat("wasm") then
 end
 
 if is_plat("wasm") then
-    add_requires("catch2", "nlohmann_json", "yaml-cpp")
+    add_requires(
+        "catch2",
+        "stb",
+        "tinyobjloader",
+        "mikktspace",
+        "nlohmann_json",
+        "yaml-cpp"
+    )
 else
     add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "fastgltf v0.9.0")
     add_requires("box2d v3.1.1", {configs = {shared = false}})
@@ -281,6 +288,7 @@ add_cxxflags("cl::/Zc:preprocessor")
 if is_plat("wasm") then
     includes("tools/reflgen")
     includes("engine")
+    includes("samples/browser")
 else
     includes("tools")
     includes("engine")

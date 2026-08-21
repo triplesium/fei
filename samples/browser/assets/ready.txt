@@ -1,0 +1,2 @@
+fei browser assets ready
+loaded from project://browser/ready.txt

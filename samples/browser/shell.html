@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
+        <title>fei WebGPU browser sample</title>
+        <style>
+            html,
+            body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                overflow: hidden;
+                background: #141f33;
+            }
+
+            #canvas {
+                display: block;
+                width: 100%;
+                height: 100%;
+                outline: none;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="canvas" tabindex="-1"></canvas>
+        <script>
+            window.addEventListener("error", (event) => {
+                console.error(
+                    "[fei] window error:",
+                    event.error?.stack ?? event.message,
+                );
+            });
+            window.addEventListener("unhandledrejection", (event) => {
+                console.error(
+                    "[fei] unhandled rejection:",
+                    event.reason?.stack ?? event.reason,
+                );
+            });
+            var Module = {
+                canvas: document.getElementById("canvas"),
+                print: (...args) => console.log(...args),
+                printErr: (...args) => console.error(...args),
+            };
+        </script>
+        {{{ SCRIPT }}}
+    </body>
+</html>

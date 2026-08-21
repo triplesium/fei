@@ -11,6 +11,9 @@ if is_plat("wasm") then
     includes("math")
     includes("graphics")
     includes("shader")
+    includes("core")
+    includes("rendering")
+    includes("sprite")
 else
     includes("app")
     includes("asset")
