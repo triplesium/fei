@@ -78,6 +78,16 @@ function newFileContent(path: string): string {
     return "";
 }
 
+const assetPathPrefix = "assets/";
+
+function assetRelativePath(path: string): string {
+    return path.startsWith(assetPathPrefix) ? path.slice(assetPathPrefix.length) : path;
+}
+
+function projectAssetPath(path: string): string {
+    return path.startsWith(assetPathPrefix) ? path : `${assetPathPrefix}${path}`;
+}
+
 function fileIcon(entry: ProjectFileEntry) {
     const props = { size: 14, strokeWidth: 1.7 };
     if (entry.kind === "binary") return <Image {...props} />;
@@ -102,7 +112,8 @@ function buildFileTree(files: ProjectFileEntry[]): FileTreeNode[] {
     const root: FileTreeNode = { name: "", path: "", children: [] };
     for (const entry of files) {
         let parent = root;
-        const parts = entry.path.split("/");
+        const displayPath = assetRelativePath(entry.path);
+        const parts = displayPath.split("/");
         parts.forEach((name, index) => {
             const path = parts.slice(0, index + 1).join("/");
             let node = parent.children.find((candidate) => candidate.name === name);
@@ -116,8 +127,6 @@ function buildFileTree(files: ProjectFileEntry[]): FileTreeNode[] {
     }
     const sort = (nodes: FileTreeNode[]) => {
         nodes.sort((left, right) => {
-            if (left.path === "project.yaml") return -1;
-            if (right.path === "project.yaml") return 1;
             if (Boolean(left.entry) !== Boolean(right.entry)) return left.entry ? 1 : -1;
             return left.name.localeCompare(right.name);
         });
@@ -152,11 +161,11 @@ function FileTree({
             return (
                 <button
                     key={node.path}
-                    className={`file-entry ${node.path === activePath ? "active" : ""}`}
+                    className={`file-entry ${node.entry.path === activePath ? "active" : ""}`}
                     type="button"
                     disabled={node.entry.readonly}
                     style={{ paddingLeft: 10 + depth * 14 }}
-                    onClick={() => onSelect(node.path)}
+                    onClick={() => onSelect(node.entry!.path)}
                 >
                     {fileIcon(node.entry)}
                     <span>{node.name}</span>
@@ -243,7 +252,7 @@ function addDefaultWorkbenchPanels(api: DockviewApi): void {
         id: "project",
         component: "panel",
         tabComponent: "engine",
-        title: "Project",
+        title: "Assets",
         initialWidth: 230,
         minimumWidth: 180,
         maximumWidth: 360,
@@ -345,8 +354,9 @@ export function App() {
             return [];
         }
         const entries = await storage.list();
-        setFiles(entries);
-        return entries;
+        const assetEntries = entries.filter((entry) => entry.path.startsWith(assetPathPrefix));
+        setFiles(assetEntries);
+        return assetEntries;
     };
 
     const saveActiveFile = async (): Promise<void> => {
@@ -416,8 +426,8 @@ export function App() {
 
     const assertMutablePath = (path: string): void => {
         storage.validatePath(path);
-        if (path === "project.yaml") {
-            throw new Error("project.yaml cannot be renamed or deleted.");
+        if (!path.startsWith(assetPathPrefix)) {
+            throw new Error("Only files inside the asset directory can be changed directly.");
         }
     };
 
@@ -426,7 +436,7 @@ export function App() {
         initialContent = newFileContent(path),
         select = false,
     ) => {
-        storage.validatePath(path);
+        assertMutablePath(path);
         if (await storage.exists(path)) throw new Error(`Project file already exists: ${path}`);
         await storage.write(path, initialContent);
         await refreshFiles();
@@ -440,7 +450,7 @@ export function App() {
 
     const renameProjectFile = async (source: string, destination: string) => {
         assertMutablePath(source);
-        storage.validatePath(destination);
+        assertMutablePath(destination);
         if (source === activePath && dirty) await saveActiveFile();
         await storage.rename(source, destination);
         if (source === activePath) setActivePath(destination);
@@ -505,23 +515,24 @@ export function App() {
     const showOperation = (next: Exclude<Operation, null>): void => {
         setOperation(next);
         setOperationError("");
-        if (next === "new") setOperationPath("assets/new.luau");
-        else setOperationPath(activePath);
+        if (next === "new") setOperationPath("new.luau");
+        else setOperationPath(assetRelativePath(activePath));
     };
 
     const applyOperation = async (): Promise<void> => {
         try {
-            const path = operationPath.trim();
+            const displayPath = operationPath.trim();
+            const path = projectAssetPath(displayPath);
             if (operation === "new") {
                 await createProjectFile(path, newFileContent(path), true);
-                appendConsole("info", "project", `created ${path}`);
+                appendConsole("info", "project", `created ${displayPath}`);
             } else if (operation === "rename") {
                 const source = activePath;
                 await renameProjectFile(source, path);
-                appendConsole("info", "project", `renamed ${source} to ${path}`);
+                appendConsole("info", "project", `renamed ${assetRelativePath(source)} to ${displayPath}`);
             } else if (operation === "delete") {
                 await removeProjectFile(activePath);
-                appendConsole("info", "project", `deleted ${path}`);
+                appendConsole("info", "project", `deleted ${displayPath}`);
             }
             setOperation(null);
         } catch (error) {
@@ -655,6 +666,7 @@ export function App() {
         },
         "project.write": async ({ path, content: nextContent }) => {
             const projectPath = storage.validatePath(path ?? "");
+            assertMutablePath(projectPath);
             if (typeof nextContent !== "string") throw new Error("project.write requires string content");
             const created = !(await storage.exists(projectPath));
             await storage.write(projectPath, nextContent);
@@ -751,6 +763,7 @@ export function App() {
         }
 
         dockviewLayoutListenerRef.current?.dispose();
+        api.getPanel("project")?.api.setTitle("Assets");
         dockviewLayoutListenerRef.current = api.onDidLayoutChange(() => {
             localStorage.setItem(workbenchLayoutStorageKey, JSON.stringify(api.toJSON()));
         });
@@ -765,7 +778,6 @@ export function App() {
         localStorage.setItem(workbenchLayoutStorageKey, JSON.stringify(api.toJSON()));
     }, []);
 
-    const protectedFile = activePath === "project.yaml";
     const canEdit = storage.isOpen && activePath.length > 0;
     const operationTitle =
         operation === "new" ? "Create file" : operation === "rename" ? "Rename file" : "Delete file";
@@ -773,7 +785,9 @@ export function App() {
     useEffect(() => {
         dockviewApiRef.current
             ?.getPanel("code")
-            ?.api.setTitle(activePath ? `${activePath}${dirty ? " •" : ""}` : "Code");
+            ?.api.setTitle(
+                activePath ? `${assetRelativePath(activePath)}${dirty ? " •" : ""}` : "Code",
+            );
     }, [activePath, dirty]);
 
     const workbenchPanels: Record<string, ReactNode> = {
@@ -785,10 +799,10 @@ export function App() {
                         <IconButton label="New file" disabled={!storage.isOpen} onClick={() => showOperation("new")}>
                             <Plus size={14} />
                         </IconButton>
-                        <IconButton label="Rename" disabled={!canEdit || protectedFile} onClick={() => showOperation("rename")}>
+                        <IconButton label="Rename" disabled={!canEdit} onClick={() => showOperation("rename")}>
                             <Pencil size={13} />
                         </IconButton>
-                        <IconButton label="Delete" danger disabled={!canEdit || protectedFile} onClick={() => showOperation("delete")}>
+                        <IconButton label="Delete" danger disabled={!canEdit} onClick={() => showOperation("delete")}>
                             <Trash2 size={14} />
                         </IconButton>
                         <IconButton label="Refresh folder" disabled={!storage.isOpen} onClick={() => void refreshProjectFolder()}>
@@ -1009,10 +1023,10 @@ export function App() {
                             </div>
                             <Dialog.Description>
                                 {operation === "delete"
-                                    ? "This removes the file from the local project folder."
-                                    : "Paths are relative to the project root and must be inside assets/."}
+                                    ? "This removes the file from the project's asset directory."
+                                    : "Paths are relative to the project’s Assets root."}
                             </Dialog.Description>
-                            <label className="field-label" htmlFor="operation-path">Project path</label>
+                            <label className="field-label" htmlFor="operation-path">Asset path</label>
                             <input
                                 id="operation-path"
                                 className="text-field"
