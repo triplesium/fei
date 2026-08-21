@@ -65,10 +65,18 @@ ShaderCompileTarget shader_compile_target(const SubApp& render_app) {
     return ShaderCompileTarget::All;
 }
 
-void validate_backend_execution_mode(SubAppExecutionMode execution_mode) {
-    if (execution_mode != SubAppExecutionMode::DedicatedThread) {
+void validate_backend_execution_mode(
+    SubAppExecutionMode execution_mode,
+    const GraphicsBackendCapabilities& capabilities
+) {
+    const auto expected_mode = capabilities.presentation_on_render_thread ?
+                                   SubAppExecutionMode::DedicatedThread :
+                                   SubAppExecutionMode::Inline;
+    if (execution_mode != expected_mode) {
         throw std::runtime_error(
-            "Graphics backends require a dedicated Render Worker"
+            capabilities.presentation_on_render_thread ?
+                "Graphics backend requires a dedicated Render Worker" :
+                "Graphics backend requires an inline Render App"
         );
     }
 }
@@ -78,11 +86,17 @@ void install_backend_render_app(App& app) {
         return;
     }
     if (app.has_resource<GraphicsBackendBootstrap>()) {
-        install_render_app(app, [](SubApp render_app) {
-            return std::make_unique<ThreadedRenderRunner>(
-                std::move(render_app)
-            );
-        });
+        const auto& capabilities =
+            app.resource<GraphicsBackendBootstrap>().capabilities();
+        if (capabilities.presentation_on_render_thread) {
+            install_render_app(app, [](SubApp render_app) {
+                return std::make_unique<ThreadedRenderRunner>(
+                    std::move(render_app)
+                );
+            });
+        } else {
+            install_render_app(app);
+        }
         return;
     }
     install_render_app(app);
@@ -95,7 +109,10 @@ void initialize_graphics_backend(App& app) {
     auto& runner = app.sub_app_runner<RenderApp>();
     auto& bootstrap = app.resource<GraphicsBackendBootstrap>();
     const auto bootstrap_capabilities = bootstrap.capabilities();
-    validate_backend_execution_mode(runner.execution_mode());
+    validate_backend_execution_mode(
+        runner.execution_mode(),
+        bootstrap_capabilities
+    );
     runner.run_on_execution_thread(
         [&bootstrap, bootstrap_capabilities](SubApp& render_app) {
             auto runtime = bootstrap.initialize();

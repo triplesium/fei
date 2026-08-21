@@ -104,9 +104,12 @@ class FakeGraphicsBootstrap final : public GraphicsBackendBootstrap {
   public:
     explicit FakeGraphicsBootstrap(
         std::shared_ptr<BootstrapThreadState> state,
-        GraphicsBackendCapabilities runtime_capabilities = vulkan_capabilities()
+        GraphicsBackendCapabilities runtime_capabilities =
+            vulkan_capabilities(),
+        GraphicsBackendCapabilities bootstrap_capabilities =
+            vulkan_capabilities()
     ) :
-        m_state(std::move(state)),
+        m_capabilities(bootstrap_capabilities), m_state(std::move(state)),
         m_runtime_capabilities(runtime_capabilities) {}
 
     const GraphicsBackendCapabilities& capabilities() const noexcept override {
@@ -120,7 +123,7 @@ class FakeGraphicsBootstrap final : public GraphicsBackendBootstrap {
     }
 
   private:
-    GraphicsBackendCapabilities m_capabilities {vulkan_capabilities()};
+    GraphicsBackendCapabilities m_capabilities;
     std::shared_ptr<BootstrapThreadState> m_state;
     GraphicsBackendCapabilities m_runtime_capabilities;
 };
@@ -306,6 +309,41 @@ TEST_CASE(
     app.add_plugin<RenderingPlugin>();
     REQUIRE_THROWS_AS(app.finish(), std::runtime_error);
     REQUIRE(state->initialized_on == std::thread::id {});
+}
+
+TEST_CASE(
+    "RenderingPlugin selects an inline runner for a main-thread backend",
+    "[rendering][plugin][graphics-runtime][bootstrap][inline]"
+) {
+    const auto caller_thread = std::this_thread::get_id();
+    auto state = std::make_shared<BootstrapThreadState>();
+    const GraphicsBackendCapabilities capabilities {
+        .backend = GraphicsBackendKind::WebGpu,
+        .presentation_on_render_thread = false,
+    };
+
+    App app;
+    app.add_plugin<AssetsPlugin>()
+        .add_plugin<OpenGLShaderPlugin>()
+        .add_resource_as<GraphicsBackendBootstrap>(
+            BoxedGraphicsBackendBootstrap(
+                std::make_unique<FakeGraphicsBootstrap>(
+                    state,
+                    capabilities,
+                    capabilities
+                )
+            )
+        );
+    app.add_plugin<RenderingPlugin>();
+    app.finish();
+
+    REQUIRE(
+        app.sub_app_runner<RenderApp>().execution_mode() ==
+        SubAppExecutionMode::Inline
+    );
+    REQUIRE(state->initialized_on == caller_thread);
+
+    app.shutdown();
 }
 
 TEST_CASE(
