@@ -300,6 +300,7 @@ if is_plat("wasm") then
     includes("tools/reflgen")
     includes("engine")
     includes("samples/browser")
+    includes("samples/browser_project")
 else
     includes("tools")
     includes("engine")

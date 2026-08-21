@@ -1,0 +1,9 @@
+name: Browser Project Demo
+asset_directory: assets
+
+runtime:
+  plugins:
+    - project_runtime::LuauScripts
+
+scripts:
+  - project://main.luau
