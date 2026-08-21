@@ -45,9 +45,27 @@
         <pre id="error"></pre>
         <script>
             const errorElement = document.getElementById("error");
+            const editorChannelId = new URLSearchParams(location.search).get(
+                "fei-editor-channel",
+            );
+            const postEditorMessage = (type, detail = {}) => {
+                if (!editorChannelId || window.parent === window) return;
+                window.parent.postMessage(
+                    {
+                        source: "fei-runtime",
+                        channelId: editorChannelId,
+                        type,
+                        ...detail,
+                    },
+                    location.origin,
+                );
+            };
             const showError = (message) => {
                 errorElement.style.display = "block";
                 errorElement.textContent += `${message}\n`;
+                postEditorMessage("runtime.error", {
+                    message: String(message),
+                });
             };
             window.addEventListener("error", (event) => {
                 const message = event.error?.stack ?? event.message;
@@ -68,6 +86,75 @@
             var Module = {
                 canvas: document.getElementById("canvas"),
                 preRun: [
+                    () => {
+                        if (!editorChannelId) return;
+                        const dependency = "fei-editor-project";
+                        addRunDependency(dependency);
+                        const timeout = setTimeout(() => {
+                            showError("Timed out waiting for editor project files.");
+                            removeRunDependency(dependency);
+                        }, 30000);
+                        const receiveProject = (event) => {
+                            if (
+                                event.source !== window.parent ||
+                                event.origin !== location.origin ||
+                                event.data?.source !== "fei-editor" ||
+                                event.data?.channelId !== editorChannelId ||
+                                event.data?.type !== "project.files"
+                            ) {
+                                return;
+                            }
+                            window.removeEventListener(
+                                "message",
+                                receiveProject,
+                            );
+                            clearTimeout(timeout);
+                            try {
+                                const root = "/fei/assets/web-project";
+                                FS.mkdirTree(`${root}/assets`);
+                                for (const file of event.data.files ?? []) {
+                                    const path = String(file.path ?? "");
+                                    if (
+                                        path.length === 0 ||
+                                        path.startsWith("/") ||
+                                        path.includes("..") ||
+                                        (path !== "project.yaml" &&
+                                            !path.startsWith("assets/"))
+                                    ) {
+                                        throw new Error(
+                                            `Rejected editor project path: ${path}`,
+                                        );
+                                    }
+                                    const directory = path
+                                        .split("/")
+                                        .slice(0, -1)
+                                        .join("/");
+                                    if (directory) {
+                                        FS.mkdirTree(`${root}/${directory}`);
+                                    }
+                                    const content = file.content;
+                                    if (content instanceof Uint8Array) {
+                                        FS.writeFile(`${root}/${path}`, content);
+                                    } else {
+                                        FS.writeFile(
+                                            `${root}/${path}`,
+                                            String(content ?? ""),
+                                            { encoding: "utf8" },
+                                        );
+                                    }
+                                }
+                                postEditorMessage("project.applied");
+                            } catch (error) {
+                                showError(
+                                    error?.stack ?? error?.message ?? error,
+                                );
+                            } finally {
+                                removeRunDependency(dependency);
+                            }
+                        };
+                        window.addEventListener("message", receiveProject);
+                        postEditorMessage("project.request");
+                    },
                     () => {
                         const dependency = "fei-webgpu-device";
                         addRunDependency(dependency);
@@ -141,9 +228,19 @@
                 ],
                 locateFile: (path, prefix) =>
                     `${prefix}${path}?dev=${resourceVersion}`,
-                print: (...args) => console.log(...args),
+                print: (...args) => {
+                    console.log(...args);
+                    postEditorMessage("runtime.log", {
+                        level: "info",
+                        message: args.join(" "),
+                    });
+                },
                 printErr: (...args) => {
                     console.error(...args);
+                    postEditorMessage("runtime.log", {
+                        level: "error",
+                        message: args.join(" "),
+                    });
                     showError(args.join(" "));
                 },
             };

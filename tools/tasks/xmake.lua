@@ -91,6 +91,29 @@ task("browser-project-smoke")
         }
     }
 
+task("web-editor-smoke")
+    on_run(function ()
+        local option = import("core.base.option")
+        import("tasks.browser_smoke", {
+            rootdir = path.join(os.projectdir(), "tools")
+        }).run({
+            target = "sample-browser-project",
+            page = "editor/index.html",
+            scenario = "editor",
+            browser = option.get("browser"),
+            timeout = option.get("timeout")
+        })
+    end)
+
+    set_menu {
+        usage = "xmake web-editor-smoke [options]",
+        description = "Build and smoke-test the WebAssembly project editor.",
+        options = {
+            {nil, "browser", "kv", nil, "Path to an Edge, Chrome, or Chromium executable."},
+            {nil, "timeout", "kv", "60000", "Timeout for each browser smoke-test stage in milliseconds."}
+        }
+    }
+
 task("profile")
     on_run(function()
         local option = import("core.base.option")

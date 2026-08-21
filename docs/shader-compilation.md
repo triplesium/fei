@@ -189,6 +189,7 @@ Run the development browser smoke test after building or changing this path:
 ```text
 xmake browser-smoke
 xmake browser-project-smoke
+xmake web-editor-smoke
 ```
 
 The task starts a no-cache local server and a temporary headless Edge, Chrome,
@@ -206,6 +207,17 @@ loads and that its sprite reaches the presentation phase without JavaScript,
 console, or WebGPU errors. Native-only project playtest/protocol code remains
 outside the WASM target graph; a browser transport can be added separately
 without coupling project loading or scripting to HTTP.
+
+The development Web Editor is staged at `editor/index.html` beside the
+browser project output. On Edge and Chrome, it edits a user-authorized local
+folder containing `project.yaml` and project assets. The selected directory
+handle is remembered in IndexedDB so the editor can restore it when permission
+persists, or request access again without opening the directory picker. Play
+injects text and binary project files into an isolated iframe runtime before
+startup, and Stop destroys that iframe. The page exposes the same operations
+used by its controls through `window.feiEditorAgent`, including project
+list/read/write/create/rename/remove and runtime play/stop/restart/status
+commands.
 
 Serve `build/wasm/wasm32/debug` over HTTP and open `sample-browser.html` to run
 the animated WebGPU sprite sample. The `fei.shader_sources` rule preloads every

@@ -13,3 +13,11 @@ target("sample-browser-project")
         "fei-graphics-webgpu-browser"
     )
     add_browser_shell(path.join(os.scriptdir(), "../browser/shell.html"))
+    add_extrafiles(path.join(os.projectdir(), "editor/**"))
+
+    after_link(function(target)
+        local editor_root = path.join(os.projectdir(), "editor")
+        local output_root = path.join(target:targetdir(), "editor")
+        os.mkdir(output_root)
+        os.cp(path.join(editor_root, "*"), output_root)
+    end)

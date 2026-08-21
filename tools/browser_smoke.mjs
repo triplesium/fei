@@ -16,8 +16,8 @@ const requestedBrowser = argumentsByName.get("--browser");
 const page = argumentsByName.get("--page") ?? "sample-browser.html";
 const scenario = argumentsByName.get("--scenario") ?? "ui";
 
-if (!outputRoot || !Number.isFinite(timeoutMs) || timeoutMs <= 0 || !["ui", "project"].includes(scenario)) {
-    throw new Error("usage: browser_smoke.mjs --root <directory> [--browser <path>] [--timeout <milliseconds>] [--page <filename>] [--scenario <ui|project>]");
+if (!outputRoot || !Number.isFinite(timeoutMs) || timeoutMs <= 0 || !["ui", "project", "editor"].includes(scenario)) {
+    throw new Error("usage: browser_smoke.mjs --root <directory> [--browser <path>] [--timeout <milliseconds>] [--page <filename>] [--scenario <ui|project|editor>]");
 }
 
 const mimeTypes = new Map([
@@ -344,6 +344,28 @@ async function runSmokeTest(client, url, selectedScenario) {
     ]);
     await client.send("Page.navigate", {url});
 
+    if (selectedScenario === "editor") {
+        await waitFor(client, "the web editor", async () => {
+            return evaluate(client, "document.documentElement.dataset.feiEditorReady === 'true'");
+        }, errors);
+        const unopened = await evaluate(client, `({
+            openFolderAvailable: typeof window.showDirectoryPicker === "function",
+            openFolderDisabled: document.querySelector("#open-folder").disabled,
+            playDisabled: document.querySelector("#play").disabled,
+            editorDisabled: document.querySelector("#source-editor").disabled,
+        })`);
+        if (!unopened.openFolderAvailable || unopened.openFolderDisabled ||
+            !unopened.playDisabled || !unopened.editorDisabled) {
+            throw new Error("the editor did not enter the expected unopened local-folder state");
+        }
+        const project = await evaluate(client, "window.feiEditorAgent.invoke({type: 'project.list'})");
+        if (project.ok || !project.error?.message.includes("Open a local project folder")) {
+            throw new Error("project commands were not gated on local-folder permission");
+        }
+        console.log("browser smoke: local-folder editor startup passed");
+        return {feiEditorRuntime: "stopped", feiEditorProjectStatus: "local folder required"};
+    }
+
     if (selectedScenario === "project") {
         const ready = await waitFor(client, "the web project", async () => {
             return evaluate(client, `(() => {
@@ -455,7 +477,9 @@ try {
     client = new DevToolsClient(pageTargetUrl);
     const result = await runSmokeTest(client, url, scenario);
     console.log(`browser smoke passed (${basename(browserPath)})`);
-    if (scenario === "project") {
+    if (scenario === "editor") {
+        console.log(`  editor: ${result.feiEditorRuntime}, project: ${result.feiEditorProjectStatus}`);
+    } else if (scenario === "project") {
         console.log(`  project: ${result.feiProjectStatus}, script: ${result.feiProjectScript}`);
     } else {
         console.log(`  glyphs: ${result.feiGlyphCount}, batches: ${result.feiGlyphBatches}`);
