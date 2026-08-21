@@ -172,7 +172,7 @@ MipmapGeneratorWebGpu::MipmapGeneratorWebGpu(const WebGpuDeviceState& state) :
     WGPUShaderModuleDescriptor shader_desc {};
     shader_desc.nextInChain = &shader_source.chain;
     shader_desc.label = {"fei mipmap shader", WGPU_STRLEN};
-    wgpuDevicePushErrorScope(m_device, WGPUErrorFilter_Validation);
+    push_webgpu_error_scope(state);
     m_shader = wgpuDeviceCreateShaderModule(m_device, &shader_desc);
     check_webgpu_error_scope(state, "WebGPU mipmap shader creation");
     if (m_shader == nullptr) {
@@ -184,7 +184,7 @@ MipmapGeneratorWebGpu::MipmapGeneratorWebGpu(const WebGpuDeviceState& state) :
     pipeline_desc.layout = m_pipeline_layout;
     pipeline_desc.compute.module = m_shader;
     pipeline_desc.compute.entryPoint = {"compute_main", WGPU_STRLEN};
-    wgpuDevicePushErrorScope(m_device, WGPUErrorFilter_Validation);
+    push_webgpu_error_scope(state);
     m_pipeline = wgpuDeviceCreateComputePipeline(m_device, &pipeline_desc);
     check_webgpu_error_scope(state, "WebGPU mipmap pipeline creation");
     if (m_pipeline == nullptr) {

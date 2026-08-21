@@ -49,6 +49,7 @@ class WebGpuDeviceState {
 };
 
 WGPUInstance create_webgpu_instance();
+void push_webgpu_error_scope(const WebGpuDeviceState& state);
 void check_webgpu_error_scope(
     const WebGpuDeviceState& state,
     std::string_view operation

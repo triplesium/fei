@@ -420,7 +420,7 @@ ShaderModuleWebGpu::ShaderModuleWebGpu(
             reinterpret_cast<const std::uint32_t*>(desc.spirv.data());
         descriptor.nextInChain = &spirv_source.chain;
     }
-    wgpuDevicePushErrorScope(m_state->device(), WGPUErrorFilter_Validation);
+    push_webgpu_error_scope(*m_state);
     m_module = wgpuDeviceCreateShaderModule(m_state->device(), &descriptor);
     check_webgpu_error_scope(
         *m_state,
@@ -657,7 +657,7 @@ ResourceSetWebGpu::ResourceSetWebGpu(
     descriptor.layout = layout->handle();
     descriptor.entryCount = entries.size();
     descriptor.entries = entries.data();
-    wgpuDevicePushErrorScope(m_state->device(), WGPUErrorFilter_Validation);
+    push_webgpu_error_scope(*m_state);
     m_group = wgpuDeviceCreateBindGroup(m_state->device(), &descriptor);
     check_webgpu_error_scope(
         *m_state,
@@ -804,7 +804,7 @@ PipelineWebGpu::PipelineWebGpu(
     descriptor.multisample.mask = std::numeric_limits<std::uint32_t>::max();
     descriptor.fragment = fragment_shader ? &fragment : nullptr;
 
-    wgpuDevicePushErrorScope(m_state->device(), WGPUErrorFilter_Validation);
+    push_webgpu_error_scope(*m_state);
     m_render_pipeline =
         wgpuDeviceCreateRenderPipeline(m_state->device(), &descriptor);
     auto operation =
@@ -833,7 +833,7 @@ PipelineWebGpu::PipelineWebGpu(
     descriptor.layout = nullptr;
     descriptor.compute.module = shader->handle();
     descriptor.compute.entryPoint = shader->entry_point();
-    wgpuDevicePushErrorScope(m_state->device(), WGPUErrorFilter_Validation);
+    push_webgpu_error_scope(*m_state);
     m_compute_pipeline =
         wgpuDeviceCreateComputePipeline(m_state->device(), &descriptor);
     check_webgpu_error_scope(*m_state, "WebGPU compute pipeline creation");

@@ -203,11 +203,17 @@ void SwapchainWebGpu::present() const {
         return;
     }
     m_framebuffer.reset();
+#ifdef __EMSCRIPTEN__
+    // emdawnwebgpu presents the current canvas texture when the animation
+    // frame callback returns. Calling wgpuSurfacePresent aborts in browsers.
+    return;
+#else
     const auto status = wgpuSurfacePresent(m_surface);
     if (status != WGPUStatus_Success) {
         m_configured = false;
         error("Failed to present WebGPU surface");
     }
+#endif
 }
 
 } // namespace fei

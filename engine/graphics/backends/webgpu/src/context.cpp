@@ -15,6 +15,12 @@ namespace fei {
 
 namespace {
 
+#ifdef __EMSCRIPTEN__
+constexpr auto async_callback_mode = WGPUCallbackMode_AllowSpontaneous;
+#else
+constexpr auto async_callback_mode = WGPUCallbackMode_AllowProcessEvents;
+#endif
+
 std::string to_string(WGPUStringView value) {
     if (value.data == nullptr) {
         return {};
@@ -108,6 +114,7 @@ void on_uncaptured_error(
     );
 }
 
+#ifndef __EMSCRIPTEN__
 struct ErrorScopeResult {
     WGPUPopErrorScopeStatus status {WGPUPopErrorScopeStatus_Force32};
     WGPUErrorType type {WGPUErrorType_NoError};
@@ -128,6 +135,7 @@ void on_error_scope(
     result.message = to_string(message);
     result.completed = true;
 }
+#endif
 
 } // namespace
 
@@ -152,7 +160,7 @@ WebGpuDeviceState::WebGpuDeviceState(WebGpuDeviceStateDescription desc) :
 
     AdapterRequest adapter_request;
     WGPURequestAdapterCallbackInfo adapter_callback {
-        .mode = WGPUCallbackMode_AllowProcessEvents,
+        .mode = async_callback_mode,
         .callback = on_adapter,
         .userdata1 = &adapter_request,
     };
@@ -197,7 +205,7 @@ WebGpuDeviceState::WebGpuDeviceState(WebGpuDeviceStateDescription desc) :
 
     DeviceRequest device_request;
     WGPURequestDeviceCallbackInfo device_callback {
-        .mode = WGPUCallbackMode_AllowProcessEvents,
+        .mode = async_callback_mode,
         .callback = on_device,
         .userdata1 = &device_request,
     };
@@ -244,13 +252,25 @@ void WebGpuDeviceState::poll(bool wait) const {
 #endif
 }
 
+void push_webgpu_error_scope(const WebGpuDeviceState& state) {
+#ifdef __EMSCRIPTEN__
+    static_cast<void>(state);
+#else
+    wgpuDevicePushErrorScope(state.device(), WGPUErrorFilter_Validation);
+#endif
+}
+
 void check_webgpu_error_scope(
     const WebGpuDeviceState& state,
     std::string_view operation
 ) {
+#ifdef __EMSCRIPTEN__
+    static_cast<void>(state);
+    static_cast<void>(operation);
+#else
     ErrorScopeResult result;
     WGPUPopErrorScopeCallbackInfo callback {
-        .mode = WGPUCallbackMode_AllowProcessEvents,
+        .mode = async_callback_mode,
         .callback = on_error_scope,
         .userdata1 = &result,
     };
@@ -260,6 +280,7 @@ void check_webgpu_error_scope(
         result.type != WGPUErrorType_NoError) {
         fatal("{} failed: {}", operation, result.message);
     }
+#endif
 }
 
 } // namespace fei
