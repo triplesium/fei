@@ -7,6 +7,11 @@ import "monaco-editor/language/json/monaco.contribution";
 import editorWorker from "monaco-editor/editor/editor.worker?worker";
 import jsonWorker from "monaco-editor/language/json/json.worker?worker";
 import { useCallback } from "react";
+import {
+    enableLuauTextmate,
+    luauEditorTheme,
+    registerLuauLanguage,
+} from "../languages/luau";
 
 self.MonacoEnvironment = {
     getWorker(_moduleId: string, label: string) {
@@ -14,6 +19,10 @@ self.MonacoEnvironment = {
     },
 };
 loader.config({ monaco });
+registerLuauLanguage(monaco);
+void enableLuauTextmate(monaco).catch((error: unknown) => {
+    console.error("[fei editor] failed to enable Luau TextMate grammar", error);
+});
 
 interface CodeEditorProps {
     path: string;
@@ -24,7 +33,8 @@ interface CodeEditorProps {
 }
 
 function languageForPath(path: string): string {
-    if (path.endsWith(".luau") || path.endsWith(".lua")) return "lua";
+    if (path.endsWith(".luau")) return "luau";
+    if (path.endsWith(".lua")) return "lua";
     if (path.endsWith(".json")) return "json";
     if (path.endsWith(".cpp") || path.endsWith(".cc")) return "cpp";
     if (/\.(?:h|hpp|hxx)$/.test(path)) return "cpp";
@@ -55,15 +65,21 @@ export function CodeEditor({
                 path={path ? `file:///project/${path}` : "inmemory://empty"}
                 language={languageForPath(path)}
                 value={value}
-                theme="vs-dark"
+                theme={luauEditorTheme}
                 onChange={(next) => onChange(next ?? "")}
                 onMount={onMount}
                 keepCurrentModel
                 options={{
                     readOnly,
                     automaticLayout: true,
+                    bracketPairColorization: { enabled: false },
                     fontFamily: '"Cascadia Code", "SFMono-Regular", Consolas, monospace',
                     fontSize: 13,
+                    guides: {
+                        bracketPairs: false,
+                        bracketPairsHorizontal: false,
+                        highlightActiveBracketPair: false,
+                    },
                     lineHeight: 20,
                     minimap: { enabled: false },
                     padding: { top: 10, bottom: 10 },
