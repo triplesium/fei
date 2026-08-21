@@ -219,6 +219,11 @@ used by its controls through `window.feiEditorAgent`, including project
 list/read/write/create/rename/remove and runtime play/stop/restart/status
 commands.
 
+The editor source is a Vite, React, and TypeScript application in the
+repository-root `editor/` directory. Building `sample-browser-project` builds
+that application and stages only its `editor/dist/` output beside the WASM
+sample.
+
 Serve `build/wasm/wasm32/debug` over HTTP and open `sample-browser.html` to run
 the animated WebGPU sprite sample. The `fei.shader_sources` rule preloads every
 registered shader source root into `/fei/shaders/<prefix>` and compiles
