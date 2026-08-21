@@ -13,6 +13,8 @@ class MipmapGeneratorWebGpu;
 struct WebGpuDeviceStateDescription {
     WGPUInstance instance {nullptr};
     WGPUSurface compatible_surface {nullptr};
+    WGPUFeatureLevel feature_level {WGPUFeatureLevel_Core};
+    bool allow_compatibility_fallback {false};
 };
 
 class WebGpuDeviceState {

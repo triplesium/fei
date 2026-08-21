@@ -60,6 +60,7 @@ class WebGpuBrowserRuntime::Impl {
             WebGpuDeviceStateDescription {
                 .instance = instance,
                 .compatible_surface = surface,
+                .allow_compatibility_fallback = true,
             }
         ),
         swapchain(

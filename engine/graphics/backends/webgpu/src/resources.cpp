@@ -778,8 +778,15 @@ PipelineWebGpu::PipelineWebGpu(
             std::numeric_limits<std::uint32_t>::max();
     }
 
+    auto pipeline_label =
+        "fei render pipeline (vertex: " + vertex_shader->path();
+    if (fragment_shader) {
+        pipeline_label += ", fragment: " + fragment_shader->path();
+    }
+    pipeline_label += ')';
+
     WGPURenderPipelineDescriptor descriptor {};
-    descriptor.label = {"fei render pipeline", WGPU_STRLEN};
+    descriptor.label = {pipeline_label.data(), pipeline_label.size()};
     descriptor.layout = m_layout;
     descriptor.vertex.module = vertex_shader->handle();
     descriptor.vertex.entryPoint = vertex_shader->entry_point();
@@ -807,13 +814,7 @@ PipelineWebGpu::PipelineWebGpu(
     push_webgpu_error_scope(*m_state);
     m_render_pipeline =
         wgpuDeviceCreateRenderPipeline(m_state->device(), &descriptor);
-    auto operation =
-        "WebGPU render pipeline creation (vertex: " + vertex_shader->path();
-    if (fragment_shader) {
-        operation += ", fragment: " + fragment_shader->path();
-    }
-    operation += ')';
-    check_webgpu_error_scope(*m_state, operation);
+    check_webgpu_error_scope(*m_state, pipeline_label);
     if (m_render_pipeline == nullptr) {
         fatal("Failed to create WebGPU render pipeline");
     }

@@ -10,6 +10,7 @@
 #    include <webgpu/wgpu.h>
 #endif
 #include <string>
+#include <utility>
 
 namespace fei {
 
@@ -137,6 +138,29 @@ void on_error_scope(
 }
 #endif
 
+#ifdef __EMSCRIPTEN__
+struct BrowserErrorScopeResult {
+    std::string operation;
+};
+
+void on_browser_error_scope(
+    WGPUPopErrorScopeStatus status,
+    WGPUErrorType type,
+    WGPUStringView message,
+    void* userdata1,
+    void*
+) {
+    auto* result = static_cast<BrowserErrorScopeResult*>(userdata1);
+    if (status != WGPUPopErrorScopeStatus_Success ||
+        type != WGPUErrorType_NoError) {
+        auto operation = std::move(result->operation);
+        auto error_message = to_string(message);
+        delete result;
+        fatal("{} failed: {}", operation, error_message);
+    }
+    delete result;
+}
+#endif
 } // namespace
 
 WGPUInstance create_webgpu_instance() {
@@ -153,19 +177,35 @@ WebGpuDeviceState::WebGpuDeviceState(WebGpuDeviceStateDescription desc) :
         desc.instance != nullptr ? desc.instance : create_webgpu_instance()
     ) {
     WGPURequestAdapterOptions options {
-        .featureLevel = WGPUFeatureLevel_Core,
+        .featureLevel = desc.feature_level,
         .powerPreference = WGPUPowerPreference_HighPerformance,
         .compatibleSurface = desc.compatible_surface,
     };
 
-    AdapterRequest adapter_request;
-    WGPURequestAdapterCallbackInfo adapter_callback {
-        .mode = async_callback_mode,
-        .callback = on_adapter,
-        .userdata1 = &adapter_request,
+    const auto request_adapter = [this, &options] {
+        AdapterRequest request;
+        WGPURequestAdapterCallbackInfo callback {
+            .mode = async_callback_mode,
+            .callback = on_adapter,
+            .userdata1 = &request,
+        };
+        wgpuInstanceRequestAdapter(m_instance, &options, callback);
+        wait_for(m_instance, request.completed);
+        return request;
     };
-    wgpuInstanceRequestAdapter(m_instance, &options, adapter_callback);
-    wait_for(m_instance, adapter_request.completed);
+
+    auto adapter_request = request_adapter();
+    if (adapter_request.adapter == nullptr &&
+        desc.allow_compatibility_fallback &&
+        options.featureLevel == WGPUFeatureLevel_Core) {
+        warn(
+            "Failed to request a core WebGPU adapter ({}); retrying with "
+            "compatibility mode",
+            adapter_request.error
+        );
+        options.featureLevel = WGPUFeatureLevel_Compatibility;
+        adapter_request = request_adapter();
+    }
     if (adapter_request.adapter == nullptr) {
         fatal("Failed to request WebGPU adapter: {}", adapter_request.error);
     }
@@ -253,11 +293,7 @@ void WebGpuDeviceState::poll(bool wait) const {
 }
 
 void push_webgpu_error_scope(const WebGpuDeviceState& state) {
-#ifdef __EMSCRIPTEN__
-    static_cast<void>(state);
-#else
     wgpuDevicePushErrorScope(state.device(), WGPUErrorFilter_Validation);
-#endif
 }
 
 void check_webgpu_error_scope(
@@ -265,8 +301,13 @@ void check_webgpu_error_scope(
     std::string_view operation
 ) {
 #ifdef __EMSCRIPTEN__
-    static_cast<void>(state);
-    static_cast<void>(operation);
+    auto* result = new BrowserErrorScopeResult {std::string(operation)};
+    WGPUPopErrorScopeCallbackInfo callback {
+        .mode = WGPUCallbackMode_AllowSpontaneous,
+        .callback = on_browser_error_scope,
+        .userdata1 = result,
+    };
+    wgpuDevicePopErrorScope(state.device(), callback);
 #else
     ErrorScopeResult result;
     WGPUPopErrorScopeCallbackInfo callback {
