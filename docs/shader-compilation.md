@@ -170,10 +170,10 @@ loaded. In particular, `glad`, `wgpu-native`, `glfw3webgpu`, `fastgltf`, and
 Browser WebGPU uses Emscripten's `emdawnwebgpu` port through
 `--use-port=emdawnwebgpu`. The shared surface swapchain lives in
 `fei-graphics-webgpu`; `fei-graphics-webgpu-browser` supplies canvas surface
-creation and uses `#canvas` by default. The development configuration enables
-JSPI so the existing synchronous engine bootstrap can yield while browser
-adapter and device requests complete without conflicting with Slang's Wasm
-exception handling.
+creation and uses `#canvas` by default. The browser shell requests the adapter
+and device asynchronously before releasing its Emscripten run dependency. The
+C++ runtime adopts that preinitialized device, so engine startup does not need
+JSPI or a synchronous wait around the browser WebGPU promises.
 
 The principal development targets can be built independently:
 
@@ -182,6 +182,19 @@ xmake build -y fei-graphics-webgpu-browser
 xmake build -y fei-shader-webgpu
 xmake build -y sample-browser
 ```
+
+Run the development browser smoke test after building or changing this path:
+
+```text
+xmake browser-smoke
+```
+
+The task starts a no-cache local server and a temporary headless Edge, Chrome,
+or Chromium profile. It checks the first presented frame, font atlas and glyph
+batches, button activation, text entry, scrolling, JavaScript exceptions,
+console errors, and WebGPU validation errors. Use `--browser=<path>` or the
+`FEI_BROWSER` environment variable when the browser is not in a standard
+installation location.
 
 Serve `build/wasm/wasm32/debug` over HTTP and open `sample-browser.html` to run
 the animated WebGPU sprite sample. The `fei.shader_sources` rule preloads every
@@ -200,8 +213,8 @@ The sample creates a `Camera2d` and textured `Sprite`, then uses the existing
 sprite batching, resource binding, render pass, and swapchain submission path.
 Browser builds use a zero-worker `ThreadPool`, which preserves the scheduler API
 while executing system batches inline without requiring Emscripten pthreads or
-cross-origin isolation. Emdawnwebgpu callbacks run spontaneously while JSPI
-yields, and canvas surface presentation completes when the animation frame
+cross-origin isolation. Emdawnwebgpu callbacks run through the browser event
+loop, and canvas surface presentation completes when the animation frame
 callback returns rather than through `wgpuSurfacePresent`.
 
 WASM targets can register only the runtime assets they need with
