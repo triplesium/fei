@@ -1,7 +1,9 @@
 #include "input_focus/tab_navigation.hpp"
 
+#include "app/app.hpp"
 #include "ecs/world.hpp"
 #include "input_focus/focus.hpp"
+#include "input_focus/plugin.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -78,6 +80,30 @@ TEST_CASE(
     CHECK(test.focused() == second_group_item);
     test.tab();
     CHECK(test.focused() == first_in_tree);
+}
+
+TEST_CASE(
+    "InputFocusPlugin navigates after input events",
+    "[input_focus][tab]"
+) {
+    App app;
+    app.add_plugin<input_focus::InputFocusPlugin>();
+    app.startup();
+
+    const auto group = app.world().entity();
+    const auto item = app.world().entity();
+    app.world().add_component(group, input_focus::TabGroup {});
+    app.world().add_component(item, input_focus::TabIndex {});
+    app.world().set_parent(item, group);
+    app.resource<Events<KeyEvent>>().send(
+        KeyEvent {.key_code = KeyCode::Tab, .state = KeyState::Pressed}
+    );
+
+    app.update();
+
+    REQUIRE(app.resource<input_focus::InputFocus>().get());
+    CHECK(*app.resource<input_focus::InputFocus>().get() == item);
+    app.shutdown();
 }
 
 TEST_CASE("Shift Tab navigates backward and wraps", "[input_focus][tab]") {

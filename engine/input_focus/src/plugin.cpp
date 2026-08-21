@@ -23,7 +23,8 @@ void InputFocusPlugin::setup(App& app) {
                 Systems::Validate {},
                 Systems::AutoFocus {},
                 Systems::Navigation {}
-            )
+            ),
+            Systems::Navigation {}.after<InputSystems::Update>()
         )
         .add_systems(
             PreUpdate,
