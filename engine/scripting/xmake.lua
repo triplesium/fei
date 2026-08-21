@@ -1,3 +1,5 @@
 includes("core")
-includes("lua")
+if not is_plat("wasm") then
+    includes("lua")
+end
 includes("luau")

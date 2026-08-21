@@ -52,6 +52,17 @@ if is_plat("wasm") then
         "nlohmann_json",
         "yaml-cpp"
     )
+    add_requires(
+        "luau 696",
+        {
+            configs = {
+                shared = false,
+                extern_c = false,
+                cxflags = "-fwasm-exceptions",
+                cxxflags = "-fwasm-exceptions",
+            }
+        }
+    )
 else
     add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "fastgltf v0.9.0")
     add_requires("box2d v3.1.1", {configs = {shared = false}})
