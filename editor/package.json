@@ -1,0 +1,31 @@
+{
+    "name": "@fei/editor",
+    "private": true,
+    "version": "0.1.0",
+    "type": "module",
+    "scripts": {
+        "build": "tsc -b && vite build",
+        "dev": "vite",
+        "typecheck": "tsc -b"
+    },
+    "dependencies": {
+        "@monaco-editor/react": "^4.7.0",
+        "lucide-react": "^1.33.0",
+        "monaco-editor": "^0.56.0",
+        "radix-ui": "^1.6.7",
+        "react": "^19.2.8",
+        "react-dom": "^19.2.8",
+        "react-resizable-panels": "^4.12.3"
+    },
+    "devDependencies": {
+        "@types/react": "^19.2.18",
+        "@types/react-dom": "^19.2.4",
+        "@types/wicg-file-system-access": "^2023.10.7",
+        "@vitejs/plugin-react": "^6.1.0",
+        "typescript": "^7.0.2",
+        "vite": "^8.2.2"
+    },
+    "overrides": {
+        "dompurify": "^3.4.14"
+    }
+}
