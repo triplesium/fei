@@ -256,6 +256,12 @@ configure_builtin_adapters(World& world, snapshot::SnapshotRegistry& registry) {
     rebuild_if_present<MouseScrollInput>(world, registry);
     rebuild_if_present<CharacterInput>(world, registry);
     rebuild_if_present<VirtualInput>(world, registry);
+    rebuild_if_present<Events<KeyEvent>>(world, registry);
+    rebuild_if_present<Events<MouseButtonEvent>>(world, registry);
+    rebuild_if_present<Events<MouseMoveEvent>>(world, registry);
+    rebuild_if_present<Events<MouseScrollEvent>>(world, registry);
+    rebuild_if_present<Events<CharacterEvent>>(world, registry);
+    rebuild_if_present<Events<InputFocusLost>>(world, registry);
     registry.on_after_restore(
         [](World& restored) -> Status<snapshot::SnapshotError> {
             if (restored.has_resource<KeyInput>()) {

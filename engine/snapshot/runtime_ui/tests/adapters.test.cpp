@@ -290,15 +290,17 @@ TEST_CASE(
     const auto coverage = snapshot::audit(world, test.checkpoints.registry());
     std::string diagnostics = coverage.runtime_message;
     for (const auto& entry : coverage.components) {
-        if (!entry.serializable &&
-            entry.disposition == snapshot::AuditDisposition::Snapshot) {
+        if (entry.disposition == snapshot::AuditDisposition::Unregistered ||
+            (!entry.serializable &&
+             entry.disposition == snapshot::AuditDisposition::Snapshot)) {
             diagnostics +=
                 "\ncomponent " + entry.type_name + ": " + entry.message;
         }
     }
     for (const auto& entry : coverage.resources) {
-        if (!entry.serializable &&
-            entry.disposition == snapshot::AuditDisposition::Snapshot) {
+        if (entry.disposition == snapshot::AuditDisposition::Unregistered ||
+            (!entry.serializable &&
+             entry.disposition == snapshot::AuditDisposition::Snapshot)) {
             diagnostics +=
                 "\nresource " + entry.type_name + ": " + entry.message;
         }
