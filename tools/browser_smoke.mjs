@@ -13,9 +13,11 @@ for (let index = 2; index < process.argv.length; index += 2) {
 const outputRoot = resolve(argumentsByName.get("--root") ?? "");
 const timeoutMs = Number(argumentsByName.get("--timeout") ?? "30000");
 const requestedBrowser = argumentsByName.get("--browser");
+const page = argumentsByName.get("--page") ?? "sample-browser.html";
+const scenario = argumentsByName.get("--scenario") ?? "ui";
 
-if (!outputRoot || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    throw new Error("usage: browser_smoke.mjs --root <directory> [--browser <path>] [--timeout <milliseconds>]");
+if (!outputRoot || !Number.isFinite(timeoutMs) || timeoutMs <= 0 || !["ui", "project"].includes(scenario)) {
+    throw new Error("usage: browser_smoke.mjs --root <directory> [--browser <path>] [--timeout <milliseconds>] [--page <filename>] [--scenario <ui|project>]");
 }
 
 const mimeTypes = new Map([
@@ -319,7 +321,7 @@ async function dispatchClick(client, point) {
     await client.send("Input.dispatchMouseEvent", {type: "mouseReleased", button: "left", clickCount: 1, ...point});
 }
 
-async function runSmokeTest(client, url) {
+async function runSmokeTest(client, url, selectedScenario) {
     const errors = [];
     client.on("Runtime.exceptionThrown", event => {
         errors.push(event.exceptionDetails.exception?.description ?? event.exceptionDetails.text);
@@ -341,6 +343,25 @@ async function runSmokeTest(client, url) {
         client.send("Log.enable"),
     ]);
     await client.send("Page.navigate", {url});
+
+    if (selectedScenario === "project") {
+        const ready = await waitFor(client, "the web project", async () => {
+            return evaluate(client, `(() => {
+                const data = document.documentElement.dataset;
+                if (data.feiProjectStatus !== "web project presented") return null;
+                return {...data};
+            })()`);
+        }, errors);
+        if (ready.feiProjectScript !== "loaded" || ready.feiProjectFramePresented !== "true") {
+            throw new Error("the project script or first sprite frame was not presented");
+        }
+        await new Promise(accept => setTimeout(accept, 250));
+        if (errors.length > 0) {
+            throw new Error(errors.join("\n"));
+        }
+        console.log("browser smoke: web project script and first frame are ready");
+        return ready;
+    }
 
     const ready = await waitFor(client, "the rendered UI", async () => {
         return evaluate(client, `(() => {
@@ -406,7 +427,7 @@ async function runSmokeTest(client, url) {
 
 const server = await startServer();
 const address = server.address();
-const url = `http://127.0.0.1:${address.port}/sample-browser.html?smoke=${Date.now()}`;
+const url = `http://127.0.0.1:${address.port}/${page}?smoke=${Date.now()}`;
 const browserPath = findBrowser();
 const profileDirectory = await mkdtemp(join(tmpdir(), "fei-browser-smoke-"));
 const devToolsPort = await unusedPort();
@@ -432,10 +453,14 @@ try {
     browserClient = new DevToolsClient(devToolsUrl);
     const pageTargetUrl = await waitForPageTarget(devToolsUrl);
     client = new DevToolsClient(pageTargetUrl);
-    const result = await runSmokeTest(client, url);
+    const result = await runSmokeTest(client, url, scenario);
     console.log(`browser smoke passed (${basename(browserPath)})`);
-    console.log(`  glyphs: ${result.feiGlyphCount}, batches: ${result.feiGlyphBatches}`);
-    console.log(`  clicks: ${result.feiUiClicks}, text: ${result.feiUiText}, scroll: ${result.feiUiScrollY}`);
+    if (scenario === "project") {
+        console.log(`  project: ${result.feiProjectStatus}, script: ${result.feiProjectScript}`);
+    } else {
+        console.log(`  glyphs: ${result.feiGlyphCount}, batches: ${result.feiGlyphBatches}`);
+        console.log(`  clicks: ${result.feiUiClicks}, text: ${result.feiUiText}, scroll: ${result.feiUiScrollY}`);
+    }
 } finally {
     await browserClient?.notify("Browser.close").catch(() => {});
     await new Promise(accept => setTimeout(accept, 250));

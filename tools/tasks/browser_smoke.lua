@@ -11,7 +11,8 @@ function run(options)
         config.get("plat") == "wasm",
         "browser-smoke requires a wasm configuration"
     )
-    os.vrunv("xmake", {"build", "-y", "sample-browser"})
+    local target = options.target or "sample-browser"
+    os.vrunv("xmake", {"build", "-y", target})
 
     local output_root = path.join(
         os.projectdir(),
@@ -25,7 +26,11 @@ function run(options)
         "--root",
         output_root,
         "--timeout",
-        tostring(options.timeout or 30000)
+        tostring(options.timeout or 30000),
+        "--page",
+        options.page or "sample-browser.html",
+        "--scenario",
+        options.scenario or "ui"
     }
     if options.browser then
         table.join2(arguments, {"--browser", path.absolute(options.browser)})

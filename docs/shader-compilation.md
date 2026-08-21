@@ -181,12 +181,14 @@ The principal development targets can be built independently:
 xmake build -y fei-graphics-webgpu-browser
 xmake build -y fei-shader-webgpu
 xmake build -y sample-browser
+xmake build -y sample-browser-project
 ```
 
 Run the development browser smoke test after building or changing this path:
 
 ```text
 xmake browser-smoke
+xmake browser-project-smoke
 ```
 
 The task starts a no-cache local server and a temporary headless Edge, Chrome,
@@ -195,6 +197,15 @@ batches, button activation, text entry, scrolling, JavaScript exceptions,
 console errors, and WebGPU validation errors. Use `--browser=<path>` or the
 `FEI_BROWSER` environment variable when the browser is not in a standard
 installation location.
+
+`sample-browser-project` is the first browser project-runtime target. It loads
+`samples/browser_project/project/project.yaml` from the preloaded Emscripten
+filesystem, installs the configured `project_runtime::LuauScripts` plugin, and
+runs `project://main.luau`. The project smoke task checks that the Luau module
+loads and that its sprite reaches the presentation phase without JavaScript,
+console, or WebGPU errors. Native-only project playtest/protocol code remains
+outside the WASM target graph; a browser transport can be added separately
+without coupling project loading or scripting to HTTP.
 
 Serve `build/wasm/wasm32/debug` over HTTP and open `sample-browser.html` to run
 the animated WebGPU sprite sample. The `fei.shader_sources` rule preloads every
