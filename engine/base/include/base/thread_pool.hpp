@@ -39,6 +39,11 @@ class ThreadPool {
         );
         auto future = task->get_future();
 
+        if (m_workers.empty()) {
+            (*task)();
+            return future;
+        }
+
         {
             std::scoped_lock lock(m_mutex);
             m_tasks.emplace([task]() {

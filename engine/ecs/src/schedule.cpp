@@ -539,7 +539,7 @@ void Schedule::run_systems(
 
     for (const auto& batch : m_execution_batches) {
         std::exception_ptr exception;
-        if (batch.size() == 1 || thread_pool.thread_count() == 1) {
+        if (batch.size() == 1 || thread_pool.thread_count() <= 1) {
             try {
                 for (auto system_id : batch) {
                     run_one(system_id);

@@ -5,6 +5,7 @@
 
 using namespace fei;
 
+#ifndef __EMSCRIPTEN__
 TEST_CASE("ThreadPool runs submitted tasks", "[base][thread_pool]") {
     ThreadPool pool(2);
 
@@ -28,4 +29,22 @@ TEST_CASE("ThreadPool propagates task exceptions", "[base][thread_pool]") {
     });
 
     REQUIRE_THROWS_AS(task.get(), std::runtime_error);
+}
+#endif
+
+TEST_CASE(
+    "ThreadPool runs tasks inline without workers",
+    "[base][thread_pool]"
+) {
+    ThreadPool pool(0);
+    bool ran = false;
+
+    auto task = pool.submit([&ran]() {
+        ran = true;
+        return 7;
+    });
+
+    REQUIRE(pool.thread_count() == 0);
+    REQUIRE(ran);
+    REQUIRE(task.get() == 7);
 }

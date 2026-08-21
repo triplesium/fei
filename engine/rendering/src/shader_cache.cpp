@@ -86,6 +86,11 @@ void ShaderCache::update_source_snapshot() {
         return;
     }
 
+#ifdef __EMSCRIPTEN__
+    // Browser shader sources are immutable MEMFS preload data. A page reload
+    // installs a new snapshot without requiring a background polling thread.
+    return;
+#else
     using namespace std::chrono_literals;
     if (m_pending_source_snapshot.valid()) {
         if (m_pending_source_snapshot.wait_for(0ms) !=
@@ -126,6 +131,7 @@ void ShaderCache::update_source_snapshot() {
         }
     );
     m_next_source_snapshot_poll = now + m_source_snapshot_poll_interval;
+#endif
 }
 
 void ShaderCache::set_source_snapshot_poll_interval(

@@ -1,11 +1,8 @@
 #include "base/thread_pool.hpp"
 
-#include <algorithm>
-
 namespace fei {
 
 ThreadPool::ThreadPool(std::size_t thread_count) {
-    thread_count = std::max<std::size_t>(1, thread_count);
     m_workers.reserve(thread_count);
     for (std::size_t i = 0; i < thread_count; ++i) {
         m_workers.emplace_back([this]() {
@@ -28,11 +25,15 @@ ThreadPool::~ThreadPool() {
 }
 
 std::size_t ThreadPool::default_thread_count() {
+#ifdef __EMSCRIPTEN__
+    return 0;
+#else
     auto count = std::thread::hardware_concurrency();
     if (count == 0) {
         return 1;
     }
     return count;
+#endif
 }
 
 void ThreadPool::worker_loop() {
