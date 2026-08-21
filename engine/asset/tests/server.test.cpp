@@ -28,6 +28,7 @@
 #include <string>
 #include <thread>
 #include <type_traits>
+#include <utility>
 
 using namespace fei;
 namespace {
@@ -271,6 +272,26 @@ TEST_CASE("AssetsPlugin installs task resources", "[asset][plugin]") {
             AssetPath("textures/player.png")
         ) == AssetPath("project://textures/player.png")
     );
+}
+
+TEST_CASE(
+    "AssetsPlugin rebinds AssetServer after App relocation",
+    "[asset][plugin][app]"
+) {
+    App app;
+    app.add_plugin<AssetsPlugin>();
+    app.finish();
+    app.resource<AssetServer>().emplace_source<MemorySource>();
+    app.resource<AssetServer>().add_loader<ServerAsset, ServerLoader>();
+
+    App relocated(std::move(app));
+    auto handle = relocated.resource<AssetServer>().load<ServerAsset>(
+        AssetPath("memory://asset.bin")
+    );
+    auto asset = relocated.resource<Assets<ServerAsset>>().get(handle);
+
+    REQUIRE(asset.has_value());
+    CHECK(asset->byte_count == 4);
 }
 
 TEST_CASE(

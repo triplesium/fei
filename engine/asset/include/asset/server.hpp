@@ -84,6 +84,8 @@ class AssetServer {
     explicit AssetServer(App* app, std::string default_source = "project") :
         m_app(app), m_default_source(std::move(default_source)) {}
 
+    void rebind_app(App* app) { m_app = app; }
+
     // Delete copy constructor and copy assignment operator
     AssetServer(const AssetServer&) = delete;
     AssetServer& operator=(const AssetServer&) = delete;

@@ -63,6 +63,9 @@ void AssetsPlugin::setup(App& app) {
     app.add_resource(std::move(server))
         .add_resource(AssetImporterRegistry {})
         .add_resource(std::move(database));
+    app.add_relocation_handler([](App& relocated) {
+        relocated.resource<AssetServer>().rebind_app(&relocated);
+    });
 }
 
 } // namespace fei

@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -114,6 +115,7 @@ class App {
     std::unordered_set<TypeId> m_events;
     std::vector<LabeledSubApp> m_sub_apps;
     AppRunner m_runner;
+    std::vector<MoveOnlyFunction<void(App&)>> m_relocation_handlers;
 
     App& add_boxed_plugin(
         TypeId plugin_type,
@@ -149,8 +151,18 @@ class App {
     App();
     App(const App&) = delete;
     App& operator=(const App&) = delete;
-    App(App&&) noexcept = default;
-    App& operator=(App&&) noexcept = default;
+    App(App&& other) noexcept;
+    App& operator=(App&& other) noexcept;
+
+    App& add_relocation_handler(MoveOnlyFunction<void(App&)> handler) {
+        if (!handler) {
+            throw std::invalid_argument(
+                "App relocation handler cannot be empty"
+            );
+        }
+        m_relocation_handlers.push_back(std::move(handler));
+        return *this;
+    }
 
     template<typename E>
     App& add_event() {

@@ -56,6 +56,41 @@ App::App() : m_runner(run_default) {
     );
 }
 
+App::App(App&& other) noexcept :
+    m_world(std::move(other.m_world)), m_plugins(std::move(other.m_plugins)),
+    m_plugin_indices(std::move(other.m_plugin_indices)),
+    m_plugin_order(std::move(other.m_plugin_order)),
+    m_plugin_registry_frozen(other.m_plugin_registry_frozen),
+    m_events(std::move(other.m_events)),
+    m_sub_apps(std::move(other.m_sub_apps)),
+    m_runner(std::move(other.m_runner)),
+    m_relocation_handlers(std::move(other.m_relocation_handlers)),
+    m_lifecycle(other.m_lifecycle) {
+    for (auto& handler : m_relocation_handlers) {
+        handler(*this);
+    }
+}
+
+App& App::operator=(App&& other) noexcept {
+    if (this == &other) {
+        return *this;
+    }
+    m_world = std::move(other.m_world);
+    m_plugins = std::move(other.m_plugins);
+    m_plugin_indices = std::move(other.m_plugin_indices);
+    m_plugin_order = std::move(other.m_plugin_order);
+    m_plugin_registry_frozen = other.m_plugin_registry_frozen;
+    m_events = std::move(other.m_events);
+    m_sub_apps = std::move(other.m_sub_apps);
+    m_runner = std::move(other.m_runner);
+    m_relocation_handlers = std::move(other.m_relocation_handlers);
+    m_lifecycle = other.m_lifecycle;
+    for (auto& handler : m_relocation_handlers) {
+        handler(*this);
+    }
+    return *this;
+}
+
 App& App::set_runner(AppRunner runner) {
     if (!runner) {
         throw std::invalid_argument("App runner cannot be empty");
@@ -132,13 +167,11 @@ void App::finish() {
             }
             const auto dependency_index = m_plugins.size();
             m_plugin_indices.emplace(requirement.type, dependency_index);
-            m_plugins.push_back(
-                PluginEntry {
-                    .type = requirement.type,
-                    .name = requirement.name,
-                    .plugin = requirement.create_default(),
-                }
-            );
+            m_plugins.push_back(PluginEntry {
+                .type = requirement.type,
+                .name = requirement.name,
+                .plugin = requirement.create_default(),
+            });
         }
     }
 

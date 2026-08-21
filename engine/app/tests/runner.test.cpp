@@ -29,7 +29,11 @@ class InstallRunnerPlugin final : public Plugin {
 
 TEST_CASE("App runner can take ownership of the App", "[app][runner]") {
     std::unique_ptr<App> owned_app;
+    App* relocated_app = nullptr;
     App app;
+    app.add_relocation_handler([&](App& relocated) {
+        relocated_app = &relocated;
+    });
     app.set_runner([&owned_app](App&& running_app) {
         owned_app = std::make_unique<App>(std::move(running_app));
     });
@@ -37,6 +41,7 @@ TEST_CASE("App runner can take ownership of the App", "[app][runner]") {
     app.run();
 
     REQUIRE(owned_app != nullptr);
+    REQUIRE(relocated_app == owned_app.get());
     REQUIRE(owned_app->lifecycle() == AppLifecycle::Ready);
     owned_app->startup();
     REQUIRE(owned_app->lifecycle() == AppLifecycle::Running);
