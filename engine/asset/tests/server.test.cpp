@@ -292,6 +292,13 @@ TEST_CASE(
 
     REQUIRE(asset.has_value());
     CHECK(asset->byte_count == 4);
+    CHECK(relocated.resource<AssetServer>().is_loaded(handle));
+    auto loaded_path = relocated.resource<AssetServer>().asset_path(
+        AssetServer::asset_key(handle)
+    );
+    REQUIRE(loaded_path);
+    CHECK(*loaded_path == AssetPath("memory://asset.bin"));
+    CHECK_FALSE(relocated.resource<AssetServer>().load_error(handle));
 }
 
 TEST_CASE(

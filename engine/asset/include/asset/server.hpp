@@ -66,6 +66,7 @@ class AssetServer {
     };
 
     App* m_app;
+    std::shared_ptr<App*> m_app_binding;
     std::string m_default_source;
     std::unordered_map<std::string, std::unique_ptr<AssetSource>> m_sources;
     std::unordered_map<TypeId, AssetTypeAccess> m_asset_types;
@@ -82,9 +83,13 @@ class AssetServer {
 
   public:
     explicit AssetServer(App* app, std::string default_source = "project") :
-        m_app(app), m_default_source(std::move(default_source)) {}
+        m_app(app), m_app_binding(std::make_shared<App*>(app)),
+        m_default_source(std::move(default_source)) {}
 
-    void rebind_app(App* app) { m_app = app; }
+    void rebind_app(App* app) {
+        m_app = app;
+        *m_app_binding = app;
+    }
 
     // Delete copy constructor and copy assignment operator
     AssetServer(const AssetServer&) = delete;
@@ -910,7 +915,7 @@ class AssetServer {
   private:
     template<typename T>
     void register_asset_type_access() {
-        auto* app = m_app;
+        auto app = m_app_binding;
         m_asset_handle_types[type_id<Handle<T>>()] = type_id<T>();
         m_asset_types[type_id<T>()] = AssetTypeAccess {
             .registration =
@@ -954,34 +959,43 @@ class AssetServer {
                 return typed->id();
             },
             .path = [app](AssetId id) -> Optional<AssetPath> {
-                if (!app || !app->template has_resource<Assets<T>>()) {
+                auto* bound_app = *app;
+                if (!bound_app ||
+                    !bound_app->template has_resource<Assets<T>>()) {
                     return nullopt;
                 }
-                auto path = app->template resource<Assets<T>>().path(id);
+                auto path = bound_app->template resource<Assets<T>>().path(id);
                 return path ? Optional<AssetPath> {*path} : nullopt;
             },
             .load_state = [app](AssetId id) -> Optional<AssetLoadState> {
-                if (!app || !app->template has_resource<Assets<T>>()) {
+                auto* bound_app = *app;
+                if (!bound_app ||
+                    !bound_app->template has_resource<Assets<T>>()) {
                     return nullopt;
                 }
-                return app->template resource<Assets<T>>().load_state(id);
+                return bound_app->template resource<Assets<T>>().load_state(id);
             },
             .load_error = [app](AssetId id) -> Optional<AssetLoadError> {
-                if (!app || !app->template has_resource<Assets<T>>()) {
+                auto* bound_app = *app;
+                if (!bound_app ||
+                    !bound_app->template has_resource<Assets<T>>()) {
                     return nullopt;
                 }
-                auto error = app->template resource<Assets<T>>().load_error(id);
+                auto error =
+                    bound_app->template resource<Assets<T>>().load_error(id);
                 if (!error) {
                     return nullopt;
                 }
                 return *error;
             },
             .dependencies = [app](AssetId id) -> std::vector<AssetKey> {
-                if (!app || !app->template has_resource<Assets<T>>()) {
+                auto* bound_app = *app;
+                if (!bound_app ||
+                    !bound_app->template has_resource<Assets<T>>()) {
                     return {};
                 }
                 auto dependencies =
-                    app->template resource<Assets<T>>().dependencies(id);
+                    bound_app->template resource<Assets<T>>().dependencies(id);
                 if (!dependencies) {
                     return {};
                 }
@@ -992,22 +1006,25 @@ class AssetServer {
             },
             .remap_path =
                 [app](const AssetPath& source, const AssetPath& destination) {
-                    if (!app || !app->template has_resource<Assets<T>>()) {
+                    auto* bound_app = *app;
+                    if (!bound_app ||
+                        !bound_app->template has_resource<Assets<T>>()) {
                         return false;
                     }
-                    return app->template resource<Assets<T>>().remap_path(
+                    return bound_app->template resource<Assets<T>>().remap_path(
                         source,
                         destination
                     );
                 },
             .remove_path =
                 [app](const AssetPath& path) {
-                    if (!app || !app->template has_resource<Assets<T>>()) {
+                    auto* bound_app = *app;
+                    if (!bound_app ||
+                        !bound_app->template has_resource<Assets<T>>()) {
                         return std::size_t {0};
                     }
-                    return app->template resource<Assets<T>>().remove_path(
-                        path
-                    );
+                    return bound_app->template resource<Assets<T>>()
+                        .remove_path(path);
                 },
         };
     }
