@@ -302,7 +302,7 @@ TextPipeline::AtlasGlyph TextPipeline::cache_glyph(
             atlas_size,
             atlas_size,
             1,
-            PixelFormat::R8Unorm,
+            PixelFormat::Rgba8Unorm,
             TextureUsage::Sampled,
             TextureType::Texture2D
         );
@@ -340,13 +340,17 @@ TextPipeline::AtlasGlyph TextPipeline::cache_glyph(
         std::max(selected->row_height, glyph.height + atlas_padding);
 
     if (auto image = images.modify(selected->image)) {
-        auto pixels =
-            std::make_unique<unsigned char[]>(selected->pixels.size());
-        std::memcpy(
-            pixels.get(),
-            selected->pixels.data(),
-            selected->pixels.size()
+        constexpr std::size_t channels = 4;
+        auto pixels = std::make_unique<unsigned char[]>(
+            selected->pixels.size() * channels
         );
+        for (std::size_t index = 0; index < selected->pixels.size(); ++index) {
+            const auto coverage = selected->pixels[index];
+            pixels[index * channels] = coverage;
+            pixels[index * channels + 1] = coverage;
+            pixels[index * channels + 2] = coverage;
+            pixels[index * channels + 3] = 255;
+        }
         image->set_data(std::move(pixels));
     }
     const AtlasGlyph cached {

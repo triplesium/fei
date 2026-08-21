@@ -64,7 +64,27 @@ TEST_CASE("Text pipeline measures and caches glyph atlas entries", "[text]") {
     CHECK(layout.size == measured);
     REQUIRE(layout.glyphs.size() == 5);
     CHECK(layout.glyphs.front().atlas);
-    CHECK(app.resource<Assets<Image>>().get(layout.glyphs.front().atlas));
+    const auto atlas =
+        app.resource<Assets<Image>>().get(layout.glyphs.front().atlas);
+    REQUIRE(atlas);
+    CHECK(
+        atlas->texture_description().texture_format == PixelFormat::Rgba8Unorm
+    );
+    bool has_coverage = false;
+    for (std::size_t index = 0;
+         index < static_cast<std::size_t>(atlas->width()) * atlas->height();
+         ++index) {
+        const auto offset = index * 4;
+        if (atlas->data()[offset] == 0) {
+            continue;
+        }
+        has_coverage = true;
+        CHECK(atlas->data()[offset] == atlas->data()[offset + 1]);
+        CHECK(atlas->data()[offset] == atlas->data()[offset + 2]);
+        CHECK(atlas->data()[offset + 3] == 255);
+        break;
+    }
+    CHECK(has_coverage);
 }
 
 TEST_CASE(
