@@ -4,27 +4,27 @@ struct UiFrame {
 };
 
 struct UiVertexInput {
-    [vk::location(0)] float2 position : POSITION;
-    [vk::location(1)] float2 uv : TEXCOORD0;
-    [vk::location(2)] float4 color : COLOR0;
-    [vk::location(3)] float2 local_position : TEXCOORD1;
-    [vk::location(4)] float2 size : TEXCOORD2;
-    [vk::location(5)] float4 border_radius : TEXCOORD3;
-    [vk::location(6)] float4 border : TEXCOORD4;
-    [vk::location(7)] float kind : TEXCOORD5;
-    [vk::location(8)] float border_side : TEXCOORD6;
+    [vk::location(0)] float2 position : TEXCOORD0;
+    [vk::location(1)] float2 uv : TEXCOORD1;
+    [vk::location(2)] float4 color : TEXCOORD2;
+    [vk::location(3)] float2 local_position : TEXCOORD3;
+    [vk::location(4)] float2 size : TEXCOORD4;
+    [vk::location(5)] float4 border_radius : TEXCOORD5;
+    [vk::location(6)] float4 border : TEXCOORD6;
+    [vk::location(7)] float kind : TEXCOORD7;
+    [vk::location(8)] float border_side : TEXCOORD8;
 };
 
 struct UiFragmentInput {
     float4 position : SV_Position;
     [vk::location(0)] float2 uv : TEXCOORD0;
-    [vk::location(1)] float4 color : COLOR0;
-    [vk::location(2)] float2 local_position : TEXCOORD1;
-    [vk::location(3)] float2 size : TEXCOORD2;
-    [vk::location(4)] float4 border_radius : TEXCOORD3;
-    [vk::location(5)] float4 border : TEXCOORD4;
-    [vk::location(6)] float kind : TEXCOORD5;
-    [vk::location(7)] float border_side : TEXCOORD6;
+    [vk::location(1)] float4 color : TEXCOORD1;
+    [vk::location(2)] float2 local_position : TEXCOORD2;
+    [vk::location(3)] float2 size : TEXCOORD3;
+    [vk::location(4)] float4 border_radius : TEXCOORD4;
+    [vk::location(5)] float4 border : TEXCOORD5;
+    [vk::location(6)] float kind : TEXCOORD6;
+    [vk::location(7)] float border_side : TEXCOORD7;
 };
 
 layout(set = 0, binding = 0) ConstantBuffer<UiFrame> frame;
@@ -69,8 +69,9 @@ float coverage(float distance) {
 
 [shader("fragment")]
 float4 fragment_main(UiFragmentInput input) : SV_Target0 {
+    float4 sampled_image = image.Sample(image_sampler, input.uv);
     if (input.kind > 1.5) {
-        float glyph_coverage = image.Sample(image_sampler, input.uv).r;
+        float glyph_coverage = sampled_image.r;
         return float4(input.color.rgb, input.color.a * glyph_coverage);
     }
     float2 half_size = input.size * 0.5;
@@ -79,7 +80,7 @@ float4 fragment_main(UiFragmentInput input) : SV_Target0 {
         half_size,
         input.border_radius
     ));
-    float4 color = image.Sample(image_sampler, input.uv) * input.color;
+    float4 color = sampled_image * input.color;
     if (input.kind < 0.5) {
         color.a *= outer;
         return color;

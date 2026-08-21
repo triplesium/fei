@@ -1,10 +1,12 @@
 #include "shader/compiler.hpp"
+
 #include "shader_opengl/plugin.hpp"
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
+#include <regex>
 #include <string>
 #include <string_view>
 
@@ -34,7 +36,74 @@ require_resource(const ShaderDescription& shader, std::string_view name) {
     return *it;
 }
 
+bool has_wgsl_location(
+    std::string_view wgsl,
+    std::uint32_t location,
+    std::string_view name,
+    std::string_view type
+) {
+    const auto pattern = "@location\\(" + std::to_string(location) + "\\)\\s+" +
+                         std::string(name) + "(_[0-9]+)?\\s*:\\s*" +
+                         std::string(type);
+    return std::regex_search(wgsl.begin(), wgsl.end(), std::regex(pattern));
+}
+
+std::filesystem::path find_project_file(const std::filesystem::path& path) {
+    auto root = std::filesystem::current_path();
+    while (true) {
+        const auto candidate = root / path;
+        if (std::filesystem::exists(candidate)) {
+            return candidate;
+        }
+        const auto parent = root.parent_path();
+        if (parent == root) {
+            return {};
+        }
+        root = parent;
+    }
+}
+
 } // namespace
+
+TEST_CASE(
+    "UI shader preserves its WebGPU vertex input contract",
+    "[rendering][shader-compiler][slang][webgpu][ui]"
+) {
+    const auto source_path = find_project_file(
+        std::filesystem::path("engine") / "ui" / "rendering" / "shaders" /
+        "ui" / "ui.slang"
+    );
+    REQUIRE_FALSE(source_path.empty());
+
+    ShaderCompileRequest request {
+        .source_path = source_path,
+        .source_root = source_path.parent_path(),
+        .logical_path = "ui/ui.slang",
+        .stage = ShaderStages::Vertex,
+        .entry = "vertex_main",
+        .target = ShaderCompileTarget::WebGpu,
+    };
+    OpenGLShaderCompiler compiler(ShaderCompileTarget::All);
+
+    const auto output = compiler.compile(request);
+
+    if (!output) {
+        INFO(output.error().message);
+        INFO(output.error().diagnostics);
+    }
+    REQUIRE(output.has_value());
+    const auto& wgsl = output->description.wgsl;
+    REQUIRE_FALSE(wgsl.empty());
+    CHECK(has_wgsl_location(wgsl, 0, "position", "vec2<f32>"));
+    CHECK(has_wgsl_location(wgsl, 1, "uv", "vec2<f32>"));
+    CHECK(has_wgsl_location(wgsl, 2, "color", "vec4<f32>"));
+    CHECK(has_wgsl_location(wgsl, 3, "local_position", "vec2<f32>"));
+    CHECK(has_wgsl_location(wgsl, 4, "size", "vec2<f32>"));
+    CHECK(has_wgsl_location(wgsl, 5, "border_radius", "vec4<f32>"));
+    CHECK(has_wgsl_location(wgsl, 6, "border", "vec4<f32>"));
+    CHECK(has_wgsl_location(wgsl, 7, "kind", "f32"));
+    CHECK(has_wgsl_location(wgsl, 8, "border_side", "f32"));
+}
 
 TEST_CASE(
     "SlangLibraryShaderCompiler compiles Slang with in-process artifact "
