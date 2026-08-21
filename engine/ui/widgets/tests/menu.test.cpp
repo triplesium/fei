@@ -4,7 +4,7 @@
 #include "input_focus/focus.hpp"
 #include "ui/node.hpp"
 #include "ui_widgets/plugin.hpp"
-#include "window/input.hpp"
+#include "input/input.hpp"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>

@@ -7,8 +7,8 @@
 #include "ecs/query.hpp"
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
+#include "input/input.hpp"
 #include "input_types.hpp"
-#include "window/input.hpp"
 
 #include <algorithm>
 #include <string_view>

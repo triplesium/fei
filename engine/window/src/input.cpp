@@ -1,128 +1,171 @@
 #include "window/input.hpp"
 
+#include "app/app.hpp"
+#include "input/input.hpp"
+#include "window/window.hpp"
+
 #include <GLFW/glfw3.h>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace fei {
-
 namespace {
 
-std::unordered_map<GLFWwindow*, Vector2> g_scroll_deltas;
-std::unordered_map<GLFWwindow*, std::vector<char32_t>> g_characters;
+struct GlfwInputQueue {
+    std::vector<KeyEvent> keys;
+    std::vector<MouseButtonEvent> mouse_buttons;
+    std::vector<CharacterEvent> characters;
+    Vector2 scroll;
+    Vector2 cursor;
+    bool cursor_changed {false};
+    bool focus_lost {false};
+};
+
+std::unordered_map<GLFWwindow*, GlfwInputQueue> g_input_queues;
+
+void on_key(GLFWwindow* window, int key, int, int action, int) {
+    if (key == GLFW_KEY_UNKNOWN) {
+        return;
+    }
+    g_input_queues[window].keys.push_back(
+        KeyEvent {
+            .key_code = static_cast<KeyCode>(key),
+            .state =
+                action == GLFW_RELEASE ? KeyState::Released : KeyState::Pressed,
+            .repeat = action == GLFW_REPEAT,
+        }
+    );
+}
+
+void on_mouse_button(GLFWwindow* window, int button, int action, int) {
+    if (button < GLFW_MOUSE_BUTTON_LEFT || button > GLFW_MOUSE_BUTTON_MIDDLE ||
+        action == GLFW_REPEAT) {
+        return;
+    }
+    g_input_queues[window].mouse_buttons.push_back(
+        MouseButtonEvent {
+            .button = static_cast<MouseButton>(button),
+            .state =
+                action == GLFW_PRESS ? KeyState::Pressed : KeyState::Released,
+        }
+    );
+}
+
+void on_cursor_position(GLFWwindow* window, double x, double y) {
+    auto& queue = g_input_queues[window];
+    queue.cursor = {static_cast<float>(x), static_cast<float>(y)};
+    queue.cursor_changed = true;
+}
 
 void on_scroll(GLFWwindow* window, double x, double y) {
-    g_scroll_deltas[window] += {
+    g_input_queues[window].scroll += {
         static_cast<float>(x),
         static_cast<float>(y),
     };
 }
 
 void on_character(GLFWwindow* window, unsigned int codepoint) {
-    g_characters[window].push_back(static_cast<char32_t>(codepoint));
+    g_input_queues[window].characters.push_back(
+        CharacterEvent {.character = static_cast<char32_t>(codepoint)}
+    );
+}
+
+void on_focus(GLFWwindow* window, int focused) {
+    if (focused == GLFW_FALSE) {
+        g_input_queues[window].focus_lost = true;
+    }
+}
+
+void collect_glfw_input(
+    ResRO<Window> window,
+    EventWriter<KeyEvent> key_events,
+    EventWriter<MouseButtonEvent> mouse_button_events,
+    EventWriter<MouseMoveEvent> mouse_move_events,
+    EventWriter<MouseScrollEvent> scroll_events,
+    EventWriter<CharacterEvent> character_events,
+    EventWriter<InputFocusLost> focus_lost_events
+) {
+    auto& queue = g_input_queues[window->glfw_window];
+    for (auto& event : queue.keys) {
+        key_events.send(std::move(event));
+    }
+    for (auto& event : queue.mouse_buttons) {
+        mouse_button_events.send(std::move(event));
+    }
+    for (auto& event : queue.characters) {
+        character_events.send(std::move(event));
+    }
+    queue.keys.clear();
+    queue.mouse_buttons.clear();
+    queue.characters.clear();
+
+    if (queue.cursor_changed) {
+        double logical_width = 0.0;
+        double logical_height = 0.0;
+        int glfw_width = 0;
+        int glfw_height = 0;
+        glfwGetWindowSize(window->glfw_window, &glfw_width, &glfw_height);
+        logical_width = static_cast<double>(glfw_width);
+        logical_height = static_cast<double>(glfw_height);
+        auto position = queue.cursor;
+        if (logical_width > 0.0 && logical_height > 0.0) {
+            position.x *= static_cast<float>(window->width / logical_width);
+            position.y *= static_cast<float>(window->height / logical_height);
+        }
+        mouse_move_events.send(MouseMoveEvent {.position = position});
+        queue.cursor_changed = false;
+    }
+    if (queue.scroll != Vector2::Zero) {
+        scroll_events.send(MouseScrollEvent {.delta = queue.scroll});
+        queue.scroll = Vector2::Zero;
+    }
+    if (queue.focus_lost) {
+        focus_lost_events.send(InputFocusLost {});
+        queue.focus_lost = false;
+    }
+}
+
+void install_glfw_input_callbacks(GLFWwindow* window) {
+    g_input_queues.try_emplace(window);
+    glfwSetKeyCallback(window, on_key);
+    glfwSetMouseButtonCallback(window, on_mouse_button);
+    glfwSetCursorPosCallback(window, on_cursor_position);
+    glfwSetScrollCallback(window, on_scroll);
+    glfwSetCharCallback(window, on_character);
+    glfwSetWindowFocusCallback(window, on_focus);
+}
+
+void uninstall_glfw_input_callbacks(GLFWwindow* window) {
+    if (window == nullptr) {
+        return;
+    }
+    glfwSetKeyCallback(window, nullptr);
+    glfwSetMouseButtonCallback(window, nullptr);
+    glfwSetCursorPosCallback(window, nullptr);
+    glfwSetScrollCallback(window, nullptr);
+    glfwSetCharCallback(window, nullptr);
+    glfwSetWindowFocusCallback(window, nullptr);
+    g_input_queues.erase(window);
 }
 
 } // namespace
 
-void key_input_system(ResRO<Window> win, ResRW<KeyInput> input) {
-    auto glfw_window = win->glfw_window;
-    input->clear();
-    for (KeyCode key_code : c_key_codes) {
-        int state = glfwGetKey(glfw_window, static_cast<int>(key_code));
-        if (state == GLFW_PRESS) {
-            input->press(key_code);
-        } else if (state == GLFW_RELEASE) {
-            input->release(key_code);
-        }
-    }
+void GlfwInputPlugin::dependencies(PluginDependencies& dependencies) const {
+    dependencies.require<InputPlugin>().require<WindowPlugin>();
 }
 
-void mouse_input_system(ResRO<Window> win, ResRW<MouseInput> input) {
-    auto glfw_window = win->glfw_window;
-    input->clear();
-    for (MouseButton button :
-         {MouseButton::Left, MouseButton::Right, MouseButton::Middle}) {
-        int state = glfwGetMouseButton(glfw_window, static_cast<int>(button));
-        if (state == GLFW_PRESS) {
-            input->press(button);
-        } else if (state == GLFW_RELEASE) {
-            input->release(button);
-        }
-    }
-    double xpos, ypos;
-    glfwGetCursorPos(glfw_window, &xpos, &ypos);
-    int logical_width = 0;
-    int logical_height = 0;
-    glfwGetWindowSize(glfw_window, &logical_width, &logical_height);
-    if (logical_width > 0 && logical_height > 0) {
-        xpos *= static_cast<double>(win->width) / logical_width;
-        ypos *= static_cast<double>(win->height) / logical_height;
-    }
-    input->set_position({static_cast<float>(xpos), static_cast<float>(ypos)});
+void GlfwInputPlugin::setup(App& app) {
+    install_glfw_input_callbacks(app.resource<Window>().glfw_window);
+    app.add_systems(
+        PreUpdate,
+        collect_glfw_input | in_set<InputSystems::Collect>()
+    );
 }
 
-void mouse_scroll_input_system(
-    ResRO<Window> win,
-    ResRW<MouseScrollInput> input
-) {
-    input->clear();
-    if (win->glfw_window == nullptr) {
-        return;
-    }
-    glfwSetScrollCallback(win->glfw_window, on_scroll);
-    const auto item = g_scroll_deltas.find(win->glfw_window);
-    if (item != g_scroll_deltas.end()) {
-        input->set_delta(item->second);
-        item->second = Vector2::Zero;
-    }
-}
-
-void character_input_system(ResRO<Window> win, ResRW<CharacterInput> input) {
-    input->clear();
-    if (win->glfw_window == nullptr) {
-        return;
-    }
-    glfwSetCharCallback(win->glfw_window, on_character);
-    const auto item = g_characters.find(win->glfw_window);
-    if (item != g_characters.end()) {
-        for (const auto character : item->second) {
-            input->push(character);
-        }
-        item->second.clear();
-    }
-}
-
-void apply_virtual_key_input(
-    ResRO<VirtualInput> virtual_input,
-    ResRW<KeyInput> input
-) {
-    if (!virtual_input->exclusive()) {
-        return;
-    }
-    for (auto key : c_key_codes) {
-        if (virtual_input->pressed(key)) {
-            input->press(key);
-        } else {
-            input->release(key);
-        }
-    }
-}
-
-void apply_virtual_mouse_input(
-    ResRO<VirtualInput> virtual_input,
-    ResRW<MouseInput> input
-) {
-    if (!virtual_input->exclusive()) {
-        return;
-    }
-    if (virtual_input->has_mouse_position()) {
-        input->set_position(virtual_input->mouse_position());
-    }
-    for (auto button : c_mouse_buttons) {
-        if (virtual_input->pressed(button)) {
-            input->press(button);
-        } else {
-            input->release(button);
-        }
+void GlfwInputPlugin::cleanup(App& app) noexcept {
+    if (app.has_resource<Window>()) {
+        uninstall_glfw_input_callbacks(app.resource<Window>().glfw_window);
     }
 }
 

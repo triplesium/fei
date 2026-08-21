@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ecs/system_params.hpp"
-#include "window/input.hpp"
+#include "input/input.hpp"
 
 #include <string>
 

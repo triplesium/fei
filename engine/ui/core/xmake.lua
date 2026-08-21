@@ -4,7 +4,7 @@ target("fei-ui")
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
-    add_deps("fei-base", "fei-refl", "fei-ecs", "fei-app", "fei-math", "fei-asset", "fei-core", "fei-window", "fei-input-focus", "fei-text")
+    add_deps("fei-base", "fei-refl", "fei-ecs", "fei-app", "fei-math", "fei-asset", "fei-core", "fei-window", "fei-input", "fei-input-focus", "fei-text")
 
 target("fei-ui-tests")
     set_kind("binary")

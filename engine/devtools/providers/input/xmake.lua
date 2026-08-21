@@ -4,7 +4,7 @@ target("fei-devtools-input")
     add_headerfiles("include/**.hpp", "src/*.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
-    add_deps("fei-devtools", "fei-window")
+    add_deps("fei-devtools", "fei-input")
 
 target("fei-devtools-input-tests")
     set_kind("binary")

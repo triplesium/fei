@@ -7,6 +7,7 @@
 #include "core/time.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics/swapchain.hpp"
+#include "input/input.hpp"
 #include "physics2d/physics_world.hpp"
 #include "project/project.hpp"
 #include "project_runtime/runtime.hpp"
@@ -31,7 +32,6 @@
 #include "snapshot_runtime_rendering/adapters.hpp"
 #include "snapshot_runtime_ui/adapters.hpp"
 #include "ui/surface.hpp"
-#include "window/input.hpp"
 #include "window/window.hpp"
 
 #include <algorithm>

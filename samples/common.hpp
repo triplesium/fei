@@ -4,6 +4,7 @@
 #include "core/plugin.hpp"
 #include "graphics/plugin.hpp"
 #include "graphics_opengl_glfw/plugin.hpp"
+#include "input/input.hpp"
 #include "window/input.hpp"
 
 class SamplePlugin : public fei::Plugin {
@@ -13,7 +14,7 @@ class SamplePlugin : public fei::Plugin {
         app.add_plugin<AssetsPlugin>()
             .add_plugin<OpenGLGlfwPlugin>()
             .add_plugin<CorePlugin>()
-            .add_plugin<InputPlugin>()
+            .add_plugin<GlfwInputPlugin>()
             .add_plugin<GraphicsPlugin>();
     }
 };

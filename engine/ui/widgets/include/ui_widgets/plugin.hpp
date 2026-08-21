@@ -6,6 +6,7 @@
 #include "ecs/event.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_set.hpp"
+#include "input/input.hpp"
 #include "input_focus/focus.hpp"
 #include "input_focus/tab_navigation.hpp"
 #include "text/editable.hpp"
@@ -26,7 +27,7 @@
 #include "ui_widgets/text_input.hpp"
 #include "ui_widgets/tooltip.hpp"
 #include "ui_widgets/value_change.hpp"
-#include "window/input.hpp"
+#include "window/window.hpp"
 
 namespace fei {
 

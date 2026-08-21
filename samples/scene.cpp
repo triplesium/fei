@@ -26,6 +26,7 @@
 #include "graphics_opengl_glfw/plugin.hpp"
 #include "graphics_vulkan_glfw/plugin.hpp"
 #include "imgui/plugin.hpp"
+#include "input/input.hpp"
 #include "math/vector.hpp"
 #include "pbr/environment_map.hpp"
 #include "pbr/light.hpp"
@@ -36,11 +37,11 @@
 #include "pbr/vxgi.hpp"
 #include "profiling/profiling.hpp"
 #include "rendering/plugin.hpp"
-#include "shader/shader.hpp"
 #include "scene/plugin.hpp"
 #include "scripting_lua/asset.hpp"
 #include "scripting_lua/plugin.hpp"
 #include "scripting_lua/script_system_registry.hpp"
+#include "shader/shader.hpp"
 #include "window/input.hpp"
 
 #include <algorithm>
@@ -613,7 +614,7 @@ int main(int argc, char** argv) {
     add_graphics_backend(app, args.backend);
     app.add_plugin<RenderingPlugin>()
         .add_plugin<PbrPlugin>()
-        .add_plugin<InputPlugin>()
+        .add_plugin<GlfwInputPlugin>()
         .add_plugin<TimePlugin>()
         .add_plugin<EnvironmentMapPlugin>()
         .add_plugin<ScenePlugin>()

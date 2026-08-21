@@ -4,7 +4,7 @@
 #include "input_focus/focus.hpp"
 #include "input_focus/tab_navigation.hpp"
 #include "ui/plugin.hpp"
-#include "window/input.hpp"
+#include "input/input.hpp"
 #include "window/window.hpp"
 
 #include <catch2/catch_approx.hpp>

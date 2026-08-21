@@ -6,7 +6,7 @@
 #include "ui/plugin.hpp"
 #include "ui_widgets/plugin.hpp"
 #include "ui_widgets/value_change.hpp"
-#include "window/input.hpp"
+#include "input/input.hpp"
 #include "window/window.hpp"
 
 #include <catch2/catch_test_macros.hpp>

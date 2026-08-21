@@ -1,7 +1,7 @@
 #pragma once
 
+#include "input/input.hpp"
 #include "refl/reflect.hpp"
-#include "window/input.hpp"
 
 namespace fei::devtools::input {
 

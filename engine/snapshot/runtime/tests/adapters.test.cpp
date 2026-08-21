@@ -5,9 +5,9 @@
 #include "core/time.hpp"
 #include "core/transform.hpp"
 #include "ecs/world.hpp"
+#include "input/input.hpp"
 #include "refl/cls.hpp"
 #include "refl/registry.hpp"
-#include "window/input.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

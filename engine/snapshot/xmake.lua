@@ -18,7 +18,7 @@ target("fei-snapshot-runtime")
     add_headerfiles("runtime/include/**.hpp")
     add_files("runtime/src/*.cpp")
     add_includedirs("runtime/include", {public = true})
-    add_deps("fei-snapshot", "fei-core", "fei-window")
+    add_deps("fei-snapshot", "fei-core", "fei-input")
 
 target("fei-snapshot-runtime-tests")
     set_kind("binary")

@@ -4,12 +4,12 @@ target("fei-window")
     add_headerfiles("include/**.hpp", "include/**.def")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
-    add_deps("fei-base", "fei-refl", "fei-ecs", "fei-app", "fei-math")
+    add_deps(
+        "fei-base",
+        "fei-refl",
+        "fei-ecs",
+        "fei-app",
+        "fei-math",
+        "fei-input"
+    )
     add_packages("glfw")
-
-target("fei-window-tests")
-    set_kind("binary")
-    set_default(false)
-    add_rules("fei.test")
-    add_files("tests/*.test.cpp")
-    add_deps("fei-window")

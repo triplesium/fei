@@ -5,6 +5,7 @@
 #include "ecs/hierarchy.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_set.hpp"
+#include "input/input.hpp"
 #include "input_focus/focus.hpp"
 #include "input_focus/plugin.hpp"
 #include "input_focus/tab_navigation.hpp"
@@ -16,7 +17,6 @@
 #include "ui/node.hpp"
 #include "ui/surface.hpp"
 #include "ui/text.hpp"
-#include "window/input.hpp"
 
 namespace fei {
 

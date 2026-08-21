@@ -2,9 +2,9 @@
 
 #include "ecs/hierarchy.hpp"
 #include "ecs/query.hpp"
+#include "input/input.hpp"
 #include "input_focus/focus.hpp"
 #include "refl/reflect.hpp"
-#include "window/input.hpp"
 
 #include <cstdint>
 

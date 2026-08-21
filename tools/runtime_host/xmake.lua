@@ -24,6 +24,7 @@ target("fei-runtime-host-core")
         "fei-project-scripting-lua",
         "fei-project-scripting-luau",
         "fei-window",
+        "fei-input",
         "fei-rendering",
         "fei-sprite",
         "fei-input-focus",

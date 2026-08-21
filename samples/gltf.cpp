@@ -19,6 +19,7 @@
 #include "gltf/plugin.hpp"
 #include "graphics_opengl_glfw/plugin.hpp"
 #include "graphics_vulkan_glfw/plugin.hpp"
+#include "input/input.hpp"
 #include "math/vector.hpp"
 #include "pbr/environment_map.hpp"
 #include "pbr/light.hpp"
@@ -207,7 +208,7 @@ int main(int argc, char** argv) {
     add_graphics_backend(app, arguments.backend);
     app.add_plugin<RenderingPlugin>()
         .add_plugin<PbrPlugin>()
-        .add_plugin<InputPlugin>()
+        .add_plugin<GlfwInputPlugin>()
         .add_plugin<TimePlugin>()
         .add_plugin<EnvironmentMapPlugin>()
         .add_plugin<GltfPlugin>()
