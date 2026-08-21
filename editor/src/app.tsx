@@ -36,6 +36,7 @@ import {
     useState,
     type ReactNode,
 } from "react";
+import { parseDocument } from "yaml";
 import { CodeEditor } from "./components/code-editor";
 import { ToolPanel } from "./components/panel";
 import { ProjectStorage } from "./services/project-storage";
@@ -46,6 +47,7 @@ import type {
     ConsoleLevel,
     EditorAgentApi,
     ProjectFileEntry,
+    ProjectSettings,
     RuntimeSession,
     RuntimeState,
 } from "./types";
@@ -86,6 +88,68 @@ function assetRelativePath(path: string): string {
 
 function projectAssetPath(path: string): string {
     return path.startsWith(assetPathPrefix) ? path : `${assetPathPrefix}${path}`;
+}
+
+function parseProjectSettings(source: string): ProjectSettings {
+    const document = parseDocument(source);
+    if (document.errors.length > 0) throw new Error(document.errors[0].message);
+    const value = document.toJS() as Record<string, unknown> | null;
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error("Project configuration must be a YAML mapping.");
+    }
+    const runtime = value.runtime;
+    const runtimeMap =
+        runtime && typeof runtime === "object" && !Array.isArray(runtime)
+            ? (runtime as Record<string, unknown>)
+            : {};
+    const plugins = runtimeMap.plugins ?? [];
+    if (!Array.isArray(plugins) || plugins.some((plugin) => typeof plugin !== "string")) {
+        throw new Error("Project field 'runtime.plugins' must be a list of plugin ids.");
+    }
+    return {
+        name: typeof value.name === "string" ? value.name : "",
+        assetDirectory:
+            typeof value.asset_directory === "string" ? value.asset_directory : "assets",
+        runtimePlugins: plugins as string[],
+    };
+}
+
+function validateProjectSettings(settings: ProjectSettings): ProjectSettings {
+    if (typeof settings.name !== "string" || typeof settings.assetDirectory !== "string") {
+        throw new Error("Project name and asset directory must be strings.");
+    }
+    if (!Array.isArray(settings.runtimePlugins) || settings.runtimePlugins.some((plugin) => typeof plugin !== "string")) {
+        throw new Error("Runtime plugins must be a list of plugin ids.");
+    }
+    const name = settings.name.trim();
+    const assetDirectory = settings.assetDirectory.trim();
+    const runtimePlugins = settings.runtimePlugins.map((plugin) => plugin.trim()).filter(Boolean);
+    if (!name) throw new Error("Project name is required.");
+    if (
+        !assetDirectory ||
+        assetDirectory.startsWith("/") ||
+        assetDirectory.includes("\\") ||
+        assetDirectory.split("/").some((part) => !part || part === "." || part === "..")
+    ) {
+        throw new Error("Asset directory must be a relative path inside the project folder.");
+    }
+    if (new Set(runtimePlugins).size !== runtimePlugins.length) {
+        throw new Error("Runtime plugins cannot contain duplicates.");
+    }
+    if (runtimePlugins.some((plugin) => !/^[A-Za-z_]\w*(?:::[A-Za-z_]\w*)+$/.test(plugin))) {
+        throw new Error("Runtime plugin ids must use qualified names such as project_runtime::LuauScripts.");
+    }
+    return { name, assetDirectory, runtimePlugins };
+}
+
+function updateProjectSettingsSource(source: string, settings: ProjectSettings): string {
+    const document = parseDocument(source);
+    if (document.errors.length > 0) throw new Error(document.errors[0].message);
+    document.set("name", settings.name);
+    document.set("asset_directory", settings.assetDirectory);
+    if (!document.has("runtime")) document.set("runtime", {});
+    document.setIn(["runtime", "plugins"], settings.runtimePlugins);
+    return document.toString({ lineWidth: 0 });
 }
 
 function fileIcon(entry: ProjectFileEntry) {
@@ -316,6 +380,14 @@ export function App() {
     const [operation, setOperation] = useState<Operation>(null);
     const [operationPath, setOperationPath] = useState("");
     const [operationError, setOperationError] = useState("");
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [settingsDraft, setSettingsDraft] = useState<ProjectSettings>({
+        name: "",
+        assetDirectory: "assets",
+        runtimePlugins: [],
+    });
+    const [settingsPlugins, setSettingsPlugins] = useState("");
+    const [settingsError, setSettingsError] = useState("");
     const [runtimeState, setRuntimeState] = useState<RuntimeState>("stopped");
     const [runtimeDetail, setRuntimeDetail] = useState("stopped");
     const [runtimeScript, setRuntimeScript] = useState("—");
@@ -359,6 +431,13 @@ export function App() {
         return assetEntries;
     };
 
+    const readProjectSettings = async (): Promise<ProjectSettings> => {
+        storage.assertOpen();
+        const source = await storage.read("project.yaml");
+        if (source === null) throw new Error("Project manifest project.yaml was not found.");
+        return parseProjectSettings(source);
+    };
+
     const saveActiveFile = async (): Promise<void> => {
         if (!activePath) return;
         await storage.write(activePath, content);
@@ -377,9 +456,16 @@ export function App() {
     };
 
     const loadOpenedProject = async (name: string): Promise<void> => {
-        setProjectName(name);
         setStorageLabel(name);
         setOpenFolderLabel("Open Folder");
+        try {
+            const settings = await readProjectSettings();
+            if (!settings.name.trim()) throw new Error("Project name is required.");
+            setProjectName(settings.name);
+        } catch (error) {
+            setProjectName(name);
+            appendConsole("error", "project", `invalid project settings: ${errorMessage(error)}`);
+        }
         const entries = await refreshFiles();
         const preferred =
             entries.find((entry) => entry.path === "assets/main.luau") ??
@@ -398,6 +484,44 @@ export function App() {
         setRuntimeScript("—");
         setRuntimeFrame("—");
         if (log) appendConsole("info", "runtime", reason);
+    };
+
+    const writeProjectSettings = async (settings: ProjectSettings): Promise<ProjectSettings> => {
+        const next = validateProjectSettings(settings);
+        const source = await storage.read("project.yaml");
+        if (source === null) throw new Error("Project manifest project.yaml was not found.");
+        const current = parseProjectSettings(source);
+        if (next.assetDirectory !== current.assetDirectory) {
+            throw new Error("Changing the asset directory is not supported by this development editor yet.");
+        }
+        await storage.write("project.yaml", updateProjectSettingsSource(source, next));
+        setProjectName(next.name);
+        if (runtimeState !== "stopped") stopRuntime("project settings changed");
+        return next;
+    };
+
+    const showProjectSettings = async (): Promise<void> => {
+        if (dirty) await saveActiveFile();
+        const settings = await readProjectSettings();
+        setSettingsDraft(settings);
+        setSettingsPlugins(settings.runtimePlugins.join("\n"));
+        setSettingsError("");
+        setSettingsOpen(true);
+    };
+
+    const applyProjectSettings = async (): Promise<void> => {
+        try {
+            const next = await writeProjectSettings({
+                ...settingsDraft,
+                runtimePlugins: settingsPlugins.split(/\r?\n/),
+            });
+            setSettingsDraft(next);
+            setSettingsPlugins(next.runtimePlugins.join("\n"));
+            setSettingsOpen(false);
+            appendConsole("info", "project", "project settings saved");
+        } catch (error) {
+            setSettingsError(errorMessage(error));
+        }
     };
 
     const openProjectFolder = async (): Promise<void> => {
@@ -657,6 +781,18 @@ export function App() {
             storage.assertOpen();
             return { files: files.map((entry) => ({ ...entry })) };
         },
+        "project.settings.get": async () => readProjectSettings(),
+        "project.settings.update": async ({ settings }) => {
+            if (!settings || typeof settings !== "object") {
+                throw new Error("project.settings.update requires a settings object");
+            }
+            const current = await readProjectSettings();
+            return writeProjectSettings({
+                name: settings.name ?? current.name,
+                assetDirectory: settings.assetDirectory ?? current.assetDirectory,
+                runtimePlugins: settings.runtimePlugins ?? current.runtimePlugins,
+            });
+        },
         "project.read": async ({ path }) => {
             const projectPath = storage.validatePath(path ?? "");
             const entry = files.find((candidate) => candidate.path === projectPath);
@@ -719,6 +855,8 @@ export function App() {
         return {
             capabilities: Object.freeze([
                 "project.list",
+                "project.settings.get",
+                "project.settings.update",
                 "project.read",
                 "project.write",
                 "project.create",
@@ -796,6 +934,18 @@ export function App() {
                 <div className="panel-commandbar">
                     <span>{files.length > 0 ? `${files.length} files` : storageLabel}</span>
                     <div className="panel-actions">
+                        <IconButton
+                            id="project-settings"
+                            label="Project settings"
+                            disabled={!storage.isOpen}
+                            onClick={() =>
+                                void showProjectSettings().catch((error) =>
+                                    appendConsole("error", "project", errorMessage(error)),
+                                )
+                            }
+                        >
+                            <Settings2 size={14} />
+                        </IconButton>
                         <IconButton label="New file" disabled={!storage.isOpen} onClick={() => showOperation("new")}>
                             <Plus size={14} />
                         </IconButton>
@@ -934,6 +1084,18 @@ export function App() {
                                     <DropdownMenu.Item className="menu-item" disabled={!canEdit} onSelect={() => void saveActiveFile()}>
                                         Save<span>Ctrl+S</span>
                                     </DropdownMenu.Item>
+                                    <DropdownMenu.Separator className="menu-separator" />
+                                    <DropdownMenu.Item
+                                        className="menu-item"
+                                        disabled={!storage.isOpen}
+                                        onSelect={() =>
+                                            void showProjectSettings().catch((error) =>
+                                                appendConsole("error", "project", errorMessage(error)),
+                                            )
+                                        }
+                                    >
+                                        Project Settings…
+                                    </DropdownMenu.Item>
                                 </DropdownMenu.Content>
                             </DropdownMenu.Portal>
                         </DropdownMenu.Root>
@@ -1044,6 +1206,61 @@ export function App() {
                                 <Dialog.Close asChild><button className="button" type="button">Cancel</button></Dialog.Close>
                                 <button className={`button ${operation === "delete" ? "danger" : "primary"}`} type="button" onClick={() => void applyOperation()}>
                                     {operation === "delete" ? "Delete" : "Apply"}
+                                </button>
+                            </div>
+                        </Dialog.Content>
+                    </Dialog.Portal>
+                </Dialog.Root>
+
+                <Dialog.Root open={settingsOpen} onOpenChange={setSettingsOpen}>
+                    <Dialog.Portal>
+                        <Dialog.Overlay className="dialog-overlay" />
+                        <Dialog.Content className="dialog-content settings-dialog">
+                            <div className="dialog-heading">
+                                <div>
+                                    <Dialog.Title>Project Settings</Dialog.Title>
+                                    <Dialog.Description>Configure project-level metadata managed in project.yaml.</Dialog.Description>
+                                </div>
+                                <Dialog.Close asChild>
+                                    <button className="icon-button" type="button" aria-label="Close"><X size={15} /></button>
+                                </Dialog.Close>
+                            </div>
+                            <div className="settings-form">
+                                <label className="settings-field">
+                                    <span>Project name</span>
+                                    <input
+                                        className="text-field"
+                                        value={settingsDraft.name}
+                                        autoFocus
+                                        onChange={(event) =>
+                                            setSettingsDraft((current) => ({ ...current, name: event.target.value }))
+                                        }
+                                    />
+                                </label>
+                                <details className="settings-advanced">
+                                    <summary>Advanced</summary>
+                                    <label className="settings-field">
+                                        <span>Asset directory <small>Managed by the development editor</small></span>
+                                        <input className="text-field" value={settingsDraft.assetDirectory} readOnly />
+                                    </label>
+                                    <label className="settings-field">
+                                        <span>Runtime plugins <small>One qualified plugin id per line</small></span>
+                                        <textarea
+                                            className="text-area"
+                                            rows={5}
+                                            spellCheck={false}
+                                            value={settingsPlugins}
+                                            placeholder="project_runtime::LuauScripts"
+                                            onChange={(event) => setSettingsPlugins(event.target.value)}
+                                        />
+                                    </label>
+                                </details>
+                            </div>
+                            {settingsError && <p className="dialog-error">{settingsError}</p>}
+                            <div className="dialog-actions">
+                                <Dialog.Close asChild><button className="button" type="button">Cancel</button></Dialog.Close>
+                                <button className="button primary" type="button" onClick={() => void applyProjectSettings()}>
+                                    Save Settings
                                 </button>
                             </div>
                         </Dialog.Content>

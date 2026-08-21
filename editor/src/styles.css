@@ -798,6 +798,12 @@ code {
     opacity: 0.4;
 }
 
+.menu-separator {
+    height: 1px;
+    margin: 4px 3px;
+    background: var(--border);
+}
+
 .tooltip {
     z-index: 80;
     padding: 5px 7px;
@@ -845,9 +851,19 @@ code {
     justify-content: space-between;
 }
 
+.dialog-heading > div {
+    min-width: 0;
+}
+
 .dialog-heading h2 {
     margin: 0;
     font-size: 14px;
+}
+
+.dialog-heading p {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 10px;
 }
 
 .dialog-content > p {
@@ -877,6 +893,76 @@ code {
 }
 
 .text-field:focus {
+    border-color: rgb(109 158 255 / 60%);
+    box-shadow: 0 0 0 2px rgb(109 158 255 / 10%);
+}
+
+.settings-dialog {
+    width: min(520px, calc(100vw - 30px));
+}
+
+.settings-form {
+    display: grid;
+    gap: 14px;
+    padding: 6px 0 2px;
+}
+
+.settings-field {
+    display: grid;
+    gap: 6px;
+    color: var(--text-subtle);
+    font-size: 10px;
+    font-weight: 650;
+}
+
+.settings-field small {
+    margin-left: 6px;
+    color: var(--muted);
+    font-size: 9px;
+    font-weight: 450;
+}
+
+.settings-field .text-field[readonly] {
+    color: var(--muted);
+    background: #171a20;
+}
+
+.settings-advanced {
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    background: #191c22;
+}
+
+.settings-advanced summary {
+    padding: 9px 10px;
+    color: var(--text-subtle);
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 650;
+    user-select: none;
+}
+
+.settings-advanced[open] summary {
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.settings-advanced .settings-field {
+    margin: 11px;
+}
+
+.text-area {
+    width: 100%;
+    resize: vertical;
+    padding: 8px 9px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    outline: none;
+    color: var(--text);
+    background: #111419;
+    font: 10px/1.55 "Cascadia Code", Consolas, monospace;
+}
+
+.text-area:focus {
     border-color: rgb(109 158 255 / 60%);
     box-shadow: 0 0 0 2px rgb(109 158 255 / 10%);
 }

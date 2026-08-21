@@ -30,12 +30,19 @@ export interface ConsoleEntry {
     time: string;
 }
 
+export interface ProjectSettings {
+    name: string;
+    assetDirectory: string;
+    runtimePlugins: string[];
+}
+
 export interface AgentRequest {
     requestId?: string;
     type?: string;
     path?: string;
     destination?: string;
     content?: string;
+    settings?: Partial<ProjectSettings>;
 }
 
 export interface AgentResponse {
