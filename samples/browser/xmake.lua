@@ -24,3 +24,19 @@ target("sample-browser")
         {force = true}
     )
     add_extrafiles("shell.html")
+
+    after_link(function(target)
+        local html_path = target:targetfile()
+        local html = io.readfile(html_path)
+        local script_tag = '<script async type="text/javascript" src="sample%-browser%.js"></script>'
+        local script_loader = [[<script>
+            const emscriptenScript = document.createElement("script");
+            emscriptenScript.async = true;
+            emscriptenScript.src = `sample-browser.js?dev=${resourceVersion}`;
+            document.body.appendChild(emscriptenScript);
+        </script>]]
+        local replacement_count
+        html, replacement_count = html:gsub(script_tag, script_loader, 1)
+        assert(replacement_count == 1, "failed to add cache busting to sample-browser.js")
+        io.writefile(html_path, html)
+    end)
