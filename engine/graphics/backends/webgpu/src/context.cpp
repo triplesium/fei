@@ -3,9 +3,7 @@
 #include "base/log.hpp"
 #include "mipmap_generator.hpp"
 
-#ifdef __EMSCRIPTEN__
-#    include <emscripten.h>
-#else
+#ifndef __EMSCRIPTEN__
 #    include <thread>
 #    include <webgpu/wgpu.h>
 #endif
@@ -16,9 +14,7 @@ namespace fei {
 
 namespace {
 
-#ifdef __EMSCRIPTEN__
-constexpr auto async_callback_mode = WGPUCallbackMode_AllowSpontaneous;
-#else
+#ifndef __EMSCRIPTEN__
 constexpr auto async_callback_mode = WGPUCallbackMode_AllowProcessEvents;
 #endif
 
@@ -32,14 +28,11 @@ std::string to_string(WGPUStringView value) {
     return {value.data, value.length};
 }
 
+#ifndef __EMSCRIPTEN__
 void wait_for(WGPUInstance instance, const bool& completed) {
     while (!completed) {
-#ifdef __EMSCRIPTEN__
-        emscripten_sleep(0);
-#else
         wgpuInstanceProcessEvents(instance);
         std::this_thread::yield();
-#endif
     }
 }
 
@@ -115,7 +108,6 @@ void on_uncaptured_error(
     );
 }
 
-#ifndef __EMSCRIPTEN__
 struct ErrorScopeResult {
     WGPUPopErrorScopeStatus status {WGPUPopErrorScopeStatus_Force32};
     WGPUErrorType type {WGPUErrorType_NoError};
@@ -175,7 +167,24 @@ WGPUInstance create_webgpu_instance() {
 WebGpuDeviceState::WebGpuDeviceState(WebGpuDeviceStateDescription desc) :
     m_instance(
         desc.instance != nullptr ? desc.instance : create_webgpu_instance()
-    ) {
+    ),
+    m_surface_format(desc.surface_format) {
+    if (desc.device != nullptr) {
+        m_device = desc.device;
+        WGPULimits device_limits {};
+        if (wgpuDeviceGetLimits(m_device, &device_limits) !=
+            WGPUStatus_Success) {
+            fatal("Failed to query preinitialized WebGPU device limits");
+        }
+        m_queue = wgpuDeviceGetQueue(m_device);
+        m_uniform_buffer_offset_alignment =
+            device_limits.minUniformBufferOffsetAlignment;
+        return;
+    }
+
+#ifdef __EMSCRIPTEN__
+    fatal("WebGPU browser initialization requires a preinitialized GPUDevice");
+#else
     WGPURequestAdapterOptions options {
         .featureLevel = desc.feature_level,
         .powerPreference = WGPUPowerPreference_HighPerformance,
@@ -258,6 +267,7 @@ WebGpuDeviceState::WebGpuDeviceState(WebGpuDeviceStateDescription desc) :
     m_queue = wgpuDeviceGetQueue(m_device);
     m_uniform_buffer_offset_alignment =
         adapter_limits.minUniformBufferOffsetAlignment;
+#endif
 }
 
 WebGpuDeviceState::~WebGpuDeviceState() {

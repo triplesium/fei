@@ -4,6 +4,7 @@
 #include "graphics_webgpu/graphics_device.hpp"
 #include "graphics_webgpu/swapchain.hpp"
 
+#include <emscripten.h>
 #include <stdexcept>
 #include <utility>
 #include <webgpu/webgpu.h>
@@ -49,6 +50,14 @@ WGPUSurface create_surface(WGPUInstance instance, const std::string& selector) {
     return surface;
 }
 
+WGPUTextureFormat preferred_surface_format() {
+    const auto rgba = EM_ASM_INT({
+        return navigator.gpu.getPreferredCanvasFormat() === "rgba8unorm";
+    });
+    return rgba != 0 ? WGPUTextureFormat_RGBA8Unorm :
+                       WGPUTextureFormat_BGRA8Unorm;
+}
+
 } // namespace
 
 class WebGpuBrowserRuntime::Impl {
@@ -60,7 +69,8 @@ class WebGpuBrowserRuntime::Impl {
             WebGpuDeviceStateDescription {
                 .instance = instance,
                 .compatible_surface = surface,
-                .allow_compatibility_fallback = true,
+                .device = emscripten_webgpu_get_device(),
+                .surface_format = preferred_surface_format(),
             }
         ),
         swapchain(

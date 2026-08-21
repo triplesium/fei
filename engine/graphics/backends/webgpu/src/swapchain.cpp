@@ -82,15 +82,30 @@ void SwapchainWebGpu::configure() const {
         return;
     }
 
-    WGPUSurfaceCapabilities capabilities {};
-    if (wgpuSurfaceGetCapabilities(
-            m_surface,
-            m_state->adapter(),
-            &capabilities
-        ) != WGPUStatus_Success) {
-        fatal("Failed to query WebGPU surface capabilities");
+    auto alpha_mode = WGPUCompositeAlphaMode_Auto;
+    if (m_state->adapter() != nullptr) {
+        WGPUSurfaceCapabilities capabilities {};
+        if (wgpuSurfaceGetCapabilities(
+                m_surface,
+                m_state->adapter(),
+                &capabilities
+            ) != WGPUStatus_Success) {
+            fatal("Failed to query WebGPU surface capabilities");
+        }
+        m_surface_format = choose_surface_format(capabilities);
+        alpha_mode = capabilities.alphaModeCount != 0 ?
+                         capabilities.alphaModes[0] :
+                         WGPUCompositeAlphaMode_Auto;
+        wgpuSurfaceCapabilitiesFreeMembers(capabilities);
+    } else {
+        m_surface_format = m_state->surface_format();
+        if (m_surface_format == WGPUTextureFormat_Undefined) {
+            fatal(
+                "A WebGPU surface format is required when no adapter handle "
+                "is available"
+            );
+        }
     }
-    m_surface_format = choose_surface_format(capabilities);
     m_color_format = from_webgpu(m_surface_format);
 
     WGPUSurfaceConfiguration configuration {};
@@ -100,12 +115,9 @@ void SwapchainWebGpu::configure() const {
         WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_CopySrc;
     configuration.width = m_width;
     configuration.height = m_height;
-    configuration.alphaMode = capabilities.alphaModeCount != 0 ?
-                                  capabilities.alphaModes[0] :
-                                  WGPUCompositeAlphaMode_Auto;
+    configuration.alphaMode = alpha_mode;
     configuration.presentMode = WGPUPresentMode_Fifo;
     wgpuSurfaceConfigure(m_surface, &configuration);
-    wgpuSurfaceCapabilitiesFreeMembers(capabilities);
     m_configured = true;
 }
 

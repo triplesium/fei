@@ -13,7 +13,6 @@ target("fei-graphics-webgpu")
         add_cxflags("--use-port=emdawnwebgpu", {force = true, public = true})
         add_ldflags(
             "--use-port=emdawnwebgpu",
-            "-sJSPI",
             {force = true, public = true}
         )
     else

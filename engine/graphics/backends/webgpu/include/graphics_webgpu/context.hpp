@@ -13,6 +13,8 @@ class MipmapGeneratorWebGpu;
 struct WebGpuDeviceStateDescription {
     WGPUInstance instance {nullptr};
     WGPUSurface compatible_surface {nullptr};
+    WGPUDevice device {nullptr};
+    WGPUTextureFormat surface_format {WGPUTextureFormat_Undefined};
     WGPUFeatureLevel feature_level {WGPUFeatureLevel_Core};
     bool allow_compatibility_fallback {false};
 };
@@ -31,6 +33,9 @@ class WebGpuDeviceState {
     [[nodiscard]] WGPUAdapter adapter() const { return m_adapter; }
     [[nodiscard]] WGPUDevice device() const { return m_device; }
     [[nodiscard]] WGPUQueue queue() const { return m_queue; }
+    [[nodiscard]] WGPUTextureFormat surface_format() const {
+        return m_surface_format;
+    }
     [[nodiscard]] std::size_t uniform_buffer_offset_alignment() const {
         return m_uniform_buffer_offset_alignment;
     }
@@ -44,6 +49,7 @@ class WebGpuDeviceState {
     WGPUAdapter m_adapter {nullptr};
     WGPUDevice m_device {nullptr};
     WGPUQueue m_queue {nullptr};
+    WGPUTextureFormat m_surface_format {WGPUTextureFormat_Undefined};
     std::size_t m_uniform_buffer_offset_alignment {256};
     mutable std::mutex m_queue_mutex;
     mutable std::once_flag m_mipmap_generator_once;

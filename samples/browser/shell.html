@@ -64,17 +64,81 @@
             } else if (!navigator.gpu) {
                 showError("This browser has no WebGPU implementation enabled.");
             }
-            if (
-                !("Suspending" in WebAssembly) ||
-                !("promising" in WebAssembly)
-            ) {
-                showError(
-                    "This browser does not support WebAssembly JSPI, which this development build requires.",
-                );
-            }
             const resourceVersion = Date.now().toString();
             var Module = {
                 canvas: document.getElementById("canvas"),
+                preRun: [
+                    () => {
+                        const dependency = "fei-webgpu-device";
+                        addRunDependency(dependency);
+                        const initializeWebGpu = async () => {
+                            try {
+                                document.documentElement.dataset.feiStatus =
+                                    "initializing webgpu";
+                                if (!navigator.gpu) {
+                                    throw new Error(
+                                        "This browser has no WebGPU implementation enabled.",
+                                    );
+                                }
+                                let adapter =
+                                    await navigator.gpu.requestAdapter({
+                                        powerPreference: "high-performance",
+                                    });
+                                if (!adapter) {
+                                    adapter =
+                                        await navigator.gpu.requestAdapter({
+                                            featureLevel: "compatibility",
+                                            powerPreference:
+                                                "high-performance",
+                                        });
+                                }
+                                if (!adapter) {
+                                    throw new Error(
+                                        "Failed to request a WebGPU adapter.",
+                                    );
+                                }
+                                const requiredFeatures = [];
+                                if (
+                                    adapter.features.has("float32-filterable")
+                                ) {
+                                    requiredFeatures.push(
+                                        "float32-filterable",
+                                    );
+                                }
+                                const device = await adapter.requestDevice({
+                                    label: "fei WebGPU device",
+                                    requiredFeatures,
+                                });
+                                device.addEventListener(
+                                    "uncapturederror",
+                                    (event) => {
+                                        const message = `WebGPU uncaptured error: ${event.error.message}`;
+                                        console.error("[fei] " + message);
+                                        showError(message);
+                                    },
+                                );
+                                device.lost.then((info) => {
+                                    const message = `WebGPU device lost (${info.reason}): ${info.message}`;
+                                    console.error("[fei] " + message);
+                                    showError(message);
+                                });
+                                Module.preinitializedWebGPUDevice = device;
+                                removeRunDependency(dependency);
+                            } catch (error) {
+                                document.documentElement.dataset.feiStatus =
+                                    "webgpu initialization failed";
+                                const message =
+                                    error?.stack ?? error?.message ?? error;
+                                console.error(
+                                    "[fei] WebGPU initialization failed:",
+                                    message,
+                                );
+                                showError(message);
+                            }
+                        };
+                        initializeWebGpu();
+                    },
+                ],
                 locateFile: (path, prefix) =>
                     `${prefix}${path}?dev=${resourceVersion}`,
                 print: (...args) => console.log(...args),
