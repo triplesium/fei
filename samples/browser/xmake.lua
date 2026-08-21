@@ -6,6 +6,13 @@ function add_browser_shell(shell_file)
     )
     add_extrafiles(shell_file)
 
+    before_build(function(target)
+        local html_path = target:targetfile()
+        if os.isfile(html_path) and os.mtime(shell_file) > os.mtime(html_path) then
+            os.rm(html_path)
+        end
+    end)
+
     after_link(function(target)
         local html_path = target:targetfile()
         local html = io.readfile(html_path)
