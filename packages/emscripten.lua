@@ -26,6 +26,23 @@ toolchain("fei-emcc")
     end)
 
     on_load(function(toolchain)
+        if is_host("windows") then
+            for _, package in ipairs(toolchain:packages()) do
+                local installdir = package:installdir()
+                installdir = installdir:gsub(
+                    "^([a-z]):",
+                    function(drive)
+                        return drive:upper() .. ":"
+                    end
+                )
+                toolchain:add(
+                    "runenvs",
+                    "EM_CONFIG",
+                    path.join(installdir, ".emscripten")
+                )
+            end
+        end
+
         if toolchain:is_arch("wasm64") then
             toolchain:add("cxflags", "-sMEMORY64=1")
             toolchain:add("asflags", "-sMEMORY64=1")
