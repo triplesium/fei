@@ -28,6 +28,9 @@ target("sample-browser")
     after_link(function(target)
         local html_path = target:targetfile()
         local html = io.readfile(html_path)
+        if html:find("sample-browser.js?dev=${resourceVersion}", 1, true) then
+            return
+        end
         local script_tag = '<script async type="text/javascript" src="sample%-browser%.js"></script>'
         local script_loader = [[<script>
             const emscriptenScript = document.createElement("script");
