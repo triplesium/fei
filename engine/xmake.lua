@@ -5,6 +5,7 @@ if is_plat("wasm") then
     includes("ecs")
     includes("app")
     includes("input")
+    includes("input_focus")
     includes("window")
     includes("task")
     includes("serialization")
@@ -15,6 +16,8 @@ if is_plat("wasm") then
     includes("core")
     includes("rendering")
     includes("sprite")
+    includes("text")
+    includes("ui")
 else
     includes("app")
     includes("asset")

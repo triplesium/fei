@@ -200,6 +200,8 @@ void Phase::clear() {
     vertices.clear();
     indices.clear();
     batches.clear();
+    glyph_count = 0;
+    glyph_batch_count = 0;
     active = false;
 }
 
@@ -226,6 +228,18 @@ void Phase::append(
                 .index_count = index_count,
             }
         );
+    }
+}
+
+void Phase::append_glyph(
+    const Quad& quad,
+    std::shared_ptr<const ResourceSet> texture_set
+) {
+    const auto previous_batch_count = batches.size();
+    append(quad, std::move(texture_set));
+    ++glyph_count;
+    if (batches.size() > previous_batch_count) {
+        ++glyph_batch_count;
     }
 }
 

@@ -50,7 +50,28 @@ TEST_CASE("UI phase appends quads into one indexed stream", "[ui][rendering]") {
     phase.clear();
     CHECK(phase.vertices.empty());
     CHECK(phase.indices.empty());
+    CHECK(phase.glyph_count == 0);
+    CHECK(phase.glyph_batch_count == 0);
     CHECK_FALSE(phase.active);
+}
+
+TEST_CASE("UI phase tracks queued glyph batches", "[ui][rendering][text]") {
+    ui::rendering::Phase phase;
+    const auto quad = ui::rendering::make_glyph_quad(
+        ui::ComputedNode {.size = {20.0f, 20.0f}},
+        text::PositionedGlyph {
+            .size = {8.0f, 12.0f},
+            .uv = {.min = {0.0f, 0.0f}, .max = {0.5f, 0.5f}},
+        },
+        Color4F {1.0f, 1.0f, 1.0f, 1.0f}
+    );
+    REQUIRE(quad);
+
+    phase.append_glyph(*quad);
+    phase.append_glyph(*quad);
+
+    CHECK(phase.glyph_count == 2);
+    CHECK(phase.glyph_batch_count == 1);
 }
 
 TEST_CASE("UI quad is clipped on the CPU", "[ui][rendering]") {
@@ -102,8 +123,7 @@ TEST_CASE("UI image auto-fits and clipping preserves UVs", "[ui][rendering]") {
     CHECK(clipped->vertices[3].uv == Vector2 {0.625f, 0.0f});
 
     auto partial = image;
-    partial.source_rect =
-        Rect {.min = {0.0f, 20.0f}, .max = {100.0f, 80.0f}};
+    partial.source_rect = Rect {.min = {0.0f, 20.0f}, .max = {100.0f, 80.0f}};
     const auto partial_quad = ui::rendering::make_image_quad(
         ui::ComputedNode {.size = {100.0f, 60.0f}},
         partial,

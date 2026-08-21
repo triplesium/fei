@@ -87,10 +87,16 @@ struct Phase {
     GpuVector<Vertex> vertices {BufferUsages::Vertex};
     GpuVector<std::uint32_t> indices {BufferUsages::Index};
     std::vector<Batch> batches;
+    uint32 glyph_count {0};
+    uint32 glyph_batch_count {0};
     bool active {false};
 
     void clear();
     void append(
+        const Quad& quad,
+        std::shared_ptr<const ResourceSet> texture_set = nullptr
+    );
+    void append_glyph(
         const Quad& quad,
         std::shared_ptr<const ResourceSet> texture_set = nullptr
     );

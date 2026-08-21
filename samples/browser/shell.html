@@ -23,27 +23,65 @@
                 height: 100%;
                 outline: none;
             }
+
+            #error {
+                position: fixed;
+                inset: 16px;
+                display: none;
+                overflow: auto;
+                padding: 16px;
+                color: #ffd7d7;
+                background: rgb(45 8 12 / 92%);
+                border: 1px solid #e35d6a;
+                border-radius: 8px;
+                font: 14px/1.5 monospace;
+                white-space: pre-wrap;
+                z-index: 1;
+            }
         </style>
     </head>
     <body>
         <canvas id="canvas" tabindex="-1"></canvas>
+        <pre id="error"></pre>
         <script>
+            const errorElement = document.getElementById("error");
+            const showError = (message) => {
+                errorElement.style.display = "block";
+                errorElement.textContent += `${message}\n`;
+            };
             window.addEventListener("error", (event) => {
-                console.error(
-                    "[fei] window error:",
-                    event.error?.stack ?? event.message,
-                );
+                const message = event.error?.stack ?? event.message;
+                console.error("[fei] window error:", message);
+                showError(message);
             });
             window.addEventListener("unhandledrejection", (event) => {
-                console.error(
-                    "[fei] unhandled rejection:",
-                    event.reason?.stack ?? event.reason,
-                );
+                const message = event.reason?.stack ?? event.reason;
+                console.error("[fei] unhandled rejection:", message);
+                showError(message);
             });
+            if (!window.isSecureContext) {
+                showError("WebGPU requires HTTPS or a localhost secure context.");
+            } else if (!navigator.gpu) {
+                showError("This browser has no WebGPU implementation enabled.");
+            }
+            if (
+                !("Suspending" in WebAssembly) ||
+                !("promising" in WebAssembly)
+            ) {
+                showError(
+                    "This browser does not support WebAssembly JSPI, which this development build requires.",
+                );
+            }
+            const resourceVersion = Date.now().toString();
             var Module = {
                 canvas: document.getElementById("canvas"),
+                locateFile: (path, prefix) =>
+                    `${prefix}${path}?dev=${resourceVersion}`,
                 print: (...args) => console.log(...args),
-                printErr: (...args) => console.error(...args),
+                printErr: (...args) => {
+                    console.error(...args);
+                    showError(args.join(" "));
+                },
             };
         </script>
         {{{ SCRIPT }}}

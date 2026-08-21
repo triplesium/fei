@@ -391,7 +391,7 @@ void queue_nodes(
                     node.color,
                     node.clip
                 )) {
-                phase->append(*quad, std::move(texture_set));
+                phase->append_glyph(*quad, std::move(texture_set));
             }
             continue;
         }
