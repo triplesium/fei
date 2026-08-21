@@ -171,18 +171,53 @@ Browser WebGPU uses Emscripten's `emdawnwebgpu` port through
 `--use-port=emdawnwebgpu`. The shared surface swapchain lives in
 `fei-graphics-webgpu`; `fei-graphics-webgpu-browser` supplies canvas surface
 creation and uses `#canvas` by default. The development configuration enables
-Asyncify so the existing synchronous engine bootstrap can yield while browser
-adapter and device requests complete.
+JSPI so the existing synchronous engine bootstrap can yield while browser
+adapter and device requests complete without conflicting with Slang's Wasm
+exception handling.
 
 The principal development targets can be built independently:
 
 ```text
 xmake build -y fei-graphics-webgpu-browser
 xmake build -y fei-shader-webgpu
+xmake build -y sample-browser
 ```
+
+Serve `build/wasm/wasm32/debug` over HTTP and open `sample-browser.html` to run
+the animated WebGPU sprite sample. The `fei.shader_sources` rule preloads every
+registered shader source root into `/fei/shaders/<prefix>` and compiles
+`FEI_SHADER_SOURCES` with those browser virtual paths. `SpritePlugin` resolves
+`shader://sprite/sprite.slang` through `ShaderSourceRegistry`, captures an
+immutable source snapshot, and uses `ShaderVariantCompiler` to compile its
+vertex and fragment entry points to WGSL. Repeated variants are served by the
+artifact cache in `/fei/cache/shaders`. That cache currently lives in
+Emscripten's in-memory file system and lasts for the page session; persistent
+browser caching can later mount the same path through IDBFS. Registered
+`.slang` files are build dependencies, so changing one relinks the browser
+target and refreshes its `.data` package.
+
+The sample creates a `Camera2d` and textured `Sprite`, then uses the existing
+sprite batching, resource binding, render pass, and swapchain submission path.
+Browser builds use a zero-worker `ThreadPool`, which preserves the scheduler API
+while executing system batches inline without requiring Emscripten pthreads or
+cross-origin isolation. Emdawnwebgpu callbacks run spontaneously while JSPI
+yields, and canvas surface presentation completes when the animation frame
+callback returns rather than through `wgpuSurfacePresent`.
+
+WASM targets can register only the runtime assets they need with
+`add_asset_bundle(prefix, root)`. Each bundle is scoped to the current target
+and preloaded at `/fei/assets/<prefix>`; `AssetsPlugin` uses `/fei/assets` as its
+default `project` source root. Asset files participate in incremental builds, so
+content changes refresh the target's `.data` package without making unchanged
+builds relink. The browser sample validates this path by loading
+`project://browser/ready.txt` and `project://browser/checker.ppm` through
+`AssetServer` before queuing the sprite for rendering.
 
 `App::run()` delegates lifecycle control to an `AppRunner`. The default runner
 keeps the native blocking loop, while `BrowserPlugin` replaces it with an
 Emscripten `requestAnimationFrame` loop and transfers the `App` into
-browser-owned storage. `WebGpuBrowserPlugin` depends on that plugin and keeps
-the canvas pixel size synchronized with its CSS size and device pixel ratio.
+browser-owned storage. `App` relocation handlers repair resources that keep a
+back-reference to their owning application; `AssetsPlugin` uses one to rebind
+`AssetServer` after the browser runner takes ownership. `WebGpuBrowserPlugin`
+depends on that plugin and keeps the canvas pixel size synchronized with its CSS
+size and device pixel ratio.
