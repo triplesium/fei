@@ -2,19 +2,19 @@
     color-scheme: dark;
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
         "Segoe UI", sans-serif;
-    --background: #090c11;
-    --surface: #0f141b;
-    --surface-raised: #151b24;
-    --surface-hover: #1a2230;
-    --surface-active: #202b3a;
-    --border: #252e3b;
-    --border-soft: #1b232e;
-    --text: #e7edf5;
-    --text-subtle: #a6b1c0;
-    --muted: #6f7d91;
-    --accent: #4adeac;
-    --accent-soft: rgb(74 222 172 / 12%);
-    --blue: #82aaff;
+    --background: #15171b;
+    --surface: #1b1e24;
+    --surface-raised: #242830;
+    --surface-hover: #2a2f38;
+    --surface-active: #313844;
+    --border: #30353e;
+    --border-soft: #282c34;
+    --text: #e2e5eb;
+    --text-subtle: #b7bdc8;
+    --muted: #7c8492;
+    --accent: #6d9eff;
+    --accent-soft: rgb(109 158 255 / 13%);
+    --blue: #7eacff;
     --danger: #fb7185;
     --warning: #fbbf24;
 }
@@ -52,25 +52,25 @@ button {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background:
-        radial-gradient(circle at 12% -20%, rgb(74 222 172 / 8%), transparent 28rem),
-        var(--background);
+    background: var(--background);
 }
 
 .topbar {
-    height: 54px;
-    display: flex;
+    height: 42px;
+    display: grid;
+    grid-template-columns: auto auto minmax(100px, 1fr) auto minmax(220px, 1fr);
     flex: 0 0 auto;
     align-items: center;
-    justify-content: space-between;
-    gap: 20px;
-    padding: 0 12px;
+    gap: 10px;
+    padding: 0 8px;
     border-bottom: 1px solid var(--border);
-    background: rgb(9 12 17 / 96%);
+    background: #1b1e23;
 }
 
 .brand,
+.application-menu,
 .toolbar,
+.run-controls,
 .panel-title,
 .panel-actions,
 .runtime-badge {
@@ -79,49 +79,83 @@ button {
 }
 
 .brand {
-    min-width: 0;
-    gap: 10px;
+    gap: 7px;
 }
 
 .brand-mark {
-    width: 30px;
-    height: 30px;
+    width: 25px;
+    height: 25px;
     display: grid;
     flex: 0 0 auto;
     place-items: center;
-    border: 1px solid rgb(74 222 172 / 38%);
-    border-radius: 8px;
+    border: 1px solid rgb(109 158 255 / 42%);
+    border-radius: 5px;
     color: var(--accent);
     background: var(--accent-soft);
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 850;
-    box-shadow: inset 0 0 20px rgb(74 222 172 / 4%);
+    box-shadow: inset 0 0 16px rgb(109 158 255 / 8%);
 }
 
-.brand-copy {
-    min-width: 0;
-    display: grid;
+.brand-name {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.13em;
+}
+
+.application-menu {
     gap: 1px;
 }
 
-.brand-copy > span {
-    color: var(--muted);
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: 0.15em;
+.menu-trigger {
+    height: 27px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 4px;
+    color: var(--text-subtle);
+    background: transparent;
+    cursor: pointer;
+    font-size: 11px;
 }
 
-.brand-copy strong {
-    max-width: 320px;
+.menu-trigger:hover,
+.menu-trigger[data-state="open"] {
+    color: var(--text);
+    background: var(--surface-hover);
+}
+
+.project-title {
+    min-width: 0;
     overflow: hidden;
-    font-size: 13px;
-    font-weight: 650;
+    color: var(--muted);
+    font-size: 10px;
+    text-align: center;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+.run-controls {
+    gap: 3px;
+    padding: 2px 4px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: #17191e;
+}
+
+.run-controls .icon-button {
+    width: 25px;
+    height: 24px;
+    border: 0;
+    background: transparent;
+}
+
+.run-controls .icon-button:first-child:not(:disabled) {
+    color: #8cddb5;
+}
+
 .toolbar {
     gap: 5px;
+    justify-content: flex-end;
 }
 
 .button,
@@ -153,9 +187,9 @@ button {
 }
 
 .button.primary {
-    border-color: rgb(74 222 172 / 38%);
-    color: #d9fff1;
-    background: #176146;
+    border-color: rgb(109 158 255 / 42%);
+    color: #e6eeff;
+    background: #315caa;
 }
 
 .button.danger,
@@ -172,8 +206,8 @@ button {
 }
 
 .button.primary:hover:not(:disabled) {
-    border-color: rgb(74 222 172 / 55%);
-    background: #1b7151;
+    border-color: rgb(109 158 255 / 65%);
+    background: #3a6bc2;
 }
 
 .button:disabled,
@@ -206,7 +240,7 @@ button {
 }
 
 .runtime-badge {
-    min-width: 80px;
+    min-width: 68px;
     gap: 7px;
     margin-left: 5px;
     color: var(--muted);
@@ -228,8 +262,8 @@ button {
 }
 
 .runtime-badge.running .status-dot {
-    background: var(--accent);
-    box-shadow: 0 0 0 3px rgb(74 222 172 / 10%);
+    background: #70d8a6;
+    box-shadow: 0 0 0 3px rgb(112 216 166 / 10%);
 }
 
 .runtime-badge.failed .status-dot {
@@ -239,6 +273,88 @@ button {
 .workbench {
     min-height: 0;
     flex: 1 1 auto;
+    padding: 3px;
+    background: #111318;
+}
+
+.dockview-theme-fei {
+    width: 100%;
+    height: 100%;
+    --dv-tabs-and-actions-container-font-size: 11px;
+    --dv-tabs-and-actions-container-height: 31px;
+    --dv-group-view-background-color: var(--surface);
+    --dv-tabs-and-actions-container-background-color: #1a1d22;
+    --dv-activegroup-visiblepanel-tab-background-color: #252931;
+    --dv-activegroup-hiddenpanel-tab-background-color: #1a1d22;
+    --dv-inactivegroup-visiblepanel-tab-background-color: #202329;
+    --dv-inactivegroup-hiddenpanel-tab-background-color: #1a1d22;
+    --dv-activegroup-visiblepanel-tab-color: var(--text);
+    --dv-activegroup-hiddenpanel-tab-color: var(--muted);
+    --dv-inactivegroup-visiblepanel-tab-color: var(--text-subtle);
+    --dv-inactivegroup-hiddenpanel-tab-color: #69717e;
+    --dv-tab-divider-color: var(--border-soft);
+    --dv-separator-border: #111318;
+    --dv-sash-color: transparent;
+    --dv-active-sash-color: var(--accent);
+    --dv-drag-over-background-color: rgb(109 158 255 / 18%);
+    --dv-drag-over-border-color: var(--accent);
+    --dv-drag-over-border: 1px solid var(--accent);
+    --dv-edge-dock-indicator-color: rgb(109 158 255 / 90%);
+    --dv-icon-hover-background-color: var(--surface-hover);
+    --dv-tabs-container-scrollbar-color: var(--muted);
+    --dv-paneview-active-outline-color: var(--accent);
+    --dv-floating-box-shadow: 0 18px 55px rgb(0 0 0 / 48%);
+    --dv-floating-border: 1px solid var(--border);
+    --dv-floating-titlebar-height: 24px;
+    --dv-floating-titlebar-background-color: #1a1d22;
+    --dv-floating-titlebar-border-bottom: 1px solid var(--border);
+    --dv-overlay-z-index: 70;
+    --dv-tab-font-size: 11px;
+    --dv-tab-margin: 0;
+    --dv-border-radius: 0;
+    --dv-tab-border-radius: 0;
+    --dv-spacing-padding: 2px;
+    --dv-sash-border-radius: 0;
+    --dv-dropdown-border-radius: 5px;
+}
+
+.dockview-theme-fei .dv-sash:hover,
+.dockview-theme-fei .dv-sash.dv-active {
+    background: var(--accent);
+}
+
+.engine-panel-tab {
+    height: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+}
+
+.engine-panel-tab svg {
+    flex: 0 0 auto;
+    color: var(--muted);
+}
+
+.dv-active-tab .engine-panel-tab svg {
+    color: var(--accent);
+}
+
+.engine-panel-tab span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.missing-panel {
+    height: 100%;
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+    background: var(--surface);
 }
 
 .tool-panel {
@@ -250,6 +366,32 @@ button {
     flex-direction: column;
     overflow: hidden;
     background: var(--surface);
+}
+
+.panel-commandbar,
+.viewport-toolbar {
+    height: 29px;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 7px 0 10px;
+    border-bottom: 1px solid var(--border-soft);
+    color: var(--muted);
+    background: #1c1f25;
+    font-size: 9px;
+}
+
+.panel-commandbar .panel-actions {
+    gap: 1px;
+}
+
+.panel-commandbar .icon-button {
+    width: 23px;
+    height: 22px;
+    border-color: transparent;
+    background: transparent;
 }
 
 .panel-header {
@@ -610,6 +752,52 @@ code {
     color: var(--blue);
 }
 
+.console-empty {
+    height: 100%;
+    display: grid;
+    place-items: center;
+    color: #59616e;
+    font: 10px Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.menu-content {
+    z-index: 100;
+    min-width: 210px;
+    padding: 4px;
+    border: 1px solid #3a404b;
+    border-radius: 6px;
+    color: var(--text-subtle);
+    background: #242830;
+    box-shadow: 0 14px 36px rgb(0 0 0 / 42%);
+}
+
+.menu-item {
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 0 8px;
+    border-radius: 4px;
+    outline: none;
+    cursor: default;
+    font-size: 10px;
+}
+
+.menu-item > span {
+    color: var(--muted);
+    font-size: 9px;
+}
+
+.menu-item[data-highlighted] {
+    color: var(--text);
+    background: #35435a;
+}
+
+.menu-item[data-disabled] {
+    opacity: 0.4;
+}
+
 .tooltip {
     z-index: 80;
     padding: 5px 7px;
@@ -689,8 +877,8 @@ code {
 }
 
 .text-field:focus {
-    border-color: rgb(74 222 172 / 55%);
-    box-shadow: 0 0 0 2px rgb(74 222 172 / 8%);
+    border-color: rgb(109 158 255 / 60%);
+    box-shadow: 0 0 0 2px rgb(109 158 255 / 10%);
 }
 
 .dialog-error {
@@ -710,9 +898,19 @@ code {
 }
 
 @media (max-width: 900px) {
-    .brand-copy > span,
+    .brand-name,
+    .project-title,
+    .application-menu,
     .runtime-badge {
         display: none;
+    }
+
+    .topbar {
+        grid-template-columns: auto 1fr auto;
+    }
+
+    .run-controls {
+        justify-self: center;
     }
 
     .folder-button {

@@ -1,4 +1,11 @@
-import { Dialog, Tooltip } from "radix-ui";
+import { Dialog, DropdownMenu, Tooltip } from "radix-ui";
+import {
+    DockviewReact,
+    type DockviewApi,
+    type DockviewReadyEvent,
+    type IDockviewPanelHeaderProps,
+    type IDockviewPanelProps,
+} from "dockview-react";
 import {
     CircleStop,
     Code2,
@@ -14,13 +21,23 @@ import {
     RefreshCw,
     RotateCcw,
     Save,
+    Settings2,
+    Terminal,
     Trash2,
     X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
+import {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ReactNode,
+} from "react";
 import { CodeEditor } from "./components/code-editor";
-import { PanelHeader, ToolPanel } from "./components/panel";
+import { ToolPanel } from "./components/panel";
 import { ProjectStorage } from "./services/project-storage";
 import type {
     AgentRequest,
@@ -151,12 +168,14 @@ function FileTree({
 }
 
 function IconButton({
+    id,
     label,
     disabled,
     danger = false,
     onClick,
     children,
 }: {
+    id?: string;
     label: string;
     disabled?: boolean;
     danger?: boolean;
@@ -167,6 +186,7 @@ function IconButton({
         <Tooltip.Root>
             <Tooltip.Trigger asChild>
                 <button
+                    id={id}
                     className={`icon-button ${danger ? "danger" : ""}`}
                     type="button"
                     aria-label={label}
@@ -186,12 +206,93 @@ function IconButton({
     );
 }
 
-function ResizeHandle({ orientation }: { orientation: "horizontal" | "vertical" }) {
-    return <Separator className={`resize-handle ${orientation}`} />;
-}
-
 type Operation = "new" | "rename" | "delete" | null;
 type CommandHandler = (request: AgentRequest) => Promise<unknown>;
+
+const workbenchLayoutStorageKey = "fei-editor-dockview-layout-v1";
+const dockviewComponents = { panel: DockPanel };
+const dockviewTabComponents = { engine: EnginePanelTab };
+const WorkbenchPanelsContext = createContext<Record<string, ReactNode>>({});
+
+function DockPanel({ api }: IDockviewPanelProps) {
+    const panels = useContext(WorkbenchPanelsContext);
+    return panels[api.id] ?? <div className="missing-panel">Panel unavailable</div>;
+}
+
+function EnginePanelTab({ api }: IDockviewPanelHeaderProps) {
+    const Icon =
+        api.id === "project"
+            ? Folder
+            : api.id === "code"
+              ? Code2
+              : api.id === "game"
+                ? Play
+                : api.id === "inspector"
+                  ? Settings2
+                  : Terminal;
+    return (
+        <div className="engine-panel-tab">
+            <Icon size={13} strokeWidth={1.7} />
+            <span>{api.title}</span>
+        </div>
+    );
+}
+
+function addDefaultWorkbenchPanels(api: DockviewApi): void {
+    api.addPanel({
+        id: "project",
+        component: "panel",
+        tabComponent: "engine",
+        title: "Project",
+        initialWidth: 230,
+        minimumWidth: 180,
+        maximumWidth: 360,
+    });
+    api.addPanel({
+        id: "code",
+        component: "panel",
+        tabComponent: "engine",
+        title: "Code",
+        position: { referencePanel: "project", direction: "right" },
+        initialWidth: 660,
+        minimumWidth: 380,
+    });
+    api.addPanel({
+        id: "game",
+        component: "panel",
+        tabComponent: "engine",
+        title: "Game",
+        renderer: "always",
+        position: { referencePanel: "code", direction: "right" },
+        initialWidth: 520,
+        minimumWidth: 360,
+    });
+    api.addPanel({
+        id: "inspector",
+        component: "panel",
+        tabComponent: "engine",
+        title: "Inspector",
+        position: { referencePanel: "game", direction: "below" },
+        initialHeight: 290,
+        minimumWidth: 260,
+        minimumHeight: 120,
+    });
+    api.addPanel({
+        id: "console",
+        component: "panel",
+        tabComponent: "engine",
+        title: "Console",
+        position: { referencePanel: "code", direction: "below" },
+        initialHeight: 180,
+        minimumHeight: 90,
+    });
+
+    const gameWidth = Math.max(460, Math.min(760, Math.round(api.width * 0.4)));
+    api.getPanel("project")?.group.api.setSize({ width: 230 });
+    api.getPanel("game")?.group.api.setSize({ width: gameWidth });
+    api.getPanel("console")?.group.api.setSize({ height: 180 });
+    api.getPanel("inspector")?.group.api.setSize({ height: 280 });
+}
 
 export function App() {
     const [projectName, setProjectName] = useState("No project open");
@@ -214,24 +315,8 @@ export function App() {
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const consoleRef = useRef<HTMLDivElement>(null);
     const handlersRef = useRef<Record<string, CommandHandler>>({});
-    const workbenchLayout = useDefaultLayout({
-        id: "fei-editor-workbench-columns-v1",
-        panelIds: ["project", "main"],
-        storage: localStorage,
-        onlySaveAfterUserInteractions: true,
-    });
-    const mainLayout = useDefaultLayout({
-        id: "fei-editor-main-columns-v1",
-        panelIds: ["code-column", "game-column"],
-        storage: localStorage,
-        onlySaveAfterUserInteractions: true,
-    });
-    const codeLayout = useDefaultLayout({
-        id: "fei-editor-code-rows-v1",
-        panelIds: ["code", "console"],
-        storage: localStorage,
-        onlySaveAfterUserInteractions: true,
-    });
+    const dockviewApiRef = useRef<DockviewApi | null>(null);
+    const dockviewLayoutListenerRef = useRef<{ dispose(): void } | null>(null);
 
     const dirty = storage.isOpen && activePath.length > 0 && content !== savedContent;
 
@@ -640,10 +725,172 @@ export function App() {
         window.feiEditorAgent = agentApi;
     }, [agentApi]);
 
+    useEffect(
+        () => () => {
+            dockviewLayoutListenerRef.current?.dispose();
+        },
+        [],
+    );
+
+    const onDockviewReady = useCallback((event: DockviewReadyEvent) => {
+        const { api } = event;
+        dockviewApiRef.current = api;
+        const savedLayout = localStorage.getItem(workbenchLayoutStorageKey);
+        if (savedLayout) {
+            try {
+                api.fromJSON(JSON.parse(savedLayout));
+            } catch (error) {
+                console.warn("[fei editor] discarded invalid workbench layout", error);
+                localStorage.removeItem(workbenchLayoutStorageKey);
+                addDefaultWorkbenchPanels(api);
+                localStorage.setItem(workbenchLayoutStorageKey, JSON.stringify(api.toJSON()));
+            }
+        } else {
+            addDefaultWorkbenchPanels(api);
+            localStorage.setItem(workbenchLayoutStorageKey, JSON.stringify(api.toJSON()));
+        }
+
+        dockviewLayoutListenerRef.current?.dispose();
+        dockviewLayoutListenerRef.current = api.onDidLayoutChange(() => {
+            localStorage.setItem(workbenchLayoutStorageKey, JSON.stringify(api.toJSON()));
+        });
+    }, []);
+
+    const resetWorkbenchLayout = useCallback(() => {
+        const api = dockviewApiRef.current;
+        if (!api) return;
+        localStorage.removeItem(workbenchLayoutStorageKey);
+        api.clear();
+        addDefaultWorkbenchPanels(api);
+        localStorage.setItem(workbenchLayoutStorageKey, JSON.stringify(api.toJSON()));
+    }, []);
+
     const protectedFile = activePath === "project.yaml";
     const canEdit = storage.isOpen && activePath.length > 0;
     const operationTitle =
         operation === "new" ? "Create file" : operation === "rename" ? "Rename file" : "Delete file";
+
+    useEffect(() => {
+        dockviewApiRef.current
+            ?.getPanel("code")
+            ?.api.setTitle(activePath ? `${activePath}${dirty ? " •" : ""}` : "Code");
+    }, [activePath, dirty]);
+
+    const workbenchPanels: Record<string, ReactNode> = {
+        project: (
+            <ToolPanel className="project-panel">
+                <div className="panel-commandbar">
+                    <span>{files.length > 0 ? `${files.length} files` : storageLabel}</span>
+                    <div className="panel-actions">
+                        <IconButton label="New file" disabled={!storage.isOpen} onClick={() => showOperation("new")}>
+                            <Plus size={14} />
+                        </IconButton>
+                        <IconButton label="Rename" disabled={!canEdit || protectedFile} onClick={() => showOperation("rename")}>
+                            <Pencil size={13} />
+                        </IconButton>
+                        <IconButton label="Delete" danger disabled={!canEdit || protectedFile} onClick={() => showOperation("delete")}>
+                            <Trash2 size={14} />
+                        </IconButton>
+                        <IconButton label="Refresh folder" disabled={!storage.isOpen} onClick={() => void refreshProjectFolder()}>
+                            <RefreshCw size={14} />
+                        </IconButton>
+                    </div>
+                </div>
+                <nav className="file-tree" aria-label="Project files">
+                    {!storage.isOpen ? (
+                        <div className="empty-tree">
+                            <Folder size={28} strokeWidth={1.3} />
+                            <span>Open a local project folder to begin.</span>
+                        </div>
+                    ) : (
+                        <FileTree files={files} activePath={activePath} onSelect={(path) => void selectFile(path)} />
+                    )}
+                </nav>
+                <footer className="panel-status">
+                    <span title={storageLabel}>{storageLabel}</span>
+                    <span className={dirty ? "dirty" : ""}>{canEdit ? (dirty ? "Unsaved" : "Saved") : "—"}</span>
+                </footer>
+            </ToolPanel>
+        ),
+        code: (
+            <ToolPanel className="editor-panel">
+                <CodeEditor
+                    path={activePath}
+                    value={content}
+                    readOnly={!canEdit}
+                    onChange={setContent}
+                    onCursorChange={(line, column) => setCursor({ line, column })}
+                />
+                <footer className="editor-status">
+                    <span>{dirty ? "● Unsaved" : "Saved"}</span>
+                    <span>Ln {cursor.line}, Col {cursor.column}</span>
+                    <span>{languageForPath(activePath)}</span>
+                    <span>UTF-8</span>
+                </footer>
+            </ToolPanel>
+        ),
+        console: (
+            <ToolPanel className="console-panel">
+                <div className="panel-commandbar">
+                    <span>{logs.length} messages</span>
+                    <button className="text-button" type="button" onClick={() => setLogs([])}>Clear</button>
+                </div>
+                <div ref={consoleRef} className="console-output" aria-live="polite">
+                    {logs.length === 0 && <div className="console-empty">No console output.</div>}
+                    {logs.map((entry) => (
+                        <div key={entry.id} className={`console-line ${entry.level}`}>
+                            <span>{entry.time}</span>
+                            <span>{entry.source}</span>
+                            <span>{entry.message}</span>
+                        </div>
+                    ))}
+                </div>
+            </ToolPanel>
+        ),
+        game: (
+            <ToolPanel className="preview-panel">
+                <div className="viewport-toolbar">
+                    <span>16:9</span>
+                </div>
+                <div className="runtime-stage">
+                    {runtimeSession ? (
+                        <iframe
+                            ref={iframeRef}
+                            className="runtime-frame"
+                            title="fei project runtime"
+                            allow="fullscreen"
+                            src={runtimeSession.source}
+                        />
+                    ) : (
+                        <div className="runtime-placeholder">
+                            <span className="placeholder-play"><Play size={19} fill="currentColor" /></span>
+                            <strong>Project is stopped</strong>
+                            <span>Press Play to start the WebAssembly runtime.</span>
+                        </div>
+                    )}
+                </div>
+            </ToolPanel>
+        ),
+        inspector: (
+            <ToolPanel className="inspector-panel">
+                <div className="inspector-section">
+                    <span className="section-label">RUNTIME</span>
+                    <dl className="property-list">
+                        <div><dt>State</dt><dd>{runtimeDetail}</dd></div>
+                        <div><dt>Script</dt><dd>{runtimeScript}</dd></div>
+                        <div><dt>Frame</dt><dd>{runtimeFrame}</dd></div>
+                    </dl>
+                </div>
+                <div className="inspector-section">
+                    <span className="section-label">AGENT API</span>
+                    <p className="muted-copy">UI and agents use the same command bus through <code>window.feiEditorAgent</code>.</p>
+                    <div className="capabilities">
+                        {agentApi.capabilities.map((capability) => <code key={capability}>{capability}</code>)}
+                    </div>
+                </div>
+            </ToolPanel>
+        ),
+    };
 
     return (
         <Tooltip.Provider delayDuration={450}>
@@ -651,40 +898,52 @@ export function App() {
                 <header className="topbar">
                     <div className="brand">
                         <span className="brand-mark">F</span>
-                        <div className="brand-copy">
-                            <span>FEI EDITOR</span>
-                            <strong>{projectName}</strong>
-                        </div>
+                        <span className="brand-name">FEI</span>
                     </div>
-                    <div className="toolbar" aria-label="Project and runtime controls">
-                        <button
-                            id="open-folder"
-                            className="button folder-button"
-                            type="button"
-                            onClick={() =>
-                                void openProjectFolder().catch((error) => {
-                                    if (!(error instanceof DOMException) || error.name !== "AbortError") {
-                                        appendConsole("error", "project", errorMessage(error));
-                                    }
-                                })
-                            }
-                        >
-                            <FolderOpen size={15} />
-                            {openFolderLabel}
-                        </button>
-                        <IconButton label="Save (Ctrl+S)" disabled={!canEdit} onClick={() => void saveActiveFile()}>
-                            <Save size={15} />
-                        </IconButton>
-                        <span className="toolbar-divider" />
-                        <button
+                    <nav className="application-menu" aria-label="Application menu">
+                        <DropdownMenu.Root>
+                            <DropdownMenu.Trigger asChild><button className="menu-trigger" type="button">File</button></DropdownMenu.Trigger>
+                            <DropdownMenu.Portal>
+                                <DropdownMenu.Content className="menu-content" sideOffset={5} align="start">
+                                    <DropdownMenu.Item
+                                        className="menu-item"
+                                        onSelect={() =>
+                                            void openProjectFolder().catch((error) => {
+                                                if (!(error instanceof DOMException) || error.name !== "AbortError") {
+                                                    appendConsole("error", "project", errorMessage(error));
+                                                }
+                                            })
+                                        }
+                                    >
+                                        Open Folder<span>Ctrl+O</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item className="menu-item" disabled={!canEdit} onSelect={() => void saveActiveFile()}>
+                                        Save<span>Ctrl+S</span>
+                                    </DropdownMenu.Item>
+                                </DropdownMenu.Content>
+                            </DropdownMenu.Portal>
+                        </DropdownMenu.Root>
+                        <DropdownMenu.Root>
+                            <DropdownMenu.Trigger asChild><button className="menu-trigger" type="button">View</button></DropdownMenu.Trigger>
+                            <DropdownMenu.Portal>
+                                <DropdownMenu.Content className="menu-content" sideOffset={5} align="start">
+                                    <DropdownMenu.Item className="menu-item" onSelect={resetWorkbenchLayout}>
+                                        Reset Workbench Layout
+                                    </DropdownMenu.Item>
+                                </DropdownMenu.Content>
+                            </DropdownMenu.Portal>
+                        </DropdownMenu.Root>
+                    </nav>
+                    <div className="project-title" title={projectName}>{projectName}</div>
+                    <div className="run-controls" aria-label="Runtime controls">
+                        <IconButton
                             id="play"
-                            className="button primary"
-                            type="button"
+                            label="Play"
                             disabled={!storage.isOpen || runtimeState === "starting" || runtimeState === "running"}
                             onClick={() => void playRuntime()}
                         >
-                            <Play size={14} fill="currentColor" /> Play
-                        </button>
+                            <Play size={14} fill="currentColor" />
+                        </IconButton>
                         <IconButton
                             label="Stop"
                             danger
@@ -698,7 +957,27 @@ export function App() {
                             disabled={runtimeState !== "running" && runtimeState !== "failed"}
                             onClick={() => void restartRuntime()}
                         >
-                            <RotateCcw size={15} />
+                            <RotateCcw size={14} />
+                        </IconButton>
+                    </div>
+                    <div className="toolbar" aria-label="Project controls">
+                        <button
+                            id="open-folder"
+                            className="button folder-button"
+                            type="button"
+                            onClick={() =>
+                                void openProjectFolder().catch((error) => {
+                                    if (!(error instanceof DOMException) || error.name !== "AbortError") {
+                                        appendConsole("error", "project", errorMessage(error));
+                                    }
+                                })
+                            }
+                        >
+                            <FolderOpen size={14} />
+                            {openFolderLabel}
+                        </button>
+                        <IconButton label="Save (Ctrl+S)" disabled={!canEdit} onClick={() => void saveActiveFile()}>
+                            <Save size={14} />
                         </IconButton>
                         <div className={`runtime-badge ${runtimeState}`}>
                             <span className="status-dot" />
@@ -708,162 +987,14 @@ export function App() {
                 </header>
 
                 <main className="workbench">
-                    <Group
-                        orientation="horizontal"
-                        id="workbench-columns"
-                        defaultLayout={workbenchLayout.defaultLayout}
-                        onLayoutChanged={workbenchLayout.onLayoutChanged}
-                    >
-                        <Panel id="project" defaultSize={235} minSize={180} maxSize={360}>
-                            <ToolPanel className="project-panel">
-                                <PanelHeader
-                                    title="PROJECT"
-                                    detail={files.length > 0 ? String(files.length) : undefined}
-                                    actions={
-                                        <>
-                                            <IconButton label="New file" disabled={!storage.isOpen} onClick={() => showOperation("new")}>
-                                                <Plus size={14} />
-                                            </IconButton>
-                                            <IconButton label="Rename" disabled={!canEdit || protectedFile} onClick={() => showOperation("rename")}>
-                                                <Pencil size={13} />
-                                            </IconButton>
-                                            <IconButton label="Delete" danger disabled={!canEdit || protectedFile} onClick={() => showOperation("delete")}>
-                                                <Trash2 size={14} />
-                                            </IconButton>
-                                            <IconButton label="Refresh folder" disabled={!storage.isOpen} onClick={() => void refreshProjectFolder()}>
-                                                <RefreshCw size={14} />
-                                            </IconButton>
-                                        </>
-                                    }
-                                />
-                                <nav className="file-tree" aria-label="Project files">
-                                    {!storage.isOpen ? (
-                                        <div className="empty-tree">
-                                            <Folder size={28} strokeWidth={1.3} />
-                                            <span>Open a local project folder to begin.</span>
-                                        </div>
-                                    ) : (
-                                        <FileTree
-                                            files={files}
-                                            activePath={activePath}
-                                            onSelect={(path) => void selectFile(path)}
-                                        />
-                                    )}
-                                </nav>
-                                <footer className="panel-status">
-                                    <span title={storageLabel}>{storageLabel}</span>
-                                    <span className={dirty ? "dirty" : ""}>{canEdit ? (dirty ? "Unsaved" : "Saved") : "—"}</span>
-                                </footer>
-                            </ToolPanel>
-                        </Panel>
-                        <ResizeHandle orientation="horizontal" />
-                        <Panel id="main" minSize={480}>
-                            <Group
-                                orientation="horizontal"
-                                id="main-columns"
-                                defaultLayout={mainLayout.defaultLayout}
-                                onLayoutChanged={mainLayout.onLayoutChanged}
-                            >
-                                <Panel id="code-column" minSize={400}>
-                                    <Group
-                                        orientation="vertical"
-                                        id="code-rows"
-                                        defaultLayout={codeLayout.defaultLayout}
-                                        onLayoutChanged={codeLayout.onLayoutChanged}
-                                    >
-                                        <Panel id="code" minSize={240}>
-                                            <ToolPanel className="editor-panel">
-                                                <PanelHeader
-                                                    title={activePath || "EDITOR"}
-                                                    detail={dirty ? "●" : languageForPath(activePath)}
-                                                />
-                                                <CodeEditor
-                                                    path={activePath}
-                                                    value={content}
-                                                    readOnly={!canEdit}
-                                                    onChange={setContent}
-                                                    onCursorChange={(line, column) => setCursor({ line, column })}
-                                                />
-                                                <footer className="editor-status">
-                                                    <span>Ln {cursor.line}, Col {cursor.column}</span>
-                                                    <span>{languageForPath(activePath)}</span>
-                                                    <span>UTF-8</span>
-                                                </footer>
-                                            </ToolPanel>
-                                        </Panel>
-                                        <ResizeHandle orientation="vertical" />
-                                        <Panel id="console" defaultSize={190} minSize={90} maxSize="42%" collapsible>
-                                            <ToolPanel className="console-panel">
-                                                <PanelHeader
-                                                    title="CONSOLE"
-                                                    detail={`${logs.length}`}
-                                                    actions={<button className="text-button" type="button" onClick={() => setLogs([])}>Clear</button>}
-                                                />
-                                                <div ref={consoleRef} className="console-output" aria-live="polite">
-                                                    {logs.map((entry) => (
-                                                        <div key={entry.id} className={`console-line ${entry.level}`}>
-                                                            <span>{entry.time}</span>
-                                                            <span>{entry.source}</span>
-                                                            <span>{entry.message}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </ToolPanel>
-                                        </Panel>
-                                    </Group>
-                                </Panel>
-                                <ResizeHandle orientation="horizontal" />
-                                <Panel
-                                    id="game-column"
-                                    defaultSize={540}
-                                    minSize={380}
-                                    maxSize={760}
-                                    groupResizeBehavior="preserve-pixel-size"
-                                >
-                                    <aside className="game-column">
-                                        <ToolPanel className="preview-panel">
-                                            <PanelHeader title="GAME" detail={`16:9 · ${runtimeDetail}`} />
-                                            <div className="runtime-stage">
-                                                {runtimeSession ? (
-                                                    <iframe
-                                                        ref={iframeRef}
-                                                        className="runtime-frame"
-                                                        title="fei project runtime"
-                                                        allow="fullscreen"
-                                                        src={runtimeSession.source}
-                                                    />
-                                                ) : (
-                                                    <div className="runtime-placeholder">
-                                                        <span className="placeholder-play"><Play size={19} fill="currentColor" /></span>
-                                                        <strong>Project is stopped</strong>
-                                                        <span>Press Play to start the WebAssembly runtime.</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </ToolPanel>
-                                        <ToolPanel className="inspector-panel">
-                                            <PanelHeader title="INSPECTOR" />
-                                            <div className="inspector-section">
-                                                <span className="section-label">RUNTIME</span>
-                                                <dl className="property-list">
-                                                    <div><dt>State</dt><dd>{runtimeDetail}</dd></div>
-                                                    <div><dt>Script</dt><dd>{runtimeScript}</dd></div>
-                                                    <div><dt>Frame</dt><dd>{runtimeFrame}</dd></div>
-                                                </dl>
-                                            </div>
-                                            <div className="inspector-section">
-                                                <span className="section-label">AGENT API</span>
-                                                <p className="muted-copy">UI and agents use the same command bus through <code>window.feiEditorAgent</code>.</p>
-                                                <div className="capabilities">
-                                                    {agentApi.capabilities.map((capability) => <code key={capability}>{capability}</code>)}
-                                                </div>
-                                            </div>
-                                        </ToolPanel>
-                                    </aside>
-                                </Panel>
-                            </Group>
-                        </Panel>
-                    </Group>
+                    <WorkbenchPanelsContext.Provider value={workbenchPanels}>
+                        <DockviewReact
+                            className="dockview-theme-fei"
+                            components={dockviewComponents}
+                            tabComponents={dockviewTabComponents}
+                            onReady={onDockviewReady}
+                        />
+                    </WorkbenchPanelsContext.Provider>
                 </main>
 
                 <Dialog.Root open={operation !== null} onOpenChange={(open) => !open && setOperation(null)}>
