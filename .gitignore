@@ -18,6 +18,7 @@ CMakeSettings.json
 .sandbox/
 node_modules/
 editor/dist/
+editor/host-dist/
 editor/*.tsbuildinfo
 *.log
 imgui.ini

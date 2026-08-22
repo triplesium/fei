@@ -8,6 +8,7 @@ import {
 } from "dockview-react";
 import {
     CircleStop,
+    Bot,
     Code2,
     File,
     FileCode2,
@@ -37,8 +38,12 @@ import {
     type ReactNode,
 } from "react";
 import { parseDocument } from "yaml";
+import { EditorPiAgent } from "./agent/editor-pi-agent";
+import { EditorModelGateway, type ModelGatewayState } from "./agent/model-gateway";
+import { PiAssistantThread } from "./agent/pi-assistant-thread";
 import { CodeEditor } from "./components/code-editor";
 import { ToolPanel } from "./components/panel";
+import { WasmRuntimeController } from "./runtime/wasm-runtime-controller";
 import { ProjectStorage } from "./services/project-storage";
 import type {
     AgentRequest,
@@ -48,12 +53,9 @@ import type {
     EditorAgentApi,
     ProjectFileEntry,
     ProjectSettings,
-    RuntimeSession,
-    RuntimeState,
 } from "./types";
 
 const storage = new ProjectStorage();
-let nextLogId = 1;
 
 function requestId(): string {
     return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
@@ -282,7 +284,7 @@ function IconButton({
 type Operation = "new" | "rename" | "delete" | null;
 type CommandHandler = (request: AgentRequest) => Promise<unknown>;
 
-const workbenchLayoutStorageKey = "fei-editor-dockview-layout-v1";
+const workbenchLayoutStorageKey = "fei-editor-dockview-layout-v2";
 const dockviewComponents = { panel: DockPanel };
 const dockviewTabComponents = { engine: EnginePanelTab };
 const WorkbenchPanelsContext = createContext<Record<string, ReactNode>>({});
@@ -300,6 +302,8 @@ function EnginePanelTab({ api }: IDockviewPanelHeaderProps) {
               ? Code2
               : api.id === "game"
                 ? Play
+                : api.id === "agent"
+                  ? Bot
                 : api.id === "inspector"
                   ? Settings2
                   : Terminal;
@@ -341,6 +345,16 @@ function addDefaultWorkbenchPanels(api: DockviewApi): void {
         minimumWidth: 360,
     });
     api.addPanel({
+        id: "agent",
+        component: "panel",
+        tabComponent: "engine",
+        title: "Agent",
+        renderer: "always",
+        position: { referencePanel: "game", direction: "right" },
+        initialWidth: 360,
+        minimumWidth: 280,
+    });
+    api.addPanel({
         id: "inspector",
         component: "panel",
         tabComponent: "engine",
@@ -368,6 +382,12 @@ function addDefaultWorkbenchPanels(api: DockviewApi): void {
 }
 
 export function App() {
+    const runtimeControllerRef = useRef<WasmRuntimeController | null>(null);
+    if (runtimeControllerRef.current === null) {
+        runtimeControllerRef.current = new WasmRuntimeController();
+    }
+    const runtimeController = runtimeControllerRef.current;
+
     const [projectName, setProjectName] = useState("No project open");
     const [storageLabel, setStorageLabel] = useState("Local folder");
     const [openFolderLabel, setOpenFolderLabel] = useState("Open Folder");
@@ -388,12 +408,15 @@ export function App() {
     });
     const [settingsPlugins, setSettingsPlugins] = useState("");
     const [settingsError, setSettingsError] = useState("");
-    const [runtimeState, setRuntimeState] = useState<RuntimeState>("stopped");
-    const [runtimeDetail, setRuntimeDetail] = useState("stopped");
-    const [runtimeScript, setRuntimeScript] = useState("—");
-    const [runtimeFrame, setRuntimeFrame] = useState("—");
-    const [runtimeSession, setRuntimeSession] = useState<RuntimeSession | null>(null);
-    const iframeRef = useRef<HTMLIFrameElement>(null);
+    const [agentSettingsOpen, setAgentSettingsOpen] = useState(false);
+    const [agentApiKey, setAgentApiKey] = useState("");
+    const [agentSettingsError, setAgentSettingsError] = useState("");
+    const [agentSettingsSaving, setAgentSettingsSaving] = useState(false);
+    const [agentGatewayState, setAgentGatewayState] = useState<ModelGatewayState>({
+        state: "connecting",
+    });
+    const [agentStreaming, setAgentStreaming] = useState(false);
+    const [runtimeSnapshot, setRuntimeSnapshot] = useState(() => runtimeController.getSnapshot());
     const consoleRef = useRef<HTMLDivElement>(null);
     const handlersRef = useRef<Record<string, CommandHandler>>({});
     const dockviewApiRef = useRef<DockviewApi | null>(null);
@@ -404,7 +427,7 @@ export function App() {
     const appendConsole = useCallback(
         (level: ConsoleLevel, source: string, message: unknown) => {
             const entry: ConsoleEntry = {
-                id: nextLogId++,
+                id: requestId(),
                 level,
                 source,
                 message: String(message),
@@ -418,6 +441,33 @@ export function App() {
             setLogs((current) => [...current.slice(-499), entry]);
         },
         [],
+    );
+
+    useEffect(() => {
+        const unsubscribe = runtimeController.subscribe((event) => {
+            if (event.type === "snapshot") {
+                setRuntimeSnapshot(event.snapshot);
+            } else {
+                appendConsole(event.level, event.source, event.message);
+            }
+        });
+        return () => {
+            unsubscribe();
+            runtimeController.dispose();
+        };
+    }, [appendConsole, runtimeController]);
+
+    const {
+        state: runtimeState,
+        detail: runtimeDetail,
+        script: runtimeScript,
+        frame: runtimeFrame,
+        session: runtimeSession,
+    } = runtimeSnapshot;
+
+    const attachRuntimeFrame = useCallback(
+        (frame: HTMLIFrameElement | null) => runtimeController.attachFrame(frame),
+        [runtimeController],
     );
 
     const refreshFiles = async (): Promise<ProjectFileEntry[]> => {
@@ -478,12 +528,7 @@ export function App() {
     };
 
     const stopRuntime = (reason = "runtime stopped", log = true): void => {
-        setRuntimeSession(null);
-        setRuntimeState("stopped");
-        setRuntimeDetail("stopped");
-        setRuntimeScript("—");
-        setRuntimeFrame("—");
-        if (log) appendConsole("info", "runtime", reason);
+        runtimeController.stop(reason, log);
     };
 
     const writeProjectSettings = async (settings: ProjectSettings): Promise<ProjectSettings> => {
@@ -620,20 +665,12 @@ export function App() {
     const playRuntime = async (force = false): Promise<void> => {
         if (!force && (runtimeState === "starting" || runtimeState === "running")) return;
         const snapshot = await projectSnapshot();
-        const channelId = requestId();
-        setRuntimeState("starting");
-        setRuntimeDetail("starting");
-        setRuntimeSession({
-            channelId,
-            files: snapshot,
-            source: `../sample-browser-project.html?fei-editor-channel=${encodeURIComponent(channelId)}&dev=${Date.now()}`,
-        });
-        appendConsole("info", "runtime", "creating isolated runtime");
+        await runtimeController.start(snapshot, force);
     };
 
     const restartRuntime = async (): Promise<void> => {
-        stopRuntime("restarting runtime");
-        await playRuntime(true);
+        const snapshot = await projectSnapshot();
+        await runtimeController.restart(snapshot);
     };
 
     const showOperation = (next: Exclude<Operation, null>): void => {
@@ -699,69 +736,34 @@ export function App() {
     }, [runtimeState]);
 
     useEffect(() => {
-        consoleRef.current?.scrollTo({ top: consoleRef.current.scrollHeight });
-    }, [logs]);
+        let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+        const unsubscribe = storage.subscribe((event) => {
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => {
+                void refreshFiles()
+                    .then(async () => {
+                        if (!dirty && activePath && event.path === activePath) {
+                            const nextContent = await storage.read(activePath);
+                            if (nextContent !== null) {
+                                setContent(nextContent);
+                                setSavedContent(nextContent);
+                            }
+                        }
+                    })
+                    .catch((error) => appendConsole("error", "project", errorMessage(error)));
+            }, 120);
+        });
+        return () => {
+            if (refreshTimer) clearTimeout(refreshTimer);
+            unsubscribe();
+        };
+    }, [activePath, appendConsole, dirty]);
+
+    useEffect(() => () => storage.dispose(), []);
 
     useEffect(() => {
-        if (!runtimeSession) return;
-        const { channelId, files } = runtimeSession;
-        const onMessage = (event: MessageEvent) => {
-            if (
-                event.source !== iframeRef.current?.contentWindow ||
-                event.origin !== location.origin ||
-                event.data?.source !== "fei-runtime" ||
-                event.data?.channelId !== channelId
-            ) {
-                return;
-            }
-            if (event.data.type === "project.request") {
-                iframeRef.current?.contentWindow?.postMessage(
-                    { source: "fei-editor", channelId, type: "project.files", files },
-                    location.origin,
-                );
-            } else if (event.data.type === "project.applied") {
-                appendConsole("info", "runtime", "project files applied");
-            } else if (event.data.type === "runtime.log") {
-                appendConsole(event.data.level === "error" ? "error" : "info", "game", event.data.message);
-            } else if (event.data.type === "runtime.error") {
-                appendConsole("error", "runtime", event.data.message);
-                setRuntimeState("failed");
-                setRuntimeDetail("failed");
-            }
-        };
-        window.addEventListener("message", onMessage);
-        const interval = window.setInterval(() => {
-            try {
-                const data = iframeRef.current?.contentDocument?.documentElement.dataset;
-                if (!data) return;
-                setRuntimeScript(data.feiProjectScript ?? "—");
-                setRuntimeFrame(data.feiProjectFramePresented === "true" ? "presented" : "—");
-                if (data.feiProjectStatus === "web project presented") {
-                    setRuntimeState("running");
-                    setRuntimeDetail("running");
-                    document.documentElement.dataset.feiEditorProjectStatus = data.feiProjectStatus;
-                } else if (data.feiProjectStatus?.includes("failed")) {
-                    setRuntimeState("failed");
-                    setRuntimeDetail(data.feiProjectStatus);
-                }
-            } catch (error) {
-                appendConsole("error", "editor", errorMessage(error));
-            }
-        }, 100);
-        const timeout = window.setTimeout(() => {
-            setRuntimeState((current) => {
-                if (current !== "starting") return current;
-                setRuntimeDetail("startup timed out");
-                appendConsole("error", "runtime", "startup timed out");
-                return "failed";
-            });
-        }, 60_000);
-        return () => {
-            window.removeEventListener("message", onMessage);
-            window.clearInterval(interval);
-            window.clearTimeout(timeout);
-        };
-    }, [appendConsole, runtimeSession]);
+        consoleRef.current?.scrollTo({ top: consoleRef.current.scrollHeight });
+    }, [logs]);
 
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
@@ -874,6 +876,67 @@ export function App() {
     useEffect(() => {
         window.feiEditorAgent = agentApi;
     }, [agentApi]);
+
+    const piAgent = useMemo(() => new EditorPiAgent(agentApi), [agentApi]);
+    const modelGateway = useMemo(() => new EditorModelGateway(), []);
+
+    useEffect(() => {
+        window.feiEditorPi = piAgent;
+        return () => piAgent.dispose();
+    }, [piAgent]);
+
+    useEffect(() => {
+        const updateStreaming = () => setAgentStreaming(piAgent.snapshot().streaming);
+        updateStreaming();
+        return piAgent.subscribeState(updateStreaming);
+    }, [piAgent]);
+
+    useEffect(() => {
+        let cancelled = false;
+        void modelGateway.connect(piAgent).then((state) => {
+            if (!cancelled) setAgentGatewayState(state);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [modelGateway, piAgent]);
+
+    const saveAgentApiKey = async (): Promise<void> => {
+        setAgentSettingsSaving(true);
+        setAgentSettingsError("");
+        try {
+            const state = await modelGateway.saveDeepSeekApiKey(agentApiKey, piAgent);
+            setAgentGatewayState(state);
+            setAgentApiKey("");
+            setAgentSettingsOpen(false);
+            appendConsole("info", "agent", "DeepSeek model gateway configured");
+        } catch (error) {
+            setAgentSettingsError(errorMessage(error));
+        } finally {
+            setAgentSettingsSaving(false);
+        }
+    };
+
+    const removeAgentApiKey = async (): Promise<void> => {
+        setAgentSettingsSaving(true);
+        setAgentSettingsError("");
+        try {
+            const state = await modelGateway.removeDeepSeekApiKey(piAgent);
+            setAgentGatewayState(state);
+            setAgentApiKey("");
+            appendConsole("info", "agent", "DeepSeek credential removed");
+        } catch (error) {
+            setAgentSettingsError(errorMessage(error));
+        } finally {
+            setAgentSettingsSaving(false);
+        }
+    };
+
+    const resetAgentConversation = (): void => {
+        if (agentStreaming) piAgent.abort();
+        else piAgent.reset();
+        setAgentStreaming(false);
+    };
 
     useEffect(
         () => () => {
@@ -1019,7 +1082,7 @@ export function App() {
                 <div className="runtime-stage">
                     {runtimeSession ? (
                         <iframe
-                            ref={iframeRef}
+                            ref={attachRuntimeFrame}
                             className="runtime-frame"
                             title="fei project runtime"
                             allow="fullscreen"
@@ -1033,6 +1096,37 @@ export function App() {
                         </div>
                     )}
                 </div>
+            </ToolPanel>
+        ),
+        agent: (
+            <ToolPanel className="agent-panel">
+                <div className="panel-commandbar">
+                    <span className="agent-model-label">
+                        <i className={agentGatewayState.state === "ready" ? "ready" : ""} />
+                        {agentGatewayState.state === "ready" ? agentGatewayState.model : "Agent"}
+                    </span>
+                    <div className="panel-actions">
+                        {agentStreaming && (
+                            <button className="text-button" type="button" onClick={() => piAgent.abort()}>
+                                Stop
+                            </button>
+                        )}
+                        <button
+                            className="text-button"
+                            type="button"
+                            disabled={agentStreaming}
+                            onClick={resetAgentConversation}
+                        >
+                            New chat
+                        </button>
+                    </div>
+                </div>
+                <PiAssistantThread
+                    agent={piAgent}
+                    enabled={agentGatewayState.state === "ready"}
+                    model={agentGatewayState.state === "ready" ? agentGatewayState.model : undefined}
+                    onConfigure={() => setAgentSettingsOpen(true)}
+                />
             </ToolPanel>
         ),
         inspector: (
@@ -1051,6 +1145,31 @@ export function App() {
                     <div className="capabilities">
                         {agentApi.capabilities.map((capability) => <code key={capability}>{capability}</code>)}
                     </div>
+                </div>
+                <div className="inspector-section">
+                    <span className="section-label">PI TOOLS</span>
+                    <p className="muted-copy">
+                        {agentGatewayState.state === "ready"
+                            ? `${agentGatewayState.provider} · ${agentGatewayState.model}`
+                            : agentGatewayState.state === "unconfigured"
+                              ? `${agentGatewayState.provider} credential required`
+                              : agentGatewayState.state === "unavailable"
+                                ? "Local model gateway unavailable"
+                                : "Connecting to local model gateway…"}
+                    </p>
+                    <div className="capabilities">
+                        {piAgent.status().tools.map((tool) => <code key={tool}>{tool}</code>)}
+                    </div>
+                    <button
+                        className="button"
+                        type="button"
+                        onClick={() => {
+                            setAgentSettingsError("");
+                            setAgentSettingsOpen(true);
+                        }}
+                    >
+                        Configure DeepSeek
+                    </button>
                 </div>
             </ToolPanel>
         ),
@@ -1261,6 +1380,68 @@ export function App() {
                                 <Dialog.Close asChild><button className="button" type="button">Cancel</button></Dialog.Close>
                                 <button className="button primary" type="button" onClick={() => void applyProjectSettings()}>
                                     Save Settings
+                                </button>
+                            </div>
+                        </Dialog.Content>
+                    </Dialog.Portal>
+                </Dialog.Root>
+
+                <Dialog.Root open={agentSettingsOpen} onOpenChange={setAgentSettingsOpen}>
+                    <Dialog.Portal>
+                        <Dialog.Overlay className="dialog-overlay" />
+                        <Dialog.Content className="dialog-content settings-dialog">
+                            <div className="dialog-heading">
+                                <div>
+                                    <Dialog.Title>Agent Model</Dialog.Title>
+                                    <Dialog.Description>
+                                        The API key is encrypted by the local Editor Host and is never returned to the browser.
+                                    </Dialog.Description>
+                                </div>
+                                <Dialog.Close asChild>
+                                    <button className="icon-button" type="button" aria-label="Close"><X size={15} /></button>
+                                </Dialog.Close>
+                            </div>
+                            <div className="settings-form">
+                                <label className="settings-field">
+                                    <span>DeepSeek API key</span>
+                                    <input
+                                        className="text-field"
+                                        type="password"
+                                        value={agentApiKey}
+                                        autoFocus
+                                        autoComplete="off"
+                                        spellCheck={false}
+                                        placeholder="Enter a new API key"
+                                        onChange={(event) => setAgentApiKey(event.target.value)}
+                                        onKeyDown={(event) => {
+                                            if (event.key === "Enter" && agentApiKey.trim()) {
+                                                void saveAgentApiKey();
+                                            }
+                                        }}
+                                    />
+                                </label>
+                                <p className="muted-copy">
+                                    Saving replaces the existing credential. The current key cannot be displayed.
+                                </p>
+                            </div>
+                            {agentSettingsError && <p className="dialog-error">{agentSettingsError}</p>}
+                            <div className="dialog-actions">
+                                <button
+                                    className="button danger"
+                                    type="button"
+                                    disabled={agentSettingsSaving || agentGatewayState.state !== "ready"}
+                                    onClick={() => void removeAgentApiKey()}
+                                >
+                                    Remove Key
+                                </button>
+                                <Dialog.Close asChild><button className="button" type="button">Cancel</button></Dialog.Close>
+                                <button
+                                    className="button primary"
+                                    type="button"
+                                    disabled={agentSettingsSaving || !agentApiKey.trim()}
+                                    onClick={() => void saveAgentApiKey()}
+                                >
+                                    {agentSettingsSaving ? "Saving…" : "Save Key"}
                                 </button>
                             </div>
                         </Dialog.Content>

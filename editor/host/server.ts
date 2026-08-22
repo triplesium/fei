@@ -1,0 +1,443 @@
+import { randomBytes } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { access, stat } from "node:fs/promises";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { extname, join, resolve, sep } from "node:path";
+import type { AddressInfo } from "node:net";
+import {
+    createModels,
+    type Context,
+    type CredentialStore,
+    type Model,
+    type SimpleStreamOptions,
+} from "@earendil-works/pi-ai";
+import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
+import {
+    HostProjectService,
+    ProjectPickerCancelledError,
+    type ProjectDirectoryPicker,
+} from "./project-service.js";
+import { toProxyEvent } from "./proxy-events.js";
+
+const maximumJsonBodyBytes = 4 * 1024 * 1024;
+const providerId = "deepseek";
+
+interface HostOptions {
+    credentials: CredentialStore;
+    distDirectory: string;
+    runtimeDirectory: string;
+    host?: string;
+    port?: number;
+    allowedOrigins?: readonly string[];
+    projectDirectory?: string;
+    pickProjectDirectory?: ProjectDirectoryPicker;
+    projectService?: HostProjectService;
+}
+
+interface ProxyRequest {
+    model?: { provider?: unknown; id?: unknown };
+    context?: unknown;
+    options?: unknown;
+}
+
+const contentTypes: Record<string, string> = {
+    ".css": "text/css; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".ttf": "font/ttf",
+    ".wasm": "application/wasm",
+};
+
+function json(response: ServerResponse, status: number, value: unknown): void {
+    response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify(value));
+}
+
+function errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+async function readJson(request: IncomingMessage, maximumBytes = maximumJsonBodyBytes): Promise<unknown> {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of request) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        size += buffer.length;
+        if (size > maximumBytes) throw new Error("Request body is too large.");
+        chunks.push(buffer);
+    }
+    const source = Buffer.concat(chunks).toString("utf8");
+    if (!source) return {};
+    return JSON.parse(source);
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error("Expected a JSON object.");
+    }
+    return value as Record<string, unknown>;
+}
+
+function sanitizeContext(value: unknown): Context {
+    const context = asObject(value);
+    if (!Array.isArray(context.messages)) throw new Error("Agent context requires messages.");
+    if (context.systemPrompt !== undefined && typeof context.systemPrompt !== "string") {
+        throw new Error("Agent system prompt must be a string.");
+    }
+    if (context.tools !== undefined && !Array.isArray(context.tools)) {
+        throw new Error("Agent tools must be a list.");
+    }
+    return {
+        systemPrompt: context.systemPrompt as string | undefined,
+        messages: context.messages as Context["messages"],
+        tools: context.tools as Context["tools"],
+    };
+}
+
+function finiteNumber(value: unknown, minimum: number, maximum: number): number | undefined {
+    if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+    return Math.max(minimum, Math.min(maximum, value));
+}
+
+function sanitizeOptions(value: unknown, model: Model<any>, signal: AbortSignal): SimpleStreamOptions {
+    const options = value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
+    const reasoning =
+        typeof options.reasoning === "string" &&
+        ["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(options.reasoning)
+            ? (options.reasoning as SimpleStreamOptions["reasoning"])
+            : undefined;
+    const cacheRetention =
+        options.cacheRetention === "none" ||
+        options.cacheRetention === "short" ||
+        options.cacheRetention === "long"
+            ? options.cacheRetention
+            : undefined;
+    return {
+        signal,
+        temperature: finiteNumber(options.temperature, 0, 2),
+        maxTokens: finiteNumber(options.maxTokens, 1, model.maxTokens),
+        reasoning,
+        cacheRetention,
+        sessionId:
+            typeof options.sessionId === "string" && options.sessionId.length <= 256
+                ? options.sessionId
+                : undefined,
+        maxRetryDelayMs: finiteNumber(options.maxRetryDelayMs, 0, 60_000),
+    };
+}
+
+function bearerToken(request: IncomingMessage): string | undefined {
+    const authorization = request.headers.authorization;
+    return authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
+}
+
+function modelForClient(model: Model<any>): Model<any> {
+    return structuredClone(model);
+}
+
+export function createEditorHost(options: HostOptions): {
+    server: Server;
+    token: string;
+    listen(): Promise<{ host: string; port: number }>;
+} {
+    const host = options.host ?? "127.0.0.1";
+    const port = options.port ?? 3100;
+    const token = randomBytes(32).toString("base64url");
+    const allowedOrigins = new Set([
+        `http://${host}:${port}`,
+        `http://localhost:${port}`,
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        ...(options.allowedOrigins ?? []),
+    ]);
+    const models = createModels({ credentials: options.credentials });
+    models.setProvider(deepseekProvider());
+    const projects =
+        options.projectService ??
+        new HostProjectService(options.projectDirectory, options.pickProjectDirectory);
+
+    const selectedModel = (): Model<any> | undefined => {
+        const configuredModel = process.env.FEI_EDITOR_MODEL?.trim();
+        return configuredModel
+            ? models.getModel(providerId, configuredModel)
+            : models.getModels(providerId)[0];
+    };
+
+    const server = createServer(async (request, response) => {
+        const origin = request.headers.origin;
+        if (origin && !allowedOrigins.has(origin)) {
+            json(response, 403, { error: "Origin is not allowed." });
+            return;
+        }
+        if (origin) {
+            response.setHeader("Access-Control-Allow-Origin", origin);
+            response.setHeader("Vary", "Origin");
+        }
+        response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+        response.setHeader("Access-Control-Allow-Methods", "GET, PUT, DELETE, POST, OPTIONS");
+        response.setHeader("X-Content-Type-Options", "nosniff");
+        if (request.method === "OPTIONS") {
+            response.writeHead(204);
+            response.end();
+            return;
+        }
+
+        const url = new URL(request.url ?? "/", `http://${request.headers.host ?? `${host}:${port}`}`);
+        try {
+            if (request.method === "GET" && url.pathname === "/api/v1/bootstrap") {
+                const model = selectedModel();
+                if (!model) throw new Error("Configured DeepSeek model is unavailable.");
+                const auth = await models.checkAuth(providerId);
+                json(response, 200, {
+                    version: 1,
+                    token,
+                    project: await projects.snapshot(),
+                    provider: {
+                        id: providerId,
+                        name: "DeepSeek",
+                        configured: Boolean(auth),
+                        model: modelForClient(model),
+                    },
+                });
+                return;
+            }
+
+            if (bearerToken(request) !== token && url.pathname.startsWith("/api/")) {
+                json(response, 401, { error: "Invalid Editor Host token." });
+                return;
+            }
+
+            if (request.method === "PUT" && url.pathname === "/api/v1/credentials/deepseek") {
+                const body = asObject(await readJson(request, 64 * 1024));
+                const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+                if (apiKey.length < 8 || apiKey.length > 4096) {
+                    json(response, 400, { error: "DeepSeek API key is invalid." });
+                    return;
+                }
+                await options.credentials.modify(providerId, async () => ({ type: "api_key", key: apiKey }));
+                json(response, 200, { configured: true });
+                return;
+            }
+
+            if (request.method === "DELETE" && url.pathname === "/api/v1/credentials/deepseek") {
+                await options.credentials.delete(providerId);
+                json(response, 200, { configured: false });
+                return;
+            }
+
+            if (request.method === "GET" && url.pathname === "/api/v1/project") {
+                json(response, 200, await projects.snapshot());
+                return;
+            }
+
+            if (request.method === "POST" && url.pathname === "/api/v1/project/open") {
+                json(response, 200, await projects.open());
+                return;
+            }
+
+            if (request.method === "GET" && url.pathname === "/api/v1/project/files") {
+                json(response, 200, { files: await projects.list() });
+                return;
+            }
+
+            if (request.method === "GET" && url.pathname === "/api/v1/project/file") {
+                const content = await projects.read(url.searchParams.get("path") ?? "");
+                if (!content) {
+                    json(response, 404, { error: "Project file not found." });
+                    return;
+                }
+                response.writeHead(200, {
+                    "Content-Type": "application/octet-stream",
+                    "Content-Length": content.byteLength,
+                    "Cache-Control": "no-store",
+                });
+                response.end(content);
+                return;
+            }
+
+            if (request.method === "PUT" && url.pathname === "/api/v1/project/file") {
+                const body = asObject(await readJson(request));
+                if (typeof body.path !== "string" || typeof body.content !== "string") {
+                    throw new Error("Project file writes require path and string content.");
+                }
+                await projects.write(body.path, body.content);
+                json(response, 200, { ok: true });
+                return;
+            }
+
+            if (request.method === "POST" && url.pathname === "/api/v1/project/rename") {
+                const body = asObject(await readJson(request, 64 * 1024));
+                if (typeof body.source !== "string" || typeof body.destination !== "string") {
+                    throw new Error("Project rename requires source and destination paths.");
+                }
+                await projects.rename(body.source, body.destination);
+                json(response, 200, { ok: true });
+                return;
+            }
+
+            if (request.method === "DELETE" && url.pathname === "/api/v1/project/file") {
+                await projects.remove(url.searchParams.get("path") ?? "");
+                json(response, 200, { ok: true });
+                return;
+            }
+
+            if (request.method === "GET" && url.pathname === "/api/v1/project/events") {
+                response.writeHead(200, {
+                    "Content-Type": "text/event-stream; charset=utf-8",
+                    "Cache-Control": "no-cache, no-transform",
+                    Connection: "keep-alive",
+                });
+                response.flushHeaders();
+                response.write(`data: ${JSON.stringify({ type: "ready" })}\n\n`);
+                const unsubscribe = projects.subscribe((event) => {
+                    if (!response.destroyed) response.write(`data: ${JSON.stringify(event)}\n\n`);
+                });
+                const heartbeat = setInterval(() => {
+                    if (!response.destroyed) response.write(": heartbeat\n\n");
+                }, 15_000);
+                request.once("close", () => {
+                    clearInterval(heartbeat);
+                    unsubscribe();
+                });
+                return;
+            }
+
+            if (request.method === "POST" && url.pathname === "/api/stream") {
+                const body = (await readJson(request)) as ProxyRequest;
+                if (body.model?.provider !== providerId || typeof body.model.id !== "string") {
+                    json(response, 400, { error: "Only registered DeepSeek models are supported." });
+                    return;
+                }
+                const model = models.getModel(providerId, body.model.id);
+                if (!model) {
+                    json(response, 400, { error: "Requested DeepSeek model is unavailable." });
+                    return;
+                }
+                const context = sanitizeContext(body.context);
+                const abortController = new AbortController();
+                response.on("close", () => {
+                    if (!response.writableEnded) abortController.abort();
+                });
+                response.writeHead(200, {
+                    "Content-Type": "text/event-stream; charset=utf-8",
+                    "Cache-Control": "no-cache, no-transform",
+                    Connection: "keep-alive",
+                });
+                response.flushHeaders();
+                const stream = models.streamSimple(
+                    model,
+                    context,
+                    sanitizeOptions(body.options, model, abortController.signal),
+                );
+                for await (const event of stream) {
+                    response.write(`data: ${JSON.stringify(toProxyEvent(event))}\n\n`);
+                }
+                response.end();
+                return;
+            }
+
+            if (url.pathname.startsWith("/sample-browser-project.")) {
+                await serveRuntimeAsset(options.runtimeDirectory, url.pathname, response);
+                return;
+            }
+            await serveStatic(options.distDirectory, url.pathname, response);
+        } catch (error) {
+            if (response.headersSent) {
+                if (!response.writableEnded && !response.destroyed) {
+                    response.write(
+                        `data: ${JSON.stringify({
+                            type: "error",
+                            reason: "error",
+                            errorMessage: errorMessage(error),
+                            usage: {
+                                input: 0,
+                                output: 0,
+                                cacheRead: 0,
+                                cacheWrite: 0,
+                                totalTokens: 0,
+                                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+                            },
+                        })}\n\n`,
+                    );
+                }
+                response.end();
+            } else {
+                if (error instanceof ProjectPickerCancelledError) {
+                    json(response, 409, { error: error.message, code: "cancelled" });
+                } else {
+                    json(response, 500, { error: errorMessage(error) });
+                }
+            }
+        }
+    });
+    server.once("close", () => projects.dispose());
+
+    return {
+        server,
+        token,
+        listen: () =>
+            new Promise((resolveListen, reject) => {
+                server.once("error", reject);
+                server.listen(port, host, () => {
+                    server.removeListener("error", reject);
+                    const address = server.address() as AddressInfo;
+                    resolveListen({ host, port: address.port });
+                });
+            }),
+    };
+}
+
+async function serveStatic(directory: string, pathname: string, response: ServerResponse): Promise<void> {
+    const root = resolve(directory);
+    const requested = resolve(root, `.${decodeURIComponent(pathname)}`);
+    if (requested !== root && !requested.startsWith(`${root}${sep}`)) {
+        json(response, 403, { error: "Invalid asset path." });
+        return;
+    }
+    let file = requested;
+    try {
+        const information = await stat(file);
+        if (information.isDirectory()) file = join(file, "index.html");
+    } catch {
+        file = resolve(root, "index.html");
+    }
+    try {
+        await access(file);
+    } catch {
+        json(response, 404, { error: "Editor assets have not been built." });
+        return;
+    }
+    const contentType = contentTypes[extname(file).toLowerCase()] ?? "application/octet-stream";
+    response.writeHead(200, { "Content-Type": contentType });
+    createReadStream(file).pipe(response);
+}
+
+async function serveRuntimeAsset(
+    directory: string,
+    pathname: string,
+    response: ServerResponse,
+): Promise<void> {
+    const name = pathname.slice(1);
+    if (!/^sample-browser-project\.(?:data|html|js|wasm)$/.test(name)) {
+        json(response, 404, { error: "Unknown WebAssembly runtime asset." });
+        return;
+    }
+    const file = resolve(directory, name);
+    try {
+        await access(file);
+    } catch {
+        json(response, 404, {
+            error: "WebAssembly runtime assets have not been built. Run the sample-browser-project build first.",
+        });
+        return;
+    }
+    response.writeHead(200, {
+        "Content-Type": contentTypes[extname(file).toLowerCase()] ?? "application/octet-stream",
+    });
+    createReadStream(file).pipe(response);
+}

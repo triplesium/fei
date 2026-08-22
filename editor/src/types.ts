@@ -1,3 +1,5 @@
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
+
 export type ProjectFileKind = "text" | "binary";
 
 export interface ProjectFileEntry {
@@ -12,18 +14,12 @@ export interface RememberedProject {
     permissionRequired?: boolean;
 }
 
-export type RuntimeState = "stopped" | "starting" | "running" | "failed";
-
-export interface RuntimeSession {
-    channelId: string;
-    files: Array<{ path: string; content: string | Uint8Array<ArrayBuffer> }>;
-    source: string;
-}
+export type { RuntimeSession, RuntimeState } from "./runtime/types";
 
 export type ConsoleLevel = "info" | "error" | "command";
 
 export interface ConsoleEntry {
-    id: number;
+    id: string;
     level: ConsoleLevel;
     source: string;
     message: string;
@@ -57,8 +53,24 @@ export interface EditorAgentApi {
     invoke(request: AgentRequest): Promise<AgentResponse>;
 }
 
+export interface EditorPiAgentStatus {
+    configured: boolean;
+    streaming: boolean;
+    tools: readonly string[];
+    error?: string;
+}
+
+export interface EditorPiAgentApi {
+    status(): EditorPiAgentStatus;
+    prompt(input: string): Promise<void>;
+    abort(): void;
+    reset(): void;
+    subscribe(listener: (event: AgentEvent) => void | Promise<void>): () => void;
+}
+
 declare global {
     interface Window {
         feiEditorAgent: EditorAgentApi;
+        feiEditorPi: EditorPiAgentApi;
     }
 }
