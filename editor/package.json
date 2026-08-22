@@ -10,7 +10,9 @@
         "dev": "concurrently -k -n host,renderer \"npm:dev:host\" \"npm:dev:renderer\"",
         "dev:host": "tsx watch host/main.ts",
         "dev:renderer": "vite",
+        "sandbox:prepare": "node tools/sandbox-project.mjs --prepare-only",
         "start": "npm run build && node host-dist/main.js",
+        "start:sandbox": "npm run build && node tools/sandbox-project.mjs",
         "test": "vitest run",
         "typecheck": "tsc -b && tsc -p tsconfig.host.json --noEmit"
     },
