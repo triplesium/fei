@@ -36,9 +36,9 @@ return playtest {
         "The red barrier can only be crossed while airborne.",
 
     types = {
-        PlatformInput = "sample.platformer_test.PlatformInput",
-        PlatformPlayer = "sample.platformer_test.PlatformPlayer",
-        PlatformState = "sample.platformer_test.PlatformState",
+        PlatformInput = "project.scripts.platformer_test.PlatformInput",
+        PlatformPlayer = "project.scripts.platformer_test.PlatformPlayer",
+        PlatformState = "project.scripts.platformer_test.PlatformState",
     },
 
     ticks = {

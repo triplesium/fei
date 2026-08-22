@@ -17,8 +17,7 @@ TEST_CASE(
             local function fixed_system()
             end
 
-            return module {
-                name = "game.fixed_update",
+            return {
                 systems = {
                     system(MainSchedules.FixedUpdate, fixed_system),
                 },
@@ -32,6 +31,56 @@ TEST_CASE(
     }
     REQUIRE(artifact->declaration.systems.size() == 1);
     CHECK(artifact->declaration.systems.front().schedule == FixedUpdate);
+}
+
+TEST_CASE(
+    "Luau compiler derives module identity from the source path",
+    "[scripting_luau][compiler][module]"
+) {
+    const ScriptSource source {
+        .name = "project://scripts/gameplay/movement.luau",
+        .content = R"(
+            return {
+                types = {
+                    Position = {},
+                },
+                systems = {},
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    CHECK(artifact->declaration.name == "project.scripts.gameplay.movement");
+    REQUIRE(artifact->declaration.types.size() == 1);
+    CHECK(
+        artifact->declaration.types.front().qualified_name ==
+        "project.scripts.gameplay.movement.Position"
+    );
+}
+
+TEST_CASE(
+    "Luau compiler rejects source-declared module identity",
+    "[scripting_luau][compiler][module][error]"
+) {
+    const ScriptSource source {
+        .name = "movement.luau",
+        .content = R"(
+            return {
+                name = "game.movement",
+                systems = {},
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE_FALSE(artifact);
+    CHECK(
+        artifact.error().message.find("derived from the source path") !=
+        std::string::npos
+    );
 }
 
 TEST_CASE(
@@ -49,8 +98,7 @@ TEST_CASE(
             )
             end
 
-            return module {
-                name = "game.movement",
+            return {
                 systems = {
                     system(MainSchedules.Update, movement_system),
                 },
@@ -63,7 +111,7 @@ TEST_CASE(
         FAIL(artifact.error().message);
     }
     REQUIRE(artifact.has_value());
-    CHECK(artifact->declaration.name == "game.movement");
+    CHECK(artifact->declaration.name == "movement");
     REQUIRE(artifact->declaration.systems.size() == 1);
     const DynamicSystemDecl& system = artifact->declaration.systems.front();
     CHECK(system.name == "movement_system");
@@ -117,8 +165,7 @@ TEST_CASE(
             local function invalid_system(value)
             end
 
-            return module {
-                name = "invalid",
+            return {
                 systems = { system(Update, invalid_system) },
             }
         )",
@@ -145,8 +192,7 @@ TEST_CASE(
             )
             end
 
-            return module {
-                name = "game.combat",
+            return {
                 types = {
                     Health = {
                         current = field(i32, 100),
@@ -179,12 +225,12 @@ TEST_CASE(
     REQUIRE(artifact->declaration.types.size() == 2);
     const auto& config_type = artifact->declaration.types[0];
     CHECK(config_type.name == "CombatConfig");
-    CHECK(config_type.qualified_name == "game.combat.CombatConfig");
+    CHECK(config_type.qualified_name == "combat.CombatConfig");
     REQUIRE(config_type.fields.size() == 3);
     CHECK(config_type.fields[0].name == "enabled");
     CHECK(config_type.fields[0].default_value.get<bool>());
     CHECK(config_type.fields[1].name == "health");
-    CHECK(config_type.fields[1].type.type_name == "game.combat.Health");
+    CHECK(config_type.fields[1].type.type_name == "combat.Health");
     CHECK(config_type.fields[1].type.script_type);
     CHECK_FALSE(config_type.fields[1].has_default);
     CHECK(config_type.fields[2].name == "label");
@@ -201,7 +247,7 @@ TEST_CASE(
 
     REQUIRE(artifact->declaration.resources.size() == 1);
     const auto& resource = artifact->declaration.resources.front();
-    CHECK(resource.type == "game.combat.CombatConfig");
+    CHECK(resource.type == "combat.CombatConfig");
     CHECK(resource.init_if_missing);
     REQUIRE(resource.initial_values.size() == 2);
     CHECK(resource.initial_values[0].name == "enabled");
@@ -213,10 +259,10 @@ TEST_CASE(
     const auto& system = artifact->declaration.systems.front();
     const auto& query =
         static_cast<const DynamicQueryParamDecl&>(*system.params[0]);
-    CHECK(query.fields[0].type.type_name == "game.combat.Health");
+    CHECK(query.fields[0].type.type_name == "combat.Health");
     const auto& config =
         static_cast<const DynamicResourceParamDecl&>(*system.params[1]);
-    CHECK(config.type.type_name == "game.combat.CombatConfig");
+    CHECK(config.type.type_name == "combat.CombatConfig");
 }
 
 TEST_CASE(
@@ -226,8 +272,7 @@ TEST_CASE(
     const ScriptSource source {
         .name = "invalid_type.luau",
         .content = R"(
-            return module {
-                name = "game.invalid",
+            return {
                 types = {
                     Health = {
                         current = field(i32, 1.5),
@@ -250,8 +295,7 @@ TEST_CASE(
     const ScriptSource source {
         .name = "optional_entity.luau",
         .content = R"(
-            return module {
-                name = "game.optional_entity",
+            return {
                 types = {
                     TargetState = {
                         target = field(optional(entity), nil),
@@ -284,8 +328,7 @@ TEST_CASE(
     const ScriptSource source {
         .name = "invalid_state.luau",
         .content = R"(
-            return module {
-                name = "game.invalid_state",
+            return {
                 states = {
                     GameState = {
                         initial = "Missing",
@@ -325,8 +368,7 @@ TEST_CASE(
             local function third()
             end
 
-            return module {
-                name = "configured",
+            return {
                 systems = {
                     [Update] = {
                         third,
@@ -368,8 +410,7 @@ TEST_CASE(
             R"(
                 local function first() end
                 local function missing() end
-                return module {
-                    name = "missing",
+                return {
                     systems = { [Update] = { first:after(missing) } },
                 }
             )",
@@ -379,8 +420,7 @@ TEST_CASE(
             R"(
                 local function first() end
                 local function second() end
-                return module {
-                    name = "cycle",
+                return {
                     systems = {
                         [Update] = {
                             first:after(second),
@@ -394,8 +434,7 @@ TEST_CASE(
         {
             R"(
                 local function tick() end
-                return module {
-                    name = "short_chain",
+                return {
                     systems = { [Update] = { chain(tick) } },
                 }
             )",
@@ -407,8 +446,7 @@ TEST_CASE(
                     return true
                 end
                 local function tick() end
-                return module {
-                    name = "writable",
+                return {
                     systems = {
                         [Update] = { tick:run_if(writable) },
                     },
@@ -440,8 +478,7 @@ TEST_CASE(
             local function third() end
             local function independent() end
 
-            return module {
-                name = "system.chain",
+            return {
                 systems = {
                     [Update] = {
                         chain(
@@ -485,8 +522,7 @@ TEST_CASE(
                 R"(
                     counter = 0
                     local function tick() end
-                    return module {
-                        name = "global",
+                    return {
                         systems = { system(Update, tick) },
                     }
                 )",
@@ -495,8 +531,7 @@ TEST_CASE(
             {
                 R"(
                     function tick() end
-                    return module {
-                        name = "global_function",
+                    return {
                         systems = { system(Update, tick) },
                     }
                 )",
@@ -508,8 +543,7 @@ TEST_CASE(
                     local function tick()
                         counter += 1
                     end
-                    return module {
-                        name = "captured",
+                    return {
                         systems = { system(Update, tick) },
                     }
                 )",
@@ -521,8 +555,7 @@ TEST_CASE(
                     local function tick()
                         cache.value = cache.value + 1
                     end
-                    return module {
-                        name = "captured_table",
+                    return {
                         systems = { system(Update, tick) },
                     }
                 )",
@@ -534,8 +567,7 @@ TEST_CASE(
                     local function tick()
                         table.insert(cache, 1)
                     end
-                    return module {
-                        name = "captured_table_call",
+                    return {
                         systems = { system(Update, tick) },
                     }
                 )",
@@ -548,8 +580,7 @@ TEST_CASE(
                         local alias = cache
                         alias.value += 1
                     end
-                    return module {
-                        name = "captured_alias",
+                    return {
                         systems = { system(Update, tick) },
                     }
                 )",
@@ -564,8 +595,7 @@ TEST_CASE(
                     local function tick()
                         mutate(cache)
                     end
-                    return module {
-                        name = "captured_indirect_call",
+                    return {
                         systems = { system(Update, tick) },
                     }
                 )",
@@ -576,8 +606,7 @@ TEST_CASE(
                     local function tick()
                         math.snapshot_unsafe_value = 1
                     end
-                    return module {
-                        name = "global_member",
+                    return {
                         systems = { system(Update, tick) },
                     }
                 )",
@@ -588,8 +617,7 @@ TEST_CASE(
                     local function tick()
                         local value = math.random()
                     end
-                    return module {
-                        name = "random",
+                    return {
                         systems = { system(Update, tick) },
                     }
                 )",
@@ -619,8 +647,7 @@ TEST_CASE(
                 add(2)
                 assert(total == 2)
             end
-            return module {
-                name = "safe_nested_capture",
+            return {
                 systems = { system(Update, tick) },
             }
         )",

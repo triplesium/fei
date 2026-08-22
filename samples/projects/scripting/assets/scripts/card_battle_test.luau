@@ -70,8 +70,7 @@ local function initialize(
     state.energy = 3
 end
 
-return module {
-    name = "sample.card_battle_test",
+return {
     types = {
         CardBattleState = {
             initialized = field(i32, 0),

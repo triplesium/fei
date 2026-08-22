@@ -249,8 +249,7 @@ TEST_CASE(
                 assert(config.value == 7)
             end
 
-            return module {
-                name = "test.structured_name",
+            return {
                 systems = { system(Update, verify) },
             }
         )",
@@ -326,8 +325,7 @@ TEST_CASE(
                 state.readonly_rejected = true
             end
 
-            return module {
-                name = "test.asset",
+            return {
                 systems = {
                     system(Update, load_asset),
                     system(Update, reject_readonly_load),
@@ -399,8 +397,7 @@ TEST_CASE(
                 state.spawned = world:spawn(nested):id()
             end
 
-            return module {
-                name = "test.construction",
+            return {
                 systems = {
                     system(Update, construct_values),
                 },
@@ -459,8 +456,7 @@ TEST_CASE(
                 end
             end
 
-            return module {
-                name = "test.luau_dynamic_types",
+            return {
                 types = {
                     Health = {
                         current = field(i32, 10),
@@ -499,7 +495,7 @@ TEST_CASE(
     REQUIRE(systems.has_value());
 
     auto health_type =
-        Registry::instance().try_get_type("test.luau_dynamic_types.Health");
+        Registry::instance().try_get_type("dynamic_types_system.Health");
     REQUIRE(health_type.has_value());
     auto health = Val::default_construct(*health_type);
     const Entity entity = world.entity();
@@ -515,9 +511,8 @@ TEST_CASE(
     REQUIRE(current.has_value());
     CHECK(current->get<int>() == 15);
 
-    auto state_type = Registry::instance().try_get_type(
-        "test.luau_dynamic_types.CombatState"
-    );
+    auto state_type =
+        Registry::instance().try_get_type("dynamic_types_system.CombatState");
     REQUIRE(state_type.has_value());
     auto& state_cls = registry.get_cls(state_type->id());
     const Ref state = world.resource(state_type->id());
@@ -580,8 +575,7 @@ TEST_CASE(
                 world:set_resource(state:make_error(total))
             end
 
-            return module {
-                name = "test.world",
+            return {
                 systems = {
                     system(Update, use_world),
                 },
@@ -650,8 +644,7 @@ TEST_CASE(
                 end
             end
 
-            return module {
-                name = "test.luau_optional_entity",
+            return {
                 types = {
                     TargetState = {
                         observed = field(entity, 0),
@@ -687,9 +680,8 @@ TEST_CASE(
 
     world.run_schedule(Update);
 
-    auto type = Registry::instance().try_get_type(
-        "test.luau_optional_entity.TargetState"
-    );
+    auto type =
+        Registry::instance().try_get_type("optional_entity_system.TargetState");
     REQUIRE(type.has_value());
     auto& cls = Registry::instance().get_cls(type->id());
     const Ref state = world.resource(type->id());
@@ -716,8 +708,7 @@ TEST_CASE(
                 end
             end
 
-            return module {
-                name = "test.world_invalidation",
+            return {
                 systems = {
                     system(Update, invalidate),
                 },
@@ -785,8 +776,7 @@ TEST_CASE(
                 return escaped_query:size()
             end
 
-            return module {
-                name = "test.world_borrow",
+            return {
                 systems = {
                     system(Update, capture),
                     system(Update, use_entity),
@@ -858,8 +848,7 @@ TEST_CASE(
                 commands:add_resource(state:make_position(11))
             end
 
-            return module {
-                name = "test.commands",
+            return {
                 systems = {
                     system(Update, apply_commands),
                 },
@@ -957,8 +946,7 @@ TEST_CASE(
                 end
             end
 
-            return module {
-                name = "test.movement",
+            return {
                 systems = {
                     system(MainSchedules.Update, movement_system),
                 },
@@ -1074,8 +1062,7 @@ TEST_CASE(
                 end
             end
 
-            return module {
-                name = "test.borrow",
+            return {
                 systems = {
                     system(Update, mutate),
                     system(Update, mutate_method),
@@ -1187,8 +1174,7 @@ TEST_CASE(
                 config.executions += 1
             end
 
-            return module {
-                name = "test.removed_components",
+            return {
                 systems = {
                     [Update] = { discard_removed },
                 },
@@ -1246,8 +1232,7 @@ TEST_CASE(
                 config.schedule_order = config.schedule_order * 10 + 3
             end
 
-            return module {
-                name = "configured.schedule",
+            return {
                 systems = {
                     [Update] = {
                         chain(
@@ -1327,8 +1312,7 @@ TEST_CASE(
                 config.state_order = config.state_order * 10 + 4
             end
 
-            return module {
-                name = "test.state_schedule",
+            return {
                 systems = {
                     [Update] = {
                         update_idle:run_if(in_state(LuauTestMode.Idle)),
@@ -1413,8 +1397,7 @@ TEST_CASE(
                 config.state_order = config.state_order * 10 + 5
             end
 
-            return module {
-                name = "test.script_state",
+            return {
                 states = {
                     GameFlow = {
                         initial = "Boot",
@@ -1469,7 +1452,7 @@ TEST_CASE(
     CHECK(world.resource<LuauTestConfig>().state_order == 12345);
 
     const ScriptSource reloaded_source {
-        .name = "script_state_reload.luau",
+        .name = "script_state.luau",
         .content = R"(
             local function verify_running(
                 config: ResRW<LuauTestConfig>,
@@ -1479,8 +1462,7 @@ TEST_CASE(
                 config.state_order = config.state_order * 10 + 6
             end
 
-            return module {
-                name = "test.script_state",
+            return {
                 states = {
                     GameFlow = {
                         initial = "Paused",
@@ -1510,10 +1492,9 @@ TEST_CASE(
     CHECK(world.resource<LuauTestConfig>().state_order == 123456);
 
     const ScriptSource invalid_reload {
-        .name = "script_state_invalid_reload.luau",
+        .name = "script_state.luau",
         .content = R"(
-            return module {
-                name = "test.script_state",
+            return {
                 states = {
                     GameFlow = {
                         initial = "Boot",

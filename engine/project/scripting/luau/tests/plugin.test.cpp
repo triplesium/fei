@@ -144,8 +144,7 @@ TEST_CASE(
         ScriptFile {
             .path = "scripts/gameplay.luau",
             .content = std::string_view {R"(
-                return module {
-                    name = "project.gameplay",
+                return {
                     systems = {},
                 }
             )"},
@@ -177,7 +176,7 @@ TEST_CASE(
     TemporaryMixedScriptProject directory(
         {
             ScriptFile {
-                .path = "scripts/gameplay.luau",
+                .path = "scripts/require_test.luau",
                 .content = std::string_view {R"(
                     local first = require("./lib/counter")
                     local second = require("./lib/../lib/counter.luau")
@@ -186,8 +185,7 @@ TEST_CASE(
                         state.value = first.next(0) * 10 + second.next(1)
                     end
 
-                    return module {
-                        name = "project.require_test",
+                    return {
                         types = {
                             RequireState = {
                                 value = field(i32, 0),
@@ -226,8 +224,9 @@ TEST_CASE(
     );
 
     app.run_schedule(Update);
-    auto state_type =
-        Registry::instance().try_get_type("project.require_test.RequireState");
+    auto state_type = Registry::instance().try_get_type(
+        "project.scripts.require_test.RequireState"
+    );
     REQUIRE(state_type);
     Ref state = app.world().resource(state_type->id());
     auto value = Registry::instance()
@@ -248,8 +247,7 @@ TEST_CASE(
                 .path = "scripts/gameplay.luau",
                 .content = std::string_view {R"(
                     local first = require("./lib/first")
-                    return module {
-                        name = "project.require_cycle",
+                    return {
                         systems = {},
                     }
                 )"},
@@ -295,8 +293,7 @@ TEST_CASE(
                 .path = "scripts/gameplay.luau",
                 .content = std::string_view {R"(
                     local missing = require("./missing")
-                    return module {
-                        name = "project.missing_import",
+                    return {
                         systems = {},
                     }
                 )"},
@@ -319,8 +316,7 @@ TEST_CASE(
                 .content = std::string_view {R"(
                     local name = "missing"
                     local missing = require("./" .. name)
-                    return module {
-                        name = "project.dynamic_import",
+                    return {
                         systems = {},
                     }
                 )"},
@@ -342,8 +338,7 @@ TEST_CASE(
                 .path = "scripts/gameplay.luau",
                 .content = std::string_view {R"(
                     local outside = require("../../outside")
-                    return module {
-                        name = "project.escaped_import",
+                    return {
                         systems = {},
                     }
                 )"},
@@ -366,8 +361,7 @@ TEST_CASE(
                     .path = "scripts/gameplay.luau",
                     .content = std::string_view {R"(
                         local invalid = require("./invalid")
-                        return module {
-                            name = "project.invalid_export",
+                        return {
                             systems = {},
                         }
                     )"},
@@ -399,10 +393,9 @@ TEST_CASE(
     TemporaryMixedScriptProject directory(
         {
             ScriptFile {
-                .path = "scripts/gameplay.luau",
+                .path = "scripts/playtest_game.luau",
                 .content = std::string_view {R"(
-                    return module {
-                        name = "project.playtest_game",
+                    return {
                         types = {
                             Control = {
                                 value = field(i32, 0),
@@ -438,7 +431,7 @@ TEST_CASE(
                         id = "game.main",
                         label = "Main controls",
                         types = {
-                            Control = "project.playtest_game.Control",
+                            Control = "project.scripts.playtest_game.Control",
                         },
                         ticks = {
                             default = 4,
@@ -512,8 +505,7 @@ TEST_CASE(
             ScriptFile {
                 .path = "scripts/gameplay.luau",
                 .content = std::string_view {R"(
-                    return module {
-                        name = "project.invalid_playtest",
+                    return {
                         systems = {},
                     }
                 )"},
@@ -546,8 +538,7 @@ TEST_CASE(
             ScriptFile {
                 .path = "scripts/gameplay.luau",
                 .content = std::string_view {R"(
-                    return module {
-                        name = "project.snapshot_safe_playtest",
+                    return {
                         systems = {},
                     }
                 )"},
@@ -625,7 +616,7 @@ TEST_CASE(
 ) {
     TemporaryMixedScriptProject directory({
         ScriptFile {
-            .path = "scripts/gameplay.luau",
+            .path = "scripts/pure_luau.luau",
             .content = std::string_view {R"(
                 local function initialize(
                     world: World,
@@ -651,8 +642,7 @@ TEST_CASE(
                     state.ticks += 1
                 end
 
-                return module {
-                    name = "project.pure_luau",
+                return {
                     types = {
                         Position = {
                             x = field(f32, 1.0),
@@ -688,8 +678,10 @@ TEST_CASE(
     app.run_schedule(Update);
 
     auto& registry = Registry::instance();
-    auto position_type = registry.try_get_type("project.pure_luau.Position");
-    auto state_type = registry.try_get_type("project.pure_luau.ProjectState");
+    auto position_type =
+        registry.try_get_type("project.scripts.pure_luau.Position");
+    auto state_type =
+        registry.try_get_type("project.scripts.pure_luau.ProjectState");
     REQUIRE(position_type.has_value());
     REQUIRE(state_type.has_value());
 

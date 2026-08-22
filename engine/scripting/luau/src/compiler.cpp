@@ -794,33 +794,25 @@ Result<ScheduleId, ScriptError> schedule_id(
     return failure(declaration_error("unknown schedule declaration"));
 }
 
-const AstExprTable* module_table(const AstExpr& expression) {
-    const auto* call = expression.as<AstExprCall>();
-    if (call == nullptr || call->args.size != 1) {
-        return nullptr;
+std::string module_name_from_source(std::string_view source_name) {
+    while (source_name.starts_with("./") || source_name.starts_with(".\\")) {
+        source_name.remove_prefix(2);
     }
-    const auto* global = call->func->as<AstExprGlobal>();
-    if (global == nullptr || name_view(global->name) != "module") {
-        return nullptr;
-    }
-    return call->args.data[0]->as<AstExprTable>();
-}
 
-Result<std::string, ScriptError>
-string_record(const AstExprTable& table, const char* key) {
-    const std::optional<AstExpr*> value = table.getRecord(key);
-    if (!value) {
-        return failure(declaration_error(
-            "module requires a string '" + std::string(key) + "' field"
-        ));
+    std::string result {source_name};
+    if (const auto source_delimiter = result.find("://");
+        source_delimiter != std::string::npos) {
+        result.replace(source_delimiter, 3, ".");
     }
-    const auto* text = (*value)->as<AstExprConstantString>();
-    if (text == nullptr) {
-        return failure(declaration_error(
-            "module field '" + std::string(key) + "' must be a string"
-        ));
+    const auto separator = result.find_last_of("/\\");
+    const auto extension = result.find_last_of('.');
+    if (extension != std::string::npos &&
+        (separator == std::string::npos || extension > separator)) {
+        result.erase(extension);
     }
-    return std::string {text->value.data, text->value.size};
+    std::ranges::replace(result, '/', '.');
+    std::ranges::replace(result, '\\', '.');
+    return result.empty() ? std::string {"script"} : result;
 }
 
 Result<std::string, ScriptError>
@@ -1837,30 +1829,32 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
             const auto* return_statement = statement->as<AstStatReturn>();
             return_statement != nullptr && return_statement->list.size == 1
         ) {
-            table = module_table(*return_statement->list.data[0]);
+            table = return_statement->list.data[0]->as<AstExprTable>();
         }
     }
     if (table == nullptr) {
         return failure(declaration_error(
-            "script must return module { name = ..., systems = {...} }"
+            "script must return a declaration table with a 'systems' field"
         ));
     }
 
-    auto module_name = string_record(*table, "name");
-    if (!module_name) {
-        return failure(std::move(module_name.error()));
+    if (table->getRecord("name")) {
+        return failure(declaration_error(
+            "script declaration field 'name' is not supported; module "
+            "identity is derived from the source path"
+        ));
     }
     ScriptModuleDecl declaration {
-        .name = std::move(*module_name),
+        .name = module_name_from_source(source.name),
         .source_name = source.name,
     };
     const std::optional<AstExpr*> types_value = table->getRecord("types");
     const auto* types =
         types_value ? (*types_value)->as<AstExprTable>() : nullptr;
     if (types_value && types == nullptr) {
-        return failure(
-            declaration_error("module field 'types' must be a table")
-        );
+        return failure(declaration_error(
+            "script declaration field 'types' must be a table"
+        ));
     }
     if (types != nullptr) {
         auto compiled = compile_types(*types, declaration.name);
@@ -1879,9 +1873,9 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
     const auto* states =
         states_value ? (*states_value)->as<AstExprTable>() : nullptr;
     if (states_value && states == nullptr) {
-        return failure(
-            declaration_error("module field 'states' must be a table")
-        );
+        return failure(declaration_error(
+            "script declaration field 'states' must be a table"
+        ));
     }
     if (states != nullptr) {
         auto compiled = compile_states(*states, declaration.name);
@@ -1905,9 +1899,9 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
     const auto* resources =
         resources_value ? (*resources_value)->as<AstExprTable>() : nullptr;
     if (resources_value && resources == nullptr) {
-        return failure(
-            declaration_error("module field 'resources' must be a table")
-        );
+        return failure(declaration_error(
+            "script declaration field 'resources' must be a table"
+        ));
     }
     if (resources != nullptr) {
         auto compiled =
@@ -1921,9 +1915,9 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
     const auto* systems =
         systems_value ? (*systems_value)->as<AstExprTable>() : nullptr;
     if (systems == nullptr) {
-        return failure(
-            declaration_error("module field 'systems' must be a table")
-        );
+        return failure(declaration_error(
+            "script declaration field 'systems' must be a table"
+        ));
     }
     LuauSystemDeclarationLayout system_layout =
         LuauSystemDeclarationLayout::Flat;

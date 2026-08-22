@@ -113,9 +113,9 @@ return playtest {
         "select it, then drag it onto the target with the same id.",
 
     types = {
-        PuzzlePiece = "sample.pointer_puzzle_test.PuzzlePiece",
-        PuzzleTarget = "sample.pointer_puzzle_test.PuzzleTarget",
-        PuzzleState = "sample.pointer_puzzle_test.PuzzleState",
+        PuzzlePiece = "project.scripts.pointer_puzzle_test.PuzzlePiece",
+        PuzzleTarget = "project.scripts.pointer_puzzle_test.PuzzleTarget",
+        PuzzleState = "project.scripts.pointer_puzzle_test.PuzzleState",
     },
 
     ticks = {

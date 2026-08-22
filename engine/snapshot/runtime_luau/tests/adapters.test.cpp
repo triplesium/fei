@@ -15,7 +15,7 @@ using namespace fei;
 
 namespace {
 
-constexpr std::string_view c_counter_type = "snapshot.luau.Counter";
+constexpr std::string_view c_counter_type = "snapshot_counter.Counter";
 
 struct ScriptTarget {
     int value {7};
@@ -69,8 +69,7 @@ App make_script_app() {
                     counter.value += 1
                 end
 
-                return module {
-                    name = "snapshot.luau",
+                return {
                     types = {
                         Counter = {
                             value = field(i32, 0),
@@ -214,8 +213,7 @@ TEST_CASE(
         LuauScriptSource {
             .name = "additional_module.luau",
             .content = R"(
-                return module {
-                    name = "snapshot.additional",
+                return {
                     systems = {},
                 }
             )",

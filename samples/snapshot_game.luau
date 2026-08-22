@@ -255,8 +255,7 @@ local function finish_turn(
     if state.enemies_remaining == 0 then state.victory = true end
 end
 
-return module {
-    name = "sample.snapshot_game",
+return {
     types = {
         GridPosition = { x = field(i32, 0), y = field(i32, 0) },
         Fighter = {

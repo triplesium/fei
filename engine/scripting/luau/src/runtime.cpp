@@ -377,12 +377,6 @@ void seal_script_namespace(lua_State* state, int index) {
     lua_setreadonly(state, index, true);
 }
 
-int module_helper(lua_State* state) {
-    luaL_checktype(state, 1, LUA_TTABLE);
-    lua_pushvalue(state, 1);
-    return 1;
-}
-
 int system_helper(lua_State* state) {
     if (!lua_isfunction(state, 2) && !is_system_config(state, 2)) {
         luaL_error(state, "system expects a function or configured system");
@@ -542,8 +536,6 @@ int optional_helper(lua_State* state) {
 }
 
 void install_module_helpers(lua_State* state) {
-    lua_pushcfunction(state, module_helper, "module");
-    lua_setglobal(state, "module");
     lua_pushcfunction(state, system_helper, "system");
     lua_setglobal(state, "system");
     lua_pushcfunction(state, chain_helper, "chain");

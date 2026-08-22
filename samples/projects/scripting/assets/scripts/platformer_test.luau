@@ -113,8 +113,7 @@ local function simulate(
     state.ticks += 1
 end
 
-return module {
-    name = "sample.platformer_test",
+return {
     types = {
         PlatformPlayer = {
             velocity_y = field(f32, 0.0),

@@ -80,8 +80,7 @@ local function initialize(
     state.initialized = 1
 end
 
-return module {
-    name = "sample.pointer_puzzle_test",
+return {
     types = {
         PuzzlePiece = {
             id = field(i32, 0),

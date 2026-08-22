@@ -57,8 +57,7 @@ TEST_CASE(
                 assert(value == 2)
             end
 
-            return module {
-                name = "counter",
+            return {
                 systems = { system(Update, tick) },
             }
         )",
@@ -107,8 +106,7 @@ TEST_CASE(
                 assert(not ok)
             end
 
-            return module {
-                name = "namespace",
+            return {
                 systems = { system(Update, verify) },
             }
         )",
@@ -161,8 +159,7 @@ TEST_CASE(
                 assert(value.value == 23)
             end
 
-            return module {
-                name = "static_method",
+            return {
                 systems = { system(Update, verify) },
             }
         )",
@@ -201,8 +198,7 @@ TEST_CASE(
             local function last()
             end
 
-            return module {
-                name = "configured.runtime",
+            return {
                 systems = {
                     [Update] = {
                         chain(

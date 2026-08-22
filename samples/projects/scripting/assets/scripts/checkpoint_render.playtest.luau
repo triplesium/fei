@@ -100,11 +100,14 @@ return playtest {
         "checkpoint branches.",
 
     types = {
-        CheckpointArenaActor = "sample.checkpoint_render.CheckpointArenaActor",
-        CheckpointArenaPlayer = "sample.checkpoint_render.CheckpointArenaPlayer",
-        CheckpointArenaState = "sample.checkpoint_render.CheckpointArenaState",
+        CheckpointArenaActor =
+            "project.scripts.checkpoint_render.CheckpointArenaActor",
+        CheckpointArenaPlayer =
+            "project.scripts.checkpoint_render.CheckpointArenaPlayer",
+        CheckpointArenaState =
+            "project.scripts.checkpoint_render.CheckpointArenaState",
         CheckpointArenaPhysicsProbe =
-            "sample.checkpoint_render.CheckpointArenaPhysicsProbe",
+            "project.scripts.checkpoint_render.CheckpointArenaPhysicsProbe",
     },
 
     ticks = {

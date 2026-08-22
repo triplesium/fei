@@ -45,9 +45,9 @@ return playtest {
     description = "Moves the player and reports the current game state.",
 
     types = {
-        PlaytestInput = "sample.movement.PlaytestInput",
-        GameState = "sample.movement.GameState",
-        Player = "sample.movement.Player",
+        PlaytestInput = "project.scripts.movement.PlaytestInput",
+        GameState = "project.scripts.movement.GameState",
+        Player = "project.scripts.movement.Player",
     },
 
     ticks = {

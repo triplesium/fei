@@ -33,8 +33,7 @@ local function animate(
     end
 end
 
-return module {
-    name = "web_project.main",
+return {
     types = {
         WebProjectSprite = {},
     },

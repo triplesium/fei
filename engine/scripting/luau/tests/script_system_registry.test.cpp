@@ -58,8 +58,7 @@ constexpr auto increment_source = R"(
         counter.value += 4
     end
 
-    return module {
-        name = "registry.increment",
+    return {
         systems = {
             system(Update, tick),
         },
@@ -181,8 +180,7 @@ TEST_CASE(
             counter.value += 7
         end
 
-        return module {
-            name = "registry.reloaded",
+        return {
             systems = { system(Update, tick) },
         }
     )");
@@ -206,8 +204,7 @@ TEST_CASE(
             counter.value += 100
         end
 
-        return module {
-            name = "registry.invalid",
+        return {
             systems = { system(NotASchedule, tick) },
         }
     )");
@@ -247,8 +244,7 @@ TEST_CASE(
             counter.value += 10
         end
 
-        return module {
-            name = "registry.script_state",
+        return {
             states = {
                 FlowState = {
                     initial = "Idle",
@@ -287,8 +283,7 @@ TEST_CASE(
             counter.value += 100
         end
 
-        return module {
-            name = "registry.script_state",
+        return {
             states = {
                 FlowState = {
                     initial = "Idle",
@@ -310,8 +305,7 @@ TEST_CASE(
     script_asset = luau_assets(world).modify(script);
     REQUIRE(script_asset);
     script_asset->set_content(R"(
-        return module {
-            name = "registry.script_state",
+        return {
             states = {
                 FlowState = {
                     initial = "Idle",

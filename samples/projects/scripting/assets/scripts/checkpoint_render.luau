@@ -394,8 +394,7 @@ local function sync_status_ui(
     end
 end
 
-return module {
-    name = "sample.checkpoint_render",
+return {
     types = {
         CheckpointArenaActor = {
             kind = field(i32, 0),

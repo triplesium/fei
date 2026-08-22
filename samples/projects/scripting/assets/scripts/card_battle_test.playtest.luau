@@ -123,7 +123,7 @@ return playtest {
         "Choose cards from the observed hand and reduce enemy_hp to zero.",
 
     types = {
-        CardBattleState = "sample.card_battle_test.CardBattleState",
+        CardBattleState = "project.scripts.card_battle_test.CardBattleState",
     },
 
     ticks = {

@@ -133,8 +133,7 @@ local function update_button(
     end
 end
 
-return module {
-    name = "sample.ui_demo",
+return {
     types = {
         UiDemoButton = {},
         UiDemoLabel = {},

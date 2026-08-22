@@ -111,8 +111,7 @@ local function collect(
     end
 end
 
-return module {
-    name = "sample.movement",
+return {
     types = {
         Player = {
             speed = field(f32, 3.5),

@@ -25,7 +25,7 @@ using namespace fei;
 
 namespace {
 
-constexpr std::string_view c_type_prefix = "sample.snapshot_game.";
+constexpr std::string_view c_type_prefix = "snapshot_game.";
 
 enum class ActionKind { Move, Attack, UsePotion, Wait };
 
