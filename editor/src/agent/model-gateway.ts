@@ -1,12 +1,33 @@
 import { streamProxy } from "@earendil-works/pi-agent-core";
-import { editorHost, type EditorHostBootstrap } from "../services/editor-host-client";
+import {
+    editorHost,
+    type EditorHostBootstrap,
+    type EditorModelSettingsSnapshot,
+    type EditorModelSettingsUpdate,
+    type EditorProviderSettingsUpdate,
+    type EditorRegistryModelUpdate,
+} from "../services/editor-host-client";
 import type { EditorPiAgent } from "./editor-pi-agent";
 
 export type ModelGatewayState =
     | { state: "connecting" }
     | { state: "unavailable"; error: string }
-    | { state: "unconfigured"; provider: string; model: string }
-    | { state: "ready"; provider: string; model: string };
+    | {
+          state: "unconfigured";
+          providerId: string;
+          provider: string;
+          modelId: string;
+          model: string;
+          settings: EditorModelSettingsSnapshot;
+      }
+    | {
+          state: "ready";
+          providerId: string;
+          provider: string;
+          modelId: string;
+          model: string;
+          settings: EditorModelSettingsSnapshot;
+      };
 
 export class EditorModelGateway {
     async connect(agent: EditorPiAgent): Promise<ModelGatewayState> {
@@ -16,15 +37,21 @@ export class EditorModelGateway {
                 agent.unconfigure();
                 return {
                     state: "unconfigured",
+                    providerId: bootstrap.provider.id,
                     provider: bootstrap.provider.name,
+                    modelId: bootstrap.provider.model.id,
                     model: bootstrap.provider.model.name,
+                    settings: bootstrap.modelSettings,
                 };
             }
             this.configureAgent(agent, bootstrap);
             return {
                 state: "ready",
+                providerId: bootstrap.provider.id,
                 provider: bootstrap.provider.name,
+                modelId: bootstrap.provider.model.id,
                 model: bootstrap.provider.model.name,
+                settings: bootstrap.modelSettings,
             };
         } catch (error) {
             agent.unconfigure();
@@ -35,21 +62,69 @@ export class EditorModelGateway {
         }
     }
 
-    async saveDeepSeekApiKey(apiKey: string, agent: EditorPiAgent): Promise<ModelGatewayState> {
-        const key = apiKey.trim();
-        if (!key) throw new Error("DeepSeek API key is required.");
-        await editorHost.request("/api/v1/credentials/deepseek", {
+    async configure(
+        settings: EditorModelSettingsUpdate,
+        agent: EditorPiAgent,
+    ): Promise<ModelGatewayState> {
+        await editorHost.request("/api/v1/model-settings", {
             method: "PUT",
             headers: {
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({ apiKey: key }),
+            body: JSON.stringify(settings),
         });
         return this.connect(agent);
     }
 
-    async removeDeepSeekApiKey(agent: EditorPiAgent): Promise<ModelGatewayState> {
-        await editorHost.request("/api/v1/credentials/deepseek", { method: "DELETE" });
+    async removeCredential(providerId: string, agent: EditorPiAgent): Promise<ModelGatewayState> {
+        await editorHost.request(
+            `/api/v1/model-settings/credential?provider=${encodeURIComponent(providerId)}`,
+            { method: "DELETE" },
+        );
+        return this.connect(agent);
+    }
+
+    async deleteModel(
+        providerId: string,
+        modelId: string,
+        agent: EditorPiAgent,
+    ): Promise<ModelGatewayState> {
+        await editorHost.request(
+            `/api/v1/model-settings/model?provider=${encodeURIComponent(providerId)}&model=${encodeURIComponent(modelId)}`,
+            { method: "DELETE" },
+        );
+        return this.connect(agent);
+    }
+
+    async configureProvider(
+        settings: EditorProviderSettingsUpdate,
+        agent: EditorPiAgent,
+    ): Promise<ModelGatewayState> {
+        await editorHost.request("/api/v1/model-settings/provider", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(settings),
+        });
+        return this.connect(agent);
+    }
+
+    async configureRegistryModel(
+        settings: EditorRegistryModelUpdate,
+        agent: EditorPiAgent,
+    ): Promise<ModelGatewayState> {
+        await editorHost.request("/api/v1/model-settings/model", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(settings),
+        });
+        return this.connect(agent);
+    }
+
+    async deleteProvider(providerId: string, agent: EditorPiAgent): Promise<ModelGatewayState> {
+        await editorHost.request(
+            `/api/v1/model-settings/provider?provider=${encodeURIComponent(providerId)}`,
+            { method: "DELETE" },
+        );
         return this.connect(agent);
     }
 

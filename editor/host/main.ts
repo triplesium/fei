@@ -1,5 +1,7 @@
 import { resolve } from "node:path";
 import { EncryptedCredentialStore } from "./credential-store.js";
+import { FileEditorSettingsStore } from "./editor-settings-store.js";
+import { FileEditorModelSettingsStore } from "./model-settings-store.js";
 import {
     chooseProjectDirectory,
     projectDirectoryFromArguments,
@@ -16,6 +18,8 @@ function portFromEnvironment(): number {
 
 const host = createEditorHost({
     credentials: new EncryptedCredentialStore(),
+    editorSettingsStore: new FileEditorSettingsStore(),
+    modelSettingsStore: new FileEditorModelSettingsStore(),
     distDirectory: resolve(process.cwd(), "dist"),
     runtimeDirectory: resolve(
         process.env.FEI_EDITOR_RUNTIME_DIR ??

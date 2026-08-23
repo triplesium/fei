@@ -1,4 +1,3 @@
-import { Dialog, DropdownMenu, Tooltip } from "radix-ui";
 import {
     DockviewReact,
     type DockviewApi,
@@ -7,7 +6,6 @@ import {
     type IDockviewPanelProps,
 } from "dockview-react";
 import {
-    CircleStop,
     Bot,
     Code2,
     File,
@@ -20,12 +18,9 @@ import {
     Play,
     Plus,
     RefreshCw,
-    RotateCcw,
-    Save,
     Settings2,
     Terminal,
     Trash2,
-    X,
 } from "lucide-react";
 import {
     createContext,
@@ -41,9 +36,41 @@ import { parseDocument } from "yaml";
 import { EditorPiAgent } from "./agent/editor-pi-agent";
 import { EditorModelGateway, type ModelGatewayState } from "./agent/model-gateway";
 import { PiAssistantThread } from "./agent/pi-assistant-thread";
+import type {
+    AgentModelDraft,
+    AgentModelEditorTarget,
+} from "./components/agent-model-dialog";
+import { AgentModelSelector } from "./components/agent-model-selector";
+import { EditorTopbar } from "./components/editor-topbar";
+import { SettingsDialog } from "./components/settings-dialog";
+import { Badge } from "./components/ui/badge";
+import { Button as UiButton } from "./components/ui/button";
+import { IconButton } from "./components/ui/icon-button";
+import { TooltipProvider } from "./components/ui/tooltip";
+import { ScrollArea } from "./components/ui/scroll-area";
+import { Separator } from "./components/ui/separator";
 import { CodeEditor } from "./components/code-editor";
-import { ToolPanel } from "./components/panel";
+import { RuntimeViewport } from "./components/runtime-viewport";
+import {
+    PanelEmptyState,
+    PanelSection,
+    PanelSectionTitle,
+    PanelStatus,
+    PanelToolbar,
+    ToolPanel,
+} from "./components/panel";
+import {
+    ProjectOperationDialog,
+    type ProjectOperation,
+} from "./components/project-operation-dialog";
+import { ProjectSettingsDialog } from "./components/project-settings-dialog";
 import { WasmRuntimeController } from "./runtime/wasm-runtime-controller";
+import { cn } from "./lib/utils";
+import {
+    editorHost,
+    type EditorModelSettingsUpdate,
+    type EditorSettings,
+} from "./services/editor-host-client";
 import { ProjectStorage } from "./services/project-storage";
 import type {
     AgentRequest,
@@ -56,6 +83,23 @@ import type {
 } from "./types";
 
 const storage = new ProjectStorage();
+const defaultAgentModelDraft: AgentModelDraft = {
+    providerId: "",
+    modelId: "",
+    providerName: "Custom API",
+    baseUrl: "http://127.0.0.1:8000/v1",
+    api: "responses",
+    modelName: "Custom Model",
+    reasoning: false,
+    contextWindow: "128000",
+    maxTokens: "8192",
+    apiKey: "",
+};
+
+const defaultEditorSettings: EditorSettings = {
+    version: 1,
+    appearance: { agentDensity: "compact" },
+};
 
 function requestId(): string {
     return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
@@ -216,72 +260,42 @@ function FileTree({
             if (!node.entry) {
                 return (
                     <div key={node.path} className="tree-directory">
-                        <div className="directory-row" style={{ paddingLeft: 8 + depth * 14 }}>
-                            <FolderOpen size={14} strokeWidth={1.6} />
-                            <span>{node.name}</span>
+                        <div
+                            className="flex h-7 items-center gap-2 text-[11px] font-semibold text-[#b7bdc8]"
+                            style={{ paddingLeft: 8 + depth * 14 }}
+                        >
+                            <FolderOpen className="shrink-0 text-muted-foreground" size={14} strokeWidth={1.6} />
+                            <span className="truncate">{node.name}</span>
                         </div>
                         {renderNodes(node.children, depth + 1)}
                     </div>
                 );
             }
             return (
-                <button
+                <UiButton
                     key={node.path}
-                    className={`file-entry ${node.entry.path === activePath ? "active" : ""}`}
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                        "h-7 w-full justify-start gap-2 px-2 font-normal text-[#b7c2d0] hover:bg-muted",
+                        node.entry.path === activePath &&
+                            "bg-[#313844] text-foreground shadow-[inset_2px_0_var(--accent)] hover:bg-[#313844]",
+                    )}
                     type="button"
                     disabled={node.entry.readonly}
+                    aria-current={node.entry.path === activePath ? "page" : undefined}
                     style={{ paddingLeft: 10 + depth * 14 }}
                     onClick={() => onSelect(node.entry!.path)}
                 >
-                    {fileIcon(node.entry)}
-                    <span>{node.name}</span>
-                    {node.entry.readonly && <span className="binary-tag">BIN</span>}
-                </button>
+                    <span className="shrink-0 text-primary">{fileIcon(node.entry)}</span>
+                    <span className="min-w-0 flex-1 truncate text-left">{node.name}</span>
+                    {node.entry.readonly && <Badge variant="outline">BIN</Badge>}
+                </UiButton>
             );
         });
     return <>{renderNodes(buildFileTree(files))}</>;
 }
 
-function IconButton({
-    id,
-    label,
-    disabled,
-    danger = false,
-    onClick,
-    children,
-}: {
-    id?: string;
-    label: string;
-    disabled?: boolean;
-    danger?: boolean;
-    onClick?(): void;
-    children: React.ReactNode;
-}) {
-    return (
-        <Tooltip.Root>
-            <Tooltip.Trigger asChild>
-                <button
-                    id={id}
-                    className={`icon-button ${danger ? "danger" : ""}`}
-                    type="button"
-                    aria-label={label}
-                    disabled={disabled}
-                    onClick={onClick}
-                >
-                    {children}
-                </button>
-            </Tooltip.Trigger>
-            <Tooltip.Portal>
-                <Tooltip.Content className="tooltip" sideOffset={7}>
-                    {label}
-                    <Tooltip.Arrow className="tooltip-arrow" />
-                </Tooltip.Content>
-            </Tooltip.Portal>
-        </Tooltip.Root>
-    );
-}
-
-type Operation = "new" | "rename" | "delete" | null;
 type CommandHandler = (request: AgentRequest) => Promise<unknown>;
 
 const workbenchLayoutStorageKey = "fei-editor-dockview-layout-v2";
@@ -291,7 +305,7 @@ const WorkbenchPanelsContext = createContext<Record<string, ReactNode>>({});
 
 function DockPanel({ api }: IDockviewPanelProps) {
     const panels = useContext(WorkbenchPanelsContext);
-    return panels[api.id] ?? <div className="missing-panel">Panel unavailable</div>;
+    return panels[api.id] ?? <PanelEmptyState className="bg-card">Panel unavailable</PanelEmptyState>;
 }
 
 function EnginePanelTab({ api }: IDockviewPanelHeaderProps) {
@@ -308,9 +322,9 @@ function EnginePanelTab({ api }: IDockviewPanelHeaderProps) {
                   ? Settings2
                   : Terminal;
     return (
-        <div className="engine-panel-tab">
-            <Icon size={13} strokeWidth={1.7} />
-            <span>{api.title}</span>
+        <div className="flex h-full min-w-0 items-center gap-1.5 px-2.5 uppercase tracking-[0.07em]">
+            <Icon className="shrink-0 text-muted-foreground [.dv-active-tab_&]:text-primary" size={13} strokeWidth={1.7} />
+            <span className="truncate">{api.title}</span>
         </div>
     );
 }
@@ -397,7 +411,7 @@ export function App() {
     const [savedContent, setSavedContent] = useState("");
     const [cursor, setCursor] = useState({ line: 1, column: 1 });
     const [logs, setLogs] = useState<ConsoleEntry[]>([]);
-    const [operation, setOperation] = useState<Operation>(null);
+    const [operation, setOperation] = useState<ProjectOperation>(null);
     const [operationPath, setOperationPath] = useState("");
     const [operationError, setOperationError] = useState("");
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -408,8 +422,10 @@ export function App() {
     });
     const [settingsPlugins, setSettingsPlugins] = useState("");
     const [settingsError, setSettingsError] = useState("");
-    const [agentSettingsOpen, setAgentSettingsOpen] = useState(false);
-    const [agentApiKey, setAgentApiKey] = useState("");
+    const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
+    const [editorPreferences, setEditorPreferences] = useState<EditorSettings>(defaultEditorSettings);
+    const [agentModelDraft, setAgentModelDraft] = useState<AgentModelDraft>(defaultAgentModelDraft);
+    const [agentModelTarget, setAgentModelTarget] = useState<AgentModelEditorTarget | null>(null);
     const [agentSettingsError, setAgentSettingsError] = useState("");
     const [agentSettingsSaving, setAgentSettingsSaving] = useState(false);
     const [agentGatewayState, setAgentGatewayState] = useState<ModelGatewayState>({
@@ -673,7 +689,7 @@ export function App() {
         await runtimeController.restart(snapshot);
     };
 
-    const showOperation = (next: Exclude<Operation, null>): void => {
+    const showOperation = (next: Exclude<ProjectOperation, null>): void => {
         setOperation(next);
         setOperationError("");
         if (next === "new") setOperationPath("new.luau");
@@ -772,6 +788,12 @@ export function App() {
                 void saveActiveFile().catch((error) =>
                     appendConsole("error", "editor", errorMessage(error)),
                 );
+            }
+            if ((event.ctrlKey || event.metaKey) && event.key === ",") {
+                event.preventDefault();
+                setAgentSettingsError("");
+                setAgentModelTarget(null);
+                setGlobalSettingsOpen(true);
             }
         };
         window.addEventListener("keydown", onKeyDown);
@@ -901,15 +923,117 @@ export function App() {
         };
     }, [modelGateway, piAgent]);
 
-    const saveAgentApiKey = async (): Promise<void> => {
+    useEffect(() => {
+        let cancelled = false;
+        void editorHost
+            .getEditorSettings()
+            .then((settings) => {
+                if (!cancelled) setEditorPreferences(settings);
+            })
+            .catch((error) => {
+                if (!cancelled) appendConsole("error", "settings", errorMessage(error));
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [appendConsole]);
+
+    const openAgentSettings = (): void => {
+        setAgentSettingsError("");
+        setAgentModelTarget(null);
+        setGlobalSettingsOpen(true);
+    };
+
+    const editAgentModel = (providerId: string, modelId: string): void => {
+        const settings = "settings" in agentGatewayState ? agentGatewayState.settings : undefined;
+        const provider = settings?.providers.find((candidate) => candidate.id === providerId);
+        const model = provider?.models.find((candidate) => candidate.id === modelId);
+        if (!provider || !model) return;
+        setAgentModelTarget({ kind: "model", providerId, modelId });
+        setAgentModelDraft({
+            providerId,
+            modelId,
+            providerName: provider.name,
+            baseUrl: provider.baseUrl,
+            api: provider.api,
+            modelName: model.name,
+            reasoning: model.reasoning,
+            contextWindow: String(model.contextWindow),
+            maxTokens: String(model.maxTokens),
+            apiKey: "",
+        });
+        setAgentSettingsError("");
+    };
+
+    const addAgentModel = (providerId: string): void => {
+        const settings = "settings" in agentGatewayState ? agentGatewayState.settings : undefined;
+        const provider = settings?.providers.find((candidate) => candidate.id === providerId);
+        if (!provider) return;
+        setAgentModelTarget({ kind: "model", providerId });
+        setAgentModelDraft({
+            ...defaultAgentModelDraft,
+            providerId,
+            providerName: provider.name,
+            baseUrl: provider.baseUrl,
+            api: provider.api,
+        });
+        setAgentSettingsError("");
+    };
+
+    const addAgentProvider = (): void => {
+        const providerId = `provider-${crypto.randomUUID().slice(0, 8)}`;
+        setAgentModelTarget({ kind: "provider", providerId, newProvider: true });
+        setAgentModelDraft({ ...defaultAgentModelDraft, providerId });
+        setAgentSettingsError("");
+    };
+
+    const editAgentProvider = (providerId: string): void => {
+        const settings = "settings" in agentGatewayState ? agentGatewayState.settings : undefined;
+        const provider = settings?.providers.find((candidate) => candidate.id === providerId);
+        if (!provider) return;
+        setAgentModelTarget({ kind: "provider", providerId, newProvider: false });
+        setAgentModelDraft({
+            ...defaultAgentModelDraft,
+            providerId,
+            providerName: provider.name,
+            baseUrl: provider.baseUrl,
+            api: provider.api,
+        });
+        setAgentSettingsError("");
+    };
+
+    const saveAgentProviderSettings = async (): Promise<void> => {
+        if (agentModelTarget?.kind !== "provider") return;
         setAgentSettingsSaving(true);
         setAgentSettingsError("");
         try {
-            const state = await modelGateway.saveDeepSeekApiKey(agentApiKey, piAgent);
+            const newProvider = agentModelTarget.newProvider;
+            const providerId = agentModelDraft.providerId.trim();
+            const state = await modelGateway.configureProvider({
+                provider: {
+                    id: providerId,
+                    name: agentModelDraft.providerName.trim(),
+                    baseUrl: agentModelDraft.baseUrl.trim(),
+                    api: agentModelDraft.api,
+                },
+                ...(agentModelDraft.apiKey.trim() ? { apiKey: agentModelDraft.apiKey.trim() } : {}),
+            }, piAgent);
             setAgentGatewayState(state);
-            setAgentApiKey("");
-            setAgentSettingsOpen(false);
-            appendConsole("info", "agent", "DeepSeek model gateway configured");
+            setAgentModelDraft((current) => ({ ...current, apiKey: "" }));
+            if (newProvider) {
+                setAgentModelDraft((current) => ({
+                    ...current,
+                    modelId: "",
+                    modelName: defaultAgentModelDraft.modelName,
+                    reasoning: defaultAgentModelDraft.reasoning,
+                    contextWindow: defaultAgentModelDraft.contextWindow,
+                    maxTokens: defaultAgentModelDraft.maxTokens,
+                }));
+                setAgentModelTarget({ kind: "model", providerId });
+            } else {
+                setAgentModelTarget(null);
+            }
+            appendConsole("info", "agent", `saved provider ${providerId}`);
         } catch (error) {
             setAgentSettingsError(errorMessage(error));
         } finally {
@@ -917,14 +1041,70 @@ export function App() {
         }
     };
 
-    const removeAgentApiKey = async (): Promise<void> => {
+    const saveAgentModelSettings = async (): Promise<void> => {
+        if (agentModelTarget?.kind !== "model") return;
         setAgentSettingsSaving(true);
         setAgentSettingsError("");
         try {
-            const state = await modelGateway.removeDeepSeekApiKey(piAgent);
+            const state = await modelGateway.configureRegistryModel({
+                providerId: agentModelTarget.providerId,
+                ...(agentModelTarget.modelId ? { previousModelId: agentModelTarget.modelId } : {}),
+                model: {
+                    id: agentModelDraft.modelId.trim(),
+                    name: agentModelDraft.modelName.trim(),
+                    reasoning: agentModelDraft.reasoning,
+                    contextWindow: Number(agentModelDraft.contextWindow),
+                    maxTokens: Number(agentModelDraft.maxTokens),
+                },
+            }, piAgent);
             setAgentGatewayState(state);
-            setAgentApiKey("");
-            appendConsole("info", "agent", "DeepSeek credential removed");
+            setAgentModelTarget(null);
+            appendConsole("info", "agent", `saved model ${agentModelTarget.providerId}/${agentModelDraft.modelId.trim()}`);
+        } catch (error) {
+            setAgentSettingsError(errorMessage(error));
+        } finally {
+            setAgentSettingsSaving(false);
+        }
+    };
+
+    const deleteAgentModel = async (providerId: string, modelId: string): Promise<void> => {
+        setAgentSettingsSaving(true);
+        setAgentSettingsError("");
+        try {
+            const state = await modelGateway.deleteModel(providerId, modelId, piAgent);
+            setAgentGatewayState(state);
+            setAgentModelTarget(null);
+            appendConsole("info", "agent", `deleted model ${providerId}/${modelId}`);
+        } catch (error) {
+            setAgentSettingsError(errorMessage(error));
+        } finally {
+            setAgentSettingsSaving(false);
+        }
+    };
+
+    const deleteAgentProvider = async (providerId: string): Promise<void> => {
+        setAgentSettingsSaving(true);
+        setAgentSettingsError("");
+        try {
+            const state = await modelGateway.deleteProvider(providerId, piAgent);
+            setAgentGatewayState(state);
+            setAgentModelTarget(null);
+            appendConsole("info", "agent", `deleted provider ${providerId}`);
+        } catch (error) {
+            setAgentSettingsError(errorMessage(error));
+        } finally {
+            setAgentSettingsSaving(false);
+        }
+    };
+
+    const removeAgentCredential = async (): Promise<void> => {
+        setAgentSettingsSaving(true);
+        setAgentSettingsError("");
+        try {
+            const state = await modelGateway.removeCredential(agentModelDraft.providerId, piAgent);
+            setAgentGatewayState(state);
+            setAgentModelDraft((current) => ({ ...current, apiKey: "" }));
+            appendConsole("info", "agent", "model credential removed");
         } catch (error) {
             setAgentSettingsError(errorMessage(error));
         } finally {
@@ -980,8 +1160,76 @@ export function App() {
     }, []);
 
     const canEdit = storage.isOpen && activePath.length > 0;
-    const operationTitle =
-        operation === "new" ? "Create file" : operation === "rename" ? "Rename file" : "Delete file";
+    const agentModelSettings =
+        "settings" in agentGatewayState ? agentGatewayState.settings : undefined;
+    const draftModelProvider = agentModelSettings?.providers.find(
+        (provider) => provider.id === agentModelDraft.providerId,
+    );
+    const draftCredentialConfigured = draftModelProvider?.configured ?? false;
+    const agentProviderDraftValid =
+        agentModelDraft.providerId.trim().length > 0 &&
+        agentModelDraft.providerName.trim().length > 0 &&
+        agentModelDraft.baseUrl.trim().length > 0;
+    const agentModelDraftValid =
+        agentModelDraft.modelId.trim().length > 0 &&
+        agentModelDraft.modelName.trim().length > 0 &&
+        Number.isInteger(Number(agentModelDraft.contextWindow)) &&
+        Number.isInteger(Number(agentModelDraft.maxTokens));
+    const selectAgentModel = async (providerId: string, modelId: string): Promise<void> => {
+        if (agentStreaming || agentSettingsSaving) return;
+        const provider = agentModelSettings?.providers.find((candidate) => candidate.id === providerId);
+        const model = provider?.models.find((candidate) => candidate.id === modelId);
+        if (!provider || !model) return;
+        if (!provider.configured) {
+            openAgentSettings();
+            editAgentProvider(providerId);
+            return;
+        }
+        if (
+            "providerId" in agentGatewayState &&
+            agentGatewayState.providerId === providerId &&
+            agentGatewayState.modelId === modelId
+        ) {
+            return;
+        }
+
+        const update: EditorModelSettingsUpdate = { providerId, modelId };
+
+        setAgentSettingsSaving(true);
+        try {
+            const state = await modelGateway.configure(update, piAgent);
+            setAgentGatewayState(state);
+            appendConsole("info", "agent", `using ${provider.name} · ${model.name}`);
+        } catch (error) {
+            appendConsole("error", "agent", errorMessage(error));
+            openAgentSettings();
+            editAgentModel(providerId, modelId);
+            setAgentSettingsError(errorMessage(error));
+        } finally {
+            setAgentSettingsSaving(false);
+        }
+    };
+
+    const activeAgentProviderId =
+        "providerId" in agentGatewayState ? agentGatewayState.providerId : undefined;
+    const activeAgentModelId =
+        "modelId" in agentGatewayState ? agentGatewayState.modelId : undefined;
+    const agentModelControl = (
+        <AgentModelSelector
+            providers={agentModelSettings?.providers}
+            activeProviderId={activeAgentProviderId}
+            activeModelId={activeAgentModelId}
+            label={
+                agentGatewayState.state === "ready" || agentGatewayState.state === "unconfigured"
+                    ? agentGatewayState.model
+                    : "Select model"
+            }
+            ready={agentGatewayState.state === "ready"}
+            disabled={agentStreaming || agentSettingsSaving}
+            onSelectModel={selectAgentModel}
+            onManageModels={openAgentSettings}
+        />
+    );
 
     useEffect(() => {
         dockviewApiRef.current
@@ -993,10 +1241,10 @@ export function App() {
 
     const workbenchPanels: Record<string, ReactNode> = {
         project: (
-            <ToolPanel className="project-panel">
-                <div className="panel-commandbar">
+            <ToolPanel>
+                <PanelToolbar>
                     <span>{files.length > 0 ? `${files.length} files` : storageLabel}</span>
-                    <div className="panel-actions">
+                    <div className="flex items-center gap-px">
                         <IconButton
                             id="project-settings"
                             label="Project settings"
@@ -1022,21 +1270,23 @@ export function App() {
                             <RefreshCw size={14} />
                         </IconButton>
                     </div>
-                </div>
-                <nav className="file-tree" aria-label="Project files">
-                    {!storage.isOpen ? (
-                        <div className="empty-tree">
-                            <Folder size={28} strokeWidth={1.3} />
-                            <span>Open a local project folder to begin.</span>
-                        </div>
-                    ) : (
-                        <FileTree files={files} activePath={activePath} onSelect={(path) => void selectFile(path)} />
-                    )}
-                </nav>
-                <footer className="panel-status">
-                    <span title={storageLabel}>{storageLabel}</span>
-                    <span className={dirty ? "dirty" : ""}>{canEdit ? (dirty ? "Unsaved" : "Saved") : "—"}</span>
-                </footer>
+                </PanelToolbar>
+                <ScrollArea className="min-h-0 flex-1">
+                    <nav className="min-h-full p-1.5" aria-label="Project files">
+                        {!storage.isOpen ? (
+                            <PanelEmptyState>
+                                <Folder size={28} strokeWidth={1.3} />
+                                <span>Open a local project folder to begin.</span>
+                            </PanelEmptyState>
+                        ) : (
+                            <FileTree files={files} activePath={activePath} onSelect={(path) => void selectFile(path)} />
+                        )}
+                    </nav>
+                </ScrollArea>
+                <PanelStatus>
+                    <span className="truncate" title={storageLabel}>{storageLabel}</span>
+                    <span className={dirty ? "text-[#fbbf24]" : ""}>{canEdit ? (dirty ? "Unsaved" : "Saved") : "—"}</span>
+                </PanelStatus>
             </ToolPanel>
         ),
         code: (
@@ -1048,240 +1298,166 @@ export function App() {
                     onChange={setContent}
                     onCursorChange={(line, column) => setCursor({ line, column })}
                 />
-                <footer className="editor-status">
+                <PanelStatus className="justify-end">
                     <span>{dirty ? "● Unsaved" : "Saved"}</span>
                     <span>Ln {cursor.line}, Col {cursor.column}</span>
                     <span>{languageForPath(activePath)}</span>
                     <span>UTF-8</span>
-                </footer>
+                </PanelStatus>
             </ToolPanel>
         ),
         console: (
-            <ToolPanel className="console-panel">
-                <div className="panel-commandbar">
+            <ToolPanel>
+                <PanelToolbar>
                     <span>{logs.length} messages</span>
-                    <button className="text-button" type="button" onClick={() => setLogs([])}>Clear</button>
-                </div>
-                <div ref={consoleRef} className="console-output" aria-live="polite">
-                    {logs.length === 0 && <div className="console-empty">No console output.</div>}
-                    {logs.map((entry) => (
-                        <div key={entry.id} className={`console-line ${entry.level}`}>
-                            <span>{entry.time}</span>
-                            <span>{entry.source}</span>
-                            <span>{entry.message}</span>
-                        </div>
-                    ))}
-                </div>
+                    <UiButton variant="ghost" size="sm" className="h-6" type="button" onClick={() => setLogs([])}>
+                        Clear
+                    </UiButton>
+                </PanelToolbar>
+                <ScrollArea viewportRef={consoleRef} className="min-h-0 flex-1 bg-[#0a0e13]">
+                    <div className="min-h-full px-2.5 py-1.5 font-mono text-[10px] leading-[1.5]" aria-live="polite">
+                        {logs.length === 0 && <PanelEmptyState>No console output.</PanelEmptyState>}
+                        {logs.map((entry) => (
+                            <div
+                                key={entry.id}
+                                className="grid grid-cols-[58px_52px_minmax(0,1fr)] gap-2 py-0.5 text-[#b5c0ce]"
+                            >
+                                <span className="text-[#586579]">{entry.time}</span>
+                                <span className="text-[#586579]">{entry.source}</span>
+                                <span className={cn(entry.level === "error" && "text-[#ff9aaa]", entry.level === "command" && "text-[#7eacff]")}>{entry.message}</span>
+                            </div>
+                        ))}
+                    </div>
+                </ScrollArea>
             </ToolPanel>
         ),
         game: (
-            <ToolPanel className="preview-panel">
-                <div className="viewport-toolbar">
-                    <span>16:9</span>
-                </div>
-                <div className="runtime-stage">
-                    {runtimeSession ? (
-                        <iframe
-                            ref={attachRuntimeFrame}
-                            className="runtime-frame"
-                            title="fei project runtime"
-                            allow="fullscreen"
-                            src={runtimeSession.source}
-                        />
-                    ) : (
-                        <div className="runtime-placeholder">
-                            <span className="placeholder-play"><Play size={19} fill="currentColor" /></span>
-                            <strong>Project is stopped</strong>
-                            <span>Press Play to start the WebAssembly runtime.</span>
-                        </div>
-                    )}
-                </div>
-            </ToolPanel>
+            <RuntimeViewport
+                state={runtimeState}
+                detail={runtimeDetail}
+                session={runtimeSession}
+                projectOpen={storage.isOpen}
+                onFrame={attachRuntimeFrame}
+                onPlay={() => {
+                    void playRuntime().catch((error) =>
+                        appendConsole("error", "runtime", errorMessage(error)),
+                    );
+                }}
+                onRestart={() => {
+                    void restartRuntime().catch((error) =>
+                        appendConsole("error", "runtime", errorMessage(error)),
+                    );
+                }}
+            />
         ),
         agent: (
-            <ToolPanel className="agent-panel">
-                <div className="panel-commandbar">
-                    <span className="agent-model-label">
-                        <i className={agentGatewayState.state === "ready" ? "ready" : ""} />
-                        {agentGatewayState.state === "ready" ? agentGatewayState.model : "Agent"}
-                    </span>
-                    <div className="panel-actions">
-                        {agentStreaming && (
-                            <button className="text-button" type="button" onClick={() => piAgent.abort()}>
-                                Stop
-                            </button>
-                        )}
-                        <button
-                            className="text-button"
-                            type="button"
-                            disabled={agentStreaming}
-                            onClick={resetAgentConversation}
-                        >
-                            New chat
-                        </button>
-                    </div>
-                </div>
+            <ToolPanel className="min-h-0 bg-[#0d1117]">
                 <PiAssistantThread
                     agent={piAgent}
                     enabled={agentGatewayState.state === "ready"}
-                    model={agentGatewayState.state === "ready" ? agentGatewayState.model : undefined}
-                    onConfigure={() => setAgentSettingsOpen(true)}
+                    modelControl={agentModelControl}
+                    density={editorPreferences.appearance.agentDensity}
+                    onConfigure={openAgentSettings}
+                    onNewChat={resetAgentConversation}
                 />
             </ToolPanel>
         ),
         inspector: (
-            <ToolPanel className="inspector-panel">
-                <div className="inspector-section">
-                    <span className="section-label">RUNTIME</span>
-                    <dl className="property-list">
-                        <div><dt>State</dt><dd>{runtimeDetail}</dd></div>
-                        <div><dt>Script</dt><dd>{runtimeScript}</dd></div>
-                        <div><dt>Frame</dt><dd>{runtimeFrame}</dd></div>
-                    </dl>
-                </div>
-                <div className="inspector-section">
-                    <span className="section-label">AGENT API</span>
-                    <p className="muted-copy">UI and agents use the same command bus through <code>window.feiEditorAgent</code>.</p>
-                    <div className="capabilities">
-                        {agentApi.capabilities.map((capability) => <code key={capability}>{capability}</code>)}
-                    </div>
-                </div>
-                <div className="inspector-section">
-                    <span className="section-label">PI TOOLS</span>
-                    <p className="muted-copy">
-                        {agentGatewayState.state === "ready"
-                            ? `${agentGatewayState.provider} · ${agentGatewayState.model}`
-                            : agentGatewayState.state === "unconfigured"
-                              ? `${agentGatewayState.provider} credential required`
-                              : agentGatewayState.state === "unavailable"
-                                ? "Local model gateway unavailable"
-                                : "Connecting to local model gateway…"}
-                    </p>
-                    <div className="capabilities">
-                        {piAgent.status().tools.map((tool) => <code key={tool}>{tool}</code>)}
-                    </div>
-                    <button
-                        className="button"
-                        type="button"
-                        onClick={() => {
-                            setAgentSettingsError("");
-                            setAgentSettingsOpen(true);
-                        }}
-                    >
-                        Configure DeepSeek
-                    </button>
-                </div>
+            <ToolPanel>
+                <ScrollArea className="min-h-0 flex-1">
+                    <PanelSection>
+                        <PanelSectionTitle>RUNTIME</PanelSectionTitle>
+                        <dl className="mt-2">
+                            {[["State", runtimeDetail], ["Script", runtimeScript], ["Frame", runtimeFrame]].map(([label, value]) => (
+                                <div key={label} className="grid grid-cols-[62px_minmax(0,1fr)] border-b border-border/55 py-1.5 text-[10px]">
+                                    <dt className="text-muted-foreground">{label}</dt>
+                                    <dd className="m-0 truncate text-right text-[#b7bdc8]">{value}</dd>
+                                </div>
+                            ))}
+                        </dl>
+                    </PanelSection>
+                    <Separator />
+                    <PanelSection>
+                        <PanelSectionTitle>AGENT API</PanelSectionTitle>
+                        <p className="text-[10px] leading-relaxed text-muted-foreground">UI and agents use the same command bus through <code className="font-mono text-primary">window.feiEditorAgent</code>.</p>
+                        <div className="flex flex-wrap gap-1">
+                            {agentApi.capabilities.map((capability) => <Badge key={capability}>{capability}</Badge>)}
+                        </div>
+                    </PanelSection>
+                    <Separator />
+                    <PanelSection>
+                        <PanelSectionTitle>PI TOOLS</PanelSectionTitle>
+                        <p className="text-[10px] leading-relaxed text-muted-foreground">
+                            {agentGatewayState.state === "ready"
+                                ? `${agentGatewayState.provider} · ${agentGatewayState.model}`
+                                : agentGatewayState.state === "unconfigured"
+                                  ? `${agentGatewayState.provider} credential required`
+                                  : agentGatewayState.state === "unavailable"
+                                    ? "Local model gateway unavailable"
+                                    : "Connecting to local model gateway…"}
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                            {piAgent.status().tools.map((tool) => <Badge key={tool}>{tool}</Badge>)}
+                        </div>
+                        <UiButton
+                            variant="secondary"
+                            size="sm"
+                            className="mt-2"
+                            type="button"
+                            onClick={() => {
+                                openAgentSettings();
+                            }}
+                        >
+                            Configure Model
+                        </UiButton>
+                    </PanelSection>
+                </ScrollArea>
             </ToolPanel>
         ),
     };
 
     return (
-        <Tooltip.Provider delayDuration={450}>
-            <div className="app-shell">
-                <header className="topbar">
-                    <div className="brand">
-                        <span className="brand-mark">F</span>
-                        <span className="brand-name">FEI</span>
-                    </div>
-                    <nav className="application-menu" aria-label="Application menu">
-                        <DropdownMenu.Root>
-                            <DropdownMenu.Trigger asChild><button className="menu-trigger" type="button">File</button></DropdownMenu.Trigger>
-                            <DropdownMenu.Portal>
-                                <DropdownMenu.Content className="menu-content" sideOffset={5} align="start">
-                                    <DropdownMenu.Item
-                                        className="menu-item"
-                                        onSelect={() =>
-                                            void openProjectFolder().catch((error) => {
-                                                if (!(error instanceof DOMException) || error.name !== "AbortError") {
-                                                    appendConsole("error", "project", errorMessage(error));
-                                                }
-                                            })
-                                        }
-                                    >
-                                        Open Folder<span>Ctrl+O</span>
-                                    </DropdownMenu.Item>
-                                    <DropdownMenu.Item className="menu-item" disabled={!canEdit} onSelect={() => void saveActiveFile()}>
-                                        Save<span>Ctrl+S</span>
-                                    </DropdownMenu.Item>
-                                    <DropdownMenu.Separator className="menu-separator" />
-                                    <DropdownMenu.Item
-                                        className="menu-item"
-                                        disabled={!storage.isOpen}
-                                        onSelect={() =>
-                                            void showProjectSettings().catch((error) =>
-                                                appendConsole("error", "project", errorMessage(error)),
-                                            )
-                                        }
-                                    >
-                                        Project Settings…
-                                    </DropdownMenu.Item>
-                                </DropdownMenu.Content>
-                            </DropdownMenu.Portal>
-                        </DropdownMenu.Root>
-                        <DropdownMenu.Root>
-                            <DropdownMenu.Trigger asChild><button className="menu-trigger" type="button">View</button></DropdownMenu.Trigger>
-                            <DropdownMenu.Portal>
-                                <DropdownMenu.Content className="menu-content" sideOffset={5} align="start">
-                                    <DropdownMenu.Item className="menu-item" onSelect={resetWorkbenchLayout}>
-                                        Reset Workbench Layout
-                                    </DropdownMenu.Item>
-                                </DropdownMenu.Content>
-                            </DropdownMenu.Portal>
-                        </DropdownMenu.Root>
-                    </nav>
-                    <div className="project-title" title={projectName}>{projectName}</div>
-                    <div className="run-controls" aria-label="Runtime controls">
-                        <IconButton
-                            id="play"
-                            label="Play"
-                            disabled={!storage.isOpen || runtimeState === "starting" || runtimeState === "running"}
-                            onClick={() => void playRuntime()}
-                        >
-                            <Play size={14} fill="currentColor" />
-                        </IconButton>
-                        <IconButton
-                            label="Stop"
-                            danger
-                            disabled={runtimeState === "stopped"}
-                            onClick={() => stopRuntime()}
-                        >
-                            <CircleStop size={15} />
-                        </IconButton>
-                        <IconButton
-                            label="Restart"
-                            disabled={runtimeState !== "running" && runtimeState !== "failed"}
-                            onClick={() => void restartRuntime()}
-                        >
-                            <RotateCcw size={14} />
-                        </IconButton>
-                    </div>
-                    <div className="toolbar" aria-label="Project controls">
-                        <button
-                            id="open-folder"
-                            className="button folder-button"
-                            type="button"
-                            onClick={() =>
-                                void openProjectFolder().catch((error) => {
-                                    if (!(error instanceof DOMException) || error.name !== "AbortError") {
-                                        appendConsole("error", "project", errorMessage(error));
-                                    }
-                                })
+        <TooltipProvider delayDuration={450}>
+            <div className="flex size-full flex-col overflow-hidden bg-background">
+                <EditorTopbar
+                    projectName={projectName}
+                    openFolderLabel={openFolderLabel}
+                    projectOpen={storage.isOpen}
+                    canSave={canEdit}
+                    runtimeState={runtimeState}
+                    onOpenProject={() => {
+                        void openProjectFolder().catch((error) => {
+                            if (!(error instanceof DOMException) || error.name !== "AbortError") {
+                                appendConsole("error", "project", errorMessage(error));
                             }
-                        >
-                            <FolderOpen size={14} />
-                            {openFolderLabel}
-                        </button>
-                        <IconButton label="Save (Ctrl+S)" disabled={!canEdit} onClick={() => void saveActiveFile()}>
-                            <Save size={14} />
-                        </IconButton>
-                        <div className={`runtime-badge ${runtimeState}`}>
-                            <span className="status-dot" />
-                            {runtimeState}
-                        </div>
-                    </div>
-                </header>
+                        });
+                    }}
+                    onSave={() => {
+                        void saveActiveFile().catch((error) =>
+                            appendConsole("error", "editor", errorMessage(error)),
+                        );
+                    }}
+                    onOpenProjectSettings={() => {
+                        void showProjectSettings().catch((error) =>
+                            appendConsole("error", "project", errorMessage(error)),
+                        );
+                    }}
+                    onOpenSettings={openAgentSettings}
+                    onResetWorkbench={resetWorkbenchLayout}
+                    onPlay={() => {
+                        void playRuntime().catch((error) =>
+                            appendConsole("error", "runtime", errorMessage(error)),
+                        );
+                    }}
+                    onStop={() => stopRuntime()}
+                    onRestart={() => {
+                        void restartRuntime().catch((error) =>
+                            appendConsole("error", "runtime", errorMessage(error)),
+                        );
+                    }}
+                />
 
-                <main className="workbench">
+                <main className="min-h-0 flex-1 bg-[#111318] p-[3px]">
                     <WorkbenchPanelsContext.Provider value={workbenchPanels}>
                         <DockviewReact
                             className="dockview-theme-fei"
@@ -1292,162 +1468,62 @@ export function App() {
                     </WorkbenchPanelsContext.Provider>
                 </main>
 
-                <Dialog.Root open={operation !== null} onOpenChange={(open) => !open && setOperation(null)}>
-                    <Dialog.Portal>
-                        <Dialog.Overlay className="dialog-overlay" />
-                        <Dialog.Content className="dialog-content">
-                            <div className="dialog-heading">
-                                <Dialog.Title>{operationTitle}</Dialog.Title>
-                                <Dialog.Close asChild>
-                                    <button className="icon-button" type="button" aria-label="Close"><X size={15} /></button>
-                                </Dialog.Close>
-                            </div>
-                            <Dialog.Description>
-                                {operation === "delete"
-                                    ? "This removes the file from the project's asset directory."
-                                    : "Paths are relative to the project’s Assets root."}
-                            </Dialog.Description>
-                            <label className="field-label" htmlFor="operation-path">Asset path</label>
-                            <input
-                                id="operation-path"
-                                className="text-field"
-                                value={operationPath}
-                                readOnly={operation === "delete"}
-                                autoFocus
-                                spellCheck={false}
-                                onChange={(event) => setOperationPath(event.target.value)}
-                                onKeyDown={(event) => {
-                                    if (event.key === "Enter") void applyOperation();
-                                }}
-                            />
-                            {operationError && <p className="dialog-error">{operationError}</p>}
-                            <div className="dialog-actions">
-                                <Dialog.Close asChild><button className="button" type="button">Cancel</button></Dialog.Close>
-                                <button className={`button ${operation === "delete" ? "danger" : "primary"}`} type="button" onClick={() => void applyOperation()}>
-                                    {operation === "delete" ? "Delete" : "Apply"}
-                                </button>
-                            </div>
-                        </Dialog.Content>
-                    </Dialog.Portal>
-                </Dialog.Root>
+                <ProjectOperationDialog
+                    operation={operation}
+                    path={operationPath}
+                    error={operationError || undefined}
+                    onOpenChange={(open) => {
+                        if (!open) setOperation(null);
+                    }}
+                    onPathChange={setOperationPath}
+                    onApply={applyOperation}
+                />
 
-                <Dialog.Root open={settingsOpen} onOpenChange={setSettingsOpen}>
-                    <Dialog.Portal>
-                        <Dialog.Overlay className="dialog-overlay" />
-                        <Dialog.Content className="dialog-content settings-dialog">
-                            <div className="dialog-heading">
-                                <div>
-                                    <Dialog.Title>Project Settings</Dialog.Title>
-                                    <Dialog.Description>Configure project-level metadata managed in project.yaml.</Dialog.Description>
-                                </div>
-                                <Dialog.Close asChild>
-                                    <button className="icon-button" type="button" aria-label="Close"><X size={15} /></button>
-                                </Dialog.Close>
-                            </div>
-                            <div className="settings-form">
-                                <label className="settings-field">
-                                    <span>Project name</span>
-                                    <input
-                                        className="text-field"
-                                        value={settingsDraft.name}
-                                        autoFocus
-                                        onChange={(event) =>
-                                            setSettingsDraft((current) => ({ ...current, name: event.target.value }))
-                                        }
-                                    />
-                                </label>
-                                <details className="settings-advanced">
-                                    <summary>Advanced</summary>
-                                    <label className="settings-field">
-                                        <span>Asset directory <small>Managed by the development editor</small></span>
-                                        <input className="text-field" value={settingsDraft.assetDirectory} readOnly />
-                                    </label>
-                                    <label className="settings-field">
-                                        <span>Runtime plugins <small>One qualified plugin id per line</small></span>
-                                        <textarea
-                                            className="text-area"
-                                            rows={5}
-                                            spellCheck={false}
-                                            value={settingsPlugins}
-                                            placeholder="project_runtime::LuauScripts"
-                                            onChange={(event) => setSettingsPlugins(event.target.value)}
-                                        />
-                                    </label>
-                                </details>
-                            </div>
-                            {settingsError && <p className="dialog-error">{settingsError}</p>}
-                            <div className="dialog-actions">
-                                <Dialog.Close asChild><button className="button" type="button">Cancel</button></Dialog.Close>
-                                <button className="button primary" type="button" onClick={() => void applyProjectSettings()}>
-                                    Save Settings
-                                </button>
-                            </div>
-                        </Dialog.Content>
-                    </Dialog.Portal>
-                </Dialog.Root>
+                <ProjectSettingsDialog
+                    open={settingsOpen}
+                    draft={settingsDraft}
+                    plugins={settingsPlugins}
+                    error={settingsError || undefined}
+                    onOpenChange={setSettingsOpen}
+                    onNameChange={(name) =>
+                        setSettingsDraft((current) => ({ ...current, name }))
+                    }
+                    onPluginsChange={setSettingsPlugins}
+                    onSave={applyProjectSettings}
+                />
 
-                <Dialog.Root open={agentSettingsOpen} onOpenChange={setAgentSettingsOpen}>
-                    <Dialog.Portal>
-                        <Dialog.Overlay className="dialog-overlay" />
-                        <Dialog.Content className="dialog-content settings-dialog">
-                            <div className="dialog-heading">
-                                <div>
-                                    <Dialog.Title>Agent Model</Dialog.Title>
-                                    <Dialog.Description>
-                                        The API key is encrypted by the local Editor Host and is never returned to the browser.
-                                    </Dialog.Description>
-                                </div>
-                                <Dialog.Close asChild>
-                                    <button className="icon-button" type="button" aria-label="Close"><X size={15} /></button>
-                                </Dialog.Close>
-                            </div>
-                            <div className="settings-form">
-                                <label className="settings-field">
-                                    <span>DeepSeek API key</span>
-                                    <input
-                                        className="text-field"
-                                        type="password"
-                                        value={agentApiKey}
-                                        autoFocus
-                                        autoComplete="off"
-                                        spellCheck={false}
-                                        placeholder="Enter a new API key"
-                                        onChange={(event) => setAgentApiKey(event.target.value)}
-                                        onKeyDown={(event) => {
-                                            if (event.key === "Enter" && agentApiKey.trim()) {
-                                                void saveAgentApiKey();
-                                            }
-                                        }}
-                                    />
-                                </label>
-                                <p className="muted-copy">
-                                    Saving replaces the existing credential. The current key cannot be displayed.
-                                </p>
-                            </div>
-                            {agentSettingsError && <p className="dialog-error">{agentSettingsError}</p>}
-                            <div className="dialog-actions">
-                                <button
-                                    className="button danger"
-                                    type="button"
-                                    disabled={agentSettingsSaving || agentGatewayState.state !== "ready"}
-                                    onClick={() => void removeAgentApiKey()}
-                                >
-                                    Remove Key
-                                </button>
-                                <Dialog.Close asChild><button className="button" type="button">Cancel</button></Dialog.Close>
-                                <button
-                                    className="button primary"
-                                    type="button"
-                                    disabled={agentSettingsSaving || !agentApiKey.trim()}
-                                    onClick={() => void saveAgentApiKey()}
-                                >
-                                    {agentSettingsSaving ? "Saving…" : "Save Key"}
-                                </button>
-                            </div>
-                        </Dialog.Content>
-                    </Dialog.Portal>
-                </Dialog.Root>
+                <SettingsDialog
+                    open={globalSettingsOpen}
+                    onOpenChange={setGlobalSettingsOpen}
+                    draft={agentModelDraft}
+                    target={agentModelTarget}
+                    providers={agentModelSettings?.providers}
+                    activeProviderId={activeAgentProviderId}
+                    activeModelId={activeAgentModelId}
+                    credentialConfigured={draftCredentialConfigured}
+                    providerValid={agentProviderDraftValid}
+                    modelValid={agentModelDraftValid}
+                    saving={agentSettingsSaving}
+                    error={agentSettingsError || undefined}
+                    onDraftChange={(patch) =>
+                        setAgentModelDraft((current) => ({ ...current, ...patch }))
+                    }
+                    onActivate={selectAgentModel}
+                    onAddProvider={addAgentProvider}
+                    onAddModel={addAgentModel}
+                    onEditProvider={editAgentProvider}
+                    onEditModel={editAgentModel}
+                    onBack={() => {
+                        setAgentModelTarget(null);
+                        setAgentSettingsError("");
+                    }}
+                    onSaveProvider={saveAgentProviderSettings}
+                    onSaveModel={saveAgentModelSettings}
+                    onDeleteProvider={deleteAgentProvider}
+                    onDeleteModel={deleteAgentModel}
+                    onRemoveCredential={removeAgentCredential}
+                />
             </div>
-        </Tooltip.Provider>
+        </TooltipProvider>
     );
 }

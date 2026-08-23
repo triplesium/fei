@@ -6,6 +6,7 @@ import {
     EncryptedCredentialStore,
     type SecretProtector,
 } from "./credential-store.js";
+import { FileEditorModelSettingsStore } from "./model-settings-store.js";
 import { createEditorHost } from "./server.js";
 
 const temporaryDirectories: string[] = [];
@@ -44,17 +45,42 @@ describe("Editor Host", () => {
             const initial = await fetch(`${baseUrl}/api/v1/bootstrap`).then((response) => response.json());
             expect(initial).toMatchObject({
                 version: 1,
-                provider: { id: "deepseek", configured: false },
+                provider: {
+                    id: "deepseek",
+                    configured: false,
+                    model: { api: "openai-responses" },
+                },
             });
             expect(initial).not.toHaveProperty("provider.apiKey");
 
-            const saved = await fetch(`${baseUrl}/api/v1/credentials/deepseek`, {
+            const rejected = await fetch(`${baseUrl}/api/v1/model-settings`, {
                 method: "PUT",
                 headers: {
                     Authorization: `Bearer ${initial.token}`,
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ apiKey: "test-deepseek-secret" }),
+                body: JSON.stringify({
+                    providerId: initial.provider.id,
+                    modelId: initial.provider.model.id,
+                    apiKey: "test-deepseek-密钥",
+                }),
+            });
+            expect(rejected.status).toBe(500);
+            expect(await rejected.json()).toEqual({
+                error: "API key must contain between 8 and 4096 printable ASCII characters without spaces.",
+            });
+
+            const saved = await fetch(`${baseUrl}/api/v1/model-settings`, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${initial.token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    providerId: initial.provider.id,
+                    modelId: initial.provider.model.id,
+                    apiKey: "test-deepseek-secret",
+                }),
             });
             expect(saved.status).toBe(200);
             expect(await readFile(credentialPath, "utf8")).not.toContain("test-deepseek-secret");
@@ -100,6 +126,116 @@ describe("Editor Host", () => {
 
             const unknown = await fetch(`${baseUrl}/sample-browser-project.map`);
             expect(unknown.status).toBe(404);
+        } finally {
+            await new Promise<void>((resolveClose) => host.server.close(() => resolveClose()));
+        }
+    });
+
+    it("persists a custom Responses API model without exposing its credential", async () => {
+        const directory = await mkdtemp(join(tmpdir(), "fei-editor-custom-model-"));
+        temporaryDirectories.push(directory);
+        const distDirectory = join(directory, "dist");
+        const credentialPath = join(directory, "credentials.json");
+        const settingsPath = join(directory, "model-settings.json");
+        await mkdir(distDirectory);
+        await writeFile(join(distDirectory, "index.html"), "<p>Fei Editor</p>", "utf8");
+
+        const startHost = () =>
+            createEditorHost({
+                credentials: new EncryptedCredentialStore(credentialPath, testProtector),
+                modelSettingsStore: new FileEditorModelSettingsStore(settingsPath),
+                distDirectory,
+                runtimeDirectory: distDirectory,
+                port: 0,
+            });
+        let host = startHost();
+        let address = await host.listen();
+        let baseUrl = `http://${address.host}:${address.port}`;
+
+        try {
+            const bootstrap = await fetch(`${baseUrl}/api/v1/bootstrap`).then((response) => response.json());
+            const providerConfigured = await fetch(`${baseUrl}/api/v1/model-settings/provider`, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${bootstrap.token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    apiKey: "custom-responses-secret",
+                    provider: {
+                        id: "custom-openai",
+                        name: "Acme AI",
+                        baseUrl: "https://models.example.test/v1/",
+                        api: "responses",
+                    },
+                }),
+            });
+            expect(providerConfigured.status).toBe(200);
+            expect(await providerConfigured.json()).toMatchObject({
+                providers: [{ id: "deepseek" }, { id: "custom-openai", models: [] }],
+            });
+
+            const modelConfigured = await fetch(`${baseUrl}/api/v1/model-settings/model`, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${bootstrap.token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    providerId: "custom-openai",
+                    model: {
+                            id: "acme-agent-1",
+                            name: "Acme Agent 1",
+                            reasoning: true,
+                            contextWindow: 128_000,
+                            maxTokens: 16_384,
+                    },
+                }),
+            });
+            expect(modelConfigured.status).toBe(200);
+
+            const configured = await fetch(`${baseUrl}/api/v1/model-settings`, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${bootstrap.token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    providerId: "custom-openai",
+                    modelId: "acme-agent-1",
+                }),
+            });
+            expect(configured.status).toBe(200);
+            expect(await configured.json()).toMatchObject({
+                active: { providerId: "custom-openai", modelId: "acme-agent-1" },
+                providers: [
+                    { id: "deepseek" },
+                    {
+                        id: "custom-openai",
+                        name: "Acme AI",
+                        configured: true,
+                        models: [{ id: "acme-agent-1", api: "openai-responses" }],
+                    },
+                ],
+            });
+            expect(await readFile(settingsPath, "utf8")).not.toContain("custom-responses-secret");
+            expect(await readFile(credentialPath, "utf8")).not.toContain("custom-responses-secret");
+        } finally {
+            await new Promise<void>((resolveClose) => host.server.close(() => resolveClose()));
+        }
+
+        host = startHost();
+        address = await host.listen();
+        baseUrl = `http://${address.host}:${address.port}`;
+        try {
+            const restored = await fetch(`${baseUrl}/api/v1/bootstrap`).then((response) => response.json());
+            expect(restored.provider).toMatchObject({
+                id: "custom-openai",
+                name: "Acme AI",
+                configured: true,
+                model: { id: "acme-agent-1", api: "openai-responses" },
+            });
+            expect(JSON.stringify(restored)).not.toContain("custom-responses-secret");
         } finally {
             await new Promise<void>((resolveClose) => host.server.close(() => resolveClose()));
         }

@@ -7,6 +7,14 @@ import type {
 } from "@assistant-ui/react";
 import type { EditorPiAgentSnapshot } from "./editor-pi-agent";
 
+interface ProjectedAssistantMessage {
+    id: string;
+    role: "assistant";
+    content: ThreadAssistantMessagePart[];
+    createdAt: Date;
+    status: MessageStatus;
+}
+
 function dataUrl(data: string, mimeType: string): string {
     return data.startsWith("data:") ? data : `data:${mimeType};base64,${data}`;
 }
@@ -69,7 +77,7 @@ function projectAssistantMessage(
     index: number,
     streaming: boolean,
     toolResults: ReadonlyMap<string, ToolResultMessage>,
-): ThreadMessageLike {
+): ProjectedAssistantMessage {
     const content: ThreadAssistantMessagePart[] = [];
     for (const part of message.content) {
         if (part.type === "text") {
@@ -100,6 +108,22 @@ function projectAssistantMessage(
     };
 }
 
+function projectAssistantTurn(
+    messages: readonly { message: AssistantMessage; index: number; streaming: boolean }[],
+    toolResults: ReadonlyMap<string, ToolResultMessage>,
+): ProjectedAssistantMessage {
+    const projected = messages.map(({ message, index, streaming }) =>
+        projectAssistantMessage(message, index, streaming, toolResults),
+    );
+    const first = projected[0]!;
+    const last = projected.at(-1)!;
+    return {
+        ...first,
+        content: projected.flatMap((message) => message.content),
+        status: last.status,
+    };
+}
+
 export function projectPiMessages(snapshot: EditorPiAgentSnapshot): ThreadMessageLike[] {
     const messages = [...snapshot.messages];
     if (snapshot.streamingMessage && !messages.includes(snapshot.streamingMessage)) {
@@ -109,19 +133,27 @@ export function projectPiMessages(snapshot: EditorPiAgentSnapshot): ThreadMessag
     for (const message of messages) {
         if (message.role === "toolResult") toolResults.set(message.toolCallId, message);
     }
-    return messages.flatMap((message, index) => {
-        if (message.role === "toolResult") return [];
-        if (message.role === "user") return [projectUserMessage(message, index)];
+    const projected: ThreadMessageLike[] = [];
+    let assistantTurn: { message: AssistantMessage; index: number; streaming: boolean }[] = [];
+    const flushAssistantTurn = (): void => {
+        if (assistantTurn.length === 0) return;
+        projected.push(projectAssistantTurn(assistantTurn, toolResults));
+        assistantTurn = [];
+    };
+
+    messages.forEach((message, index) => {
         if (message.role === "assistant") {
-            return [
-                projectAssistantMessage(
-                    message,
-                    index,
-                    message === snapshot.streamingMessage,
-                    toolResults,
-                ),
-            ];
+            assistantTurn.push({
+                message,
+                index,
+                streaming: message === snapshot.streamingMessage,
+            });
+            return;
         }
-        return [];
+        if (message.role === "toolResult") return;
+        flushAssistantTurn();
+        if (message.role === "user") projected.push(projectUserMessage(message, index));
     });
+    flushAssistantTurn();
+    return projected;
 }

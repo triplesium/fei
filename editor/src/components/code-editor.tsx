@@ -60,7 +60,7 @@ export function CodeEditor({
     );
 
     return (
-        <div id="source-editor" className="code-editor" data-disabled={String(readOnly)}>
+        <div id="source-editor" className="min-h-0 flex-1 bg-[#0c1016]" data-disabled={String(readOnly)}>
             <Editor
                 path={path ? `file:///project/${path}` : "inmemory://empty"}
                 language={languageForPath(path)}

@@ -1,5 +1,80 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
 
+export interface EditorModelProviderSummary {
+    id: string;
+    name: string;
+    baseUrl: string;
+    api: OpenAICompatibleApi;
+    configured: boolean;
+    models: Model<Api>[];
+}
+
+export interface EditorModelSettingsSnapshot {
+    active: { providerId: string; modelId: string };
+    providers: EditorModelProviderSummary[];
+}
+
+export type OpenAICompatibleApi = "responses" | "chat-completions";
+
+export interface OpenAICompatibleModelSettings {
+    id: string;
+    name: string;
+    reasoning: boolean;
+    contextWindow: number;
+    maxTokens: number;
+}
+
+export interface OpenAICompatibleProviderSettings {
+    id: string;
+    name: string;
+    baseUrl: string;
+    api: OpenAICompatibleApi;
+    models: OpenAICompatibleModelSettings[];
+}
+
+export interface EditorModelSettingsUpdate {
+    providerId: string;
+    modelId: string;
+    apiKey?: string;
+    provider?: OpenAICompatibleProviderSettings;
+}
+
+export interface EditorProviderSettingsUpdate {
+    provider: Omit<OpenAICompatibleProviderSettings, "models">;
+    apiKey?: string;
+}
+
+export interface EditorRegistryModelUpdate {
+    providerId: string;
+    previousModelId?: string;
+    model: OpenAICompatibleModelSettings;
+}
+
+export type AgentDensity = "compact" | "comfortable";
+
+export interface EditorSettings {
+    version: 1;
+    appearance: {
+        agentDensity: AgentDensity;
+    };
+}
+
+function asEditorSettings(value: unknown): EditorSettings {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error("Editor Host returned invalid Editor settings.");
+    }
+    const settings = value as Partial<EditorSettings>;
+    if (
+        settings.version !== 1 ||
+        !settings.appearance ||
+        (settings.appearance.agentDensity !== "compact" &&
+            settings.appearance.agentDensity !== "comfortable")
+    ) {
+        throw new Error("Editor Host returned unsupported Editor settings.");
+    }
+    return settings as EditorSettings;
+}
+
 export interface EditorHostBootstrap {
     version: 1;
     token: string;
@@ -13,6 +88,7 @@ export interface EditorHostBootstrap {
         configured: boolean;
         model: Model<Api>;
     };
+    modelSettings: EditorModelSettingsSnapshot;
 }
 
 export class EditorHostRequestError extends Error {
@@ -34,6 +110,7 @@ function asBootstrap(value: unknown): EditorHostBootstrap {
     const project = bootstrap.project;
     const provider = bootstrap.provider;
     const model = provider?.model;
+    const modelSettings = bootstrap.modelSettings;
     if (
         bootstrap.version !== 1 ||
         typeof bootstrap.token !== "string" ||
@@ -47,7 +124,21 @@ function asBootstrap(value: unknown): EditorHostBootstrap {
         !model ||
         typeof model.id !== "string" ||
         typeof model.provider !== "string" ||
-        typeof model.api !== "string"
+        typeof model.api !== "string" ||
+        !modelSettings ||
+        typeof modelSettings.active?.providerId !== "string" ||
+        typeof modelSettings.active?.modelId !== "string" ||
+        !Array.isArray(modelSettings.providers) ||
+        modelSettings.providers.some(
+            (candidate) =>
+                !candidate ||
+                typeof candidate.id !== "string" ||
+                typeof candidate.name !== "string" ||
+                typeof candidate.baseUrl !== "string" ||
+                (candidate.api !== "responses" && candidate.api !== "chat-completions") ||
+                typeof candidate.configured !== "boolean" ||
+                !Array.isArray(candidate.models),
+        )
     ) {
         throw new Error("Editor Host returned an invalid bootstrap response.");
     }
@@ -97,6 +188,20 @@ export class EditorHostClient {
 
     async json<T>(path: string, init: RequestInit = {}): Promise<T> {
         return (await this.request(path, init)).json() as Promise<T>;
+    }
+
+    async getEditorSettings(): Promise<EditorSettings> {
+        return asEditorSettings(await this.json<unknown>("/api/v1/editor-settings"));
+    }
+
+    async updateEditorSettings(settings: EditorSettings): Promise<EditorSettings> {
+        return asEditorSettings(
+            await this.json<unknown>("/api/v1/editor-settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(settings),
+            }),
+        );
     }
 
     subscribeEvents(path: string, listener: (value: unknown) => void): () => void {

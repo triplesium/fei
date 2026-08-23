@@ -43,7 +43,7 @@ describe("projectPiMessages", () => {
 
         const projected = projectPiMessages(snapshot);
 
-        expect(projected).toHaveLength(3);
+        expect(projected).toHaveLength(2);
         expect(projected[1]).toMatchObject({
             role: "assistant",
             content: [
@@ -56,7 +56,9 @@ describe("projectPiMessages", () => {
                     result: { state: "stopped" },
                     isError: false,
                 },
+                { type: "text", text: "The runtime is stopped." },
             ],
+            status: { type: "complete" },
         });
     });
 
@@ -77,5 +79,28 @@ describe("projectPiMessages", () => {
             role: "assistant",
             status: { type: "running" },
         });
+    });
+
+    it("keeps assistant turns separated by user messages", () => {
+        const firstUser: UserMessage = { role: "user", content: "First", timestamp: 1 };
+        const secondUser: UserMessage = { role: "user", content: "Second", timestamp: 3 };
+        const projected = projectPiMessages({
+            messages: [
+                firstUser,
+                fauxAssistantMessage("First answer", { timestamp: 2 }),
+                secondUser,
+                fauxAssistantMessage("Second answer", { timestamp: 4 }),
+            ],
+            streaming: false,
+            pendingToolCalls: new Set(),
+            configured: true,
+        });
+
+        expect(projected.map((message) => message.role)).toEqual([
+            "user",
+            "assistant",
+            "user",
+            "assistant",
+        ]);
     });
 });

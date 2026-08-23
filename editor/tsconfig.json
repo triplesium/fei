@@ -11,6 +11,9 @@
         "forceConsistentCasingInFileNames": true,
         "module": "ESNext",
         "moduleResolution": "Bundler",
+        "paths": {
+            "@/*": ["./src/*"]
+        },
         "types": ["vite/client", "wicg-file-system-access"],
         "resolveJsonModule": true,
         "isolatedModules": true,

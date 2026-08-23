@@ -5,13 +5,26 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { extname, join, resolve, sep } from "node:path";
 import type { AddressInfo } from "node:net";
 import {
-    createModels,
     type Context,
     type CredentialStore,
     type Model,
     type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
+import {
+    HostModelRegistry,
+    type ConfigureModelInput,
+    type ConfigureProviderInput,
+    type ConfigureRegistryModelInput,
+} from "./model-registry.js";
+import {
+    MemoryEditorModelSettingsStore,
+    type EditorModelSettingsStore,
+} from "./model-settings-store.js";
+import {
+    MemoryEditorSettingsStore,
+    type EditorSettings,
+    type EditorSettingsStore,
+} from "./editor-settings-store.js";
 import {
     HostProjectService,
     ProjectPickerCancelledError,
@@ -20,10 +33,10 @@ import {
 import { toProxyEvent } from "./proxy-events.js";
 
 const maximumJsonBodyBytes = 4 * 1024 * 1024;
-const providerId = "deepseek";
-
 interface HostOptions {
     credentials: CredentialStore;
+    editorSettingsStore?: EditorSettingsStore;
+    modelSettingsStore?: EditorModelSettingsStore;
     distDirectory: string;
     runtimeDirectory: string;
     host?: string;
@@ -155,18 +168,14 @@ export function createEditorHost(options: HostOptions): {
         "http://localhost:5173",
         ...(options.allowedOrigins ?? []),
     ]);
-    const models = createModels({ credentials: options.credentials });
-    models.setProvider(deepseekProvider());
+    const modelRegistry = new HostModelRegistry(
+        options.credentials,
+        options.modelSettingsStore ?? new MemoryEditorModelSettingsStore(),
+    );
+    const editorSettings = options.editorSettingsStore ?? new MemoryEditorSettingsStore();
     const projects =
         options.projectService ??
         new HostProjectService(options.projectDirectory, options.pickProjectDirectory);
-
-    const selectedModel = (): Model<any> | undefined => {
-        const configuredModel = process.env.FEI_EDITOR_MODEL?.trim();
-        return configuredModel
-            ? models.getModel(providerId, configuredModel)
-            : models.getModels(providerId)[0];
-    };
 
     const server = createServer(async (request, response) => {
         const origin = request.headers.origin;
@@ -190,19 +199,19 @@ export function createEditorHost(options: HostOptions): {
         const url = new URL(request.url ?? "/", `http://${request.headers.host ?? `${host}:${port}`}`);
         try {
             if (request.method === "GET" && url.pathname === "/api/v1/bootstrap") {
-                const model = selectedModel();
-                if (!model) throw new Error("Configured DeepSeek model is unavailable.");
-                const auth = await models.checkAuth(providerId);
+                const modelSettings = await modelRegistry.snapshot();
+                const active = await modelRegistry.activeModel();
                 json(response, 200, {
                     version: 1,
                     token,
                     project: await projects.snapshot(),
                     provider: {
-                        id: providerId,
-                        name: "DeepSeek",
-                        configured: Boolean(auth),
-                        model: modelForClient(model),
+                        id: active.provider.id,
+                        name: active.provider.name,
+                        configured: active.provider.configured,
+                        model: modelForClient(active.model),
                     },
+                    modelSettings,
                 });
                 return;
             }
@@ -212,21 +221,95 @@ export function createEditorHost(options: HostOptions): {
                 return;
             }
 
-            if (request.method === "PUT" && url.pathname === "/api/v1/credentials/deepseek") {
-                const body = asObject(await readJson(request, 64 * 1024));
-                const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
-                if (apiKey.length < 8 || apiKey.length > 4096) {
-                    json(response, 400, { error: "DeepSeek API key is invalid." });
-                    return;
-                }
-                await options.credentials.modify(providerId, async () => ({ type: "api_key", key: apiKey }));
-                json(response, 200, { configured: true });
+            if (request.method === "GET" && url.pathname === "/api/v1/model-settings") {
+                json(response, 200, await modelRegistry.snapshot());
                 return;
             }
 
-            if (request.method === "DELETE" && url.pathname === "/api/v1/credentials/deepseek") {
-                await options.credentials.delete(providerId);
-                json(response, 200, { configured: false });
+            if (request.method === "GET" && url.pathname === "/api/v1/editor-settings") {
+                json(response, 200, await editorSettings.read());
+                return;
+            }
+
+            if (request.method === "PUT" && url.pathname === "/api/v1/editor-settings") {
+                const body = asObject(await readJson(request, 64 * 1024));
+                const appearance = asObject(body.appearance);
+                const next: EditorSettings = {
+                    version: 1,
+                    appearance: {
+                        agentDensity:
+                            appearance.agentDensity === "compact" ||
+                            appearance.agentDensity === "comfortable"
+                                ? appearance.agentDensity
+                                : (() => {
+                                      throw new Error("Agent density must be compact or comfortable.");
+                                  })(),
+                    },
+                };
+                await editorSettings.write(next);
+                json(response, 200, next);
+                return;
+            }
+
+            if (request.method === "PUT" && url.pathname === "/api/v1/model-settings") {
+                const body = asObject(await readJson(request, 128 * 1024));
+                json(
+                    response,
+                    200,
+                    await modelRegistry.configure(body as unknown as ConfigureModelInput),
+                );
+                return;
+            }
+
+            if (request.method === "PUT" && url.pathname === "/api/v1/model-settings/provider") {
+                const body = asObject(await readJson(request, 128 * 1024));
+                json(
+                    response,
+                    200,
+                    await modelRegistry.configureProvider(body as unknown as ConfigureProviderInput),
+                );
+                return;
+            }
+
+            if (request.method === "PUT" && url.pathname === "/api/v1/model-settings/model") {
+                const body = asObject(await readJson(request, 128 * 1024));
+                json(
+                    response,
+                    200,
+                    await modelRegistry.configureRegistryModel(
+                        body as unknown as ConfigureRegistryModelInput,
+                    ),
+                );
+                return;
+            }
+
+            if (request.method === "DELETE" && url.pathname === "/api/v1/model-settings/credential") {
+                json(
+                    response,
+                    200,
+                    await modelRegistry.deleteCredential(url.searchParams.get("provider") ?? ""),
+                );
+                return;
+            }
+
+            if (request.method === "DELETE" && url.pathname === "/api/v1/model-settings/model") {
+                json(
+                    response,
+                    200,
+                    await modelRegistry.deleteModel(
+                        url.searchParams.get("provider") ?? "",
+                        url.searchParams.get("model") ?? "",
+                    ),
+                );
+                return;
+            }
+
+            if (request.method === "DELETE" && url.pathname === "/api/v1/model-settings/provider") {
+                json(
+                    response,
+                    200,
+                    await modelRegistry.deleteProvider(url.searchParams.get("provider") ?? ""),
+                );
                 return;
             }
 
@@ -309,13 +392,13 @@ export function createEditorHost(options: HostOptions): {
 
             if (request.method === "POST" && url.pathname === "/api/stream") {
                 const body = (await readJson(request)) as ProxyRequest;
-                if (body.model?.provider !== providerId || typeof body.model.id !== "string") {
-                    json(response, 400, { error: "Only registered DeepSeek models are supported." });
+                if (typeof body.model?.provider !== "string" || typeof body.model.id !== "string") {
+                    json(response, 400, { error: "A registered model is required." });
                     return;
                 }
-                const model = models.getModel(providerId, body.model.id);
+                const model = await modelRegistry.getModel(body.model.provider, body.model.id);
                 if (!model) {
-                    json(response, 400, { error: "Requested DeepSeek model is unavailable." });
+                    json(response, 400, { error: "Requested model is unavailable." });
                     return;
                 }
                 const context = sanitizeContext(body.context);
@@ -329,7 +412,7 @@ export function createEditorHost(options: HostOptions): {
                     Connection: "keep-alive",
                 });
                 response.flushHeaders();
-                const stream = models.streamSimple(
+                const stream = modelRegistry.streamSimple(
                     model,
                     context,
                     sanitizeOptions(body.options, model, abortController.signal),
