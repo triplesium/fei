@@ -35,6 +35,12 @@ describe("HostProjectService", () => {
         ]);
         expect((await service.read("assets/main.luau"))?.toString("utf8")).toBe("return {}\n");
 
+        await service.createDirectory("assets/scripts");
+        expect(await service.list()).toContainEqual({
+            path: "assets/scripts",
+            kind: "directory",
+            readonly: false,
+        });
         await service.write("assets/new.luau", "return 42\n");
         await service.rename("assets/new.luau", "assets/moved.luau");
         expect(await readFile(join(directory, "assets", "moved.luau"), "utf8")).toBe(
@@ -42,6 +48,7 @@ describe("HostProjectService", () => {
         );
         await service.remove("assets/moved.luau");
         expect(await service.exists("assets/moved.luau")).toBe(false);
+        await expect(service.createDirectory("outside")).rejects.toThrow("inside assets");
         service.dispose();
     });
 

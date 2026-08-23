@@ -1,6 +1,6 @@
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
-export type ProjectFileKind = "text" | "binary";
+export type ProjectFileKind = "text" | "binary" | "directory";
 
 export interface ProjectFileEntry {
     path: string;

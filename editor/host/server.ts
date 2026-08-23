@@ -353,6 +353,16 @@ export function createEditorHost(options: HostOptions): {
                 return;
             }
 
+            if (request.method === "POST" && url.pathname === "/api/v1/project/directory") {
+                const body = asObject(await readJson(request));
+                if (typeof body.path !== "string") {
+                    throw new Error("Project directory creation requires a path.");
+                }
+                await projects.createDirectory(body.path);
+                json(response, 200, { ok: true });
+                return;
+            }
+
             if (request.method === "POST" && url.pathname === "/api/v1/project/rename") {
                 const body = asObject(await readJson(request, 64 * 1024));
                 if (typeof body.source !== "string" || typeof body.destination !== "string") {

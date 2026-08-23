@@ -19,7 +19,7 @@ const textFilePattern =
 
 export interface HostProjectFileEntry {
     path: string;
-    kind: "text" | "binary";
+    kind: "text" | "binary" | "directory";
     readonly: boolean;
 }
 
@@ -86,6 +86,7 @@ export class HostProjectService {
                 const path = `${prefix}/${entry.name}`;
                 const absolute = resolve(directory, entry.name);
                 if (entry.isDirectory()) {
+                    files.push({ path, kind: "directory", readonly: false });
                     await visit(absolute, path);
                 } else if (entry.isFile()) {
                     const text = textFilePattern.test(path);
@@ -117,6 +118,13 @@ export class HostProjectService {
         } finally {
             await rm(temporary, { force: true });
         }
+    }
+
+    async createDirectory(path: string): Promise<void> {
+        if (!path.startsWith("assets/")) {
+            throw new Error("Project directories must be inside assets/.");
+        }
+        await mkdir(await this.writableFile(path));
     }
 
     async exists(path: string): Promise<boolean> {

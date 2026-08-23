@@ -287,6 +287,24 @@ describe("Editor Host", () => {
                 "return 42\n",
             );
 
+            const createdDirectory = await fetch(`${baseUrl}/api/v1/project/directory`, {
+                method: "POST",
+                headers: { ...headers, "Content-Type": "application/json" },
+                body: JSON.stringify({ path: "assets/scripts" }),
+            });
+            expect(createdDirectory.status).toBe(200);
+            expect(
+                await fetch(`${baseUrl}/api/v1/project/files`, { headers }).then((response) =>
+                    response.json(),
+                ),
+            ).toEqual({
+                files: [
+                    { path: "project.yaml", kind: "text", readonly: false },
+                    { path: "assets/main.luau", kind: "text", readonly: false },
+                    { path: "assets/scripts", kind: "directory", readonly: false },
+                ],
+            });
+
             const unauthenticated = await fetch(`${baseUrl}/api/v1/project/files`);
             expect(unauthenticated.status).toBe(401);
         } finally {

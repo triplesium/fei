@@ -95,6 +95,15 @@ export class ProjectStorage {
         });
     }
 
+    async createDirectory(path: string): Promise<void> {
+        this.assertOpen();
+        await editorHost.request("/api/v1/project/directory", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: this.validatePath(path) }),
+        });
+    }
+
     async list(): Promise<ProjectFileEntry[]> {
         this.assertOpen();
         const result = await editorHost.json<ProjectFilesResponse>("/api/v1/project/files");
