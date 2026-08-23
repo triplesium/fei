@@ -9,10 +9,10 @@ interface PanelHeaderProps {
 
 export function PanelHeader({ title, detail, actions }: PanelHeaderProps) {
     return (
-        <header className="flex h-[34px] shrink-0 items-center justify-between gap-2 border-b border-border/70 bg-[#0e1319] px-2.5">
-            <div className="flex min-w-0 items-center gap-2 text-[10px] font-bold tracking-[0.09em] text-[#b7bdc8]">
+        <header className="flex h-[34px] shrink-0 items-center justify-between gap-2 border-b border-[#171717] bg-[#202020] px-2.5">
+            <div className="flex min-w-0 items-center gap-2 text-[12px] font-bold tracking-[0.06em] text-[#b7bdc8]">
                 <span className="truncate">{title}</span>
-                {detail && <span className="text-[9px] font-medium tracking-normal text-muted-foreground">{detail}</span>}
+                {detail && <span className="text-[11px] font-medium tracking-normal text-muted-foreground">{detail}</span>}
             </div>
             {actions && <div className="flex items-center gap-0.5">{actions}</div>}
         </header>
@@ -31,7 +31,7 @@ export function PanelToolbar({ className, ...props }: HTMLAttributes<HTMLDivElem
     return (
         <div
             className={cn(
-                "flex h-[29px] shrink-0 items-center justify-between gap-2 border-b border-border/70 bg-[#1c1f25] py-0 pr-1.5 pl-2.5 text-[9px] text-muted-foreground",
+                "flex h-[30px] shrink-0 items-center justify-between gap-2 border-b border-[#191919] bg-[#2b2b2b] py-0 pr-1.5 pl-2.5 text-[12px] text-muted-foreground",
                 className,
             )}
             {...props}
@@ -43,7 +43,7 @@ export function PanelStatus({ className, ...props }: HTMLAttributes<HTMLElement>
     return (
         <footer
             className={cn(
-                "flex h-[23px] shrink-0 items-center justify-between gap-3 border-t border-border/70 bg-[#0c1117] px-2.5 text-[9px] text-muted-foreground",
+                "flex h-[24px] shrink-0 items-center justify-between gap-3 border-t border-[#171717] bg-[#1d1d1d] px-2.5 text-[11px] text-muted-foreground",
                 className,
             )}
             {...props}
@@ -58,7 +58,7 @@ export function PanelSection({ className, ...props }: HTMLAttributes<HTMLDivElem
 export function PanelSectionTitle({ className, ...props }: HTMLAttributes<HTMLSpanElement>) {
     return (
         <span
-            className={cn("text-[9px] font-extrabold tracking-[0.13em] text-muted-foreground", className)}
+            className={cn("text-[11px] font-bold tracking-[0.08em] text-muted-foreground", className)}
             {...props}
         />
     );
@@ -68,7 +68,7 @@ export function PanelEmptyState({ className, ...props }: HTMLAttributes<HTMLDivE
     return (
         <div
             className={cn(
-                "grid size-full place-content-center justify-items-center gap-2.5 px-5 py-4 text-center text-[10px] leading-relaxed text-muted-foreground",
+                "grid size-full place-content-center justify-items-center gap-2.5 px-5 py-4 text-center text-[12px] leading-relaxed text-muted-foreground",
                 className,
             )}
             {...props}

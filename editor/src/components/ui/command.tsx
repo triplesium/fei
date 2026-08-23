@@ -18,7 +18,7 @@ function CommandInput({ className, ...props }: ComponentProps<typeof CommandPrim
             <Search className="size-3.5 shrink-0 text-muted-foreground" />
             <CommandPrimitive.Input
                 className={cn(
-                    "h-full min-w-0 flex-1 border-0 bg-transparent text-[10px] text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+                    "h-full min-w-0 flex-1 border-0 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
                     className,
                 )}
                 {...props}
@@ -39,7 +39,7 @@ function CommandList({ className, ...props }: ComponentProps<typeof CommandPrimi
 function CommandEmpty({ className, ...props }: ComponentProps<typeof CommandPrimitive.Empty>) {
     return (
         <CommandPrimitive.Empty
-            className={cn("py-8 text-center text-[10px] text-muted-foreground", className)}
+            className={cn("py-8 text-center text-[11px] text-muted-foreground", className)}
             {...props}
         />
     );
@@ -49,7 +49,7 @@ function CommandGroup({ className, ...props }: ComponentProps<typeof CommandPrim
     return (
         <CommandPrimitive.Group
             className={cn(
-                "overflow-hidden p-1 text-foreground [&_[cmdk-group-heading]]:px-1.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[8px] [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.07em] [&_[cmdk-group-heading]]:text-muted-foreground",
+                "overflow-hidden p-1 text-foreground [&_[cmdk-group-heading]]:px-1.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.07em] [&_[cmdk-group-heading]]:text-muted-foreground",
                 className,
             )}
             {...props}
@@ -61,7 +61,7 @@ function CommandItem({ className, ...props }: ComponentProps<typeof CommandPrimi
     return (
         <CommandPrimitive.Item
             className={cn(
-                "relative flex min-h-10 cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-[10px] outline-none data-[disabled=true]:pointer-events-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground data-[disabled=true]:opacity-50",
+                "relative flex min-h-10 cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-[11px] outline-none data-[disabled=true]:pointer-events-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground data-[disabled=true]:opacity-50",
                 className,
             )}
             {...props}

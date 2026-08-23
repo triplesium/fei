@@ -76,7 +76,7 @@ function DialogTitle({ className, ...props }: ComponentProps<typeof DialogPrimit
 function DialogDescription({ className, ...props }: ComponentProps<typeof DialogPrimitive.Description>) {
     return (
         <DialogPrimitive.Description
-            className={cn("m-0 text-[10px] leading-5 text-muted-foreground", className)}
+            className={cn("m-0 text-[11px] leading-5 text-muted-foreground", className)}
             {...props}
         />
     );

@@ -181,21 +181,6 @@ export function PiAssistantThread({
                 className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
                 style={{ ["--thread-max-width" as string]: "44rem" }}
             >
-                <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 px-3">
-                    <span className="text-[11px] font-medium text-muted-foreground">Entisium Agent</span>
-                    <ThreadPrimitive.If empty={false}>
-                        <TooltipIconButton
-                            tooltip="New chat"
-                            aria-label="New chat"
-                            className="size-7 rounded-md"
-                            type="button"
-                            disabled={snapshot.streaming}
-                            onClick={onNewChat}
-                        >
-                            <SquarePen className="size-3.5" />
-                        </TooltipIconButton>
-                    </ThreadPrimitive.If>
-                </div>
                 <ThreadPrimitive.Viewport
                     turnAnchor="top"
                     className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth px-2 pt-4 [scrollbar-gutter:stable]"
@@ -232,7 +217,21 @@ export function PiAssistantThread({
                                 aria-label="Message input"
                             />
                             <div className="relative flex min-h-7 items-center justify-between gap-2">
-                                <div className="flex min-w-0 items-center">{modelControl}</div>
+                                <div className="flex min-w-0 items-center gap-1">
+                                    {modelControl}
+                                    <ThreadPrimitive.If empty={false}>
+                                        <TooltipIconButton
+                                            tooltip="New chat"
+                                            aria-label="New chat"
+                                            className="size-7 rounded-full"
+                                            type="button"
+                                            disabled={snapshot.streaming}
+                                            onClick={onNewChat}
+                                        >
+                                            <SquarePen className="size-3.5" />
+                                        </TooltipIconButton>
+                                    </ThreadPrimitive.If>
+                                </div>
                                 <div className="flex items-center gap-1.5">
                                     <ThreadPrimitive.If running>
                                         <ComposerPrimitive.Cancel

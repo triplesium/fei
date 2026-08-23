@@ -62,7 +62,7 @@ function Field({ label, hint, className, children }: {
         <label className={cn("grid gap-1.5 text-[10px] font-semibold text-[#b7bdc8]", className)}>
             <span>
                 {label}
-                {hint && <small className="ml-1.5 text-[9px] font-normal text-muted-foreground">{hint}</small>}
+                {hint && <small className="ml-1.5 text-[10px] font-normal text-muted-foreground">{hint}</small>}
             </span>
             {children}
         </label>
@@ -76,7 +76,7 @@ function apiLabel(api: OpenAICompatibleApi): string {
 function ProviderStatus({ configured }: { configured: boolean }) {
     if (configured) return null;
     return (
-        <span className="inline-flex items-center gap-1.5 text-[9px] text-amber-300">
+        <span className="inline-flex items-center gap-1.5 text-[10px] text-amber-300">
             <span className="size-1.5 rounded-full bg-amber-300" />
             API key required
         </span>
@@ -168,10 +168,10 @@ export function AgentModelSettings({
                         onKeyDown={submitOnEnter}
                     />
                 </Field>
-                <p className="m-0 flex items-center gap-1.5 text-[9px] leading-4 text-muted-foreground">
+                <p className="m-0 flex items-center gap-1.5 text-[10px] leading-4 text-muted-foreground">
                     <KeyRound className="size-3" /> Saved keys are never returned to the browser.
                 </p>
-                {error && <p className="m-0 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[9px] leading-4 text-[#ff9aaa]">{error}</p>}
+                {error && <p className="m-0 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[10px] leading-4 text-[#ff9aaa]">{error}</p>}
                 <div className="flex flex-wrap justify-end gap-2 border-t border-border/70 pt-4">
                     {!target.newProvider && (
                         <Button variant="destructive" disabled={saving || !credentialConfigured} onClick={() => void onRemoveCredential()}>
@@ -199,7 +199,7 @@ export function AgentModelSettings({
                         <span className="font-semibold text-foreground">{provider?.name ?? target.providerId}</span>
                         {provider && <ProviderStatus configured={provider.configured} />}
                     </div>
-                    {provider && <p className="mb-0 mt-1 truncate text-[9px] text-muted-foreground">{apiLabel(provider.api)} · {provider.baseUrl}</p>}
+                    {provider && <p className="mb-0 mt-1 truncate text-[10px] text-muted-foreground">{apiLabel(provider.api)} · {provider.baseUrl}</p>}
                 </div>
                 <div className="grid grid-cols-2 gap-3 max-[560px]:grid-cols-1">
                     <Field label="Model ID">
@@ -223,7 +223,7 @@ export function AgentModelSettings({
                         </Field>
                     </div>
                 </div>
-                {error && <p className="m-0 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[9px] leading-4 text-[#ff9aaa]">{error}</p>}
+                {error && <p className="m-0 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[10px] leading-4 text-[#ff9aaa]">{error}</p>}
                 <div className="flex justify-end gap-2 border-t border-border/70 pt-4">
                     <Button variant="outline" disabled={saving} onClick={onBack}>Cancel</Button>
                     <Button disabled={saving || !modelValid} onClick={() => void onSaveModel()}>{saving ? "Saving…" : "Save model"}</Button>
@@ -237,7 +237,7 @@ export function AgentModelSettings({
             <div className="flex items-center justify-between gap-3">
                 <div>
                     <h3 className="m-0 text-[11px] font-semibold text-foreground">Models</h3>
-                    <p className="mb-0 mt-1 text-[9px] text-muted-foreground">Every provider uses an OpenAI-compatible transport.</p>
+                    <p className="mb-0 mt-1 text-[10px] text-muted-foreground">Every provider uses an OpenAI-compatible transport.</p>
                 </div>
                 <Button variant="outline" size="sm" onClick={onAddProvider}>
                     <Plus className="size-3.5" /> Add provider
@@ -252,7 +252,7 @@ export function AgentModelSettings({
                                     <span className="text-[11px] font-semibold text-foreground">{provider.name}</span>
                                     <ProviderStatus configured={provider.configured} />
                                 </div>
-                                <p className="mb-0 mt-1 truncate text-[9px] text-muted-foreground" title={provider.baseUrl}>{apiLabel(provider.api)} · {provider.baseUrl}</p>
+                                <p className="mb-0 mt-1 truncate text-[10px] text-muted-foreground" title={provider.baseUrl}>{apiLabel(provider.api)} · {provider.baseUrl}</p>
                             </div>
                             <div className="flex items-center gap-1">
                                 <Button variant="ghost" size="sm" onClick={() => onAddModel(provider.id)}><Plus className="size-3" /> Model</Button>
@@ -278,7 +278,7 @@ export function AgentModelSettings({
                                                 <span className={cn("grid size-5 shrink-0 place-items-center rounded-full border", active ? "border-primary bg-primary text-primary-foreground" : "border-border text-transparent")}><Check className="size-3" /></span>
                                                 <span className="min-w-0 flex-1">
                                                     <span className="block truncate text-[11px] font-medium text-foreground">{model.name}</span>
-                                                    <span className="mt-0.5 block truncate font-mono text-[9px] text-muted-foreground">{model.id}</span>
+                                                    <span className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground">{model.id}</span>
                                                 </span>
                                             </button>
                                             <Button variant="ghost" size="icon" aria-label={`Edit ${model.name}`} onClick={() => onEditModel(provider.id, model.id)}><Pencil className="size-3.5" /></Button>
@@ -288,7 +288,7 @@ export function AgentModelSettings({
                                 })}
                             </div>
                         ) : (
-                            <div className="flex items-center justify-between gap-3 px-3 py-3 text-[9px] text-muted-foreground">
+                            <div className="flex items-center justify-between gap-3 px-3 py-3 text-[10px] text-muted-foreground">
                                 <span>No models configured.</span>
                                 <Button variant="ghost" size="sm" onClick={() => onAddModel(provider.id)}>Add first model</Button>
                             </div>
@@ -296,7 +296,7 @@ export function AgentModelSettings({
                     </div>
                 ))}
             </div>
-            {error && <p className="m-0 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[9px] leading-4 text-[#ff9aaa]">{error}</p>}
+            {error && <p className="m-0 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[10px] leading-4 text-[#ff9aaa]">{error}</p>}
         </section>
     );
 }

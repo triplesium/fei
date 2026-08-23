@@ -33,7 +33,7 @@ function DropdownMenuItem({ className, ...props }: ComponentProps<typeof Dropdow
     return (
         <DropdownMenuPrimitive.Item
             className={cn(
-                "relative flex min-h-7 cursor-default select-none items-center gap-2 rounded-md px-2 text-[10px] outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:opacity-40",
+                "relative flex min-h-7 cursor-default select-none items-center gap-2 rounded-md px-2 text-[12px] outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:opacity-40",
                 className,
             )}
             {...props}
@@ -53,7 +53,7 @@ function DropdownMenuSeparator({ className, ...props }: ComponentProps<typeof Dr
 function DropdownMenuShortcut({ className, ...props }: ComponentProps<"span">) {
     return (
         <span
-            className={cn("ml-auto pl-5 text-[9px] tracking-wide text-muted-foreground", className)}
+            className={cn("ml-auto pl-5 text-[11px] tracking-wide text-muted-foreground", className)}
             {...props}
         />
     );

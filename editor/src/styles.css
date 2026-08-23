@@ -5,11 +5,13 @@
 @source "./";
 
 @theme inline {
+    --font-sans: var(--font-ui);
+    --font-mono: var(--font-code);
     --color-background: var(--background);
     --color-foreground: var(--text);
     --color-card: var(--surface);
     --color-card-foreground: var(--text);
-    --color-popover: #171c24;
+    --color-popover: #242424;
     --color-popover-foreground: var(--text);
     --color-primary: var(--accent);
     --color-primary-foreground: #07111f;
@@ -17,7 +19,7 @@
     --color-secondary-foreground: var(--text);
     --color-muted: var(--surface-hover);
     --color-muted-foreground: var(--muted);
-    --color-accent: #263248;
+    --color-accent: #363636;
     --color-accent-foreground: var(--text);
     --color-destructive: var(--danger);
     --color-border: var(--border);
@@ -30,21 +32,24 @@
 
 :root {
     color-scheme: dark;
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-        "Segoe UI", sans-serif;
-    --background: #15171b;
-    --surface: #1b1e24;
-    --surface-raised: #242830;
-    --surface-hover: #2a2f38;
-    --surface-active: #313844;
-    --border: #30353e;
-    --border-soft: #282c34;
-    --text: #e2e5eb;
-    --text-subtle: #b7bdc8;
-    --muted: #7c8492;
-    --accent: #6d9eff;
-    --accent-soft: rgb(109 158 255 / 13%);
-    --blue: #7eacff;
+    --font-ui: "Segoe UI Variable Text", "Segoe UI Variable", "Noto Sans SC",
+        "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+    --font-code: "Cascadia Code", "Cascadia Mono", "SFMono-Regular", Consolas,
+        monospace;
+    font-family: var(--font-ui);
+    --background: #171717;
+    --surface: #252525;
+    --surface-raised: #303030;
+    --surface-hover: #363636;
+    --surface-active: #424242;
+    --border: #3a3a3a;
+    --border-soft: #171717;
+    --text: #dedede;
+    --text-subtle: #b9b9b9;
+    --muted: #898989;
+    --accent: #4aa8ff;
+    --accent-soft: rgb(74 168 255 / 14%);
+    --blue: #63b4ff;
     --danger: #fb7185;
     --warning: #fbbf24;
 }
@@ -63,6 +68,9 @@ body,
 body {
     margin: 0;
     overflow: hidden;
+    font-size: 13px;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
     color: var(--text);
     background: var(--background);
 }
@@ -96,21 +104,21 @@ button {
 .dockview-theme-entisium {
     width: 100%;
     height: 100%;
-    --dv-tabs-and-actions-container-font-size: 11px;
-    --dv-tabs-and-actions-container-height: 31px;
+    --dv-tabs-and-actions-container-font-size: 13px;
+    --dv-tabs-and-actions-container-height: 35px;
     --dv-group-view-background-color: var(--surface);
-    --dv-tabs-and-actions-container-background-color: #1a1d22;
-    --dv-activegroup-visiblepanel-tab-background-color: #252931;
-    --dv-activegroup-hiddenpanel-tab-background-color: #1a1d22;
-    --dv-inactivegroup-visiblepanel-tab-background-color: #202329;
-    --dv-inactivegroup-hiddenpanel-tab-background-color: #1a1d22;
+    --dv-tabs-and-actions-container-background-color: #1d1d1d;
+    --dv-activegroup-visiblepanel-tab-background-color: var(--surface);
+    --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+    --dv-inactivegroup-visiblepanel-tab-background-color: var(--surface);
+    --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
     --dv-activegroup-visiblepanel-tab-color: var(--text);
     --dv-activegroup-hiddenpanel-tab-color: var(--muted);
     --dv-inactivegroup-visiblepanel-tab-color: var(--text-subtle);
-    --dv-inactivegroup-hiddenpanel-tab-color: #69717e;
-    --dv-tab-divider-color: var(--border-soft);
-    --dv-separator-border: #111318;
-    --dv-sash-color: transparent;
+    --dv-inactivegroup-hiddenpanel-tab-color: #777;
+    --dv-tab-divider-color: transparent;
+    --dv-separator-border: #101010;
+    --dv-sash-color: #101010;
     --dv-active-sash-color: var(--accent);
     --dv-drag-over-background-color: rgb(109 158 255 / 18%);
     --dv-drag-over-border-color: var(--accent);
@@ -125,13 +133,50 @@ button {
     --dv-floating-titlebar-background-color: #1a1d22;
     --dv-floating-titlebar-border-bottom: 1px solid var(--border);
     --dv-overlay-z-index: 70;
-    --dv-tab-font-size: 11px;
-    --dv-tab-margin: 0;
-    --dv-border-radius: 0;
-    --dv-tab-border-radius: 0;
+    --dv-tab-font-size: 13px;
+    --dv-tab-margin: 3px 2px 0;
+    --dv-border-radius: 4px;
+    --dv-tab-border-radius: 4px 4px 0 0;
     --dv-spacing-padding: 2px;
     --dv-sash-border-radius: 0;
     --dv-dropdown-border-radius: 5px;
+}
+
+.dockview-theme-entisium .dv-tabs-and-actions-container {
+    border-bottom: 0;
+}
+
+.dockview-theme-entisium .dv-tab {
+    border-radius: var(--dv-tab-border-radius);
+    padding: 0;
+    transition:
+        color 120ms ease,
+        background-color 120ms ease,
+        box-shadow 120ms ease;
+}
+
+.dockview-theme-entisium .dv-tabs-container .dv-tab::before {
+    display: none;
+}
+
+.dockview-theme-entisium .dv-active-group > .dv-tabs-and-actions-container .dv-tab.dv-active-tab {
+    z-index: 1;
+    box-shadow: inset 0 1px rgb(255 255 255 / 5%);
+}
+
+.dockview-theme-entisium .dv-tab.dv-inactive-tab:hover {
+    background-color: rgb(255 255 255 / 5%);
+    color: var(--text-subtle);
+}
+
+.dockview-theme-entisium .dv-groupview.dv-inactive-group .dv-tab.dv-active-tab {
+    z-index: 1;
+    box-shadow: inset 0 1px rgb(255 255 255 / 3%);
+}
+
+.dockview-theme-entisium > .dv-grid-view {
+    border-radius: var(--dv-border-radius);
+    overflow: hidden;
 }
 
 .dockview-theme-entisium .dv-sash:hover,

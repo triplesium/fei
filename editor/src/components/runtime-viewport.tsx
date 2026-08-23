@@ -81,14 +81,14 @@ export function RuntimeViewport({
                         )}
 
                         {session && state === "starting" && (
-                            <div className="absolute inset-0 grid place-content-center justify-items-center gap-2 bg-black/45 text-[10px] text-muted-foreground backdrop-blur-[1px]">
+                            <div className="absolute inset-0 grid place-content-center justify-items-center gap-2 bg-black/45 text-[11px] text-muted-foreground backdrop-blur-[1px]">
                                 <LoaderCircle className="animate-spin text-primary" size={22} />
                                 <strong className="text-[#d5dbe5]">Starting runtime…</strong>
                             </div>
                         )}
 
                         {session && state === "failed" && (
-                            <div className="absolute inset-0 grid place-content-center justify-items-center gap-2 bg-[#130c10]/85 px-6 text-center text-[10px] text-muted-foreground backdrop-blur-sm">
+                            <div className="absolute inset-0 grid place-content-center justify-items-center gap-2 bg-[#130c10]/85 px-6 text-center text-[11px] text-muted-foreground backdrop-blur-sm">
                                 <TriangleAlert className="text-destructive" size={23} />
                                 <strong className="text-[#ffb4c0]">Runtime failed</strong>
                                 <span className="max-w-72 truncate" title={detail}>{detail}</span>

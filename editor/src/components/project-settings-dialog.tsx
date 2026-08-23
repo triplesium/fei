@@ -30,7 +30,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
             <span>
                 {label}
                 {hint && (
-                    <small className="ml-1.5 text-[9px] font-normal text-muted-foreground">{hint}</small>
+                    <small className="ml-1.5 text-[10px] font-normal text-muted-foreground">{hint}</small>
                 )}
             </span>
             {children}
@@ -85,7 +85,7 @@ export function ProjectSettingsDialog({
                         </div>
                     </details>
                     {error && (
-                        <p className="m-0 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[9px] leading-4 text-[#ff9aaa]">
+                        <p className="m-0 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[10px] leading-4 text-[#ff9aaa]">
                             {error}
                         </p>
                     )}
