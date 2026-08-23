@@ -164,6 +164,7 @@ export class EncryptedCredentialStore implements CredentialStore {
     private credentialsPromise: Promise<Map<string, Credential>> | undefined;
     private mutationChain: Promise<void> = Promise.resolve();
     private readonly paths: readonly string[];
+    private readonly unreadablePaths = new Set<string>();
     private activePath: string | undefined;
 
     constructor(
@@ -248,8 +249,18 @@ export class EncryptedCredentialStore implements CredentialStore {
             if (file.version !== 1 || typeof file.protected !== "string") {
                 throw new Error("Credential file has an unsupported format.");
             }
+            let plaintext: string;
+            try {
+                plaintext = await this.protector.unprotect(file.protected);
+            } catch {
+                this.unreadablePaths.add(path);
+                console.warn(
+                    `[fei editor] credential file cannot be decrypted by the current user; skipping: ${path}`,
+                );
+                continue;
+            }
             this.activePath = path;
-            return parseCredentials(JSON.parse(await this.protector.unprotect(file.protected)));
+            return parseCredentials(JSON.parse(plaintext));
         }
         return new Map();
     }
@@ -261,7 +272,9 @@ export class EncryptedCredentialStore implements CredentialStore {
             protected: await this.protector.protect(plaintext),
         };
 
-        const candidates = this.activePath ? [this.activePath] : this.paths;
+        const candidates = this.activePath
+            ? [this.activePath]
+            : this.paths.filter((path) => !this.unreadablePaths.has(path));
         let lastError: unknown;
         for (const path of candidates) {
             const temporaryPath = `${path}.${process.pid}.${randomUUID()}.tmp`;

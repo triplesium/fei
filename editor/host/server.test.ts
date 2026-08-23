@@ -157,4 +157,47 @@ describe("Editor Host", () => {
             await new Promise<void>((resolveClose) => host.server.close(() => resolveClose()));
         }
     });
+
+    it("opens the Host project when model credentials cannot be decrypted", async () => {
+        const directory = await mkdtemp(join(tmpdir(), "fei-editor-project-credential-failure-"));
+        temporaryDirectories.push(directory);
+        const distDirectory = join(directory, "dist");
+        const projectDirectory = join(directory, "project");
+        const credentialPath = join(directory, "credentials.json");
+        await mkdir(distDirectory);
+        await mkdir(projectDirectory);
+        await writeFile(join(distDirectory, "index.html"), "<p>Fei Editor</p>", "utf8");
+        await writeFile(join(projectDirectory, "project.yaml"), "name: Host project\n", "utf8");
+        await writeFile(
+            credentialPath,
+            JSON.stringify({ version: 1, protected: "unreadable" }),
+            "utf8",
+        );
+        const unavailableProtector: SecretProtector = {
+            protect: async (plaintext) => plaintext,
+            unprotect: async () => {
+                throw new Error("Credential belongs to another Windows user.");
+            },
+        };
+        const host = createEditorHost({
+            credentials: new EncryptedCredentialStore(credentialPath, unavailableProtector),
+            distDirectory,
+            runtimeDirectory: distDirectory,
+            projectDirectory,
+            port: 0,
+        });
+        const address = await host.listen();
+        const baseUrl = `http://${address.host}:${address.port}`;
+
+        try {
+            const bootstrapResponse = await fetch(`${baseUrl}/api/v1/bootstrap`);
+            expect(bootstrapResponse.status).toBe(200);
+            expect(await bootstrapResponse.json()).toMatchObject({
+                project: { open: true, name: "project" },
+                provider: { id: "deepseek", configured: false },
+            });
+        } finally {
+            await new Promise<void>((resolveClose) => host.server.close(() => resolveClose()));
+        }
+    });
 });

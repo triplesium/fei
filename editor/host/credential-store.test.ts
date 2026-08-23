@@ -1,4 +1,4 @@
-import { readFile, rm, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -65,6 +65,46 @@ describe("EncryptedCredentialStore", () => {
         expect(await store.read("deepseek")).toEqual({
             type: "api_key",
             key: "fallback-secret",
+        });
+    });
+
+    it("preserves an unreadable credential file and recovers through a fallback", async () => {
+        const directory = await mkdtemp(join(tmpdir(), "fei-editor-credential-recovery-"));
+        temporaryDirectories.push(directory);
+        const unreadablePath = join(directory, "unreadable", "credentials.json");
+        const fallbackPath = join(directory, "fallback", "credentials.json");
+        await mkdir(join(directory, "unreadable"));
+        await writeFile(
+            unreadablePath,
+            JSON.stringify({ version: 1, protected: "unreadable" }),
+            "utf8",
+        );
+        const recoveringProtector: SecretProtector = {
+            protect: testProtector.protect,
+            unprotect: async (ciphertext) => {
+                if (ciphertext === "unreadable") throw new Error("Wrong Windows identity.");
+                return testProtector.unprotect(ciphertext);
+            },
+        };
+        const store = new EncryptedCredentialStore(
+            [unreadablePath, fallbackPath],
+            recoveringProtector,
+        );
+
+        await store.modify("deepseek", async () => ({
+            type: "api_key",
+            key: "recovered-secret",
+        }));
+
+        expect(await readFile(unreadablePath, "utf8")).toContain("unreadable");
+        expect(await readFile(fallbackPath, "utf8")).not.toContain("recovered-secret");
+        const reloaded = new EncryptedCredentialStore(
+            [unreadablePath, fallbackPath],
+            recoveringProtector,
+        );
+        expect(await reloaded.read("deepseek")).toEqual({
+            type: "api_key",
+            key: "recovered-secret",
         });
     });
 });
