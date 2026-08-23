@@ -11,6 +11,7 @@
 #include "rendering/render_app.hpp"
 #include "sprite/plugin.hpp"
 #include "sprite/renderer.hpp"
+#include "ui_rendering/plugin.hpp"
 #include "window_browser/input.hpp"
 
 #include <emscripten.h>
@@ -94,7 +95,8 @@ class BrowserProjectHostPlugin final : public Plugin {
         dependencies.require<WebGpuBrowserPlugin>()
             .require<BrowserInputPlugin>()
             .require<CorePlugin>()
-            .require<SpritePlugin>();
+            .require<SpritePlugin>()
+            .require<ui::rendering::UiRenderingPlugin>();
     }
 
     void setup(App& app) override {

@@ -9,6 +9,7 @@ target("sample-browser-project")
         "entisium-project-scripting-luau",
         "entisium-runtime-inspection",
         "entisium-sprite",
+        "entisium-ui-rendering",
         "entisium-window-browser",
         "entisium-graphics-webgpu-browser"
     )
