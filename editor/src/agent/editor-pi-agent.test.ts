@@ -58,7 +58,16 @@ describe("EditorPiAgent", () => {
         expect(agent.status()).toMatchObject({
             configured: true,
             streaming: false,
-            tools: ["runtime_status", "runtime_play", "runtime_stop"],
+            tools: [
+                "project_list",
+                "project_read",
+                "project_write",
+                "project_create",
+                "runtime_status",
+                "runtime_play",
+                "runtime_stop",
+                "runtime_restart",
+            ],
         });
 
         unsubscribe();

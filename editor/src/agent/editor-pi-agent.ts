@@ -6,10 +6,10 @@ import {
 } from "@earendil-works/pi-agent-core";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { EditorAgentApi, EditorPiAgentApi, EditorPiAgentStatus } from "../types";
-import { createRuntimeTools } from "./runtime-tools";
+import { createEditorTools } from "./tools";
 
 const systemPrompt = `You are the built-in agent for the Fei Editor.
-Use the available tools to inspect and control the current WebAssembly runtime.
+Use the available tools to inspect and edit the current project and control its WebAssembly runtime.
 Do not claim an operation succeeded until its tool result confirms success.`;
 
 const unconfiguredStream: StreamFn = () => {
@@ -38,7 +38,7 @@ export class EditorPiAgent implements EditorPiAgentApi {
     private readonly unsubscribeStateEvents: () => void;
 
     constructor(editor: EditorAgentApi) {
-        const tools = createRuntimeTools(editor);
+        const tools = createEditorTools(editor);
         this.toolNames = Object.freeze(tools.map((tool) => tool.name));
         this.agent = new Agent({
             initialState: {
