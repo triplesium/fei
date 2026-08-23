@@ -15,7 +15,7 @@
 #include <utility>
 #include <yaml-cpp/yaml.h> // IWYU pragma: keep
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -157,7 +157,7 @@ AssetDatabase::AssetDatabase(
     std::filesystem::path import_cache_root
 ) : m_root(canonical_root(std::move(project_asset_root))) {
     if (import_cache_root.empty()) {
-        import_cache_root = m_root.parent_path() / ".fei" / "imported";
+        import_cache_root = m_root.parent_path() / ".entisium" / "imported";
     }
     m_import_cache_root = canonical_root(std::move(import_cache_root));
 }
@@ -1559,4 +1559,4 @@ Result<AssetImportReport, std::string> import_pending_assets(
     return report;
 }
 
-} // namespace fei
+} // namespace ets

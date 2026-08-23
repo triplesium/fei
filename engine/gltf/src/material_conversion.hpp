@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace fei::gltf_detail {
+namespace ets::gltf_detail {
 
 struct PendingMaterialTexture {
     std::size_t texture_index;
@@ -38,4 +38,4 @@ std::unique_ptr<StandardMaterial> finalize_material(
 
 std::unique_ptr<StandardMaterial> make_default_gltf_material();
 
-} // namespace fei::gltf_detail
+} // namespace ets::gltf_detail

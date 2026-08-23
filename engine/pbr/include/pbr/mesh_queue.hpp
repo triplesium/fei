@@ -9,7 +9,7 @@
 #include <memory>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 template<class QueryT, class PhaseT, class SpecializerT, class ShouldQueueT>
 void queue_mesh_draw_items(
@@ -94,4 +94,4 @@ void queue_mesh_draw_items(
     );
 }
 
-} // namespace fei
+} // namespace ets

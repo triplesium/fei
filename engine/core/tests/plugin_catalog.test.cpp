@@ -5,7 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace fei;
+using namespace ets;
 
 TEST_CASE(
     "Engine plugins are discoverable by stable ids",

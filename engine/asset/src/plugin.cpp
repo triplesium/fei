@@ -6,13 +6,13 @@
 #include "asset/systems.hpp"
 #include "base/log.hpp"
 
-namespace fei {
+namespace ets {
 
 namespace {
 
 std::filesystem::path default_project_asset_root() {
-#ifdef FEI_ASSETS_PATH
-    return FEI_ASSETS_PATH;
+#ifdef ETS_ASSETS_PATH
+    return ETS_ASSETS_PATH;
 #else
     return std::filesystem::current_path();
 #endif
@@ -20,7 +20,7 @@ std::filesystem::path default_project_asset_root() {
 
 std::filesystem::path
 default_import_cache_root(const std::filesystem::path& project_asset_root) {
-    return project_asset_root.parent_path() / ".fei" / "imported";
+    return project_asset_root.parent_path() / ".entisium" / "imported";
 }
 
 } // namespace
@@ -78,4 +78,4 @@ void AssetsPlugin::setup(App& app) {
     });
 }
 
-} // namespace fei
+} // namespace ets

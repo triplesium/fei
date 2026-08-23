@@ -13,7 +13,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace detail {
 
@@ -31,7 +31,7 @@ ConversionRank property_conversion_rank(const Ref& value) {
 template<class MemberType>
 Status<InvokeFailure>
 assign_array_property(MemberType& target, Ref value, const std::string& name) {
-    if (!value || value.type_id() != fei::type_id<MemberType>()) {
+    if (!value || value.type_id() != ets::type_id<MemberType>()) {
         return failure(
             InvokeFailure::invalid_call(
                 "Invalid value passed to property set " + name + ": expected " +
@@ -83,7 +83,7 @@ assign_property(MemberType& target, Ref value, const std::string& name) {
         }
         return {};
     } else if constexpr (std::is_move_assignable_v<MemberType>) {
-        if (!value || value.type_id() != fei::type_id<ValueType>()) {
+        if (!value || value.type_id() != ets::type_id<ValueType>()) {
             return failure(
                 InvokeFailure::invalid_call(
                     "Invalid value passed to property set " + name +
@@ -150,26 +150,26 @@ inline Status<InvokeFailure> assign_dynamic_property(
     Ref value,
     const std::string& name
 ) {
-    if (target_type == fei::type_id<bool>()) {
+    if (target_type == ets::type_id<bool>()) {
         return assign_property(*static_cast<bool*>(target), value, name);
     }
-    if (target_type == fei::type_id<int>()) {
+    if (target_type == ets::type_id<int>()) {
         return assign_property(*static_cast<int*>(target), value, name);
     }
-    if (target_type == fei::type_id<unsigned int>()) {
+    if (target_type == ets::type_id<unsigned int>()) {
         return assign_property(
             *static_cast<unsigned int*>(target),
             value,
             name
         );
     }
-    if (target_type == fei::type_id<float>()) {
+    if (target_type == ets::type_id<float>()) {
         return assign_property(*static_cast<float*>(target), value, name);
     }
-    if (target_type == fei::type_id<double>()) {
+    if (target_type == ets::type_id<double>()) {
         return assign_property(*static_cast<double*>(target), value, name);
     }
-    if (target_type == fei::type_id<std::string>()) {
+    if (target_type == ets::type_id<std::string>()) {
         return assign_property(*static_cast<std::string*>(target), value, name);
     }
     return assign_exact_dynamic_property(target_type, target, value, name);
@@ -254,7 +254,7 @@ class PropertyImpl : public Property {
 
   public:
     PropertyImpl(std::string name, P ptr) :
-        Property(std::move(name), fei::type_id<MemberType>()), m_ptr(ptr) {}
+        Property(std::move(name), ets::type_id<MemberType>()), m_ptr(ptr) {}
 
     Result<Ref, InvokeFailure> get(Ref obj) const override {
         if constexpr (is_static) {
@@ -292,4 +292,4 @@ class PropertyImpl : public Property {
     }
 };
 
-} // namespace fei
+} // namespace ets

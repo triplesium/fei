@@ -17,9 +17,9 @@
 #include <span>
 #include <string>
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT()
+ETS_REFLECT()
 class Image {
   private:
     std::unique_ptr<unsigned char[]> m_data;
@@ -101,7 +101,7 @@ class ImageImporter : public AssetImporter {
     ) const override;
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class ImagePlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {
@@ -111,4 +111,4 @@ class ImagePlugin : public Plugin {
     void setup(App& /*app*/) override {}
 };
 
-} // namespace fei
+} // namespace ets

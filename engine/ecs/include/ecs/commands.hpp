@@ -13,7 +13,7 @@
 #include <variant>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace detail {
 struct DynamicCommandsWorldAccess;
@@ -400,4 +400,4 @@ struct SystemParamTraits<Commands> {
 };
 static_assert(SystemParam<Commands>);
 
-} // namespace fei
+} // namespace ets

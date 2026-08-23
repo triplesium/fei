@@ -7,7 +7,7 @@
 #include <cstring>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -186,4 +186,4 @@ void BufferVulkan::update(
     m_state->memory_allocator().flush(m_memory, offset, size);
 }
 
-} // namespace fei
+} // namespace ets

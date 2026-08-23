@@ -4,9 +4,9 @@
 #include "refl/reflect.hpp"
 #include "ui_widgets/control.hpp"
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct Scrollbar {
     Entity target;
     ControlOrientation orientation {ControlOrientation::Vertical};
@@ -25,10 +25,10 @@ struct Scrollbar {
     }
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct ScrollbarThumb {};
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct ScrollbarDragState {
     bool dragging {false};
     float offset {0.0f};
@@ -36,4 +36,4 @@ struct ScrollbarDragState {
     float pointer_position {0.0f};
 };
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

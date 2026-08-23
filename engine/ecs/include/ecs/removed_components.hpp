@@ -8,7 +8,7 @@
 
 #include <cstddef>
 
-namespace fei {
+namespace ets {
 
 template<typename T>
 class RemovedComponents {
@@ -65,4 +65,4 @@ struct SystemParamTraits<RemovedComponents<T>> {
 
 static_assert(SystemParam<RemovedComponents<int>>);
 
-} // namespace fei
+} // namespace ets

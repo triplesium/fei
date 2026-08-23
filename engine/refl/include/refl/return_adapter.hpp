@@ -8,7 +8,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 template<class T>
 struct ReturnAdapter {
@@ -71,4 +71,4 @@ struct ReturnAdapter<Result<T, E>> {
     }
 };
 
-} // namespace fei
+} // namespace ets

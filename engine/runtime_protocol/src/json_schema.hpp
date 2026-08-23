@@ -7,7 +7,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei::runtime_protocol::detail {
+namespace ets::runtime_protocol::detail {
 
 [[nodiscard]] Result<nlohmann::json, std::string>
 compile_json_schema(std::string_view source);
@@ -17,4 +17,4 @@ compile_json_schema(std::string_view source);
     const nlohmann::json& instance
 );
 
-} // namespace fei::runtime_protocol::detail
+} // namespace ets::runtime_protocol::detail

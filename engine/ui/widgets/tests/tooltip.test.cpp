@@ -7,7 +7,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace fei;
+using namespace ets;
 
 TEST_CASE("Tooltip appears after its hover delay", "[ui_widgets][tooltip]") {
     World world;

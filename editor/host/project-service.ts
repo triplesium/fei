@@ -110,7 +110,7 @@ export class HostProjectService {
     async write(path: string, content: Buffer | string): Promise<void> {
         const file = await this.writableFile(path);
         await mkdir(dirname(file), { recursive: true });
-        const temporary = `${file}.fei-${randomBytes(8).toString("hex")}.tmp`;
+        const temporary = `${file}.entisium-${randomBytes(8).toString("hex")}.tmp`;
         try {
             await writeFile(temporary, content, { flag: "wx" });
             await rename(temporary, file);

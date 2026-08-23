@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-using namespace fei;
+using namespace ets;
 
 TEST_CASE("Timer once mode only finishes one time", "[core][time]") {
     Timer timer(1.0f, Once);

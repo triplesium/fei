@@ -2,7 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace fei;
+using namespace ets;
 
 TEST_CASE(
     "Project scripts match language extensions case insensitively",

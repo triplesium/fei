@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <iterator>
 
-namespace fei {
+namespace ets {
 
 PluginGroupBuilder::PluginGroupBuilder(std::string name) :
     m_name(std::move(name)) {}
@@ -148,4 +148,4 @@ void PluginGroupBuilder::finish(App& app) {
     }
 }
 
-} // namespace fei
+} // namespace ets

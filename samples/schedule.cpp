@@ -6,7 +6,7 @@
 #include "ecs/world.hpp"
 
 #include <print>
-using namespace fei;
+using namespace ets;
 
 #define TEST_SYSTEM(name)    \
     void name() {            \

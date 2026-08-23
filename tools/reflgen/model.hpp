@@ -5,7 +5,7 @@
 #include <string_view>
 #include <vector>
 
-namespace fei::reflgen {
+namespace ets::reflgen {
 
 struct ReflectionTag {
     std::string key;
@@ -72,4 +72,4 @@ struct ParseResult {
 void dedupe_reflected_types(ParseResult& result);
 void filter_codegen_unsupported_members(ParseResult& result);
 
-} // namespace fei::reflgen
+} // namespace ets::reflgen

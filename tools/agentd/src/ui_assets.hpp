@@ -4,7 +4,7 @@
 
 #include <string_view>
 
-namespace fei::agentd::detail {
+namespace ets::agentd::detail {
 
 struct UiAsset {
     std::string_view content;
@@ -19,4 +19,4 @@ inline constexpr std::string_view c_ui_content_security_policy {
 
 Optional<UiAsset> find_ui_asset(std::string_view path);
 
-} // namespace fei::agentd::detail
+} // namespace ets::agentd::detail

@@ -19,7 +19,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::devtools {
+namespace ets::devtools {
 
 namespace {
 
@@ -338,4 +338,4 @@ void CorePlugin::setup(App& app) {
 
 void CorePlugin::finish(App&) {}
 
-} // namespace fei::devtools
+} // namespace ets::devtools

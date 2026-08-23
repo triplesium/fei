@@ -3,10 +3,10 @@
 #include "app/app.hpp"
 #include "refl/generated.hpp"
 
-namespace fei {
+namespace ets {
 
 void ReflectionPlugin::setup(App&) {
     register_generated_reflection();
 }
 
-} // namespace fei
+} // namespace ets

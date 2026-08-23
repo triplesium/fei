@@ -3,16 +3,16 @@
 #include "ecs/fwd.hpp"
 #include "refl/reflect.hpp"
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class MenuAction {
     Opened,
     Closed,
     Activated,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct MenuEvent {
     Entity menu;
     Entity source;
@@ -21,18 +21,18 @@ struct MenuEvent {
     bool operator==(const MenuEvent&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct MenuButton {
     Entity popup;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct MenuPopup {};
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct MenuItem {};
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct MenuOpen {};
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

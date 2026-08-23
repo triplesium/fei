@@ -207,7 +207,7 @@ export class EditorHostClient {
     subscribeEvents(path: string, listener: (value: unknown) => void): () => void {
         const abortController = new AbortController();
         void this.consumeEvents(path, listener, abortController.signal).catch((error) => {
-            if (!abortController.signal.aborted) console.warn("[fei editor] event stream closed", error);
+            if (!abortController.signal.aborted) console.warn("[entisium editor] event stream closed", error);
         });
         return () => abortController.abort();
     }

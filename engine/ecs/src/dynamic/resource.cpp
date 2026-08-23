@@ -5,7 +5,7 @@
 
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 DynamicResourceParam::DynamicResourceParam(
     std::string name,
@@ -45,4 +45,4 @@ DynamicResourceParam::prepare(World& world, SystemTicks system_ticks) {
     return static_cast<const World&>(world).resource(type);
 }
 
-} // namespace fei
+} // namespace ets

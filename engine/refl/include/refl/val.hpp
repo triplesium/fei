@@ -15,7 +15,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 struct ValError {
     enum class Kind {
@@ -290,4 +290,4 @@ Val make_val(Args&&... args) {
     });
 }
 
-} // namespace fei
+} // namespace ets

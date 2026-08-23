@@ -7,7 +7,7 @@
 #include <memory>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class CommandBufferExecutorOpenGL;
 class GraphicsDeviceOpenGL;
@@ -115,4 +115,4 @@ class CommandBufferOpenGL : public CommandBuffer {
     void mark_submitted();
 };
 
-} // namespace fei
+} // namespace ets

@@ -9,9 +9,9 @@
 #include <string>
 #include <vector>
 
-namespace fei::devtools::rendering {
+namespace ets::devtools::rendering {
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct RenderSystemSnapshot {
     std::uint32_t id {0};
     std::string name;
@@ -20,7 +20,7 @@ struct RenderSystemSnapshot {
     std::uint64_t batch_index {0};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct RenderScheduleSnapshot {
     bool available {false};
     std::uint64_t total_systems {0};
@@ -29,7 +29,7 @@ struct RenderScheduleSnapshot {
     std::vector<std::vector<std::uint32_t>> batches;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct ResourceSetSourceSnapshot {
     std::string name;
     std::uint64_t requests {0};
@@ -38,7 +38,7 @@ struct ResourceSetSourceSnapshot {
     std::size_t cache_size {0};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct GraphicsCacheSnapshot {
     std::uint64_t framebuffer_requests {0};
     std::uint64_t framebuffer_hits {0};
@@ -57,4 +57,4 @@ make_render_schedule_snapshot(const ScheduleDebugInfo& debug);
 GraphicsCacheSnapshot
 make_graphics_cache_snapshot(const GraphicsResourceCacheStats& stats);
 
-} // namespace fei::devtools::rendering
+} // namespace ets::devtools::rendering

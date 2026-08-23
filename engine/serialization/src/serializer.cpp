@@ -21,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::serialization {
+namespace ets::serialization {
 namespace {
 
 constexpr const char* c_root_path = "$";
@@ -307,7 +307,7 @@ Result<Type&, DeserializeError> resolve_runtime_schema_type(
 
 template<class T>
 bool same_type(TypeId type_id) {
-    return type_id == fei::type_id<T>();
+    return type_id == ets::type_id<T>();
 }
 
 bool is_signed_integral_type(TypeId type_id) {
@@ -2082,4 +2082,4 @@ Result<Val, DeserializeError> deserialize(
     return deserialize_value(type_id, node, c_root_path, options);
 }
 
-} // namespace fei::serialization
+} // namespace ets::serialization

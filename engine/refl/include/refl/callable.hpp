@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class Param {
   private:
@@ -138,4 +138,4 @@ class Callable {
     QualType m_return_type;
 };
 
-} // namespace fei
+} // namespace ets

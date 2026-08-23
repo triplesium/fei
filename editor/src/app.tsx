@@ -298,7 +298,7 @@ function FileTree({
 
 type CommandHandler = (request: AgentRequest) => Promise<unknown>;
 
-const workbenchLayoutStorageKey = "fei-editor-dockview-layout-v2";
+const workbenchLayoutStorageKey = "entisium-editor-dockview-layout-v2";
 const dockviewComponents = { panel: DockPanel };
 const dockviewTabComponents = { engine: EnginePanelTab };
 const WorkbenchPanelsContext = createContext<Record<string, ReactNode>>({});
@@ -734,10 +734,10 @@ export function App() {
                 } else {
                     appendConsole("info", "editor", "ready; open a local project folder");
                 }
-                document.documentElement.dataset.feiEditorReady = "true";
+                document.documentElement.dataset.entisiumEditorReady = "true";
             })
             .catch((error) => {
-                document.documentElement.dataset.feiEditorReady = "failed";
+                document.documentElement.dataset.entisiumEditorReady = "failed";
                 appendConsole("error", "editor", errorMessage(error));
             });
         return () => {
@@ -748,7 +748,7 @@ export function App() {
     }, []);
 
     useEffect(() => {
-        document.documentElement.dataset.feiEditorRuntime = runtimeState;
+        document.documentElement.dataset.entisiumEditorRuntime = runtimeState;
     }, [runtimeState]);
 
     useEffect(() => {
@@ -896,14 +896,14 @@ export function App() {
     }, [appendConsole]);
 
     useEffect(() => {
-        window.feiEditorAgent = agentApi;
+        window.entisiumEditorAgent = agentApi;
     }, [agentApi]);
 
     const piAgent = useMemo(() => new EditorPiAgent(agentApi), [agentApi]);
     const modelGateway = useMemo(() => new EditorModelGateway(), []);
 
     useEffect(() => {
-        window.feiEditorPi = piAgent;
+        window.entisiumEditorPi = piAgent;
         return () => piAgent.dispose();
     }, [piAgent]);
 
@@ -1133,7 +1133,7 @@ export function App() {
             try {
                 api.fromJSON(JSON.parse(savedLayout));
             } catch (error) {
-                console.warn("[fei editor] discarded invalid workbench layout", error);
+                console.warn("[entisium editor] discarded invalid workbench layout", error);
                 localStorage.removeItem(workbenchLayoutStorageKey);
                 addDefaultWorkbenchPanels(api);
                 localStorage.setItem(workbenchLayoutStorageKey, JSON.stringify(api.toJSON()));
@@ -1379,7 +1379,7 @@ export function App() {
                     <Separator />
                     <PanelSection>
                         <PanelSectionTitle>AGENT API</PanelSectionTitle>
-                        <p className="text-[10px] leading-relaxed text-muted-foreground">UI and agents use the same command bus through <code className="font-mono text-primary">window.feiEditorAgent</code>.</p>
+                        <p className="text-[10px] leading-relaxed text-muted-foreground">UI and agents use the same command bus through <code className="font-mono text-primary">window.entisiumEditorAgent</code>.</p>
                         <div className="flex flex-wrap gap-1">
                             {agentApi.capabilities.map((capability) => <Badge key={capability}>{capability}</Badge>)}
                         </div>
@@ -1460,7 +1460,7 @@ export function App() {
                 <main className="min-h-0 flex-1 bg-[#111318] p-[3px]">
                     <WorkbenchPanelsContext.Provider value={workbenchPanels}>
                         <DockviewReact
-                            className="dockview-theme-fei"
+                            className="dockview-theme-entisium"
                             components={dockviewComponents}
                             tabComponents={dockviewTabComponents}
                             onReady={onDockviewReady}

@@ -36,7 +36,7 @@
 #include <string_view>
 #include <tuple>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -53,19 +53,19 @@ const Color4F WHITE {1.0f, 1.0f, 1.0f, 1.0f};
 const Color4F RED {0.9f, 0.18f, 0.18f, 1.0f};
 const Color4F DISABLED {0.32f, 0.32f, 0.32f, 1.0f};
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct DemoButton {};
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct DemoMenuItem {};
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct DemoListItem {};
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct DemoSliderThumb {};
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct OptionText {
     std::string value;
 };
@@ -169,7 +169,7 @@ Entity spawn_list_item(
 void setup(Commands commands, ResRW<AssetServer> assets) {
     assets->emplace_source<FilesystemAssetSource>(
         "ui-widget-fonts",
-        FEI_ASSETS_PATH "/../engine/imgui/fonts"
+        ETS_ASSETS_PATH "/../engine/imgui/fonts"
     );
     const auto font =
         assets->load<text::Font>("ui-widget-fonts://Cousine-Regular.ttf");
@@ -871,7 +871,7 @@ int main(int argc, char** argv) {
         GlfwWindowConfig {
             .width = 900,
             .height = 760,
-            .title = "Fei Standard Widgets",
+            .title = "Entisium Standard Widgets",
         }
     );
     app.add_plugin<OpenGLGlfwPlugin>()

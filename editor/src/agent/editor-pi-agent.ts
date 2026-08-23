@@ -8,7 +8,7 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import type { EditorAgentApi, EditorPiAgentApi, EditorPiAgentStatus } from "../types";
 import { createEditorTools } from "./tools";
 
-const systemPrompt = `You are the built-in agent for the Fei Editor.
+const systemPrompt = `You are the built-in agent for the Entisium Editor.
 Use the available tools to inspect and edit the current project and control its WebAssembly runtime.
 Do not claim an operation succeeded until its tool result confirms success.`;
 

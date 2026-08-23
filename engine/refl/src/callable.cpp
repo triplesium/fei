@@ -2,7 +2,7 @@
 
 #include <cassert>
 
-namespace fei {
+namespace ets {
 
 Param::Param(std::string name, TypeId type_id) :
     m_name(std::move(name)), m_type(type_id) {}
@@ -250,4 +250,4 @@ QualType Callable::return_type() const {
     return m_return_type;
 }
 
-} // namespace fei
+} // namespace ets

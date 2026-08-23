@@ -23,7 +23,7 @@
 #include <string_view>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -1096,4 +1096,4 @@ void GraphicsDeviceVulkan::present(const Swapchain& swapchain) const {
     check_submitted_command_buffers();
 }
 
-} // namespace fei
+} // namespace ets

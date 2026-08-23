@@ -182,7 +182,7 @@ export function PiAssistantThread({
                 style={{ ["--thread-max-width" as string]: "44rem" }}
             >
                 <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 px-3">
-                    <span className="text-[11px] font-medium text-muted-foreground">Fei Agent</span>
+                    <span className="text-[11px] font-medium text-muted-foreground">Entisium Agent</span>
                     <ThreadPrimitive.If empty={false}>
                         <TooltipIconButton
                             tooltip="New chat"

@@ -11,7 +11,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei {
+namespace ets {
 namespace {
 
 constexpr std::uint64_t c_hook_interval = 1'000;
@@ -248,4 +248,4 @@ LuaEvalResult LuaRuntime::eval_script(
     return std::move(context.result);
 }
 
-} // namespace fei
+} // namespace ets

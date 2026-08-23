@@ -61,7 +61,7 @@ task("reflgen")
         description = "Generate reflection metadata for the project.",
     }
 
-target("fei-reflgen")
+target("entisium-reflgen")
     set_kind("binary")
     set_default(false)
     set_policy("build.fence", true)
@@ -80,7 +80,7 @@ target("fei-reflgen")
     add_headerfiles("*.hpp")
     add_packages("llvm-libclang", "cli11")
 
-rule("fei.reflect.file")
+rule("entisium.reflect.file")
     set_extensions(".reflgen")
 
     on_buildcmd_file(function(target, batchcmds, sourcefile, opt)
@@ -90,9 +90,9 @@ rule("fei.reflect.file")
     end)
 rule_end()
 
-rule("fei.reflect.module")
+rule("entisium.reflect.module")
     set_extensions(".reflmod")
-    add_orders("fei.reflect.file", "fei.reflect.module")
+    add_orders("entisium.reflect.file", "entisium.reflect.module")
 
     on_buildcmd_file(function(target, batchcmds, sourcefile, opt)
         import("reflgen.rules", {
@@ -101,9 +101,9 @@ rule("fei.reflect.module")
     end)
 rule_end()
 
-rule("fei.reflect.aggregate")
+rule("entisium.reflect.aggregate")
     set_extensions(".reflagg")
-    add_orders("fei.reflect.module", "fei.reflect.aggregate")
+    add_orders("entisium.reflect.module", "entisium.reflect.aggregate")
 
     on_buildcmd_file(function(target, batchcmds, sourcefile, opt)
         import("reflgen.rules", {
@@ -112,11 +112,11 @@ rule("fei.reflect.aggregate")
     end)
 rule_end()
 
-rule("fei.reflect")
+rule("entisium.reflect")
     add_deps(
-        "fei.reflect.file",
-        "fei.reflect.module",
-        "fei.reflect.aggregate"
+        "entisium.reflect.file",
+        "entisium.reflect.module",
+        "entisium.reflect.aggregate"
     )
 
     on_load(function(target)

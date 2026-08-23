@@ -2,7 +2,7 @@
 
 #include "ecs/system_set.hpp"
 
-namespace fei {
+namespace ets {
 
 struct WindowSystems {
     struct Prepare : SystemSet<Prepare> {};
@@ -14,4 +14,4 @@ struct Window {
     int height {0};
 };
 
-} // namespace fei
+} // namespace ets

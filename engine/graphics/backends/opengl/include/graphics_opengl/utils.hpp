@@ -8,7 +8,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 std::string opengl_error_string(GLenum const err) noexcept;
 void opengl_check_error(
@@ -32,8 +32,8 @@ decltype(auto) opengl_call(
     }
 }
 
-#define FEI_GL_CALL(call)               \
-    ::fei::opengl_call(                 \
+#define ETS_GL_CALL(call)               \
+    ::ets::opengl_call(                 \
         [&]() -> decltype(call) {       \
             return (call);              \
         },                              \
@@ -80,4 +80,4 @@ GLsizeiptr to_gl_sizeiptr(T value) {
     return static_cast<GLsizeiptr>(value);
 }
 
-} // namespace fei
+} // namespace ets

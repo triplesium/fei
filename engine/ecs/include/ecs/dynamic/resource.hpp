@@ -6,7 +6,7 @@
 
 #include <string>
 
-namespace fei {
+namespace ets {
 
 class DynamicResourceParam final : public DynamicSystemParam {
   public:
@@ -29,4 +29,4 @@ class DynamicResourceParam final : public DynamicSystemParam {
     prepare(World& world, SystemTicks system_ticks) override;
 };
 
-} // namespace fei
+} // namespace ets

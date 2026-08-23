@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <thread>
 
-namespace fei {
+namespace ets {
 
 class MainThreadExecutor::State {
   public:
@@ -40,7 +40,7 @@ bool MainThreadExecutor::run_one() const {
         m_state->tasks.pop_front();
     }
     {
-        FEI_PROFILE_SCOPE("Main Thread Executor Task");
+        ETS_PROFILE_SCOPE("Main Thread Executor Task");
         task();
     }
     return true;
@@ -72,4 +72,4 @@ void MainThreadExecutor::enqueue(MoveOnlyFunction<void()> task) const {
     m_state->tasks.push_back(std::move(task));
 }
 
-} // namespace fei
+} // namespace ets

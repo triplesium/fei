@@ -7,9 +7,9 @@
 #include <nlohmann/json.hpp>
 #include <string>
 
-using namespace fei;
-using namespace fei::agentd;
-using namespace fei::runtime_protocol;
+using namespace ets;
+using namespace ets::agentd;
+using namespace ets::runtime_protocol;
 
 namespace {
 
@@ -19,7 +19,7 @@ ProjectDescriptor test_project() {
         .project_file = "project.yaml",
         .project_root = ".",
         .asset_root = "assets",
-        .cache_root = ".fei",
+        .cache_root = ".entisium",
     };
 }
 

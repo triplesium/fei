@@ -29,7 +29,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -410,7 +410,7 @@ GraphicsDeviceOpenGL::GraphicsDeviceOpenGL() :
     m_state(std::make_shared<OpenGLDeviceState>()),
     m_context_thread(std::this_thread::get_id()) {
     GLint uniform_buffer_offset_alignment = 1;
-    FEI_GL_CALL(glGetIntegerv(
+    ETS_GL_CALL(glGetIntegerv(
         GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT,
         &uniform_buffer_offset_alignment
     ));
@@ -418,14 +418,14 @@ GraphicsDeviceOpenGL::GraphicsDeviceOpenGL() :
         static_cast<std::size_t>(uniform_buffer_offset_alignment);
 
     GLuint vao;
-    FEI_GL_CALL(glGenVertexArrays(1, &vao));
-    FEI_GL_CALL(glBindVertexArray(vao));
+    ETS_GL_CALL(glGenVertexArrays(1, &vao));
+    ETS_GL_CALL(glBindVertexArray(vao));
 
     // TODO: Abstract these states to be configurable
-    FEI_GL_CALL(glEnable(GL_CULL_FACE));
-    FEI_GL_CALL(glCullFace(GL_BACK));
-    FEI_GL_CALL(glEnable(GL_DEPTH_TEST));
-    FEI_GL_CALL(glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS));
+    ETS_GL_CALL(glEnable(GL_CULL_FACE));
+    ETS_GL_CALL(glCullFace(GL_BACK));
+    ETS_GL_CALL(glEnable(GL_DEPTH_TEST));
+    ETS_GL_CALL(glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS));
 }
 
 GraphicsDeviceOpenGL::~GraphicsDeviceOpenGL() {
@@ -435,7 +435,7 @@ GraphicsDeviceOpenGL::~GraphicsDeviceOpenGL() {
     flush_pending_work();
     m_state->clear_resource_cache();
     flush_pending_work();
-    FEI_GL_CALL(glFinish());
+    ETS_GL_CALL(glFinish());
     collect_gpu_profile_queries();
     clear_gpu_profile_queries();
 }
@@ -509,7 +509,7 @@ GraphicsDeviceOpenGL::create_sampler(const SamplerDescription& desc) const {
 void GraphicsDeviceOpenGL::submit_commands(
     std::shared_ptr<CommandBuffer> command_buffer
 ) const {
-    FEI_PROFILE_SCOPE("OpenGL Submit Commands");
+    ETS_PROFILE_SCOPE("OpenGL Submit Commands");
     auto command_buffer_gl =
         std::dynamic_pointer_cast<CommandBufferOpenGL>(command_buffer);
     if (!command_buffer_gl) {
@@ -540,7 +540,7 @@ void GraphicsDeviceOpenGL::update_texture(
     std::uint32_t mip_level,
     std::uint32_t layer
 ) const {
-    FEI_PROFILE_SCOPE("OpenGL Queue Texture Update");
+    ETS_PROFILE_SCOPE("OpenGL Queue Texture Update");
     const auto byte_count = static_cast<std::size_t>(width) *
                             static_cast<std::size_t>(height) *
                             static_cast<std::size_t>(depth) *
@@ -569,7 +569,7 @@ void GraphicsDeviceOpenGL::update_buffer(
     const void* data,
     std::uint32_t size
 ) const {
-    FEI_PROFILE_SCOPE("OpenGL Queue Buffer Update");
+    ETS_PROFILE_SCOPE("OpenGL Queue Buffer Update");
     auto bytes = copy_bytes(data, size);
 
     m_state->enqueue_operation(
@@ -585,7 +585,7 @@ MappedResource GraphicsDeviceOpenGL::map(
     std::shared_ptr<MappableResource> resource,
     MapMode map_mode
 ) const {
-    FEI_PROFILE_SCOPE("OpenGL Map Resource");
+    ETS_PROFILE_SCOPE("OpenGL Map Resource");
     assert_context_thread("GraphicsDeviceOpenGL::map");
     flush();
 
@@ -612,7 +612,7 @@ MappedResource GraphicsDeviceOpenGL::map(
             static_cast<std::size_t>(depth) * bytes_per_pixel;
 
         auto* data = new std::byte[total_size];
-        FEI_GL_CALL(glGetTextureImage(
+        ETS_GL_CALL(glGetTextureImage(
             texture_gl->id(),
             0, // mip level
             texture_gl->gl_format(),
@@ -635,7 +635,7 @@ MappedResource GraphicsDeviceOpenGL::map(
         auto buffer_gl = std::dynamic_pointer_cast<BufferOpenGL>(resource)
     ) {
         buffer_gl->ensure_created();
-        void* ptr = FEI_GL_CALL(glMapNamedBuffer(
+        void* ptr = ETS_GL_CALL(glMapNamedBuffer(
             buffer_gl->id(),
             map_mode == MapMode::Read ? GL_READ_ONLY : GL_WRITE_ONLY
         ));
@@ -649,14 +649,14 @@ MappedResource GraphicsDeviceOpenGL::map(
             )
         );
     }
-    fei::fatal("Unknown MappableResource type in GraphicsDeviceOpenGL::map");
+    ets::fatal("Unknown MappableResource type in GraphicsDeviceOpenGL::map");
     return MappedResource(nullptr, MapMode::Read, std::span<std::byte>());
 }
 
 void GraphicsDeviceOpenGL::unmap(
     std::shared_ptr<MappableResource> resource
 ) const {
-    FEI_PROFILE_SCOPE("OpenGL Unmap Resource");
+    ETS_PROFILE_SCOPE("OpenGL Unmap Resource");
     assert_context_thread("GraphicsDeviceOpenGL::unmap");
     flush();
 
@@ -672,10 +672,10 @@ void GraphicsDeviceOpenGL::unmap(
         auto buffer_gl = std::dynamic_pointer_cast<BufferOpenGL>(resource)
     ) {
         buffer_gl->ensure_created();
-        FEI_GL_CALL(glUnmapNamedBuffer(buffer_gl->id()));
+        ETS_GL_CALL(glUnmapNamedBuffer(buffer_gl->id()));
         return;
     }
-    fei::fatal("Unknown MappableResource type in GraphicsDeviceOpenGL::unmap");
+    ets::fatal("Unknown MappableResource type in GraphicsDeviceOpenGL::unmap");
 }
 
 std::shared_ptr<TextureReadback>
@@ -684,7 +684,7 @@ GraphicsDeviceOpenGL::create_texture_readback(uint32 max_in_flight) const {
 }
 
 void GraphicsDeviceOpenGL::present(const Swapchain& swapchain) const {
-    FEI_PROFILE_SCOPE("OpenGL Present");
+    ETS_PROFILE_SCOPE("OpenGL Present");
     flush();
     swapchain.present();
 }
@@ -711,12 +711,12 @@ GraphicsDeviceOpenGL::capture_presented_frame(
     GLint previous_read_buffer = 0;
     GLint previous_pack_alignment = 0;
     GLint previous_pack_buffer = 0;
-    FEI_GL_CALL(
+    ETS_GL_CALL(
         glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previous_read_framebuffer)
     );
-    FEI_GL_CALL(glGetIntegerv(GL_READ_BUFFER, &previous_read_buffer));
-    FEI_GL_CALL(glGetIntegerv(GL_PACK_ALIGNMENT, &previous_pack_alignment));
-    FEI_GL_CALL(
+    ETS_GL_CALL(glGetIntegerv(GL_READ_BUFFER, &previous_read_buffer));
+    ETS_GL_CALL(glGetIntegerv(GL_PACK_ALIGNMENT, &previous_pack_alignment));
+    ETS_GL_CALL(
         glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &previous_pack_buffer)
     );
 
@@ -732,11 +732,11 @@ GraphicsDeviceOpenGL::capture_presented_frame(
         .data_origin = TextureDataOrigin::BottomLeft,
     };
 
-    FEI_GL_CALL(glBindFramebuffer(GL_READ_FRAMEBUFFER, 0));
-    FEI_GL_CALL(glBindBuffer(GL_PIXEL_PACK_BUFFER, 0));
-    FEI_GL_CALL(glReadBuffer(GL_BACK));
-    FEI_GL_CALL(glPixelStorei(GL_PACK_ALIGNMENT, 1));
-    FEI_GL_CALL(glReadPixels(
+    ETS_GL_CALL(glBindFramebuffer(GL_READ_FRAMEBUFFER, 0));
+    ETS_GL_CALL(glBindBuffer(GL_PIXEL_PACK_BUFFER, 0));
+    ETS_GL_CALL(glReadBuffer(GL_BACK));
+    ETS_GL_CALL(glPixelStorei(GL_PACK_ALIGNMENT, 1));
+    ETS_GL_CALL(glReadPixels(
         0,
         0,
         static_cast<GLsizei>(width),
@@ -746,21 +746,21 @@ GraphicsDeviceOpenGL::capture_presented_frame(
         frame.data.data()
     ));
 
-    FEI_GL_CALL(glPixelStorei(GL_PACK_ALIGNMENT, previous_pack_alignment));
-    FEI_GL_CALL(glBindBuffer(
+    ETS_GL_CALL(glPixelStorei(GL_PACK_ALIGNMENT, previous_pack_alignment));
+    ETS_GL_CALL(glBindBuffer(
         GL_PIXEL_PACK_BUFFER,
         static_cast<GLuint>(previous_pack_buffer)
     ));
-    FEI_GL_CALL(glBindFramebuffer(
+    ETS_GL_CALL(glBindFramebuffer(
         GL_READ_FRAMEBUFFER,
         static_cast<GLuint>(previous_read_framebuffer)
     ));
-    FEI_GL_CALL(glReadBuffer(static_cast<GLenum>(previous_read_buffer)));
+    ETS_GL_CALL(glReadBuffer(static_cast<GLenum>(previous_read_buffer)));
     return frame;
 }
 
 void GraphicsDeviceOpenGL::flush() const {
-    FEI_PROFILE_SCOPE("OpenGL Device Flush");
+    ETS_PROFILE_SCOPE("OpenGL Device Flush");
     assert_context_thread("GraphicsDeviceOpenGL::flush");
     flush_pending_work();
 }
@@ -770,7 +770,7 @@ OpenGLResourceCacheStats GraphicsDeviceOpenGL::resource_cache_stats() const {
 }
 
 void GraphicsDeviceOpenGL::flush_pending_work() const {
-    FEI_PROFILE_SCOPE("OpenGL Flush Pending Work");
+    ETS_PROFILE_SCOPE("OpenGL Flush Pending Work");
     assert_context_thread("GraphicsDeviceOpenGL::flush_pending_work");
     auto operations = m_state->take_pending_operations();
 
@@ -803,7 +803,7 @@ void GraphicsDeviceOpenGL::collect_gpu_profile_queries() const {
     for (auto query = m_gpu_profile_queries.begin();
          query != m_gpu_profile_queries.end();) {
         GLint available = GL_FALSE;
-        FEI_GL_CALL(glGetQueryObjectiv(
+        ETS_GL_CALL(glGetQueryObjectiv(
             query->end_query,
             GL_QUERY_RESULT_AVAILABLE,
             &available
@@ -815,18 +815,18 @@ void GraphicsDeviceOpenGL::collect_gpu_profile_queries() const {
 
         GLuint64 begin_timestamp = 0;
         GLuint64 end_timestamp = 0;
-        FEI_GL_CALL(glGetQueryObjectui64v(
+        ETS_GL_CALL(glGetQueryObjectui64v(
             query->begin_query,
             GL_QUERY_RESULT,
             &begin_timestamp
         ));
-        FEI_GL_CALL(glGetQueryObjectui64v(
+        ETS_GL_CALL(glGetQueryObjectui64v(
             query->end_query,
             GL_QUERY_RESULT,
             &end_timestamp
         ));
         const std::array queries {query->begin_query, query->end_query};
-        FEI_GL_CALL(glDeleteQueries(
+        ETS_GL_CALL(glDeleteQueries(
             static_cast<GLsizei>(queries.size()),
             queries.data()
         ));
@@ -843,7 +843,7 @@ void GraphicsDeviceOpenGL::collect_gpu_profile_queries() const {
 void GraphicsDeviceOpenGL::clear_gpu_profile_queries() const {
     for (const auto& query : m_gpu_profile_queries) {
         const std::array queries {query.begin_query, query.end_query};
-        FEI_GL_CALL(glDeleteQueries(
+        ETS_GL_CALL(glDeleteQueries(
             static_cast<GLsizei>(queries.size()),
             queries.data()
         ));
@@ -885,12 +885,12 @@ void GraphicsDeviceOpenGL::execute_operation(
 void GraphicsDeviceOpenGL::execute_update_buffer(
     const OpenGLPendingBufferUpdate& update
 ) const {
-    FEI_PROFILE_SCOPE("OpenGL Buffer Upload");
+    ETS_PROFILE_SCOPE("OpenGL Buffer Upload");
     auto buffer_gl = std::static_pointer_cast<BufferOpenGL>(update.buffer);
     buffer_gl->ensure_created();
 
     if (update.offset == 0 && update.data.size() == buffer_gl->size()) {
-        FEI_GL_CALL(glNamedBufferData(
+        ETS_GL_CALL(glNamedBufferData(
             buffer_gl->id(),
             to_gl_sizeiptr(update.data.size()),
             update.data.data(),
@@ -899,7 +899,7 @@ void GraphicsDeviceOpenGL::execute_update_buffer(
         return;
     }
 
-    FEI_GL_CALL(glNamedBufferSubData(
+    ETS_GL_CALL(glNamedBufferSubData(
         buffer_gl->id(),
         static_cast<GLintptr>(update.offset),
         to_gl_sizeiptr(update.data.size()),
@@ -910,12 +910,12 @@ void GraphicsDeviceOpenGL::execute_update_buffer(
 void GraphicsDeviceOpenGL::execute_update_texture(
     const OpenGLPendingTextureUpdate& update
 ) const {
-    FEI_PROFILE_SCOPE("OpenGL Texture Upload");
+    ETS_PROFILE_SCOPE("OpenGL Texture Upload");
     auto gl_texture = std::static_pointer_cast<TextureOpenGL>(update.texture);
     gl_texture->ensure_created();
 
     if (update.texture->usage().is_set(TextureUsage::Cubemap)) {
-        FEI_GL_CALL(glTextureSubImage3D(
+        ETS_GL_CALL(glTextureSubImage3D(
             gl_texture->id(),
             static_cast<GLint>(update.mip_level),
             static_cast<GLint>(update.x),
@@ -929,7 +929,7 @@ void GraphicsDeviceOpenGL::execute_update_texture(
             update.data.data()
         ));
     } else {
-        FEI_GL_CALL(glTextureSubImage2D(
+        ETS_GL_CALL(glTextureSubImage2D(
             gl_texture->id(),
             static_cast<GLint>(update.mip_level),
             static_cast<GLint>(update.x),
@@ -946,12 +946,12 @@ void GraphicsDeviceOpenGL::execute_update_texture(
 void GraphicsDeviceOpenGL::execute_texture_readback(
     const OpenGLPendingTextureReadback& readback
 ) const {
-    fei::execute_texture_readback(readback);
+    ets::execute_texture_readback(readback);
 }
 
 void GraphicsDeviceOpenGL::collect_texture_readbacks() const {
     for (const auto& readback : m_state->live_texture_readbacks()) {
-        fei::collect_ready_texture_readbacks(readback);
+        ets::collect_ready_texture_readbacks(readback);
     }
 }
 
@@ -976,4 +976,4 @@ void GraphicsDeviceOpenGL::assert_context_thread(const char* operation) const {
     fatal("{} must run on the OpenGL context thread", operation);
 }
 
-} // namespace fei
+} // namespace ets

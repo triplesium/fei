@@ -4,7 +4,7 @@
 #include "refl/registry.hpp"
 #include "refl/val.hpp"
 
-namespace fei {
+namespace ets {
 
 Val Enum::make_val(std::int64_t underlying_value) const {
     auto& type = Registry::instance().get_type(m_type_id);
@@ -18,4 +18,4 @@ Val Enum::make_val(std::int64_t underlying_value) const {
     });
 }
 
-} // namespace fei
+} // namespace ets

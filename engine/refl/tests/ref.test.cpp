@@ -8,8 +8,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <type_traits>
 
-using namespace fei;
-using namespace fei::refl_test;
+using namespace ets;
+using namespace ets::refl_test;
 
 namespace {
 

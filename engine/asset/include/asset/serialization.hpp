@@ -13,7 +13,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei {
+namespace ets {
 
 inline bool register_asset_handle_codec(
     serialization::ValueCodecRegistry& codecs,
@@ -195,4 +195,4 @@ bool register_asset_handle_codec(
            register_asset_handle_codec(codecs, server, *registration);
 }
 
-} // namespace fei
+} // namespace ets

@@ -3,7 +3,7 @@
 #include "ecs/dynamic/system.hpp"
 #include "scripting/module_install.hpp"
 
-namespace fei::detail {
+namespace ets::detail {
 
 Result<SystemAccess, LuaScriptError>
 lua_script_system_access_for_decl(const DynamicSystemDecl& decl) {
@@ -46,4 +46,4 @@ Result<std::vector<SystemHandle>, LuaScriptError> install_lua_script_systems(
     );
 }
 
-} // namespace fei::detail
+} // namespace ets::detail

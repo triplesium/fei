@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace fei {
+namespace ets {
 
 struct ScriptBorrowToken {
     std::uint64_t epoch {0};
@@ -31,4 +31,4 @@ class ScriptBorrowScope {
     }
 };
 
-} // namespace fei
+} // namespace ets

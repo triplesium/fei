@@ -10,7 +10,7 @@
 #include <optional>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
 ContainerError adapt_error(DynamicArrayError error) {
@@ -507,4 +507,4 @@ void register_dynamic_container_adapters(Registry& registry) {
     );
 }
 
-} // namespace fei
+} // namespace ets

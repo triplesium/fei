@@ -20,7 +20,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::ui {
+namespace ets::ui {
 
 namespace {
 
@@ -605,4 +605,4 @@ void UiPlugin::setup(App& app) {
         );
 }
 
-} // namespace fei::ui
+} // namespace ets::ui

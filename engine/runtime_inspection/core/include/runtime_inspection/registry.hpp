@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -82,4 +82,4 @@ class InspectionRegistry {
 };
 
 } // namespace runtime_inspection
-} // namespace fei
+} // namespace ets

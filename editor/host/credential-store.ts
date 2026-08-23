@@ -20,7 +20,7 @@ export interface SecretProtector {
     unprotect(ciphertext: string): Promise<string>;
 }
 
-const entropyLabel = "FeiEditorCredentials/v1";
+const entropyLabel = "EntisiumEditorCredentials/v1";
 
 const protectScript = `
 Add-Type -AssemblyName System.Security
@@ -133,7 +133,7 @@ export function defaultCredentialPath(): string {
 }
 
 export function defaultCredentialPaths(): readonly string[] {
-    const configuredPath = process.env.FEI_EDITOR_CREDENTIAL_PATH?.trim();
+    const configuredPath = process.env.ETS_EDITOR_CREDENTIAL_PATH?.trim();
     if (configuredPath) return [resolve(configuredPath)];
 
     const applicationData = process.env.APPDATA?.trim();
@@ -142,9 +142,9 @@ export function defaultCredentialPaths(): readonly string[] {
     const localRoot = localApplicationData || join(homedir(), "AppData", "Local");
     return Array.from(
         new Set([
-            join(roamingRoot, "Fei", "editor-credentials.json"),
-            join(localRoot, "Fei", "editor-credentials.json"),
-            resolve(process.cwd(), ".fei", "editor-credentials.json"),
+            join(roamingRoot, "Entisium", "editor-credentials.json"),
+            join(localRoot, "Entisium", "editor-credentials.json"),
+            resolve(process.cwd(), ".entisium", "editor-credentials.json"),
         ]),
     );
 }
@@ -255,7 +255,7 @@ export class EncryptedCredentialStore implements CredentialStore {
             } catch {
                 this.unreadablePaths.add(path);
                 console.warn(
-                    `[fei editor] credential file cannot be decrypted by the current user; skipping: ${path}`,
+                    `[entisium editor] credential file cannot be decrypted by the current user; skipping: ${path}`,
                 );
                 continue;
             }
@@ -288,7 +288,7 @@ export class EncryptedCredentialStore implements CredentialStore {
                 await unlink(temporaryPath).catch(() => undefined);
                 lastError = error;
                 if (this.activePath || !isUnavailablePathError(error)) throw error;
-                console.warn(`[fei editor] credential path is unavailable: ${path}`);
+                console.warn(`[entisium editor] credential path is unavailable: ${path}`);
             }
         }
         throw lastError ?? new Error("No writable credential path is available.");

@@ -18,14 +18,14 @@
 #include <nlohmann/json.hpp>
 #include <string>
 
-using namespace fei;
-using namespace fei::devtools;
-using namespace fei::devtools::ecs;
-using fei::runtime_inspection::ecs::EntityInspectRequest;
-using fei::runtime_inspection::ecs::QueryInspectionProvider;
-using fei::runtime_inspection::ecs::QueryRequest;
-using fei::runtime_inspection::ecs::WorldSummaryInspectionProvider;
-using fei::runtime_inspection::ecs::WorldSummaryRequest;
+using namespace ets;
+using namespace ets::devtools;
+using namespace ets::devtools::ecs;
+using ets::runtime_inspection::ecs::EntityInspectRequest;
+using ets::runtime_inspection::ecs::QueryInspectionProvider;
+using ets::runtime_inspection::ecs::QueryRequest;
+using ets::runtime_inspection::ecs::WorldSummaryInspectionProvider;
+using ets::runtime_inspection::ecs::WorldSummaryRequest;
 
 namespace ecs_query_test {
 

@@ -70,7 +70,7 @@ export interface EditorPiAgentApi {
 
 declare global {
     interface Window {
-        feiEditorAgent: EditorAgentApi;
-        feiEditorPi: EditorPiAgentApi;
+        entisiumEditorAgent: EditorAgentApi;
+        entisiumEditorPi: EditorPiAgentApi;
     }
 }

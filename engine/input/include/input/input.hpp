@@ -15,7 +15,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct InputSystems {
     struct Collect : SystemSet<Collect> {};
@@ -24,7 +24,7 @@ struct InputSystems {
     struct ApplyDevtools : SystemSet<ApplyDevtools> {};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class KeyCode : std::int32_t {
 #define KEY_CODE(name, code) name = (code),
 #include "keycode.def"
@@ -68,7 +68,7 @@ struct KeyEvent {
     bool repeat {false};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 class KeyInput {
   public:
     KeyInput();
@@ -92,7 +92,7 @@ class KeyInput {
     std::unordered_map<KeyCode, KeyStateInternal> m_keys;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class MouseButton : std::int32_t {
     Left = 0,
     Right = 1,
@@ -148,7 +148,7 @@ class VirtualInput {
     bool m_exclusive {false};
 };
 
-FEI_REFLECT(Resource)
+ETS_REFLECT(Resource)
 class MouseInput {
   public:
     MouseInput();
@@ -175,7 +175,7 @@ class MouseInput {
     std::unordered_map<MouseButton, KeyStateInternal> m_keys;
 };
 
-FEI_REFLECT(Resource)
+ETS_REFLECT(Resource)
 class MouseScrollInput {
   public:
     void set_delta(Vector2 delta) { m_delta = delta; }
@@ -226,10 +226,10 @@ void apply_virtual_mouse_input(
     ResRW<MouseInput> input
 );
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class InputPlugin : public Plugin {
   public:
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

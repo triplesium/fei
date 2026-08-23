@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace fei::text {
+namespace ets::text {
 
 struct FontMetrics {
     float ascent {0.0f};
@@ -28,7 +28,7 @@ struct RasterizedGlyph {
     std::vector<uint8> pixels;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 class Font {
   private:
     struct Impl;
@@ -61,4 +61,4 @@ class FontLoader : public AssetLoader<Font> {
     load(Reader& reader, const LoadContext& context) override;
 };
 
-} // namespace fei::text
+} // namespace ets::text

@@ -4,7 +4,7 @@
 #include "ecs/system_config.hpp"
 #include "ui/plugin.hpp"
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
 void PopoverPlugin::dependencies(PluginDependencies& dependencies) const {
     dependencies.require<ui::UiPlugin>();
@@ -252,4 +252,4 @@ void TextInputPlugin::setup(App& app) {
         );
 }
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

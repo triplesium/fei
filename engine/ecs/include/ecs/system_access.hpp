@@ -11,7 +11,7 @@
 #include <type_traits>
 #include <unordered_set>
 
-namespace fei {
+namespace ets {
 
 template<typename T>
 class ResRO;
@@ -320,4 +320,4 @@ SystemAccess system_access_for_params() {
     return detail::SystemAccessBuilder<ParamTuple>::build();
 }
 
-} // namespace fei
+} // namespace ets

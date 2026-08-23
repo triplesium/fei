@@ -6,7 +6,7 @@
 #include <string_view>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 class AssetPath {
   private:
@@ -107,12 +107,12 @@ class AssetPath {
     bool operator!=(const AssetPath& other) const { return !(*this == other); }
 };
 
-} // namespace fei
+} // namespace ets
 
 namespace std {
 template<>
-struct hash<fei::AssetPath> { // NOLINT(readability-identifier-naming)
-    std::size_t operator()(const fei::AssetPath& asset_path) const noexcept {
+struct hash<ets::AssetPath> { // NOLINT(readability-identifier-naming)
+    std::size_t operator()(const ets::AssetPath& asset_path) const noexcept {
         return std::hash<std::string>()(asset_path.as_string());
     }
 };

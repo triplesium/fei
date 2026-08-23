@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 AssetLoadResult<Scene>
 SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
@@ -31,7 +31,7 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
     tinyobj::ObjReaderConfig reader_config;
     tinyobj::ObjReader obj_reader;
 
-    auto obj_path = FEI_ASSETS_PATH / context.asset_path().path();
+    auto obj_path = ETS_ASSETS_PATH / context.asset_path().path();
     if (!obj_reader.ParseFromFile(obj_path.string(), reader_config)) {
         auto message = obj_reader.Error().empty() ?
                            "Failed to parse OBJ scene" :
@@ -42,14 +42,14 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
     }
 
     if (!obj_reader.Warning().empty()) {
-        fei::warn("TinyObjReader: {}", obj_reader.Warning());
+        ets::warn("TinyObjReader: {}", obj_reader.Warning());
     }
 
     const auto& attrib = obj_reader.GetAttrib();
     const auto& shapes = obj_reader.GetShapes();
     const auto& materials = obj_reader.GetMaterials();
 
-    fei::info(
+    ets::info(
         "Loading scene '{}' with {} shapes and {} materials",
         context.asset_path().as_string(),
         shapes.size(),
@@ -96,7 +96,7 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
         using IndexKey = std::tuple<int, int, int>;
         struct IndexKeyHash {
             std::size_t operator()(const IndexKey& k) const {
-                return fei::hash_combine_all(
+                return ets::hash_combine_all(
                     std::get<0>(k),
                     std::get<1>(k),
                     std::get<2>(k)
@@ -201,7 +201,7 @@ SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
         );
         scene->roots.push_back(node_id);
     }
-    fei::info(
+    ets::info(
         "Loaded scene '{}' with {} vertices and {} triangles",
         context.asset_path().as_string(),
         attrib.vertices.size() / 3,
@@ -455,4 +455,4 @@ void cleanup_scene_instances(
     }
 }
 
-} // namespace fei
+} // namespace ets

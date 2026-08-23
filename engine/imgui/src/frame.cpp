@@ -6,7 +6,7 @@
 #include <imgui.h>
 #include <limits>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -90,7 +90,8 @@ void capture_texture_operations(
 
         if (texture_data->Format != ImTextureFormat_RGBA32) {
             error(
-                "fei-imgui only supports RGBA32 managed textures (texture {})",
+                "entisium-imgui only supports RGBA32 managed textures (texture "
+                "{})",
                 texture_data->UniqueID
             );
             continue;
@@ -99,7 +100,7 @@ void capture_texture_operations(
         if (texture_data->Status == ImTextureStatus_WantCreate) {
             if (texture_data->Width <= 0 || texture_data->Height <= 0) {
                 error(
-                    "fei-imgui cannot create managed texture {} with size "
+                    "entisium-imgui cannot create managed texture {} with size "
                     "{}x{}",
                     texture_data->UniqueID,
                     texture_data->Width,
@@ -209,7 +210,8 @@ std::shared_ptr<const ImGuiFrameSnapshot> capture_imgui_frame_snapshot() {
                     );
                 } else {
                     error(
-                        "fei-imgui skipped an ImDrawCallback because arbitrary "
+                        "entisium-imgui skipped an ImDrawCallback because "
+                        "arbitrary "
                         "callbacks cannot cross the Render Worker boundary"
                     );
                 }
@@ -245,4 +247,4 @@ std::shared_ptr<const ImGuiFrameSnapshot> capture_imgui_frame_snapshot() {
     return snapshot;
 }
 
-} // namespace fei
+} // namespace ets

@@ -5,7 +5,7 @@
 #include "math/color.hpp"
 #include "math/vector.hpp"
 
-namespace fei {
+namespace ets {
 
 struct Tex2F {
     float u {.0f}, v {.0f};
@@ -46,4 +46,4 @@ class Buffer : public BindableResource, public MappableResource {
     virtual std::size_t size() const = 0;
     virtual BitFlags<BufferUsages> usages() const = 0;
 };
-} // namespace fei
+} // namespace ets

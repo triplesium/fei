@@ -37,6 +37,6 @@ async function prepareSandboxProject() {
 await prepareSandboxProject();
 
 if (!process.argv.includes("--prepare-only")) {
-    process.env.FEI_EDITOR_PROJECT_DIR = sandboxDirectory;
+    process.env.ETS_EDITOR_PROJECT_DIR = sandboxDirectory;
     await import("../host-dist/main.js");
 }

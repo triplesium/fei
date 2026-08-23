@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class Mesh {
   private:
@@ -176,4 +176,4 @@ class GpuMeshAdapter : public RenderAssetAdapter<Mesh, GpuMesh> {
     }
 };
 
-} // namespace fei
+} // namespace ets

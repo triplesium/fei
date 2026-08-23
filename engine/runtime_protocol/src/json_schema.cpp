@@ -14,7 +14,7 @@
 #include <unordered_set>
 #include <utility>
 
-namespace fei::runtime_protocol::detail {
+namespace ets::runtime_protocol::detail {
 namespace {
 
 using Json = nlohmann::json;
@@ -190,7 +190,7 @@ Status<std::string> validate_schema_node(
         (void)value;
         if (!is_supported_keyword(keyword)) {
             return failure(
-                child_path(path, keyword) + " is not supported by the Fei "
+                child_path(path, keyword) + " is not supported by the Entisium "
                                             "playtest Schema profile"
             );
         }
@@ -838,4 +838,4 @@ validate_json_schema_instance(const Json& schema, const Json& instance) {
     return InstanceValidator(schema).validate(schema, instance);
 }
 
-} // namespace fei::runtime_protocol::detail
+} // namespace ets::runtime_protocol::detail

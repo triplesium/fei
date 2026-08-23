@@ -12,7 +12,7 @@
 #include <memory>
 #include <unordered_map>
 
-namespace fei {
+namespace ets {
 
 struct alignas(16) MeshUniform {
     Matrix4x4 world_from_local;
@@ -39,4 +39,4 @@ void prepare_mesh_uniforms(
     ResRW<MeshUniforms> mesh_uniforms
 );
 
-} // namespace fei
+} // namespace ets

@@ -5,9 +5,9 @@
 #include "asset/plugin.hpp"
 #include "scripting_luau/asset.hpp"
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class LuauScriptingPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {
@@ -18,4 +18,4 @@ class LuauScriptingPlugin : public Plugin {
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

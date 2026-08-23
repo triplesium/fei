@@ -36,13 +36,13 @@
 #include <stdexcept>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
 std::filesystem::path default_shader_cache_root() {
-#ifdef FEI_SHADER_CACHE_PATH
-    return FEI_SHADER_CACHE_PATH;
+#ifdef ETS_SHADER_CACHE_PATH
+    return ETS_SHADER_CACHE_PATH;
 #else
     return std::filesystem::current_path() / "build" / "cache" / "shaders";
 #endif
@@ -289,7 +289,7 @@ void RenderingCorePlugin::setup(App& app) {
 
     app.add_systems(PostUpdate, compute_mesh_aabb);
 
-    render_app.add_systems(RenderExtract, FEI_NAMED_SYSTEM(extract_shaders))
+    render_app.add_systems(RenderExtract, ETS_NAMED_SYSTEM(extract_shaders))
         .add_systems(
             RenderUpdate,
             chain(init_camera_view_uniform, prepare_camera_view_uniform) |
@@ -312,11 +312,11 @@ void RenderingCorePlugin::setup(App& app) {
         .add_systems(
             RenderUpdate,
             chain(
-                FEI_NAMED_SYSTEM(begin_render_resource_set_cache),
-                FEI_NAMED_SYSTEM(begin_render_frame),
-                FEI_NAMED_SYSTEM(flush_render_queue)
+                ETS_NAMED_SYSTEM(begin_render_resource_set_cache),
+                ETS_NAMED_SYSTEM(begin_render_frame),
+                ETS_NAMED_SYSTEM(flush_render_queue)
             ) | in_set<RenderingSystems::BeginRender>(),
-            FEI_NAMED_SYSTEM(submit_render_frame) |
+            ETS_NAMED_SYSTEM(submit_render_frame) |
                 in_set<RenderingSystems::Submit>()
         )
         .add_systems(
@@ -326,4 +326,4 @@ void RenderingCorePlugin::setup(App& app) {
         );
 }
 
-} // namespace fei
+} // namespace ets

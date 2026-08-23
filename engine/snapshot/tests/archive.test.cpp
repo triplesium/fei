@@ -11,7 +11,7 @@
 #include <fstream>
 #include <string>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -65,7 +65,7 @@ class ArchiveTempDirectory {
         const auto suffix =
             std::chrono::steady_clock::now().time_since_epoch().count();
         m_path = std::filesystem::temp_directory_path() /
-                 ("fei-snapshot-archive-" + std::to_string(suffix));
+                 ("entisium-snapshot-archive-" + std::to_string(suffix));
         std::filesystem::create_directories(m_path);
     }
 
@@ -103,7 +103,7 @@ TEST_CASE(
 ) {
     register_archive_types();
     ArchiveTempDirectory temporary;
-    const auto path = temporary.file("turn-0.fei-snapshot.json");
+    const auto path = temporary.file("turn-0.entisium-snapshot.json");
 
     World source;
     auto source_checkpoints = make_checkpoint_store(source);
@@ -156,7 +156,7 @@ TEST_CASE(
     ArchiveTempDirectory temporary;
 
     SECTION("compatibility metadata must match") {
-        const auto path = temporary.file("compatible.fei-snapshot.json");
+        const auto path = temporary.file("compatible.entisium-snapshot.json");
         World source;
         auto checkpoints = make_checkpoint_store(source);
         REQUIRE(checkpoints.export_file("turn-0", path, archive_metadata()));
@@ -173,7 +173,7 @@ TEST_CASE(
     }
 
     SECTION("malformed JSON is rejected") {
-        const auto path = temporary.file("corrupt.fei-snapshot.json");
+        const auto path = temporary.file("corrupt.entisium-snapshot.json");
         {
             std::ofstream stream(path, std::ios::binary | std::ios::trunc);
             stream << "{not-json";
@@ -193,7 +193,7 @@ TEST_CASE(
 ) {
     register_archive_types();
     ArchiveTempDirectory temporary;
-    const auto path = temporary.file("stateful.fei-snapshot.json");
+    const auto path = temporary.file("stateful.entisium-snapshot.json");
 
     World world;
     world.add_systems(

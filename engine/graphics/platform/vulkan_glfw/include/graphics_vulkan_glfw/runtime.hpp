@@ -9,7 +9,7 @@
 
 struct GLFWwindow;
 
-namespace fei {
+namespace ets {
 
 class SwapchainVulkanGlfw;
 
@@ -54,4 +54,4 @@ class VulkanGlfwBootstrap final : public GraphicsBackendBootstrap {
     std::optional<VulkanGlfwBootstrapDescription> m_description;
 };
 
-} // namespace fei
+} // namespace ets

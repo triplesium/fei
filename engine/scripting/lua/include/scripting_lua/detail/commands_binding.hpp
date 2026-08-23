@@ -4,10 +4,10 @@
 
 #include <lua.hpp>
 
-namespace fei {
+namespace ets {
 
 Type& register_lua_commands_type();
 bool lua_is_commands(TypeId type_id);
 int lua_dispatch_commands_index(lua_State* L, const char* key);
 
-} // namespace fei
+} // namespace ets

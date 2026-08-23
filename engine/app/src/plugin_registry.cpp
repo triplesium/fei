@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 PluginRegistry& detail::plugin_registry_storage() {
     static PluginRegistry registry;
@@ -160,4 +160,4 @@ App& App::add_plugin(const PluginId& id) {
     );
 }
 
-} // namespace fei
+} // namespace ets

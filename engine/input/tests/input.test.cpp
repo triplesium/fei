@@ -6,7 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <vector>
 
-using namespace fei;
+using namespace ets;
 
 TEST_CASE("Key codes convert from reflected names", "[input]") {
     CHECK(key_code_from_string("A") == KeyCode::A);

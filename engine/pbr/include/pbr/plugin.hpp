@@ -3,7 +3,7 @@
 #include "app/plugin.hpp"
 #include "ecs/system_set.hpp"
 
-namespace fei {
+namespace ets {
 
 struct PbrSystems {
     struct StartupMeshView : SystemSet<StartupMeshView> {};
@@ -21,14 +21,14 @@ struct PbrSystems {
     struct DeferredPrepass : SystemSet<DeferredPrepass> {};
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class PbrCorePlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class PbrPlugin : public Plugin {
   private:
     bool m_enable_vxgi {true};
@@ -40,4 +40,4 @@ class PbrPlugin : public Plugin {
     void setup(App& /*app*/) override {}
 };
 
-} // namespace fei
+} // namespace ets

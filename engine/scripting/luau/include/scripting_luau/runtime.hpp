@@ -10,7 +10,7 @@
 #include <span>
 #include <string>
 
-namespace fei {
+namespace ets {
 
 class Enum;
 class Type;
@@ -86,4 +86,4 @@ class LuauRuntime {
     );
 };
 
-} // namespace fei
+} // namespace ets

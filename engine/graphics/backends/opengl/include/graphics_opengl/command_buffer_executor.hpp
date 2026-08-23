@@ -13,7 +13,7 @@
 #include <memory>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class GraphicsDeviceOpenGL;
 class PipelineOpenGL;
@@ -85,4 +85,4 @@ class CommandBufferExecutorOpenGL {
     void execute_copy_texture(const opengl_commands::CopyTexture& command);
 };
 
-} // namespace fei
+} // namespace ets

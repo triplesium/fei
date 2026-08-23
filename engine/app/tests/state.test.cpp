@@ -6,8 +6,8 @@
 #include <string>
 #include <vector>
 
-using namespace fei;
-using namespace fei::app_test;
+using namespace ets;
+using namespace ets::app_test;
 
 namespace {
 

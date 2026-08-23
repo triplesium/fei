@@ -3,15 +3,15 @@
 #include "app/plugin.hpp"
 #include "base/types.hpp"
 
-namespace fei::devtools::rendering {
+namespace ets::devtools::rendering {
 
 struct Config {
     int jpeg_quality {80};
     uint32 max_capture_fps {15};
 };
 
-FEI_REFLECT(Plugin)
-class ProviderPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class ProviderPlugin : public ets::Plugin {
   public:
     explicit ProviderPlugin(Config config = {});
 
@@ -22,4 +22,4 @@ class ProviderPlugin : public fei::Plugin {
     Config m_config;
 };
 
-} // namespace fei::devtools::rendering
+} // namespace ets::devtools::rendering

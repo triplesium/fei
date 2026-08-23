@@ -1,6 +1,6 @@
 #include "ui_widgets/plugin.hpp"
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
 void sync_tooltips(
     Query<Entity, const Tooltip>::Filter<Without<ui::Interaction>>
@@ -81,4 +81,4 @@ void update_tooltips(
     }
 }
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

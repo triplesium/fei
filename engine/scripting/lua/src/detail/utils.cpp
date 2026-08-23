@@ -11,7 +11,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -30,14 +30,14 @@ LuaObject& checked_lua_object(lua_State* L, int idx) {
 
 } // namespace
 
-bool lua_is_fei_type(lua_State* L, int idx) {
+bool lua_is_ets_type(lua_State* L, int idx) {
     if (lua_type(L, idx) != LUA_TTABLE) {
         return false;
     }
     lua_getfield(L, idx, "__type_id");
-    bool is_fei_type = lua_isinteger(L, -1);
+    bool is_ets_type = lua_isinteger(L, -1);
     lua_pop(L, 1);
-    return is_fei_type;
+    return is_ets_type;
 }
 
 bool lua_is_enum_value(lua_State* L, int idx) {
@@ -105,7 +105,7 @@ Val lua_to_val(lua_State* L, int idx) {
                 }
                 return enm->make_val(value);
             }
-            if (lua_is_fei_type(L, idx)) {
+            if (lua_is_ets_type(L, idx)) {
                 lua_getfield(L, idx, "__type_id");
                 auto type_id = static_cast<TypeId>(lua_tointeger(L, -1));
                 lua_pop(L, 1);
@@ -153,7 +153,7 @@ TypeId lua_type_of(lua_State* L, int idx) {
                 lua_pop(L, 1);
                 return type_id;
             }
-            if (lua_is_fei_type(L, idx)) {
+            if (lua_is_ets_type(L, idx)) {
                 return type_id<TypeId>();
             }
             return {};
@@ -167,7 +167,7 @@ TypeId lua_type_of(lua_State* L, int idx) {
 }
 
 TypeId lua_check_type_id(lua_State* L, int idx, std::string_view context) {
-    if (!lua_is_fei_type(L, idx)) {
+    if (!lua_is_ets_type(L, idx)) {
         luaL_error(
             L,
             "%.*s expects a reflected type",
@@ -334,4 +334,4 @@ void lua_push_borrowed_ref(
     }
 }
 
-} // namespace fei
+} // namespace ets

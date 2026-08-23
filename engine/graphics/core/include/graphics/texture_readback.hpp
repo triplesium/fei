@@ -8,7 +8,7 @@
 #include <memory>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 enum class TextureDataOrigin : uint8 {
     BottomLeft,
@@ -45,4 +45,4 @@ class TextureReadback {
     virtual void reset() = 0;
 };
 
-} // namespace fei
+} // namespace ets

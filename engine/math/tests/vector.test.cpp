@@ -4,8 +4,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace fei;
-using namespace fei::test;
+using namespace ets;
+using namespace ets::test;
 
 TEST_CASE("Vector2 operations preserve geometric behavior", "[math][vector]") {
     Vector2 value {3.0f, 4.0f};

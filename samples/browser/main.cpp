@@ -38,7 +38,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei::browser_sample {
+namespace ets::browser_sample {
 namespace {
 
 struct BrowserSprite {};
@@ -71,8 +71,8 @@ void set_browser_status(const char* status) {
     EM_ASM(
         {
             const status = UTF8ToString($0);
-            document.documentElement.dataset.feiStatus = status;
-            console.log("[fei] " + status);
+            document.documentElement.dataset.entisiumStatus = status;
+            console.log("[entisium] " + status);
         },
         status
     );
@@ -81,8 +81,8 @@ void set_browser_status(const char* status) {
 void set_browser_input_status(const char* status, float sprite_x) {
     EM_ASM(
         {
-            document.documentElement.dataset.feiInput = UTF8ToString($0);
-            document.documentElement.dataset.feiSpriteX = $1.toString();
+            document.documentElement.dataset.entisiumInput = UTF8ToString($0);
+            document.documentElement.dataset.entisiumSpriteX = $1.toString();
         },
         status,
         sprite_x
@@ -93,11 +93,11 @@ void publish_browser_text_status(int glyph_count, int glyph_batch_count) {
     EM_ASM(
         {
             const root = document.documentElement.dataset;
-            root.feiTextStatus = "ready";
-            root.feiFontAtlasUploaded = "true";
-            root.feiGlyphCount = $0.toString();
-            root.feiGlyphBatches = $1.toString();
-            root.feiFramePresented = "true";
+            root.entisiumTextStatus = "ready";
+            root.entisiumFontAtlasUploaded = "true";
+            root.entisiumGlyphCount = $0.toString();
+            root.entisiumGlyphBatches = $1.toString();
+            root.entisiumFramePresented = "true";
         },
         glyph_count,
         glyph_batch_count
@@ -118,13 +118,13 @@ void publish_browser_ui_status(
     EM_ASM(
         {
             const root = document.documentElement.dataset;
-            root.feiUiStatus = "ready";
-            root.feiUiClicks = $0.toString();
-            root.feiUiText = UTF8ToString($1);
-            root.feiUiScrollY = $2.toString();
-            root.feiUiInteraction = $3.toString();
-            root.feiUiViewport = $4 + "," + $5;
-            root.feiUiFocus = $6.toString();
+            root.entisiumUiStatus = "ready";
+            root.entisiumUiClicks = $0.toString();
+            root.entisiumUiText = UTF8ToString($1);
+            root.entisiumUiScrollY = $2.toString();
+            root.entisiumUiInteraction = $3.toString();
+            root.entisiumUiViewport = $4 + "," + $5;
+            root.entisiumUiFocus = $6.toString();
         },
         clicks,
         text,
@@ -137,9 +137,9 @@ void publish_browser_ui_status(
     EM_ASM(
         {
             const root = document.documentElement.dataset;
-            root.feiUiButtonRect = $0 + "," + $1 + "," + $2 + "," + $3;
-            root.feiUiInputRect = $4 + "," + $5 + "," + $6 + "," + $7;
-            root.feiUiScrollRect = $8 + "," + $9 + "," + $10 + "," + $11;
+            root.entisiumUiButtonRect = $0 + "," + $1 + "," + $2 + "," + $3;
+            root.entisiumUiInputRect = $4 + "," + $5 + "," + $6 + "," + $7;
+            root.entisiumUiScrollRect = $8 + "," + $9 + "," + $10 + "," + $11;
         },
         button.position.x,
         button.position.y,
@@ -199,7 +199,7 @@ void setup_browser_scene(
     const auto ready_asset = asset_server->load<TextAsset>("browser/ready.txt");
     const auto ready_text = text_assets->get(ready_asset);
     if (!ready_text || !std::string_view(ready_text->text())
-                            .starts_with("fei browser assets ready")) {
+                            .starts_with("entisium browser assets ready")) {
         set_browser_status("browser asset loading failed");
         error("Browser readiness asset was unavailable or invalid");
         return;
@@ -567,11 +567,11 @@ class BrowserSamplePlugin final : public Plugin {
 };
 
 } // namespace
-} // namespace fei::browser_sample
+} // namespace ets::browser_sample
 
 int main() {
-    using namespace fei;
-    using namespace fei::browser_sample;
+    using namespace ets;
+    using namespace ets::browser_sample;
 
     App app;
     app.add_plugin<BrowserSamplePlugin>();

@@ -10,7 +10,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace fei {
+namespace ets {
 namespace {
 
 void register_main_schedule_profile_names() {
@@ -37,7 +37,7 @@ void register_main_schedule_profile_names() {
 }
 
 void run_profiled_schedule(App& app, ScheduleId schedule, const char* name) {
-    FEI_PROFILE_DYNAMIC_SCOPE(name, __FILE__, __func__, __LINE__);
+    ETS_PROFILE_DYNAMIC_SCOPE(name, __FILE__, __func__, __LINE__);
     app.run_schedule(schedule);
 }
 
@@ -167,11 +167,13 @@ void App::finish() {
             }
             const auto dependency_index = m_plugins.size();
             m_plugin_indices.emplace(requirement.type, dependency_index);
-            m_plugins.push_back(PluginEntry {
-                .type = requirement.type,
-                .name = requirement.name,
-                .plugin = requirement.create_default(),
-            });
+            m_plugins.push_back(
+                PluginEntry {
+                    .type = requirement.type,
+                    .name = requirement.name,
+                    .plugin = requirement.create_default(),
+                }
+            );
         }
     }
 
@@ -294,7 +296,7 @@ void App::render() {
     for (auto& entry : m_sub_apps) {
         entry.runner->update(resolve_sub_app_source(entry));
     }
-    FEI_PROFILE_FRAME();
+    ETS_PROFILE_FRAME();
 }
 
 void App::shutdown() noexcept {
@@ -321,9 +323,9 @@ void App::shutdown() noexcept {
 
 void App::run_default(App&& app) {
     const auto exit_after_seconds =
-        read_environment_variable<double>("FEI_EXIT_AFTER_SECONDS");
+        read_environment_variable<double>("ETS_EXIT_AFTER_SECONDS");
     const auto exit_after_frames =
-        read_environment_variable<std::uint64_t>("FEI_EXIT_AFTER_FRAMES");
+        read_environment_variable<std::uint64_t>("ETS_EXIT_AFTER_FRAMES");
     const auto start_time = std::chrono::steady_clock::now();
     std::uint64_t frame_count = 0;
 
@@ -370,4 +372,4 @@ void App::run() {
     auto runner = std::move(m_runner);
     runner(std::move(*this));
 }
-} // namespace fei
+} // namespace ets

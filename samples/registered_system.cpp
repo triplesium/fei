@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <print>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 

@@ -5,7 +5,7 @@
 #include <memory>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -510,4 +510,4 @@ void render_vxgi_inject_propagation_pass(
     commands->dispatch(work_groups, work_groups, work_groups);
 }
 
-} // namespace fei
+} // namespace ets

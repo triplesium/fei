@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-namespace fei::detail {
+namespace ets::detail {
 namespace {
 
 Status<ScriptError> bind_type_ref(
@@ -339,4 +339,4 @@ Result<std::vector<SystemHandle>, ScriptError> install_luau_script_systems(
     );
 }
 
-} // namespace fei::detail
+} // namespace ets::detail

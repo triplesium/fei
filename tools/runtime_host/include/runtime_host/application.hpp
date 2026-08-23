@@ -3,7 +3,7 @@
 #include "app/app.hpp"
 #include "project/project.hpp"
 
-namespace fei::runtime_host {
+namespace ets::runtime_host {
 
 class RuntimeHostApplication {
   public:
@@ -23,4 +23,4 @@ class RuntimeHostApplication {
     App m_app;
 };
 
-} // namespace fei::runtime_host
+} // namespace ets::runtime_host

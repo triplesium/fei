@@ -8,9 +8,9 @@
 #include "core/time.hpp"
 #include "core/transform_plugin.hpp"
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class CorePlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {
@@ -27,4 +27,4 @@ class CorePlugin : public Plugin {
     }
 };
 
-} // namespace fei
+} // namespace ets

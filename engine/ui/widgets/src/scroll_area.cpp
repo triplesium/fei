@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <vector>
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
 namespace {
 
@@ -177,4 +177,4 @@ void update_scroll_areas(
     }
 }
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

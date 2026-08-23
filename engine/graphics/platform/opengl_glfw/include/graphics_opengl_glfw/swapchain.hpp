@@ -5,7 +5,7 @@
 
 struct GLFWwindow;
 
-namespace fei {
+namespace ets {
 
 class SwapchainOpenGLGlfw final : public Swapchain {
   private:
@@ -25,4 +25,4 @@ class SwapchainOpenGLGlfw final : public Swapchain {
     void present() const override;
 };
 
-} // namespace fei
+} // namespace ets

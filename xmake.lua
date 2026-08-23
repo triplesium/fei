@@ -1,3 +1,4 @@
+set_project("Entisium")
 add_rules("mode.debug", "mode.release")
 set_languages("c++23")
 set_warnings("all")
@@ -37,10 +38,10 @@ includes("packages")
 if is_plat("wasm") then
     add_requires("emscripten 6.0.0")
     add_requires(
-        "fei-slang-wasm 2026.14.1",
-        {configs = {toolchains = "fei-emcc@emscripten"}}
+        "entisium-slang-wasm 2026.14.1",
+        {configs = {toolchains = "entisium-emcc@emscripten"}}
     )
-    set_toolchains("fei-emcc@emscripten")
+    set_toolchains("entisium-emcc@emscripten")
 end
 
 if is_plat("wasm") then
@@ -104,13 +105,13 @@ end
 
 local project_dir = os.scriptdir():gsub("\\", "/")
 if is_plat("wasm") then
-    add_defines("FEI_ASSETS_PATH=\"/fei/assets\"")
+    add_defines("ETS_ASSETS_PATH=\"/entisium/assets\"")
 else
-    add_defines("FEI_ASSETS_PATH=\"" .. project_dir .. "/assets\"")
+    add_defines("ETS_ASSETS_PATH=\"" .. project_dir .. "/assets\"")
 end
-add_defines("FEI_SHADER_ASSETS_PATH=\"" .. project_dir .. "/build/generated/shaders\"")
-add_defines("FEI_SHADER_CACHE_PATH=\"" .. project_dir .. "/build/cache/shaders\"")
-add_defines("FEI_PROFILE_OUTPUT_PATH=\"" .. project_dir .. "/build/profile/latest\"")
+add_defines("ETS_SHADER_ASSETS_PATH=\"" .. project_dir .. "/build/generated/shaders\"")
+add_defines("ETS_SHADER_CACHE_PATH=\"" .. project_dir .. "/build/cache/shaders\"")
+add_defines("ETS_PROFILE_OUTPUT_PATH=\"" .. project_dir .. "/build/profile/latest\"")
 
 local shader_sources = {}
 
@@ -123,7 +124,7 @@ function add_asset_bundle(prefix, root)
     end
 
     add_values(
-        "fei.asset_bundles",
+        "entisium.asset_bundles",
         prefix:gsub("\\", "/") .. "=" ..
             path.absolute(root):gsub("\\", "/")
     )
@@ -131,7 +132,7 @@ end
 
 local function target_asset_bundles(target)
     local bundles = {}
-    for _, entry in ipairs(table.wrap(target:values("fei.asset_bundles"))) do
+    for _, entry in ipairs(table.wrap(target:values("entisium.asset_bundles"))) do
         local separator = entry:find("=", 1, true)
         if not separator then
             raise("invalid asset bundle: " .. entry)
@@ -162,7 +163,7 @@ end
 
 local function shader_runtime_root(source, target)
     if target:is_plat("wasm") then
-        return "/fei/shaders/" .. source.prefix
+        return "/entisium/shaders/" .. source.prefix
     end
     return source.root
 end
@@ -182,11 +183,11 @@ local function shader_sources_define_value(target)
     return table.concat(entries, ";")
 end
 
-rule("fei.shader_sources")
+rule("entisium.shader_sources")
     after_load(function(target)
         local sources = shader_sources_define_value(target)
         if sources and #sources > 0 then
-            target:add("defines", "FEI_SHADER_SOURCES=\"" .. sources .. "\"")
+            target:add("defines", "ETS_SHADER_SOURCES=\"" .. sources .. "\"")
         end
         if target:is_plat("wasm") and target:kind() == "binary" then
             for _, source in ipairs(shader_sources) do
@@ -227,9 +228,9 @@ rule("fei.shader_sources")
     end)
 rule_end()
 
-add_rules("fei.shader_sources")
+add_rules("entisium.shader_sources")
 
-rule("fei.asset_bundles")
+rule("entisium.asset_bundles")
     after_load(function(target)
         if not target:is_plat("wasm") or target:kind() ~= "binary" then
             return
@@ -238,7 +239,7 @@ rule("fei.asset_bundles")
         for _, bundle in ipairs(target_asset_bundles(target)) do
             target:add(
                 "ldflags",
-                "--preload-file=" .. bundle.root .. "@/fei/assets/" ..
+                "--preload-file=" .. bundle.root .. "@/entisium/assets/" ..
                     bundle.prefix,
                 {force = true}
             )
@@ -269,9 +270,9 @@ rule("fei.asset_bundles")
     end)
 rule_end()
 
-add_rules("fei.asset_bundles")
+add_rules("entisium.asset_bundles")
 
-rule("fei.executable_startup")
+rule("entisium.executable_startup")
     on_load(function(target)
         if target:kind() == "binary" then
             target:add(
@@ -285,9 +286,9 @@ rule("fei.executable_startup")
     end)
 rule_end()
 
-add_rules("fei.executable_startup")
+add_rules("entisium.executable_startup")
 
-rule("fei.test")
+rule("entisium.test")
     on_load(function(target)
         target:add("packages", "catch2")
         target:add("tests", "default")

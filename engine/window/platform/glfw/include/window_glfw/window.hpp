@@ -11,7 +11,7 @@
 
 struct GLFWwindow;
 
-namespace fei {
+namespace ets {
 
 struct GlfwWindow {
     GLFWwindow* handle {nullptr};
@@ -25,7 +25,7 @@ struct GlfwWindowHint {
 struct GlfwWindowConfig {
     int width {1920};
     int height {1080};
-    std::string title {"Fei Engine"};
+    std::string title {"Entisium Engine"};
     std::vector<GlfwWindowHint> hints;
 };
 
@@ -39,7 +39,7 @@ GLFWwindow* setup_glfw_window(const GlfwWindowConfig& config);
 void prepare_glfw_window(ResRO<GlfwWindow> glfw, ResRW<Window> window);
 void update_should_close(ResRO<GlfwWindow> glfw, ResRW<AppStates> app_states);
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class GlfwWindowPlugin : public Plugin {
   private:
     std::vector<GlfwWindowHint> m_hints;
@@ -72,4 +72,4 @@ class GlfwWindowPlugin : public Plugin {
     void cleanup(App& app) noexcept override;
 };
 
-} // namespace fei
+} // namespace ets

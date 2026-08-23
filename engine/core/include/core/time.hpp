@@ -6,7 +6,7 @@
 
 #include <chrono>
 
-namespace fei {
+namespace ets {
 
 struct TimeSnapshotState {
     float delta {};
@@ -22,7 +22,7 @@ struct FixedTimeSnapshotState {
     double elapsed {};
 };
 
-FEI_REFLECT(Resource)
+ETS_REFLECT(Resource)
 struct Time {
     Time() : m_last_tick_time(std::chrono::steady_clock::now()) {}
 
@@ -51,7 +51,7 @@ struct Time {
     Optional<float> m_fixed_delta;
 };
 
-FEI_REFLECT(Resource)
+ETS_REFLECT(Resource)
 class FixedTime {
   public:
     FixedTime() = default;
@@ -100,10 +100,10 @@ class Timer {
 
 void time_system(ResRW<Time> time);
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class TimePlugin : public Plugin {
   public:
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

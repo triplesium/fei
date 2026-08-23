@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 bool RenderFrameContext::begin(const GraphicsDevice& device) {
     if (m_state == State::Recording || m_state == State::Skipped) {
@@ -54,4 +54,4 @@ void submit_render_frame(
     }
 }
 
-} // namespace fei
+} // namespace ets

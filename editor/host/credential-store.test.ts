@@ -24,7 +24,7 @@ afterEach(async () => {
 
 describe("EncryptedCredentialStore", () => {
     it("persists credentials through its protector without writing plaintext", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "fei-editor-credentials-"));
+        const directory = await mkdtemp(join(tmpdir(), "entisium-editor-credentials-"));
         temporaryDirectories.push(directory);
         const path = join(directory, "credentials.json");
         const store = new EncryptedCredentialStore(path, testProtector);
@@ -46,7 +46,7 @@ describe("EncryptedCredentialStore", () => {
     });
 
     it("falls back when the preferred credential directory is unavailable", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "fei-editor-credential-fallback-"));
+        const directory = await mkdtemp(join(tmpdir(), "entisium-editor-credential-fallback-"));
         temporaryDirectories.push(directory);
         const blockedDirectory = join(directory, "blocked");
         const fallbackPath = join(directory, "fallback", "credentials.json");
@@ -69,7 +69,7 @@ describe("EncryptedCredentialStore", () => {
     });
 
     it("preserves an unreadable credential file and recovers through a fallback", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "fei-editor-credential-recovery-"));
+        const directory = await mkdtemp(join(tmpdir(), "entisium-editor-credential-recovery-"));
         temporaryDirectories.push(directory);
         const unreadablePath = join(directory, "unreadable", "credentials.json");
         const fallbackPath = join(directory, "fallback", "credentials.json");

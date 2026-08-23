@@ -9,7 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei::devtools {
+namespace ets::devtools {
 
 struct ManifestEndpoint {
     std::string rel;
@@ -117,4 +117,4 @@ std::string blob_metadata_json(const BridgeBlob& blob);
 std::string
 error_json(std::string message, int status, std::string capability = {});
 
-} // namespace fei::devtools
+} // namespace ets::devtools

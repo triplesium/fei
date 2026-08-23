@@ -18,7 +18,7 @@
 #include "ui/surface.hpp"
 #include "ui/text.hpp"
 
-namespace fei {
+namespace ets {
 
 class App;
 struct Window;
@@ -168,12 +168,12 @@ void compute_stack(
     ResRW<Stack> stack
 );
 
-FEI_REFLECT(Plugin)
-class UiPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class UiPlugin : public ets::Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
 } // namespace ui
-} // namespace fei
+} // namespace ets

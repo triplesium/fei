@@ -2,9 +2,9 @@
 
 #include "refl/type.hpp"
 
-namespace fei {
+namespace ets {
 
 inline constexpr TypeTagId ComponentTypeTag {"Component"};
 inline constexpr TypeTagId ResourceTypeTag {"Resource"};
 
-} // namespace fei
+} // namespace ets

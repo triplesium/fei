@@ -2,7 +2,7 @@
 
 #include "frame_profile_accumulator.hpp"
 
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
 #    include "frame_profile_history.hpp"
 #endif
 
@@ -15,7 +15,7 @@
 #include <string_view>
 #include <unordered_map>
 
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
 #    include <cstdlib>
 #    include <filesystem>
 #    include <fstream>
@@ -23,10 +23,10 @@
 #    include <vector>
 #endif
 
-namespace fei {
+namespace ets {
 namespace {
 
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
 
 struct ProfileStats {
     std::uint64_t count = 0;
@@ -71,11 +71,11 @@ struct ProfileState {
     std::unordered_map<std::uint64_t, std::string> schedule_names;
     profiling_detail::FrameProfileAccumulator frame_stats;
     std::unordered_map<std::string, GpuRecord> gpu_records;
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
     std::unordered_map<std::string, ProfileRecord> records;
     profiling_detail::FrameProfileHistory frame_history;
-#    if defined(FEI_PROFILE_OUTPUT_PATH)
-    std::string output_directory = FEI_PROFILE_OUTPUT_PATH;
+#    if defined(ETS_PROFILE_OUTPUT_PATH)
+    std::string output_directory = ETS_PROFILE_OUTPUT_PATH;
 #    else
     std::string output_directory = "build/profile/latest";
 #    endif
@@ -88,7 +88,7 @@ ProfileState& profile_state() {
     return state;
 }
 
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
 
 struct ActiveProfileScope {
     std::int64_t start_ns = 0;
@@ -328,13 +328,13 @@ std::string profile_schedule_name(std::uint64_t schedule_id) {
 }
 
 void profile_frame_mark() {
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
     ensure_profile_summary_atexit();
 #endif
 
     auto& state = profile_state();
     std::scoped_lock lock(state.mutex);
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
     auto duration = state.frame_stats.mark(profile_now_ns());
     if (!duration) {
         return;
@@ -352,7 +352,7 @@ FrameProfileStats profile_frame_stats() {
 }
 
 ProfileSummarySnapshot profile_summary_snapshot() {
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
     auto raw = copy_profile_summary();
     ProfileSummarySnapshot snapshot {
         .available = true,
@@ -395,7 +395,7 @@ void clear_profile_frame_stats() {
 }
 
 void flush_profile_summary() {
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
     auto snapshot = profile_summary_snapshot();
     auto& state = profile_state();
     std::filesystem::path output_directory;
@@ -415,14 +415,14 @@ void clear_profile_summary() {
     auto& state = profile_state();
     std::scoped_lock lock(state.mutex);
     state.frame_stats.clear();
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
     state.records.clear();
     state.frame_history.clear();
 #endif
 }
 
 void set_profile_summary_output_directory(std::string path) {
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
     auto& state = profile_state();
     std::scoped_lock lock(state.mutex);
     state.output_directory = std::move(path);
@@ -490,7 +490,7 @@ void clear_gpu_profile_summary() {
     state.gpu_records.clear();
 }
 
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
 
 SummaryProfileScope::SummaryProfileScope(
     ProfileZoneKind kind,
@@ -540,4 +540,4 @@ SummaryProfileScope::~SummaryProfileScope() {
 
 #endif
 
-} // namespace fei
+} // namespace ets

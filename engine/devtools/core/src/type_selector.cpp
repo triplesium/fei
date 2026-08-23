@@ -7,7 +7,7 @@
 #include <iomanip>
 #include <sstream>
 
-namespace fei::devtools {
+namespace ets::devtools {
 
 Result<Type&, TypeSelectorError>
 resolve_type_selector(std::string_view selector) {
@@ -56,4 +56,4 @@ std::string format_type_id(TypeId id) {
     return stream.str();
 }
 
-} // namespace fei::devtools
+} // namespace ets::devtools

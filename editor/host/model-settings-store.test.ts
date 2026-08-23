@@ -16,7 +16,7 @@ afterEach(async () => {
 
 describe("FileEditorModelSettingsStore", () => {
     it("falls back from an unavailable preferred directory", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "fei-editor-model-settings-"));
+        const directory = await mkdtemp(join(tmpdir(), "entisium-editor-model-settings-"));
         temporaryDirectories.push(directory);
         const blockedDirectory = join(directory, "blocked");
         const fallbackPath = join(directory, "fallback", "model-settings.json");
@@ -50,7 +50,7 @@ describe("FileEditorModelSettingsStore", () => {
     });
 
     it("migrates the legacy single custom provider to the unified registry", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "fei-editor-model-settings-"));
+        const directory = await mkdtemp(join(tmpdir(), "entisium-editor-model-settings-"));
         temporaryDirectories.push(directory);
         const path = join(directory, "model-settings.json");
         await writeFile(path, JSON.stringify({

@@ -21,7 +21,7 @@
 #include <string_view>
 #include <vector>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -123,7 +123,7 @@ entities_with(const World& world, TypeId first, TypeId second) {
 }
 
 std::string load_game_script() {
-    const auto path = (std::filesystem::path(FEI_ASSETS_PATH).parent_path() /
+    const auto path = (std::filesystem::path(ETS_ASSETS_PATH).parent_path() /
                        "samples" / "snapshot_game.luau")
                           .lexically_normal();
     std::ifstream input(path, std::ios::binary);

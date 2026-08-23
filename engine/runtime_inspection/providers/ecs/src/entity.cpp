@@ -13,7 +13,7 @@
 #include <string>
 #include <utility>
 
-namespace fei::runtime_inspection::ecs {
+namespace ets::runtime_inspection::ecs {
 namespace {
 
 using serialization::SerializedField;
@@ -294,4 +294,4 @@ register_entity_inspection_provider(InspectionRegistry& registry) {
     );
 }
 
-} // namespace fei::runtime_inspection::ecs
+} // namespace ets::runtime_inspection::ecs

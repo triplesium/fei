@@ -7,7 +7,7 @@
 #include <filesystem>
 #include <unordered_map>
 
-using namespace fei;
+using namespace ets;
 
 TEST_CASE(
     "AssetPath parses and hashes source-qualified paths",

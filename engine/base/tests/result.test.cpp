@@ -4,7 +4,7 @@
 #include <string>
 #include <type_traits>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 

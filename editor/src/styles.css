@@ -93,7 +93,7 @@ button {
     font-size: 14px;
 }
 
-.dockview-theme-fei {
+.dockview-theme-entisium {
     width: 100%;
     height: 100%;
     --dv-tabs-and-actions-container-font-size: 11px;
@@ -134,7 +134,7 @@ button {
     --dv-dropdown-border-radius: 5px;
 }
 
-.dockview-theme-fei .dv-sash:hover,
-.dockview-theme-fei .dv-sash.dv-active {
+.dockview-theme-entisium .dv-sash:hover,
+.dockview-theme-entisium .dv-sash.dv-active {
     background: var(--accent);
 }

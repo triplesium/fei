@@ -16,32 +16,32 @@ UI layout and rendering, reflected text components, standard button behavior,
 the Runtime Host's embedded fallback font, and real mouse input. Hover or click
 the face to exercise pointer interaction.
 
-When running under `fei-agentd`, the built-in `runtime.pointer` playtest
+When running under `entisium-agentd`, the built-in `runtime.pointer` playtest
 interface can position the pointer and hold `Left`, `Right`, or `Middle` for a
 bounded step. This makes UI clicks reproducible without desktop automation.
 
 Build the supervisor, CLI, and Runtime Host before launching a project:
 
 ```powershell
-xmake build -y fei-agentd
-xmake build -y fei-ctl
-xmake build -y fei-runtime-host
+xmake build -y entisium-agentd
+xmake build -y entisium-ctl
+xmake build -y entisium-runtime-host
 ```
 
 For example, launch the platformer from the repository root:
 
 ```powershell
-build/windows/x64/debug/fei-agentd.exe `
+build/windows/x64/debug/entisium-agentd.exe `
   --project samples/projects/scripting/platformer.project.yaml `
-  --runtime build/windows/x64/debug/fei-runtime-host.exe `
+  --runtime build/windows/x64/debug/entisium-runtime-host.exe `
   --port 8091
 ```
 
 Then discover its contract or execute an ad-hoc control program:
 
 ```powershell
-build/windows/x64/debug/fei-ctl.exe --port 8091 play-interfaces
-build/windows/x64/debug/fei-ctl.exe --port 8091 play-run --eval `
+build/windows/x64/debug/entisium-ctl.exe --port 8091 play-interfaces
+build/windows/x64/debug/entisium-ctl.exe --port 8091 play-run --eval `
   'return play.step("platformer.main", {horizontal=1, jump=true}, 72)'
 ```
 
@@ -54,7 +54,7 @@ Expected completion conditions are:
 - Card battle: choose available damage cards from `hand` until `enemy_hp = 0`
   and `status = "won"`.
 - Rendered checkpoint arena: run `checkpoint_render.retry.luau` through
-  `fei-ctl play-run --stdin`. It captures the initial frame, despawns the enemy,
+  `entisium-ctl play-run --stdin`. It captures the initial frame, despawns the enemy,
   restores and immediately recaptures the checkpoint, then renders a jumping
   branch. The initial and restored PNG files should be byte-identical. Run
   Runtime Host directly for continuous human play with `A`/`D` (or arrow keys)
@@ -65,7 +65,7 @@ Expected completion conditions are:
 Launch that continuous keyboard mode from the repository root with:
 
 ```powershell
-build/windows/x64/debug/fei-runtime-host.exe `
+build/windows/x64/debug/entisium-runtime-host.exe `
   samples/projects/scripting/checkpoint_render.project.yaml
 ```
 

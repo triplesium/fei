@@ -5,7 +5,7 @@
 #include <limits>
 #include <numbers>
 
-namespace fei {
+namespace ets {
 
 constexpr float POS_INFINITY = std::numeric_limits<float>::infinity();
 constexpr float NEG_INFINITY = -std::numeric_limits<float>::infinity();
@@ -47,4 +47,4 @@ inline bool real_equal(
     return abs(b - a) <= tolerance;
 }
 
-} // namespace fei
+} // namespace ets

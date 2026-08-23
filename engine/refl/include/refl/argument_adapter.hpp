@@ -5,7 +5,7 @@
 #include <string>
 #include <type_traits>
 
-namespace fei {
+namespace ets {
 
 namespace detail {
 template<typename T>
@@ -53,7 +53,7 @@ struct ArgumentAdapter {
         }
 
         if constexpr (std::is_pointer_v<NoRef>) {
-            if (ref.type_id() != fei::type_id<Base>()) {
+            if (ref.type_id() != ets::type_id<Base>()) {
                 return ConversionRank::None;
             }
             return (std::is_const_v<NoPtr> || !ref.is_const()) ?
@@ -62,7 +62,7 @@ struct ArgumentAdapter {
         } else if constexpr (
             std::is_lvalue_reference_v<T> && !std::is_const_v<NoRef>
         ) {
-            return (ref.type_id() == fei::type_id<Base>() && !ref.is_const()) ?
+            return (ref.type_id() == ets::type_id<Base>() && !ref.is_const()) ?
                        ConversionRank::Exact :
                        ConversionRank::None;
         } else if constexpr (
@@ -72,7 +72,7 @@ struct ArgumentAdapter {
             if constexpr (std::is_enum_v<Base>) {
                 return Conversion<Base>::match(ref);
             } else {
-                return (ref.type_id() == fei::type_id<Base>() &&
+                return (ref.type_id() == ets::type_id<Base>() &&
                         !ref.is_const()) ?
                            ConversionRank::Exact :
                            ConversionRank::None;
@@ -80,7 +80,7 @@ struct ArgumentAdapter {
         } else if constexpr (detail::can_bind_converted_value<T>()) {
             return Conversion<Base>::match(ref);
         } else {
-            return (ref.type_id() == fei::type_id<Base>() &&
+            return (ref.type_id() == ets::type_id<Base>() &&
                     (!detail::needs_mutable_argument<T>() || !ref.is_const())) ?
                        ConversionRank::Exact :
                        ConversionRank::None;
@@ -131,4 +131,4 @@ struct ArgumentAdapter {
     }
 };
 
-} // namespace fei
+} // namespace ets

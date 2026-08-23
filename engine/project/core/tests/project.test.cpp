@@ -13,7 +13,7 @@
 #include <fstream>
 #include <string_view>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -27,7 +27,7 @@ class TemporaryProjectDirectory {
         const auto timestamp =
             std::chrono::steady_clock::now().time_since_epoch().count();
         m_path = std::filesystem::temp_directory_path() /
-                 ("fei-project-" + std::to_string(timestamp) + "-" +
+                 ("entisium-project-" + std::to_string(timestamp) + "-" +
                   std::to_string(sequence.fetch_add(1)));
         std::filesystem::create_directories(m_path / "assets");
     }
@@ -79,9 +79,10 @@ TEST_CASE("Project loads project.yaml", "[project]") {
         project->asset_root() ==
         std::filesystem::weakly_canonical(directory.path() / "assets")
     );
-    CHECK(project->cache_root() == directory.path() / ".fei");
+    CHECK(project->cache_root() == directory.path() / ".entisium");
     CHECK(
-        project->imported_asset_root() == directory.path() / ".fei" / "imported"
+        project->imported_asset_root() ==
+        directory.path() / ".entisium" / "imported"
     );
 }
 
@@ -324,7 +325,7 @@ TEST_CASE(
     CHECK(asset_server.has_source("project"));
     CHECK(
         app.resource<AssetDatabase>().import_cache_root() ==
-        directory.path() / ".fei" / "imported"
+        directory.path() / ".entisium" / "imported"
     );
     auto bytes = asset_server.read_asset_bytes("project://readme.txt");
     REQUIRE(bytes);

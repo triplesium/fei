@@ -7,7 +7,7 @@
 #include <cassert>
 #include <variant>
 
-namespace fei {
+namespace ets {
 
 class LuaObject {
   private:
@@ -61,4 +61,4 @@ class LuaObject {
     }
 };
 
-} // namespace fei
+} // namespace ets

@@ -17,7 +17,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -285,4 +285,4 @@ void SkyboxPlugin::setup(App& app) {
         );
 }
 
-} // namespace fei
+} // namespace ets

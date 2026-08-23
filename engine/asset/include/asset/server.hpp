@@ -27,7 +27,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct AssetLoadFailure {
     AssetKey asset;
@@ -46,7 +46,7 @@ struct AssetTypeRegistration {
     TypeId events_resource_type;
 };
 
-FEI_REFLECT(Resource)
+ETS_REFLECT(Resource)
 class AssetServer {
   private:
     struct AssetTypeAccess {
@@ -1407,4 +1407,4 @@ Handle<T> AssetLoadRequests::add_asset(std::unique_ptr<T> asset) {
     return m_sender->template add_asset<T>(std::move(asset));
 }
 
-} // namespace fei
+} // namespace ets

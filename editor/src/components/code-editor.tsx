@@ -21,7 +21,7 @@ self.MonacoEnvironment = {
 loader.config({ monaco });
 registerLuauLanguage(monaco);
 void enableLuauTextmate(monaco).catch((error: unknown) => {
-    console.error("[fei editor] failed to enable Luau TextMate grammar", error);
+    console.error("[entisium editor] failed to enable Luau TextMate grammar", error);
 });
 
 interface CodeEditorProps {

@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <typeinfo>
 
-namespace fei {
+namespace ets {
 
 Result<SystemParamRuntimeState, RuntimeStateError>
 DynamicSystemParam::capture_runtime_state() const {
@@ -84,4 +84,4 @@ dynamic_system_access_for_params(const DynamicSystemParams& params) {
     return result;
 }
 
-} // namespace fei
+} // namespace ets

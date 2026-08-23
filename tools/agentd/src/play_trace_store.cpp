@@ -4,7 +4,7 @@
 #include <chrono>
 #include <utility>
 
-namespace fei::agentd {
+namespace ets::agentd {
 namespace {
 
 int64 unix_time_milliseconds() {
@@ -119,4 +119,4 @@ void PlayTraceStore::evict_to_bounds() {
     }
 }
 
-} // namespace fei::agentd
+} // namespace ets::agentd

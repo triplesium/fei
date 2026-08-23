@@ -20,7 +20,7 @@
 #include <variant>
 #include <vector>
 
-namespace fei {
+namespace ets {
 namespace {
 
 struct ConvertedScene {
@@ -460,4 +460,4 @@ GltfLoader::load(Reader& reader, const LoadContext& context) {
     return gltf;
 }
 
-} // namespace fei
+} // namespace ets

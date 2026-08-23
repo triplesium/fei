@@ -3,7 +3,7 @@
 
 #include <type_traits>
 
-namespace fei {
+namespace ets {
 
 class QualType {
   public:
@@ -38,7 +38,7 @@ class QualType {
         if constexpr (std::is_const_v<NoPtr>) {
             flags |= Const;
         }
-        return QualType(fei::type_id<Base>(), static_cast<Flags>(flags));
+        return QualType(ets::type_id<Base>(), static_cast<Flags>(flags));
     }
 
     template<typename T>
@@ -63,4 +63,4 @@ class QualType {
     TypeId m_type_id;
     unsigned int m_flags {None};
 };
-} // namespace fei
+} // namespace ets

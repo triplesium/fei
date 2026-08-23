@@ -6,7 +6,7 @@
 #include <nlohmann/json.hpp>
 #include <utility>
 
-namespace fei::devtools {
+namespace ets::devtools {
 
 namespace {
 
@@ -382,4 +382,4 @@ error_json(std::string message, int status, std::string capability) {
     return result.dump();
 }
 
-} // namespace fei::devtools
+} // namespace ets::devtools

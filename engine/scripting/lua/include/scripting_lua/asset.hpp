@@ -4,7 +4,7 @@
 #include <string>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 class LuaScriptAsset {
   private:
@@ -25,4 +25,4 @@ class LuaScriptAssetLoader : public AssetLoader<LuaScriptAsset> {
     }
 };
 
-} // namespace fei
+} // namespace ets

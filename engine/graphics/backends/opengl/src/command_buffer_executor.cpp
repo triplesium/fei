@@ -21,7 +21,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace ogl_cmd = opengl_commands;
 
@@ -31,7 +31,7 @@ template<class>
 inline constexpr bool always_false_v = false;
 
 void set_default_framebuffer_draw_buffer() {
-    FEI_GL_CALL(glDrawBuffer(GL_BACK));
+    ETS_GL_CALL(glDrawBuffer(GL_BACK));
 }
 
 void clear_color_attachment(
@@ -40,10 +40,10 @@ void clear_color_attachment(
     const Color4F& color
 ) {
     if (framebuffer == 0) {
-        FEI_GL_CALL(glClearBufferfv(GL_COLOR, index, color.data()));
+        ETS_GL_CALL(glClearBufferfv(GL_COLOR, index, color.data()));
         return;
     }
-    FEI_GL_CALL(
+    ETS_GL_CALL(
         glClearNamedFramebufferfv(framebuffer, GL_COLOR, index, color.data())
     );
 }
@@ -54,10 +54,10 @@ void clear_depth_stencil_attachment(
     std::uint8_t stencil
 ) {
     if (framebuffer == 0) {
-        FEI_GL_CALL(glClearBufferfi(GL_DEPTH_STENCIL, 0, depth, stencil));
+        ETS_GL_CALL(glClearBufferfi(GL_DEPTH_STENCIL, 0, depth, stencil));
         return;
     }
-    FEI_GL_CALL(glClearNamedFramebufferfi(
+    ETS_GL_CALL(glClearNamedFramebufferfi(
         framebuffer,
         GL_DEPTH_STENCIL,
         0,
@@ -68,18 +68,18 @@ void clear_depth_stencil_attachment(
 
 void clear_depth_attachment(GLuint framebuffer, float depth) {
     if (framebuffer == 0) {
-        FEI_GL_CALL(glClearBufferfv(GL_DEPTH, 0, &depth));
+        ETS_GL_CALL(glClearBufferfv(GL_DEPTH, 0, &depth));
         return;
     }
-    FEI_GL_CALL(glClearNamedFramebufferfv(framebuffer, GL_DEPTH, 0, &depth));
+    ETS_GL_CALL(glClearNamedFramebufferfv(framebuffer, GL_DEPTH, 0, &depth));
 }
 
 void clear_stencil_attachment(GLuint framebuffer, GLint stencil) {
     if (framebuffer == 0) {
-        FEI_GL_CALL(glClearBufferiv(GL_STENCIL, 0, &stencil));
+        ETS_GL_CALL(glClearBufferiv(GL_STENCIL, 0, &stencil));
         return;
     }
-    FEI_GL_CALL(
+    ETS_GL_CALL(
         glClearNamedFramebufferiv(framebuffer, GL_STENCIL, 0, &stencil)
     );
 }
@@ -113,7 +113,7 @@ std::size_t resolve_buffer_binding_size(
 ) {
     const auto base_offset = binding.offset + dynamic_offset;
     if (base_offset > binding.buffer->size()) {
-        fei::fatal(
+        ets::fatal(
             "Buffer binding offset {} exceeds buffer size {}",
             base_offset,
             binding.buffer->size()
@@ -123,7 +123,7 @@ std::size_t resolve_buffer_binding_size(
         return binding.buffer->size() - base_offset;
     }
     if (base_offset + binding.size > binding.buffer->size()) {
-        fei::fatal(
+        ets::fatal(
             "Buffer binding range [{}, {}) exceeds buffer size {}",
             base_offset,
             base_offset + binding.size,
@@ -165,12 +165,12 @@ void bind_buffer_resource(
     const auto offset = binding.offset + dynamic_offset;
     const auto size = resolve_buffer_binding_size(binding, dynamic_offset);
     if (offset == 0 && binding.size == BufferRange::WholeSize) {
-        FEI_GL_CALL(
+        ETS_GL_CALL(
             glBindBufferBase(target, binding_index, binding.buffer->id())
         );
         return;
     }
-    FEI_GL_CALL(glBindBufferRange(
+    ETS_GL_CALL(glBindBufferRange(
         target,
         binding_index,
         binding.buffer->id(),
@@ -204,7 +204,7 @@ struct CommandBufferExecutorOpenGL::ExecutionState {
 };
 
 void CommandBufferExecutorOpenGL::execute(CommandBufferOpenGL& command_buffer) {
-    FEI_PROFILE_SCOPE("OpenGL CommandBuffer Execute");
+    ETS_PROFILE_SCOPE("OpenGL CommandBuffer Execute");
     command_buffer.ensure_executable("execute");
     execute(command_buffer.m_commands);
     command_buffer.mark_submitted();
@@ -213,7 +213,7 @@ void CommandBufferExecutorOpenGL::execute(CommandBufferOpenGL& command_buffer) {
 void CommandBufferExecutorOpenGL::execute(
     const std::vector<ogl_cmd::Command>& commands
 ) {
-    FEI_PROFILE_SCOPE("OpenGL Command List Execute");
+    ETS_PROFILE_SCOPE("OpenGL Command List Execute");
     ExecutionState state;
     for (const auto& command : commands) {
         execute_command(state, command);
@@ -232,17 +232,17 @@ void CommandBufferExecutorOpenGL::execute_command(
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::EndRenderPass>
             ) {
-                FEI_GL_CALL(glBindFramebuffer(GL_FRAMEBUFFER, 0));
+                ETS_GL_CALL(glBindFramebuffer(GL_FRAMEBUFFER, 0));
             } else if constexpr (
                 std::is_same_v<CommandT, ogl_cmd::SetViewport>
             ) {
-                FEI_GL_CALL(glViewport(
+                ETS_GL_CALL(glViewport(
                     cmd.x,
                     cmd.y,
                     to_gl_sizei(cmd.w),
                     to_gl_sizei(cmd.h)
                 ));
-                FEI_GL_CALL(glScissor(
+                ETS_GL_CALL(glScissor(
                     cmd.x,
                     cmd.y,
                     to_gl_sizei(cmd.w),
@@ -266,7 +266,7 @@ void CommandBufferExecutorOpenGL::execute_command(
                     state.viewport_y +
                     static_cast<std::int32_t>(state.viewport_height) - cmd.y -
                     static_cast<std::int32_t>(cmd.h);
-                FEI_GL_CALL(glScissor(
+                ETS_GL_CALL(glScissor(
                     state.viewport_x + cmd.x,
                     scissor_y,
                     to_gl_sizei(cmd.w),
@@ -294,7 +294,7 @@ void CommandBufferExecutorOpenGL::execute_command(
                     state.draw_elements_type != element_type ||
                     state.index_buffer_offset != cmd.offset) {
                     buffer_gl->ensure_created();
-                    FEI_GL_CALL(
+                    ETS_GL_CALL(
                         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_gl->id())
                     );
 
@@ -332,8 +332,8 @@ void CommandBufferExecutorOpenGL::execute_command(
                 std::is_same_v<CommandT, ogl_cmd::BeginGpuProfileZone>
             ) {
                 GLuint query = 0;
-                FEI_GL_CALL(glGenQueries(1, &query));
-                FEI_GL_CALL(glQueryCounter(query, GL_TIMESTAMP));
+                ETS_GL_CALL(glGenQueries(1, &query));
+                ETS_GL_CALL(glQueryCounter(query, GL_TIMESTAMP));
                 state.active_gpu_profile_zones.push_back(
                     ExecutionState::ActiveGpuProfileZone {
                         .name = cmd.name,
@@ -349,8 +349,8 @@ void CommandBufferExecutorOpenGL::execute_command(
                 auto active = std::move(state.active_gpu_profile_zones.back());
                 state.active_gpu_profile_zones.pop_back();
                 GLuint query = 0;
-                FEI_GL_CALL(glGenQueries(1, &query));
-                FEI_GL_CALL(glQueryCounter(query, GL_TIMESTAMP));
+                ETS_GL_CALL(glGenQueries(1, &query));
+                ETS_GL_CALL(glQueryCounter(query, GL_TIMESTAMP));
                 m_device.enqueue_gpu_profile_query(
                     std::move(active.name),
                     active.begin_query,
@@ -426,13 +426,13 @@ void CommandBufferExecutorOpenGL::execute_begin_render_pass(
         // Attachment load operations must not inherit raster state from the
         // previous pass. In particular, the ImGui overlay leaves scissor
         // enabled and depth writes disabled at the end of each frame.
-        FEI_GL_CALL(glDisable(GL_SCISSOR_TEST));
+        ETS_GL_CALL(glDisable(GL_SCISSOR_TEST));
     }
 
     for (size_t i = 0; i < desc.color_attachments.size(); ++i) {
         const auto& att = desc.color_attachments[i];
         if (att.load_op == LoadOp::Clear) {
-            FEI_GL_CALL(glColorMaski(
+            ETS_GL_CALL(glColorMaski(
                 static_cast<GLuint>(i),
                 GL_TRUE,
                 GL_TRUE,
@@ -450,11 +450,11 @@ void CommandBufferExecutorOpenGL::execute_begin_render_pass(
     if (desc.depth_stencil_attachment) {
         const auto& att = *desc.depth_stencil_attachment;
         if (clears_depth) {
-            FEI_GL_CALL(glDepthMask(GL_TRUE));
+            ETS_GL_CALL(glDepthMask(GL_TRUE));
         }
         if (clears_stencil) {
-            FEI_GL_CALL(glStencilMaskSeparate(GL_FRONT, 0xffffffffU));
-            FEI_GL_CALL(glStencilMaskSeparate(GL_BACK, 0xffffffffU));
+            ETS_GL_CALL(glStencilMaskSeparate(GL_FRONT, 0xffffffffU));
+            ETS_GL_CALL(glStencilMaskSeparate(GL_BACK, 0xffffffffU));
         }
         if (att.depth_load_op == LoadOp::Clear &&
             att.stencil_load_op == LoadOp::Clear) {
@@ -479,7 +479,7 @@ void CommandBufferExecutorOpenGL::execute_set_framebuffer(
     auto framebuffer_gl =
         std::static_pointer_cast<const FramebufferOpenGL>(framebuffer);
     framebuffer_gl->ensure_created();
-    FEI_GL_CALL(glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_gl->id()));
+    ETS_GL_CALL(glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_gl->id()));
     if (framebuffer_gl->id() == 0) {
         set_default_framebuffer_draw_buffer();
     }
@@ -512,7 +512,7 @@ void CommandBufferExecutorOpenGL::execute_set_render_pipeline(
         );
     }
 
-    FEI_GL_CALL(glUseProgram(pipeline_gl->program()));
+    ETS_GL_CALL(glUseProgram(pipeline_gl->program()));
 
     const auto& blend_state = pipeline_gl->blend_state();
     const auto color_attachment_count = pipeline_gl->color_attachment_count();
@@ -532,23 +532,23 @@ void CommandBufferExecutorOpenGL::execute_set_render_pipeline(
                 blend_state.attachment_states
                     [blend_state.attachment_states.size() == 1 ? 0 : index];
         if (att.enabled) {
-            FEI_GL_CALL(glEnablei(GL_BLEND, index));
-            FEI_GL_CALL(glBlendFuncSeparatei(
+            ETS_GL_CALL(glEnablei(GL_BLEND, index));
+            ETS_GL_CALL(glBlendFuncSeparatei(
                 index,
                 to_gl_blend_factor(att.source_color_factor),
                 to_gl_blend_factor(att.destination_color_factor),
                 to_gl_blend_factor(att.source_alpha_factor),
                 to_gl_blend_factor(att.destination_alpha_factor)
             ));
-            FEI_GL_CALL(glBlendEquationSeparatei(
+            ETS_GL_CALL(glBlendEquationSeparatei(
                 index,
                 to_gl_blend_function(att.color_function),
                 to_gl_blend_function(att.alpha_function)
             ));
         } else {
-            FEI_GL_CALL(glDisablei(GL_BLEND, index));
+            ETS_GL_CALL(glDisablei(GL_BLEND, index));
         }
-        FEI_GL_CALL(glColorMaski(
+        ETS_GL_CALL(glColorMaski(
             index,
             color_mask_contains(att.color_write_mask, ColorWriteMask::Red),
             color_mask_contains(att.color_write_mask, ColorWriteMask::Green),
@@ -559,26 +559,26 @@ void CommandBufferExecutorOpenGL::execute_set_render_pipeline(
 
     const auto& depth_stencil_state = pipeline_gl->depth_stencil_state();
     if (depth_stencil_state.depth_test_enabled) {
-        FEI_GL_CALL(glEnable(GL_DEPTH_TEST));
-        FEI_GL_CALL(glDepthFunc(
+        ETS_GL_CALL(glEnable(GL_DEPTH_TEST));
+        ETS_GL_CALL(glDepthFunc(
             to_gl_compare_function(depth_stencil_state.depth_comparison)
         ));
     } else {
-        FEI_GL_CALL(glDisable(GL_DEPTH_TEST));
+        ETS_GL_CALL(glDisable(GL_DEPTH_TEST));
     }
-    FEI_GL_CALL(glDepthMask(depth_stencil_state.depth_write_enabled));
+    ETS_GL_CALL(glDepthMask(depth_stencil_state.depth_write_enabled));
 
     const auto& rasterizer_state = pipeline_gl->rasterizer_state();
     if (rasterizer_state.cull_mode == CullMode::None) {
-        FEI_GL_CALL(glDisable(GL_CULL_FACE));
+        ETS_GL_CALL(glDisable(GL_CULL_FACE));
     } else {
-        FEI_GL_CALL(glEnable(GL_CULL_FACE));
-        FEI_GL_CALL(glCullFace(to_gl_cull_mode(rasterizer_state.cull_mode)));
+        ETS_GL_CALL(glEnable(GL_CULL_FACE));
+        ETS_GL_CALL(glCullFace(to_gl_cull_mode(rasterizer_state.cull_mode)));
     }
     if (rasterizer_state.scissor_test_enabled) {
-        FEI_GL_CALL(glEnable(GL_SCISSOR_TEST));
+        ETS_GL_CALL(glEnable(GL_SCISSOR_TEST));
     } else {
-        FEI_GL_CALL(glDisable(GL_SCISSOR_TEST));
+        ETS_GL_CALL(glDisable(GL_SCISSOR_TEST));
     }
 
     state.pipeline = std::move(pipeline);
@@ -609,7 +609,7 @@ void CommandBufferExecutorOpenGL::execute_set_compute_pipeline(
         );
     }
 
-    FEI_GL_CALL(glUseProgram(pipeline_gl->program()));
+    ETS_GL_CALL(glUseProgram(pipeline_gl->program()));
 
     state.pipeline = std::move(pipeline);
 }
@@ -634,12 +634,12 @@ void CommandBufferExecutorOpenGL::execute_set_vertex_buffer(
         return;
     }
 
-    FEI_GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, buffer_gl->id()));
+    ETS_GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, buffer_gl->id()));
     for (auto& layout : pipeline_gl->vertex_layouts()) {
         for (auto& attr : layout.attributes) {
             auto location = static_cast<GLuint>(attr.location);
-            FEI_GL_CALL(glEnableVertexAttribArray(location));
-            FEI_GL_CALL(glVertexAttribPointer(
+            ETS_GL_CALL(glEnableVertexAttribArray(location));
+            ETS_GL_CALL(glVertexAttribPointer(
                 location,
                 to_gl_attribute_size(attr.format),
                 to_gl_attribute_type(attr.format),
@@ -672,7 +672,7 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
     auto gl_resource_set =
         std::static_pointer_cast<const ResourceSetOpenGL>(resource_set);
     if (slot >= gl_pipeline->resource_layouts().size()) {
-        fei::fatal(
+        ets::fatal(
             "Resource set slot {} out of range (max {})",
             slot,
             gl_pipeline->resource_layouts().size()
@@ -753,7 +753,7 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                     texture_gl->ensure_created();
                     auto& info =
                         std::get<PipelineOpenGL::TextureBinding>(binding_info);
-                    FEI_GL_CALL(glBindTextureUnit(info.unit, texture_gl->id()));
+                    ETS_GL_CALL(glBindTextureUnit(info.unit, texture_gl->id()));
                     break;
                 }
                 auto texture_view = m_device.get_texture_view(resource);
@@ -764,7 +764,7 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                 texture_view_gl->ensure_created();
                 auto& info =
                     std::get<PipelineOpenGL::TextureBinding>(binding_info);
-                FEI_GL_CALL(
+                ETS_GL_CALL(
                     glBindTextureUnit(info.unit, texture_view_gl->id())
                 );
                 break;
@@ -782,7 +782,7 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                                    TextureUsage::Cubemap
                                ) ||
                                texture_view_gl->target_gl()->layer() > 1;
-                FEI_GL_CALL(glBindImageTexture(
+                ETS_GL_CALL(glBindImageTexture(
                     info.unit,
                     texture_view_gl->id(),
                     0,
@@ -813,12 +813,12 @@ void CommandBufferExecutorOpenGL::execute_set_resource_set(
                 auto& info =
                     std::get<PipelineOpenGL::SamplerBinding>(binding_info);
                 for (auto unit : info.units) {
-                    FEI_GL_CALL(glBindSampler(unit, sampler->id()));
+                    ETS_GL_CALL(glBindSampler(unit, sampler->id()));
                 }
                 break;
             }
             default:
-                fei::fatal(
+                ets::fatal(
                     "ResourceKind {} not supported in "
                     "CommandBufferOpenGL::set_resource_set",
                     static_cast<uint32>(kind)
@@ -854,7 +854,7 @@ void CommandBufferExecutorOpenGL::execute_update_buffer(
         );
     }
 
-    FEI_GL_CALL(glNamedBufferSubData(
+    ETS_GL_CALL(glNamedBufferSubData(
         buffer_gl->id(),
         static_cast<GLintptr>(offset),
         to_gl_sizeiptr(data.size()),
@@ -875,13 +875,13 @@ void CommandBufferExecutorOpenGL::execute_draw(
         std::static_pointer_cast<const PipelineOpenGL>(state.pipeline);
     pipeline_gl->ensure_created();
 
-    FEI_GL_CALL(glDrawArrays(
+    ETS_GL_CALL(glDrawArrays(
         to_gl_render_primitive(pipeline_gl->render_primitive()),
         static_cast<GLint>(start),
         static_cast<GLsizei>(count)
     ));
     if (pipeline_gl->memory_barriers() != 0) {
-        FEI_GL_CALL(glMemoryBarrier(pipeline_gl->memory_barriers()));
+        ETS_GL_CALL(glMemoryBarrier(pipeline_gl->memory_barriers()));
     }
 }
 
@@ -904,7 +904,7 @@ void CommandBufferExecutorOpenGL::execute_draw_indexed(
             index_element_size(state.draw_elements_type)
     );
 
-    FEI_GL_CALL(glDrawElementsBaseVertex(
+    ETS_GL_CALL(glDrawElementsBaseVertex(
         to_gl_render_primitive(pipeline_gl->render_primitive()),
         static_cast<GLsizei>(count),
         state.draw_elements_type,
@@ -912,7 +912,7 @@ void CommandBufferExecutorOpenGL::execute_draw_indexed(
         vertex_offset
     ));
     if (pipeline_gl->memory_barriers() != 0) {
-        FEI_GL_CALL(glMemoryBarrier(pipeline_gl->memory_barriers()));
+        ETS_GL_CALL(glMemoryBarrier(pipeline_gl->memory_barriers()));
     }
 }
 
@@ -929,14 +929,14 @@ void CommandBufferExecutorOpenGL::execute_dispatch(
     auto pipeline_gl =
         std::static_pointer_cast<const PipelineOpenGL>(state.pipeline);
     pipeline_gl->ensure_created();
-    FEI_GL_CALL(glDispatchCompute(
+    ETS_GL_CALL(glDispatchCompute(
         static_cast<GLuint>(group_x),
         static_cast<GLuint>(group_y),
         static_cast<GLuint>(group_z)
     ));
 
     if (pipeline_gl->memory_barriers() != 0) {
-        FEI_GL_CALL(glMemoryBarrier(pipeline_gl->memory_barriers()));
+        ETS_GL_CALL(glMemoryBarrier(pipeline_gl->memory_barriers()));
     }
 }
 
@@ -945,7 +945,7 @@ void CommandBufferExecutorOpenGL::execute_generate_mipmaps(
 ) {
     auto texture_gl = std::static_pointer_cast<const TextureOpenGL>(texture);
     texture_gl->ensure_created();
-    FEI_GL_CALL(glGenerateTextureMipmap(texture_gl->id()));
+    ETS_GL_CALL(glGenerateTextureMipmap(texture_gl->id()));
 }
 
 void CommandBufferExecutorOpenGL::execute_copy_texture(
@@ -961,7 +961,7 @@ void CommandBufferExecutorOpenGL::execute_copy_texture(
         std::max(command.dst_z, command.dst_base_array_layer);
     uint32 depth_or_layer_count = std::max(command.depth, command.layer_count);
 
-    FEI_GL_CALL(glCopyImageSubData(
+    ETS_GL_CALL(glCopyImageSubData(
         src_gl->id(),
         to_gl_texture_target(command.src->usage(), command.src->type()),
         static_cast<GLint>(command.src_mip_level),
@@ -980,4 +980,4 @@ void CommandBufferExecutorOpenGL::execute_copy_texture(
     ));
 }
 
-} // namespace fei
+} // namespace ets

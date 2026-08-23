@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 template<typename T>
     requires std::is_trivially_copyable_v<T>
@@ -90,4 +90,4 @@ class GpuVector {
     uint64 m_buffer_revision {0};
 };
 
-} // namespace fei
+} // namespace ets

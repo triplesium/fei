@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -77,4 +77,4 @@ class PlaytestRegistry {
 };
 
 } // namespace runtime_protocol
-} // namespace fei
+} // namespace ets

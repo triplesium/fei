@@ -10,7 +10,7 @@
 
 #include <string>
 
-namespace fei::snapshot_runtime_asset {
+namespace ets::snapshot_runtime_asset {
 namespace {
 
 snapshot::SnapshotError configuration_error(std::string message) {
@@ -74,4 +74,4 @@ configure_asset_adapters(World& world, snapshot::SnapshotRegistry& registry) {
     return {};
 }
 
-} // namespace fei::snapshot_runtime_asset
+} // namespace ets::snapshot_runtime_asset

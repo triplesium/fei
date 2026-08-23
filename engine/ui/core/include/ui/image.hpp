@@ -8,15 +8,15 @@
 #include "math/vector.hpp"
 #include "refl/reflect.hpp"
 
-namespace fei::ui {
+namespace ets::ui {
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class NodeImageMode {
     Auto,
     Stretch,
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct ImageNode {
     Handle<Image> image;
     Color4F color {1.0f, 1.0f, 1.0f, 1.0f};
@@ -26,11 +26,11 @@ struct ImageNode {
     bool flip_y {false};
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct ImageNodeSize {
     Vector2 size;
 
     bool operator==(const ImageNodeSize&) const = default;
 };
 
-} // namespace fei::ui
+} // namespace ets::ui

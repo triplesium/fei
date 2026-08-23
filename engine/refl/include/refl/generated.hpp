@@ -1,7 +1,7 @@
 #pragma once
 
-namespace fei {
+namespace ets {
 
 void register_generated_reflection();
 
-} // namespace fei
+} // namespace ets

@@ -9,7 +9,7 @@
 #include <span>
 #include <vulkan/vulkan_core.h>
 
-namespace fei {
+namespace ets {
 
 class VulkanDeviceState;
 
@@ -47,4 +47,4 @@ class BufferVulkan : public Buffer {
     void update(std::uint32_t offset, const void* data, std::uint32_t size);
 };
 
-} // namespace fei
+} // namespace ets

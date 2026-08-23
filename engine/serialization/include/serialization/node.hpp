@@ -5,7 +5,7 @@
 #include <variant>
 #include <vector>
 
-namespace fei::serialization {
+namespace ets::serialization {
 
 struct SerializedField;
 
@@ -92,4 +92,4 @@ find_field(const SerializedNode::Object& object, const std::string& name);
 SerializedField*
 find_field(SerializedNode::Object& object, const std::string& name);
 
-} // namespace fei::serialization
+} // namespace ets::serialization

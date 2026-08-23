@@ -60,7 +60,7 @@ export function EditorTopbar({
                 <span className="grid size-[25px] shrink-0 place-items-center rounded-md border border-primary/40 bg-primary/10 text-[11px] font-extrabold text-primary shadow-[inset_0_0_16px_rgb(109_158_255/0.08)]">
                     F
                 </span>
-                <span className="text-[11px] font-extrabold tracking-[0.13em] max-[900px]:hidden">FEI</span>
+                <span className="text-[11px] font-extrabold tracking-[0.13em] max-[900px]:hidden">ENTISIUM</span>
             </div>
 
             <nav className="flex items-center gap-px max-[900px]:hidden" aria-label="Application menu">

@@ -25,11 +25,11 @@
 #include <utility>
 #include <vector>
 
-namespace fei::detail {
+namespace ets::detail {
 namespace {
 
-constexpr const char* c_borrowed_metatable = "fei.borrowed";
-constexpr const char* c_type_token_metatable = "fei.type";
+constexpr const char* c_borrowed_metatable = "ets.borrowed";
+constexpr const char* c_type_token_metatable = "ets.type";
 
 struct LuauObject {
     Ref ref;
@@ -1007,4 +1007,4 @@ void push_luau_borrowed_ref(
     push_object(state, ref, {}, &scope, token);
 }
 
-} // namespace fei::detail
+} // namespace ets::detail

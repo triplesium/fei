@@ -8,8 +8,8 @@
 #include <type_traits>
 #include <utility>
 
-using namespace fei;
-using namespace fei::rendering_test;
+using namespace ets;
+using namespace ets::rendering_test;
 
 static_assert(std::is_same_v<
               decltype(std::declval<GpuImage&>().texture()),

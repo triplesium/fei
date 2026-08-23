@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
 namespace {
 
@@ -263,4 +263,4 @@ void list_box_self_update(
     }
 }
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

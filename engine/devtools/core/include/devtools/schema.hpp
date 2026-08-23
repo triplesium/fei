@@ -6,9 +6,9 @@
 #include <string>
 #include <vector>
 
-namespace fei::devtools {
+namespace ets::devtools {
 
 Result<std::string, std::string>
 build_schema_json(const std::vector<TypeId>& roots);
 
-} // namespace fei::devtools
+} // namespace ets::devtools

@@ -7,7 +7,7 @@
 #include <string>
 #include <unordered_set>
 
-namespace fei::reflgen {
+namespace ets::reflgen {
 namespace {
 
 [[nodiscard]] bool starts_with(std::string_view text, std::string_view prefix) {
@@ -213,4 +213,4 @@ void filter_codegen_unsupported_members(ParseResult& result) {
     }
 }
 
-} // namespace fei::reflgen
+} // namespace ets::reflgen

@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -62,7 +62,7 @@ MeshLoader::load(Reader& reader, const LoadContext& context) {
     }
 
     if (!obj_reader.Warning().empty()) {
-        fei::warn("TinyObjReader: {}", obj_reader.Warning());
+        ets::warn("TinyObjReader: {}", obj_reader.Warning());
     }
 
     const auto& attrib = obj_reader.GetAttrib();
@@ -74,7 +74,7 @@ MeshLoader::load(Reader& reader, const LoadContext& context) {
     }
 
     if (shapes.size() > 1) {
-        fei::warn(
+        ets::warn(
             "MeshLoader: only the first shape is loaded, {} shapes found",
             shapes.size()
         );
@@ -196,4 +196,4 @@ MeshLoader::load(Reader& reader, const LoadContext& context) {
     return mesh;
 }
 
-} // namespace fei
+} // namespace ets

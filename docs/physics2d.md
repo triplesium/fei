@@ -1,7 +1,7 @@
 # 2D Physics
 
-`fei-physics2d` follows Bevy's ECS integration style while delegating collision
-detection and constraint solving to Box2D 3.1.1. One FEI world unit represents
+`entisium-physics2d` follows Bevy's ECS integration style while delegating collision
+detection and constraint solving to Box2D 3.1.1. One ENTISIUM world unit represents
 one meter.
 
 Add `PhysicsPlugin2d`, then give an entity a `Transform2d`, `RigidBody2d`, and

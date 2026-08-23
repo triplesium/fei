@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -374,4 +374,4 @@ TextureViewVulkan::~TextureViewVulkan() {
     }
 }
 
-} // namespace fei
+} // namespace ets

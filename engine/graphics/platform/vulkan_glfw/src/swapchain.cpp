@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -368,7 +368,7 @@ void SwapchainVulkanGlfw::destroy_swapchain_resources() const {
 }
 
 bool SwapchainVulkanGlfw::recreate_swapchain() const {
-    FEI_PROFILE_SCOPE("Vulkan GLFW Recreate Swapchain");
+    ETS_PROFILE_SCOPE("Vulkan GLFW Recreate Swapchain");
 
     if (m_desired_width == 0 || m_desired_height == 0) {
         return false;
@@ -588,7 +588,7 @@ void SwapchainVulkanGlfw::resize(uint32 width, uint32 height) {
 }
 
 void SwapchainVulkanGlfw::present() const {
-    FEI_PROFILE_SCOPE("Vulkan GLFW Present");
+    ETS_PROFILE_SCOPE("Vulkan GLFW Present");
 
     std::scoped_lock lock(m_mutex);
     if (!m_acquired || m_swapchain == VK_NULL_HANDLE) {
@@ -622,4 +622,4 @@ void SwapchainVulkanGlfw::present() const {
     check_vk(result, "vkQueuePresentKHR");
 }
 
-} // namespace fei
+} // namespace ets

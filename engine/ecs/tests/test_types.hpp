@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace fei::ecs_test {
+namespace ets::ecs_test {
 
 struct Position {
     float x, y;
@@ -142,4 +142,4 @@ inline void scheduled_update_events(ResRW<Events<GameEvent>> events) {
     events->update();
 }
 
-} // namespace fei::ecs_test
+} // namespace ets::ecs_test

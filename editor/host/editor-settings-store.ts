@@ -46,7 +46,7 @@ function isUnavailablePathError(error: unknown): boolean {
 }
 
 export function defaultEditorSettingsPaths(): readonly string[] {
-    const configuredPath = process.env.FEI_EDITOR_SETTINGS_PATH?.trim();
+    const configuredPath = process.env.ETS_EDITOR_SETTINGS_PATH?.trim();
     if (configuredPath) return [resolve(configuredPath)];
 
     const applicationData = process.env.APPDATA?.trim();
@@ -55,9 +55,9 @@ export function defaultEditorSettingsPaths(): readonly string[] {
     const localRoot = localApplicationData || join(homedir(), "AppData", "Local");
     return Array.from(
         new Set([
-            join(roamingRoot, "Fei", "editor-settings.json"),
-            join(localRoot, "Fei", "editor-settings.json"),
-            resolve(process.cwd(), ".fei", "editor-settings.json"),
+            join(roamingRoot, "Entisium", "editor-settings.json"),
+            join(localRoot, "Entisium", "editor-settings.json"),
+            resolve(process.cwd(), ".entisium", "editor-settings.json"),
         ]),
     );
 }
@@ -131,7 +131,7 @@ export class FileEditorSettingsStore implements EditorSettingsStore {
                 await unlink(temporaryPath).catch(() => undefined);
                 lastError = error;
                 if (this.activePath || !isUnavailablePathError(error)) throw error;
-                console.warn(`[fei editor] settings path is unavailable: ${path}`);
+                console.warn(`[entisium editor] settings path is unavailable: ${path}`);
             }
         }
         throw lastError ?? new Error("No writable Editor settings path is available.");

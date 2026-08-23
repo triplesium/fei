@@ -21,7 +21,7 @@
 #include <variant>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 using ShaderSourceKey = std::variant<AssetId, AssetPath>;
 
@@ -34,20 +34,20 @@ struct ShaderVariantKey {
     bool operator==(const ShaderVariantKey&) const = default;
 };
 
-} // namespace fei
+} // namespace ets
 
 namespace std {
 template<>
-struct hash<fei::ShaderVariantKey> { // NOLINT(readability-identifier-naming)
-    std::size_t operator()(const fei::ShaderVariantKey& key) const {
+struct hash<ets::ShaderVariantKey> { // NOLINT(readability-identifier-naming)
+    std::size_t operator()(const ets::ShaderVariantKey& key) const {
         std::size_t shader_hash = key.shader.index();
         std::visit(
             [&](const auto& shader) {
-                fei::hash_combine(shader_hash, shader);
+                ets::hash_combine(shader_hash, shader);
             },
             key.shader
         );
-        return fei::hash_combine_all(
+        return ets::hash_combine_all(
             shader_hash,
             key.stage,
             key.entry,
@@ -57,7 +57,7 @@ struct hash<fei::ShaderVariantKey> { // NOLINT(readability-identifier-naming)
 };
 } // namespace std
 
-namespace fei {
+namespace ets {
 
 class ShaderCache {
   private:
@@ -194,4 +194,4 @@ void extract_shaders(
     ResRW<ShaderCache> shader_cache
 );
 
-} // namespace fei
+} // namespace ets

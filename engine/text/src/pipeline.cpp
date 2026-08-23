@@ -7,7 +7,7 @@
 #include <cstring>
 #include <memory>
 
-namespace fei::text {
+namespace ets::text {
 
 namespace {
 
@@ -447,4 +447,4 @@ void TextPipeline::layout(
     }
 }
 
-} // namespace fei::text
+} // namespace ets::text

@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class Type;
 class World;
@@ -92,4 +92,4 @@ bool remove_script_module_systems(
     const std::vector<SystemHandle>& systems
 );
 
-} // namespace fei
+} // namespace ets

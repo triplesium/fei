@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace fei::reflgen {
+namespace ets::reflgen {
 
 void generate_cpp_file(
     const ParseResult& result,
@@ -20,4 +20,4 @@ void generate_aggregate_cpp_file(
     const std::filesystem::path& output_file
 );
 
-} // namespace fei::reflgen
+} // namespace ets::reflgen

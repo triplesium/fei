@@ -14,7 +14,7 @@
 #include <utility>
 #include <yaml-cpp/yaml.h> // IWYU pragma: keep
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -358,7 +358,7 @@ parse_scene_document(std::string_view source) {
             return failure(scene_error(
                 SceneDocumentErrorKind::InvalidDocument,
                 "$.format",
-                "Scene format must be 'fei.scene'"
+                "Scene format must be 'entisium.scene'"
             ));
         }
         if (!version.IsScalar() || !entities.IsSequence()) {
@@ -654,4 +654,4 @@ SceneDocumentLoader::load(Reader& reader, const LoadContext& context) {
     return std::make_unique<SceneDocument>(std::move(*document));
 }
 
-} // namespace fei
+} // namespace ets

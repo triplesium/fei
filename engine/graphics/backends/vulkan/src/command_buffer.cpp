@@ -17,7 +17,7 @@
 #include <string_view>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -1951,4 +1951,4 @@ void CommandBufferVulkan::mark_completed() {
     }
 }
 
-} // namespace fei
+} // namespace ets

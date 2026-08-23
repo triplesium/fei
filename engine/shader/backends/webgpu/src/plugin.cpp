@@ -5,7 +5,7 @@
 
 #include <stdexcept>
 
-namespace fei {
+namespace ets {
 namespace {
 
 class WebGpuShaderCompilerProvider final : public ShaderCompilerProvider {
@@ -30,4 +30,4 @@ void WebGpuShaderPlugin::setup(App& app) {
     );
 }
 
-} // namespace fei
+} // namespace ets

@@ -1,6 +1,6 @@
 #include "input_focus/focus.hpp"
 
-namespace fei::input_focus {
+namespace ets::input_focus {
 
 void clear_invalid_focus(Query<Entity> entities, ResRW<InputFocus> focus) {
     const auto current =
@@ -86,4 +86,4 @@ bool is_focus_within_visible(
     return visible.visible && is_focus_within(focus, entity, parents);
 }
 
-} // namespace fei::input_focus
+} // namespace ets::input_focus

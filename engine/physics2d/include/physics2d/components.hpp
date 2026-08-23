@@ -6,16 +6,16 @@
 #include <cstdint>
 #include <limits>
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class RigidBodyType2d : std::uint8_t {
     Static,
     Kinematic,
     Dynamic,
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct RigidBody2d {
     RigidBodyType2d type {RigidBodyType2d::Dynamic};
     float linear_damping {0.0f};
@@ -27,13 +27,13 @@ struct RigidBody2d {
     bool operator==(const RigidBody2d&) const = default;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class ColliderShape2d : std::uint8_t {
     Box,
     Circle,
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct Collider2d {
     ColliderShape2d shape {ColliderShape2d::Box};
     Vector2 half_extents {0.5f, 0.5f};
@@ -46,7 +46,7 @@ struct Collider2d {
     bool operator==(const Collider2d&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct PhysicsMaterial2d {
     float density {1.0f};
     float friction {0.6f};
@@ -58,7 +58,7 @@ struct PhysicsMaterial2d {
 // A pair interacts when both sides accept the other's membership bits.
 // A shared non-zero group overrides the bit masks: positive always interacts,
 // negative never interacts.
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct CollisionLayers2d {
     std::uint64_t memberships {std::numeric_limits<std::uint64_t>::max()};
     std::uint64_t filters {std::numeric_limits<std::uint64_t>::max()};
@@ -68,17 +68,17 @@ struct CollisionLayers2d {
 };
 
 // Generates overlap events without applying a collision response.
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct Sensor2d {};
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct LinearVelocity2d {
     Vector2 value {Vector2::Zero};
 
     bool operator==(const LinearVelocity2d&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct AngularVelocity2d {
     // Radians per second, matching Box2D.
     float value {0.0f};
@@ -86,7 +86,7 @@ struct AngularVelocity2d {
     bool operator==(const AngularVelocity2d&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct PhysicsPose2d {
     Vector2 position {Vector2::Zero};
     // Degrees, matching Transform2d.
@@ -95,7 +95,7 @@ struct PhysicsPose2d {
     bool operator==(const PhysicsPose2d&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct PreviousPhysicsPose2d {
     Vector2 position {Vector2::Zero};
     // Degrees, matching Transform2d.
@@ -104,15 +104,15 @@ struct PreviousPhysicsPose2d {
     bool operator==(const PreviousPhysicsPose2d&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct PhysicsInterpolation2d {};
 
 // A one-shot request consumed before the next Box2D step. Resetting both pose
 // samples prevents interpolation from sweeping through the old position.
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct PhysicsTeleport2d {
     Vector2 position {Vector2::Zero};
     float rotation {0.0f};
 };
 
-} // namespace fei
+} // namespace ets

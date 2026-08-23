@@ -16,7 +16,7 @@
 #include <string_view>
 #include <utility>
 
-namespace fei::devtools::scripting_lua {
+namespace ets::devtools::scripting_lua {
 namespace {
 
 struct LuaEval {
@@ -101,4 +101,4 @@ void ProviderPlugin::setup(App& app) {
 
 void ProviderPlugin::finish(App&) {}
 
-} // namespace fei::devtools::scripting_lua
+} // namespace ets::devtools::scripting_lua

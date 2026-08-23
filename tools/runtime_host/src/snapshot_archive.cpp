@@ -22,7 +22,7 @@
 #    include <mach-o/dyld.h>
 #endif
 
-namespace fei::runtime_host {
+namespace ets::runtime_host {
 namespace {
 
 class StableDigest {
@@ -76,7 +76,7 @@ bool is_script_file(const std::filesystem::path& path) {
 Result<std::string, std::string>
 script_digest(const std::filesystem::path& asset_root) {
     StableDigest digest;
-    digest.append("fei.project-scripts.v1");
+    digest.append("entisium.project-scripts.v1");
 
     std::error_code error;
     if (!std::filesystem::exists(asset_root, error)) {
@@ -191,7 +191,7 @@ Result<std::string, std::string> current_runtime_build_id() {
     }
 
     StableDigest digest;
-    digest.append("fei.runtime-executable.v1");
+    digest.append("entisium.runtime-executable.v1");
     std::array<char, 64 * 1024> buffer {};
     while (stream) {
         stream.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
@@ -207,7 +207,7 @@ Result<std::string, std::string> current_runtime_build_id() {
             "Failed to hash runtime executable '" + path->string() + "'"
         );
     }
-    return "fei-runtime-host:" + digest.finish();
+    return "entisium-runtime-host:" + digest.finish();
 }
 
 Result<snapshot::SnapshotArchiveMetadata, std::string>
@@ -220,7 +220,7 @@ make_snapshot_archive_metadata(
     }
 
     StableDigest runtime;
-    runtime.append("fei.project-runtime.v1");
+    runtime.append("entisium.project-runtime.v1");
     runtime.append(project.config().name);
     runtime.append(project.config().asset_directory.generic_string());
     for (const auto& plugin : project.config().runtime.plugins) {
@@ -245,4 +245,4 @@ make_snapshot_archive_metadata(
     };
 }
 
-} // namespace fei::runtime_host
+} // namespace ets::runtime_host

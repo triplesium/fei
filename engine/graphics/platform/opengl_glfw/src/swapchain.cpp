@@ -6,7 +6,7 @@
 
 #include <GLFW/glfw3.h>
 
-namespace fei {
+namespace ets {
 
 SwapchainOpenGLGlfw::SwapchainOpenGLGlfw(
     GLFWwindow* window,
@@ -48,8 +48,8 @@ void SwapchainOpenGLGlfw::resize(uint32 width, uint32 height) {
 }
 
 void SwapchainOpenGLGlfw::present() const {
-    FEI_PROFILE_SCOPE("OpenGL GLFW Swap Buffers");
+    ETS_PROFILE_SCOPE("OpenGL GLFW Swap Buffers");
     glfwSwapBuffers(m_window);
 }
 
-} // namespace fei
+} // namespace ets

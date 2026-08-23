@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::devtools {
+namespace ets::devtools {
 namespace {
 
 using Json = nlohmann::json;
@@ -304,4 +304,4 @@ build_schema_json(const std::vector<TypeId>& roots) {
     return SchemaBuilder {}.build(roots);
 }
 
-} // namespace fei::devtools
+} // namespace ets::devtools

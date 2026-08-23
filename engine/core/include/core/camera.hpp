@@ -1,9 +1,9 @@
 #pragma once
 #include "refl/reflect.hpp"
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct Camera3d {
     float fov_y {45.0f};
     float aspect_ratio {16.0f / 9.0f};
@@ -11,4 +11,4 @@ struct Camera3d {
     float far_plane {1000.0f};
 };
 
-} // namespace fei
+} // namespace ets

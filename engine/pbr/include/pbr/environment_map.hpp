@@ -13,7 +13,7 @@
 #include <memory>
 #include <unordered_map>
 
-namespace fei {
+namespace ets {
 
 struct GeneratedEquirectEnvironmentMap {
     Handle<Image> equirect_image;
@@ -73,10 +73,10 @@ void generate_env_maps(
     ResRW<RenderEnvironmentMapCache> cache
 );
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class EnvironmentMapPlugin : public Plugin {
   public:
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

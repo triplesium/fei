@@ -7,7 +7,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -60,4 +60,4 @@ concept InspectionProvider = requires(
 };
 
 } // namespace runtime_inspection
-} // namespace fei
+} // namespace ets

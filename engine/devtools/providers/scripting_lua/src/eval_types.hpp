@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace fei::devtools::scripting_lua {
+namespace ets::devtools::scripting_lua {
 
 inline constexpr std::size_t c_default_max_source_bytes =
     std::size_t {64} * 1024;
@@ -16,12 +16,12 @@ inline constexpr std::size_t c_default_max_output_bytes =
 inline constexpr std::uint64_t c_default_instruction_limit = 1'000'000;
 inline constexpr std::uint32_t c_default_time_limit_ms = 100;
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct EvalRequest {
     std::string source;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct EvalResponse {
     bool ok {false};
     std::vector<std::string> output;
@@ -36,4 +36,4 @@ struct EvalLimits {
     std::uint32_t time_limit_ms {c_default_time_limit_ms};
 };
 
-} // namespace fei::devtools::scripting_lua
+} // namespace ets::devtools::scripting_lua

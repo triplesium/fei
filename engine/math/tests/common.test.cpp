@@ -2,8 +2,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace fei;
-using namespace fei::test;
+using namespace ets;
+using namespace ets::test;
 
 TEST_CASE("Math common helpers compute scalar results", "[math][common]") {
     REQUIRE_THAT(sqr(3.0f), WithinAbs(9.0f, EPSILON));

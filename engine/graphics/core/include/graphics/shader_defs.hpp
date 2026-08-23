@@ -8,7 +8,7 @@
 #include <variant>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 using ShaderDefValue = std::variant<bool, std::int32_t, std::uint32_t>;
 
@@ -73,18 +73,18 @@ inline ShaderDefs normalized_shader_defs(ShaderDefs defs) {
     return defs;
 }
 
-} // namespace fei
+} // namespace ets
 
 namespace std {
 template<>
-struct hash<fei::ShaderDefVal> { // NOLINT(readability-identifier-naming)
-    std::size_t operator()(const fei::ShaderDefVal& def) const {
+struct hash<ets::ShaderDefVal> { // NOLINT(readability-identifier-naming)
+    std::size_t operator()(const ets::ShaderDefVal& def) const {
         std::size_t seed = 0;
-        fei::hash_combine(seed, def.name);
-        fei::hash_combine(seed, def.value.index());
+        ets::hash_combine(seed, def.name);
+        ets::hash_combine(seed, def.value.index());
         std::visit(
             [&](const auto& value) {
-                fei::hash_combine(seed, value);
+                ets::hash_combine(seed, value);
             },
             def.value
         );

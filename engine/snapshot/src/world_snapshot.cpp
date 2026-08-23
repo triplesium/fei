@@ -15,7 +15,7 @@
 #include <unordered_set>
 #include <utility>
 
-namespace fei::snapshot {
+namespace ets::snapshot {
 namespace {
 
 using EntityToSnapshot = std::unordered_map<Entity, SnapshotEntityId>;
@@ -1588,4 +1588,4 @@ Result<RestoreResult, SnapshotError> restore(
     return restored;
 }
 
-} // namespace fei::snapshot
+} // namespace ets::snapshot

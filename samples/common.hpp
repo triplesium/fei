@@ -7,10 +7,10 @@
 #include "input/input.hpp"
 #include "window_glfw/input.hpp"
 
-class SamplePlugin : public fei::Plugin {
+class SamplePlugin : public ets::Plugin {
   public:
-    void setup(fei::App& app) override {
-        using namespace fei;
+    void setup(ets::App& app) override {
+        using namespace ets;
         app.add_plugin<AssetsPlugin>()
             .add_plugin<OpenGLGlfwPlugin>()
             .add_plugin<CorePlugin>()

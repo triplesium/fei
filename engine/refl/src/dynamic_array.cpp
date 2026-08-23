@@ -5,7 +5,7 @@
 #include <string>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
 DynamicArrayError make_error(
@@ -315,4 +315,4 @@ Status<DynamicArrayError> DynamicArray::erase(std::size_t index) {
     return {};
 }
 
-} // namespace fei
+} // namespace ets

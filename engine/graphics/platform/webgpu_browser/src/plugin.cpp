@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <memory>
 
-namespace fei {
+namespace ets {
 namespace {
 
 GraphicsSurfaceSize graphics_surface_size(const Window& window) {
@@ -60,4 +60,4 @@ void WebGpuBrowserPlugin::setup(App& app) {
         );
 }
 
-} // namespace fei
+} // namespace ets

@@ -4,7 +4,7 @@
 #include "graphics/resource.hpp"
 #include "rendering/components.hpp"
 
-namespace fei {
+namespace ets {
 
 void prepare_mesh_uniforms(
     Query<Entity, const Mesh3d, const GlobalTransform3d> query,
@@ -58,4 +58,4 @@ void prepare_mesh_uniforms(
     }
 }
 
-} // namespace fei
+} // namespace ets

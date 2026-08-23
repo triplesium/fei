@@ -5,7 +5,7 @@
 #include <optional>
 #include <string>
 
-namespace fei {
+namespace ets {
 
 struct ShaderCompileOutput;
 struct ShaderCompileRequest;
@@ -40,4 +40,4 @@ class ShaderArtifactCache {
     ) const;
 };
 
-} // namespace fei
+} // namespace ets

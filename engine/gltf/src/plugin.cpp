@@ -1,7 +1,7 @@
 #include "gltf/plugin.hpp"
 
-namespace fei {
+namespace ets {
 
 void GltfPlugin::setup(App& /*app*/) {}
 
-} // namespace fei
+} // namespace ets

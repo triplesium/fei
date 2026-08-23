@@ -10,7 +10,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -33,7 +33,7 @@ void resolve_global_transform_2d(
     while (true) {
         if (resolved.contains(current)) {
             auto item = transforms.get(current);
-            FEI_ASSERT(item);
+            ETS_ASSERT(item);
             parent_matrix = std::get<2>(*item).read().to_matrix();
             break;
         }
@@ -63,7 +63,7 @@ void resolve_global_transform_2d(
 
     for (const auto chain_entity : std::views::reverse(chain)) {
         auto item = transforms.get(chain_entity);
-        FEI_ASSERT(item);
+        ETS_ASSERT(item);
         parent_matrix = parent_matrix * std::get<1>(*item).model_matrix();
         auto& global_transform = std::get<2>(*item);
         if (global_transform.read().matrix != parent_matrix) {
@@ -92,7 +92,7 @@ void resolve_global_transform(
     while (true) {
         if (resolved.contains(current)) {
             auto item = transforms.get(current);
-            FEI_ASSERT(item);
+            ETS_ASSERT(item);
             parent_matrix = std::get<2>(*item).read().to_matrix();
             break;
         }
@@ -122,7 +122,7 @@ void resolve_global_transform(
 
     for (const auto chain_entity : std::views::reverse(chain)) {
         auto item = transforms.get(chain_entity);
-        FEI_ASSERT(item);
+        ETS_ASSERT(item);
         parent_matrix = parent_matrix * std::get<1>(*item).to_matrix();
         auto& global_transform = std::get<2>(*item);
         if (global_transform.read().matrix != parent_matrix) {
@@ -206,4 +206,4 @@ void TransformPlugin::setup(App& app) {
     );
 }
 
-} // namespace fei
+} // namespace ets

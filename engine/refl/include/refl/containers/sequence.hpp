@@ -6,16 +6,16 @@
 #include <cstddef>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 template<class Container, class Element>
 class VectorContainerAdapter final : public IndexedContainerAdapter {
   public:
     ContainerKind kind() const override { return ContainerKind::Sequence; }
 
-    TypeId container_type() const override { return fei::type_id<Container>(); }
+    TypeId container_type() const override { return ets::type_id<Container>(); }
 
-    TypeId element_type() const override { return fei::type_id<Element>(); }
+    TypeId element_type() const override { return ets::type_id<Element>(); }
 
     Result<std::size_t, ContainerError> size(Ref container) const override {
         auto result = detail::const_container<Container>(
@@ -260,9 +260,9 @@ class ArrayContainerAdapter final : public IndexedContainerAdapter {
   public:
     ContainerKind kind() const override { return ContainerKind::Sequence; }
 
-    TypeId container_type() const override { return fei::type_id<Container>(); }
+    TypeId container_type() const override { return ets::type_id<Container>(); }
 
-    TypeId element_type() const override { return fei::type_id<Element>(); }
+    TypeId element_type() const override { return ets::type_id<Element>(); }
 
     Result<std::size_t, ContainerError> size(Ref container) const override {
         auto result = detail::const_container<Container>(
@@ -381,9 +381,9 @@ class OptionalContainerAdapter final : public IndexedContainerAdapter {
   public:
     ContainerKind kind() const override { return ContainerKind::Optional; }
 
-    TypeId container_type() const override { return fei::type_id<Container>(); }
+    TypeId container_type() const override { return ets::type_id<Container>(); }
 
-    TypeId element_type() const override { return fei::type_id<Value>(); }
+    TypeId element_type() const override { return ets::type_id<Value>(); }
 
     Result<std::size_t, ContainerError> size(Ref container) const override {
         auto result = detail::const_container<Container>(
@@ -610,4 +610,4 @@ class OptionalContainerAdapter final : public IndexedContainerAdapter {
     }
 };
 
-} // namespace fei
+} // namespace ets

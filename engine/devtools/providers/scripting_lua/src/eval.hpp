@@ -7,7 +7,7 @@
 #include <memory>
 #include <string>
 
-namespace fei {
+namespace ets {
 
 class System;
 
@@ -22,4 +22,4 @@ std::unique_ptr<System> make_eval_system(
 );
 
 } // namespace devtools::scripting_lua
-} // namespace fei
+} // namespace ets

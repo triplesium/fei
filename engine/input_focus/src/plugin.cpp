@@ -5,7 +5,7 @@
 #include "input_focus/focus.hpp"
 #include "input_focus/tab_navigation.hpp"
 
-namespace fei::input_focus {
+namespace ets::input_focus {
 
 void InputFocusPlugin::dependencies(PluginDependencies& dependencies) const {
     dependencies.require<InputPlugin>();
@@ -39,4 +39,4 @@ void InputFocusPlugin::setup(App& app) {
         );
 }
 
-} // namespace fei::input_focus
+} // namespace ets::input_focus

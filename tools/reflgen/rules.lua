@@ -83,7 +83,7 @@ local function target_symbol_name(target_name)
 end
 
 local function reflected_target_enabled(target)
-    return target:values("fei.reflect") == true
+    return target:values("entisium.reflect") == true
 end
 
 local function reflect_link_owner(kind)
@@ -95,7 +95,7 @@ local function header_has_reflect_marker(header)
         return false
     end
     local content = io.readfile(header)
-    return content and content:find("FEI_REFLECT", 1, true) ~= nil
+    return content and content:find("ETS_REFLECT", 1, true) ~= nil
 end
 
 local function collect_package_include_dirs(include_dirs, target)
@@ -128,7 +128,7 @@ local function collect_recursive_include_dirs(include_dirs, target, visited)
 
     collect_target_include_dirs(include_dirs, target)
     for _, dep in ipairs(table.wrap(target:get("deps"))) do
-        if dep ~= "fei-reflgen" then
+        if dep ~= "entisium-reflgen" then
             local dep_target = project.target(dep)
             if dep_target then
                 collect_recursive_include_dirs(include_dirs, dep_target, visited)
@@ -141,7 +141,7 @@ local function collect_target_headers(headers, target)
     for _, header in ipairs(target:headerfiles()) do
         insert_unique_header(headers, header)
     end
-    for _, header in ipairs(table.wrap(target:values("fei.reflect.headers"))) do
+    for _, header in ipairs(table.wrap(target:values("entisium.reflect.headers"))) do
         insert_unique_header(headers, header)
     end
 end
@@ -161,7 +161,7 @@ local function reflection_headers(target)
 end
 
 local function file_entries(target)
-    local autogendir = target:values("fei.reflect.dir")
+    local autogendir = target:values("entisium.reflect.dir")
     if not autogendir then
         autogendir = path.join(os.projectdir(), "build/.gens", target:name(), "reflection")
     end
@@ -203,7 +203,7 @@ local function collect_reflected_targets(root_target)
         visited[target:name()] = true
 
         for _, dep in ipairs(table.wrap(target:get("deps"))) do
-            if dep ~= "fei-reflgen" then
+            if dep ~= "entisium-reflgen" then
                 visit(project.target(dep))
             end
         end
@@ -229,7 +229,7 @@ local function target_dependency_closure(target)
     local deps = {}
 
     local function visit(dep_name)
-        if dep_name == "fei-reflgen" or deps[dep_name] then
+        if dep_name == "entisium-reflgen" or deps[dep_name] then
             return
         end
 
@@ -325,7 +325,7 @@ local function validate_reflect_dependencies(target, inputs)
                     if not reported[report_key] then
                         reported[report_key] = true
                         raise(
-                            "fei.reflect: %s includes %s, but target %s does not depend on %s",
+                            "entisium.reflect: %s includes %s, but target %s does not depend on %s",
                             project_relative_path(header),
                             project_relative_path(included_file),
                             target:name(),
@@ -367,7 +367,7 @@ local function reflection_runtime_headers()
 end
 
 local function reflgen_program()
-    local target = assert(project.target("fei-reflgen"), "target fei-reflgen not found")
+    local target = assert(project.target("entisium-reflgen"), "target entisium-reflgen not found")
     local program = target:targetfile()
     if os.isfile(program) then
         return program
@@ -379,7 +379,7 @@ local function reflgen_program()
             return candidate
         end
     end
-    raise("missing fei-reflgen executable: %s", program)
+    raise("missing entisium-reflgen executable: %s", program)
 end
 
 local function reflgen_depfile(entry)
@@ -473,9 +473,9 @@ local function module_inputs(target)
     insert_unique(include_dirs, path.join(os.projectdir(), "engine"))
     collect_recursive_include_dirs(include_dirs, target)
     return {
-        module_file = target:values("fei.reflect.module_file"),
-        module_function = target:values("fei.reflect.module_function"),
-        module_marker_file = target:values("fei.reflect.module_marker_file"),
+        module_file = target:values("entisium.reflect.module_file"),
+        module_function = target:values("entisium.reflect.module_function"),
+        module_marker_file = target:values("entisium.reflect.module_marker_file"),
         headers = reflection_headers(target),
         include_dirs = include_dirs,
         entries = file_entries(target)
@@ -497,12 +497,12 @@ local function depfiles_with_reflgen(files)
 end
 
 local function aggregate_inputs(target)
-    local output_file = target:values("fei.reflect.aggregate_file")
+    local output_file = target:values("entisium.reflect.aggregate_file")
     local functions = {}
     local files = {}
     for _, reflected_target in ipairs(collect_reflected_targets(target)) do
-        local function_name = reflected_target:values("fei.reflect.module_function")
-        local module_file = reflected_target:values("fei.reflect.module_file")
+        local function_name = reflected_target:values("entisium.reflect.module_function")
+        local module_file = reflected_target:values("entisium.reflect.module_file")
         if function_name then
             table.insert(functions, function_name)
         end
@@ -528,12 +528,12 @@ local function write_stamp_file(stamp_file)
 end
 
 local function cleanup_legacy_runner_files(target)
-    local autogendir = target:values("fei.reflect.dir")
+    local autogendir = target:values("entisium.reflect.dir")
     if not autogendir or not os.isdir(autogendir) then
         return
     end
 
-    local prefix = "fei-reflgen-" .. target:name()
+    local prefix = "entisium-reflgen-" .. target:name()
     for _, directory in ipairs({autogendir, path.join(autogendir, "files")}) do
         if os.isdir(directory) then
             for _, filepath in ipairs(os.files(path.join(directory, prefix .. "*"))) do
@@ -552,11 +552,11 @@ end
 
 local function write_module_aggregate(output_file, module_function, functions)
     local lines = {
-        "// This file is generated by fei-reflgen",
+        "// This file is generated by entisium-reflgen",
         "",
         "#include \"refl/registry.hpp\"",
         "",
-        "namespace fei::refl::generated {"
+        "namespace ets::refl::generated {"
     }
 
     for _, function_name in ipairs(functions) do
@@ -570,7 +570,7 @@ local function write_module_aggregate(output_file, module_function, functions)
     end
     table.insert(lines, "}")
     table.insert(lines, "")
-    table.insert(lines, "} // namespace fei::refl::generated")
+    table.insert(lines, "} // namespace ets::refl::generated")
     table.insert(lines, "")
 
     write_file_if_changed(output_file, table.concat(lines, "\n"))
@@ -578,21 +578,21 @@ end
 
 local function write_aggregate(output_file, functions)
     local lines = {
-        "// This file is generated by fei-reflgen",
+        "// This file is generated by entisium-reflgen",
         "",
         "#include \"refl/generated.hpp\"",
         "#include \"refl/registry.hpp\"",
         "",
-        "namespace fei::refl::generated {"
+        "namespace ets::refl::generated {"
     }
 
     for _, function_name in ipairs(functions) do
         table.insert(lines, format("void %s(Registry& registry);", function_name))
     end
 
-    table.insert(lines, "} // namespace fei::refl::generated")
+    table.insert(lines, "} // namespace ets::refl::generated")
     table.insert(lines, "")
-    table.insert(lines, "namespace fei {")
+    table.insert(lines, "namespace ets {")
     table.insert(lines, "")
     table.insert(lines, "void register_generated_reflection() {")
     table.insert(lines, "    auto& registry = Registry::instance();")
@@ -603,7 +603,7 @@ local function write_aggregate(output_file, functions)
 
     table.insert(lines, "}")
     table.insert(lines, "")
-    table.insert(lines, "} // namespace fei")
+    table.insert(lines, "} // namespace ets")
     table.insert(lines, "")
 
     write_file_if_changed(output_file, table.concat(lines, "\n"))
@@ -621,25 +621,25 @@ end
 
 function configure_target(target)
     local autogendir = path.join(os.projectdir(), "build/.gens", target:name(), "reflection")
-    target:set("values", "fei.reflect", true)
-    target:set("values", "fei.reflect.dir", autogendir)
-    target:set("values", "fei.reflect.module_file", path.join(autogendir, "reflection.cpp"))
-    target:set("values", "fei.reflect.module_function", target_symbol_name(target:name()))
-    target:set("values", "fei.reflect.module_marker_file", path.join(autogendir, "module.reflmod"))
-    target:add("deps", "fei-reflgen", {links = false})
+    target:set("values", "entisium.reflect", true)
+    target:set("values", "entisium.reflect.dir", autogendir)
+    target:set("values", "entisium.reflect.module_file", path.join(autogendir, "reflection.cpp"))
+    target:set("values", "entisium.reflect.module_function", target_symbol_name(target:name()))
+    target:set("values", "entisium.reflect.module_marker_file", path.join(autogendir, "module.reflmod"))
+    target:add("deps", "entisium-reflgen", {links = false})
 
     for _, entry in ipairs(file_entries(target)) do
         target:add("files", entry.marker, {always_added = true})
     end
 
-    target:add("files", target:values("fei.reflect.module_marker_file"), {always_added = true})
+    target:add("files", target:values("entisium.reflect.module_marker_file"), {always_added = true})
     target:add("includedirs", os.projectdir())
     target:add("cxxflags", "cl::/bigobj")
 
     if reflect_link_owner(target:kind()) then
-        target:set("values", "fei.reflect.aggregate_file", path.join(autogendir, "reflection_aggregate.cpp"))
-        target:set("values", "fei.reflect.aggregate_marker_file", path.join(autogendir, "aggregate.reflagg"))
-        target:add("files", target:values("fei.reflect.aggregate_marker_file"), {always_added = true})
+        target:set("values", "entisium.reflect.aggregate_file", path.join(autogendir, "reflection_aggregate.cpp"))
+        target:set("values", "entisium.reflect.aggregate_marker_file", path.join(autogendir, "aggregate.reflagg"))
+        target:add("files", target:values("entisium.reflect.aggregate_marker_file"), {always_added = true})
     end
 end
 
@@ -657,7 +657,7 @@ function clean(target)
         os.rm(absolute)
     end
 
-    local autogendir = target:values("fei.reflect.dir")
+    local autogendir = target:values("entisium.reflect.dir")
     if autogendir and os.isdir(autogendir) then
         remove_reflection_dir(autogendir)
     end
@@ -703,7 +703,7 @@ local function generate_files(target)
                 parse_reflgen_depfile(header_depfile, {entry.header})
             ),
             values = {
-                "fei.reflect.file.v5",
+                "entisium.reflect.file.v5",
                 entry.output_file,
                 entry.function_name,
                 entry.header,
@@ -745,7 +745,7 @@ local function generate_module(target)
     end, {
         files = depfiles,
         values = {
-            "fei.reflect.module.v5",
+            "entisium.reflect.module.v5",
             inputs.module_file,
             inputs.module_function,
             table.concat(functions, ";")
@@ -755,7 +755,7 @@ local function generate_module(target)
 end
 
 local function generate_aggregate(target)
-    local output_file = target:values("fei.reflect.aggregate_file")
+    local output_file = target:values("entisium.reflect.aggregate_file")
     if not output_file then
         return
     end
@@ -767,11 +767,11 @@ local function generate_aggregate(target)
 
     depend.on_changed(function ()
         write_aggregate(output_file, functions)
-        write_stamp_file(target:values("fei.reflect.aggregate_marker_file"))
+        write_stamp_file(target:values("entisium.reflect.aggregate_marker_file"))
     end, {
         files = files,
         values = {
-            "fei.reflect.aggregate.v5",
+            "entisium.reflect.aggregate.v5",
             output_file,
             table.concat(functions, ";")
         },
@@ -821,7 +821,7 @@ function buildcmd_file(target, batchcmds, sourcefile, opt)
         )
     )
     batchcmds:add_depvalues(
-        "fei.reflect.file.v5",
+        "entisium.reflect.file.v5",
         entry.output_file,
         entry.function_name,
         entry.header,
@@ -867,7 +867,7 @@ function buildcmd_module(target, batchcmds, opt)
     batchcmds:compile(inputs.module_file, objectfile)
     batchcmds:add_depfiles(depfiles)
     batchcmds:add_depvalues(
-        "fei.reflect.module.v5",
+        "entisium.reflect.module.v5",
         inputs.module_file,
         inputs.module_function,
         table.concat(functions, ";")
@@ -892,11 +892,11 @@ function buildcmd_aggregate(target, batchcmds, opt)
     )
     batchcmds:mkdir(path.directory(output_file))
     write_aggregate(output_file, functions)
-    write_stamp_file(target:values("fei.reflect.aggregate_marker_file"))
+    write_stamp_file(target:values("entisium.reflect.aggregate_marker_file"))
     batchcmds:compile(output_file, objectfile)
     batchcmds:add_depfiles(files)
     batchcmds:add_depvalues(
-        "fei.reflect.aggregate.v5",
+        "entisium.reflect.aggregate.v5",
         output_file,
         table.concat(functions, ";")
     )

@@ -13,7 +13,7 @@
 #include <string>
 #include <string_view>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -24,7 +24,7 @@ class TemporaryImportDirectory {
         const auto timestamp =
             std::chrono::steady_clock::now().time_since_epoch().count();
         m_path = std::filesystem::temp_directory_path() /
-                 ("fei-asset-import-" + std::to_string(timestamp) + "-" +
+                 ("entisium-asset-import-" + std::to_string(timestamp) + "-" +
                   std::to_string(sequence.fetch_add(1)));
         std::filesystem::create_directories(project_assets());
         std::filesystem::create_directories(source_directory());
@@ -142,7 +142,7 @@ TEST_CASE("Native assets use metadata without import artifacts", "[asset]") {
     TemporaryImportDirectory directory;
     directory.write_project_asset(
         "scenes/main.scene.yaml",
-        "format: fei.scene"
+        "format: entisium.scene"
     );
     AssetDatabase database(directory.project_assets());
     const AssetPath path("project://scenes/main.scene.yaml");

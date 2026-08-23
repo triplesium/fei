@@ -4,8 +4,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace fei;
-using namespace fei::rendering_test;
+using namespace ets;
+using namespace ets::rendering_test;
 
 TEST_CASE(
     "GpuVector grows geometrically and queues uploads",

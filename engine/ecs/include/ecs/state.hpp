@@ -18,10 +18,10 @@
 #include <unordered_map>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 inline constexpr ScheduleId StateTransition =
-    stable_type_hash("fei::StateTransition");
+    stable_type_hash("ets::StateTransition");
 
 template<typename T>
 class State;
@@ -455,7 +455,7 @@ template<typename T>
 State<std::remove_cvref_t<T>>& World::init_state(T&& initial_state) {
     using StateType = std::remove_cvref_t<T>;
     static_assert(
-        fei::StateValue<StateType>,
+        ets::StateValue<StateType>,
         "State values must be copyable, equality comparable, and hashable"
     );
 
@@ -474,7 +474,7 @@ template<typename T>
 State<std::remove_cvref_t<T>>& World::insert_state(T&& state) {
     using StateType = std::remove_cvref_t<T>;
     static_assert(
-        fei::StateValue<StateType>,
+        ets::StateValue<StateType>,
         "State values must be copyable, equality comparable, and hashable"
     );
 
@@ -495,4 +495,4 @@ inline void World::run_state_transitions() {
     run_schedule(StateTransition);
 }
 
-} // namespace fei
+} // namespace ets

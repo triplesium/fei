@@ -12,7 +12,7 @@
 #include <variant>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class PipelineOpenGL : public Pipeline, public DeferredResourceOpenGL {
   public:
@@ -77,7 +77,7 @@ class PipelineOpenGL : public Pipeline, public DeferredResourceOpenGL {
     Optional<const ResourceBindingInfo&>
     get_resource_binding(uint32 slot, uint32 index) const {
         if (slot >= m_resource_bindings.size()) {
-            fei::error(
+            ets::error(
                 "Resource binding slot {} out of range (max {})",
                 slot,
                 m_resource_bindings.size()
@@ -86,7 +86,7 @@ class PipelineOpenGL : public Pipeline, public DeferredResourceOpenGL {
         }
         auto& bindings = m_resource_bindings[slot];
         if (index >= bindings.size()) {
-            fei::error(
+            ets::error(
                 "Resource binding index {} out of range (max {})",
                 index,
                 bindings.size()
@@ -106,4 +106,4 @@ class PipelineOpenGL : public Pipeline, public DeferredResourceOpenGL {
     void destroy_gl_resource() override;
 };
 
-} // namespace fei
+} // namespace ets

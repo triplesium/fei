@@ -34,7 +34,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::ui::rendering {
+namespace ets::ui::rendering {
 
 namespace {
 
@@ -556,9 +556,9 @@ void UiRenderingPlugin::setup(App& app) {
                 in_set<Systems::Prepare>(),
             queue_nodes | in_set<RenderingSystems::Queue>() |
                 in_set<Systems::Queue>(),
-            FEI_NAMED_SYSTEM(render_nodes) |
+            ETS_NAMED_SYSTEM(render_nodes) |
                 in_set<RenderingSystems::Overlay>() | in_set<Systems::Render>()
         );
 }
 
-} // namespace fei::ui::rendering
+} // namespace ets::ui::rendering

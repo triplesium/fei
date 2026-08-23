@@ -6,7 +6,7 @@
 #include <functional>
 #include <limits>
 
-namespace fei {
+namespace ets {
 using AssetId = std::uint32_t;
 inline constexpr AssetId invalid_asset_id = std::numeric_limits<AssetId>::max();
 
@@ -16,14 +16,14 @@ struct AssetKey {
 
     bool operator==(const AssetKey& other) const = default;
 };
-} // namespace fei
+} // namespace ets
 
 namespace std {
 template<>
-struct hash<fei::AssetKey> { // NOLINT(readability-identifier-naming)
-    size_t operator()(const fei::AssetKey& key) const {
-        auto seed = std::hash<fei::TypeId> {}(key.type);
-        seed ^= std::hash<fei::AssetId> {}(key.id) + 0x9e3779b9 + (seed << 6) +
+struct hash<ets::AssetKey> { // NOLINT(readability-identifier-naming)
+    size_t operator()(const ets::AssetKey& key) const {
+        auto seed = std::hash<ets::TypeId> {}(key.type);
+        seed ^= std::hash<ets::AssetId> {}(key.id) + 0x9e3779b9 + (seed << 6) +
                 (seed >> 2);
         return seed;
     }

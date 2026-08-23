@@ -5,7 +5,7 @@
 #include <source_location>
 #include <string>
 
-namespace fei {
+namespace ets {
 
 enum class LogLevel : std::uint32_t {
     Trace,
@@ -67,4 +67,4 @@ template<typename... Args>
     std::terminate();
 }
 
-} // namespace fei
+} // namespace ets

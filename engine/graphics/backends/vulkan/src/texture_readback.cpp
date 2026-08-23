@@ -14,7 +14,7 @@
 #include <mutex>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -377,4 +377,4 @@ void TextureReadbackVulkan::reset() {
     m_completed_frames.clear();
 }
 
-} // namespace fei
+} // namespace ets

@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::runtime_inspection::ecs {
+namespace ets::runtime_inspection::ecs {
 namespace {
 
 using serialization::SerializedField;
@@ -309,4 +309,4 @@ register_world_summary_inspection_provider(InspectionRegistry& registry) {
     );
 }
 
-} // namespace fei::runtime_inspection::ecs
+} // namespace ets::runtime_inspection::ecs

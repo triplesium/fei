@@ -9,8 +9,8 @@
 #include <thread>
 #include <type_traits>
 
-using namespace fei;
-using namespace fei::ecs_test;
+using namespace ets;
+using namespace ets::ecs_test;
 
 namespace {
 
@@ -72,11 +72,11 @@ void custom_param_system(CustomParam) {}
 } // namespace
 
 template<>
-struct fei::SystemParamTraits<CustomParam>
-    : fei::StatelessParamTraits<CustomParam> {};
+struct ets::SystemParamTraits<CustomParam>
+    : ets::StatelessParamTraits<CustomParam> {};
 
 template<>
-struct fei::ResourceTraits<MainThreadResource> {
+struct ets::ResourceTraits<MainThreadResource> {
     static constexpr bool main_thread_only = true;
 };
 
@@ -146,7 +146,7 @@ TEST_CASE("ECS systems expose query access metadata", "[ecs][system]") {
 }
 
 TEST_CASE("ECS named systems preserve system metadata", "[ecs][system]") {
-    SystemConfig named(FEI_NAMED_SYSTEM(named_profile_system));
+    SystemConfig named(ETS_NAMED_SYSTEM(named_profile_system));
     FunctionSystem<decltype(named_profile_system)*> bare(named_profile_system);
 
     REQUIRE(named.profile.name == "named_profile_system");
@@ -309,7 +309,7 @@ TEST_CASE("ECS named lambda systems run", "[ecs][system]") {
 
     int calls = 0;
     Schedule schedule;
-    schedule.add_systems(FEI_SYSTEM_NAME("named_lambda", [&calls]() {
+    schedule.add_systems(ETS_SYSTEM_NAME("named_lambda", [&calls]() {
         ++calls;
     }));
     schedule.sort_systems();

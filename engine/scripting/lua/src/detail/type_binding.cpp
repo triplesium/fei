@@ -21,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 namespace {
 
 ReturnValue lua_to_argument(lua_State* L, int idx) {
@@ -219,7 +219,7 @@ int push_lua_object(lua_State* L, const Type& type, Val value) {
 }
 
 bool lua_is_object_initializer(lua_State* L, int idx) {
-    return lua_istable(L, idx) && !lua_is_fei_type(L, idx) &&
+    return lua_istable(L, idx) && !lua_is_ets_type(L, idx) &&
            !lua_is_enum_value(L, idx);
 }
 
@@ -648,4 +648,4 @@ int dispatch_operator(lua_State* L) {
 
 } // namespace
 
-} // namespace fei
+} // namespace ets

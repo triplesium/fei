@@ -1,6 +1,6 @@
 #include "math/vector.hpp"
 
-namespace fei {
+namespace ets {
 const Vector2 Vector2::Down {0, -1};
 const Vector2 Vector2::Left {-1, 0};
 const Vector2 Vector2::NegativeInfinity {NEG_INFINITY};
@@ -35,4 +35,4 @@ Vector3::operator Vector2() const {
 Vector4::Vector4(const Vector3& v3, float w) :
     x {v3.x}, y {v3.y}, z {v3.z}, w {w} {}
 
-} // namespace fei
+} // namespace ets

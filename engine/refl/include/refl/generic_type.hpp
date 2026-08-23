@@ -9,7 +9,7 @@
 #include <tuple>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 // Stores reflected template arguments, including non-type arguments such as
 // std::array<T, N>'s N. GenericType::argument_type_ids is kept as the compact
@@ -85,14 +85,14 @@ struct GenericTypeInfo<Result<T, E>> {
     using Dependencies = std::tuple<T, E>;
 
     static TypeId generic_type_id() {
-        return TypeId(std::string_view {"fei::Result"});
+        return TypeId(std::string_view {"ets::Result"});
     }
 
-    static std::string generic_name() { return "fei::Result"; }
+    static std::string generic_name() { return "ets::Result"; }
 
     static std::vector<TypeId> argument_type_ids() {
         return {type_id<T>(), type_id<E>()};
     }
 };
 
-} // namespace fei
+} // namespace ets

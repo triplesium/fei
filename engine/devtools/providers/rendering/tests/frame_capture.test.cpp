@@ -4,8 +4,8 @@
 #include <chrono>
 #include <vector>
 
-using namespace fei;
-using namespace fei::devtools::rendering;
+using namespace ets;
+using namespace ets::devtools::rendering;
 
 TEST_CASE(
     "Rendering frame capture converts BGRA and row origin to RGB",

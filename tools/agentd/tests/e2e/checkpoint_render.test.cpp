@@ -19,8 +19,8 @@
 #include <thread>
 #include <vector>
 
-using namespace fei;
-using namespace fei::agentd;
+using namespace ets;
+using namespace ets::agentd;
 
 namespace {
 
@@ -59,9 +59,9 @@ class RenderedCheckpointFiles {
     RenderedCheckpointFiles() {
         const auto suffix =
             std::chrono::steady_clock::now().time_since_epoch().count();
-        m_directory =
-            std::filesystem::temp_directory_path() /
-            ("fei-agentd-rendered-checkpoint-e2e-" + std::to_string(suffix));
+        m_directory = std::filesystem::temp_directory_path() /
+                      ("entisium-agentd-rendered-checkpoint-e2e-" +
+                       std::to_string(suffix));
         std::filesystem::create_directories(m_directory);
     }
 
@@ -71,7 +71,7 @@ class RenderedCheckpointFiles {
     }
 
     [[nodiscard]] std::filesystem::path archive() const {
-        return m_directory / "gate-cleared.fei-snapshot.json";
+        return m_directory / "gate-cleared.entisium-snapshot.json";
     }
 
     [[nodiscard]] std::filesystem::path before_frame() const {
@@ -110,7 +110,7 @@ TEST_CASE(
     "Rendered Luau checkpoint survives a real Runtime Host restart",
     "[agentd][checkpoint][runtime-host][physics2d][asset][ui][luau][e2e]"
 ) {
-    auto project = Project::load(FEI_CHECKPOINT_RENDER_PROJECT_PATH);
+    auto project = Project::load(ETS_CHECKPOINT_RENDER_PROJECT_PATH);
     REQUIRE(project);
 
     SupervisorState state(
@@ -138,12 +138,12 @@ TEST_CASE(
             ProcessLaunch {
                 .arguments =
                     {
-                        FEI_RUNTIME_HOST_PATH,
-                        FEI_CHECKPOINT_RENDER_PROJECT_PATH,
+                        ETS_RUNTIME_HOST_PATH,
+                        ETS_CHECKPOINT_RENDER_PROJECT_PATH,
                     },
                 .environment = {
-                    {"FEI_AGENTD_PORT", std::to_string(port)},
-                    {"FEI_RUNTIME_SESSION", state.session()},
+                    {"ETS_AGENTD_PORT", std::to_string(port)},
+                    {"ETS_RUNTIME_SESSION", state.session()},
                 },
             }
         );
@@ -186,7 +186,7 @@ TEST_CASE(
     };
     auto run_ctl = [&](std::vector<std::string> arguments) {
         std::vector<std::string> command {
-            FEI_CTL_PATH,
+            ETS_CTL_PATH,
             "--port",
             std::to_string(port),
         };

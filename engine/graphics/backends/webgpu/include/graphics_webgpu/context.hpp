@@ -6,7 +6,7 @@
 #include <string_view>
 #include <webgpu/webgpu.h>
 
-namespace fei {
+namespace ets {
 
 class MipmapGeneratorWebGpu;
 
@@ -63,4 +63,4 @@ void check_webgpu_error_scope(
     std::string_view operation
 );
 
-} // namespace fei
+} // namespace ets

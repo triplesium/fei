@@ -5,7 +5,7 @@
 
 #include <stdexcept>
 
-namespace fei {
+namespace ets {
 namespace {
 
 class VulkanShaderCompilerProvider final : public ShaderCompilerProvider {
@@ -30,4 +30,4 @@ void VulkanShaderPlugin::setup(App& app) {
     );
 }
 
-} // namespace fei
+} // namespace ets

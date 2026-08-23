@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 template<class>
 struct SignatureTraitBase;
@@ -414,4 +414,4 @@ class MethodImpl : public Method {
     }
 };
 
-} // namespace fei
+} // namespace ets

@@ -9,7 +9,7 @@
 #include <cstring>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -75,7 +75,7 @@ class UploadBufferWebGpu {
   public:
     UploadBufferWebGpu(WGPUDevice device, const void* data, std::size_t size) {
         WGPUBufferDescriptor descriptor {};
-        descriptor.label = {"fei command upload buffer", WGPU_STRLEN};
+        descriptor.label = {"entisium command upload buffer", WGPU_STRLEN};
         descriptor.usage = WGPUBufferUsage_CopySrc;
         descriptor.size = size;
         descriptor.mappedAtCreation = true;
@@ -146,7 +146,7 @@ void CommandBufferWebGpu::begin() {
         fatal("WebGPU command buffer has already begun");
     }
     WGPUCommandEncoderDescriptor descriptor {};
-    descriptor.label = {"fei command encoder", WGPU_STRLEN};
+    descriptor.label = {"entisium command encoder", WGPU_STRLEN};
     m_encoder = wgpuDeviceCreateCommandEncoder(m_state->device(), &descriptor);
     if (m_encoder == nullptr) {
         fatal("Failed to create WebGPU command encoder");
@@ -162,7 +162,7 @@ void CommandBufferWebGpu::end() {
         fatal("WebGPU command buffer has not begun");
     }
     WGPUCommandBufferDescriptor descriptor {};
-    descriptor.label = {"fei command buffer", WGPU_STRLEN};
+    descriptor.label = {"entisium command buffer", WGPU_STRLEN};
     m_commands = wgpuCommandEncoderFinish(m_encoder, &descriptor);
     wgpuCommandEncoderRelease(m_encoder);
     m_encoder = nullptr;
@@ -279,7 +279,7 @@ void CommandBufferWebGpu::begin_render_pass(const RenderPassDescription& desc) {
     }
 
     WGPURenderPassDescriptor descriptor {};
-    descriptor.label = {"fei render pass", WGPU_STRLEN};
+    descriptor.label = {"entisium render pass", WGPU_STRLEN};
     descriptor.colorAttachmentCount = colors.size();
     descriptor.colorAttachments = colors.data();
     descriptor.depthStencilAttachment = depth_ptr;
@@ -622,7 +622,7 @@ void CommandBufferWebGpu::ensure_compute_pass() {
     }
     if (m_compute_pass == nullptr) {
         WGPUComputePassDescriptor descriptor {};
-        descriptor.label = {"fei compute pass", WGPU_STRLEN};
+        descriptor.label = {"entisium compute pass", WGPU_STRLEN};
         m_compute_pass =
             wgpuCommandEncoderBeginComputePass(m_encoder, &descriptor);
         if (m_current_compute_pipeline != nullptr) {
@@ -656,4 +656,4 @@ void CommandBufferWebGpu::end_compute_pass() {
     m_compute_pass = nullptr;
 }
 
-} // namespace fei
+} // namespace ets

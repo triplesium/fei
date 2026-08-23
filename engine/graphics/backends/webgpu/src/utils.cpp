@@ -2,7 +2,7 @@
 
 #include "base/log.hpp"
 
-namespace fei {
+namespace ets {
 
 WGPUTextureFormat to_webgpu(PixelFormat value) {
     switch (value) {
@@ -205,4 +205,4 @@ WGPUTextureViewDimension to_webgpu(TextureViewType value) {
     fatal("Unsupported WebGPU texture view type");
 }
 
-} // namespace fei
+} // namespace ets

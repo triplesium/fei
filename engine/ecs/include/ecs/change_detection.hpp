@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 using Tick = std::uint64_t;
 
@@ -70,7 +70,7 @@ class ComponentRW {
         m_change_tick_source(&change_tick_source) {}
 
     const T& read() const {
-        FEI_ASSERT(m_value);
+        ETS_ASSERT(m_value);
         return *m_value;
     }
 
@@ -80,7 +80,7 @@ class ComponentRW {
     }
 
     const T* operator->() const {
-        FEI_ASSERT(m_value);
+        ETS_ASSERT(m_value);
         return m_value;
     }
 
@@ -103,28 +103,28 @@ class ComponentRW {
     }
 
     bool is_added() const {
-        FEI_ASSERT(m_ticks);
+        ETS_ASSERT(m_ticks);
         return m_ticks->is_added(m_system_ticks);
     }
 
     bool is_changed() const {
-        FEI_ASSERT(m_ticks);
+        ETS_ASSERT(m_ticks);
         return m_ticks->is_changed(m_system_ticks);
     }
 
     Tick added_tick() const {
-        FEI_ASSERT(m_ticks);
+        ETS_ASSERT(m_ticks);
         return m_ticks->added;
     }
 
     Tick changed_tick() const {
-        FEI_ASSERT(m_ticks);
+        ETS_ASSERT(m_ticks);
         return m_ticks->changed;
     }
 
     void mark_changed() {
-        FEI_ASSERT(m_value);
-        FEI_ASSERT(m_ticks);
+        ETS_ASSERT(m_value);
+        ETS_ASSERT(m_ticks);
         auto tick = m_system_ticks.this_run;
         if (m_change_tick_source) {
             tick =
@@ -136,4 +136,4 @@ class ComponentRW {
     }
 };
 
-} // namespace fei
+} // namespace ets

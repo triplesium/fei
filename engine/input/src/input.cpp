@@ -2,7 +2,7 @@
 
 #include "app/app.hpp"
 
-namespace fei {
+namespace ets {
 
 KeyInput::KeyInput() {
     for (auto key : c_key_codes) {
@@ -307,4 +307,4 @@ void InputPlugin::setup(App& app) {
         );
 }
 
-} // namespace fei
+} // namespace ets

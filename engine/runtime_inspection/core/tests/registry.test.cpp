@@ -6,8 +6,8 @@
 #include <stdexcept>
 #include <string>
 
-using namespace fei;
-using namespace fei::runtime_inspection;
+using namespace ets;
+using namespace ets::runtime_inspection;
 
 namespace {
 

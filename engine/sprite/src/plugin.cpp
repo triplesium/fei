@@ -35,7 +35,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -396,15 +396,15 @@ void SpritePlugin::setup(App& app) {
         )
         .add_systems(
             RenderUpdate,
-            FEI_NAMED_SYSTEM(render_sprites) |
+            ETS_NAMED_SYSTEM(render_sprites) |
                 in_set<RenderingSystems::MainPass>() |
                 in_set<SpriteSystems::RenderSprites>()
         )
         .add_systems(
             RenderUpdate,
-            FEI_NAMED_SYSTEM(release_sprite_swapchain_framebuffer) |
+            ETS_NAMED_SYSTEM(release_sprite_swapchain_framebuffer) |
                 in_set<RenderingSystems::Submit>()
         );
 }
 
-} // namespace fei
+} // namespace ets

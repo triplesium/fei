@@ -5,7 +5,7 @@
 
 #include <string_view>
 
-namespace fei {
+namespace ets {
 
 enum class ScriptTestEnum { Idle = 1, Active = 2 };
 
@@ -44,4 +44,4 @@ void register_transform_script_metadata();
 
 LuaRuntime make_test_runtime();
 
-} // namespace fei
+} // namespace ets

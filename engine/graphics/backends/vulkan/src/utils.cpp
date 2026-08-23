@@ -2,7 +2,7 @@
 
 #include "base/log.hpp"
 
-namespace fei {
+namespace ets {
 
 std::string_view vk_result_name(VkResult result) {
     switch (result) {
@@ -583,4 +583,4 @@ VkIndexType to_vk_index_type(IndexFormat format) {
     fatal("Unsupported Vulkan IndexFormat");
 }
 
-} // namespace fei
+} // namespace ets

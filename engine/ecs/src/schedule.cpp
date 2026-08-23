@@ -12,17 +12,17 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#if defined(FEI_ENABLE_TRACY) || defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_TRACY) || defined(ETS_ENABLE_PROFILE_SUMMARY)
 #    include "ecs/system_profile.hpp"
 #    include "profiling/profiling.hpp"
 
 #    include <string>
 #endif
 
-namespace fei {
+namespace ets {
 namespace {
 
-#if defined(FEI_ENABLE_TRACY) || defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_TRACY) || defined(ETS_ENABLE_PROFILE_SUMMARY)
 void resolve_system_profile(SystemConfig& config) {
     if (!config.profile.named() && config.system->has_profile_key()) {
         auto& registry = SystemProfileRegistry::instance();
@@ -52,9 +52,9 @@ void run_profiled_system(
     SystemConfig& config,
     World& world
 ) {
-#if defined(FEI_ENABLE_TRACY) || defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_TRACY) || defined(ETS_ENABLE_PROFILE_SUMMARY)
     resolve_system_profile(config);
-    FEI_PROFILE_SYSTEM_SCOPE(schedule, config.profile);
+    ETS_PROFILE_SYSTEM_SCOPE(schedule, config.profile);
 #endif
     config.system->run(world);
 }
@@ -159,7 +159,7 @@ void ScheduleGraph::sort() {
         }
     }
     if (m_sorted_nodes.size() != m_edges.size()) {
-        fei::fatal("Cycle detected in system dependencies");
+        ets::fatal("Cycle detected in system dependencies");
     }
 }
 
@@ -390,7 +390,7 @@ SystemId Schedule::add_system(SystemConfig config) {
     auto id = config.id;
     auto [_, inserted] = m_systems.emplace(id, std::move(config));
     if (!inserted) {
-        fei::fatal("System with id {} has already been added", id);
+        ets::fatal("System with id {} has already been added", id);
     }
     m_dirty = true;
     return id;
@@ -583,7 +583,7 @@ void Schedule::run_systems(
 }
 
 void Schedule::resolve_system_profiles() {
-#if defined(FEI_ENABLE_TRACY) || defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_TRACY) || defined(ETS_ENABLE_PROFILE_SUMMARY)
     for (auto& [_, config] : m_systems) {
         resolve_system_profile(config);
     }
@@ -639,7 +639,7 @@ void Schedule::build_execution_batches() {
         }
 
         if (batch.empty()) {
-            fei::fatal("Unable to build system execution batch");
+            ets::fatal("Unable to build system execution batch");
         }
 
         for (auto system_id : batch) {
@@ -656,4 +656,4 @@ void Schedule::build_execution_batches() {
     }
 }
 
-} // namespace fei
+} // namespace ets

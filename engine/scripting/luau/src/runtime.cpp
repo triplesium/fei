@@ -21,7 +21,7 @@
 #include <unordered_set>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
 void install_system_config_metatables(lua_State* state);
@@ -417,7 +417,7 @@ int chain_helper(lua_State* state) {
 }
 
 std::string dynamic_schedule_key(ScheduleId schedule) {
-    return "__fei_schedule_" + std::to_string(schedule);
+    return "__ets_schedule_" + std::to_string(schedule);
 }
 
 int state_schedule_helper(lua_State* state) {
@@ -1237,4 +1237,4 @@ Result<bool, LuauScriptError> LuauRuntime::call_module_condition(
     return result;
 }
 
-} // namespace fei
+} // namespace ets

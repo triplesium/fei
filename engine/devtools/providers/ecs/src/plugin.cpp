@@ -15,7 +15,7 @@
 #include <string_view>
 #include <utility>
 
-namespace fei::devtools::ecs {
+namespace ets::devtools::ecs {
 namespace {
 
 namespace inspection_ecs = runtime_inspection::ecs;
@@ -280,4 +280,4 @@ void ProviderPlugin::finish(App& app) {
     app.resource<runtime_inspection::InspectionRegistry>().freeze();
 }
 
-} // namespace fei::devtools::ecs
+} // namespace ets::devtools::ecs

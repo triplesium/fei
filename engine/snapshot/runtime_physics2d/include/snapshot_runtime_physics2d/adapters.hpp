@@ -3,7 +3,7 @@
 #include "base/result.hpp"
 #include "snapshot/world_snapshot.hpp"
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -15,4 +15,4 @@ Status<snapshot::SnapshotError> configure_physics2d_adapters(
 );
 
 } // namespace snapshot_runtime_physics2d
-} // namespace fei
+} // namespace ets

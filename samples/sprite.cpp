@@ -24,7 +24,7 @@
 #include <cstddef>
 #include <string_view>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -152,7 +152,7 @@ int main(int argc, char** argv) {
         GlfwWindowConfig {
             .width = 800,
             .height = 450,
-            .title = "Fei Sprite Sample",
+            .title = "Entisium Sprite Sample",
         }
     );
     app.add_plugin<AssetsPlugin>();

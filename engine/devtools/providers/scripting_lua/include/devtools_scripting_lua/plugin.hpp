@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace fei::devtools::scripting_lua {
+namespace ets::devtools::scripting_lua {
 
 struct Config {
     std::size_t max_source_bytes {std::size_t {64} * 1024};
@@ -14,8 +14,8 @@ struct Config {
     std::uint32_t time_limit_ms {100};
 };
 
-FEI_REFLECT(Plugin)
-class ProviderPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class ProviderPlugin : public ets::Plugin {
   public:
     explicit ProviderPlugin(Config config = {});
 
@@ -26,4 +26,4 @@ class ProviderPlugin : public fei::Plugin {
     Config m_config;
 };
 
-} // namespace fei::devtools::scripting_lua
+} // namespace ets::devtools::scripting_lua

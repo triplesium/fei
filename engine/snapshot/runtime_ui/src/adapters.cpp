@@ -38,7 +38,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei::snapshot_runtime_ui {
+namespace ets::snapshot_runtime_ui {
 namespace {
 
 snapshot::SnapshotError configuration_error(std::string message) {
@@ -81,7 +81,7 @@ void register_value_change_reflection(std::string_view local_name) {
     }
     registry
         .register_cls<ui_widgets::ValueChange<T>>(
-            {"fei", "ui_widgets", "snapshot"},
+            {"ets", "ui_widgets", "snapshot"},
             local_name
         )
         .add_property("source", &ui_widgets::ValueChange<T>::source)
@@ -362,4 +362,4 @@ configure_ui_adapters(World& world, snapshot::SnapshotRegistry& registry) {
     return {};
 }
 
-} // namespace fei::snapshot_runtime_ui
+} // namespace ets::snapshot_runtime_ui

@@ -3,7 +3,7 @@
 
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class ResourceLayoutOpenGL : public ResourceLayout {
   private:
@@ -31,4 +31,4 @@ class ResourceSetOpenGL : public ResourceSet {
     }
 };
 
-} // namespace fei
+} // namespace ets

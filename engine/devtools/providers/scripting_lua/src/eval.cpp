@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::devtools::scripting_lua {
+namespace ets::devtools::scripting_lua {
 namespace {
 
 class LuaEvalExecutor final : public DynamicSystemExecutor {
@@ -144,4 +144,4 @@ std::unique_ptr<System> make_eval_system(
     );
 }
 
-} // namespace fei::devtools::scripting_lua
+} // namespace ets::devtools::scripting_lua

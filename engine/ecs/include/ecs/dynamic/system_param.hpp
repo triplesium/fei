@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -42,4 +42,4 @@ using DynamicSystemParams = std::vector<DynamicSystemParamPtr>;
 SystemAccess
 dynamic_system_access_for_params(const DynamicSystemParams& params);
 
-} // namespace fei
+} // namespace ets

@@ -1,4 +1,4 @@
-toolchain("fei-emcc")
+toolchain("entisium-emcc")
     set_homepage("https://emscripten.org/")
     set_description("Emscripten 6 toolchain compatibility for Xmake 3.0")
     set_kind("standalone")

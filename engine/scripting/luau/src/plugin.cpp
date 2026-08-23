@@ -6,7 +6,7 @@
 #include "scripting_luau/script_system_registry.hpp"
 #include "scripting_luau/snapshot_state.hpp"
 
-namespace fei {
+namespace ets {
 namespace {
 
 void update_dynamic_events(ResRW<DynamicEvents> events) {
@@ -24,4 +24,4 @@ void LuauScriptingPlugin::setup(App& app) {
         .add_systems(Last, update_dynamic_events);
 }
 
-} // namespace fei
+} // namespace ets

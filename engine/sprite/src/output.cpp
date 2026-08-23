@@ -7,7 +7,7 @@
 
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -84,4 +84,4 @@ void update_sprite_output(
     output.framebuffer = std::move(framebuffer);
 }
 
-} // namespace fei
+} // namespace ets

@@ -1,6 +1,6 @@
 #include "ui_widgets/plugin.hpp"
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
 void sync_buttons(
     Query<Entity, const Button>::Filter<Without<ui::Node>> missing_nodes,
@@ -74,4 +74,4 @@ void update_buttons(
     }
 }
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

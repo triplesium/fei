@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class RemovedComponentBuffer {
   private:
@@ -78,4 +78,4 @@ class RemovedComponentEvents {
     }
 };
 
-} // namespace fei
+} // namespace ets

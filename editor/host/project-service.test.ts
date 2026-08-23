@@ -7,7 +7,7 @@ import { HostProjectService, ProjectPickerCancelledError } from "./project-servi
 const temporaryDirectories: string[] = [];
 
 async function createProject(): Promise<string> {
-    const directory = await mkdtemp(join(tmpdir(), "fei-editor-project-"));
+    const directory = await mkdtemp(join(tmpdir(), "entisium-editor-project-"));
     temporaryDirectories.push(directory);
     await mkdir(join(directory, "assets"));
     await writeFile(join(directory, "project.yaml"), "name: Test\n", "utf8");
@@ -47,7 +47,7 @@ describe("HostProjectService", () => {
 
     it("rejects paths outside the project and skips symbolic links", async () => {
         const directory = await createProject();
-        const outside = await mkdtemp(join(tmpdir(), "fei-editor-outside-"));
+        const outside = await mkdtemp(join(tmpdir(), "entisium-editor-outside-"));
         temporaryDirectories.push(outside);
         await writeFile(join(outside, "secret.txt"), "secret", "utf8");
         let symbolicLinkCreated = false;

@@ -416,7 +416,7 @@ export class HostModelRegistry {
             if (!this.warnedCredentialProviders.has(providerId)) {
                 this.warnedCredentialProviders.add(providerId);
                 console.warn(
-                    `[fei editor] ${providerId} credentials are unavailable; treating the provider as unconfigured.`,
+                    `[entisium editor] ${providerId} credentials are unavailable; treating the provider as unconfigured.`,
                 );
             }
             return false;
@@ -424,7 +424,7 @@ export class HostModelRegistry {
     }
 
     private resolveActive(): { providerId: string; modelId: string } {
-        const configuredModel = process.env.FEI_EDITOR_MODEL?.trim();
+        const configuredModel = process.env.ETS_EDITOR_MODEL?.trim();
         if (configuredModel) {
             for (const provider of this.settings.providers) {
                 if (this.models.getModel(provider.id, configuredModel)) {

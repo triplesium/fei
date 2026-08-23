@@ -5,7 +5,7 @@
 
 #include <limits>
 
-namespace fei {
+namespace ets {
 
 struct SamplerDescription {
     SamplerAddressMode address_mode_u {SamplerAddressMode::Repeat};
@@ -76,4 +76,4 @@ class Sampler : public BindableResource {
     ~Sampler() override = default;
 };
 
-} // namespace fei
+} // namespace ets

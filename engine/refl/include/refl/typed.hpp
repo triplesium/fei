@@ -2,7 +2,7 @@
 
 #include "refl/type.hpp"
 
-namespace fei {
+namespace ets {
 
 template<class T>
 class Typed {
@@ -17,4 +17,4 @@ class Typed {
     TypeId type_id() const { return m_type.id(); }
 };
 
-} // namespace fei
+} // namespace ets

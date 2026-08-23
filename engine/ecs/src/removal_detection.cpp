@@ -2,7 +2,7 @@
 
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 void RemovedComponentBuffer::send(Entity entity) {
     m_current.entities.push_back(entity);
@@ -90,4 +90,4 @@ RemovedComponentEvents::get(TypeId component) const {
     return found != m_buffers.end() ? &found->second : nullptr;
 }
 
-} // namespace fei
+} // namespace ets

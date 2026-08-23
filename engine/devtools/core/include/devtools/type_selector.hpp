@@ -6,7 +6,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei {
+namespace ets {
 
 class Type;
 
@@ -24,4 +24,4 @@ std::string format_type_id(TypeId id);
 
 } // namespace devtools
 
-} // namespace fei
+} // namespace ets

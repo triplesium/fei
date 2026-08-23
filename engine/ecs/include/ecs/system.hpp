@@ -17,7 +17,7 @@
 #include <variant>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 class System;
@@ -284,11 +284,11 @@ concept IntoSystem =
       // Or a callable object
       (std::is_class_v<T> && requires { &T::operator(); })) &&
      // System should not return value
-     std::is_same_v<void, typename fei::FunctionTraits<T>::return_type> &&
+     std::is_same_v<void, typename ets::FunctionTraits<T>::return_type> &&
      // All arguments must be a SystemParam
      []<typename... Ts>(std::type_identity<std::tuple<Ts...>>) {
          return (SystemParam<Ts> && ...);
-     }(std::type_identity<typename fei::FunctionTraits<T>::args_tuple>()));
+     }(std::type_identity<typename ets::FunctionTraits<T>::args_tuple>()));
 
 template<typename T>
 concept IntoCondition =
@@ -298,11 +298,11 @@ concept IntoCondition =
       (std::is_class_v<std::remove_cvref_t<T>> &&
        requires { &std::remove_cvref_t<T>::operator(); })) &&
      // Condition should return bool
-     std::is_same_v<bool, typename fei::FunctionTraits<T>::return_type> &&
+     std::is_same_v<bool, typename ets::FunctionTraits<T>::return_type> &&
      // All arguments must be read-only condition params
      []<typename... Ts>(std::type_identity<std::tuple<Ts...>>) {
          return (ConditionParam<Ts> && ...);
-     }(std::type_identity<typename fei::FunctionTraits<T>::args_tuple>()));
+     }(std::type_identity<typename ets::FunctionTraits<T>::args_tuple>()));
 
 class System {
   private:
@@ -430,7 +430,7 @@ class FunctionSystem : public System {
         if constexpr (HasProfileKey) {
             return reinterpret_cast<std::size_t>(callable());
         }
-        fei::fatal("Cannot get a profile key for non-function pointer systems");
+        ets::fatal("Cannot get a profile key for non-function pointer systems");
         return 0;
     }
 
@@ -820,4 +820,4 @@ class FunctionCondition : public Condition {
     }
 };
 
-} // namespace fei
+} // namespace ets

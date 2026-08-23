@@ -1,15 +1,15 @@
-target("fei-project-runtime")
+target("entisium-project-runtime")
     set_kind("static")
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
-    add_deps("fei-app", "fei-project")
+    add_deps("entisium-app", "entisium-project")
 
 if not is_plat("wasm") then
-    target("fei-project-runtime-tests")
+    target("entisium-project-runtime-tests")
         set_kind("binary")
         set_default(false)
-        add_rules("fei.test", "fei.reflect")
+        add_rules("entisium.test", "entisium.reflect")
         add_files("tests/*.cpp")
-        add_deps("fei-project-runtime", "fei-scripting-lua")
+        add_deps("entisium-project-runtime", "entisium-scripting-lua")
 end

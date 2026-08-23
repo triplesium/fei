@@ -3,7 +3,7 @@
 #include "graphics/enums.hpp"
 #include "rendering/render_app.hpp"
 
-namespace fei {
+namespace ets {
 
 std::shared_ptr<Texture> EquirectToCubemap::convert_equirect_to_cubemap(
     const GraphicsDevice& device,
@@ -178,4 +178,4 @@ void CubemapPlugin::setup(App& app) {
         .add_systems(RenderStartup, setup_equi2cubemap);
 }
 
-} // namespace fei
+} // namespace ets

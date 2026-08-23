@@ -70,7 +70,7 @@ SortUsingDeclarations: true
 StatementMacros:
   - Q_UNUSED
   - QT_REQUIRE_VERSION
-  - FEI_REFLECT
+  - ETS_REFLECT
 WhitespaceSensitiveMacros:
   - BOOST_PP_STRINGIZE
   - CF_SWIFT_NAME

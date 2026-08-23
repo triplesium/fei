@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <string_view>
 
-namespace fei::text {
+namespace ets::text {
 
 namespace {
 
@@ -170,4 +170,4 @@ void apply_text_edits(
     }
 }
 
-} // namespace fei::text
+} // namespace ets::text

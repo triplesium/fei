@@ -7,7 +7,7 @@
 
 #include <variant>
 
-namespace fei::ui {
+namespace ets::ui {
 
 enum class AvailableSpaceKind {
     Definite,
@@ -52,7 +52,7 @@ struct TextMeasure {
 
 using NodeMeasure = std::variant<std::monostate, FixedMeasure, TextMeasure>;
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct ContentSize {
     NodeMeasure measure;
 
@@ -62,4 +62,4 @@ struct ContentSize {
     bool operator==(const ContentSize&) const = default;
 };
 
-} // namespace fei::ui
+} // namespace ets::ui

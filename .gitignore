@@ -15,6 +15,7 @@ CMakeSettings.json
 
 .cache/
 .fei/
+.entisium/
 .sandbox/
 node_modules/
 editor/dist/

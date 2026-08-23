@@ -1,9 +1,9 @@
 #pragma once
 
-namespace fei {
+namespace ets {
 
 class Registry;
 
 void register_dynamic_container_adapters(Registry& registry);
 
-} // namespace fei
+} // namespace ets

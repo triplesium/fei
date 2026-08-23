@@ -8,7 +8,7 @@
 #include <memory>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class Framebuffer;
 
@@ -38,4 +38,4 @@ struct RenderPassDescription {
     std::shared_ptr<const Framebuffer> framebuffer;
 };
 
-} // namespace fei
+} // namespace ets

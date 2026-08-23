@@ -11,7 +11,7 @@
 #include <memory>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -144,7 +144,7 @@ MipmapGeneratorWebGpu::MipmapGeneratorWebGpu(const WebGpuDeviceState& state) :
 
     WGPUBindGroupLayoutDescriptor bind_group_layout_desc {};
     bind_group_layout_desc.label = {
-        "fei mipmap bind group layout",
+        "entisium mipmap bind group layout",
         WGPU_STRLEN
     };
     bind_group_layout_desc.entryCount = entries.size();
@@ -156,7 +156,10 @@ MipmapGeneratorWebGpu::MipmapGeneratorWebGpu(const WebGpuDeviceState& state) :
     }
 
     WGPUPipelineLayoutDescriptor pipeline_layout_desc {};
-    pipeline_layout_desc.label = {"fei mipmap pipeline layout", WGPU_STRLEN};
+    pipeline_layout_desc.label = {
+        "entisium mipmap pipeline layout",
+        WGPU_STRLEN
+    };
     pipeline_layout_desc.bindGroupLayoutCount = 1;
     pipeline_layout_desc.bindGroupLayouts = &m_bind_group_layout;
     m_pipeline_layout =
@@ -171,7 +174,7 @@ MipmapGeneratorWebGpu::MipmapGeneratorWebGpu(const WebGpuDeviceState& state) :
     };
     WGPUShaderModuleDescriptor shader_desc {};
     shader_desc.nextInChain = &shader_source.chain;
-    shader_desc.label = {"fei mipmap shader", WGPU_STRLEN};
+    shader_desc.label = {"entisium mipmap shader", WGPU_STRLEN};
     push_webgpu_error_scope(state);
     m_shader = wgpuDeviceCreateShaderModule(m_device, &shader_desc);
     check_webgpu_error_scope(state, "WebGPU mipmap shader creation");
@@ -180,7 +183,7 @@ MipmapGeneratorWebGpu::MipmapGeneratorWebGpu(const WebGpuDeviceState& state) :
     }
 
     WGPUComputePipelineDescriptor pipeline_desc {};
-    pipeline_desc.label = {"fei mipmap pipeline", WGPU_STRLEN};
+    pipeline_desc.label = {"entisium mipmap pipeline", WGPU_STRLEN};
     pipeline_desc.layout = m_pipeline_layout;
     pipeline_desc.compute.module = m_shader;
     pipeline_desc.compute.entryPoint = {"compute_main", WGPU_STRLEN};
@@ -221,14 +224,14 @@ void MipmapGeneratorWebGpu::encode(
             mip_level - 1,
             array_layers,
             WGPUTextureUsage_TextureBinding,
-            "fei mipmap source view"
+            "entisium mipmap source view"
         );
         resources->destination_view = create_mip_view(
             texture,
             mip_level,
             array_layers,
             WGPUTextureUsage_StorageBinding,
-            "fei mipmap destination view"
+            "entisium mipmap destination view"
         );
 
         std::array<WGPUBindGroupEntry, 2> entries {};
@@ -237,7 +240,7 @@ void MipmapGeneratorWebGpu::encode(
         entries[1].binding = 1;
         entries[1].textureView = resources->destination_view;
         WGPUBindGroupDescriptor bind_group_desc {};
-        bind_group_desc.label = {"fei mipmap bind group", WGPU_STRLEN};
+        bind_group_desc.label = {"entisium mipmap bind group", WGPU_STRLEN};
         bind_group_desc.layout = m_bind_group_layout;
         bind_group_desc.entryCount = entries.size();
         bind_group_desc.entries = entries.data();
@@ -248,7 +251,7 @@ void MipmapGeneratorWebGpu::encode(
         }
 
         WGPUComputePassDescriptor pass_desc {};
-        pass_desc.label = {"fei mipmap pass", WGPU_STRLEN};
+        pass_desc.label = {"entisium mipmap pass", WGPU_STRLEN};
         auto pass = wgpuCommandEncoderBeginComputePass(encoder, &pass_desc);
         if (pass == nullptr) {
             fatal("Failed to begin WebGPU mipmap compute pass");
@@ -276,4 +279,4 @@ void MipmapGeneratorWebGpu::encode(
     }
 }
 
-} // namespace fei
+} // namespace ets

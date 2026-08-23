@@ -11,7 +11,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei::agentd {
+namespace ets::agentd {
 
 struct PlayControlBindings {
     std::function<Result<nlohmann::json, std::string>()> interfaces;
@@ -55,4 +55,4 @@ struct PlayRunObserver {
     const PlayRunObserver& observer = {}
 );
 
-} // namespace fei::agentd
+} // namespace ets::agentd

@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 DynamicCommandsParam::DynamicCommandsParam(std::string name) :
     m_name(std::move(name)) {}
@@ -32,4 +32,4 @@ DynamicCommandsParam::prepare(World& world, SystemTicks system_ticks) {
     return Ref(*m_commands);
 }
 
-} // namespace fei
+} // namespace ets

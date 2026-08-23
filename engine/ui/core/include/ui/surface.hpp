@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei::ui {
+namespace ets::ui {
 
 class Surface {
   public:
@@ -64,4 +64,4 @@ struct LayoutState {
     bool initialized {false};
 };
 
-} // namespace fei::ui
+} // namespace ets::ui

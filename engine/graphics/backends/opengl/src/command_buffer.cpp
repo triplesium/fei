@@ -5,7 +5,7 @@
 #include <cstring>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace ogl_cmd = opengl_commands;
 
@@ -265,4 +265,4 @@ void CommandBufferOpenGL::mark_submitted() {
     m_state = State::Submitted;
 }
 
-} // namespace fei
+} // namespace ets

@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 enum class GraphicsBackendKind : std::uint8_t {
     Unknown,
@@ -124,4 +124,4 @@ struct ResourceTraits<GraphicsBackendBootstrap> {
     static constexpr bool main_thread_only = false;
 };
 
-} // namespace fei
+} // namespace ets

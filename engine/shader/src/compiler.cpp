@@ -19,7 +19,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -988,10 +988,10 @@ compile_slang(const ShaderCompileRequest& request) {
     auto primary_defs = request.defs;
     if (primary_is_wgsl) {
         std::erase_if(primary_defs, [](const ShaderDefVal& def) {
-            return def.name == "FEI_SHADER_TARGET_WGSL";
+            return def.name == "ETS_SHADER_TARGET_WGSL";
         });
         primary_defs.push_back(
-            ShaderDefVal::bool_def("FEI_SHADER_TARGET_WGSL")
+            ShaderDefVal::bool_def("ETS_SHADER_TARGET_WGSL")
         );
     }
     auto macros = make_slang_macro_storage(std::move(primary_defs));
@@ -1122,9 +1122,9 @@ compile_slang(const ShaderCompileRequest& request) {
 
         auto wgsl_defs = request.defs;
         std::erase_if(wgsl_defs, [](const ShaderDefVal& def) {
-            return def.name == "FEI_SHADER_TARGET_WGSL";
+            return def.name == "ETS_SHADER_TARGET_WGSL";
         });
-        wgsl_defs.push_back(ShaderDefVal::bool_def("FEI_SHADER_TARGET_WGSL"));
+        wgsl_defs.push_back(ShaderDefVal::bool_def("ETS_SHADER_TARGET_WGSL"));
         auto wgsl_macros = make_slang_macro_storage(std::move(wgsl_defs));
 
         auto wgsl_file_system =
@@ -1455,7 +1455,8 @@ std::string SlangLibraryShaderCompiler::cache_identity() const {
     if (build_tag == nullptr) {
         return {};
     }
-    std::string identity = std::string(build_tag) + "|fei-shader-compiler-v5";
+    std::string identity =
+        std::string(build_tag) + "|entisium-shader-compiler-v5";
     if (m_artifact_generator != nullptr) {
         identity += '|' + m_artifact_generator->cache_identity();
     }
@@ -1533,4 +1534,4 @@ SlangLibraryShaderCompiler::compile(ShaderCompileRequest request) {
     };
 }
 
-} // namespace fei
+} // namespace ets

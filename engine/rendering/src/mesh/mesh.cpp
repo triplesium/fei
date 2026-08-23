@@ -15,7 +15,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 void Mesh::insert_attribute(
     MeshVertexAttribute attribute,
@@ -23,7 +23,7 @@ void Mesh::insert_attribute(
 ) {
     VertexFormat values_format = values.vertex_format();
     if (values_format != attribute.format) {
-        fei::fatal(
+        ets::fatal(
             "Attribute format mismatch: expected {}, got {}",
             static_cast<std::underlying_type_t<VertexFormat>>(attribute.format),
             static_cast<std::underlying_type_t<VertexFormat>>(values_format)
@@ -42,7 +42,7 @@ std::size_t Mesh::vertex_count() const {
         auto size = data.values.size();
         if (auto previous_count = count) {
             if (*previous_count != size) {
-                fei::warn(
+                ets::warn(
                     "Attribute {} size mismatch: expected {}, got {}",
                     data.attribute.name,
                     previous_count.value(),
@@ -58,17 +58,17 @@ std::size_t Mesh::vertex_count() const {
 
 void Mesh::compute_smooth_normals() {
     if (!has_attribute(ATTRIBUTE_POSITION.id)) {
-        fei::warn("Mesh has no position attribute, cannot compute normals");
+        ets::warn("Mesh has no position attribute, cannot compute normals");
         return;
     }
     const auto positions_opt =
         m_attributes.at(ATTRIBUTE_POSITION.id).values.as_float3();
     if (!positions_opt || positions_opt->empty()) {
-        fei::warn("Mesh has no positions, cannot compute normals");
+        ets::warn("Mesh has no positions, cannot compute normals");
         return;
     }
     if (!m_indices || m_indices->size() < 3) {
-        fei::warn("Mesh has no triangle indices, cannot compute normals");
+        ets::warn("Mesh has no triangle indices, cannot compute normals");
         return;
     }
 
@@ -81,7 +81,7 @@ void Mesh::compute_smooth_normals() {
         std::uint32_t c = indices[i + 2];
         if (a >= positions.size() || b >= positions.size() ||
             c >= positions.size()) {
-            fei::warn("Mesh contains an out-of-range index");
+            ets::warn("Mesh contains an out-of-range index");
             return;
         }
 
@@ -129,13 +129,13 @@ void Mesh::compute_smooth_normals() {
 
 void Mesh::center_positions() {
     if (!has_attribute(ATTRIBUTE_POSITION.id)) {
-        fei::warn("Mesh has no position attribute, cannot center");
+        ets::warn("Mesh has no position attribute, cannot center");
         return;
     }
     auto& positions =
         m_attributes.at(ATTRIBUTE_POSITION.id).values.as_float3().value();
     if (positions.empty()) {
-        fei::warn("Mesh has no positions, cannot center");
+        ets::warn("Mesh has no positions, cannot center");
         return;
     }
     std::array<float, 3> min = positions[0];
@@ -143,7 +143,7 @@ void Mesh::center_positions() {
     if (m_indices && !m_indices->empty()) {
         for (auto index : m_indices.value()) {
             if (index >= positions.size()) {
-                fei::warn("Mesh contains an out-of-range index");
+                ets::warn("Mesh contains an out-of-range index");
                 return;
             }
             const auto& pos = positions[index];
@@ -176,7 +176,7 @@ void Mesh::generate_tangents() {
     if (!has_attribute(ATTRIBUTE_POSITION.id) ||
         !has_attribute(ATTRIBUTE_NORMAL.id) ||
         !has_attribute(ATTRIBUTE_UV_0.id)) {
-        fei::warn(
+        ets::warn(
             "Mesh::generate_tangents requires position, normal, and UV "
             "attributes"
         );
@@ -291,13 +291,13 @@ void Mesh::generate_tangents() {
 
 Aabb Mesh::compute_aabb() const {
     if (!has_attribute(ATTRIBUTE_POSITION.id)) {
-        fei::warn("Mesh has no position attribute, cannot compute AABB");
+        ets::warn("Mesh has no position attribute, cannot compute AABB");
         return {};
     }
     const auto& positions =
         m_attributes.at(ATTRIBUTE_POSITION.id).values.as_float3().value();
     if (positions.empty()) {
-        fei::warn("Mesh has no positions, cannot compute AABB");
+        ets::warn("Mesh has no positions, cannot compute AABB");
         return {};
     }
     std::array<float, 3> min = positions[0];
@@ -305,7 +305,7 @@ Aabb Mesh::compute_aabb() const {
     if (m_indices && !m_indices->empty()) {
         for (auto index : m_indices.value()) {
             if (index >= positions.size()) {
-                fei::warn("Mesh contains an out-of-range index");
+                ets::warn("Mesh contains an out-of-range index");
                 return {};
             }
             const auto& pos = positions[index];
@@ -330,7 +330,7 @@ Aabb Mesh::compute_aabb() const {
 
 void Mesh::scale_by(Vector3 scale) {
     if (!has_attribute(ATTRIBUTE_POSITION.id)) {
-        fei::warn("Mesh has no position attribute, cannot scale");
+        ets::warn("Mesh has no position attribute, cannot scale");
         return;
     }
     auto& positions =
@@ -342,13 +342,13 @@ void Mesh::scale_by(Vector3 scale) {
     }
 
     if (scale.x != scale.y || scale.y != scale.z) {
-        fei::fatal("Non-uniform scaling is not yet supported");
+        ets::fatal("Non-uniform scaling is not yet supported");
     }
 }
 
 void Mesh::rotate_by(Vector3 euler_angles) {
     if (!has_attribute(ATTRIBUTE_POSITION.id)) {
-        fei::warn("Mesh has no position attribute, cannot rotate");
+        ets::warn("Mesh has no position attribute, cannot rotate");
         return;
     }
 
@@ -488,4 +488,4 @@ std::unique_ptr<std::byte[]> Mesh::index_buffer_data() const {
     return buffer;
 }
 
-} // namespace fei
+} // namespace ets

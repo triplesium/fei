@@ -17,7 +17,7 @@
 #    include <process.h>
 #endif
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -97,8 +97,8 @@ TEST_CASE(
     world.add_systems(
         DebugSchedule,
         chain(
-            FEI_NAMED_SYSTEM(shadow_debug_system),
-            FEI_NAMED_SYSTEM(lighting_debug_system)
+            ETS_NAMED_SYSTEM(shadow_debug_system),
+            ETS_NAMED_SYSTEM(lighting_debug_system)
         )
     );
 
@@ -128,9 +128,9 @@ TEST_CASE(
     world.add_systems(
         DebugSchedule,
         chain(
-            FEI_NAMED_SYSTEM(first_debug_system),
-            FEI_NAMED_SYSTEM(second_debug_system),
-            FEI_NAMED_SYSTEM(third_debug_system)
+            ETS_NAMED_SYSTEM(first_debug_system),
+            ETS_NAMED_SYSTEM(second_debug_system),
+            ETS_NAMED_SYSTEM(third_debug_system)
         )
     );
 
@@ -168,8 +168,8 @@ TEST_CASE(
     World world;
     world.add_systems(
         DebugSchedule,
-        FEI_NAMED_SYSTEM(repeated_debug_system),
-        FEI_NAMED_SYSTEM(repeated_debug_system)
+        ETS_NAMED_SYSTEM(repeated_debug_system),
+        ETS_NAMED_SYSTEM(repeated_debug_system)
     );
 
     auto debug = world.schedule_debug_info(DebugSchedule);
@@ -187,9 +187,9 @@ TEST_CASE(
     "Explicit dependencies select one of repeated system instances",
     "[ecs][schedule][debug][instance]"
 ) {
-    auto first = SystemConfig(FEI_NAMED_SYSTEM(repeated_debug_system));
-    auto second = SystemConfig(FEI_NAMED_SYSTEM(repeated_debug_system));
-    auto follower = SystemConfig(FEI_NAMED_SYSTEM(third_debug_system));
+    auto first = SystemConfig(ETS_NAMED_SYSTEM(repeated_debug_system));
+    auto second = SystemConfig(ETS_NAMED_SYSTEM(repeated_debug_system));
+    auto follower = SystemConfig(ETS_NAMED_SYSTEM(third_debug_system));
     const auto first_id = first.id;
     const auto second_id = second.id;
     const auto follower_id = follower.id;
@@ -242,8 +242,8 @@ TEST_CASE(
 ) {
     constexpr ScheduleId other_schedule = 92;
     World world;
-    world.add_systems(DebugSchedule, FEI_NAMED_SYSTEM(shadow_debug_system));
-    world.add_systems(other_schedule, FEI_NAMED_SYSTEM(shadow_debug_system));
+    world.add_systems(DebugSchedule, ETS_NAMED_SYSTEM(shadow_debug_system));
+    world.add_systems(other_schedule, ETS_NAMED_SYSTEM(shadow_debug_system));
 
     auto first = world.schedule_debug_info(DebugSchedule);
     auto second = world.schedule_debug_info(other_schedule);
@@ -265,8 +265,8 @@ TEST_CASE(
     world.add_systems(
         DebugSchedule,
         chain(
-            FEI_NAMED_SYSTEM(repeated_debug_system),
-            FEI_NAMED_SYSTEM(repeated_debug_system)
+            ETS_NAMED_SYSTEM(repeated_debug_system),
+            ETS_NAMED_SYSTEM(repeated_debug_system)
         )
     );
 

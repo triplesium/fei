@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct DynamicArrayError {
     enum class Kind {
@@ -71,4 +71,4 @@ class DynamicArray {
     void swap(DynamicArray& other) noexcept;
 };
 
-} // namespace fei
+} // namespace ets

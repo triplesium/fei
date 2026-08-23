@@ -14,11 +14,11 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 
-inline constexpr std::string_view scene_document_format = "fei.scene";
+inline constexpr std::string_view scene_document_format = "entisium.scene";
 inline constexpr std::uint32_t scene_document_version = 1;
 
 struct SceneComponentDocument {
@@ -95,4 +95,4 @@ class SceneDocumentLoader : public AssetLoader<SceneDocument> {
     load(Reader& reader, const LoadContext& context) override;
 };
 
-} // namespace fei
+} // namespace ets

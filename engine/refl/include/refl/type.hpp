@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 constexpr std::uint64_t stable_name_hash(std::string_view name) {
     std::uint64_t hash = 14695981039346656037ull;
@@ -381,25 +381,25 @@ class Type {
 
     auto operator<=>(const Type& other) const { return m_id <=> other.m_id; }
 };
-} // namespace fei
+} // namespace ets
 
 namespace std {
 template<>
-struct hash<fei::TypeId> { // NOLINT(readability-identifier-naming)
-    size_t operator()(const fei::TypeId& id) const {
+struct hash<ets::TypeId> { // NOLINT(readability-identifier-naming)
+    size_t operator()(const ets::TypeId& id) const {
         return static_cast<size_t>(id.id());
     }
 };
 template<>
-struct hash<fei::Type> { // NOLINT(readability-identifier-naming)
-    size_t operator()(const fei::Type& type) const {
+struct hash<ets::Type> { // NOLINT(readability-identifier-naming)
+    size_t operator()(const ets::Type& type) const {
         return static_cast<size_t>(type.hash().id());
     }
 };
 
 template<>
-struct hash<fei::TypeTagId> { // NOLINT(readability-identifier-naming)
-    size_t operator()(const fei::TypeTagId& id) const {
+struct hash<ets::TypeTagId> { // NOLINT(readability-identifier-naming)
+    size_t operator()(const ets::TypeTagId& id) const {
         return static_cast<size_t>(id.id());
     }
 };

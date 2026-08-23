@@ -4,7 +4,7 @@
 
 #include <string_view>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -316,4 +316,4 @@ bool Condition::run(World& world) {
     }
 }
 
-} // namespace fei
+} // namespace ets

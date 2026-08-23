@@ -7,7 +7,7 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
-namespace fei {
+namespace ets {
 
 class VulkanDeviceState;
 
@@ -33,4 +33,4 @@ class ShaderVulkan : public ShaderModule {
     std::span<const std::byte> spirv() const { return m_spirv; }
 };
 
-} // namespace fei
+} // namespace ets

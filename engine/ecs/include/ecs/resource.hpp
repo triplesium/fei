@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class Resources {
   private:
@@ -228,4 +228,4 @@ class Resources {
     }
 };
 
-} // namespace fei
+} // namespace ets

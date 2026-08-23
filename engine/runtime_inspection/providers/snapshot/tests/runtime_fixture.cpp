@@ -23,7 +23,7 @@
 namespace {
 
 using Json = nlohmann::json;
-using namespace fei;
+using namespace ets;
 
 struct Position {
     int x {};
@@ -431,39 +431,39 @@ int main(int argc, char** argv) {
     if (argc != 2) {
         return 1;
     }
-    auto project = fei::Project::load(argv[1]);
+    auto project = ets::Project::load(argv[1]);
     if (!project) {
         return 1;
     }
 
     register_game_types();
-    fei::App app;
+    ets::App app;
     setup_game(app.world());
-    fei::snapshot::CheckpointStore checkpoints;
+    ets::snapshot::CheckpointStore checkpoints;
     checkpoints.registry().resources().include<GameState>();
     checkpoints.registry().resources().include<DeterministicState>();
-    checkpoints.registry().resource<fei::AppStates>(
-        fei::snapshot::ResourcePolicy::Ignore
+    checkpoints.registry().resource<ets::AppStates>(
+        ets::snapshot::ResourcePolicy::Ignore
     );
-    checkpoints.registry().resource<fei::CommandsQueue>(
-        fei::snapshot::ResourcePolicy::Ignore
+    checkpoints.registry().resource<ets::CommandsQueue>(
+        ets::snapshot::ResourcePolicy::Ignore
     );
     checkpoints.registry()
-        .resource<fei::runtime_inspection::InspectionRegistry>(
-            fei::snapshot::ResourcePolicy::Ignore
+        .resource<ets::runtime_inspection::InspectionRegistry>(
+            ets::snapshot::ResourcePolicy::Ignore
         );
-    checkpoints.registry().resource<fei::runtime_protocol::RuntimeProbe>(
-        fei::snapshot::ResourcePolicy::Ignore
+    checkpoints.registry().resource<ets::runtime_protocol::RuntimeProbe>(
+        ets::snapshot::ResourcePolicy::Ignore
     );
-    checkpoints.registry().resource<fei::snapshot::CheckpointStore>(
-        fei::snapshot::ResourcePolicy::Ignore
+    checkpoints.registry().resource<ets::snapshot::CheckpointStore>(
+        ets::snapshot::ResourcePolicy::Ignore
     );
-    checkpoints.registry().resource<fei::snapshot::SnapshotArchiveMetadata>(
-        fei::snapshot::ResourcePolicy::Ignore
+    checkpoints.registry().resource<ets::snapshot::SnapshotArchiveMetadata>(
+        ets::snapshot::ResourcePolicy::Ignore
     );
 
-    fei::runtime_inspection::InspectionRegistry inspections;
-    auto registered = fei::runtime_inspection::checkpoint::
+    ets::runtime_inspection::InspectionRegistry inspections;
+    auto registered = ets::runtime_inspection::checkpoint::
         register_checkpoint_inspection_providers(inspections);
     if (!registered) {
         return 1;
@@ -478,7 +478,7 @@ int main(int argc, char** argv) {
     }
     inspections.freeze();
 
-    fei::runtime_protocol::RuntimeProbeConfig probe {
+    ets::runtime_protocol::RuntimeProbeConfig probe {
         .project = project->config().name,
         .project_file = project->project_file().generic_string(),
         .build_id = "snapshot-runtime-fixture-v4",
@@ -487,14 +487,14 @@ int main(int argc, char** argv) {
     };
     for (const auto& descriptor : inspections.descriptors()) {
         probe.inspections.push_back(
-            fei::runtime_protocol::InspectionCapability {
+            ets::runtime_protocol::InspectionCapability {
                 .id = descriptor.id,
                 .label = descriptor.label,
                 .description = descriptor.description,
                 .schema = descriptor.schema,
                 .read_only = descriptor.read_only,
                 .cost = std::string(
-                    fei::runtime_inspection::inspection_cost_name(
+                    ets::runtime_inspection::inspection_cost_name(
                         descriptor.cost
                     )
                 ),
@@ -506,7 +506,7 @@ int main(int argc, char** argv) {
 
     app.add_resource(std::move(checkpoints));
     app.add_resource(
-        fei::snapshot::SnapshotArchiveMetadata {
+        ets::snapshot::SnapshotArchiveMetadata {
             .project = project->config().name,
             .engine_build = "snapshot-runtime-fixture-v4",
             .runtime_signature = "checkpoint-runtime-fixture-v1",
@@ -514,9 +514,9 @@ int main(int argc, char** argv) {
         }
     );
     app.add_resource(std::move(inspections));
-    app.add_plugin<fei::ReflectionPlugin>();
+    app.add_plugin<ets::ReflectionPlugin>();
     app.add_plugin(
-        fei::runtime_protocol::RuntimeProbePlugin {std::move(probe)}
+        ets::runtime_protocol::RuntimeProbePlugin {std::move(probe)}
     );
     app.startup();
     for (int frame = 0; frame < 6000; ++frame) {

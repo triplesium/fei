@@ -9,7 +9,7 @@
 #include <string>
 #include <thread>
 
-using namespace fei;
+using namespace ets;
 using namespace std::chrono_literals;
 
 namespace {

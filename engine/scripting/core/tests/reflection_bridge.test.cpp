@@ -5,7 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-namespace fei::scripting_test {
+namespace ets::scripting_test {
 
 struct VisibleType {};
 struct HiddenType {};
@@ -16,17 +16,17 @@ struct StaticFactory {
     static StaticFactory make(int value) { return {.value = value}; }
 };
 
-} // namespace fei::scripting_test
+} // namespace ets::scripting_test
 
-using namespace fei;
+using namespace ets;
 
 TEST_CASE(
-    "Script reflection names omit the fei root namespace",
+    "Script reflection names omit the entisium root namespace",
     "[scripting][reflection]"
 ) {
     auto& type =
         Registry::instance().register_type<scripting_test::VisibleType>(
-            {"fei", "scripting_test"},
+            {"ets", "scripting_test"},
             "VisibleType"
         );
 
@@ -45,7 +45,7 @@ TEST_CASE(
 ) {
     auto& registry = Registry::instance();
     auto& type = registry.register_type<scripting_test::HiddenType>(
-        {"fei", "scripting_test"},
+        {"ets", "scripting_test"},
         "HiddenType"
     );
     registry.add_generated_annotation<scripting_test::HiddenType>("NoScript");
@@ -60,7 +60,7 @@ TEST_CASE(
     auto& registry = Registry::instance();
     registry
         .register_cls<scripting_test::StaticFactory>(
-            {"fei", "scripting_test"},
+            {"ets", "scripting_test"},
             "StaticFactory"
         )
         .add_property("value", &scripting_test::StaticFactory::value)

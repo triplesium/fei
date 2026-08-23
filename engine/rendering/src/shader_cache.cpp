@@ -7,7 +7,7 @@
 #include <future>
 #include <system_error>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -471,4 +471,4 @@ void extract_shaders(
     }
 }
 
-} // namespace fei
+} // namespace ets

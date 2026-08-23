@@ -14,7 +14,7 @@
 #include <optional>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class Buffer;
 class ResourceLayout;
@@ -105,4 +105,4 @@ struct SpriteRenderState {
     std::optional<CachedRenderPipelineId> pipeline_id;
 };
 
-} // namespace fei
+} // namespace ets

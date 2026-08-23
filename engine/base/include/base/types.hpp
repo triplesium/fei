@@ -2,7 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace fei {
+namespace ets {
 
 using int8 = std::int8_t;
 using int16 = std::int16_t;
@@ -22,4 +22,4 @@ using isize = std::ptrdiff_t;
 
 using byte = std::byte;
 
-} // namespace fei
+} // namespace ets

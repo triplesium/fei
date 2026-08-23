@@ -6,7 +6,7 @@
             name="viewport"
             content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
-        <title>fei WebGPU browser sample</title>
+        <title>Entisium WebGPU browser sample</title>
         <style>
             html,
             body {
@@ -46,13 +46,13 @@
         <script>
             const errorElement = document.getElementById("error");
             const editorChannelId = new URLSearchParams(location.search).get(
-                "fei-editor-channel",
+                "entisium-editor-channel",
             );
             const postEditorMessage = (type, detail = {}) => {
                 if (!editorChannelId || window.parent === window) return;
                 window.parent.postMessage(
                     {
-                        source: "fei-runtime",
+                        source: "entisium-runtime",
                         channelId: editorChannelId,
                         type,
                         ...detail,
@@ -69,12 +69,12 @@
             };
             window.addEventListener("error", (event) => {
                 const message = event.error?.stack ?? event.message;
-                console.error("[fei] window error:", message);
+                console.error("[entisium] window error:", message);
                 showError(message);
             });
             window.addEventListener("unhandledrejection", (event) => {
                 const message = event.reason?.stack ?? event.reason;
-                console.error("[fei] unhandled rejection:", message);
+                console.error("[entisium] unhandled rejection:", message);
                 showError(message);
             });
             if (!window.isSecureContext) {
@@ -88,7 +88,7 @@
                 preRun: [
                     () => {
                         if (!editorChannelId) return;
-                        const dependency = "fei-editor-project";
+                        const dependency = "entisium-editor-project";
                         addRunDependency(dependency);
                         const timeout = setTimeout(() => {
                             showError("Timed out waiting for editor project files.");
@@ -98,7 +98,7 @@
                             if (
                                 event.source !== window.parent ||
                                 event.origin !== location.origin ||
-                                event.data?.source !== "fei-editor" ||
+                                event.data?.source !== "entisium-editor" ||
                                 event.data?.channelId !== editorChannelId ||
                                 event.data?.type !== "project.files"
                             ) {
@@ -110,7 +110,7 @@
                             );
                             clearTimeout(timeout);
                             try {
-                                const root = "/fei/assets/web-project";
+                                const root = "/entisium/assets/web-project";
                                 FS.mkdirTree(`${root}/assets`);
                                 for (const file of event.data.files ?? []) {
                                     const path = String(file.path ?? "");
@@ -156,11 +156,11 @@
                         postEditorMessage("project.request");
                     },
                     () => {
-                        const dependency = "fei-webgpu-device";
+                        const dependency = "entisium-webgpu-device";
                         addRunDependency(dependency);
                         const initializeWebGpu = async () => {
                             try {
-                                document.documentElement.dataset.feiStatus =
+                                document.documentElement.dataset.entisiumStatus =
                                     "initializing webgpu";
                                 if (!navigator.gpu) {
                                     throw new Error(
@@ -193,31 +193,31 @@
                                     );
                                 }
                                 const device = await adapter.requestDevice({
-                                    label: "fei WebGPU device",
+                                    label: "Entisium WebGPU device",
                                     requiredFeatures,
                                 });
                                 device.addEventListener(
                                     "uncapturederror",
                                     (event) => {
                                         const message = `WebGPU uncaptured error: ${event.error.message}`;
-                                        console.error("[fei] " + message);
+                                        console.error("[entisium] " + message);
                                         showError(message);
                                     },
                                 );
                                 device.lost.then((info) => {
                                     const message = `WebGPU device lost (${info.reason}): ${info.message}`;
-                                    console.error("[fei] " + message);
+                                    console.error("[entisium] " + message);
                                     showError(message);
                                 });
                                 Module.preinitializedWebGPUDevice = device;
                                 removeRunDependency(dependency);
                             } catch (error) {
-                                document.documentElement.dataset.feiStatus =
+                                document.documentElement.dataset.entisiumStatus =
                                     "webgpu initialization failed";
                                 const message =
                                     error?.stack ?? error?.message ?? error;
                                 console.error(
-                                    "[fei] WebGPU initialization failed:",
+                                    "[entisium] WebGPU initialization failed:",
                                     message,
                                 );
                                 showError(message);

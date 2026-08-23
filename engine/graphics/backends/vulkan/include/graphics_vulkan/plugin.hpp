@@ -3,9 +3,9 @@
 #include "app/plugin.hpp"
 #include "graphics_device.hpp"
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class VulkanPlugin : public Plugin {
   public:
     void setup(App& app) override {
@@ -13,4 +13,4 @@ class VulkanPlugin : public Plugin {
     }
 };
 
-} // namespace fei
+} // namespace ets

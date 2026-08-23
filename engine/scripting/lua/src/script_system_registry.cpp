@@ -11,7 +11,7 @@
 #include <string>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
 LuaScriptSource script_source_for_asset(
@@ -399,4 +399,4 @@ void apply_lua_script_system_queue(
     scripts->apply_queued_requests(*runtime, *world, *assets);
 }
 
-} // namespace fei
+} // namespace ets

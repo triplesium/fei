@@ -11,7 +11,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace fei;
+using namespace ets;
 
 TEST_CASE(
     "Runtime snapshot adapters restore clocks RNG and rebuild input",

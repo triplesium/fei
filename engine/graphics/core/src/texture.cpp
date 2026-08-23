@@ -4,7 +4,7 @@
 
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 std::shared_ptr<const TextureView>
 Texture::full_view(const GraphicsDevice& device) const {
@@ -23,4 +23,4 @@ Texture::full_view(const GraphicsDevice& device) const {
     }
     return m_full_view;
 }
-} // namespace fei
+} // namespace ets

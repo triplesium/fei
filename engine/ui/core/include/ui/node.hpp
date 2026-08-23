@@ -9,16 +9,16 @@
 
 #include <vector>
 
-namespace fei::ui {
+namespace ets::ui {
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class LengthUnit {
     Auto,
     Px,
     Percent,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct Length {
     float value {0.0f};
     LengthUnit unit {LengthUnit::Auto};
@@ -45,7 +45,7 @@ struct Length {
     return Length::percent(value);
 }
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct Edges {
     Length left;
     Length right;
@@ -77,19 +77,19 @@ struct Edges {
     return Edges::axes(horizontal, vertical);
 }
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class Display {
     Flex,
     None,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class PositionType {
     Relative,
     Absolute,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class OverflowAxis {
     Visible,
     Clip,
@@ -97,7 +97,7 @@ enum class OverflowAxis {
     Scroll,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct Overflow {
     OverflowAxis x {OverflowAxis::Visible};
     OverflowAxis y {OverflowAxis::Visible};
@@ -134,20 +134,20 @@ struct Overflow {
     bool operator==(const Overflow&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct ScrollPosition {
     Vector2 offset;
 
     bool operator==(const ScrollPosition&) const = default;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class FlexDirection {
     Row,
     Column,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class AlignItems {
     Start,
     Center,
@@ -155,7 +155,7 @@ enum class AlignItems {
     Stretch,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class JustifyContent {
     Start,
     Center,
@@ -163,7 +163,7 @@ enum class JustifyContent {
     SpaceBetween,
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct Node {
     Display display {Display::Flex};
     PositionType position_type {PositionType::Relative};
@@ -194,7 +194,7 @@ struct Node {
     Length bottom;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct ResolvedBorder {
     float left {0.0f};
     float top {0.0f};
@@ -204,7 +204,7 @@ struct ResolvedBorder {
     bool operator==(const ResolvedBorder&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct BorderRadius {
     Length top_left;
     Length top_right;
@@ -221,7 +221,7 @@ struct BorderRadius {
     }
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct ResolvedBorderRadius {
     float top_left {0.0f};
     float top_right {0.0f};
@@ -231,7 +231,7 @@ struct ResolvedBorderRadius {
     bool operator==(const ResolvedBorderRadius&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct ComputedNode {
     // Position is the top-left corner in logical pixels relative to the UI
     // viewport. Size includes padding.
@@ -247,7 +247,7 @@ struct ComputedNode {
     bool operator==(const ComputedNode&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct CalculatedClip {
     // The inherited clip rectangle in viewport logical pixels. A node's own
     // overflow affects its descendants rather than the node itself.
@@ -258,12 +258,12 @@ struct CalculatedClip {
     }
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct BackgroundColor {
     Color4F color {0.0f, 0.0f, 0.0f, 0.0f};
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct BorderColor {
     Color4F left;
     Color4F top;
@@ -275,12 +275,12 @@ struct BorderColor {
     }
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct ZIndex {
     int32 value {0};
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct ComputedStackIndex {
     static constexpr uint32 HIDDEN = static_cast<uint32>(-1);
 
@@ -294,4 +294,4 @@ struct Stack {
     std::vector<Entity> nodes;
 };
 
-} // namespace fei::ui
+} // namespace ets::ui

@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct EntityLocation {
     ArchetypeId archetype_id;
@@ -59,12 +59,12 @@ class Entities {
     }
 
     void set_location(Entity entity, EntityLocation location) {
-        FEI_ASSERT(entity.value < m_locations.size());
+        ETS_ASSERT(entity.value < m_locations.size());
         m_locations[entity.value] = location;
     }
 
     EntityLocation get_location(Entity entity) const {
-        FEI_ASSERT(entity.value < m_locations.size());
+        ETS_ASSERT(entity.value < m_locations.size());
         return m_locations[entity.value];
     }
 
@@ -74,9 +74,9 @@ class Entities {
     }
 
     void remove_entity(Entity entity) {
-        FEI_ASSERT(contains(entity));
+        ETS_ASSERT(contains(entity));
         m_locations[entity.value] = EntityLocation {0, 0};
     }
 };
 
-} // namespace fei
+} // namespace ets

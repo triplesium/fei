@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct LuauScriptImport {
     std::string specifier;
@@ -41,4 +41,4 @@ class LuauScriptAssetLoader : public AssetLoader<LuauScriptAsset> {
     load(Reader& reader, const LoadContext& context) override;
 };
 
-} // namespace fei
+} // namespace ets

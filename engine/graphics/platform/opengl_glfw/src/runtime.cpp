@@ -7,7 +7,7 @@
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -137,4 +137,4 @@ std::unique_ptr<GraphicsRuntime> OpenGLGlfwBootstrap::initialize() {
     return std::make_unique<OpenGLGlfwRuntime>(description);
 }
 
-} // namespace fei
+} // namespace ets

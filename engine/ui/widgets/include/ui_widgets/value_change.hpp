@@ -2,7 +2,7 @@
 
 #include "ecs/fwd.hpp"
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
 template<typename T>
 struct ValueChange {
@@ -13,4 +13,4 @@ struct ValueChange {
     bool operator==(const ValueChange&) const = default;
 };
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

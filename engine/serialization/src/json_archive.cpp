@@ -7,7 +7,7 @@
 #include <string_view>
 #include <utility>
 
-namespace fei::serialization {
+namespace ets::serialization {
 namespace {
 
 using Json = nlohmann::ordered_json;
@@ -124,4 +124,4 @@ write_json(const SerializedNode& node, int indent) {
     return json.dump(indent);
 }
 
-} // namespace fei::serialization
+} // namespace ets::serialization

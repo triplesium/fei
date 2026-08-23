@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 struct SystemProfileInfo {
     std::string name;
@@ -93,10 +93,10 @@ NamedSystem<std::decay_t<Func>> named_system(
     };
 }
 
-} // namespace fei
+} // namespace ets
 
-#define FEI_NAMED_SYSTEM(fn) \
-    ::fei::named_system(#fn, fn, std::source_location::current())
+#define ETS_NAMED_SYSTEM(fn) \
+    ::ets::named_system(#fn, fn, std::source_location::current())
 
-#define FEI_SYSTEM_NAME(name, func) \
-    ::fei::named_system(name, func, std::source_location::current())
+#define ETS_SYSTEM_NAME(name, func) \
+    ::ets::named_system(name, func, std::source_location::current())

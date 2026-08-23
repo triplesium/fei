@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::vulkan_detail {
+namespace ets::vulkan_detail {
 
 class CommandBufferResourceRetention {
   private:
@@ -50,4 +50,4 @@ class CommandBufferResourceRetention {
     }
 };
 
-} // namespace fei::vulkan_detail
+} // namespace ets::vulkan_detail

@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -563,4 +563,4 @@ void ShaderArtifactCache::store(
     save_shader_cache(key.path, key.value, request, output);
 }
 
-} // namespace fei
+} // namespace ets

@@ -15,7 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 enum class MaterialShaderType : uint8 {
     Vertex,
@@ -39,16 +39,16 @@ struct MaterialPipelineState {
     bool operator==(const MaterialPipelineState&) const = default;
 };
 
-} // namespace fei
+} // namespace ets
 
 MAKE_STD_HASHABLE(
-    fei::MaterialPipelineState,
+    ets::MaterialPipelineState,
     alpha_mode,
     cull_mode,
     depth_write
 )
 
-namespace fei {
+namespace ets {
 
 class Material {
   public:
@@ -258,7 +258,7 @@ class MaterialAdapter
 };
 
 template<std::derived_from<Material> M>
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class MaterialPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {
@@ -270,4 +270,4 @@ class MaterialPlugin : public Plugin {
     void setup(App& /*app*/) override {}
 };
 
-} // namespace fei
+} // namespace ets

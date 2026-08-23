@@ -9,7 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace fei {
+namespace ets {
 
 enum class PbrMeshPipelineKeyFlags : std::uint64_t {
     None = 0,
@@ -75,4 +75,4 @@ inline void remove_vertex_input_attribute(
     }
 }
 
-} // namespace fei
+} // namespace ets

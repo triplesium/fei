@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class AssetServer;
 
@@ -147,4 +147,4 @@ void cleanup_scene_instances(
     Commands commands
 );
 
-} // namespace fei
+} // namespace ets

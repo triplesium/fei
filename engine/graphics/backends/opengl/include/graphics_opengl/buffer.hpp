@@ -6,7 +6,7 @@
 
 #include <cstddef>
 
-namespace fei {
+namespace ets {
 
 class BufferOpenGL : public Buffer, public DeferredResourceOpenGL {
   private:
@@ -27,4 +27,4 @@ class BufferOpenGL : public Buffer, public DeferredResourceOpenGL {
     void destroy_gl_resource() override;
 };
 
-} // namespace fei
+} // namespace ets

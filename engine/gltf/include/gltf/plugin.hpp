@@ -7,9 +7,9 @@
 #include "gltf/loader.hpp"
 #include "scene/plugin.hpp"
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class GltfPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {
@@ -21,4 +21,4 @@ class GltfPlugin : public Plugin {
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

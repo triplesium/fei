@@ -1,6 +1,6 @@
 #pragma once
 
-namespace fei {
+namespace ets {
 
 class App;
 
@@ -8,4 +8,4 @@ class App;
 // requestAnimationFrame until AppStates::should_stop is set.
 void run_browser_app(App&& app);
 
-} // namespace fei
+} // namespace ets

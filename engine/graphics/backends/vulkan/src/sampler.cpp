@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 SamplerVulkan::SamplerVulkan(
     std::shared_ptr<VulkanDeviceState> state,
@@ -65,4 +65,4 @@ SamplerVulkan::~SamplerVulkan() {
     }
 }
 
-} // namespace fei
+} // namespace ets

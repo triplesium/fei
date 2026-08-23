@@ -14,7 +14,7 @@
 #include <variant>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct OpenGLTextureReadbackState;
 
@@ -276,4 +276,4 @@ class GraphicsDeviceOpenGL : public GraphicsDevice {
     void assert_context_thread(const char* operation) const;
 };
 
-} // namespace fei
+} // namespace ets

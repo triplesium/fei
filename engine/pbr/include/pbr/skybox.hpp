@@ -19,7 +19,7 @@
 #include <memory>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct SkyboxResource {
     std::vector<std::shared_ptr<const ShaderModule>> shader_modules;
@@ -58,10 +58,10 @@ void render_skybox_pass(
     ResRO<SkyboxResource> skybox_resource
 );
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class SkyboxPlugin : public Plugin {
   public:
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

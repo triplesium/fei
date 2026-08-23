@@ -7,7 +7,7 @@
 #include <limits>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -891,4 +891,4 @@ std::unique_ptr<Mesh> MeshFactory::create_quad(float width, float height) {
     return mesh;
 }
 
-} // namespace fei
+} // namespace ets

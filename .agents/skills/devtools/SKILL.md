@@ -1,6 +1,6 @@
 ---
 name: devtools
-description: Use the fei DevTools HTTP API to inspect or control a running sample. Use when diagnosing rendering output, capturing frames, inspecting RenderGraph or graphics cache state, checking DevTools status, or sending input commands to a sample target.
+description: Use the Entisium DevTools HTTP API to inspect or control a running sample. Use when diagnosing rendering output, capturing frames, inspecting RenderGraph or graphics cache state, checking DevTools status, or sending input commands to a sample target.
 ---
 
 # DevTools

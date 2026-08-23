@@ -11,7 +11,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
 Window sync_canvas_size(const BrowserCanvas& canvas) {
@@ -88,4 +88,4 @@ void BrowserWindowPlugin::setup(App& app) {
         );
 }
 
-} // namespace fei
+} // namespace ets

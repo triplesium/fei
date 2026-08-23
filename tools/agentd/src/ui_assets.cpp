@@ -6,7 +6,7 @@ EMBED(agentd_index_html, "agentd/index.html");
 EMBED(agentd_app_css, "agentd/app.css");
 EMBED(agentd_app_js, "agentd/app.js");
 
-namespace fei::agentd::detail {
+namespace ets::agentd::detail {
 namespace {
 
 const Reader c_index_html = EmbeddedAssets::get("agentd/index.html").reader();
@@ -37,4 +37,4 @@ Optional<UiAsset> find_ui_asset(std::string_view path) {
     return nullopt;
 }
 
-} // namespace fei::agentd::detail
+} // namespace ets::agentd::detail

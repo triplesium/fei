@@ -1,6 +1,6 @@
 #include "ui_widgets/plugin.hpp"
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
 void sync_checkboxes(
     Query<Entity, const Checkbox>::Filter<Without<ui::Node>> missing_nodes,
@@ -116,4 +116,4 @@ void checkbox_self_update(
     }
 }
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

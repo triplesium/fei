@@ -17,13 +17,13 @@
 #include <string>
 #include <vector>
 
-namespace fei::lua_runtime_test::nested {
+namespace ets::lua_runtime_test::nested {
 
 struct Value {};
 
-} // namespace fei::lua_runtime_test::nested
+} // namespace ets::lua_runtime_test::nested
 
-using namespace fei;
+using namespace ets;
 
 TEST_CASE(
     "LuaRuntime evaluates isolated scripts and captures output",
@@ -723,7 +723,7 @@ TEST_CASE(
 ) {
     auto& registry = Registry::instance();
     auto& cls = registry.register_cls<lua_runtime_test::nested::Value>(
-        {"fei", "lua_runtime_test", "nested"},
+        {"ets", "lua_runtime_test", "nested"},
         "Value"
     );
     LuaRuntime runtime;

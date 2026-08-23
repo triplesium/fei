@@ -12,7 +12,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei::project_runtime {
+namespace ets::project_runtime {
 
 namespace detail {
 
@@ -40,7 +40,7 @@ using LuaScriptState =
 using LuaScriptsState =
     project_scripting::ScriptsState<detail::LuaProjectScriptBackend>;
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class LuaScriptsPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {
@@ -51,4 +51,4 @@ class LuaScriptsPlugin : public Plugin {
     void setup(App& app) override;
 };
 
-} // namespace fei::project_runtime
+} // namespace ets::project_runtime

@@ -4,7 +4,7 @@
 #include <fstream>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 ReaderError::ReaderError(std::filesystem::path path, std::string message) :
     path(std::move(path)), message(std::move(message)) {}
@@ -130,4 +130,4 @@ std::string Reader::as_string() const {
     );
 }
 
-} // namespace fei
+} // namespace ets

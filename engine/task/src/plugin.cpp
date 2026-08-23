@@ -4,7 +4,7 @@
 #include "ecs/system_config.hpp"
 #include "ecs/system_params.hpp"
 
-namespace fei {
+namespace ets {
 
 Tasks::Tasks(std::size_t thread_count) :
     m_general(std::make_unique<TaskPool>(thread_count)) {}
@@ -27,4 +27,4 @@ void TaskPlugin::setup(App& app) {
     );
 }
 
-} // namespace fei
+} // namespace ets

@@ -8,7 +8,7 @@
 #include <string_view>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct ReaderError {
     std::filesystem::path path;
@@ -44,4 +44,4 @@ class Reader {
     std::string as_string() const;
 };
 
-} // namespace fei
+} // namespace ets

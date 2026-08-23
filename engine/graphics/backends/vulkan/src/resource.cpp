@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -501,4 +501,4 @@ ResourceSetVulkan::~ResourceSetVulkan() {
     }
 }
 
-} // namespace fei
+} // namespace ets

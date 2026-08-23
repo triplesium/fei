@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace fei {
+namespace ets {
 
 ScriptTestReceiver::ScriptTestReceiver() = default;
 
@@ -171,4 +171,4 @@ LuaRuntime make_test_runtime() {
     return runtime;
 }
 
-} // namespace fei
+} // namespace ets

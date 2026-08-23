@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 template<typename T>
 concept NamedIntoSystem = NamedSystemWrapper<T> &&
@@ -350,4 +350,4 @@ inline SystemConfigs operator|(SystemConfigs&& config, SystemRunIfTag<C> tag) {
     return std::move(config);
 }
 
-} // namespace fei
+} // namespace ets

@@ -15,7 +15,7 @@
 #include <string_view>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
 Optional<TypeId> primitive_dynamic_type_id(std::string_view name) {
@@ -349,9 +349,9 @@ resolve_dynamic_type_ref(const DynamicTypeRef& type_ref) {
         return type->id();
     }
     if (type_ref.type_name.contains("::") &&
-        !type_ref.type_name.starts_with("fei::")) {
+        !type_ref.type_name.starts_with("ets::")) {
         auto rooted = Registry::instance().try_get_type_exact(
-            "fei::" + type_ref.type_name
+            "ets::" + type_ref.type_name
         );
         if (rooted) {
             return rooted->id();
@@ -395,4 +395,4 @@ compile_dynamic_condition_params(const DynamicConditionDecl& decl) {
     return compile_dynamic_params(decl.params);
 }
 
-} // namespace fei
+} // namespace ets

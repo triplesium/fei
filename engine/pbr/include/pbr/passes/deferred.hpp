@@ -8,7 +8,7 @@
 
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 struct DeferredPrepassPhase : RenderPhase<MeshDrawItem> {};
 
@@ -42,7 +42,7 @@ struct DeferredRenderPipelines {
     bool present_composite_pipeline_requested {false};
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class DeferredRenderPlugin : public Plugin {
   private:
     bool m_enable_vxgi {true};
@@ -55,4 +55,4 @@ class DeferredRenderPlugin : public Plugin {
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

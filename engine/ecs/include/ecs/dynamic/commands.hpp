@@ -6,7 +6,7 @@
 #include <optional>
 #include <string>
 
-namespace fei {
+namespace ets {
 
 class DynamicCommandsParam final : public DynamicSystemParam {
   private:
@@ -23,4 +23,4 @@ class DynamicCommandsParam final : public DynamicSystemParam {
     prepare(World& world, SystemTicks system_ticks) override;
 };
 
-} // namespace fei
+} // namespace ets

@@ -9,15 +9,15 @@
 
 #include <cstdint>
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct Camera2d {
     float vertical_size {10.0f};
     Color4F clear_color {0.08f, 0.09f, 0.12f, 1.0f};
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct Sprite {
     Handle<Image> image;
     Vector2 size {1.0f, 1.0f};
@@ -31,4 +31,4 @@ struct Sprite {
     std::int32_t layer {0};
 };
 
-} // namespace fei
+} // namespace ets

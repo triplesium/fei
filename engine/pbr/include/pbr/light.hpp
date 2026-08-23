@@ -37,7 +37,7 @@
 #include <memory>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct DirectionalLight {
     Color3F color {1.0f, 1.0f, 1.0f};
@@ -225,4 +225,4 @@ void render_shadow_blur_passes(
     ResRO<RenderAssets<GpuMesh>> gpu_meshes
 );
 
-} // namespace fei
+} // namespace ets

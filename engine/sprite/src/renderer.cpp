@@ -6,7 +6,7 @@
 #include <array>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 void SpritePhase::clear() {
     vertices.clear();
@@ -187,4 +187,4 @@ void append_sprite(
     );
 }
 
-} // namespace fei
+} // namespace ets

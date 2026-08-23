@@ -1,24 +1,24 @@
-target("fei-scripting-lua")
+target("entisium-scripting-lua")
     set_kind("static")
-    add_rules("fei.reflect")
+    add_rules("entisium.reflect")
     add_files("src/*.cpp", "src/detail/*.cpp")
     add_headerfiles("include/**.hpp")
     add_includedirs("include", {public = true})
     add_deps(
-        "fei-base",
-        "fei-refl",
-        "fei-ecs",
-        "fei-app",
-        "fei-asset",
-        "fei-scripting"
+        "entisium-base",
+        "entisium-refl",
+        "entisium-ecs",
+        "entisium-app",
+        "entisium-asset",
+        "entisium-scripting"
     )
     add_packages("lua")
 
-target("fei-scripting-lua-tests")
+target("entisium-scripting-lua-tests")
     set_kind("binary")
     set_default(false)
-    add_rules("fei.test")
+    add_rules("entisium.test")
     add_files("tests/*.cpp")
     add_headerfiles("tests/*.hpp")
-    add_deps("fei-scripting-lua", "fei-core", "fei-math")
+    add_deps("entisium-scripting-lua", "entisium-core", "entisium-math")
     add_packages("lua")

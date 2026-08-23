@@ -14,7 +14,7 @@
 #    include <unistd.h>
 #endif
 
-namespace fei::agentd {
+namespace ets::agentd {
 namespace {
 
 #if defined(_WIN32)
@@ -303,4 +303,4 @@ uint64 RuntimeProcess::process_id() const {
     return m_impl->process_id();
 }
 
-} // namespace fei::agentd
+} // namespace ets::agentd

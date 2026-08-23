@@ -1,6 +1,6 @@
 #include "physics2d/components.hpp"
 
-namespace fei {
+namespace ets {
 
 Collider2d Collider2d::box(Vector2 half_extents) {
     return Collider2d {
@@ -26,4 +26,4 @@ bool Collider2d::valid() const {
     return false;
 }
 
-} // namespace fei
+} // namespace ets

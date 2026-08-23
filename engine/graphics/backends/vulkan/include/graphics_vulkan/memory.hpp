@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <vulkan/vulkan_core.h>
 
-namespace fei {
+namespace ets {
 
 struct VulkanMemoryBlock {
     VkDeviceMemory memory {VK_NULL_HANDLE};
@@ -76,4 +76,4 @@ class VulkanMemoryAllocator {
     ) const;
 };
 
-} // namespace fei
+} // namespace ets

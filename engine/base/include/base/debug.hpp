@@ -2,11 +2,11 @@
 #include "base/log.hpp" // IWYU pragma: keep
 
 #ifdef NDEBUG
-#    define FEI_ASSERT(condition) static_cast<void>(0)
+#    define ETS_ASSERT(condition) static_cast<void>(0)
 #else
-#    define FEI_ASSERT(condition)                                \
+#    define ETS_ASSERT(condition)                                \
         do {                                                     \
             if (!(condition))                                    \
-                fei::fatal("Assertion '{}' failed", #condition); \
+                ets::fatal("Assertion '{}' failed", #condition); \
         } while (0)
 #endif

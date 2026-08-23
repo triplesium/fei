@@ -5,7 +5,7 @@
 #include <deque>
 #include <vector>
 
-namespace fei::profiling_detail {
+namespace ets::profiling_detail {
 
 struct FrameProfileHistorySample {
     std::uint64_t frame {0};
@@ -25,4 +25,4 @@ class FrameProfileHistory {
     std::uint64_t m_next_frame {0};
 };
 
-} // namespace fei::profiling_detail
+} // namespace ets::profiling_detail

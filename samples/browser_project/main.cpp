@@ -17,7 +17,7 @@
 #include <string>
 #include <utility>
 
-namespace fei::browser_project_sample {
+namespace ets::browser_project_sample {
 namespace {
 
 struct ProjectStatus {
@@ -36,8 +36,8 @@ void publish_status(const char* status) {
     EM_ASM(
         {
             const status = UTF8ToString($0);
-            document.documentElement.dataset.feiProjectStatus = status;
-            console.log("[fei] " + status);
+            document.documentElement.dataset.entisiumProjectStatus = status;
+            console.log("[entisium] " + status);
         },
         status
     );
@@ -65,7 +65,7 @@ void report_project_scripts(
             return;
         }
     }
-    EM_ASM({ document.documentElement.dataset.feiProjectScript = "loaded"; });
+    EM_ASM({ document.documentElement.dataset.entisiumProjectScript = "loaded"; });
     publish_status("project script loaded");
     status->published = true;
 }
@@ -79,8 +79,8 @@ void report_project_frame(
     }
     EM_ASM(
         {
-            document.documentElement.dataset.feiProjectFramePresented = "true";
-            document.documentElement.dataset.feiStatus =
+            document.documentElement.dataset.entisiumProjectFramePresented = "true";
+            document.documentElement.dataset.entisiumStatus =
                 "web project presented";
         }
     );
@@ -116,14 +116,14 @@ class BrowserProjectHostPlugin final : public Plugin {
 };
 
 } // namespace
-} // namespace fei::browser_project_sample
+} // namespace ets::browser_project_sample
 
 int main() {
-    using namespace fei;
-    using namespace fei::browser_project_sample;
+    using namespace ets;
+    using namespace ets::browser_project_sample;
 
     publish_status("loading web project");
-    auto project = Project::load("/fei/assets/web-project/project.yaml");
+    auto project = Project::load("/entisium/assets/web-project/project.yaml");
     if (!project) {
         const auto message = "project load failed: " + project.error().message;
         error("{}", message);

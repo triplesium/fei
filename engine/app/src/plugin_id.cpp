@@ -4,7 +4,7 @@
 #include <string>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 PluginId::PluginId(std::string qualified_name) :
     m_qualified_name(std::move(qualified_name)) {
@@ -52,4 +52,4 @@ std::string_view PluginId::local_name() const {
     return std::string_view(m_qualified_name).substr(separator + 2);
 }
 
-} // namespace fei
+} // namespace ets

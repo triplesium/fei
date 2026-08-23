@@ -8,8 +8,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace fei;
-using namespace fei::detail;
+using namespace ets;
+using namespace ets::detail;
 
 namespace {
 

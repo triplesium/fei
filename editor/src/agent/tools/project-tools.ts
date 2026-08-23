@@ -16,7 +16,7 @@ export function createProjectTools(editor: EditorAgentApi): AgentTool<any>[] {
         {
             name: "project_list",
             label: "List Project Files",
-            description: "List the files in the currently open Fei project.",
+            description: "List the files in the currently open Entisium project.",
             parameters: emptyParameters,
             execute: async (_toolCallId, _parameters, signal) =>
                 invokeEditorCommand(editor, { type: "project.list" }, signal),
@@ -24,7 +24,7 @@ export function createProjectTools(editor: EditorAgentApi): AgentTool<any>[] {
         {
             name: "project_read",
             label: "Read Project File",
-            description: "Read a text file from the current Fei project.",
+            description: "Read a text file from the current Entisium project.",
             parameters: pathParameters,
             execute: async (_toolCallId, parameters, signal) => {
                 const { path } = parameters as { path: string };
@@ -35,7 +35,7 @@ export function createProjectTools(editor: EditorAgentApi): AgentTool<any>[] {
             name: "project_write",
             label: "Write Project File",
             description:
-                "Replace a text file in the current Fei project, or create it if it does not exist.",
+                "Replace a text file in the current Entisium project, or create it if it does not exist.",
             parameters: Type.Object(
                 {
                     path: Type.String({ description: "Project-relative file path" }),
@@ -59,7 +59,7 @@ export function createProjectTools(editor: EditorAgentApi): AgentTool<any>[] {
         {
             name: "project_create",
             label: "Create Project File",
-            description: "Create a new text file in the current Fei project.",
+            description: "Create a new text file in the current Entisium project.",
             parameters: Type.Object(
                 {
                     path: Type.String({ description: "Project-relative file path" }),

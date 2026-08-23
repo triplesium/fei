@@ -6,12 +6,12 @@
 #include <cstddef>
 #include <string>
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct TextInput {};
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct TextInputState {
     bool changed {false};
     bool pointer_dragging {false};
@@ -20,19 +20,19 @@ struct TextInputState {
 };
 
 // Unstyled child decoration positioned by TextInputPlugin.
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct TextCaret {};
 
 // Add one child per visual line that may need a selection rectangle.
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct TextSelection {
     std::size_t segment {0};
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct SelectAllOnFocus {};
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct TextSubmit {
     Entity entity;
     std::string value;
@@ -40,4 +40,4 @@ struct TextSubmit {
     bool operator==(const TextSubmit&) const = default;
 };
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

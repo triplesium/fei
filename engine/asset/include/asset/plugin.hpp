@@ -7,14 +7,14 @@
 #include <filesystem>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 struct AssetsPluginConfig {
     std::filesystem::path project_asset_root;
     std::filesystem::path import_cache_root;
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class AssetsPlugin : public Plugin {
   private:
     AssetsPluginConfig m_config;
@@ -53,4 +53,4 @@ class AssetPlugin : public Plugin {
     }
 };
 
-} // namespace fei
+} // namespace ets

@@ -17,8 +17,8 @@
 #include <thread>
 #include <vector>
 
-using namespace fei;
-using namespace fei::agentd;
+using namespace ets;
+using namespace ets::agentd;
 
 namespace {
 
@@ -57,8 +57,9 @@ class CheckpointArchiveFile {
     CheckpointArchiveFile() {
         const auto suffix =
             std::chrono::steady_clock::now().time_since_epoch().count();
-        m_directory = std::filesystem::temp_directory_path() /
-                      ("fei-agentd-checkpoint-e2e-" + std::to_string(suffix));
+        m_directory =
+            std::filesystem::temp_directory_path() /
+            ("entisium-agentd-checkpoint-e2e-" + std::to_string(suffix));
         std::filesystem::create_directories(m_directory);
     }
 
@@ -68,7 +69,7 @@ class CheckpointArchiveFile {
     }
 
     std::filesystem::path path() const {
-        return m_directory / "before-combat.fei-snapshot.json";
+        return m_directory / "before-combat.entisium-snapshot.json";
     }
 };
 
@@ -78,7 +79,7 @@ TEST_CASE(
     "Agent control script replays and branches a real supervised ECS world",
     "[agentd][play-run][checkpoint][e2e]"
 ) {
-    auto project = Project::load(FEI_CHECKPOINT_PROJECT_PATH);
+    auto project = Project::load(ETS_CHECKPOINT_PROJECT_PATH);
     REQUIRE(project);
 
     SupervisorState state(
@@ -107,12 +108,12 @@ TEST_CASE(
         ProcessLaunch {
             .arguments =
                 {
-                    FEI_SNAPSHOT_RUNTIME_FIXTURE_PATH,
-                    FEI_CHECKPOINT_PROJECT_PATH,
+                    ETS_SNAPSHOT_RUNTIME_FIXTURE_PATH,
+                    ETS_CHECKPOINT_PROJECT_PATH,
                 },
             .environment = {
-                {"FEI_AGENTD_PORT", std::to_string(port)},
-                {"FEI_RUNTIME_SESSION", state.session()},
+                {"ETS_AGENTD_PORT", std::to_string(port)},
+                {"ETS_RUNTIME_SESSION", state.session()},
             },
         }
     ));
@@ -175,7 +176,7 @@ return {
     REQUIRE(control.start(
         ProcessLaunch {
             .arguments = {
-                FEI_CTL_PATH,
+                ETS_CTL_PATH,
                 "--port",
                 std::to_string(port),
                 "play-run",
@@ -217,7 +218,7 @@ return {
     CheckpointArchiveFile archive;
     auto run_ctl = [&](std::vector<std::string> arguments) {
         std::vector<std::string> command {
-            FEI_CTL_PATH,
+            ETS_CTL_PATH,
             "--port",
             std::to_string(port),
         };
@@ -256,12 +257,12 @@ return {
         ProcessLaunch {
             .arguments =
                 {
-                    FEI_SNAPSHOT_RUNTIME_FIXTURE_PATH,
-                    FEI_CHECKPOINT_PROJECT_PATH,
+                    ETS_SNAPSHOT_RUNTIME_FIXTURE_PATH,
+                    ETS_CHECKPOINT_PROJECT_PATH,
                 },
             .environment = {
-                {"FEI_AGENTD_PORT", std::to_string(port)},
-                {"FEI_RUNTIME_SESSION", state.session()},
+                {"ETS_AGENTD_PORT", std::to_string(port)},
+                {"ETS_RUNTIME_SESSION", state.session()},
             },
         }
     ));

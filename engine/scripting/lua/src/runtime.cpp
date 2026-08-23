@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 namespace {
 
 char c_script_namespace_marker;
@@ -227,4 +227,4 @@ Status<LuaScriptError> LuaRuntime::call_function(
     return {};
 }
 
-} // namespace fei
+} // namespace ets

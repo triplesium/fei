@@ -10,7 +10,7 @@
 #include <string_view>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -326,4 +326,4 @@ Status<InspectionError>
 register_checkpoint_inspection_providers(InspectionRegistry& registry);
 
 } // namespace runtime_inspection::checkpoint
-} // namespace fei
+} // namespace ets

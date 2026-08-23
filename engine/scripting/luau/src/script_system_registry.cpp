@@ -16,7 +16,7 @@
 #include <string_view>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
 LuauScriptSource script_source_for_asset(
@@ -639,4 +639,4 @@ void apply_luau_script_system_queue(
     scripts->apply_queued_requests(*runtime, *world, *assets, &*asset_server);
 }
 
-} // namespace fei
+} // namespace ets

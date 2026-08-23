@@ -5,7 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-namespace fei::test {
+namespace ets::test {
 
 TEST_CASE(
     "Luau compiler resolves fixed main schedules",
@@ -675,4 +675,4 @@ TEST_CASE(
     );
 }
 
-} // namespace fei::test
+} // namespace ets::test

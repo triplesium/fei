@@ -3,7 +3,7 @@
 #include "base/log.hpp"
 #include "graphics_vulkan/utils.hpp"
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -222,4 +222,4 @@ void VulkanMemoryAllocator::invalidate(
     );
 }
 
-} // namespace fei
+} // namespace ets

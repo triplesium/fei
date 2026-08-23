@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::project_scripting {
+namespace ets::project_scripting {
 
 enum class ScriptStatus : std::uint8_t {
     Queued,
@@ -135,4 +135,4 @@ void update_project_script_states(
     );
 }
 
-} // namespace fei::project_scripting
+} // namespace ets::project_scripting

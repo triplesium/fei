@@ -21,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -457,4 +457,4 @@ class World {
     bool would_create_cycle(Entity child, Entity parent) const;
 };
 
-} // namespace fei
+} // namespace ets

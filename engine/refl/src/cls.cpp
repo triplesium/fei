@@ -6,7 +6,7 @@
 #include <string>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -446,4 +446,4 @@ std::vector<Property*> Cls::get_properties() const {
     return props;
 }
 
-} // namespace fei
+} // namespace ets

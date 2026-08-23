@@ -9,7 +9,7 @@
 #    include <utility>
 #endif
 
-namespace fei {
+namespace ets {
 
 #if defined(__cpp_lib_move_only_function) && \
     __cpp_lib_move_only_function >= 202110L
@@ -98,4 +98,4 @@ class MoveOnlyFunction<Return(Args...)> {
 
 #endif
 
-} // namespace fei
+} // namespace ets

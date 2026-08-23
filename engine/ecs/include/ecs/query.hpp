@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 // Default: T=component
 template<typename T>
@@ -378,4 +378,4 @@ struct SystemParamTraits<FilteredQuery<Q, Filters...>> {
     }
 };
 
-} // namespace fei
+} // namespace ets

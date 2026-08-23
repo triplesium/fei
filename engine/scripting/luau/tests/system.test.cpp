@@ -21,15 +21,15 @@
 #include <memory>
 #include <string>
 
-using namespace fei;
+using namespace ets;
 
-namespace fei::luau_system_test {
+namespace ets::luau_system_test {
 
 struct Config {
     int value {0};
 };
 
-} // namespace fei::luau_system_test
+} // namespace ets::luau_system_test
 
 namespace {
 
@@ -237,7 +237,7 @@ TEST_CASE(
     auto& registry = Registry::instance();
     registry
         .register_cls<luau_system_test::Config>(
-            {"fei", "luau_system_test"},
+            {"ets", "luau_system_test"},
             "Config"
         )
         .add_property("value", &luau_system_test::Config::value);

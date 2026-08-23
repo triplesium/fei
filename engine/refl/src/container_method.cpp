@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 namespace {
 
 InvokeResult invalid_call(std::string message) {
@@ -413,4 +413,4 @@ void register_container_methods(Cls& cls, const ContainerAdapter& adapter) {
     );
 }
 
-} // namespace fei
+} // namespace ets

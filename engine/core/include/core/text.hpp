@@ -6,7 +6,7 @@
 
 #include <string>
 
-namespace fei {
+namespace ets {
 
 class TextAsset {
   private:
@@ -26,7 +26,7 @@ class TextAssetLoader : public AssetLoader<TextAsset> {
     }
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class TextAssetPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {
@@ -36,4 +36,4 @@ class TextAssetPlugin : public Plugin {
     void setup(App& /*app*/) override {}
 };
 
-} // namespace fei
+} // namespace ets

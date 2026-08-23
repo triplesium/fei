@@ -5,7 +5,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace fei {
+namespace ets {
 
 class Val;
 
@@ -48,4 +48,4 @@ class Enum {
 
 bool is_enum_type(TypeId type_id);
 
-} // namespace fei
+} // namespace ets

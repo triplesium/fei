@@ -3,7 +3,7 @@
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -62,4 +62,4 @@ void GlfwWindowPlugin::cleanup(App& app) noexcept {
     glfwTerminate();
 }
 
-} // namespace fei
+} // namespace ets

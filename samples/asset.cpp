@@ -13,7 +13,7 @@
 #include <print>
 #include <thread>
 
-using namespace fei;
+using namespace ets;
 
 struct Foo {
     Handle<TextAsset> handle;

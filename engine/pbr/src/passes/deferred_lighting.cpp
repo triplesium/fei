@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -536,4 +536,4 @@ void present_composite_pass(
     command_buffer->end_render_pass();
 }
 
-} // namespace fei
+} // namespace ets

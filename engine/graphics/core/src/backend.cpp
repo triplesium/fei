@@ -3,7 +3,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 BoxedGraphicsBackendBootstrap::BoxedGraphicsBackendBootstrap(
     std::unique_ptr<GraphicsBackendBootstrap> bootstrap
@@ -23,4 +23,4 @@ BoxedGraphicsRuntime::BoxedGraphicsRuntime(
     }
 }
 
-} // namespace fei
+} // namespace ets

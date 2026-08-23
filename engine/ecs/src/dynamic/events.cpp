@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 void DynamicEvents::send(TypeId type, Val event) {
     auto& channel = m_channels[type];
@@ -186,4 +186,4 @@ DynamicEventParam::restore_runtime_state(const SystemParamRuntimeState& state) {
     return {};
 }
 
-} // namespace fei
+} // namespace ets

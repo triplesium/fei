@@ -3,12 +3,12 @@
 #include "app/app.hpp"
 #include "refl/reflect.hpp"
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class ReflectionPlugin : public Plugin {
   public:
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

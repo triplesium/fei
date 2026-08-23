@@ -17,7 +17,7 @@
 #include <string_view>
 #include <utility>
 
-namespace fei::snapshot_runtime {
+namespace ets::snapshot_runtime {
 namespace {
 
 using serialization::DeserializeError;
@@ -301,4 +301,4 @@ void SnapshotRuntimePlugin::setup(App& app) {
     app.add_systems(PreUpdate, update_auto_checkpoint);
 }
 
-} // namespace fei::snapshot_runtime
+} // namespace ets::snapshot_runtime

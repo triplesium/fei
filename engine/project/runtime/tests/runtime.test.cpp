@@ -16,7 +16,7 @@
 #include <string_view>
 #include <utility>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -26,9 +26,10 @@ class TemporaryPluginProject {
         static std::atomic<std::uint64_t> sequence {0};
         const auto timestamp =
             std::chrono::steady_clock::now().time_since_epoch().count();
-        m_root = std::filesystem::temp_directory_path() /
-                 ("fei-project-runtime-plugins-" + std::to_string(timestamp) +
-                  "-" + std::to_string(sequence.fetch_add(1)));
+        m_root =
+            std::filesystem::temp_directory_path() /
+            ("entisium-project-runtime-plugins-" + std::to_string(timestamp) +
+             "-" + std::to_string(sequence.fetch_add(1)));
         std::filesystem::create_directories(m_root / "assets");
 
         std::ofstream stream(project_file());

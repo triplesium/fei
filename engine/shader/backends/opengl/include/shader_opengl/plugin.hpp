@@ -2,7 +2,7 @@
 #include "app/plugin.hpp"
 #include "shader/compiler.hpp"
 
-namespace fei {
+namespace ets {
 
 class OpenGLShaderCompiler final : public ShaderCompiler {
   private:
@@ -20,10 +20,10 @@ class OpenGLShaderCompiler final : public ShaderCompiler {
     compile(ShaderCompileRequest request) override;
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class OpenGLShaderPlugin final : public Plugin {
   public:
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

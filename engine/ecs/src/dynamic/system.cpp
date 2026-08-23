@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 namespace {
 
 Result<std::vector<Ref>, DynamicSystemError> prepare_dynamic_params(
@@ -405,4 +405,4 @@ Status<RuntimeStateError> DynamicCondition::restore_param_runtime_states(
     return restore_dynamic_param_states(m_params, states);
 }
 
-} // namespace fei
+} // namespace ets

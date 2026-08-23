@@ -9,7 +9,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei {
+namespace ets {
 
 class AssetUuid {
   public:
@@ -32,9 +32,9 @@ class AssetUuid {
     std::array<std::uint8_t, 16> m_bytes {};
 };
 
-} // namespace fei
+} // namespace ets
 
 template<>
-struct std::hash<fei::AssetUuid> {
-    std::size_t operator()(const fei::AssetUuid& value) const noexcept;
+struct std::hash<ets::AssetUuid> {
+    std::size_t operator()(const ets::AssetUuid& value) const noexcept;
 };

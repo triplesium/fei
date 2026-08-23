@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::gltf_detail {
+namespace ets::gltf_detail {
 namespace {
 
 Result<PendingMaterialTexture, std::string> convert_texture(
@@ -228,4 +228,4 @@ std::unique_ptr<StandardMaterial> make_default_gltf_material() {
     return material;
 }
 
-} // namespace fei::gltf_detail
+} // namespace ets::gltf_detail

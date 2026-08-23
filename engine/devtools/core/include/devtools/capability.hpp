@@ -16,7 +16,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -155,4 +155,4 @@ decode_capability_request(const JsonRequest& request) {
 
 } // namespace devtools
 
-} // namespace fei
+} // namespace ets

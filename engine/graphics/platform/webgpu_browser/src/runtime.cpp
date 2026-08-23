@@ -9,7 +9,7 @@
 #include <utility>
 #include <webgpu/webgpu.h>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -40,7 +40,7 @@ WGPUSurface create_surface(WGPUInstance instance, const std::string& selector) {
     };
     WGPUSurfaceDescriptor descriptor {
         .nextInChain = &canvas_source.chain,
-        .label = {"fei browser canvas", WGPU_STRLEN},
+        .label = {"entisium browser canvas", WGPU_STRLEN},
     };
     auto surface = wgpuInstanceCreateSurface(instance, &descriptor);
     if (surface == nullptr) {
@@ -147,4 +147,4 @@ std::unique_ptr<GraphicsRuntime> WebGpuBrowserBootstrap::initialize() {
     return std::make_unique<WebGpuBrowserRuntime>(std::move(description));
 }
 
-} // namespace fei
+} // namespace ets

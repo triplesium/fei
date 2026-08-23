@@ -8,7 +8,7 @@
 #include <fstream>
 #include <string_view>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -21,7 +21,7 @@ class MetadataProject {
         const auto suffix =
             std::chrono::steady_clock::now().time_since_epoch().count();
         m_root = std::filesystem::temp_directory_path() /
-                 ("fei-snapshot-metadata-" + std::to_string(suffix));
+                 ("entisium-snapshot-metadata-" + std::to_string(suffix));
         std::filesystem::create_directories(m_root / "assets");
         std::ofstream(m_root / "project.yaml") << "name: Metadata Test\n"
                                                   "asset_directory: assets\n"
@@ -87,5 +87,5 @@ TEST_CASE(
     REQUIRE(first);
     REQUIRE(second);
     CHECK(*first == *second);
-    CHECK(first->starts_with("fei-runtime-host:"));
+    CHECK(first->starts_with("entisium-runtime-host:"));
 }

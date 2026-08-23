@@ -3,7 +3,7 @@
 #include "asset/loader.hpp"
 #include "rendering/mesh/mesh.hpp"
 
-namespace fei {
+namespace ets {
 
 class MeshLoader : public AssetLoader<Mesh> {
   public:
@@ -11,4 +11,4 @@ class MeshLoader : public AssetLoader<Mesh> {
     load(Reader& reader, const LoadContext& context) override;
 };
 
-} // namespace fei
+} // namespace ets

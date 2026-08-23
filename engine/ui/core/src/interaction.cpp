@@ -4,7 +4,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace fei::ui {
+namespace ets::ui {
 
 namespace {
 
@@ -220,4 +220,4 @@ void update_interactions(
     }
 }
 
-} // namespace fei::ui
+} // namespace ets::ui

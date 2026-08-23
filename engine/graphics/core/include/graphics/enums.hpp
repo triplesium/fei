@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace fei {
+namespace ets {
 
 enum class BufferUsages : uint8 {
     Vertex = 1 << 0,
@@ -397,4 +397,4 @@ enum class MapMode : uint8 {
     ReadWrite,
 };
 
-} // namespace fei
+} // namespace ets

@@ -39,7 +39,7 @@ local function disabled_slang_features()
     }
 end
 
-package("fei-slang-generators")
+package("entisium-slang-generators")
     set_kind("binary")
     add_slang_source()
     on_install(function(package)
@@ -74,12 +74,12 @@ package("fei-slang-generators")
     end)
 package_end()
 
-package("fei-slang-wasm")
+package("entisium-slang-wasm")
     set_kind("library")
     add_slang_source()
     add_deps("emscripten 6.0.0", {host = true})
     add_deps(
-        "fei-slang-generators " .. slang_version,
+        "entisium-slang-generators " .. slang_version,
         {host = true, debug = false}
     )
     add_links(
@@ -91,7 +91,7 @@ package("fei-slang-wasm")
         "lz4"
     )
     on_install("wasm", function(package)
-        local generators = package:dep("fei-slang-generators")
+        local generators = package:dep("entisium-slang-generators")
         local configs = disabled_slang_features()
         table.insert(configs, "-DCMAKE_BUILD_TYPE=Release")
         table.insert(configs, "-DSLANG_LIB_TYPE=STATIC")
@@ -120,7 +120,7 @@ package("fei-slang-wasm")
         os.cp(version_headers[1], package:installdir("include"))
     end)
     on_test(function(package)
-        assert(package:is_plat("wasm"), "fei-slang-wasm only supports wasm")
+        assert(package:is_plat("wasm"), "entisium-slang-wasm only supports wasm")
         assert(package:has_cxxincludes({"slang.h", "slang-com-ptr.h"}))
         for _, library in ipairs({
             "libslang-compiler.a",

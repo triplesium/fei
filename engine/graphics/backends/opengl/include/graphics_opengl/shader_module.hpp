@@ -5,7 +5,7 @@
 
 #include <string>
 
-namespace fei {
+namespace ets {
 
 class ShaderOpenGL : public ShaderModule, public DeferredResourceOpenGL {
   private:
@@ -23,4 +23,4 @@ class ShaderOpenGL : public ShaderModule, public DeferredResourceOpenGL {
     void destroy_gl_resource() override;
 };
 
-} // namespace fei
+} // namespace ets

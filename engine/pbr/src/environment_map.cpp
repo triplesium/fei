@@ -20,7 +20,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fei {
+namespace ets {
 
 struct FilteringConstants {
     float roughness;
@@ -359,4 +359,4 @@ void EnvironmentMapPlugin::setup(App& app) {
         );
 }
 
-} // namespace fei
+} // namespace ets

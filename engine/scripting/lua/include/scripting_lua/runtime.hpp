@@ -17,7 +17,7 @@
 
 struct lua_State;
 
-namespace fei {
+namespace ets {
 
 class Enum;
 class Type;
@@ -128,4 +128,4 @@ class LuaRuntime {
     unset_module_global(LuaScriptModuleId module, const std::string& name);
 };
 
-} // namespace fei
+} // namespace ets

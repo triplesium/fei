@@ -11,7 +11,7 @@
 #include "rendering/render_queue.hpp"
 #include "rendering/visibility.hpp"
 
-namespace fei {
+namespace ets {
 
 struct alignas(16) ViewUniform {
     Matrix4x4 clip_from_world;
@@ -50,4 +50,4 @@ void upload_view_uniforms(
     ResRW<ViewUniforms> uniforms
 );
 
-} // namespace fei
+} // namespace ets

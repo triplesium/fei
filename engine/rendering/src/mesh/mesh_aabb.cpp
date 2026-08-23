@@ -3,7 +3,7 @@
 #include "math/primitives.hpp"
 #include "rendering/mesh/mesh.hpp"
 
-namespace fei {
+namespace ets {
 
 void compute_mesh_aabb(
     Query<Entity, const Mesh3d>::Filter<Without<Aabb>> query,
@@ -50,4 +50,4 @@ void compute_mesh_aabb(
     }
 }
 
-} // namespace fei
+} // namespace ets

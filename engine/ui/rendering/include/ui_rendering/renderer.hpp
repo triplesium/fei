@@ -15,7 +15,7 @@
 #include <optional>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class Buffer;
 class ResourceLayout;
@@ -113,4 +113,4 @@ struct RenderState {
 };
 
 } // namespace ui::rendering
-} // namespace fei
+} // namespace ets

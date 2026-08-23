@@ -2,7 +2,7 @@
 
 #include <type_traits>
 
-namespace fei::ui {
+namespace ets::ui {
 
 ContentSize ContentSize::fixed(Vector2 size) {
     return {.measure = FixedMeasure {.size = size}};
@@ -40,4 +40,4 @@ Vector2 ContentSize::compute(const MeasureArgs& args) const {
     return measured;
 }
 
-} // namespace fei::ui
+} // namespace ets::ui

@@ -1,6 +1,6 @@
 #include "pbr/passes/target.hpp"
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -117,4 +117,4 @@ void prepare_deferred_view_targets(
     );
 }
 
-} // namespace fei
+} // namespace ets

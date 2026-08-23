@@ -4,7 +4,7 @@
 
 #include <vulkan/vulkan_core.h>
 
-namespace fei::vulkan_glfw_detail {
+namespace ets::vulkan_glfw_detail {
 
 VkExtent2D choose_swapchain_extent(
     const VkSurfaceCapabilitiesKHR& capabilities,
@@ -12,4 +12,4 @@ VkExtent2D choose_swapchain_extent(
     uint32 desired_height
 );
 
-} // namespace fei::vulkan_glfw_detail
+} // namespace ets::vulkan_glfw_detail

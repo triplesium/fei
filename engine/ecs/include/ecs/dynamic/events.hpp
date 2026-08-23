@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class DynamicEvents {
   public:
@@ -85,4 +85,4 @@ class DynamicEventParam final : public DynamicSystemParam {
     std::uint64_t runtime_state_type() const override;
 };
 
-} // namespace fei
+} // namespace ets

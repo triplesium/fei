@@ -6,8 +6,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <vector>
 
-using namespace fei;
-using namespace fei::app_test;
+using namespace ets;
+using namespace ets::app_test;
 
 TEST_CASE("App reports added plugin types", "[app][plugin]") {
     AppTestPlugin::setup_count = 0;

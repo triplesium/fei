@@ -7,7 +7,7 @@
 #include <functional>
 #include <limits>
 
-namespace fei {
+namespace ets {
 
 struct Entity {
     std::uint32_t value {};
@@ -33,35 +33,35 @@ struct RegisteredSystemId {
     bool operator==(const RegisteredSystemId&) const = default;
 };
 
-} // namespace fei
+} // namespace ets
 
 namespace std {
 
 template<>
-struct hash<fei::Entity> { // NOLINT(readability-identifier-naming)
-    size_t operator()(fei::Entity entity) const noexcept {
+struct hash<ets::Entity> { // NOLINT(readability-identifier-naming)
+    size_t operator()(ets::Entity entity) const noexcept {
         return hash<uint32_t> {}(entity.value);
     }
 };
 
 template<>
-class numeric_limits<fei::Entity> : public numeric_limits<uint32_t> {
+class numeric_limits<ets::Entity> : public numeric_limits<uint32_t> {
   public:
-    static constexpr fei::Entity min() noexcept {
-        return fei::Entity {numeric_limits<uint32_t>::min()};
+    static constexpr ets::Entity min() noexcept {
+        return ets::Entity {numeric_limits<uint32_t>::min()};
     }
-    static constexpr fei::Entity lowest() noexcept {
-        return fei::Entity {numeric_limits<uint32_t>::lowest()};
+    static constexpr ets::Entity lowest() noexcept {
+        return ets::Entity {numeric_limits<uint32_t>::lowest()};
     }
-    static constexpr fei::Entity max() noexcept {
-        return fei::Entity {numeric_limits<uint32_t>::max()};
+    static constexpr ets::Entity max() noexcept {
+        return ets::Entity {numeric_limits<uint32_t>::max()};
     }
 };
 
 template<>
-struct formatter<fei::Entity, char> : formatter<uint32_t, char> {
+struct formatter<ets::Entity, char> : formatter<uint32_t, char> {
     template<class FormatContext>
-    auto format(fei::Entity entity, FormatContext& context) const {
+    auto format(ets::Entity entity, FormatContext& context) const {
         return formatter<uint32_t, char>::format(entity.value, context);
     }
 };

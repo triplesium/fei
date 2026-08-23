@@ -7,9 +7,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 
-using namespace fei;
-using namespace fei::devtools;
-using namespace fei::devtools::profiling;
+using namespace ets;
+using namespace ets::devtools;
+using namespace ets::devtools::profiling;
 
 namespace {
 
@@ -66,7 +66,7 @@ TEST_CASE(
 ) {
     register_snapshot_test_types();
 
-    fei::ProfileSummarySnapshot source {
+    ets::ProfileSummarySnapshot source {
         .available = true,
         .frame_stats =
             FrameProfileStats {
@@ -135,7 +135,7 @@ TEST_CASE(
 ) {
     register_snapshot_test_types();
 
-    fei::ProfileSummarySnapshot source {
+    ets::ProfileSummarySnapshot source {
         .available = true,
         .frames = {
             ProfileFrameSample {.frame = 10, .duration_ms = 16.0},
@@ -159,7 +159,7 @@ TEST_CASE(
     "Profiling detailed snapshots report unavailable when summary is disabled",
     "[devtools][profiling][snapshot]"
 ) {
-    const fei::ProfileSummarySnapshot source;
+    const ets::ProfileSummarySnapshot source;
 
     auto summary = make_summary_snapshot(source);
     auto history = make_frame_history_snapshot(source);

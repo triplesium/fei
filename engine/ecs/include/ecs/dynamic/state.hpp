@@ -12,7 +12,7 @@
 #include <shared_mutex>
 #include <unordered_map>
 
-namespace fei {
+namespace ets {
 
 struct DynamicStateOps {
     TypeId value_type;
@@ -97,4 +97,4 @@ class DynamicNextStateParam final : public DynamicSystemParam {
     prepare(World& world, SystemTicks system_ticks) override;
 };
 
-} // namespace fei
+} // namespace ets

@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -457,4 +457,4 @@ FramebufferVulkan::~FramebufferVulkan() {
     m_attachment_views.clear();
 }
 
-} // namespace fei
+} // namespace ets

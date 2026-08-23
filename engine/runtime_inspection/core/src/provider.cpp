@@ -1,6 +1,6 @@
 #include "runtime_inspection/provider.hpp"
 
-namespace fei::runtime_inspection {
+namespace ets::runtime_inspection {
 
 std::string_view inspection_error_kind_name(InspectionErrorKind kind) {
     switch (kind) {
@@ -32,4 +32,4 @@ std::string_view inspection_cost_name(InspectionCost cost) {
     return "unknown";
 }
 
-} // namespace fei::runtime_inspection
+} // namespace ets::runtime_inspection

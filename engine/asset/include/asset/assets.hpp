@@ -16,7 +16,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 template<typename T>
 class Assets;
@@ -660,4 +660,4 @@ class Assets {
     }
 };
 
-} // namespace fei
+} // namespace ets

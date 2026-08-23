@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 void configure_project_runtime(App& app, Project project) {
     const auto runtime = project.config().runtime;
@@ -14,4 +14,4 @@ void configure_project_runtime(App& app, Project project) {
     }
 }
 
-} // namespace fei
+} // namespace ets

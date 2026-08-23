@@ -20,7 +20,7 @@
 #include "rendering/resource_set_cache.hpp"
 #include "rendering/shader_cache.hpp"
 #include "rendering/visibility.hpp"
-namespace fei {
+namespace ets {
 
 void setup_deferred_pipelines(
     ResRO<GraphicsDevice> device,
@@ -150,4 +150,4 @@ void present_composite_pass(
     Optional<ResRO<MainSwapchain>> main_swapchain
 );
 
-} // namespace fei
+} // namespace ets

@@ -137,12 +137,12 @@ task("profile")
         end
 
         if seconds then
-            os.setenv("FEI_EXIT_AFTER_SECONDS", tostring(seconds))
-            os.setenv("FEI_EXIT_AFTER_FRAMES", "")
+            os.setenv("ETS_EXIT_AFTER_SECONDS", tostring(seconds))
+            os.setenv("ETS_EXIT_AFTER_FRAMES", "")
         end
         if frames then
-            os.setenv("FEI_EXIT_AFTER_FRAMES", tostring(frames))
-            os.setenv("FEI_EXIT_AFTER_SECONDS", "")
+            os.setenv("ETS_EXIT_AFTER_FRAMES", tostring(frames))
+            os.setenv("ETS_EXIT_AFTER_SECONDS", "")
         end
 
         os.vrunv("xmake", {"run", target})

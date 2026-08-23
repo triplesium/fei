@@ -10,7 +10,7 @@
 #include <string_view>
 #include <utility>
 
-namespace fei::devtools::reflection {
+namespace ets::devtools::reflection {
 namespace {
 
 void respond_error(
@@ -120,4 +120,4 @@ void ProviderPlugin::setup(App& app) {
 
 void ProviderPlugin::finish(App&) {}
 
-} // namespace fei::devtools::reflection
+} // namespace ets::devtools::reflection

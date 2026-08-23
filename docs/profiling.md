@@ -41,8 +41,8 @@ xmake profile --seconds=10 --top=20 sample-scene
 The task sets one of these environment variables before running the sample:
 
 ```text
-FEI_EXIT_AFTER_FRAMES
-FEI_EXIT_AFTER_SECONDS
+ETS_EXIT_AFTER_FRAMES
+ETS_EXIT_AFTER_SECONDS
 ```
 
 `App::run()` reads those values and exits normally after the limit is reached.
@@ -102,8 +102,8 @@ Use `frames.csv` for frame-time distribution work.
 
 ECS system names come from:
 
-- `FEI_NAMED_SYSTEM(fn)` for function systems.
-- `FEI_SYSTEM_NAME("name", callable)` for lambdas, templates, or local callables.
+- `ETS_NAMED_SYSTEM(fn)` for function systems.
+- `ETS_SYSTEM_NAME("name", callable)` for lambdas, templates, or local callables.
 - Windows symbolization via `SymFromAddr` when no explicit name is provided.
 - `system#<id>` fallback when no stable name can be found.
 
@@ -111,7 +111,7 @@ Prefer explicit names for templates and lambdas that should be easy to read in
 reports:
 
 ```cpp
-app.add_systems(Update, FEI_SYSTEM_NAME("init_shader_cache", [](...) {
+app.add_systems(Update, ETS_SYSTEM_NAME("init_shader_cache", [](...) {
     ...
 }));
 ```
@@ -119,7 +119,7 @@ app.add_systems(Update, FEI_SYSTEM_NAME("init_shader_cache", [](...) {
 For normal free functions:
 
 ```cpp
-app.add_systems(Update, FEI_NAMED_SYSTEM(update_transforms));
+app.add_systems(Update, ETS_NAMED_SYSTEM(update_transforms));
 ```
 
 The named wrappers preserve the original function hash and access metadata, so
@@ -131,19 +131,19 @@ Use manual scopes for engine work that is not an ECS system or is too broad at
 the system level:
 
 ```cpp
-FEI_PROFILE_SCOPE("OpenGL Texture Upload");
+ETS_PROFILE_SCOPE("OpenGL Texture Upload");
 ```
 
 Use function scopes for ordinary C++ function timing:
 
 ```cpp
-FEI_PROFILE_FUNCTION();
+ETS_PROFILE_FUNCTION();
 ```
 
 Use dynamic scopes only when the name and source location come from metadata:
 
 ```cpp
-FEI_PROFILE_DYNAMIC_SCOPE(name, file, function, line);
+ETS_PROFILE_DYNAMIC_SCOPE(name, file, function, line);
 ```
 
 Do not add scopes everywhere. Add them around expensive or ambiguous blocks that
@@ -162,5 +162,5 @@ Current scope:
   overhead Tracy features.
 
 If Tracy shows `ILT+...` names, prefer the summary CSV or explicit
-`FEI_NAMED_SYSTEM` / `FEI_SYSTEM_NAME` wrappers. The Windows symbolizer attempts
+`ETS_NAMED_SYSTEM` / `ETS_SYSTEM_NAME` wrappers. The Windows symbolizer attempts
 to resolve incremental-link thunks, but explicit names are still clearer.

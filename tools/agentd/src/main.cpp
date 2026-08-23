@@ -21,8 +21,8 @@
 
 namespace {
 
-using namespace fei;
-using namespace fei::agentd;
+using namespace ets;
+using namespace ets::agentd;
 
 std::atomic<bool> running {true};
 
@@ -40,9 +40,10 @@ struct Options {
 };
 
 void print_help() {
-    std::cout << "usage: fei-agentd --project PROJECT [--port PORT]\n"
-              << "       fei-agentd --project PROJECT --runtime EXECUTABLE\n"
-              << "       fei-agentd --project PROJECT --external-runtime\n";
+    std::cout
+        << "usage: entisium-agentd --project PROJECT [--port PORT]\n"
+        << "       entisium-agentd --project PROJECT --runtime EXECUTABLE\n"
+        << "       entisium-agentd --project PROJECT --external-runtime\n";
 }
 
 Result<uint16, std::string> parse_port(std::string_view value) {
@@ -102,7 +103,8 @@ Result<Options, std::string> parse_options(int argc, char** argv) {
             break;
         }
         return failure(
-            std::string("Unknown fei-agentd argument: ") + std::string(argument)
+            std::string("Unknown entisium-agentd argument: ") +
+            std::string(argument)
         );
     }
     if (!options.show_help && options.project_file.empty()) {
@@ -126,9 +128,9 @@ Result<Options, std::string> parse_options(int argc, char** argv) {
 
 std::string default_runtime_executable(std::string_view agentd_executable) {
 #if defined(_WIN32)
-    constexpr std::string_view c_runtime_name = "fei-runtime-host.exe";
+    constexpr std::string_view c_runtime_name = "entisium-runtime-host.exe";
 #else
-    constexpr std::string_view c_runtime_name = "fei-runtime-host";
+    constexpr std::string_view c_runtime_name = "entisium-runtime-host";
 #endif
     const std::filesystem::path agentd_path {agentd_executable};
     if (agentd_path.has_parent_path()) {
@@ -181,8 +183,8 @@ Status<std::string> start_runtime(
         ProcessLaunch {
             .arguments = options.runtime_command,
             .environment = {
-                {"FEI_AGENTD_PORT", std::to_string(options.port)},
-                {"FEI_RUNTIME_SESSION", state.session()},
+                {"ETS_AGENTD_PORT", std::to_string(options.port)},
+                {"ETS_RUNTIME_SESSION", state.session()},
             },
         }
     );
@@ -199,7 +201,7 @@ Status<std::string> start_runtime(
 int main(int argc, char** argv) {
     auto options = parse_options(argc, argv);
     if (!options) {
-        fei::error("{}", options.error());
+        ets::error("{}", options.error());
         print_help();
         return 1;
     }
@@ -210,7 +212,7 @@ int main(int argc, char** argv) {
 
     auto project = Project::load(options->project_file);
     if (!project) {
-        fei::error(
+        ets::error(
             "Failed to load project '{}': {}",
             project.error().path.string(),
             project.error().message
@@ -226,10 +228,10 @@ int main(int argc, char** argv) {
     SupervisorState state(make_session(), project_descriptor);
     AgentServer server(state, options->port);
     if (auto status = server.start(); !status) {
-        fei::error("{}", status.error());
+        ets::error("{}", status.error());
         return 1;
     }
-    info("fei-agentd listening at http://127.0.0.1:{}", options->port);
+    info("entisium-agentd listening at http://127.0.0.1:{}", options->port);
     info(
         "Bound to project '{}' at {}",
         project_descriptor.name,
@@ -240,14 +242,14 @@ int main(int argc, char** argv) {
     RuntimeProcess runtime;
     if (!options->external_runtime) {
         if (auto status = start_runtime(runtime, state, *options); !status) {
-            fei::error("{}", status.error());
+            ets::error("{}", status.error());
             server.stop();
             return 1;
         }
     } else {
         info(
-            "Waiting for an external runtime; set FEI_AGENTD_PORT={} and "
-            "FEI_RUNTIME_SESSION={} when launching one manually",
+            "Waiting for an external runtime; set ETS_AGENTD_PORT={} and "
+            "ETS_RUNTIME_SESSION={} when launching one manually",
             options->port,
             state.session()
         );
@@ -265,7 +267,7 @@ int main(int argc, char** argv) {
                 runtime.terminate();
                 if (auto status = start_runtime(runtime, state, *options);
                     !status) {
-                    fei::error("Failed to restart runtime: {}", status.error());
+                    ets::error("Failed to restart runtime: {}", status.error());
                 }
             }
         }

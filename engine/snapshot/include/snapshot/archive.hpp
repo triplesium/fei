@@ -9,7 +9,7 @@
 #include <filesystem>
 #include <string>
 
-namespace fei::snapshot {
+namespace ets::snapshot {
 
 struct SnapshotArchiveMetadata {
     std::string project;
@@ -57,4 +57,4 @@ Result<SnapshotArchive, SnapshotError> load_archive_file(
     SnapshotArchiveLimits limits = {}
 );
 
-} // namespace fei::snapshot
+} // namespace ets::snapshot

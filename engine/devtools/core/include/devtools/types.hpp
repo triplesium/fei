@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei::devtools {
+namespace ets::devtools {
 
 using Token = uint64;
 
@@ -36,7 +36,7 @@ struct Capability {
     std::string label;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct BlobRef {
     std::string capability;
 };
@@ -95,4 +95,4 @@ struct ErrorResponse {
     std::string message;
 };
 
-} // namespace fei::devtools
+} // namespace ets::devtools

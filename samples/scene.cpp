@@ -51,7 +51,7 @@
 #include <limits>
 #include <string_view>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -477,13 +477,13 @@ void spawn_default_gltf_scene(
         if (*state == AssetLoadState::Failed) {
             const auto error = asset_server->load_error(pending.gltf);
             if (error) {
-                fei::error(
+                ets::error(
                     "Failed to load '{}': {}",
                     error->path.as_string(),
                     error->message
                 );
             } else {
-                fei::error("Failed to load Sponza.gltf");
+                ets::error("Failed to load Sponza.gltf");
             }
             commands.entity(entity).despawn();
             continue;
@@ -494,12 +494,12 @@ void spawn_default_gltf_scene(
             continue;
         }
         if (!gltf->default_scene) {
-            fei::error("Sponza.gltf does not define a default scene");
+            ets::error("Sponza.gltf does not define a default scene");
             commands.entity(entity).despawn();
             continue;
         }
         if (*gltf->default_scene >= gltf->scenes.size()) {
-            fei::error("Sponza.gltf has an invalid default scene index");
+            ets::error("Sponza.gltf has an invalid default scene index");
             commands.entity(entity).despawn();
             continue;
         }

@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class Buffer;
 
@@ -91,7 +91,7 @@ inline void
 validate_resource_layout_description(const ResourceLayoutDescription& desc) {
     for (std::size_t i = 0; i < desc.elements.size(); ++i) {
         if (desc.elements[i].array_count == 0) {
-            fei::fatal(
+            ets::fatal(
                 "ResourceLayout element '{}' has zero array_count",
                 desc.elements[i].name
             );
@@ -102,7 +102,7 @@ validate_resource_layout_description(const ResourceLayoutDescription& desc) {
             desc.elements[i].kind != ResourceKind::UniformBuffer &&
             desc.elements[i].kind != ResourceKind::StorageBufferReadOnly &&
             desc.elements[i].kind != ResourceKind::StorageBufferReadWrite) {
-            fei::fatal(
+            ets::fatal(
                 "ResourceLayout element '{}' uses DynamicBinding but is {}",
                 desc.elements[i].name,
                 resource_kind_name(desc.elements[i].kind)
@@ -110,7 +110,7 @@ validate_resource_layout_description(const ResourceLayoutDescription& desc) {
         }
         for (std::size_t j = i + 1; j < desc.elements.size(); ++j) {
             if (desc.elements[i].binding == desc.elements[j].binding) {
-                fei::fatal(
+                ets::fatal(
                     "ResourceLayout has duplicate binding {} for '{}' and "
                     "'{}'",
                     desc.elements[i].binding,
@@ -258,4 +258,4 @@ class ResourceSet {
     virtual ~ResourceSet() = default;
 };
 
-} // namespace fei
+} // namespace ets

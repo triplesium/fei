@@ -8,7 +8,7 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
-namespace fei {
+namespace ets {
 
 class VulkanDeviceState;
 
@@ -109,4 +109,4 @@ class TextureViewVulkan : public TextureView {
     }
 };
 
-} // namespace fei
+} // namespace ets

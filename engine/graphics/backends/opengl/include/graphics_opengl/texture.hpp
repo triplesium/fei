@@ -4,7 +4,7 @@
 #include "graphics_opengl/deferred_resource.hpp"
 #include "graphics_opengl/utils.hpp"
 
-namespace fei {
+namespace ets {
 
 class TextureOpenGL : public Texture, public DeferredResourceOpenGL {
   private:
@@ -45,4 +45,4 @@ class TextureOpenGL : public Texture, public DeferredResourceOpenGL {
     void destroy_gl_resource() override;
 };
 
-} // namespace fei
+} // namespace ets

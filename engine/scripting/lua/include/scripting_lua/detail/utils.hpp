@@ -6,9 +6,9 @@
 #include <lua.hpp>
 #include <string_view>
 
-namespace fei {
+namespace ets {
 
-bool lua_is_fei_type(lua_State* L, int idx);
+bool lua_is_ets_type(lua_State* L, int idx);
 bool lua_is_enum_value(lua_State* L, int idx);
 bool lua_is_type_registered(lua_State* L, const Type& type);
 bool lua_can_ref(lua_State* L, int idx);
@@ -46,4 +46,4 @@ ReturnValue lua_call_func(lua_State* L, Args&&... args) {
     }
 }
 
-} // namespace fei
+} // namespace ets

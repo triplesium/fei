@@ -10,7 +10,7 @@
 #include <variant>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 using MeshVertexAttributeId = std::uint64_t;
 
@@ -106,7 +106,7 @@ struct MeshVertexBufferLayout {
     }
 };
 
-} // namespace fei
+} // namespace ets
 
-MAKE_STD_HASHABLE(fei::VertexBufferLayout, stride, step_mode, attributes)
-MAKE_STD_HASHABLE(fei::MeshVertexBufferLayout, attribute_ids, layout)
+MAKE_STD_HASHABLE(ets::VertexBufferLayout, stride, step_mode, attributes)
+MAKE_STD_HASHABLE(ets::MeshVertexBufferLayout, attribute_ids, layout)

@@ -7,7 +7,7 @@
 #include "ecs/query.hpp"
 #include "ecs/system_set.hpp"
 
-namespace fei {
+namespace ets {
 
 class App;
 
@@ -39,10 +39,10 @@ void propagate_transforms(
         explicit_globals
 );
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class TransformPlugin : public Plugin {
   public:
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

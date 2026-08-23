@@ -12,8 +12,8 @@
 #include <type_traits>
 #include <utility>
 
-using namespace fei;
-using namespace fei::refl_test;
+using namespace ets;
+using namespace ets::refl_test;
 
 namespace {
 

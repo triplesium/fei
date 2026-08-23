@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-using namespace fei;
+using namespace ets;
 using Catch::Matchers::WithinAbs;
 
 namespace {

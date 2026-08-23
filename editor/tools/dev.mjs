@@ -26,7 +26,7 @@ function projectDirectoryFromArguments(args) {
 
 const projectDirectory = projectDirectoryFromArguments(process.argv.slice(2));
 if (projectDirectory) {
-    console.log(`[fei editor] opening project ${projectDirectory}`);
+    console.log(`[entisium editor] opening project ${projectDirectory}`);
 }
 
 const { result } = concurrently(
@@ -34,7 +34,7 @@ const { result } = concurrently(
         {
             command: "npm run dev:host",
             name: "host",
-            env: projectDirectory ? { FEI_EDITOR_PROJECT_DIR: projectDirectory } : undefined,
+            env: projectDirectory ? { ETS_EDITOR_PROJECT_DIR: projectDirectory } : undefined,
         },
         {
             command: "npm run dev:renderer",

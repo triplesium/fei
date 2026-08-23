@@ -9,9 +9,9 @@
 #include <string>
 #include <vector>
 
-namespace fei::devtools::pbr {
+namespace ets::devtools::pbr {
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct RenderTargetViewSnapshot {
     std::string id;
     std::string label;
@@ -20,7 +20,7 @@ struct RenderTargetViewSnapshot {
     std::string visualization;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct RenderTargetSnapshot {
     std::string id;
     std::string label;
@@ -34,7 +34,7 @@ struct RenderTargetSnapshot {
     std::vector<RenderTargetViewSnapshot> views;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct RenderTargetsSnapshot {
     std::vector<BlobRef> previews;
     bool available {false};
@@ -48,4 +48,4 @@ struct RenderTargetsSnapshot {
 RenderTargetsSnapshot
 make_render_targets_snapshot(const DeferredViewTargets& targets);
 
-} // namespace fei::devtools::pbr
+} // namespace ets::devtools::pbr

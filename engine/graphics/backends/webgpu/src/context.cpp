@@ -10,7 +10,7 @@
 #include <string>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -234,13 +234,13 @@ WebGpuDeviceState::WebGpuDeviceState(WebGpuDeviceStateDescription desc) :
     }
 
     WGPUDeviceDescriptor device_descriptor {
-        .label = {"fei WebGPU device", WGPU_STRLEN},
+        .label = {"entisium WebGPU device", WGPU_STRLEN},
         .requiredFeatureCount = required_feature_count,
         .requiredFeatures = required_features,
         .requiredLimits = &adapter_limits,
         .defaultQueue =
             {
-                .label = {"fei WebGPU queue", WGPU_STRLEN},
+                .label = {"entisium WebGPU queue", WGPU_STRLEN},
             },
         .deviceLostCallbackInfo =
             {
@@ -334,4 +334,4 @@ void check_webgpu_error_scope(
 #endif
 }
 
-} // namespace fei
+} // namespace ets

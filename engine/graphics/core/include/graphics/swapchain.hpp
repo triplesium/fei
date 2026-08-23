@@ -5,7 +5,7 @@
 
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 class Swapchain {
   public:
@@ -23,4 +23,4 @@ struct MainSwapchain {
     std::shared_ptr<Swapchain> swapchain;
 };
 
-} // namespace fei
+} // namespace ets

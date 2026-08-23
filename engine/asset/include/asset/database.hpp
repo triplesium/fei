@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 inline constexpr std::string_view native_asset_importer_name = "native";
 
@@ -164,4 +164,4 @@ Result<AssetImportReport, std::string> import_pending_assets(
     AssetDatabase& database
 );
 
-} // namespace fei
+} // namespace ets

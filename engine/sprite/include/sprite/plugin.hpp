@@ -4,7 +4,7 @@
 #include "ecs/system_set.hpp"
 #include "sprite/output.hpp"
 
-namespace fei {
+namespace ets {
 
 struct SpriteSystems {
     struct PrepareOutput : SystemSet<PrepareOutput> {};
@@ -19,7 +19,7 @@ struct SpritePluginConfig {
     PixelFormat texture_format {PixelFormat::Rgba8Unorm};
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class SpritePlugin : public Plugin {
   public:
     explicit SpritePlugin(SpritePluginConfig config = {}) : m_config(config) {}
@@ -31,4 +31,4 @@ class SpritePlugin : public Plugin {
     SpritePluginConfig m_config;
 };
 
-} // namespace fei
+} // namespace ets

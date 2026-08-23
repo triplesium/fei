@@ -10,7 +10,7 @@
 #include <unordered_set>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
 DynamicTypeError
@@ -345,4 +345,4 @@ Registry::try_get_dynamic_struct_layout(TypeId id) const {
     return it->second.get();
 }
 
-} // namespace fei
+} // namespace ets

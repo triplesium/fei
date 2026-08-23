@@ -4,11 +4,11 @@
 #include "asset/uuid.hpp"
 #include "base/optional.hpp"
 
-namespace fei {
+namespace ets {
 
 struct AssetReference {
     Optional<AssetUuid> id;
     AssetPath fallback_path;
 };
 
-} // namespace fei
+} // namespace ets

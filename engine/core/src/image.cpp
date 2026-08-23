@@ -17,7 +17,7 @@
 #include <cstdint>
 #include <stb_image.h>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -489,4 +489,4 @@ write_image_artifact(const Image& image, const std::filesystem::path& path) {
     return {};
 }
 
-} // namespace fei
+} // namespace ets

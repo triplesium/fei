@@ -1,6 +1,6 @@
 #include "ui_rendering/renderer.hpp"
 
-namespace fei::ui::rendering {
+namespace ets::ui::rendering {
 
 namespace {
 
@@ -243,4 +243,4 @@ void Phase::append_glyph(
     }
 }
 
-} // namespace fei::ui::rendering
+} // namespace ets::ui::rendering

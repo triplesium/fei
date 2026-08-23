@@ -6,7 +6,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 template<class T, class E>
 class Result : public std::expected<T, E> {
@@ -77,4 +77,4 @@ constexpr std::unexpected<std::remove_cvref_t<Error>> failure(Error&& error) {
     return std::unexpected<ErrorType>(std::forward<Error>(error));
 }
 
-} // namespace fei
+} // namespace ets

@@ -3,7 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <stdexcept>
 
-using namespace fei;
+using namespace ets;
 
 #ifndef __EMSCRIPTEN__
 TEST_CASE("ThreadPool runs submitted tasks", "[base][thread_pool]") {

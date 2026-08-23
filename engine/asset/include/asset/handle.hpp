@@ -5,7 +5,7 @@
 #include <memory>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 template<typename T>
 class Assets;
@@ -81,4 +81,4 @@ Optional<Handle<T>> UntypedHandle::try_typed() const {
     return Handle<T>(m_state);
 }
 
-} // namespace fei
+} // namespace ets

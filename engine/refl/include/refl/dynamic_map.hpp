@@ -10,7 +10,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace fei {
+namespace ets {
 
 struct DynamicMapError {
     enum class Kind {
@@ -116,4 +116,4 @@ class DynamicMap {
     void swap(DynamicMap& other) noexcept;
 };
 
-} // namespace fei
+} // namespace ets

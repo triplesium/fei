@@ -2,9 +2,9 @@
 
 #include "app/plugin.hpp"
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class GlfwInputPlugin final : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
@@ -12,4 +12,4 @@ class GlfwInputPlugin final : public Plugin {
     void cleanup(App& app) noexcept override;
 };
 
-} // namespace fei
+} // namespace ets

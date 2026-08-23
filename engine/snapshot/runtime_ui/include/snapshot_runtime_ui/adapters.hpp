@@ -3,7 +3,7 @@
 #include "base/result.hpp"
 #include "snapshot/world_snapshot.hpp"
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -17,4 +17,4 @@ Status<snapshot::SnapshotError>
 configure_ui_adapters(World& world, snapshot::SnapshotRegistry& registry);
 
 } // namespace snapshot_runtime_ui
-} // namespace fei
+} // namespace ets

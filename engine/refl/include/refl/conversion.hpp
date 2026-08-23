@@ -9,7 +9,7 @@
 #include <string_view>
 #include <type_traits>
 
-namespace fei {
+namespace ets {
 
 // Describes how costly a Ref -> T conversion is. This is intentionally
 // language-neutral so method lookup, property assignment, and script bindings
@@ -94,7 +94,7 @@ constexpr bool allows_numeric_conversion() {
 
 template<class Source, class Target>
 bool matches_numeric_source(const Ref& ref) {
-    return ref.type_id() == fei::type_id<Source>() &&
+    return ref.type_id() == ets::type_id<Source>() &&
            allows_numeric_conversion<Source, Target>();
 }
 
@@ -144,7 +144,7 @@ struct Conversion {
         if (!ref) {
             return ConversionRank::None;
         }
-        return ref.type_id() == fei::type_id<T>() ? ConversionRank::Exact :
+        return ref.type_id() == ets::type_id<T>() ? ConversionRank::Exact :
                                                     ConversionRank::None;
     }
 
@@ -161,17 +161,17 @@ struct Conversion<E> {
         if (!ref) {
             return ConversionRank::None;
         }
-        if (ref.type_id() == fei::type_id<E>()) {
+        if (ref.type_id() == ets::type_id<E>()) {
             return ConversionRank::Exact;
         }
-        if (ref.type_id() == fei::type_id<int>()) {
+        if (ref.type_id() == ets::type_id<int>()) {
             return ConversionRank::Weak;
         }
         return ConversionRank::None;
     }
 
     static E get(const Ref& ref) {
-        if (ref.type_id() == fei::type_id<int>()) {
+        if (ref.type_id() == ets::type_id<int>()) {
             return static_cast<E>(ref.get_const<int>());
         }
         return ref.get_const<E>();
@@ -187,7 +187,7 @@ struct Conversion<N> {
         if (!ref) {
             return ConversionRank::None;
         }
-        if (ref.type_id() == fei::type_id<N>()) {
+        if (ref.type_id() == ets::type_id<N>()) {
             return ConversionRank::Exact;
         }
         if (detail::matches_numeric_source<N>(ref)) {
@@ -208,21 +208,21 @@ struct Conversion<std::string_view> {
         if (!ref) {
             return ConversionRank::None;
         }
-        if (ref.type_id() == fei::type_id<std::string_view>()) {
+        if (ref.type_id() == ets::type_id<std::string_view>()) {
             return ConversionRank::Exact;
         }
-        if (ref.type_id() == fei::type_id<std::string>()) {
+        if (ref.type_id() == ets::type_id<std::string>()) {
             return ConversionRank::Weak;
         }
         return ConversionRank::None;
     }
 
     static std::string_view get(const Ref& ref) {
-        if (ref.type_id() == fei::type_id<std::string>()) {
+        if (ref.type_id() == ets::type_id<std::string>()) {
             return std::string_view(ref.get_const<std::string>());
         }
         return std::string_view(ref.get_const<std::string_view>());
     }
 };
 
-} // namespace fei
+} // namespace ets

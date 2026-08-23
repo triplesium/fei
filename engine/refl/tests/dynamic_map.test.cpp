@@ -12,7 +12,7 @@
 #include <string_view>
 #include <utility>
 
-using namespace fei;
+using namespace ets;
 
 namespace dynamic_map_test {
 

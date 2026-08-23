@@ -1,10 +1,10 @@
 #pragma once
 
-namespace fei {
+namespace ets {
 
 enum class DynamicParamAccess {
     Read,
     Write,
 };
 
-} // namespace fei
+} // namespace ets

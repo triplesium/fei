@@ -7,7 +7,7 @@
 #include <chrono>
 #include <vector>
 
-namespace fei::devtools::rendering {
+namespace ets::devtools::rendering {
 
 struct FrameCaptureState {
     std::chrono::steady_clock::time_point next_capture_at;
@@ -30,4 +30,4 @@ std::vector<unsigned char> frame_to_rgb(const TextureReadbackFrame& frame);
 
 std::vector<byte> encode_jpeg(const TextureReadbackFrame& frame, int quality);
 
-} // namespace fei::devtools::rendering
+} // namespace ets::devtools::rendering

@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace fei::app_test {
+namespace ets::app_test {
 
 struct AppTestEvent {
     int value {0};
@@ -52,7 +52,7 @@ struct PluginTrace {
     }
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class AppTestPlugin : public Plugin {
   public:
     static inline int setup_count = 0;
@@ -60,7 +60,7 @@ class AppTestPlugin : public Plugin {
     void setup(App& /*app*/) override { ++setup_count; }
 };
 
-FEI_REFLECT(Plugin(name = ordered))
+ETS_REFLECT(Plugin(name = ordered))
 class OrderedPluginA : public Plugin {
   public:
     void setup(App& /*app*/) override { PluginTrace::setup_order.push_back(1); }
@@ -236,4 +236,4 @@ inline void CyclePluginA::dependencies(PluginDependencies& dependencies) const {
     dependencies.require<CyclePluginB>();
 }
 
-} // namespace fei::app_test
+} // namespace ets::app_test

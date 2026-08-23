@@ -2,7 +2,7 @@
 
 struct lua_State;
 
-namespace fei {
+namespace ets {
 
 class Enum;
 
@@ -13,4 +13,4 @@ bool push_lua_enum(lua_State* L, const Enum& enm);
 void register_lua_enum(lua_State* L, const Enum& enm);
 
 } // namespace detail
-} // namespace fei
+} // namespace ets

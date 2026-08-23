@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 enum class AssetEntryKind : std::uint8_t {
     File,
@@ -70,4 +70,4 @@ class EmbeddedAssetSource : public AssetSource {
     try_get_reader(const std::filesystem::path& path) const override;
 };
 
-} // namespace fei
+} // namespace ets

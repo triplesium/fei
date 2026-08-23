@@ -2,7 +2,7 @@
 
 #include <optional>
 
-namespace fei {
+namespace ets {
 
 TaskPool::TaskPool(std::size_t thread_count) : m_thread_pool(thread_count) {}
 
@@ -30,4 +30,4 @@ void TaskPool::enqueue_completion(TaskCompletion completion) {
     m_completions.push(std::move(completion));
 }
 
-} // namespace fei
+} // namespace ets

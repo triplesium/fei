@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 template<class Container, class Key, class Mapped>
 class MapContainerAdapter final : public AssociativeContainerAdapter {
@@ -15,11 +15,11 @@ class MapContainerAdapter final : public AssociativeContainerAdapter {
 
     ContainerKind kind() const override { return ContainerKind::Map; }
 
-    TypeId container_type() const override { return fei::type_id<Container>(); }
+    TypeId container_type() const override { return ets::type_id<Container>(); }
 
-    TypeId key_type() const override { return fei::type_id<Key>(); }
+    TypeId key_type() const override { return ets::type_id<Key>(); }
 
-    TypeId mapped_type() const override { return fei::type_id<Mapped>(); }
+    TypeId mapped_type() const override { return ets::type_id<Mapped>(); }
 
     Result<std::size_t, ContainerError> size(Ref container) const override {
         auto result = detail::const_container<Container>(
@@ -51,8 +51,8 @@ class MapContainerAdapter final : public AssociativeContainerAdapter {
             for (auto it = (*result)->begin(); it != (*result)->end(); ++it) {
                 auto status = visitor(
                     AssociativeElementRef {
-                        .key = Ref(&it->first, fei::type_id<Key>()),
-                        .value = Ref(&it->second, fei::type_id<Mapped>()),
+                        .key = Ref(&it->first, ets::type_id<Key>()),
+                        .value = Ref(&it->second, ets::type_id<Mapped>()),
                     },
                     index
                 );
@@ -79,8 +79,8 @@ class MapContainerAdapter final : public AssociativeContainerAdapter {
              ++it) {
             auto status = visitor(
                 AssociativeElementRef {
-                    .key = Ref(&it->first, fei::type_id<Key>()),
-                    .value = Ref(&it->second, fei::type_id<Mapped>()),
+                    .key = Ref(&it->first, ets::type_id<Key>()),
+                    .value = Ref(&it->second, ets::type_id<Mapped>()),
                 },
                 index
             );
@@ -116,7 +116,7 @@ class MapContainerAdapter final : public AssociativeContainerAdapter {
             return failure(std::move(result.error()));
         }
 
-        if (!entry.key || entry.key.type_id() != fei::type_id<Key>()) {
+        if (!entry.key || entry.key.type_id() != ets::type_id<Key>()) {
             return failure(
                 detail::container_error(
                     ContainerError::Kind::InvalidElement,
@@ -180,7 +180,7 @@ class MapContainerAdapter final : public AssociativeContainerAdapter {
             if (!result) {
                 return failure(std::move(result.error()));
             }
-            if (!key || key.type_id() != fei::type_id<Key>()) {
+            if (!key || key.type_id() != ets::type_id<Key>()) {
                 return failure(
                     detail::container_error(
                         ContainerError::Kind::InvalidElement,
@@ -199,7 +199,7 @@ class MapContainerAdapter final : public AssociativeContainerAdapter {
                     )
                 );
             }
-            return Ref(&it->second, fei::type_id<Mapped>());
+            return Ref(&it->second, ets::type_id<Mapped>());
         }
 
         auto result = detail::mutable_container<Container>(
@@ -210,7 +210,7 @@ class MapContainerAdapter final : public AssociativeContainerAdapter {
         if (!result) {
             return failure(std::move(result.error()));
         }
-        if (!key || key.type_id() != fei::type_id<Key>()) {
+        if (!key || key.type_id() != ets::type_id<Key>()) {
             return failure(
                 detail::container_error(
                     ContainerError::Kind::InvalidElement,
@@ -229,7 +229,7 @@ class MapContainerAdapter final : public AssociativeContainerAdapter {
                 )
             );
         }
-        return Ref(&it->second, fei::type_id<Mapped>());
+        return Ref(&it->second, ets::type_id<Mapped>());
     }
 
     Result<bool, ContainerError>
@@ -242,7 +242,7 @@ class MapContainerAdapter final : public AssociativeContainerAdapter {
         if (!result) {
             return failure(std::move(result.error()));
         }
-        if (!key || key.type_id() != fei::type_id<Key>()) {
+        if (!key || key.type_id() != ets::type_id<Key>()) {
             return failure(
                 detail::container_error(
                     ContainerError::Kind::InvalidElement,
@@ -263,7 +263,7 @@ class MapContainerAdapter final : public AssociativeContainerAdapter {
         if (!result) {
             return failure(std::move(result.error()));
         }
-        if (!key || key.type_id() != fei::type_id<Key>()) {
+        if (!key || key.type_id() != ets::type_id<Key>()) {
             return failure(
                 detail::container_error(
                     ContainerError::Kind::InvalidElement,
@@ -294,9 +294,9 @@ class SetContainerAdapter final : public AssociativeContainerAdapter {
 
     ContainerKind kind() const override { return ContainerKind::Set; }
 
-    TypeId container_type() const override { return fei::type_id<Container>(); }
+    TypeId container_type() const override { return ets::type_id<Container>(); }
 
-    TypeId key_type() const override { return fei::type_id<Key>(); }
+    TypeId key_type() const override { return ets::type_id<Key>(); }
 
     Result<std::size_t, ContainerError> size(Ref container) const override {
         auto result = detail::const_container<Container>(
@@ -327,7 +327,7 @@ class SetContainerAdapter final : public AssociativeContainerAdapter {
         for (auto it = (*result)->begin(); it != (*result)->end(); ++it) {
             auto status = visitor(
                 AssociativeElementRef {
-                    .key = Ref(&*it, fei::type_id<Key>()),
+                    .key = Ref(&*it, ets::type_id<Key>()),
                     .value = Ref(),
                 },
                 index
@@ -364,7 +364,7 @@ class SetContainerAdapter final : public AssociativeContainerAdapter {
             return failure(std::move(result.error()));
         }
 
-        if (!entry.key || entry.key.type_id() != fei::type_id<Key>() ||
+        if (!entry.key || entry.key.type_id() != ets::type_id<Key>() ||
             entry.value) {
             return failure(
                 detail::container_error(
@@ -413,7 +413,7 @@ class SetContainerAdapter final : public AssociativeContainerAdapter {
         if (!result) {
             return failure(std::move(result.error()));
         }
-        if (!key || key.type_id() != fei::type_id<Key>()) {
+        if (!key || key.type_id() != ets::type_id<Key>()) {
             return failure(
                 detail::container_error(
                     ContainerError::Kind::InvalidElement,
@@ -432,7 +432,7 @@ class SetContainerAdapter final : public AssociativeContainerAdapter {
                 )
             );
         }
-        return Ref(&*it, fei::type_id<Key>());
+        return Ref(&*it, ets::type_id<Key>());
     }
 
     Result<bool, ContainerError>
@@ -445,7 +445,7 @@ class SetContainerAdapter final : public AssociativeContainerAdapter {
         if (!result) {
             return failure(std::move(result.error()));
         }
-        if (!key || key.type_id() != fei::type_id<Key>()) {
+        if (!key || key.type_id() != ets::type_id<Key>()) {
             return failure(
                 detail::container_error(
                     ContainerError::Kind::InvalidElement,
@@ -466,7 +466,7 @@ class SetContainerAdapter final : public AssociativeContainerAdapter {
         if (!result) {
             return failure(std::move(result.error()));
         }
-        if (!key || key.type_id() != fei::type_id<Key>()) {
+        if (!key || key.type_id() != ets::type_id<Key>()) {
             return failure(
                 detail::container_error(
                     ContainerError::Kind::InvalidElement,
@@ -490,4 +490,4 @@ class SetContainerAdapter final : public AssociativeContainerAdapter {
     }
 };
 
-} // namespace fei
+} // namespace ets

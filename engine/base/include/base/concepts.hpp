@@ -1,7 +1,7 @@
 #pragma once
 #include <type_traits>
 
-namespace fei {
+namespace ets {
 
 namespace detail {
 template<class T, template<class...> class Template>
@@ -16,4 +16,4 @@ concept SpecializationOf = detail::SpecializationOfImpl<T, Template>::value;
 
 template<class T, class... Ts>
 concept AnyOf = (std::is_same_v<T, Ts> || ...);
-} // namespace fei
+} // namespace ets

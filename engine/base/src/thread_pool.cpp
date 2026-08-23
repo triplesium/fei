@@ -1,6 +1,6 @@
 #include "base/thread_pool.hpp"
 
-namespace fei {
+namespace ets {
 
 ThreadPool::ThreadPool(std::size_t thread_count) {
     m_workers.reserve(thread_count);
@@ -54,4 +54,4 @@ void ThreadPool::worker_loop() {
     }
 }
 
-} // namespace fei
+} // namespace ets

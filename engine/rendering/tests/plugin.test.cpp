@@ -24,8 +24,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <thread>
 
-using namespace fei;
-using namespace fei::rendering_test;
+using namespace ets;
+using namespace ets::rendering_test;
 
 namespace {
 
@@ -137,11 +137,13 @@ TEST_CASE(
     App app;
     app.add_plugin<AssetsPlugin>();
     install_render_app(app);
-    app.sub_app<RenderApp>().add_resource_as<GraphicsDevice>(
-        FakeGraphicsDevice {}
-    ).add_resource(GraphicsBackendCapabilities {
-        .backend = GraphicsBackendKind::OpenGL,
-    });
+    app.sub_app<RenderApp>()
+        .add_resource_as<GraphicsDevice>(FakeGraphicsDevice {})
+        .add_resource(
+            GraphicsBackendCapabilities {
+                .backend = GraphicsBackendKind::OpenGL,
+            }
+        );
     app.add_plugin<OpenGLShaderPlugin>();
     app.add_plugin<RenderingPlugin>();
     app.finish();

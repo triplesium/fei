@@ -5,7 +5,7 @@
 #include <fstream>
 #include <string_view>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -37,7 +37,7 @@ TEST_CASE(
 }
 
 TEST_CASE("Reader from_file returns file contents", "[asset][io]") {
-    auto path = reader_test_path("fei-reader-test.bin");
+    auto path = reader_test_path("entisium-reader-test.bin");
     std::filesystem::remove(path);
     {
         std::ofstream file(path, std::ios::binary);
@@ -52,7 +52,7 @@ TEST_CASE("Reader from_file returns file contents", "[asset][io]") {
 }
 
 TEST_CASE("Reader from_file returns errors", "[asset][io]") {
-    auto path = reader_test_path("fei-reader-missing.bin");
+    auto path = reader_test_path("entisium-reader-missing.bin");
     std::filesystem::remove(path);
 
     auto reader = Reader::from_file(path);

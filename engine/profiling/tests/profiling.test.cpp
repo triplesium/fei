@@ -12,7 +12,7 @@ TEST_CASE(
     "frame profile accumulator reports deterministic rolling statistics",
     "[base][profiling]"
 ) {
-    fei::profiling_detail::FrameProfileAccumulator accumulator;
+    ets::profiling_detail::FrameProfileAccumulator accumulator;
 
     REQUIRE_FALSE(accumulator.mark(1'000'000'000));
     REQUIRE(accumulator.mark(1'010'000'000) == 10'000'000);
@@ -49,24 +49,24 @@ TEST_CASE(
     "profile schedule names use registered names and fallbacks",
     "[base][profiling]"
 ) {
-    fei::clear_profile_schedule_names();
+    ets::clear_profile_schedule_names();
 
-    REQUIRE(fei::profile_schedule_name(42) == "schedule#42");
+    REQUIRE(ets::profile_schedule_name(42) == "schedule#42");
 
-    fei::register_profile_schedule_name(42, "Update");
-    REQUIRE(fei::profile_schedule_name(42) == "Update");
+    ets::register_profile_schedule_name(42, "Update");
+    REQUIRE(ets::profile_schedule_name(42) == "Update");
 }
 
 TEST_CASE(
     "GPU profile summary aggregates timestamp durations by name",
     "[base][profiling][gpu]"
 ) {
-    fei::clear_gpu_profile_summary();
-    fei::record_gpu_profile_duration("Pass/Z", 1'000'000);
-    fei::record_gpu_profile_duration("Pass/A", 2'000'000);
-    fei::record_gpu_profile_duration("Pass/A", 4'000'000);
+    ets::clear_gpu_profile_summary();
+    ets::record_gpu_profile_duration("Pass/Z", 1'000'000);
+    ets::record_gpu_profile_duration("Pass/A", 2'000'000);
+    ets::record_gpu_profile_duration("Pass/A", 4'000'000);
 
-    const auto snapshot = fei::gpu_profile_summary_snapshot();
+    const auto snapshot = ets::gpu_profile_summary_snapshot();
     REQUIRE(snapshot.available);
     REQUIRE(snapshot.entries.size() == 2);
     CHECK(snapshot.entries[0].name == "Pass/A");
@@ -77,15 +77,15 @@ TEST_CASE(
     CHECK(snapshot.entries[0].min_ms == Catch::Approx(2.0));
     CHECK(snapshot.entries[0].max_ms == Catch::Approx(4.0));
 
-    fei::clear_gpu_profile_summary();
-    CHECK_FALSE(fei::gpu_profile_summary_snapshot().available);
+    ets::clear_gpu_profile_summary();
+    CHECK_FALSE(ets::gpu_profile_summary_snapshot().available);
 }
 
 TEST_CASE(
     "frame profile history evicts old samples and preserves frame numbers",
     "[base][profiling]"
 ) {
-    using fei::profiling_detail::FrameProfileHistory;
+    using ets::profiling_detail::FrameProfileHistory;
 
     FrameProfileHistory history;
     constexpr auto extra_samples = 3U;
@@ -118,7 +118,7 @@ TEST_CASE(
     "profile summary snapshot returns a consistently sorted view",
     "[base][profiling]"
 ) {
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
     struct TestProfileInfo {
         std::string name;
         std::string file;
@@ -126,9 +126,9 @@ TEST_CASE(
         std::uint32_t line;
     };
 
-    fei::clear_profile_schedule_names();
-    fei::clear_profile_summary();
-    fei::register_profile_schedule_name(7, "TestSchedule");
+    ets::clear_profile_schedule_names();
+    ets::clear_profile_summary();
+    ets::register_profile_schedule_name(7, "TestSchedule");
 
     TestProfileInfo outer {
         .name = "outer_system",
@@ -144,12 +144,12 @@ TEST_CASE(
     };
 
     {
-        FEI_PROFILE_SYSTEM_SCOPE(7, outer);
+        ETS_PROFILE_SYSTEM_SCOPE(7, outer);
         std::this_thread::sleep_for(std::chrono::milliseconds {2});
-        { FEI_PROFILE_SYSTEM_SCOPE(7, inner); }
+        { ETS_PROFILE_SYSTEM_SCOPE(7, inner); }
     }
 
-    const auto snapshot = fei::profile_summary_snapshot();
+    const auto snapshot = ets::profile_summary_snapshot();
     REQUIRE(snapshot.available);
     REQUIRE(snapshot.systems.size() == 2);
     REQUIRE(snapshot.systems.front().name == "outer_system");
@@ -159,7 +159,7 @@ TEST_CASE(
     );
     REQUIRE(snapshot.zones.empty());
 #else
-    const auto snapshot = fei::profile_summary_snapshot();
+    const auto snapshot = ets::profile_summary_snapshot();
     REQUIRE_FALSE(snapshot.available);
     REQUIRE(snapshot.systems.empty());
     REQUIRE(snapshot.zones.empty());
@@ -168,7 +168,7 @@ TEST_CASE(
 }
 
 TEST_CASE("profile system scopes can write summary csv", "[base][profiling]") {
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
     struct TestProfileInfo {
         std::string name;
         std::string file;
@@ -180,10 +180,10 @@ TEST_CASE("profile system scopes can write summary csv", "[base][profiling]") {
         std::filesystem::path("build/profile/tests/base_profiling");
     std::filesystem::remove_all(output_dir);
 
-    fei::clear_profile_schedule_names();
-    fei::clear_profile_summary();
-    fei::set_profile_summary_output_directory(output_dir.string());
-    fei::register_profile_schedule_name(7, "TestSchedule");
+    ets::clear_profile_schedule_names();
+    ets::clear_profile_summary();
+    ets::set_profile_summary_output_directory(output_dir.string());
+    ets::register_profile_schedule_name(7, "TestSchedule");
 
     TestProfileInfo profile {
         .name = "test_system",
@@ -192,8 +192,8 @@ TEST_CASE("profile system scopes can write summary csv", "[base][profiling]") {
         .line = 12,
     };
 
-    { FEI_PROFILE_SYSTEM_SCOPE(7, profile); }
-    fei::flush_profile_summary();
+    { ETS_PROFILE_SYSTEM_SCOPE(7, profile); }
+    ets::flush_profile_summary();
 
     REQUIRE_FALSE(std::filesystem::exists(output_dir / "summary.json"));
 

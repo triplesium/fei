@@ -14,7 +14,7 @@ import {
 import luauGrammar from "./luau.tmLanguage.json";
 
 const languageId = "luau";
-export const luauEditorTheme = "fei-dark";
+export const luauEditorTheme = "entisium-dark";
 const textmateScope = "source.luau";
 let textmateRegistration: Promise<void> | undefined;
 

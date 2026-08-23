@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -96,4 +96,4 @@ class DynamicQuery final : public DynamicSystemParam {
     ) const;
 };
 
-} // namespace fei
+} // namespace ets

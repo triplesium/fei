@@ -24,7 +24,7 @@
 #include <string>
 #include <thread>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 

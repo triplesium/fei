@@ -33,7 +33,7 @@
 #include <memory>
 #include <string>
 
-using namespace fei;
+using namespace ets;
 
 struct Renderer {
     std::shared_ptr<Buffer> vertex_buffer;

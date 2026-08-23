@@ -1,22 +1,22 @@
-target("fei-graphics-vulkan-glfw")
+target("entisium-graphics-vulkan-glfw")
     set_kind("static")
-    add_rules("fei.reflect")
+    add_rules("entisium.reflect")
     set_default(false)
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
     add_deps(
-        "fei-graphics",
-        "fei-graphics-vulkan",
-        "fei-shader-vulkan",
-        "fei-window-glfw",
-        "fei-profiling"
+        "entisium-graphics",
+        "entisium-graphics-vulkan",
+        "entisium-shader-vulkan",
+        "entisium-window-glfw",
+        "entisium-profiling"
     )
     add_packages("glfw", "vulkansdk")
 
-target("fei-graphics-vulkan-glfw-tests")
+target("entisium-graphics-vulkan-glfw-tests")
     set_kind("binary")
     set_default(false)
-    add_rules("fei.test")
+    add_rules("entisium.test")
     add_files("tests/*.cpp")
-    add_deps("fei-graphics-vulkan-glfw")
+    add_deps("entisium-graphics-vulkan-glfw")

@@ -1,6 +1,6 @@
 #include "frame_profile_history.hpp"
 
-namespace fei::profiling_detail {
+namespace ets::profiling_detail {
 
 void FrameProfileHistory::push(std::int64_t duration_ns) {
     if (m_samples.size() >= Capacity) {
@@ -23,4 +23,4 @@ void FrameProfileHistory::clear() {
     m_next_frame = 0;
 }
 
-} // namespace fei::profiling_detail
+} // namespace ets::profiling_detail

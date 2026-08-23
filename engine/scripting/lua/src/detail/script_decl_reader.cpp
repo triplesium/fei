@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 namespace {
 
 LuaScriptError lua_decl_error(const std::string& message) {
@@ -872,4 +872,4 @@ lua_read_module_decl(lua_State* L, int decl_index) {
     return std::move(decl);
 }
 
-} // namespace fei
+} // namespace ets

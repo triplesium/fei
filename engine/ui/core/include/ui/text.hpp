@@ -3,7 +3,7 @@
 #include "math/vector.hpp"
 #include "text/text.hpp"
 
-namespace fei::ui {
+namespace ets::ui {
 
 using Text = text::Text;
 
@@ -16,4 +16,4 @@ struct TextNodeFlags {
     bool operator==(const TextNodeFlags&) const = default;
 };
 
-} // namespace fei::ui
+} // namespace ets::ui

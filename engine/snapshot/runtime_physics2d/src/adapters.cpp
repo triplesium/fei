@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-namespace fei::snapshot_runtime_physics2d {
+namespace ets::snapshot_runtime_physics2d {
 namespace {
 
 snapshot::SnapshotError configuration_error(std::string message) {
@@ -170,4 +170,4 @@ Status<snapshot::SnapshotError> configure_physics2d_adapters(
     return {};
 }
 
-} // namespace fei::snapshot_runtime_physics2d
+} // namespace ets::snapshot_runtime_physics2d

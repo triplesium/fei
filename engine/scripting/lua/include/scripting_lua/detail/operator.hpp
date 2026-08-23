@@ -5,7 +5,7 @@
 
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 enum class LuaOperator : uint8 {
     Add,
@@ -95,4 +95,4 @@ inline const char* get_operator_metamethod(LuaOperator op) {
     return nullptr;
 }
 
-} // namespace fei
+} // namespace ets

@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class AssetServer;
 class AssetLoadRequestSender;
@@ -117,4 +117,4 @@ class AssetLoader {
     load(Reader& reader, const LoadContext& context) = 0;
 };
 
-} // namespace fei
+} // namespace ets

@@ -15,11 +15,11 @@
 #include <utility>
 #include <vector>
 
-namespace fei::detail {
+namespace ets::detail {
 namespace {
 
-constexpr const char* c_world_entity_metatable = "fei.WorldEntity";
-constexpr const char* c_world_query_metatable = "fei.WorldQuery";
+constexpr const char* c_world_entity_metatable = "ets.WorldEntity";
+constexpr const char* c_world_query_metatable = "ets.WorldQuery";
 
 struct LuauWorldBorrow {
     DynamicWorld* world {nullptr};
@@ -784,4 +784,4 @@ int dispatch_luau_world_index(lua_State* state, const char* key) {
     luaL_error(state, "World has no field '%s'", key);
 }
 
-} // namespace fei::detail
+} // namespace ets::detail

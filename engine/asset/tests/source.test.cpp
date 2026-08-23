@@ -15,7 +15,7 @@
 #include <fstream>
 #include <string>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -29,7 +29,7 @@ class TemporaryAssetDirectory {
         const auto timestamp =
             std::chrono::steady_clock::now().time_since_epoch().count();
         m_path = std::filesystem::temp_directory_path() /
-                 ("fei-asset-source-" + std::to_string(timestamp) + "-" +
+                 ("entisium-asset-source-" + std::to_string(timestamp) + "-" +
                   std::to_string(sequence.fetch_add(1)));
         std::filesystem::create_directories(m_path / "textures");
         write("readme.txt", "root");

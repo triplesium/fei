@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 class WorldRef;
@@ -149,4 +149,4 @@ void apply_lua_script_system_queue(
     ResRO<Assets<LuaScriptAsset>> assets
 );
 
-} // namespace fei
+} // namespace ets

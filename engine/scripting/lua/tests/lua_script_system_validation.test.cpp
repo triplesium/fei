@@ -9,8 +9,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 
-using namespace fei;
-using namespace fei::detail;
+using namespace ets;
+using namespace ets::detail;
 
 TEST_CASE(
     "Lua script systems accept fixed main schedules",

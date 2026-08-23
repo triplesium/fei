@@ -7,7 +7,7 @@
 #include <cstring>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 ShaderVulkan::ShaderVulkan(
     std::shared_ptr<VulkanDeviceState> state,
@@ -58,4 +58,4 @@ ShaderVulkan::~ShaderVulkan() {
     }
 }
 
-} // namespace fei
+} // namespace ets

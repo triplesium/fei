@@ -1,10 +1,10 @@
 #pragma once
 
-namespace fei {
+namespace ets {
 
 template<typename T>
 struct ResourceTraits {
     static constexpr bool main_thread_only = false;
 };
 
-} // namespace fei
+} // namespace ets

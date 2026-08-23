@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
 class CallbackScriptSystemExecutor final : public DynamicSystemExecutor {
@@ -610,4 +610,4 @@ bool remove_script_module_systems(
     return removed_all_systems;
 }
 
-} // namespace fei
+} // namespace ets

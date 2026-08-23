@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 enum class LuauSystemDeclarationLayout {
     Flat,
@@ -50,4 +50,4 @@ Result<LuauScriptLibraryArtifact, ScriptError> compile_luau_script_library(
     LuauCompileOptions options = {}
 );
 
-} // namespace fei
+} // namespace ets

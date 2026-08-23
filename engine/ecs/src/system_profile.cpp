@@ -18,7 +18,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei {
+namespace ets {
 namespace {
 
 std::string strip_template_arguments(std::string_view symbol) {
@@ -238,4 +238,4 @@ void SystemProfileRegistry::clear() {
     m_profiles.clear();
 }
 
-} // namespace fei
+} // namespace ets

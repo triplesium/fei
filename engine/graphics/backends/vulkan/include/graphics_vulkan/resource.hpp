@@ -5,7 +5,7 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
-namespace fei {
+namespace ets {
 
 class VulkanDeviceState;
 class BufferVulkan;
@@ -108,4 +108,4 @@ class ResourceSetVulkan : public ResourceSet {
     }
 };
 
-} // namespace fei
+} // namespace ets

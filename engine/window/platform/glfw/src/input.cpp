@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 namespace {
 
 struct GlfwInputQueue {
@@ -171,4 +171,4 @@ void GlfwInputPlugin::cleanup(App& app) noexcept {
     }
 }
 
-} // namespace fei
+} // namespace ets

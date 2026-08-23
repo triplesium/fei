@@ -15,7 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct ClsError {
     enum class Kind { PropertyNotFound, MethodNotFound, ConstructorNotFound };
@@ -137,4 +137,4 @@ class Cls {
     TypeId type_id() const { return m_type_id; }
 };
 
-} // namespace fei
+} // namespace ets

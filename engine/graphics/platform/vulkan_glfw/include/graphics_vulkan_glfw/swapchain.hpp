@@ -10,7 +10,7 @@
 
 struct GLFWwindow;
 
-namespace fei {
+namespace ets {
 
 class TextureVulkan;
 
@@ -60,4 +60,4 @@ class SwapchainVulkanGlfw final : public Swapchain {
     void present() const override;
 };
 
-} // namespace fei
+} // namespace ets

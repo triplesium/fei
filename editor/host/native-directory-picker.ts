@@ -34,7 +34,7 @@ export async function chooseProjectDirectory(): Promise<string | undefined> {
         const script = [
             "Add-Type -AssemblyName System.Windows.Forms",
             "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog",
-            "$dialog.Description = 'Open Fei project folder'",
+            "$dialog.Description = 'Open Entisium project folder'",
             "$dialog.ShowNewFolderButton = $false",
             "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {",
             "  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
@@ -55,13 +55,13 @@ export async function chooseProjectDirectory(): Promise<string | undefined> {
     } else if (process.platform === "darwin") {
         result = await run("osascript", [
             "-e",
-            'POSIX path of (choose folder with prompt "Open Fei project folder")',
+            'POSIX path of (choose folder with prompt "Open Entisium project folder")',
         ]);
     } else {
         result = await run("zenity", [
             "--file-selection",
             "--directory",
-            "--title=Open Fei project folder",
+            "--title=Open Entisium project folder",
         ]);
     }
     if (result.code === 0 && result.stdout) return result.stdout.replace(/[\\/]$/, "");
@@ -78,5 +78,5 @@ export function projectDirectoryFromArguments(
         if (argument === "--project") return args[index + 1]?.trim() || undefined;
         if (argument?.startsWith("--project=")) return argument.slice("--project=".length).trim() || undefined;
     }
-    return environment.FEI_EDITOR_PROJECT_DIR?.trim() || undefined;
+    return environment.ETS_EDITOR_PROJECT_DIR?.trim() || undefined;
 }

@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class App;
 class PluginDependencies;
@@ -94,4 +94,4 @@ class PluginDependencies {
     std::vector<PluginRequirement> m_requirements;
 };
 
-} // namespace fei
+} // namespace ets

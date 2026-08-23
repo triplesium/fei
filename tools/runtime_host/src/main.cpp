@@ -5,11 +5,11 @@
 #include <exception>
 #include <utility>
 
-using namespace fei;
+using namespace ets;
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        error("Usage: fei-runtime-host <path-to-project.yaml>");
+        error("Usage: entisium-runtime-host <path-to-project.yaml>");
         return 1;
     }
 

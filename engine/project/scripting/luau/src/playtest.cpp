@@ -32,7 +32,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::project_runtime {
+namespace ets::project_runtime {
 namespace {
 
 using Json = nlohmann::json;
@@ -63,7 +63,7 @@ int playtest_helper(lua_State* state) {
         luaL_error(state, "playtest expects exactly one declaration table");
     }
     lua_pushboolean(state, true);
-    lua_setfield(state, 1, "__fei_playtest");
+    lua_setfield(state, 1, "__ets_playtest");
     lua_pushvalue(state, 1);
     return 1;
 }
@@ -136,7 +136,7 @@ void bind_reflected_globals(lua_State* state) {
             reserved.contains(name) || !valid_identifier(name)) {
             continue;
         }
-        fei::detail::push_luau_type_token(state, id);
+        ets::detail::push_luau_type_token(state, id);
         lua_setglobal(state, name.c_str());
     }
     for (const auto& [id, enm] : Registry::instance().enums()) {
@@ -151,7 +151,7 @@ void bind_reflected_globals(lua_State* state) {
         }
         lua_newtable(state);
         for (const auto& [enumerator, underlying_value] : enm.enumerators()) {
-            fei::detail::push_luau_owned_value(
+            ets::detail::push_luau_owned_value(
                 state,
                 enm.make_val(underlying_value)
             );
@@ -206,12 +206,12 @@ void bind_declared_type_aliases(lua_State* state, int declaration) {
         }
         const auto enm = Registry::instance().enums().find(type->id());
         if (enm == Registry::instance().enums().end()) {
-            fei::detail::push_luau_type_token(state, type->id());
+            ets::detail::push_luau_type_token(state, type->id());
         } else {
             lua_newtable(state);
             for (const auto& [enumerator, underlying_value] :
                  enm->second.enumerators()) {
-                fei::detail::push_luau_owned_value(
+                ets::detail::push_luau_owned_value(
                     state,
                     enm->second.make_val(underlying_value)
                 );
@@ -546,7 +546,7 @@ class LuauPlaytestRuntime {
                 throw std::runtime_error("Failed to create Luau playtest VM");
             }
             luaL_openlibs(state);
-            fei::detail::install_luau_borrowed_object_metatable(state);
+            ets::detail::install_luau_borrowed_object_metatable(state);
             luaL_sandbox(state);
         }
 
@@ -601,7 +601,7 @@ class LuauPlaytestRuntime {
         const auto token = scope.begin();
         lua_settop(thread, 0);
         lua_getref(thread, function_ref);
-        fei::detail::push_luau_borrowed_ref(thread, *prepared, scope, token);
+        ets::detail::push_luau_borrowed_ref(thread, *prepared, scope, token);
         int argument_count = 1;
         try {
             if (action != nullptr) {
@@ -706,7 +706,7 @@ class LuauPlaytestRuntime {
                 throw std::runtime_error("script must return playtest { ... }");
             }
             const int declaration = absolute_index(thread, -1);
-            lua_getfield(thread, declaration, "__fei_playtest");
+            lua_getfield(thread, declaration, "__ets_playtest");
             const bool tagged = lua_toboolean(thread, -1) != 0;
             lua_pop(thread, 1);
             if (!tagged) {
@@ -868,7 +868,7 @@ class LuauPlaytestRuntime {
         const auto token = scope.begin();
         lua_settop(thread, 0);
         lua_getref(thread, loaded->observe);
-        fei::detail::push_luau_borrowed_ref(thread, *prepared, scope, token);
+        ets::detail::push_luau_borrowed_ref(thread, *prepared, scope, token);
         if (lua_pcall(thread, 1, 1, 0) != 0) {
             auto message = luau_error(thread, "Failed to observe playtest");
             scope.end(token);
@@ -992,4 +992,4 @@ void LuauPlaytestsPlugin::setup(App& app) {
     }
 }
 
-} // namespace fei::project_runtime
+} // namespace ets::project_runtime

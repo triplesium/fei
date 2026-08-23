@@ -1,33 +1,33 @@
-target("fei-project-scripting-luau")
+target("entisium-project-scripting-luau")
     set_kind("static")
-    add_rules("fei.reflect")
+    add_rules("entisium.reflect")
     add_headerfiles("include/**.hpp")
     add_files("src/plugin.cpp")
     add_includedirs("include", {public = true})
     add_deps(
-        "fei-app",
-        "fei-asset",
-        "fei-project",
-        "fei-project-scripting",
-        "fei-scripting-luau"
+        "entisium-app",
+        "entisium-asset",
+        "entisium-project",
+        "entisium-project-scripting",
+        "entisium-scripting-luau"
     )
     add_packages("luau")
     if not is_plat("wasm") then
         add_files("src/playtest.cpp")
-        add_deps("fei-runtime-protocol")
+        add_deps("entisium-runtime-protocol")
         add_packages("nlohmann_json")
     end
 
 if not is_plat("wasm") then
-    target("fei-project-scripting-luau-tests")
+    target("entisium-project-scripting-luau-tests")
         set_kind("binary")
         set_default(false)
-        add_rules("fei.test", "fei.reflect")
+        add_rules("entisium.test", "entisium.reflect")
         add_files("tests/*.cpp")
         add_deps(
-            "fei-project-runtime",
-            "fei-project-scripting-lua",
-            "fei-project-scripting-luau"
+            "entisium-project-runtime",
+            "entisium-project-scripting-lua",
+            "entisium-project-scripting-luau"
         )
         add_packages("nlohmann_json")
 end

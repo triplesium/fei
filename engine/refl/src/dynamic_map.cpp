@@ -5,7 +5,7 @@
 #include <string>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
 DynamicMapError make_error(
@@ -421,4 +421,4 @@ DynamicMap::for_each_entry(const DynamicMapEntryVisitor& visitor) const {
     return {};
 }
 
-} // namespace fei
+} // namespace ets

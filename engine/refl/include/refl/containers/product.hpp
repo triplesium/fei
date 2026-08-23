@@ -8,7 +8,7 @@
 #include <tuple>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 // Adapts std::pair and std::tuple to the same fixed-size indexed container
 // model used for arrays. The elements can have different types, so callers must
@@ -20,7 +20,7 @@ class TupleLikeContainerAdapter final : public IndexedContainerAdapter {
 
     ContainerKind kind() const override { return ContainerKind::Product; }
 
-    TypeId container_type() const override { return fei::type_id<Container>(); }
+    TypeId container_type() const override { return ets::type_id<Container>(); }
 
     TypeId element_type() const override { return {}; }
 
@@ -162,7 +162,7 @@ class TupleLikeContainerAdapter final : public IndexedContainerAdapter {
             TypeId result;
             bool found =
                 ((index == Indexes ?
-                      (result = fei::type_id<
+                      (result = ets::type_id<
                            std::tuple_element_t<Indexes, Container>>(),
                        true) :
                       false) ||
@@ -266,4 +266,4 @@ class TupleLikeContainerAdapter final : public IndexedContainerAdapter {
     }
 };
 
-} // namespace fei
+} // namespace ets

@@ -6,7 +6,7 @@
 
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 void init_camera_view_uniform(
     Query<Entity, const Camera3d, const GlobalTransform3d>::Filter<
@@ -87,4 +87,4 @@ void upload_view_uniforms(
     uniforms->buffer.upload(*device, *render_queue);
 }
 
-} // namespace fei
+} // namespace ets

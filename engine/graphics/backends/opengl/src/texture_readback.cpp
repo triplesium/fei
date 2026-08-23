@@ -11,7 +11,7 @@
 #include <cstring>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -32,13 +32,13 @@ class TextureReadbackDisposalOpenGL : public DeferredResourceOpenGL {
     void destroy_gl_resource() override {
         for (auto fence : m_fences) {
             if (fence != nullptr) {
-                FEI_GL_CALL(glDeleteSync(fence));
+                ETS_GL_CALL(glDeleteSync(fence));
             }
         }
         m_fences.clear();
 
         if (!m_pbos.empty()) {
-            FEI_GL_CALL(glDeleteBuffers(
+            ETS_GL_CALL(glDeleteBuffers(
                 static_cast<GLsizei>(m_pbos.size()),
                 m_pbos.data()
             ));
@@ -142,7 +142,7 @@ bool TextureReadbackOpenGL::enqueue(TextureReadbackRequest request) {
 }
 
 Optional<TextureReadbackFrame> TextureReadbackOpenGL::poll() {
-    FEI_PROFILE_SCOPE("OpenGL Texture Readback Poll");
+    ETS_PROFILE_SCOPE("OpenGL Texture Readback Poll");
     std::scoped_lock lock(m_state->mutex);
     if (m_state->completed_frames.empty()) {
         return nullopt;
@@ -186,7 +186,7 @@ void TextureReadbackOpenGL::release_resources() {
 void collect_ready_texture_readbacks(
     const std::shared_ptr<OpenGLTextureReadbackState>& state
 ) {
-    FEI_PROFILE_SCOPE("OpenGL Texture Readback Collect");
+    ETS_PROFILE_SCOPE("OpenGL Texture Readback Collect");
     if (!state) {
         return;
     }
@@ -201,17 +201,17 @@ void collect_ready_texture_readbacks(
             continue;
         }
 
-        auto wait_result = FEI_GL_CALL(glClientWaitSync(slot.fence, 0, 0));
+        auto wait_result = ETS_GL_CALL(glClientWaitSync(slot.fence, 0, 0));
         if (wait_result != GL_ALREADY_SIGNALED &&
             wait_result != GL_CONDITION_SATISFIED) {
             continue;
         }
 
-        FEI_GL_CALL(glDeleteSync(slot.fence));
+        ETS_GL_CALL(glDeleteSync(slot.fence));
         slot.fence = nullptr;
 
         auto* mapped =
-            static_cast<const byte*>(FEI_GL_CALL(glMapNamedBufferRange(
+            static_cast<const byte*>(ETS_GL_CALL(glMapNamedBufferRange(
                 slot.pbo,
                 0,
                 static_cast<GLsizeiptr>(slot.byte_count),
@@ -230,7 +230,7 @@ void collect_ready_texture_readbacks(
             .user_data = slot.user_data,
         };
         std::memcpy(frame.data.data(), mapped, frame.data.size());
-        FEI_GL_CALL(glUnmapNamedBuffer(slot.pbo));
+        ETS_GL_CALL(glUnmapNamedBuffer(slot.pbo));
 
         slot.pending = false;
         slot.queued = false;
@@ -247,7 +247,7 @@ void collect_ready_texture_readbacks(
 }
 
 void execute_texture_readback(const OpenGLPendingTextureReadback& readback) {
-    FEI_PROFILE_SCOPE("OpenGL Texture Readback Enqueue");
+    ETS_PROFILE_SCOPE("OpenGL Texture Readback Enqueue");
     auto texture_gl =
         std::dynamic_pointer_cast<TextureOpenGL>(readback.texture);
     if (!texture_gl) {
@@ -266,10 +266,10 @@ void execute_texture_readback(const OpenGLPendingTextureReadback& readback) {
     }
 
     if (slot.pbo == 0) {
-        FEI_GL_CALL(glCreateBuffers(1, &slot.pbo));
+        ETS_GL_CALL(glCreateBuffers(1, &slot.pbo));
     }
     if (slot.allocated_bytes != slot.byte_count) {
-        FEI_GL_CALL(glNamedBufferData(
+        ETS_GL_CALL(glNamedBufferData(
             slot.pbo,
             static_cast<GLsizeiptr>(slot.byte_count),
             nullptr,
@@ -278,9 +278,9 @@ void execute_texture_readback(const OpenGLPendingTextureReadback& readback) {
         slot.allocated_bytes = slot.byte_count;
     }
 
-    FEI_GL_CALL(glBindBuffer(GL_PIXEL_PACK_BUFFER, slot.pbo));
-    FEI_GL_CALL(glPixelStorei(GL_PACK_ALIGNMENT, 1));
-    FEI_GL_CALL(glGetTextureImage(
+    ETS_GL_CALL(glBindBuffer(GL_PIXEL_PACK_BUFFER, slot.pbo));
+    ETS_GL_CALL(glPixelStorei(GL_PACK_ALIGNMENT, 1));
+    ETS_GL_CALL(glGetTextureImage(
         texture_gl->id(),
         static_cast<GLint>(readback.mip_level),
         GL_RGBA,
@@ -288,11 +288,11 @@ void execute_texture_readback(const OpenGLPendingTextureReadback& readback) {
         static_cast<GLsizei>(slot.byte_count),
         nullptr
     ));
-    FEI_GL_CALL(glBindBuffer(GL_PIXEL_PACK_BUFFER, 0));
+    ETS_GL_CALL(glBindBuffer(GL_PIXEL_PACK_BUFFER, 0));
 
-    slot.fence = FEI_GL_CALL(glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0));
+    slot.fence = ETS_GL_CALL(glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0));
     slot.queued = false;
     slot.pending = true;
 }
 
-} // namespace fei
+} // namespace ets

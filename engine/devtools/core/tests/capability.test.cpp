@@ -6,8 +6,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string_view>
 
-using namespace fei;
-using namespace fei::devtools;
+using namespace ets;
+using namespace ets::devtools;
 
 namespace {
 

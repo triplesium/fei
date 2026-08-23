@@ -3,8 +3,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace fei;
-using namespace fei::app_test;
+using namespace ets;
+using namespace ets::app_test;
 
 TEST_CASE(
     "App registers events once and updates them on Last",

@@ -6,7 +6,7 @@
 #include <new>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 Column::Column(TypeId type_id) : m_capacity(64), m_type_id(type_id) {
     auto& type = Registry::instance().get_type(type_id);
@@ -143,7 +143,7 @@ const void* Column::element_at(const void* elements, uint32_t row) const {
 }
 
 void Column::set(uint32_t row, Ref ref) {
-    FEI_ASSERT(row < m_count);
+    ETS_ASSERT(row < m_count);
     if (!ref || ref.type_id() != m_type_id) {
         error("Invalid ref passed to Column::set");
         return;
@@ -198,31 +198,31 @@ void Column::push_back(Ref ref, ComponentTicks ticks) {
 }
 
 Ref Column::get(uint32_t row) {
-    FEI_ASSERT(row < m_count);
+    ETS_ASSERT(row < m_count);
     void* data_ptr = element_at(m_elements, row);
     Ref result_ref(data_ptr, m_type_id);
     return result_ref;
 }
 
 Ref Column::get(uint32_t row) const {
-    FEI_ASSERT(row < m_count);
+    ETS_ASSERT(row < m_count);
     const void* data_ptr = element_at(m_elements, row);
     Ref result_ref(data_ptr, m_type_id);
     return result_ref;
 }
 
 ComponentTicks& Column::ticks(uint32_t row) {
-    FEI_ASSERT(row < m_count);
+    ETS_ASSERT(row < m_count);
     return m_ticks[row];
 }
 
 const ComponentTicks& Column::ticks(uint32_t row) const {
-    FEI_ASSERT(row < m_count);
+    ETS_ASSERT(row < m_count);
     return m_ticks[row];
 }
 
 void Column::swap_remove(uint32_t row) {
-    FEI_ASSERT(row < m_count);
+    ETS_ASSERT(row < m_count);
     if (row < m_count - 1) {
         void* target_ptr = element_at(m_elements, row);
         void* last_ptr = element_at(m_elements, m_count - 1);
@@ -255,4 +255,4 @@ void Column::clear() {
     m_ticks.clear();
 }
 
-} // namespace fei
+} // namespace ets

@@ -9,7 +9,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei::detail {
+namespace ets::detail {
 namespace {
 
 int raise_message(lua_State* state, const std::string& message) {
@@ -161,4 +161,4 @@ bool push_luau_asset_server_member(lua_State* state, const char* key) {
     return false;
 }
 
-} // namespace fei::detail
+} // namespace ets::detail

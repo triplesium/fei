@@ -10,7 +10,7 @@ namespace httplib {
 class Server;
 }
 
-namespace fei::devtools {
+namespace ets::devtools {
 
 class Server {
   public:
@@ -34,4 +34,4 @@ class Server {
     std::thread m_thread;
 };
 
-} // namespace fei::devtools
+} // namespace ets::devtools

@@ -4,7 +4,7 @@
 
 #include <string>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -236,4 +236,4 @@ void setup_deferred_pipelines(
     }
 }
 
-} // namespace fei
+} // namespace ets

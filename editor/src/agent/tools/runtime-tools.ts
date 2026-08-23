@@ -10,7 +10,7 @@ export function createRuntimeTools(editor: EditorAgentApi): AgentTool<any>[] {
         {
             name: "runtime_status",
             label: "Runtime Status",
-            description: "Read the current Fei WebAssembly runtime state, script, and frame status.",
+            description: "Read the current Entisium WebAssembly runtime state, script, and frame status.",
             parameters: emptyParameters,
             execute: async (_toolCallId, _parameters, signal) =>
                 invokeEditorCommand(editor, { type: "runtime.status" }, signal),
@@ -18,7 +18,7 @@ export function createRuntimeTools(editor: EditorAgentApi): AgentTool<any>[] {
         {
             name: "runtime_play",
             label: "Start Runtime",
-            description: "Start the current project in the Fei WebAssembly runtime.",
+            description: "Start the current project in the Entisium WebAssembly runtime.",
             parameters: emptyParameters,
             executionMode: "sequential",
             execute: async (_toolCallId, _parameters, signal) =>
@@ -27,7 +27,7 @@ export function createRuntimeTools(editor: EditorAgentApi): AgentTool<any>[] {
         {
             name: "runtime_stop",
             label: "Stop Runtime",
-            description: "Stop the current Fei WebAssembly runtime session.",
+            description: "Stop the current Entisium WebAssembly runtime session.",
             parameters: emptyParameters,
             executionMode: "sequential",
             execute: async (_toolCallId, _parameters, signal) =>
@@ -36,7 +36,7 @@ export function createRuntimeTools(editor: EditorAgentApi): AgentTool<any>[] {
         {
             name: "runtime_restart",
             label: "Restart Runtime",
-            description: "Restart the current project in the Fei WebAssembly runtime.",
+            description: "Restart the current project in the Entisium WebAssembly runtime.",
             parameters: emptyParameters,
             executionMode: "sequential",
             execute: async (_toolCallId, _parameters, signal) =>

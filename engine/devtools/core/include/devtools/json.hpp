@@ -10,7 +10,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fei::devtools {
+namespace ets::devtools {
 
 Result<std::string, std::string> encode_json(Ref value);
 
@@ -26,4 +26,4 @@ Result<std::remove_cvref_t<T>, std::string> decode_json(std::string_view text) {
     return std::move(value->template get<U>());
 }
 
-} // namespace fei::devtools
+} // namespace ets::devtools

@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace fei::reflgen {
+namespace ets::reflgen {
 
 struct HeaderParseOutput {
     ParseResult result;
@@ -28,4 +28,4 @@ class HeaderParser {
     bool m_verbose = false;
 };
 
-} // namespace fei::reflgen
+} // namespace ets::reflgen

@@ -1,26 +1,26 @@
-# Fei runtime supervisor
+# Entisium runtime supervisor
 
-`fei-agentd` is an out-of-process supervisor for instrumented Fei runtimes.
+`entisium-agentd` is an out-of-process supervisor for instrumented Entisium runtimes.
 It owns the local HTTP server and keeps runtime status available after the
 runtime exits. The runtime only contains the optional `RuntimeProbePlugin`,
-which connects outward when `FEI_AGENTD_PORT` and `FEI_RUNTIME_SESSION` are
+which connects outward when `ETS_AGENTD_PORT` and `ETS_RUNTIME_SESSION` are
 present.
 
 Build the supervisor, CLI, and Runtime Host:
 
 ```powershell
-xmake build -y fei-agentd
-xmake build -y fei-ctl
-xmake build -y fei-runtime-host
+xmake build -y entisium-agentd
+xmake build -y entisium-ctl
+xmake build -y entisium-runtime-host
 ```
 
 Launch a project under supervision:
 
 ```powershell
-fei-agentd --project path/to/project.yaml --port 8091
+entisium-agentd --project path/to/project.yaml --port 8091
 ```
 
-`fei-agentd` binds itself to that project and starts `fei-runtime-host`
+`entisium-agentd` binds itself to that project and starts `entisium-runtime-host`
 automatically. Use `--runtime path/to/host` to override the host executable,
 or `--external-runtime` when another launcher owns the runtime process.
 
@@ -45,30 +45,30 @@ content.
 Inspect, watch, or restart it from another terminal:
 
 ```powershell
-fei-ctl --port 8091 status
-fei-ctl --port 8091 project
-fei-ctl --port 8091 capabilities
-fei-ctl --port 8091 watch
-fei-ctl --port 8091 restart
-fei-ctl --port 8091 inspect ecs.world.summary --payload '{"archetype_limit":128,"include_empty_archetypes":false}'
-fei-ctl --port 8091 inspect ecs.entity.inspect --entity 0
-fei-ctl --port 8091 inspect ecs.query --payload '{"components":[],"with":[],"without":[],"limit":10}'
-fei-ctl --port 8091 play-interfaces
-fei-ctl --port 8091 play-capture --output frame.png
-fei-ctl --port 8091 play-observe --interface game.main
-fei-ctl --port 8091 play-step --payload '{"interface":"runtime.keyboard","action":{"keys":["D"]},"ticks":10}'
-fei-ctl --port 8091 play-run --eval 'local state = play.observe("game.main"); if state.score == 0 then play.step("game.main", { move = "right" }) end; return play.observe("game.main")'
-fei-ctl --port 8091 play-reset
+entisium-ctl --port 8091 status
+entisium-ctl --port 8091 project
+entisium-ctl --port 8091 capabilities
+entisium-ctl --port 8091 watch
+entisium-ctl --port 8091 restart
+entisium-ctl --port 8091 inspect ecs.world.summary --payload '{"archetype_limit":128,"include_empty_archetypes":false}'
+entisium-ctl --port 8091 inspect ecs.entity.inspect --entity 0
+entisium-ctl --port 8091 inspect ecs.query --payload '{"components":[],"with":[],"without":[],"limit":10}'
+entisium-ctl --port 8091 play-interfaces
+entisium-ctl --port 8091 play-capture --output frame.png
+entisium-ctl --port 8091 play-observe --interface game.main
+entisium-ctl --port 8091 play-step --payload '{"interface":"runtime.keyboard","action":{"keys":["D"]},"ticks":10}'
+entisium-ctl --port 8091 play-run --eval 'local state = play.observe("game.main"); if state.score == 0 then play.step("game.main", { move = "right" }) end; return play.observe("game.main")'
+entisium-ctl --port 8091 play-reset
 ```
 
 Project identity remains available through `GET /api/v1/project` and
-`fei-ctl project` even while the runtime is offline. A runtime hello is only
+`entisium-ctl project` even while the runtime is offline. A runtime hello is only
 accepted when its normalized project file and project name match the project
-bound to `fei-agentd`.
+bound to `entisium-agentd`.
 
 The protocol reports runtime identity, frame progress, lifecycle, uptime,
 disconnects, and process exit codes. Inspection requests are queued by
-`fei-agentd`, pulled over an outbound long-poll by `RuntimeProbePlugin`, and
+`entisium-agentd`, pulled over an outbound long-poll by `RuntimeProbePlugin`, and
 executed on the runtime's main ECS thread. `ecs.world.summary`,
 `ecs.entity.inspect`, and `ecs.query` do not require the embedded DevTools
 server. Agents can use `ecs.world.summary` as the initial map of live
@@ -80,7 +80,7 @@ handler with the runtime's `InspectionRegistry`. Registration is frozen before
 execution; RuntimeProbe and the optional DevTools compatibility adapter
 dispatch through the same registry.
 
-When launched by `fei-agentd`, Runtime Host starts in deterministic playtest
+When launched by `entisium-agentd`, Runtime Host starts in deterministic playtest
 mode. It renders one initial frame and then pauses. `play-step` applies one
 discovered action, advances only the requested interface's bounded tick count
 using a fixed 60 Hz clock, clears virtual input, and pauses again. Projects can
@@ -120,7 +120,7 @@ return {
     retry = play.observe("game.main"),
     capture = capture,
 }
-'@ | fei-ctl --port 8091 play-run --stdin
+'@ | entisium-ctl --port 8091 play-run --stdin
 ```
 
 The control API consists of `play.interfaces()`,
@@ -151,7 +151,7 @@ Callbacks receive the borrowed `World` API; `begin_step` also receives the
 decoded action table. Runtime Host loads and validates all declarations before
 freezing `PlaytestRegistry`.
 
-Schemas use Fei's bounded Draft 2020-12 profile. It supports `type`, `enum`,
+Schemas use Entisium's bounded Draft 2020-12 profile. It supports `type`, `enum`,
 `const`, local JSON Pointer `$ref`/`$defs`, `allOf`/`anyOf`/`oneOf`/`not`,
 `if`/`then`/`else`, object properties and required/additional property bounds,
 array items/prefix items/length/uniqueness, numeric bounds and multiples, and
@@ -164,5 +164,5 @@ include paths such as `$.player.position[0]`.
 
 The runtime advertises registry descriptors in its hello message. Agent tools
 can discover the complete machine-readable contracts through
-`GET /api/v1/capabilities` or `fei-ctl capabilities`; `fei-ctl inspect`
+`GET /api/v1/capabilities` or `entisium-ctl capabilities`; `entisium-ctl inspect`
 resolves the schema from that endpoint unless `--schema` is provided.

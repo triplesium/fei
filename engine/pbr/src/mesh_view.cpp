@@ -7,7 +7,7 @@
 #include "rendering/gpu_image.hpp"
 #include "rendering/view.hpp"
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -284,4 +284,4 @@ void prepare_mesh_view_resource_set(
     }
 }
 
-} // namespace fei
+} // namespace ets

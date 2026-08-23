@@ -6,7 +6,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 constexpr struct InPlace {
 } in_place;
@@ -411,4 +411,4 @@ bool operator!=(NullOpt, const Optional<T>& rhs) {
     return rhs.has_value();
 }
 
-} // namespace fei
+} // namespace ets

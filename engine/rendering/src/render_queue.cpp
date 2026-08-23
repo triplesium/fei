@@ -5,7 +5,7 @@
 #include <cstring>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 void RenderQueue::write_buffer(
     std::shared_ptr<Buffer> destination,
@@ -75,4 +75,4 @@ void flush_render_queue(
     }
 }
 
-} // namespace fei
+} // namespace ets

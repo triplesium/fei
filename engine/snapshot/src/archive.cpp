@@ -22,13 +22,13 @@
 #    include <Windows.h>
 #endif
 
-namespace fei::snapshot {
+namespace ets::snapshot {
 namespace {
 
 using serialization::SerializedField;
 using serialization::SerializedNode;
 
-constexpr std::string_view c_archive_magic {"fei.world-snapshot"};
+constexpr std::string_view c_archive_magic {"entisium.world-snapshot"};
 
 SnapshotError
 archive_error(SnapshotError::Kind kind, std::string path, std::string message) {
@@ -1368,7 +1368,7 @@ runtime_compatibility_signature(const World& world) {
     }
 
     SignatureBuilder signature;
-    signature.append("fei.runtime-compatibility.v1");
+    signature.append("entisium.runtime-compatibility.v1");
     signature.append_number(runtime->schedules.topology_generation);
     signature.append_number(runtime->schedules.schedules.size());
     for (const auto& schedule : runtime->schedules.schedules) {
@@ -1494,7 +1494,7 @@ decode_archive(const SerializedNode& node) {
         return failure(archive_error(
             SnapshotError::Kind::ArchiveFormatFailed,
             "archive.magic",
-            "File is not a Fei world snapshot archive"
+            "File is not a Entisium world snapshot archive"
         ));
     }
     auto archive_version = expect_bounded_unsigned<std::uint32_t>(
@@ -1751,4 +1751,4 @@ Result<CheckpointInfo, SnapshotError> CheckpointStore::import_file(
     return insert(std::move(name), std::move(archive->snapshot));
 }
 
-} // namespace fei::snapshot
+} // namespace ets::snapshot

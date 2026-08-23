@@ -16,7 +16,7 @@
 
 #include <cmath>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -328,4 +328,4 @@ void PhysicsPlugin2d::setup(App& app) {
         );
 }
 
-} // namespace fei
+} // namespace ets

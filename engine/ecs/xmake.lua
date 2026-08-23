@@ -1,16 +1,16 @@
-target("fei-ecs")
+target("entisium-ecs")
     set_kind("static")
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp", "src/dynamic/*.cpp")
     add_includedirs("include", {public = true})
-    add_deps("fei-base", "fei-refl", "fei-profiling")
+    add_deps("entisium-base", "entisium-refl", "entisium-profiling")
     if is_plat("windows") then
         add_syslinks("dbghelp")
     end
 
-target("fei-ecs-tests")
+target("entisium-ecs-tests")
     set_kind("binary")
     set_default(false)
-    add_rules("fei.test")
+    add_rules("entisium.test")
     add_files("tests/*.cpp")
-    add_deps("fei-ecs")
+    add_deps("entisium-ecs")

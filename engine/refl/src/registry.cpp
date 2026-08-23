@@ -7,7 +7,7 @@
 #include "refl/enum.hpp"
 #include "refl/type.hpp"
 
-namespace fei {
+namespace ets {
 
 Registry* Registry::s_instance = nullptr;
 Registry& Registry::instance() {
@@ -443,4 +443,4 @@ bool is_enum_type(TypeId type_id) {
     return Registry::instance().has_enum(type_id);
 }
 
-} // namespace fei
+} // namespace ets

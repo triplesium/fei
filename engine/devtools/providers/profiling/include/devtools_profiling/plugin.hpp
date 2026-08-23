@@ -2,13 +2,13 @@
 
 #include "app/plugin.hpp"
 
-namespace fei::devtools::profiling {
+namespace ets::devtools::profiling {
 
-FEI_REFLECT(Plugin)
-class ProviderPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class ProviderPlugin : public ets::Plugin {
   public:
     void setup(App& app) override;
     void finish(App& app) override;
 };
 
-} // namespace fei::devtools::profiling
+} // namespace ets::devtools::profiling

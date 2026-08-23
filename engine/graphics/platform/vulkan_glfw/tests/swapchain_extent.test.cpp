@@ -3,8 +3,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <limits>
 
-using namespace fei;
-using namespace fei::vulkan_glfw_detail;
+using namespace ets;
+using namespace ets::vulkan_glfw_detail;
 
 namespace {
 

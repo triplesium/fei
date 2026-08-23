@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::agentd {
+namespace ets::agentd {
 
 struct ProcessLaunch {
     std::vector<std::string> arguments;
@@ -37,4 +37,4 @@ class RuntimeProcess {
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace fei::agentd
+} // namespace ets::agentd

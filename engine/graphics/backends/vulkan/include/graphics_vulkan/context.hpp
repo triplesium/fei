@@ -10,7 +10,7 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
-namespace fei {
+namespace ets {
 
 class VulkanMemoryAllocator;
 
@@ -110,4 +110,4 @@ class VulkanDeviceState {
     [[nodiscard]] std::vector<std::string> required_instance_extensions() const;
 };
 
-} // namespace fei
+} // namespace ets

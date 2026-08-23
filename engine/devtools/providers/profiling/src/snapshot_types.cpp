@@ -1,6 +1,6 @@
 #include "snapshot_types.hpp"
 
-namespace fei::devtools::profiling {
+namespace ets::devtools::profiling {
 
 FrameStatsSnapshot make_frame_stats_snapshot(const FrameProfileStats& stats) {
     return FrameStatsSnapshot {
@@ -35,7 +35,7 @@ SummaryEntrySnapshot make_summary_entry(const ProfileEntrySnapshot& source) {
 } // namespace
 
 SummarySnapshot
-make_summary_snapshot(const fei::ProfileSummarySnapshot& source) {
+make_summary_snapshot(const ets::ProfileSummarySnapshot& source) {
     SummarySnapshot snapshot {
         .available = source.available,
         .frame_stats = make_frame_stats_snapshot(source.frame_stats),
@@ -52,7 +52,7 @@ make_summary_snapshot(const fei::ProfileSummarySnapshot& source) {
 }
 
 FrameHistorySnapshot
-make_frame_history_snapshot(const fei::ProfileSummarySnapshot& source) {
+make_frame_history_snapshot(const ets::ProfileSummarySnapshot& source) {
     FrameHistorySnapshot snapshot {
         .available = source.available,
     };
@@ -69,7 +69,7 @@ make_frame_history_snapshot(const fei::ProfileSummarySnapshot& source) {
 }
 
 GpuSummarySnapshot
-make_gpu_summary_snapshot(const fei::GpuProfileSummarySnapshot& source) {
+make_gpu_summary_snapshot(const ets::GpuProfileSummarySnapshot& source) {
     GpuSummarySnapshot snapshot {.available = source.available};
     snapshot.entries.reserve(source.entries.size());
     for (const auto& entry : source.entries) {
@@ -88,4 +88,4 @@ make_gpu_summary_snapshot(const fei::GpuProfileSummarySnapshot& source) {
     return snapshot;
 }
 
-} // namespace fei::devtools::profiling
+} // namespace ets::devtools::profiling

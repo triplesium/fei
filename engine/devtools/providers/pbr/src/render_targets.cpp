@@ -1,6 +1,6 @@
 #include "render_targets.hpp"
 
-namespace fei::devtools::pbr {
+namespace ets::devtools::pbr {
 
 const char* preview_mode_name(PreviewMode mode) {
     switch (mode) {
@@ -217,4 +217,4 @@ bool is_previewable(const std::shared_ptr<Texture>& texture) {
             texture->format() == PixelFormat::Rgba16Float);
 }
 
-} // namespace fei::devtools::pbr
+} // namespace ets::devtools::pbr

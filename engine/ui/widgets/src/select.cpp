@@ -1,6 +1,6 @@
 #include "ui_widgets/plugin.hpp"
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
 namespace {
 
@@ -243,4 +243,4 @@ void update_selects(
     }
 }
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

@@ -7,7 +7,7 @@
 #include <vector>
 #include <webgpu/webgpu.h>
 
-namespace fei {
+namespace ets {
 
 class CommandBufferWebGpu final : public CommandBuffer {
   public:
@@ -106,4 +106,4 @@ class CommandBufferWebGpu final : public CommandBuffer {
     void end_compute_pass();
 };
 
-} // namespace fei
+} // namespace ets

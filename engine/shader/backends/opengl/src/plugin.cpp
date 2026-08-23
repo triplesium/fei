@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
 class OpenGLArtifactGenerator final : public ShaderArtifactGenerator {
@@ -66,4 +66,4 @@ void OpenGLShaderPlugin::setup(App& app) {
     );
 }
 
-} // namespace fei
+} // namespace ets

@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace fei::test {
+namespace ets::test {
 namespace {
 
 class InstallRunnerPlugin final : public Plugin {
@@ -66,4 +66,4 @@ TEST_CASE("App rejects an empty runner", "[app][runner]") {
     REQUIRE_THROWS_AS(app.set_runner(AppRunner {}), std::invalid_argument);
 }
 
-} // namespace fei::test
+} // namespace ets::test

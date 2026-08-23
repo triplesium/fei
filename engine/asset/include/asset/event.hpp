@@ -1,7 +1,7 @@
 #pragma once
 
 #include "asset/id.hpp"
-namespace fei {
+namespace ets {
 
 enum class AssetEventType {
     Added,
@@ -16,4 +16,4 @@ struct AssetEvent {
     AssetId id;
 };
 
-} // namespace fei
+} // namespace ets

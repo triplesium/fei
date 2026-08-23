@@ -7,7 +7,7 @@
 #include <memory>
 #include <span>
 
-namespace fei::devtools::pbr {
+namespace ets::devtools::pbr {
 
 inline constexpr const char* c_render_targets_capability = "pbr.render_targets";
 inline constexpr const char* c_composite_capability = "pbr.composite";
@@ -68,4 +68,4 @@ std::shared_ptr<Texture> resolve_render_target(
 
 bool is_previewable(const std::shared_ptr<Texture>& texture);
 
-} // namespace fei::devtools::pbr
+} // namespace ets::devtools::pbr

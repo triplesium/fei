@@ -2,7 +2,7 @@
 
 #include <utility>
 
-namespace fei::agentd {
+namespace ets::agentd {
 
 ArtifactStore::ArtifactStore(
     std::size_t maximum_count,
@@ -63,4 +63,4 @@ void ArtifactStore::evict_oldest() {
     m_artifacts.erase(artifact);
 }
 
-} // namespace fei::agentd
+} // namespace ets::agentd

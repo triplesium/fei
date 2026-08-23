@@ -5,8 +5,8 @@
 #include <future>
 #include <nlohmann/json.hpp>
 
-using namespace fei;
-using namespace fei::agentd;
+using namespace ets;
+using namespace ets::agentd;
 
 TEST_CASE(
     "Play trace store assigns sequences and reads incrementally",

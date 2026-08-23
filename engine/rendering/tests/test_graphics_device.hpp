@@ -20,7 +20,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::rendering_test {
+namespace ets::rendering_test {
 
 class FakePipeline : public Pipeline {};
 
@@ -260,4 +260,4 @@ class FakeGraphicsDevice : public GraphicsDevice {
     void present(const Swapchain&) const override { ++present_calls; }
 };
 
-} // namespace fei::rendering_test
+} // namespace ets::rendering_test

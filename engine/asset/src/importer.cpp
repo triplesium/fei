@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cctype>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -75,4 +75,4 @@ const AssetImporter* AssetImporterRegistry::find(std::string_view name) const {
     return importer == m_by_name.end() ? nullptr : importer->second;
 }
 
-} // namespace fei
+} // namespace ets

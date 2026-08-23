@@ -7,7 +7,7 @@
 #include <string_view>
 #include <unordered_map>
 
-namespace fei {
+namespace ets {
 
 class EmbeddedData {
   private:
@@ -60,7 +60,7 @@ struct EmbeddedAssetsRegistrar {
 };
 } // namespace detail
 
-} // namespace fei
+} // namespace ets
 
 #define EMBED(name, asset_name)                                  \
     extern "C" {                                                 \
@@ -68,7 +68,7 @@ struct EmbeddedAssetsRegistrar {
     extern const uint8_t _binary_##name##_end[];                 \
     }                                                            \
     namespace {                                                  \
-    static const fei::detail::EmbeddedAssetsRegistrar            \
+    static const ets::detail::EmbeddedAssetsRegistrar            \
         _embedded_asset_registrar_##name(                        \
             asset_name,                                          \
             static_cast<const uint8_t*>(_binary_##name##_start), \

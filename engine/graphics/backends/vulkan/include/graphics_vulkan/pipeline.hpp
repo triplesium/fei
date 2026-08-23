@@ -6,7 +6,7 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
-namespace fei {
+namespace ets {
 
 class VulkanDeviceState;
 class ResourceLayoutVulkan;
@@ -50,4 +50,4 @@ class PipelineVulkan : public Pipeline {
     [[nodiscard]] bool is_compute() const { return m_compute; }
 };
 
-} // namespace fei
+} // namespace ets

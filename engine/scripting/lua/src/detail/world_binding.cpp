@@ -14,13 +14,13 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 namespace {
 
-constexpr const char* lua_world_entity_metatable = "fei.WorldEntity";
-constexpr const char* lua_world_query_metatable = "fei.WorldQuery";
+constexpr const char* lua_world_entity_metatable = "ets.WorldEntity";
+constexpr const char* lua_world_query_metatable = "ets.WorldQuery";
 constexpr const char* lua_world_query_iterator_metatable =
-    "fei.WorldQueryIterator";
+    "ets.WorldQueryIterator";
 
 struct LuaWorldEntity {
     DynamicWorld* context {nullptr};
@@ -494,7 +494,7 @@ parse_lua_world_query(lua_State* L, DynamicWorld& context, int spec_index) {
             luaL_error(L, "World.query keys must be names or array indices");
         }
 
-        if (lua_is_fei_type(L, -1)) {
+        if (lua_is_ets_type(L, -1)) {
             if (!field_name) {
                 luaL_error(L, "World.query component fields must be named");
             }
@@ -840,7 +840,7 @@ Type& register_lua_dynamic_world_type() {
 }
 
 bool lua_is_dynamic_world(TypeId type_id) {
-    return type_id == fei::type_id<DynamicWorld>();
+    return type_id == ets::type_id<DynamicWorld>();
 }
 
 int lua_dispatch_dynamic_world_index(lua_State* L, const char* key) {
@@ -867,4 +867,4 @@ int lua_dispatch_dynamic_world_index(lua_State* L, const char* key) {
     return 1;
 }
 
-} // namespace fei
+} // namespace ets

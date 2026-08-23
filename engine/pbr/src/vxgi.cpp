@@ -12,7 +12,7 @@
 #include <limits>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -806,15 +806,15 @@ void VxgiPlugin::setup(App& app) {
             queue_vxgi_voxelization_pipelines |
                 in_set<RenderingSystems::Queue>(),
             chain(
-                FEI_NAMED_SYSTEM(render_vxgi_voxelization_pass),
-                FEI_NAMED_SYSTEM(render_vxgi_inject_radiance_pass),
-                FEI_NAMED_SYSTEM(render_vxgi_mipmap_base_pass),
-                FEI_NAMED_SYSTEM(render_vxgi_mipmap_volume_pass),
-                FEI_NAMED_SYSTEM(render_vxgi_inject_propagation_pass),
-                FEI_NAMED_SYSTEM(
+                ETS_NAMED_SYSTEM(render_vxgi_voxelization_pass),
+                ETS_NAMED_SYSTEM(render_vxgi_inject_radiance_pass),
+                ETS_NAMED_SYSTEM(render_vxgi_mipmap_base_pass),
+                ETS_NAMED_SYSTEM(render_vxgi_mipmap_volume_pass),
+                ETS_NAMED_SYSTEM(render_vxgi_inject_propagation_pass),
+                ETS_NAMED_SYSTEM(
                     render_vxgi_mipmap_base_after_propagation_pass
                 ),
-                FEI_NAMED_SYSTEM(
+                ETS_NAMED_SYSTEM(
                     render_vxgi_mipmap_volume_after_propagation_pass
                 )
             ) | in_set<RenderingSystems::Prepass>() |
@@ -822,4 +822,4 @@ void VxgiPlugin::setup(App& app) {
         );
 }
 
-} // namespace fei
+} // namespace ets

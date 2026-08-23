@@ -13,7 +13,7 @@
 #include <memory>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 template<class Item>
 struct RenderPhase {
@@ -109,4 +109,4 @@ inline void draw_mesh_item(
     }
 }
 
-} // namespace fei
+} // namespace ets

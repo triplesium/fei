@@ -12,7 +12,7 @@ afterEach(async () => {
 
 describe("FileEditorSettingsStore", () => {
     it("persists appearance preferences", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "fei-editor-settings-"));
+        const directory = await mkdtemp(join(tmpdir(), "entisium-editor-settings-"));
         temporaryDirectories.push(directory);
         const path = join(directory, "settings.json");
         const store = new FileEditorSettingsStore(path);
@@ -29,7 +29,7 @@ describe("FileEditorSettingsStore", () => {
     });
 
     it("uses a fallback path when the preferred directory is unavailable", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "fei-editor-settings-"));
+        const directory = await mkdtemp(join(tmpdir(), "entisium-editor-settings-"));
         temporaryDirectories.push(directory);
         const blocked = join(directory, "blocked");
         await writeFile(blocked, "not a directory", "utf8");

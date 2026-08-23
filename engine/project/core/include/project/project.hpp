@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 enum class ProjectLoadErrorKind : std::uint8_t {
     Io,
@@ -75,4 +75,4 @@ class Project {
     }
 };
 
-} // namespace fei
+} // namespace ets

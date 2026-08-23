@@ -13,7 +13,7 @@
 #include <variant>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct BlendAttachmentDescription {
     bool enabled {false};
@@ -216,10 +216,10 @@ class Pipeline {
     virtual ~Pipeline() = default;
 };
 
-} // namespace fei
+} // namespace ets
 
 MAKE_STD_HASHABLE(
-    fei::VertexAttributeDescription,
+    ets::VertexAttributeDescription,
     location,
     offset,
     format,

@@ -7,7 +7,7 @@
 #include <memory>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 FramebufferOpenGL::FramebufferOpenGL(const FramebufferDescription& desc) :
     Framebuffer(desc) {}
@@ -20,8 +20,8 @@ FramebufferOpenGL::default_framebuffer(PixelFormat color_format) {
 }
 
 void FramebufferOpenGL::create_gl_resource() const {
-    FEI_PROFILE_SCOPE("OpenGL Framebuffer Create");
-    FEI_GL_CALL(glCreateFramebuffers(1, &m_fbo));
+    ETS_PROFILE_SCOPE("OpenGL Framebuffer Create");
+    ETS_GL_CALL(glCreateFramebuffers(1, &m_fbo));
 
     if (!m_color_attachments.empty()) {
         for (std::size_t i = 0; i < m_color_attachments.size(); i++) {
@@ -31,7 +31,7 @@ void FramebufferOpenGL::create_gl_resource() const {
             );
             tex_gl->ensure_created();
 
-            FEI_GL_CALL(glNamedFramebufferTexture(
+            ETS_GL_CALL(glNamedFramebufferTexture(
                 m_fbo,
                 static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i),
                 tex_gl->id(),
@@ -42,15 +42,15 @@ void FramebufferOpenGL::create_gl_resource() const {
         for (std::size_t i = 0; i < m_color_attachments.size(); i++) {
             bufs[i] = static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i);
         }
-        FEI_GL_CALL(glNamedFramebufferDrawBuffers(
+        ETS_GL_CALL(glNamedFramebufferDrawBuffers(
             m_fbo,
             to_gl_sizei(bufs.size()),
             bufs.data()
         ));
-        FEI_GL_CALL(glNamedFramebufferReadBuffer(m_fbo, GL_COLOR_ATTACHMENT0));
+        ETS_GL_CALL(glNamedFramebufferReadBuffer(m_fbo, GL_COLOR_ATTACHMENT0));
     } else {
-        FEI_GL_CALL(glNamedFramebufferDrawBuffer(m_fbo, GL_NONE));
-        FEI_GL_CALL(glNamedFramebufferReadBuffer(m_fbo, GL_NONE));
+        ETS_GL_CALL(glNamedFramebufferDrawBuffer(m_fbo, GL_NONE));
+        ETS_GL_CALL(glNamedFramebufferReadBuffer(m_fbo, GL_NONE));
     }
 
     if (m_depth_attachment.has_value()) {
@@ -58,7 +58,7 @@ void FramebufferOpenGL::create_gl_resource() const {
             m_depth_attachment->texture
         );
         depth_tex_gl->ensure_created();
-        FEI_GL_CALL(glNamedFramebufferTexture(
+        ETS_GL_CALL(glNamedFramebufferTexture(
             m_fbo,
             GL_DEPTH_ATTACHMENT,
             depth_tex_gl->id(),
@@ -69,9 +69,9 @@ void FramebufferOpenGL::create_gl_resource() const {
 
 void FramebufferOpenGL::destroy_gl_resource() {
     if (m_owns_fbo && m_fbo != 0) {
-        FEI_GL_CALL(glDeleteFramebuffers(1, &m_fbo));
+        ETS_GL_CALL(glDeleteFramebuffers(1, &m_fbo));
         m_fbo = 0;
     }
 }
 
-} // namespace fei
+} // namespace ets

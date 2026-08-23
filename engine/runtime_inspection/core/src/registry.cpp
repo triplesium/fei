@@ -4,7 +4,7 @@
 #include <string>
 #include <utility>
 
-namespace fei::runtime_inspection {
+namespace ets::runtime_inspection {
 namespace {
 
 Status<InspectionError>
@@ -165,4 +165,4 @@ bool InspectionRegistry::contains(std::string_view provider) const {
     return m_indices.contains(std::string(provider));
 }
 
-} // namespace fei::runtime_inspection
+} // namespace ets::runtime_inspection

@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-using namespace fei;
-using namespace fei::devtools::pbr;
+using namespace ets;
+using namespace ets::devtools::pbr;
 
 TEST_CASE(
     "PBR frame capture state tracks capability and target context",

@@ -2,7 +2,7 @@
 
 #include <cstdlib>
 
-namespace fei {
+namespace ets {
 
 std::optional<std::string> read_environment_variable(std::string_view name) {
     std::string key(name);
@@ -25,4 +25,4 @@ std::optional<std::string> read_environment_variable(std::string_view name) {
 #endif
 }
 
-} // namespace fei
+} // namespace ets

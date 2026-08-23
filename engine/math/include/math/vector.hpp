@@ -7,13 +7,13 @@
 #include <cassert>
 #include <cmath>
 
-namespace fei {
+namespace ets {
 
 class Vector2;
 class Vector3;
 class Vector4;
 
-FEI_REFLECT()
+ETS_REFLECT()
 class Vector2 {
   public:
     float x {0.0f}, y {0.0f};
@@ -157,7 +157,7 @@ class Vector2 {
     }
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 class Vector3 {
   public:
     float x {0.f};
@@ -328,7 +328,7 @@ class Vector3 {
             len_product = 1e-6f;
         }
         float f = dot(from, to) / len_product;
-        f = fei::clamp(f, -1.0f, 1.0f);
+        f = ets::clamp(f, -1.0f, 1.0f);
         return acos(f);
     }
     static Vector3 lerp(const Vector3& lhs, const Vector3& rhs, float alpha) {
@@ -340,9 +340,9 @@ class Vector3 {
     static Vector3
     clamp(const Vector3& v, const Vector3& min, const Vector3& max) {
         return {
-            fei::clamp(v.x, min.x, max.x),
-            fei::clamp(v.y, min.y, max.y),
-            fei::clamp(v.z, min.z, max.z)
+            ets::clamp(v.x, min.x, max.x),
+            ets::clamp(v.y, min.y, max.y),
+            ets::clamp(v.z, min.z, max.z)
         };
     }
     static Vector3 project(const Vector3& v, const Vector3& normal) {
@@ -363,7 +363,7 @@ class Vector3 {
     float angle(const Vector3& rhs) const { return Vector3::angle(*this, rhs); }
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 class Vector4 {
   public:
     float x {0.0f};
@@ -536,4 +536,4 @@ class Vector4 {
     }
 };
 
-} // namespace fei
+} // namespace ets

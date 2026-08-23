@@ -9,7 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 inline std::size_t hash_type_ids(const std::vector<TypeId>& type_ids) {
     std::size_t seed = 0;
@@ -118,13 +118,13 @@ class Archetype {
     }
 
     ComponentTicks& component_ticks(TypeId type_id, std::size_t row) {
-        FEI_ASSERT(m_columns.contains(type_id));
+        ETS_ASSERT(m_columns.contains(type_id));
         return m_columns.at(type_id).ticks(static_cast<uint32_t>(row));
     }
 
     const ComponentTicks&
     component_ticks(TypeId type_id, std::size_t row) const {
-        FEI_ASSERT(m_columns.contains(type_id));
+        ETS_ASSERT(m_columns.contains(type_id));
         return m_columns.at(type_id).ticks(static_cast<uint32_t>(row));
     }
 
@@ -166,12 +166,12 @@ class Archetypes {
     }
 
     Archetype& get(ArchetypeId id) {
-        FEI_ASSERT(m_archetypes.contains(id));
+        ETS_ASSERT(m_archetypes.contains(id));
         return m_archetypes.at(id);
     }
 
     const Archetype& get(ArchetypeId id) const {
-        FEI_ASSERT(m_archetypes.contains(id));
+        ETS_ASSERT(m_archetypes.contains(id));
         return m_archetypes.at(id);
     }
 
@@ -180,4 +180,4 @@ class Archetypes {
     auto end() const { return m_archetypes.end(); }
 };
 
-} // namespace fei
+} // namespace ets

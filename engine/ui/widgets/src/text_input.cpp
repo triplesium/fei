@@ -6,7 +6,7 @@
 #include <string_view>
 #include <vector>
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
 namespace {
 
@@ -589,4 +589,4 @@ void forward_text_input_changes(
     }
 }
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

@@ -24,7 +24,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class PluginId;
 class App;
@@ -69,7 +69,7 @@ enum class AppLifecycle : std::uint8_t {
     Stopped,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct AppStates {
     bool should_stop {false};
 };
@@ -436,4 +436,4 @@ class App {
     AppLifecycle m_lifecycle {AppLifecycle::Building};
 };
 
-} // namespace fei
+} // namespace ets

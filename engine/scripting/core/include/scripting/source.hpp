@@ -2,11 +2,11 @@
 
 #include <string>
 
-namespace fei {
+namespace ets {
 
 struct ScriptSource {
     std::string name;
     std::string content;
 };
 
-} // namespace fei
+} // namespace ets

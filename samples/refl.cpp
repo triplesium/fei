@@ -6,7 +6,7 @@
 
 #include <print>
 
-using namespace fei;
+using namespace ets;
 
 int main() {
     register_generated_reflection();

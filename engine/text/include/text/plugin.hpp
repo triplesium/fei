@@ -2,13 +2,13 @@
 
 #include "app/plugin.hpp"
 
-namespace fei::text {
+namespace ets::text {
 
-FEI_REFLECT(Plugin)
-class TextPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class TextPlugin : public ets::Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-} // namespace fei::text
+} // namespace ets::text

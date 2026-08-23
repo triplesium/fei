@@ -11,9 +11,9 @@
 #include <memory>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT(Resource)
+ETS_REFLECT(Resource)
 struct PhysicsSettings2d {
     Vector2 gravity {0.0f, -9.81f};
     int substeps {4};
@@ -27,7 +27,7 @@ struct PhysicsBodyMovement2d {
     float angular_velocity;
 };
 
-FEI_REFLECT(Resource)
+ETS_REFLECT(Resource)
 class PhysicsWorld2d {
   public:
     PhysicsWorld2d();
@@ -66,4 +66,4 @@ class PhysicsWorld2d {
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace fei
+} // namespace ets

@@ -17,7 +17,7 @@
 #include <variant>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct Shader {
     std::filesystem::path path;
@@ -160,4 +160,4 @@ class ShaderRef {
     }
 };
 
-} // namespace fei
+} // namespace ets

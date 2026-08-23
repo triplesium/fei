@@ -5,7 +5,7 @@
 
 #include <string>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -44,4 +44,4 @@ void request_quick_save_hotkeys(
 QuickSaveOutcome process_quick_save_requests(World& world);
 
 } // namespace runtime_host
-} // namespace fei
+} // namespace ets

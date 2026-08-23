@@ -1,7 +1,7 @@
 #include "math/quaternion.hpp"
 
-namespace fei {
+namespace ets {
 
 const Quaternion Quaternion::Identity {0.0f, 0.0f, 0.0f, 1.0f};
 
-} // namespace fei
+} // namespace ets

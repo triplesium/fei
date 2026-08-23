@@ -1,6 +1,6 @@
-# fei
+# Entisium
 
-`fei` is a toy C++ ECS-based 3D game engine inspired by [Bevy](https://github.com/bevyengine/bevy).
+`Entisium` is a toy C++ ECS-based 3D game engine inspired by [Bevy](https://github.com/bevyengine/bevy).
 
 ## Highlights
 
@@ -23,8 +23,8 @@ Most third-party libraries can be resolved by `xmake`.
 First, follow the instructions to install [xmake](https://xmake.io/).
 Once xmake is ready, simply clone the repository and run xmake.
 ```bash
-git clone https://github.com/triplesium/fei.git
-cd triple
+git clone https://github.com/triplesium/entisium.git
+cd entisium
 xmake
 ```
 
@@ -34,7 +34,7 @@ To do this, run the `reflgen` xmake task.
 ```bash
 xmake reflgen
 ```
-It builds and runs the `fei-reflgen` generator for reflected xmake targets. Generated C++ files are written under `build/.gens/<target>/reflection/` and compiled into the corresponding target.
+It builds and runs the `entisium-reflgen` generator for reflected xmake targets. Generated C++ files are written under `build/.gens/<target>/reflection/` and compiled into the corresponding target.
 
 ## Examples
 

@@ -17,7 +17,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct PreparedView;
 
@@ -104,4 +104,4 @@ void check_mesh_visibility(
     ResRW<ViewVisibleEntities> visible_entities
 );
 
-} // namespace fei
+} // namespace ets

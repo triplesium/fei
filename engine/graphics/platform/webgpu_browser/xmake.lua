@@ -1,12 +1,12 @@
-target("fei-graphics-webgpu-browser")
+target("entisium-graphics-webgpu-browser")
     set_kind("static")
-    add_rules("fei.reflect")
+    add_rules("entisium.reflect")
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})
     add_deps(
-        "fei-window-browser",
-        "fei-graphics",
-        "fei-graphics-webgpu",
-        "fei-shader-webgpu"
+        "entisium-window-browser",
+        "entisium-graphics",
+        "entisium-graphics-webgpu",
+        "entisium-shader-webgpu"
     )

@@ -7,7 +7,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
 
-namespace fei::text {
+namespace ets::text {
 
 struct Font::Impl {
     std::vector<uint8> bytes;
@@ -134,4 +134,4 @@ FontLoader::load(Reader& reader, const LoadContext& context) {
     return std::move(*font);
 }
 
-} // namespace fei::text
+} // namespace ets::text

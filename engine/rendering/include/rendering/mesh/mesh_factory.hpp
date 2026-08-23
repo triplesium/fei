@@ -4,7 +4,7 @@
 
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 class MeshFactory {
   public:
@@ -41,4 +41,4 @@ class MeshFactory {
     create_quad(float width = 1.0f, float height = 1.0f);
 };
 
-} // namespace fei
+} // namespace ets

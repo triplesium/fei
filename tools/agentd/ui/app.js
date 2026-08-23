@@ -336,9 +336,9 @@ async function requestFrame() {
     ui.framePlaceholder.hidden = true;
     if (state.frameUrl) URL.revokeObjectURL(state.frameUrl);
     state.frameUrl = nextUrl;
-    const width = response.headers.get("X-Fei-Width") ?? "—";
-    const height = response.headers.get("X-Fei-Height") ?? "—";
-    const frame = response.headers.get("X-Fei-Frame") ?? "—";
+    const width = response.headers.get("X-Entisium-Width") ?? "—";
+    const height = response.headers.get("X-Entisium-Height") ?? "—";
+    const frame = response.headers.get("X-Entisium-Frame") ?? "—";
     ui.frameDimensions.textContent = `${width} × ${height}`;
     ui.frameMessage.textContent = `Runtime frame ${frame}`;
   } catch (error) {

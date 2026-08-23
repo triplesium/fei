@@ -7,7 +7,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image_write.h>
 
-namespace fei::devtools::rendering {
+namespace ets::devtools::rendering {
 
 bool can_capture_now(
     const Config& config,
@@ -101,4 +101,4 @@ std::vector<byte> encode_jpeg(const TextureReadbackFrame& frame, int quality) {
     return ok == 0 ? std::vector<byte> {} : jpeg;
 }
 
-} // namespace fei::devtools::rendering
+} // namespace ets::devtools::rendering

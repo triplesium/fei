@@ -10,11 +10,11 @@
 #include <string_view>
 #include <utility>
 
-namespace fei::devtools {
+namespace ets::devtools {
 
 namespace {
 
-constexpr std::string_view c_mjpeg_boundary {"fei-frame"};
+constexpr std::string_view c_mjpeg_boundary {"entisium-frame"};
 constexpr std::chrono::milliseconds c_default_timeout {5000};
 struct RequestParams {
     uint64 after {0};
@@ -461,7 +461,7 @@ void install_routes(httplib::Server& server, Bridge bridge) {
             const auto token = bridge.start_subscription(capability);
             res.set_header("Cache-Control", "no-store");
             res.set_chunked_content_provider(
-                "multipart/x-mixed-replace; boundary=fei-frame",
+                "multipart/x-mixed-replace; boundary=entisium-frame",
                 [bridge, capability, token, frame_index = params.after](
                     std::size_t,
                     httplib::DataSink& sink
@@ -560,4 +560,4 @@ void Server::stop() {
     }
 }
 
-} // namespace fei::devtools
+} // namespace ets::devtools

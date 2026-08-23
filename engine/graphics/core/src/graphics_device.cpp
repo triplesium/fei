@@ -3,7 +3,7 @@
 #include <memory>
 #include <string>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -68,4 +68,4 @@ GraphicsDevice::capture_presented_frame(const Swapchain& swapchain) const {
     return std::move(*frame);
 }
 
-} // namespace fei
+} // namespace ets

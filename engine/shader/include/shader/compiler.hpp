@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class ShaderArtifactCache;
 
@@ -187,4 +187,4 @@ class SlangLibraryShaderCompiler final : public ShaderCompiler {
     compile(ShaderCompileRequest request) override;
 };
 
-} // namespace fei
+} // namespace ets

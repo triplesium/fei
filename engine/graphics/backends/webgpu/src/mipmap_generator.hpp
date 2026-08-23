@@ -6,7 +6,7 @@
 #include <vector>
 #include <webgpu/webgpu.h>
 
-namespace fei {
+namespace ets {
 
 class TextureWebGpu;
 class WebGpuDeviceState;
@@ -38,4 +38,4 @@ class MipmapGeneratorWebGpu {
     WGPUComputePipeline m_pipeline {nullptr};
 };
 
-} // namespace fei
+} // namespace ets

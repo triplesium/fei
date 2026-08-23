@@ -5,7 +5,7 @@
 
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 class GraphicsDeviceWebGpu final : public GraphicsDevice {
   public:
@@ -85,4 +85,4 @@ class GraphicsDeviceWebGpu final : public GraphicsDevice {
     std::shared_ptr<WebGpuDeviceState> m_state;
 };
 
-} // namespace fei
+} // namespace ets

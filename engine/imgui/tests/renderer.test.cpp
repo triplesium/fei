@@ -20,8 +20,8 @@
 #include <thread>
 #include <vector>
 
-using namespace fei;
-using namespace fei::rendering_test;
+using namespace ets;
+using namespace ets::rendering_test;
 
 namespace {
 
@@ -65,7 +65,7 @@ void begin_test_frame() {
     io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
     ImGui::NewFrame();
     ImGui::Begin("Renderer test");
-    ImGui::TextUnformatted("fei-imgui");
+    ImGui::TextUnformatted("entisium-imgui");
     ImGui::End();
 }
 

@@ -9,7 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct RenderResourceSetCacheStats {
     std::uint64_t requests {0};
@@ -66,4 +66,4 @@ class RenderResourceSetCache {
     }
 };
 
-} // namespace fei
+} // namespace ets

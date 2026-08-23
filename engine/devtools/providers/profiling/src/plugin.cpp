@@ -9,7 +9,7 @@
 
 #include <string_view>
 
-namespace fei::devtools::profiling {
+namespace ets::devtools::profiling {
 
 namespace {
 
@@ -32,7 +32,7 @@ struct FrameStats {
             }
 
             auto response =
-                make_frame_stats_snapshot(fei::profile_frame_stats());
+                make_frame_stats_snapshot(ets::profile_frame_stats());
             respond_capability(commands, entity, request, response);
         }
     }
@@ -56,7 +56,7 @@ struct ProfilingSummary {
                 continue;
             }
 
-            auto source = fei::profile_summary_snapshot();
+            auto source = ets::profile_summary_snapshot();
             auto response = make_summary_snapshot(source);
             respond_capability(commands, entity, request, response);
         }
@@ -81,7 +81,7 @@ struct FrameHistory {
                 continue;
             }
 
-            auto source = fei::profile_summary_snapshot();
+            auto source = ets::profile_summary_snapshot();
             auto response = make_frame_history_snapshot(source);
             respond_capability(commands, entity, request, response);
         }
@@ -107,7 +107,7 @@ struct GpuSummary {
             }
 
             auto response =
-                make_gpu_summary_snapshot(fei::gpu_profile_summary_snapshot());
+                make_gpu_summary_snapshot(ets::gpu_profile_summary_snapshot());
             respond_capability(commands, entity, request, response);
         }
     }
@@ -123,4 +123,4 @@ void ProviderPlugin::setup(App& app) {
 
 void ProviderPlugin::finish(App&) {}
 
-} // namespace fei::devtools::profiling
+} // namespace ets::devtools::profiling

@@ -3,7 +3,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei {
+namespace ets {
 
 class PluginId {
   private:
@@ -17,4 +17,4 @@ class PluginId {
     [[nodiscard]] std::string_view local_name() const;
 };
 
-} // namespace fei
+} // namespace ets

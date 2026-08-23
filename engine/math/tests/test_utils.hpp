@@ -10,7 +10,7 @@
 #include <sstream>
 #include <string>
 
-namespace fei::test {
+namespace ets::test {
 
 using Catch::Matchers::WithinAbs;
 
@@ -206,4 +206,4 @@ WithinAbs(Matrix4x4 expected, float margin = EPSILON) {
 }
 // NOLINTEND(readability-identifier-naming)
 
-} // namespace fei::test
+} // namespace ets::test

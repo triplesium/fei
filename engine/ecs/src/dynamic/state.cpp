@@ -4,7 +4,7 @@
 
 #include <mutex>
 
-namespace fei {
+namespace ets {
 
 DynamicStateRegistry& DynamicStateRegistry::instance() {
     static DynamicStateRegistry registry;
@@ -103,4 +103,4 @@ DynamicNextStateParam::prepare(World& world, SystemTicks system_ticks) {
     return Ref(m_ref);
 }
 
-} // namespace fei
+} // namespace ets

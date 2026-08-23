@@ -3,13 +3,13 @@
 #include "app/app.hpp"
 #include "app/plugin.hpp"
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class WebGpuGlfwPlugin final : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

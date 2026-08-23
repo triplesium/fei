@@ -9,9 +9,9 @@
 #include <cstdint>
 #include <string>
 
-using namespace fei;
-using namespace fei::devtools;
-using namespace fei::devtools::input;
+using namespace ets;
+using namespace ets::devtools;
+using namespace ets::devtools::input;
 
 namespace {
 

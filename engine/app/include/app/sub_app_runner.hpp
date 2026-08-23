@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 enum class SubAppExecutionMode : std::uint8_t {
     Inline,
@@ -98,4 +98,4 @@ class ThreadedSubAppRunner final : public SubAppRunner {
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace fei
+} // namespace ets

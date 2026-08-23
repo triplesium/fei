@@ -15,7 +15,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace fei::agentd {
+namespace ets::agentd {
 namespace {
 
 using Json = nlohmann::json;
@@ -846,4 +846,4 @@ Json run_luau_play_script(
     return result;
 }
 
-} // namespace fei::agentd
+} // namespace ets::agentd

@@ -11,7 +11,7 @@
 #include <stdexcept>
 #include <string_view>
 
-namespace fei::reflgen {
+namespace ets::reflgen {
 namespace {
 
 struct ReflectionMarker {
@@ -116,7 +116,7 @@ parse_group_field(std::string_view group, std::string_view text) {
     if (separator == std::string_view::npos ||
         text.find('=', separator + 1) != std::string_view::npos) {
         throw std::runtime_error(
-            "FEI_REFLECT group field '" + std::string(text) +
+            "ETS_REFLECT group field '" + std::string(text) +
             "' must use exactly one '='"
         );
     }
@@ -124,13 +124,13 @@ parse_group_field(std::string_view group, std::string_view text) {
     const auto key = trim(text.substr(0, separator));
     if (!valid_tag_key(key)) {
         throw std::runtime_error(
-            "Invalid FEI_REFLECT group field key '" + key + "'"
+            "Invalid ETS_REFLECT group field key '" + key + "'"
         );
     }
     auto value = trim(text.substr(separator + 1));
     if (!valid_tag_value(value)) {
         throw std::runtime_error(
-            "Invalid value '" + value + "' for FEI_REFLECT tag '" + key + "'"
+            "Invalid value '" + value + "' for ETS_REFLECT tag '" + key + "'"
         );
     }
     return ReflectionTag {
@@ -159,7 +159,7 @@ void for_each_top_level_item(std::string_view text, Callback callback) {
         }
 
         if (nesting < 0) {
-            throw std::runtime_error("FEI_REFLECT contains unmatched brackets");
+            throw std::runtime_error("ETS_REFLECT contains unmatched brackets");
         }
 
         if (character != ',' || nesting != 0) {
@@ -170,12 +170,12 @@ void for_each_top_level_item(std::string_view text, Callback callback) {
         if (!item.empty()) {
             callback(std::move(item));
         } else if (!trim(text).empty()) {
-            throw std::runtime_error("FEI_REFLECT contains an empty tag");
+            throw std::runtime_error("ETS_REFLECT contains an empty tag");
         }
         start = index + 1;
     }
     if (nesting != 0) {
-        throw std::runtime_error("FEI_REFLECT contains unmatched brackets");
+        throw std::runtime_error("ETS_REFLECT contains unmatched brackets");
     }
 }
 
@@ -187,7 +187,7 @@ void parse_reflection_item(
     if (group_begin == std::string_view::npos) {
         if (text.find('=') != std::string_view::npos || !valid_tag_key(text)) {
             throw std::runtime_error(
-                "Invalid FEI_REFLECT tag '" + std::string(text) + "'"
+                "Invalid ETS_REFLECT tag '" + std::string(text) + "'"
             );
         }
         tags.push_back(ReflectionTag {.key = std::string(text)});
@@ -197,7 +197,7 @@ void parse_reflection_item(
     const auto group = trim(text.substr(0, group_begin));
     if (!valid_tag_key(group) || text.back() != ')') {
         throw std::runtime_error(
-            "Invalid FEI_REFLECT group '" + std::string(text) + "'"
+            "Invalid ETS_REFLECT group '" + std::string(text) + "'"
         );
     }
 
@@ -206,7 +206,7 @@ void parse_reflection_item(
         text.substr(group_begin + 1, text.size() - group_begin - 2);
     if (trim(fields).empty()) {
         throw std::runtime_error(
-            "FEI_REFLECT group '" + group + "' must contain at least one field"
+            "ETS_REFLECT group '" + group + "' must contain at least one field"
         );
     }
     for_each_top_level_item(fields, [&](std::string field) {
@@ -230,7 +230,7 @@ parse_reflection_tags(std::string_view arguments) {
         }
         if (unique_tags.back().value != tag.value) {
             throw std::runtime_error(
-                "FEI_REFLECT tag '" + tag.key +
+                "ETS_REFLECT tag '" + tag.key +
                 "' is declared with conflicting values"
             );
         }
@@ -240,7 +240,7 @@ parse_reflection_tags(std::string_view arguments) {
 
 [[nodiscard]] ReflectionMarker
 parse_reflection_marker(std::string_view source, std::size_t marker_offset) {
-    constexpr std::string_view c_marker_name = "FEI_REFLECT";
+    constexpr std::string_view c_marker_name = "ETS_REFLECT";
     std::size_t position = marker_offset + c_marker_name.size();
     while (position < source.size() &&
            std::isspace(static_cast<unsigned char>(source[position]))) {
@@ -248,7 +248,7 @@ parse_reflection_marker(std::string_view source, std::size_t marker_offset) {
     }
     if (position >= source.size() || source[position] != '(') {
         throw std::runtime_error(
-            "FEI_REFLECT must be invoked with parentheses"
+            "ETS_REFLECT must be invoked with parentheses"
         );
     }
 
@@ -263,7 +263,7 @@ parse_reflection_marker(std::string_view source, std::size_t marker_offset) {
         ++position;
     }
     if (depth != 0) {
-        throw std::runtime_error("Unterminated FEI_REFLECT invocation");
+        throw std::runtime_error("Unterminated ETS_REFLECT invocation");
     }
 
     const std::size_t arguments_end = position - 1;
@@ -315,7 +315,7 @@ void collect_reflection_markers(
 ) {
     visit_children(cursor, [&](CXCursor child, CXCursor) {
         if (clang_getCursorKind(child) == CXCursor_MacroExpansion &&
-            cursor_spelling(child) == "FEI_REFLECT" &&
+            cursor_spelling(child) == "ETS_REFLECT" &&
             cursor_is_from_header(child, context)) {
             if (const auto offset = cursor_offset(child)) {
                 auto marker = parse_reflection_marker(context.source, *offset);
@@ -1020,7 +1020,7 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
 
     CXIndex index = clang_createIndex(0, 0);
     std::vector<std::string> args =
-        {"-x", "c++-header", "-std=c++23", "-DFEI_REFLGEN_SCRIPT"};
+        {"-x", "c++-header", "-std=c++23", "-DETS_REFLGEN_SCRIPT"};
     for (const auto& include_path : include_paths) {
         args.emplace_back("-I");
         args.push_back(include_path);
@@ -1127,4 +1127,4 @@ HeaderParseOutput HeaderParser::parse() {
     return output;
 }
 
-} // namespace fei::reflgen
+} // namespace ets::reflgen

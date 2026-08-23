@@ -8,7 +8,7 @@
 #include <system_error>
 #include <type_traits>
 
-namespace fei {
+namespace ets {
 
 std::optional<std::string> read_environment_variable(std::string_view name);
 
@@ -34,4 +34,4 @@ std::optional<T> read_environment_variable(std::string_view name) {
     return result;
 }
 
-} // namespace fei
+} // namespace ets

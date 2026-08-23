@@ -11,7 +11,7 @@ struct VertexOutput {
 [shader("vertex")]
 VertexOutput vertex_main(VertexInput input) {
     VertexOutput output;
-#if FEI_SHADER_TARGET_WGSL
+#if ETS_SHADER_TARGET_WGSL
     output.tex_coords = float2(input.uv.x, 1.0 - input.uv.y);
 #else
     output.tex_coords = input.uv;

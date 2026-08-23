@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 namespace {
 
 struct BrowserInputQueue {
@@ -401,4 +401,4 @@ void BrowserInputPlugin::cleanup(App& app) noexcept {
     }
 }
 
-} // namespace fei
+} // namespace ets

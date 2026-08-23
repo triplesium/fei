@@ -20,10 +20,10 @@
 #include <unordered_set>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
-constexpr std::string_view c_variant_field = "__fei_state_variant";
+constexpr std::string_view c_variant_field = "__ets_state_variant";
 
 struct ScriptStateStorage {
     Val current;
@@ -200,11 +200,11 @@ ensure_script_state_runtime(const ScriptStateDecl& state) {
     auto runtime = std::make_shared<ScriptStateRuntime>();
     runtime->name = state.qualified_name;
     runtime->value_type = state.type_id;
-    runtime->state_resource = TypeId {state.qualified_name + ".__fei_State"};
+    runtime->state_resource = TypeId {state.qualified_name + ".__ets_State"};
     runtime->next_state_resource =
-        TypeId {state.qualified_name + ".__fei_NextState"};
+        TypeId {state.qualified_name + ".__ets_NextState"};
     runtime->transition_resource =
-        TypeId {state.qualified_name + ".__fei_StateTransition"};
+        TypeId {state.qualified_name + ".__ets_StateTransition"};
     c_script_states.emplace(state.type_id, runtime);
 
     DynamicStateRegistry::instance().add(
@@ -578,4 +578,4 @@ bool is_script_state_type(TypeId type) {
     return find_script_state_runtime(type) != nullptr;
 }
 
-} // namespace fei
+} // namespace ets

@@ -5,7 +5,7 @@
 #include "graphics_opengl/utils.hpp"
 #include "profiling/profiling.hpp"
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -40,9 +40,9 @@ TextureViewOpenGL::TextureViewOpenGL(const TextureViewDescription& desc) :
 }
 
 void TextureViewOpenGL::create_gl_resource() const {
-    FEI_PROFILE_SCOPE("OpenGL TextureView Create");
+    ETS_PROFILE_SCOPE("OpenGL TextureView Create");
     m_target_gl->ensure_created();
-    FEI_GL_CALL(glGenTextures(1, &m_texture_view));
+    ETS_GL_CALL(glGenTextures(1, &m_texture_view));
 
     GLenum original_target =
         to_gl_texture_target(m_target_gl->usage(), m_target_gl->type());
@@ -74,7 +74,7 @@ void TextureViewOpenGL::create_gl_resource() const {
         return;
     }
     auto internal_format = m_target_gl->gl_sized_internal_format();
-    FEI_GL_CALL(glTextureView(
+    ETS_GL_CALL(glTextureView(
         m_texture_view,
         m_texture_target,
         m_target_gl->id(),
@@ -88,9 +88,9 @@ void TextureViewOpenGL::create_gl_resource() const {
 
 void TextureViewOpenGL::destroy_gl_resource() {
     if (m_texture_view != 0) {
-        FEI_GL_CALL(glDeleteTextures(1, &m_texture_view));
+        ETS_GL_CALL(glDeleteTextures(1, &m_texture_view));
         m_texture_view = 0;
     }
 }
 
-} // namespace fei
+} // namespace ets

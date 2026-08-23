@@ -9,7 +9,7 @@
 #include <mutex>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class OpenGLDeviceState;
 struct OpenGLPendingTextureReadback;
@@ -62,4 +62,4 @@ void collect_ready_texture_readbacks(
     const std::shared_ptr<OpenGLTextureReadbackState>& state
 );
 
-} // namespace fei
+} // namespace ets

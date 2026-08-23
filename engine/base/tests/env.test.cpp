@@ -4,7 +4,7 @@
 #include <optional>
 #include <string>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -27,7 +27,7 @@ void unset_test_env(char const* name) {
 } // namespace
 
 TEST_CASE("Environment variables can be read and parsed", "[base][env]") {
-    constexpr char name[] = "FEI_TEST_ENV_VALUE";
+    constexpr char name[] = "ETS_TEST_ENV_VALUE";
 
     set_test_env(name, "42");
     REQUIRE(

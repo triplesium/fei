@@ -15,7 +15,7 @@
 
 EMBED(ibl_brdf_lut_png, "ibl_brdf_lut.png");
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -140,11 +140,11 @@ void PbrCorePlugin::setup(App& app) {
         .add_systems(
             RenderUpdate,
             chain(
-                FEI_NAMED_SYSTEM(render_shadow_map_passes),
-                FEI_NAMED_SYSTEM(render_shadow_blur_passes)
+                ETS_NAMED_SYSTEM(render_shadow_map_passes),
+                ETS_NAMED_SYSTEM(render_shadow_blur_passes)
             ) | in_set<RenderingSystems::Prepass>() |
                 in_set<PbrSystems::ShadowPass>()
         );
 }
 
-} // namespace fei
+} // namespace ets

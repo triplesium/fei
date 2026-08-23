@@ -8,42 +8,42 @@
 #include <string>
 #include <vector>
 
-namespace fei::devtools::reflection {
+namespace ets::devtools::reflection {
 
 inline constexpr uint32 c_default_search_limit = 50;
 inline constexpr uint32 c_max_search_limit = 200;
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct SearchRequest {
     std::string pattern;
     uint32 limit {c_default_search_limit};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct TypeSummary {
     std::string id;
     std::string name;
     std::vector<std::string> facets;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct SearchResponse {
     std::vector<TypeSummary> matches;
     bool truncated {false};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct DescribeRequest {
     std::string type;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct TypeReference {
     std::string id;
     std::string name;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct QualifiedTypeDescriptor {
     TypeReference type;
     bool is_const {false};
@@ -52,7 +52,7 @@ struct QualifiedTypeDescriptor {
     bool is_rvalue_reference {false};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct TypeOperationsDescriptor {
     bool default_constructible {false};
     bool copy_constructible {false};
@@ -64,19 +64,19 @@ struct TypeOperationsDescriptor {
     bool hashable {false};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct ParameterDescriptor {
     std::string name;
     QualifiedTypeDescriptor type;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct PropertyDescriptor {
     std::string name;
     TypeReference type;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct MethodDescriptor {
     std::string name;
     std::vector<ParameterDescriptor> parameters;
@@ -85,25 +85,25 @@ struct MethodDescriptor {
     bool is_static {false};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct ConstructorDescriptor {
     std::vector<ParameterDescriptor> parameters;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct EnumValueDescriptor {
     std::string name;
     std::string value;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct GenericArgumentDescriptor {
     std::string kind;
     TypeReference type;
     std::string value;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct GenericDescriptor {
     bool present {false};
     std::string name;
@@ -111,7 +111,7 @@ struct GenericDescriptor {
     std::vector<GenericArgumentDescriptor> arguments;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct ContainerDescriptor {
     bool present {false};
     std::string kind;
@@ -121,7 +121,7 @@ struct ContainerDescriptor {
     bool fixed_size {false};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct TypeDescriptor {
     TypeSummary summary;
     uint64 size {0};
@@ -146,6 +146,6 @@ search_types(const SearchRequest& request);
 Result<TypeDescriptor, ReflectionError>
 describe_type(const DescribeRequest& request);
 
-using ::fei::devtools::format_type_id;
+using ::ets::devtools::format_type_id;
 
-} // namespace fei::devtools::reflection
+} // namespace ets::devtools::reflection

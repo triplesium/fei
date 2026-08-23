@@ -8,7 +8,7 @@
 #include <string>
 #include <utility>
 
-namespace fei::runtime_inspection::checkpoint {
+namespace ets::runtime_inspection::checkpoint {
 namespace {
 
 using serialization::SerializedField;
@@ -705,4 +705,4 @@ register_checkpoint_inspection_providers(InspectionRegistry& registry) {
     );
 }
 
-} // namespace fei::runtime_inspection::checkpoint
+} // namespace ets::runtime_inspection::checkpoint

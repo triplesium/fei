@@ -14,7 +14,7 @@
 #include <string_view>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -25,7 +25,7 @@ inline constexpr uint32 c_max_world_summary_archetype_limit = 512;
 inline constexpr std::size_t c_max_world_summary_response_bytes =
     std::size_t {4} * 1024 * 1024;
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct WorldSummaryRequest {
     uint32 archetype_limit {c_default_world_summary_archetype_limit};
     bool include_empty_archetypes {false};
@@ -74,7 +74,7 @@ class WorldSummaryInspectionProvider {
     static constexpr InspectionCost cost {InspectionCost::Low};
     static constexpr std::string_view request_schema_json {R"json({
         "$schema":"https://json-schema.org/draft/2020-12/schema",
-        "$id":"urn:fei:inspection:ecs.world.summary.v1:request",
+        "$id":"urn:entisium:inspection:ecs.world.summary.v1:request",
         "title":"Summarize ECS World Request",
         "type":"object",
         "additionalProperties":false,
@@ -96,7 +96,7 @@ class WorldSummaryInspectionProvider {
     })json"};
     static constexpr std::string_view response_schema_json {R"json({
         "$schema":"https://json-schema.org/draft/2020-12/schema",
-        "$id":"urn:fei:inspection:ecs.world.summary.v1:response",
+        "$id":"urn:entisium:inspection:ecs.world.summary.v1:response",
         "title":"Summarize ECS World Response",
         "type":"object",
         "additionalProperties":false,
@@ -179,4 +179,4 @@ Status<InspectionError>
 register_world_summary_inspection_provider(InspectionRegistry& registry);
 
 } // namespace runtime_inspection::ecs
-} // namespace fei
+} // namespace ets

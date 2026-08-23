@@ -6,7 +6,7 @@ EMBED(devtools_index_html, "devtools/index.html");
 EMBED(devtools_app_css, "devtools/app.css");
 EMBED(devtools_app_js, "devtools/app.js");
 
-namespace fei::devtools::detail {
+namespace ets::devtools::detail {
 namespace {
 
 const Reader c_index_html = EmbeddedAssets::get("devtools/index.html").reader();
@@ -37,4 +37,4 @@ Optional<UiAsset> find_ui_asset(std::string_view path) {
     return nullopt;
 }
 
-} // namespace fei::devtools::detail
+} // namespace ets::devtools::detail

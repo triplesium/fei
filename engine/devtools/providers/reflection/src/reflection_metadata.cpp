@@ -17,7 +17,7 @@
 #include <tuple>
 #include <utility>
 
-namespace fei::devtools::reflection {
+namespace ets::devtools::reflection {
 namespace {
 
 constexpr std::size_t c_max_pattern_length = 256;
@@ -353,4 +353,4 @@ describe_type(const DescribeRequest& request) {
     return result;
 }
 
-} // namespace fei::devtools::reflection
+} // namespace ets::devtools::reflection

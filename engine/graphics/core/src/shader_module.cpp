@@ -4,7 +4,7 @@
 #include <string>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
 ShaderResourceLayoutError
@@ -78,4 +78,4 @@ reflect_resource_layouts(std::span<const ShaderDescription> shaders) {
     return layouts;
 }
 
-} // namespace fei
+} // namespace ets

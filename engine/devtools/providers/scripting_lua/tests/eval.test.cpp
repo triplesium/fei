@@ -13,9 +13,9 @@
 #include <string>
 #include <vector>
 
-using namespace fei;
-using namespace fei::devtools;
-using namespace fei::devtools::scripting_lua;
+using namespace ets;
+using namespace ets::devtools;
+using namespace ets::devtools::scripting_lua;
 
 namespace {
 

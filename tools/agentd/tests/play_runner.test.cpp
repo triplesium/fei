@@ -11,8 +11,8 @@
 #include <string_view>
 #include <vector>
 
-using namespace fei;
-using namespace fei::agentd;
+using namespace ets;
+using namespace ets::agentd;
 
 namespace {
 

@@ -5,7 +5,7 @@
 #include <memory>
 #include <tuple>
 
-namespace fei {
+namespace ets {
 
 class Utils {
   public:
@@ -25,4 +25,4 @@ class Utils {
     }
 };
 
-} // namespace fei
+} // namespace ets

@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -239,4 +239,4 @@ Optional<Entity> SceneInstance::node_entity(SceneNodeId node) const {
     return node_entities[index];
 }
 
-} // namespace fei
+} // namespace ets

@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -231,4 +231,4 @@ void install_render_app(App& app) {
     });
 }
 
-} // namespace fei
+} // namespace ets

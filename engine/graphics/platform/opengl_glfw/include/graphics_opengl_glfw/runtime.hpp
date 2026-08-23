@@ -7,7 +7,7 @@
 
 struct GLFWwindow;
 
-namespace fei {
+namespace ets {
 
 struct OpenGLGlfwBootstrapDescription {
     GLFWwindow* window {nullptr};
@@ -48,4 +48,4 @@ class OpenGLGlfwBootstrap final : public GraphicsBackendBootstrap {
     std::optional<OpenGLGlfwBootstrapDescription> m_description;
 };
 
-} // namespace fei
+} // namespace ets

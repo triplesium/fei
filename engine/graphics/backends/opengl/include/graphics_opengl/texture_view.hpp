@@ -6,7 +6,7 @@
 
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 class TextureViewOpenGL : public TextureView, public DeferredResourceOpenGL {
   private:
@@ -28,4 +28,4 @@ class TextureViewOpenGL : public TextureView, public DeferredResourceOpenGL {
     void destroy_gl_resource() override;
 };
 
-} // namespace fei
+} // namespace ets

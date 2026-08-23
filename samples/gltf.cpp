@@ -32,7 +32,7 @@
 #include <cstdio>
 #include <string_view>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -158,13 +158,13 @@ void spawn_default_gltf_scene(
         if (*state == AssetLoadState::Failed) {
             const auto error = asset_server->load_error(pending.gltf);
             if (error) {
-                fei::error(
+                ets::error(
                     "Failed to load '{}': {}",
                     error->path.as_string(),
                     error->message
                 );
             } else {
-                fei::error("Failed to load WaterBottle.glb");
+                ets::error("Failed to load WaterBottle.glb");
             }
             commands.entity(entity).despawn();
             continue;
@@ -175,12 +175,12 @@ void spawn_default_gltf_scene(
             continue;
         }
         if (!gltf->default_scene) {
-            fei::error("WaterBottle.glb does not define a default scene");
+            ets::error("WaterBottle.glb does not define a default scene");
             commands.entity(entity).despawn();
             continue;
         }
         if (*gltf->default_scene >= gltf->scenes.size()) {
-            fei::error("WaterBottle.glb has an invalid default scene index");
+            ets::error("WaterBottle.glb has an invalid default scene index");
             commands.entity(entity).despawn();
             continue;
         }

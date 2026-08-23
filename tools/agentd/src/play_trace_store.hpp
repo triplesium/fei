@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace fei::agentd {
+namespace ets::agentd {
 
 struct PlayTraceLimits {
     std::size_t maximum_events {2000};
@@ -59,4 +59,4 @@ class PlayTraceStore {
     uint64 m_next_sequence {1};
 };
 
-} // namespace fei::agentd
+} // namespace ets::agentd

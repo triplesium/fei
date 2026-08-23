@@ -10,7 +10,7 @@ const startupTimeoutMilliseconds = 60_000;
 const statusPollMilliseconds = 100;
 
 interface RuntimeMessage {
-    source: "fei-runtime";
+    source: "entisium-runtime";
     channelId: string;
     type: string;
     level?: string;
@@ -24,7 +24,7 @@ function isRuntimeMessage(value: unknown): value is RuntimeMessage {
     if (!value || typeof value !== "object") return false;
     const message = value as Record<string, unknown>;
     return (
-        message.source === "fei-runtime" &&
+        message.source === "entisium-runtime" &&
         typeof message.channelId === "string" &&
         typeof message.type === "string"
     );
@@ -73,7 +73,7 @@ export class WasmRuntimeController {
             session: {
                 channelId,
                 files,
-                source: `${runtimeSource}?fei-editor-channel=${encodeURIComponent(channelId)}&dev=${Date.now()}`,
+                source: `${runtimeSource}?entisium-editor-channel=${encodeURIComponent(channelId)}&dev=${Date.now()}`,
             },
         });
         this.emitLog("info", "runtime", "creating isolated runtime");
@@ -120,7 +120,7 @@ export class WasmRuntimeController {
         if (message.type === "project.request") {
             this.frameElement?.contentWindow?.postMessage(
                 {
-                    source: "fei-editor",
+                    source: "entisium-editor",
                     channelId: session.channelId,
                     type: "project.files",
                     files: session.files,
@@ -175,16 +175,16 @@ export class WasmRuntimeController {
             if (!data) return;
 
             const patch: Partial<RuntimeSnapshot> = {
-                script: data.feiProjectScript ?? "—",
-                frame: data.feiProjectFramePresented === "true" ? "presented" : "—",
+                script: data.entisiumProjectScript ?? "—",
+                frame: data.entisiumProjectFramePresented === "true" ? "presented" : "—",
             };
-            if (data.feiProjectStatus === "web project presented") {
+            if (data.entisiumProjectStatus === "web project presented") {
                 patch.state = "running";
                 patch.detail = "running";
-                document.documentElement.dataset.feiEditorProjectStatus = data.feiProjectStatus;
-            } else if (data.feiProjectStatus?.includes("failed")) {
+                document.documentElement.dataset.entisiumEditorProjectStatus = data.entisiumProjectStatus;
+            } else if (data.entisiumProjectStatus?.includes("failed")) {
                 patch.state = "failed";
-                patch.detail = data.feiProjectStatus;
+                patch.detail = data.entisiumProjectStatus;
             }
             this.updateSnapshot(patch);
         } catch (error) {

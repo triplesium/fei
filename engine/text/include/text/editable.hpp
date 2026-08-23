@@ -11,9 +11,9 @@
 #include <utility>
 #include <vector>
 
-namespace fei::text {
+namespace ets::text {
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class TextEditKind {
     Insert,
     Backspace,
@@ -27,7 +27,7 @@ enum class TextEditKind {
     CollapseSelection,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct TextEdit {
     TextEditKind kind {TextEditKind::CollapseSelection};
     std::string value;
@@ -51,7 +51,7 @@ struct TextEdit {
     }
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct EditableText {
     std::size_t anchor {0};
     std::size_t cursor {0};
@@ -65,7 +65,7 @@ struct EditableText {
     void queue(TextEdit edit) { pending_edits.push_back(std::move(edit)); }
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct TextChanged {
     Entity entity;
     std::string value;
@@ -82,4 +82,4 @@ void apply_text_edits(
     EventWriter<TextChanged> changed
 );
 
-} // namespace fei::text
+} // namespace ets::text

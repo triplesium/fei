@@ -3,7 +3,7 @@
 
 #include <limits>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -75,4 +75,4 @@ std::size_t ImGuiRenderTextures::size() const noexcept {
     return m_textures.size();
 }
 
-} // namespace fei
+} // namespace ets

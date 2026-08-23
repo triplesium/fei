@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct PluginDescriptor {
     PluginId id;
@@ -52,7 +52,7 @@ void register_generated_plugin(std::string name) {
         PluginDescriptor {
             .id = PluginId {std::move(name)},
             .type = type_id<T>(),
-            .type_name = std::string(fei::type_name<T>()),
+            .type_name = std::string(ets::type_name<T>()),
             .create = []() -> std::unique_ptr<Plugin> {
                 return std::make_unique<T>();
             },
@@ -60,4 +60,4 @@ void register_generated_plugin(std::string name) {
     );
 }
 
-} // namespace fei
+} // namespace ets

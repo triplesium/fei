@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace fei::serialization {
+namespace ets::serialization {
 
 enum class ObjectFieldPolicy {
     Permissive,
@@ -123,4 +123,4 @@ Result<Val, DeserializeError> deserialize(
     const DeserializeOptions& options = {}
 );
 
-} // namespace fei::serialization
+} // namespace ets::serialization

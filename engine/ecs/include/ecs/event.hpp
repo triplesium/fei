@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 template<typename T>
 class Events;
@@ -353,4 +353,4 @@ struct SystemParamTraits<EventWriter<T>>
     : StatelessParamTraits<EventWriter<T>> {};
 static_assert(SystemParam<EventWriter<int>>);
 
-} // namespace fei
+} // namespace ets

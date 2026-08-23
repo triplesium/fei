@@ -9,7 +9,7 @@
 #include <cstddef>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct Gltf {
     Optional<std::size_t> default_scene;
@@ -19,4 +19,4 @@ struct Gltf {
     std::vector<Handle<Image>> textures;
 };
 
-} // namespace fei
+} // namespace ets

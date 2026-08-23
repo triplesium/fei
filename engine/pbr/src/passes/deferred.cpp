@@ -11,7 +11,7 @@
 #include "rendering/plugin.hpp"
 #include "rendering/render_app.hpp"
 
-namespace fei {
+namespace ets {
 
 void DeferredRenderPlugin::dependencies(
     PluginDependencies& dependencies
@@ -46,10 +46,10 @@ void DeferredRenderPlugin::setup(App& app) {
         )
         .add_systems(
             RenderUpdate,
-            FEI_NAMED_SYSTEM(deferred_prepass) |
+            ETS_NAMED_SYSTEM(deferred_prepass) |
                 in_set<RenderingSystems::Prepass>() |
                 in_set<PbrSystems::DeferredPrepass>(),
-            FEI_NAMED_SYSTEM(present_composite_pass) |
+            ETS_NAMED_SYSTEM(present_composite_pass) |
                 in_set<RenderingSystems::PostProcess>()
         );
 
@@ -57,25 +57,25 @@ void DeferredRenderPlugin::setup(App& app) {
         render_app.add_systems(
             RenderUpdate,
             chain(
-                FEI_NAMED_SYSTEM(direct_lighting_pass),
-                FEI_NAMED_SYSTEM(indirect_lighting_pass),
-                FEI_NAMED_SYSTEM(composite_pass),
-                FEI_NAMED_SYSTEM(render_skybox_pass),
-                FEI_NAMED_SYSTEM(transparent_pass)
+                ETS_NAMED_SYSTEM(direct_lighting_pass),
+                ETS_NAMED_SYSTEM(indirect_lighting_pass),
+                ETS_NAMED_SYSTEM(composite_pass),
+                ETS_NAMED_SYSTEM(render_skybox_pass),
+                ETS_NAMED_SYSTEM(transparent_pass)
             ) | in_set<RenderingSystems::MainPass>()
         );
     } else {
         render_app.add_systems(
             RenderUpdate,
             chain(
-                FEI_NAMED_SYSTEM(direct_lighting_pass),
-                FEI_NAMED_SYSTEM(clear_indirect_lighting_pass),
-                FEI_NAMED_SYSTEM(composite_pass),
-                FEI_NAMED_SYSTEM(render_skybox_pass),
-                FEI_NAMED_SYSTEM(transparent_pass)
+                ETS_NAMED_SYSTEM(direct_lighting_pass),
+                ETS_NAMED_SYSTEM(clear_indirect_lighting_pass),
+                ETS_NAMED_SYSTEM(composite_pass),
+                ETS_NAMED_SYSTEM(render_skybox_pass),
+                ETS_NAMED_SYSTEM(transparent_pass)
             ) | in_set<RenderingSystems::MainPass>()
         );
     }
 }
 
-} // namespace fei
+} // namespace ets

@@ -6,7 +6,7 @@
 #include <ranges>
 #include <type_traits>
 
-namespace fei {
+namespace ets {
 
 template<typename T>
 concept is_std_hashable = requires(const T& object) {
@@ -57,9 +57,9 @@ std::size_t hash_combine_all(const Ts&... args) {
     return seed;
 }
 
-} // namespace fei
+} // namespace ets
 
-#define FEI_HASH_COMBINE_MEMBER(x) (fei::hash_combine(seed, obj.x), 0)
+#define ETS_HASH_COMBINE_MEMBER(x) (ets::hash_combine(seed, obj.x), 0)
 
 #define MAKE_STD_HASHABLE(CLASS, ...)                             \
     template<>                                                    \
@@ -68,7 +68,7 @@ std::size_t hash_combine_all(const Ts&... args) {
             std::size_t seed = 0;                                 \
             [[maybe_unused]] int unused[] = {                     \
                 0,                                                \
-                FEI_FOREACH(FEI_HASH_COMBINE_MEMBER, __VA_ARGS__) \
+                ETS_FOREACH(ETS_HASH_COMBINE_MEMBER, __VA_ARGS__) \
             };                                                    \
             return seed;                                          \
         }                                                         \

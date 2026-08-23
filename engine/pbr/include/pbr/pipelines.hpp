@@ -21,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 struct PbrMeshShaderDefaults {
     std::shared_ptr<const ShaderModule> forward_vertex;
     std::shared_ptr<const ShaderModule> forward_fragment;
@@ -358,19 +358,19 @@ struct MeshMaterialPipelineKey {
                specializer_key == other.specializer_key;
     }
 };
-} // namespace fei
+} // namespace ets
 
 namespace std {
 template<>
-struct hash<fei::PbrMeshPipelineKey> { // NOLINT(readability-identifier-naming)
-    std::size_t operator()(const fei::PbrMeshPipelineKey& key) const {
-        return fei::hash_combine_all(key.flags.to_raw(), key.primitive);
+struct hash<ets::PbrMeshPipelineKey> { // NOLINT(readability-identifier-naming)
+    std::size_t operator()(const ets::PbrMeshPipelineKey& key) const {
+        return ets::hash_combine_all(key.flags.to_raw(), key.primitive);
     }
 };
 } // namespace std
 
 MAKE_STD_HASHABLE(
-    fei::MeshMaterialPipelineKey,
+    ets::MeshMaterialPipelineKey,
     material_hash,
     vertex_layout_hash,
     mesh_key,
@@ -378,7 +378,7 @@ MAKE_STD_HASHABLE(
     specializer_key
 )
 
-namespace fei {
+namespace ets {
 
 class MeshMaterialPipelines {
   private:
@@ -468,4 +468,4 @@ class MeshMaterialPipelines {
     }
 };
 
-} // namespace fei
+} // namespace ets

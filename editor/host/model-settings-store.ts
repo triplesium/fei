@@ -165,7 +165,7 @@ function isUnavailablePathError(error: unknown): boolean {
 }
 
 export function defaultModelSettingsPaths(): readonly string[] {
-    const configuredPath = process.env.FEI_EDITOR_MODEL_SETTINGS_PATH?.trim();
+    const configuredPath = process.env.ETS_EDITOR_MODEL_SETTINGS_PATH?.trim();
     if (configuredPath) return [resolve(configuredPath)];
 
     const applicationData = process.env.APPDATA?.trim();
@@ -174,9 +174,9 @@ export function defaultModelSettingsPaths(): readonly string[] {
     const localRoot = localApplicationData || join(homedir(), "AppData", "Local");
     return Array.from(
         new Set([
-            join(roamingRoot, "Fei", "editor-model-settings.json"),
-            join(localRoot, "Fei", "editor-model-settings.json"),
-            resolve(process.cwd(), ".fei", "editor-model-settings.json"),
+            join(roamingRoot, "Entisium", "editor-model-settings.json"),
+            join(localRoot, "Entisium", "editor-model-settings.json"),
+            resolve(process.cwd(), ".entisium", "editor-model-settings.json"),
         ]),
     );
 }
@@ -254,7 +254,7 @@ export class FileEditorModelSettingsStore implements EditorModelSettingsStore {
                 await unlink(temporaryPath).catch(() => undefined);
                 lastError = error;
                 if (this.activePath || !isUnavailablePathError(error)) throw error;
-                console.warn(`[fei editor] model settings path is unavailable: ${path}`);
+                console.warn(`[entisium editor] model settings path is unavailable: ${path}`);
             }
         }
         throw lastError ?? new Error("No writable model settings path is available.");

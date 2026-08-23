@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace fei::serialization {
+namespace ets::serialization {
 
 SerializedNode::SerializedNode() : m_value(nullptr) {}
 
@@ -162,4 +162,4 @@ find_field(SerializedNode::Object& object, const std::string& name) {
     return it == object.end() ? nullptr : &*it;
 }
 
-} // namespace fei::serialization
+} // namespace ets::serialization

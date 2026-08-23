@@ -8,7 +8,7 @@
 #include <memory>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
 struct BrowserAppLoop {
@@ -55,4 +55,4 @@ void run_browser_app(App&& app) {
     emscripten_set_main_loop_arg(run_browser_frame, loop.release(), 0, false);
 }
 
-} // namespace fei
+} // namespace ets

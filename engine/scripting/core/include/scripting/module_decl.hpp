@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct ScriptTypeRef {
     std::string type_name;
@@ -64,4 +64,4 @@ struct ScriptModuleDecl {
     std::vector<DynamicSystemDecl> systems;
 };
 
-} // namespace fei
+} // namespace ets

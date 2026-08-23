@@ -9,13 +9,13 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
 std::string_view generated_shader_sources_text() {
-#ifdef FEI_SHADER_SOURCES
-    return FEI_SHADER_SOURCES;
+#ifdef ETS_SHADER_SOURCES
+    return ETS_SHADER_SOURCES;
 #else
     return {};
 #endif
@@ -336,4 +336,4 @@ ShaderAssetSource::try_get_reader(const std::filesystem::path& path) const {
     return std::move(reader).value();
 }
 
-} // namespace fei
+} // namespace ets

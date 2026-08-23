@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 RegisteredSystemId World::register_system(std::unique_ptr<System> system) {
     if (!system) {
@@ -300,7 +300,7 @@ void World::raw_add_component(Entity entity, Ref ref) {
 }
 
 void World::remove_component(Entity entity, TypeId type_id) {
-    if (type_id == fei::type_id<ChildOf>()) {
+    if (type_id == ets::type_id<ChildOf>()) {
         remove_parent(entity);
         return;
     }
@@ -312,7 +312,7 @@ void World::raw_remove_component(Entity entity, TypeId type_id) {
     auto old_location = m_entities.get_location(entity);
     auto old_components =
         m_archetypes.get(old_location.archetype_id).components();
-    FEI_ASSERT(
+    ETS_ASSERT(
         std::find(old_components.begin(), old_components.end(), type_id) !=
         old_components.end()
     );
@@ -373,12 +373,12 @@ Ref World::get_component(Entity entity, TypeId type_id) const {
 }
 
 bool World::has_parent(Entity child) const {
-    FEI_ASSERT(has_entity(child));
+    ETS_ASSERT(has_entity(child));
     return has_component<ChildOf>(child);
 }
 
 Optional<Entity> World::parent(Entity child) const {
-    FEI_ASSERT(has_entity(child));
+    ETS_ASSERT(has_entity(child));
     if (!has_component<ChildOf>(child)) {
         return nullopt;
     }
@@ -386,10 +386,10 @@ Optional<Entity> World::parent(Entity child) const {
 }
 
 void World::set_parent(Entity child, Entity parent) {
-    FEI_ASSERT(has_entity(child));
-    FEI_ASSERT(has_entity(parent));
-    FEI_ASSERT(child != parent);
-    FEI_ASSERT(!would_create_cycle(child, parent));
+    ETS_ASSERT(has_entity(child));
+    ETS_ASSERT(has_entity(parent));
+    ETS_ASSERT(child != parent);
+    ETS_ASSERT(!would_create_cycle(child, parent));
 
     if (auto old_parent = this->parent(child)) {
         if (*old_parent == parent) {
@@ -404,7 +404,7 @@ void World::set_parent(Entity child, Entity parent) {
 }
 
 void World::remove_parent(Entity child) {
-    FEI_ASSERT(has_entity(child));
+    ETS_ASSERT(has_entity(child));
     auto old_parent = parent(child);
     if (!old_parent) {
         return;
@@ -415,7 +415,7 @@ void World::remove_parent(Entity child) {
 }
 
 void World::despawn(Entity entity) {
-    FEI_ASSERT(has_entity(entity));
+    ETS_ASSERT(has_entity(entity));
 
     if (has_component<Children>(entity)) {
         auto children = get_component<Children>(entity).entities();
@@ -485,4 +485,4 @@ bool World::would_create_cycle(Entity child, Entity parent) const {
     return current == child;
 }
 
-} // namespace fei
+} // namespace ets

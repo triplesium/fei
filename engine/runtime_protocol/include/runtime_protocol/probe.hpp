@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -76,7 +76,7 @@ class RuntimeProbe {
     std::unique_ptr<Impl> m_impl;
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class RuntimeProbePlugin : public Plugin {
   public:
     explicit RuntimeProbePlugin(RuntimeProbeConfig config = {}) :
@@ -91,4 +91,4 @@ class RuntimeProbePlugin : public Plugin {
 
 } // namespace runtime_protocol
 
-} // namespace fei
+} // namespace ets

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <functional>
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
 namespace {
 
@@ -339,4 +339,4 @@ void slider_self_update(
     }
 }
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

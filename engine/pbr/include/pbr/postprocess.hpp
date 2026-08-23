@@ -4,7 +4,7 @@
 #include "rendering/mesh/mesh.hpp"
 #include "rendering/mesh/mesh_factory.hpp"
 
-namespace fei {
+namespace ets {
 
 struct FullscreenQuad {
     Handle<Mesh> fullscreen_quad_mesh;
@@ -22,4 +22,4 @@ setup_fullscreen_quad(ResRW<Assets<Mesh>> mesh_assets, Commands commands) {
     );
 }
 
-} // namespace fei
+} // namespace ets

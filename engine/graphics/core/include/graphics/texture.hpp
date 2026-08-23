@@ -7,7 +7,7 @@
 #include <memory>
 #include <mutex>
 
-namespace fei {
+namespace ets {
 
 struct TextureDescription {
     uint32 width {0};
@@ -45,4 +45,4 @@ class Texture : public BindableResource,
     std::shared_ptr<const TextureView>
     full_view(const GraphicsDevice& device) const;
 };
-} // namespace fei
+} // namespace ets

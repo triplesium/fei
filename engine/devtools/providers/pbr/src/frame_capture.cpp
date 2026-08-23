@@ -8,7 +8,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image_write.h>
 
-namespace fei::devtools::pbr {
+namespace ets::devtools::pbr {
 
 uint64 FrameCaptureState::remember_capture(PendingFrameCapture capture) {
     auto user_data = next_user_data++;
@@ -124,4 +124,4 @@ std::vector<byte> encode_jpeg(
     return jpeg;
 }
 
-} // namespace fei::devtools::pbr
+} // namespace ets::devtools::pbr

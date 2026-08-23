@@ -33,8 +33,8 @@ function browserCandidates() {
     if (requestedBrowser) {
         return [requestedBrowser];
     }
-    if (process.env.FEI_BROWSER) {
-        return [process.env.FEI_BROWSER];
+    if (process.env.ETS_BROWSER) {
+        return [process.env.ETS_BROWSER];
     }
     if (process.platform === "win32") {
         return [
@@ -63,7 +63,7 @@ function browserCandidates() {
 function findBrowser() {
     const browser = browserCandidates().find(candidate => candidate && existsSync(candidate));
     if (!browser) {
-        throw new Error("Edge, Chrome, or Chromium was not found; pass --browser or set FEI_BROWSER");
+        throw new Error("Edge, Chrome, or Chromium was not found; pass --browser or set ETS_BROWSER");
     }
     return browser;
 }
@@ -71,7 +71,7 @@ function findBrowser() {
 async function stopBrowserProcesses(profileDirectory, browserProcess) {
     if (process.platform === "win32") {
         const script = [
-            "$profilePath = $env:FEI_SMOKE_PROFILE",
+            "$profilePath = $env:ETS_SMOKE_PROFILE",
             "$processes = @(Get-CimInstance Win32_Process -Filter \"Name = 'msedge.exe' OR Name = 'chrome.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($profilePath, [StringComparison]::OrdinalIgnoreCase) -ge 0 })",
             "$processes | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
         ].join("; ");
@@ -81,7 +81,7 @@ async function stopBrowserProcesses(profileDirectory, browserProcess) {
             "-Command",
             script,
         ], {
-            env: {...process.env, FEI_SMOKE_PROFILE: profileDirectory},
+            env: {...process.env, ETS_SMOKE_PROFILE: profileDirectory},
             stdio: "ignore",
         });
         await new Promise(accept => cleanup.once("exit", accept));
@@ -348,7 +348,7 @@ async function runSmokeTest(client, url, selectedScenario) {
 
     if (selectedScenario === "editor") {
         await waitFor(client, "the web editor", async () => {
-            return evaluate(client, "document.documentElement.dataset.feiEditorReady === 'true'");
+            return evaluate(client, "document.documentElement.dataset.entisiumEditorReady === 'true'");
         }, errors);
         const unopened = await evaluate(client, `({
             openFolderAvailable: typeof window.showDirectoryPicker === "function",
@@ -367,23 +367,23 @@ async function runSmokeTest(client, url, selectedScenario) {
         if (Math.abs(unopened.gameRatio - 16 / 9) > 0.02) {
             throw new Error(`the editor Game viewport is not 16:9 (${unopened.gameRatio})`);
         }
-        const project = await evaluate(client, "window.feiEditorAgent.invoke({type: 'project.list'})");
+        const project = await evaluate(client, "window.entisiumEditorAgent.invoke({type: 'project.list'})");
         if (project.ok || !project.error?.message.includes("Open a local project folder")) {
             throw new Error("project commands were not gated on local-folder permission");
         }
         console.log("browser smoke: local-folder editor startup passed");
-        return {feiEditorRuntime: "stopped", feiEditorProjectStatus: "local folder required"};
+        return {entisiumEditorRuntime: "stopped", entisiumEditorProjectStatus: "local folder required"};
     }
 
     if (selectedScenario === "project") {
         const ready = await waitFor(client, "the web project", async () => {
             return evaluate(client, `(() => {
                 const data = document.documentElement.dataset;
-                if (data.feiProjectStatus !== "web project presented") return null;
+                if (data.entisiumProjectStatus !== "web project presented") return null;
                 return {...data};
             })()`);
         }, errors);
-        if (ready.feiProjectScript !== "loaded" || ready.feiProjectFramePresented !== "true") {
+        if (ready.entisiumProjectScript !== "loaded" || ready.entisiumProjectFramePresented !== "true") {
             throw new Error("the project script or first sprite frame was not presented");
         }
         await new Promise(accept => setTimeout(accept, 250));
@@ -397,14 +397,14 @@ async function runSmokeTest(client, url, selectedScenario) {
     const ready = await waitFor(client, "the rendered UI", async () => {
         return evaluate(client, `(() => {
             const data = document.documentElement.dataset;
-            if (data.feiStatus !== "ui text presented" || data.feiUiStatus !== "ready") return null;
+            if (data.entisiumStatus !== "ui text presented" || data.entisiumUiStatus !== "ready") return null;
             return {...data};
         })()`);
     }, errors);
-    if (ready.feiFramePresented !== "true" || ready.feiFontAtlasUploaded !== "true") {
+    if (ready.entisiumFramePresented !== "true" || ready.entisiumFontAtlasUploaded !== "true") {
         throw new Error("the first frame or font atlas was not presented");
     }
-    if (Number(ready.feiGlyphCount) <= 0 || Number(ready.feiGlyphBatches) <= 0) {
+    if (Number(ready.entisiumGlyphCount) <= 0 || Number(ready.entisiumGlyphBatches) <= 0) {
         throw new Error("the UI produced no glyphs");
     }
     console.log("browser smoke: rendered UI is ready");
@@ -426,27 +426,27 @@ async function runSmokeTest(client, url, selectedScenario) {
         };
     };
 
-    await dispatchClick(client, toViewportPoint(geometry.data.feiUiButtonRect));
-    await waitFor(client, "a UI button activation", async () => Number(await evaluate(client, "document.documentElement.dataset.feiUiClicks ?? 0")) >= 1, errors);
+    await dispatchClick(client, toViewportPoint(geometry.data.entisiumUiButtonRect));
+    await waitFor(client, "a UI button activation", async () => Number(await evaluate(client, "document.documentElement.dataset.entisiumUiClicks ?? 0")) >= 1, errors);
     console.log("browser smoke: button input passed");
 
-    await dispatchClick(client, toViewportPoint(geometry.data.feiUiInputRect));
-    await waitFor(client, "text input focus", async () => Number(await evaluate(client, "document.documentElement.dataset.feiUiFocus ?? -1")) >= 0, errors);
+    await dispatchClick(client, toViewportPoint(geometry.data.entisiumUiInputRect));
+    await waitFor(client, "text input focus", async () => Number(await evaluate(client, "document.documentElement.dataset.entisiumUiFocus ?? -1")) >= 0, errors);
     for (const character of "Smoke") {
         const code = `Key${character.toUpperCase()}`;
         await evaluate(client, `window.dispatchEvent(new KeyboardEvent("keypress", ${JSON.stringify({key: character, code, bubbles: true})}))`);
     }
     await new Promise(accept => setTimeout(accept, 250));
-    const typedText = await evaluate(client, "document.documentElement.dataset.feiUiText");
+    const typedText = await evaluate(client, "document.documentElement.dataset.entisiumUiText");
     if (typedText !== "Edit meSmoke") {
         throw new Error(`text input produced unexpected value ${JSON.stringify(typedText)}`);
     }
     console.log("browser smoke: text input passed");
 
-    const scrollPoint = toViewportPoint(geometry.data.feiUiScrollRect);
+    const scrollPoint = toViewportPoint(geometry.data.entisiumUiScrollRect);
     await client.send("Input.dispatchMouseEvent", {type: "mouseMoved", ...scrollPoint});
     await client.send("Input.dispatchMouseEvent", {type: "mouseWheel", deltaX: 0, deltaY: 160, ...scrollPoint});
-    await waitFor(client, "UI scrolling", async () => Number(await evaluate(client, "document.documentElement.dataset.feiUiScrollY ?? 0")) !== 0, errors);
+    await waitFor(client, "UI scrolling", async () => Number(await evaluate(client, "document.documentElement.dataset.entisiumUiScrollY ?? 0")) !== 0, errors);
     console.log("browser smoke: scroll input passed");
 
     await new Promise(accept => setTimeout(accept, 250));
@@ -460,7 +460,7 @@ const server = await startServer();
 const address = server.address();
 const url = `http://127.0.0.1:${address.port}/${page}?smoke=${Date.now()}`;
 const browserPath = findBrowser();
-const profileDirectory = await mkdtemp(join(tmpdir(), "fei-browser-smoke-"));
+const profileDirectory = await mkdtemp(join(tmpdir(), "entisium-browser-smoke-"));
 const devToolsPort = await unusedPort();
 const browserProcess = spawn(browserPath, [
     "--headless=new",
@@ -487,12 +487,12 @@ try {
     const result = await runSmokeTest(client, url, scenario);
     console.log(`browser smoke passed (${basename(browserPath)})`);
     if (scenario === "editor") {
-        console.log(`  editor: ${result.feiEditorRuntime}, project: ${result.feiEditorProjectStatus}`);
+        console.log(`  editor: ${result.entisiumEditorRuntime}, project: ${result.entisiumEditorProjectStatus}`);
     } else if (scenario === "project") {
-        console.log(`  project: ${result.feiProjectStatus}, script: ${result.feiProjectScript}`);
+        console.log(`  project: ${result.entisiumProjectStatus}, script: ${result.entisiumProjectScript}`);
     } else {
-        console.log(`  glyphs: ${result.feiGlyphCount}, batches: ${result.feiGlyphBatches}`);
-        console.log(`  clicks: ${result.feiUiClicks}, text: ${result.feiUiText}, scroll: ${result.feiUiScrollY}`);
+        console.log(`  glyphs: ${result.entisiumGlyphCount}, batches: ${result.entisiumGlyphBatches}`);
+        console.log(`  clicks: ${result.entisiumUiClicks}, text: ${result.entisiumUiText}, scroll: ${result.entisiumUiScrollY}`);
     }
 } finally {
     await browserClient?.notify("Browser.close").catch(() => {});

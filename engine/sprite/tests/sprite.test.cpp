@@ -9,6 +9,7 @@
 #include "refl/registry.hpp"
 #include "rendering/plugin.hpp"
 #include "rendering/render_app.hpp"
+#include "shader_opengl/plugin.hpp"
 #include "sprite/components.hpp"
 #include "sprite/output.hpp"
 #include "sprite/plugin.hpp"
@@ -19,8 +20,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 
-using namespace fei;
-using namespace fei::rendering_test;
+using namespace ets;
+using namespace ets::rendering_test;
 
 namespace {
 
@@ -98,11 +99,13 @@ TEST_CASE(
     "[sprite][plugin][render-app][threaded]"
 ) {
     App app;
-    app.add_plugin<AssetsPlugin>().add_resource_as<GraphicsBackendBootstrap>(
-        BoxedGraphicsBackendBootstrap(
-            std::make_unique<RenderOwnedTestBootstrap>()
-        )
-    );
+    app.add_plugin<AssetsPlugin>()
+        .add_plugin<OpenGLShaderPlugin>()
+        .add_resource_as<GraphicsBackendBootstrap>(
+            BoxedGraphicsBackendBootstrap(
+                std::make_unique<RenderOwnedTestBootstrap>()
+            )
+        );
     app.add_plugin<RenderingPlugin>().add_plugin(
         SpritePlugin(SpritePluginConfig {.output = SpriteOutputMode::Texture})
     );

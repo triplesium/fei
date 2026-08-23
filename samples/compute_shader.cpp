@@ -24,7 +24,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image_write.h>
 
-using namespace fei;
+using namespace ets;
 
 struct Global {
     std::shared_ptr<Texture> cubemap;
@@ -115,7 +115,7 @@ void equirect_to_cubemap(
             ShaderStages::Compute,
             {
                 texture_read_only("input_texture"),
-                fei::sampler("input_sampler"),
+                ets::sampler("input_sampler"),
                 texture_read_write("output_texture"),
                 uniform_buffer("constants"),
             }
@@ -177,7 +177,7 @@ void equirect_to_cubemap(
             data.subspan(face * cubemap_face_bytes, cubemap_face_bytes).data()
         );
         int ret = stbi_write_hdr(
-            std::format(FEI_ASSETS_PATH "/../temp/cubemap_face_{}.hdr", face)
+            std::format(ETS_ASSETS_PATH "/../temp/cubemap_face_{}.hdr", face)
                 .c_str(),
             512,
             512,
@@ -185,7 +185,7 @@ void equirect_to_cubemap(
             float_data
         );
         if (ret == 0) {
-            fei::fatal("Failed to write cubemap face {}", face);
+            ets::fatal("Failed to write cubemap face {}", face);
         }
     }
     device->unmap(staging_texture);
@@ -229,7 +229,7 @@ void cubemap_to_irradiance_map(
             ShaderStages::Compute,
             {
                 texture_read_only("cubemap"),
-                fei::sampler("cubemap_sampler"),
+                ets::sampler("cubemap_sampler"),
                 texture_read_write("output_texture"),
             }
         )
@@ -277,7 +277,7 @@ void cubemap_to_irradiance_map(
                 .data()
         );
         int ret = stbi_write_hdr(
-            std::format(FEI_ASSETS_PATH "/../temp/irradiance_face_{}.hdr", face)
+            std::format(ETS_ASSETS_PATH "/../temp/irradiance_face_{}.hdr", face)
                 .c_str(),
             32,
             32,
@@ -285,7 +285,7 @@ void cubemap_to_irradiance_map(
             float_data
         );
         if (ret == 0) {
-            fei::fatal("Failed to write irradiance face {}", face);
+            ets::fatal("Failed to write irradiance face {}", face);
         }
     }
     device->unmap(staging_texture);
@@ -293,7 +293,7 @@ void cubemap_to_irradiance_map(
 }
 
 int main() {
-    std::filesystem::create_directories(FEI_ASSETS_PATH "/../temp");
+    std::filesystem::create_directories(ETS_ASSETS_PATH "/../temp");
 
     App app;
     app.add_plugins(

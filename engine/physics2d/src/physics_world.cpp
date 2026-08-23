@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <unordered_map>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -413,4 +413,4 @@ std::vector<SensorEnded2d> PhysicsWorld2d::sensors_ended() const {
     return overlaps;
 }
 
-} // namespace fei
+} // namespace ets

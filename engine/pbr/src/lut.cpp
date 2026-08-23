@@ -7,7 +7,7 @@
 #include "rendering/plugin.hpp"
 #include "rendering/render_app.hpp"
 
-namespace fei {
+namespace ets {
 
 void init_luts(ResRW<LUTs> luts, ResRW<AssetServer> asset_server) {
     luts->brdf_lut = asset_server->load<Image>("embedded://ibl_brdf_lut.png");
@@ -36,4 +36,4 @@ void LUTPlugin::setup(App& app) {
         );
 }
 
-} // namespace fei
+} // namespace ets

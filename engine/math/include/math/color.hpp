@@ -6,13 +6,13 @@
 #include <cstdint>
 #include <tuple>
 
-namespace fei {
+namespace ets {
 struct Color3B;
 struct Color4B;
 struct Color3F;
 struct Color4F;
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct Color3B {
     std::uint8_t r {0}, g {0}, b {0};
 
@@ -22,7 +22,7 @@ struct Color3B {
     const std::uint8_t* data() const { return &r; }
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct Color4B {
     std::uint8_t r {0}, g {0}, b {0}, a {0};
 
@@ -32,7 +32,7 @@ struct Color4B {
     const std::uint8_t* data() const { return &r; }
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct Color3F {
     float r {.0f}, g {.0f}, b {.0f};
 
@@ -44,7 +44,7 @@ struct Color3F {
     const float* data() const { return &r; }
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct Color4F {
     float r {.0f}, g {.0f}, b {.0f}, a {.0f};
 
@@ -72,4 +72,4 @@ struct Color4F {
     static const Color4F Orange;
     static const Color4F Gray;
 };
-} // namespace fei
+} // namespace ets

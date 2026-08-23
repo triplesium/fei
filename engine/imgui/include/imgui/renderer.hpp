@@ -8,7 +8,7 @@
 #include <imgui.h>
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 class GraphicsDevice;
 class GpuImage;
@@ -162,4 +162,4 @@ class ImGuiRenderer {
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace fei
+} // namespace ets

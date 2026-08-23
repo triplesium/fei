@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::devtools::rendering {
+namespace ets::devtools::rendering {
 
 namespace {
 
@@ -296,4 +296,4 @@ void ProviderPlugin::setup(App& app) {
 
 void ProviderPlugin::finish(App&) {}
 
-} // namespace fei::devtools::rendering
+} // namespace ets::devtools::rendering

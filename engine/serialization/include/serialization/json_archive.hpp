@@ -6,7 +6,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei::serialization {
+namespace ets::serialization {
 
 struct JsonError {
     enum class Kind {
@@ -23,4 +23,4 @@ Result<SerializedNode, JsonError> read_json(std::string_view text);
 Result<std::string, JsonError>
 write_json(const SerializedNode& node, int indent = 4);
 
-} // namespace fei::serialization
+} // namespace ets::serialization

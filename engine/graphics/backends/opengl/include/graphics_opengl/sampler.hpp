@@ -3,7 +3,7 @@
 #include "graphics_opengl/deferred_resource.hpp"
 #include "graphics_opengl/utils.hpp"
 
-namespace fei {
+namespace ets {
 
 class SamplerOpenGL : public Sampler, public DeferredResourceOpenGL {
   private:
@@ -19,4 +19,4 @@ class SamplerOpenGL : public Sampler, public DeferredResourceOpenGL {
     void destroy_gl_resource() override;
 };
 
-} // namespace fei
+} // namespace ets

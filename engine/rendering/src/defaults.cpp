@@ -6,7 +6,7 @@
 #include "rendering/plugin.hpp"
 #include "rendering/render_app.hpp"
 
-namespace fei {
+namespace ets {
 
 void init_rendering_defaults(
     ResRO<GraphicsDevice> device,
@@ -51,4 +51,4 @@ void RenderingDefaultsPlugin::setup(App& app) {
         .add_systems(RenderStartup, init_rendering_defaults);
 }
 
-} // namespace fei
+} // namespace ets

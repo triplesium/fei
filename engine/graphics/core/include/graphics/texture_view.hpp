@@ -6,7 +6,7 @@
 
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 enum class TextureViewType : uint8 {
     Texture1D,
@@ -56,4 +56,4 @@ class TextureView : public BindableResource {
     Optional<TextureViewType> view_type() const { return m_view_type; }
 };
 
-} // namespace fei
+} // namespace ets

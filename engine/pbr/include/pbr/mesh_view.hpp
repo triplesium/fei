@@ -11,7 +11,7 @@
 
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 struct MeshViewLayout {
     std::shared_ptr<ResourceLayout> layout;
@@ -72,4 +72,4 @@ void prepare_mesh_view_resource_set(
     Commands commands
 );
 
-} // namespace fei
+} // namespace ets

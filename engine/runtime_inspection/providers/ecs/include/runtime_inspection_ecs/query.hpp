@@ -14,7 +14,7 @@
 #include <string_view>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -28,7 +28,7 @@ inline constexpr std::size_t c_max_type_selector_length = 256;
 inline constexpr std::size_t c_max_query_response_bytes =
     std::size_t {4} * 1024 * 1024;
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct QueryRequest {
     std::vector<std::string> components;
     std::vector<std::string> with;
@@ -69,7 +69,7 @@ class QueryInspectionProvider {
     static constexpr InspectionCost cost {InspectionCost::Moderate};
     static constexpr std::string_view request_schema_json {R"json({
         "$schema":"https://json-schema.org/draft/2020-12/schema",
-        "$id":"urn:fei:inspection:ecs.query.v1:request",
+        "$id":"urn:entisium:inspection:ecs.query.v1:request",
         "title":"Query ECS Entities Request",
         "type":"object",
         "additionalProperties":false,
@@ -105,7 +105,7 @@ class QueryInspectionProvider {
     })json"};
     static constexpr std::string_view response_schema_json {R"json({
         "$schema":"https://json-schema.org/draft/2020-12/schema",
-        "$id":"urn:fei:inspection:ecs.query.v1:response",
+        "$id":"urn:entisium:inspection:ecs.query.v1:response",
         "title":"Query ECS Entities Response",
         "type":"object",
         "additionalProperties":false,
@@ -170,4 +170,4 @@ Status<InspectionError>
 register_query_inspection_provider(InspectionRegistry& registry);
 
 } // namespace runtime_inspection::ecs
-} // namespace fei
+} // namespace ets

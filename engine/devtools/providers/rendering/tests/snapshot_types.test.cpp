@@ -7,9 +7,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 
-using namespace fei;
-using namespace fei::devtools;
-using namespace fei::devtools::rendering;
+using namespace ets;
+using namespace ets::devtools;
+using namespace ets::devtools::rendering;
 
 namespace {
 

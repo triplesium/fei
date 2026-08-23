@@ -30,7 +30,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -305,7 +305,7 @@ void ImGuiTextureRegistry::sync_images(
         }
         if (!texture) {
             error(
-                "fei-imgui has no fallback texture for image binding {}",
+                "entisium-imgui has no fallback texture for image binding {}",
                 binding.texture_id
             );
             continue;
@@ -577,7 +577,8 @@ void ImGuiRenderer::process_managed_textures(
                 m_impl->managed_textures.find(operation.texture_id);
             if (texture == m_impl->managed_textures.end()) {
                 error(
-                    "fei-imgui cannot update unknown managed texture ID {}",
+                    "entisium-imgui cannot update unknown managed texture ID "
+                    "{}",
                     operation.texture_id
                 );
                 continue;
@@ -725,7 +726,7 @@ void ImGuiRenderer::render(
             if (m_impl->missing_texture_errors.insert(draw_command.texture_id)
                     .second) {
                 error(
-                    "fei-imgui draw references unregistered texture ID {}",
+                    "entisium-imgui draw references unregistered texture ID {}",
                     draw_command.texture_id
                 );
             }
@@ -778,4 +779,4 @@ std::size_t ImGuiRenderer::index_capacity(std::size_t slot) const {
     return m_impl->slots.at(slot).index_capacity;
 }
 
-} // namespace fei
+} // namespace ets

@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -787,4 +787,4 @@ PipelineVulkan::~PipelineVulkan() {
     }
 }
 
-} // namespace fei
+} // namespace ets

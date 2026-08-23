@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::agentd {
+namespace ets::agentd {
 namespace {
 
 using Json = nlohmann::json;
@@ -236,7 +236,7 @@ class AgentServer::Impl {
         }
         if (!m_server->bind_to_port("127.0.0.1", m_port)) {
             return failure(
-                std::string("Failed to bind fei-agentd to 127.0.0.1:") +
+                std::string("Failed to bind entisium-agentd to 127.0.0.1:") +
                 std::to_string(m_port)
             );
         }
@@ -267,36 +267,43 @@ class AgentServer::Impl {
     ) {
         std::string trace_id;
         std::optional<std::string> parent_span_id;
-        if (request.has_header("X-Fei-Trace-Id")) {
-            trace_id = request.get_header_value("X-Fei-Trace-Id");
+        if (request.has_header("X-Entisium-Trace-Id")) {
+            trace_id = request.get_header_value("X-Entisium-Trace-Id");
             if (!is_valid_identifier(trace_id)) {
-                return failure(std::string("Invalid X-Fei-Trace-Id header"));
+                return failure(
+                    std::string("Invalid X-Entisium-Trace-Id header")
+                );
             }
         } else {
             trace_id = make_identifier("tr");
         }
-        if (request.has_header("X-Fei-Parent-Span-Id")) {
-            auto value = request.get_header_value("X-Fei-Parent-Span-Id");
+        if (request.has_header("X-Entisium-Parent-Span-Id")) {
+            auto value = request.get_header_value("X-Entisium-Parent-Span-Id");
             if (!is_valid_identifier(value)) {
                 return failure(
-                    std::string("Invalid X-Fei-Parent-Span-Id header")
+                    std::string("Invalid X-Entisium-Parent-Span-Id header")
                 );
             }
             parent_span_id = std::move(value);
         }
-        if (!request.has_header("X-Fei-Trace-Id") && parent_span_id) {
+        if (!request.has_header("X-Entisium-Trace-Id") && parent_span_id) {
             return failure(
-                std::string("X-Fei-Parent-Span-Id requires X-Fei-Trace-Id")
+                std::string(
+                    "X-Entisium-Parent-Span-Id requires X-Entisium-Trace-Id"
+                )
             );
         }
 
         Json data {{"request", std::move(request_data)}};
-        if (request.has_header("X-Fei-Call-Index")) {
+        if (request.has_header("X-Entisium-Call-Index")) {
             uint64 call_index {};
-            const auto value = request.get_header_value("X-Fei-Call-Index");
+            const auto value =
+                request.get_header_value("X-Entisium-Call-Index");
             if (!parse_integer(std::string_view(value), call_index) ||
                 call_index == 0) {
-                return failure(std::string("Invalid X-Fei-Call-Index header"));
+                return failure(
+                    std::string("Invalid X-Entisium-Call-Index header")
+                );
             }
             data["call_index"] = call_index;
         }
@@ -358,8 +365,8 @@ class AgentServer::Impl {
                  }},
             }
         );
-        response.set_header("X-Fei-Trace-Id", span.trace_id);
-        response.set_header("X-Fei-Span-Id", span.span_id);
+        response.set_header("X-Entisium-Trace-Id", span.trace_id);
+        response.set_header("X-Entisium-Span-Id", span.span_id);
     }
 
     Result<CapturedFrame, PlayHttpError>
@@ -827,15 +834,15 @@ class AgentServer::Impl {
                 response.status = 200;
                 response.set_header("Cache-Control", "no-store");
                 response.set_header(
-                    "X-Fei-Frame",
+                    "X-Entisium-Frame",
                     std::to_string(frame->frame)
                 );
                 response.set_header(
-                    "X-Fei-Width",
+                    "X-Entisium-Width",
                     std::to_string(frame->width)
                 );
                 response.set_header(
-                    "X-Fei-Height",
+                    "X-Entisium-Height",
                     std::to_string(frame->height)
                 );
                 response.set_content(
@@ -1048,7 +1055,7 @@ class AgentServer::Impl {
                 const httplib::Request& request,
                 httplib::Response& response
             ) {
-                if (!request.has_header("X-Fei-Runtime-Session")) {
+                if (!request.has_header("X-Entisium-Runtime-Session")) {
                     set_error(
                         response,
                         400,
@@ -1057,7 +1064,7 @@ class AgentServer::Impl {
                     return;
                 }
                 auto next = m_state.wait_for_inspection(
-                    request.get_header_value("X-Fei-Runtime-Session"),
+                    request.get_header_value("X-Entisium-Runtime-Session"),
                     std::chrono::milliseconds(100)
                 );
                 if (!next) {
@@ -1169,4 +1176,4 @@ void AgentServer::stop() noexcept {
     m_impl->stop();
 }
 
-} // namespace fei::agentd
+} // namespace ets::agentd

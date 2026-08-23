@@ -9,7 +9,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 // Executes platform work on the thread that created the executor. Worker calls
 // block until the owner pumps the task with run_one() or run_pending().
@@ -62,4 +62,4 @@ class MainThreadExecutor {
     void enqueue(MoveOnlyFunction<void()> task) const;
 };
 
-} // namespace fei
+} // namespace ets

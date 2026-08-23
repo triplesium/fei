@@ -20,7 +20,7 @@
 #include <utility>
 #include <vector>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -1106,7 +1106,7 @@ TEST_CASE(
 
     auto generic_result = registry.try_get_generic_type<TestOptional>();
     REQUIRE(generic_result);
-    REQUIRE(generic_result->generic_type_id == generic_id("fei::Optional"));
+    REQUIRE(generic_result->generic_type_id == generic_id("ets::Optional"));
     REQUIRE(contains_exactly(
         generic_result->argument_type_ids,
         {type_id<std::string>()}
@@ -1377,8 +1377,8 @@ TEST_CASE(
     auto generic_result = registry.try_get_generic_type<TestResult>();
     REQUIRE(generic_result);
     REQUIRE(generic_result->specialized_type_id == type_id<TestResult>());
-    REQUIRE(generic_result->generic_type_id == generic_id("fei::Result"));
-    REQUIRE(generic_result->generic_name == "fei::Result");
+    REQUIRE(generic_result->generic_type_id == generic_id("ets::Result"));
+    REQUIRE(generic_result->generic_name == "ets::Result");
     REQUIRE(contains_exactly(
         generic_result->argument_type_ids,
         {type_id<int>(), type_id<std::string>()}
@@ -1656,7 +1656,7 @@ TEST_CASE(
     REQUIRE(weights.indexed()->element_type() == type_id<int>());
 
     auto& ratio = require_registered_adapter_from_property<Optional<float>>(
-        "fei::Optional",
+        "ets::Optional",
         {type_id<float>()}
     );
     REQUIRE(ratio.kind() == ContainerKind::Optional);

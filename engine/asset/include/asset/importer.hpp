@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 using AssetImportSettings = std::map<std::string, std::string>;
 
@@ -75,4 +75,4 @@ class AssetImporterRegistry {
     std::unordered_map<std::string, const AssetImporter*> m_by_extension;
 };
 
-} // namespace fei
+} // namespace ets

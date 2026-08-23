@@ -30,11 +30,11 @@ const state = {
 const supportedProtocolVersion = 1;
 const maximumCollectionRows = 200;
 const maximumPreviewBytes = 2 * 1024 * 1024;
-const sidebarShowBlobsStorageKey = "fei-devtools-sidebar-show-blobs";
+const sidebarShowBlobsStorageKey = "entisium-devtools-sidebar-show-blobs";
 
 function loadShowSidebarBlobs() {
   try {
-    return window.localStorage.getItem("fei-devtools-sidebar-show-blobs") === "true";
+    return window.localStorage.getItem("entisium-devtools-sidebar-show-blobs") === "true";
   } catch {
     return false;
   }
@@ -1839,7 +1839,7 @@ function renderHome() {
         "div",
         {},
         createElement("span", { className: "eyebrow", text: "Service overview" }),
-        createElement("h1", { text: state.discovery?.name || "FEI DevTools" }),
+        createElement("h1", { text: state.discovery?.name || "ENTISIUM DevTools" }),
         createElement("p", {
           text: "Select a capability to inspect data or construct a request from its schema.",
         }),

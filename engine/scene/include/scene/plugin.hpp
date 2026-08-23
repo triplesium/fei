@@ -3,9 +3,9 @@
 #include "asset/plugin.hpp"
 #include "scene/scene.hpp"
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class ScenePlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {
@@ -16,4 +16,4 @@ class ScenePlugin : public Plugin {
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

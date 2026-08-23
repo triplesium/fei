@@ -13,7 +13,7 @@
 
 #include <string>
 
-namespace fei::snapshot_runtime_luau {
+namespace ets::snapshot_runtime_luau {
 namespace {
 
 serialization::ValueCodec snapshot_state_codec() {
@@ -116,4 +116,4 @@ configure_luau_adapters(World& world, snapshot::SnapshotRegistry& registry) {
     return {};
 }
 
-} // namespace fei::snapshot_runtime_luau
+} // namespace ets::snapshot_runtime_luau

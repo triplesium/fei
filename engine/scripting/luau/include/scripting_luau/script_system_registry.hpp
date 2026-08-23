@@ -14,7 +14,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 class WorldRef;
@@ -158,4 +158,4 @@ void apply_luau_script_system_queue(
     ResRW<AssetServer> asset_server
 );
 
-} // namespace fei
+} // namespace ets

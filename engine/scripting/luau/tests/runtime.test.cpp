@@ -8,9 +8,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace fei;
+using namespace ets;
 
-namespace fei::luau_runtime_test::nested {
+namespace ets::luau_runtime_test::nested {
 
 struct Value {};
 
@@ -24,7 +24,7 @@ enum class Mode {
     Active,
 };
 
-} // namespace fei::luau_runtime_test::nested
+} // namespace ets::luau_runtime_test::nested
 
 TEST_CASE("Lua and Luau runtimes coexist", "[scripting][lua][luau]") {
     LuaRuntime lua;
@@ -80,12 +80,12 @@ TEST_CASE(
 ) {
     auto& registry = Registry::instance();
     auto& value_type = registry.register_cls<luau_runtime_test::nested::Value>(
-        {"fei", "luau_runtime_test", "nested"},
+        {"ets", "luau_runtime_test", "nested"},
         "Value"
     );
     auto& mode = registry
                      .register_enum<luau_runtime_test::nested::Mode>(
-                         {"fei", "luau_runtime_test", "nested"},
+                         {"ets", "luau_runtime_test", "nested"},
                          "Mode"
                      )
                      .add_enumerator(
@@ -139,7 +139,7 @@ TEST_CASE(
 ) {
     auto& type = Registry::instance()
                      .register_cls<luau_runtime_test::nested::StaticFactory>(
-                         {"fei", "luau_runtime_test", "nested"},
+                         {"ets", "luau_runtime_test", "nested"},
                          "StaticFactory"
                      )
                      .add_property(

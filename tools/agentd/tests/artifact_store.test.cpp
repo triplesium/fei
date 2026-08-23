@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-using namespace fei;
-using namespace fei::agentd;
+using namespace ets;
+using namespace ets::agentd;
 
 TEST_CASE(
     "Artifact store preserves binary data and metadata",

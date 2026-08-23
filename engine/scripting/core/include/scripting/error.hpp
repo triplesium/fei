@@ -2,10 +2,10 @@
 
 #include <string>
 
-namespace fei {
+namespace ets {
 
 struct ScriptError {
     std::string message;
 };
 
-} // namespace fei
+} // namespace ets

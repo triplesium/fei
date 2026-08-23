@@ -9,16 +9,16 @@
 #include "ecs/system_set.hpp"
 #include "refl/reflect.hpp"
 
-namespace fei::input_focus {
+namespace ets::input_focus {
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class FocusCause {
     Pointer,
     Navigation,
     Programmatic,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct FocusGained {
     Entity entity;
     FocusCause cause {FocusCause::Programmatic};
@@ -26,14 +26,14 @@ struct FocusGained {
     bool operator==(const FocusGained&) const = default;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct FocusLost {
     Entity entity;
 
     bool operator==(const FocusLost&) const = default;
 };
 
-FEI_REFLECT(Resource)
+ETS_REFLECT(Resource)
 struct InputFocus {
     Optional<Entity> entity;
     Optional<Entity> notified_entity;
@@ -54,12 +54,12 @@ struct InputFocus {
     [[nodiscard]] Optional<Entity> get() const { return entity; }
 };
 
-FEI_REFLECT(Resource)
+ETS_REFLECT(Resource)
 struct InputFocusVisible {
     bool visible {false};
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct AutoFocus {};
 
 struct Systems {
@@ -103,4 +103,4 @@ void process_focus_changes(
     const Query<Entity, const ChildOf>& parents
 );
 
-} // namespace fei::input_focus
+} // namespace ets::input_focus

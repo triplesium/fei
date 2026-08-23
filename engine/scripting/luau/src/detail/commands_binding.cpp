@@ -10,10 +10,10 @@
 #include <memory>
 #include <string_view>
 
-namespace fei::detail {
+namespace ets::detail {
 namespace {
 
-constexpr const char* c_entity_commands_metatable = "fei.EntityCommands";
+constexpr const char* c_entity_commands_metatable = "ets.EntityCommands";
 
 struct LuauEntityCommands {
     Commands* commands {nullptr};
@@ -311,4 +311,4 @@ int dispatch_luau_commands_index(lua_State* state, const char* key) {
     luaL_error(state, "Commands has no field '%s'", key);
 }
 
-} // namespace fei::detail
+} // namespace ets::detail

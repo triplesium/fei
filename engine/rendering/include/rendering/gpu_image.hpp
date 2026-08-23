@@ -7,7 +7,7 @@
 
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 class GpuImage {
   private:
@@ -60,4 +60,4 @@ class GpuImageAdapter : public RenderAssetAdapter<Image, GpuImage> {
     }
 };
 
-} // namespace fei
+} // namespace ets

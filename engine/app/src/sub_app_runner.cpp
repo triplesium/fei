@@ -13,7 +13,7 @@
 #include <thread>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 InlineSubAppRunner::InlineSubAppRunner(SubApp sub_app) :
     m_sub_app(std::move(sub_app)) {}
@@ -230,7 +230,7 @@ class ThreadedSubAppRunner::Impl {
     }
 
     void update(SubAppSource source) {
-        FEI_PROFILE_SCOPE("Threaded SubApp Update");
+        ETS_PROFILE_SCOPE("Threaded SubApp Update");
         if (source.world == nullptr) {
             throw std::invalid_argument("SubApp source World cannot be null");
         }
@@ -239,11 +239,11 @@ class ThreadedSubAppRunner::Impl {
         m_source_world = source.world;
 
         {
-            FEI_PROFILE_SCOPE("Threaded SubApp Extract");
+            ETS_PROFILE_SCOPE("Threaded SubApp Extract");
             local_sub_app().extract(*source.world, source.id);
         }
         {
-            FEI_PROFILE_SCOPE("Threaded SubApp Submit");
+            ETS_PROFILE_SCOPE("Threaded SubApp Submit");
             submit_work(SubAppWorkKind::Update);
         }
     }
@@ -322,7 +322,7 @@ class ThreadedSubAppRunner::Impl {
 
             std::exception_ptr exception;
             try {
-                FEI_PROFILE_SCOPE("Threaded SubApp Worker Execute");
+                ETS_PROFILE_SCOPE("Threaded SubApp Worker Execute");
                 switch (work->kind) {
                     case SubAppWorkKind::Execute:
                         work->task(*work->sub_app);
@@ -384,7 +384,7 @@ class ThreadedSubAppRunner::Impl {
 
         std::optional<SubAppWorkResult> result;
         {
-            FEI_PROFILE_SCOPE("Threaded SubApp Worker Wait");
+            ETS_PROFILE_SCOPE("Threaded SubApp Worker Wait");
             result = m_from_worker.receive(&m_main_thread_executor);
         }
         m_work_in_flight = false;
@@ -485,4 +485,4 @@ void ThreadedSubAppRunner::shutdown() noexcept {
     }
 }
 
-} // namespace fei
+} // namespace ets

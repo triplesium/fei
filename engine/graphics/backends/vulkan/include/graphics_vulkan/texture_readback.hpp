@@ -6,7 +6,7 @@
 #include <memory>
 #include <mutex>
 
-namespace fei {
+namespace ets {
 
 class VulkanDeviceState;
 
@@ -33,4 +33,4 @@ class TextureReadbackVulkan final : public TextureReadback {
     void reset() override;
 };
 
-} // namespace fei
+} // namespace ets

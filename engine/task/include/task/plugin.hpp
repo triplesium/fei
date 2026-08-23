@@ -7,7 +7,7 @@
 #include <cstddef>
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 template<typename T>
 class ResRW;
@@ -39,10 +39,10 @@ class Tasks {
     static void drain_completion_system(ResRW<Tasks> tasks);
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class TaskPlugin : public Plugin {
   public:
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

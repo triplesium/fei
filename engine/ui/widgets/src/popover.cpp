@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
 namespace {
 
@@ -193,4 +193,4 @@ void update_popovers(
     }
 }
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

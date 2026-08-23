@@ -5,10 +5,10 @@
 
 #include <lua.hpp>
 
-namespace fei {
+namespace ets {
 
 Status<LuaScriptError> install_lua_script_helpers(lua_State* L, int env_index);
 Result<LuaScriptModuleDecl, LuaScriptError>
 lua_read_module_decl(lua_State* L, int decl_index);
 
-} // namespace fei
+} // namespace ets

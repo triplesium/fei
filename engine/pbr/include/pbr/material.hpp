@@ -17,7 +17,7 @@
 #include <memory>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 enum class StandardMaterialFlags : uint32 {
     None = 0u,
@@ -341,4 +341,4 @@ class StandardMaterial : public Material {
     std::size_t hash() const override { return type_id<StandardMaterial>(); }
 };
 
-} // namespace fei
+} // namespace ets

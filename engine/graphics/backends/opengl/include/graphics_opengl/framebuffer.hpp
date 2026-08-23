@@ -6,7 +6,7 @@
 #include <glad/glad.h>
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 class FramebufferOpenGL : public Framebuffer, public DeferredResourceOpenGL {
   private:
@@ -38,4 +38,4 @@ class FramebufferOpenGL : public Framebuffer, public DeferredResourceOpenGL {
     void create_gl_resource() const override;
     void destroy_gl_resource() override;
 };
-} // namespace fei
+} // namespace ets

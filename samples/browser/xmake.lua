@@ -48,15 +48,15 @@ target("sample-browser")
     )
     add_files("main.cpp")
     add_deps(
-        "fei-core",
-        "fei-input",
-        "fei-input-focus",
-        "fei-sprite",
-        "fei-text",
-        "fei-ui",
-        "fei-ui-widgets",
-        "fei-ui-rendering",
-        "fei-window-browser",
-        "fei-graphics-webgpu-browser"
+        "entisium-core",
+        "entisium-input",
+        "entisium-input-focus",
+        "entisium-sprite",
+        "entisium-text",
+        "entisium-ui",
+        "entisium-ui-widgets",
+        "entisium-ui-rendering",
+        "entisium-window-browser",
+        "entisium-graphics-webgpu-browser"
     )
     add_browser_shell(path.join(os.scriptdir(), "shell.html"))

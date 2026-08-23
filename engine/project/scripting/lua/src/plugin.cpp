@@ -6,7 +6,7 @@
 #include <string>
 #include <utility>
 
-namespace fei::project_runtime {
+namespace ets::project_runtime {
 
 void detail::LuaProjectScriptBackend::queue_asset(
     Registry& registry,
@@ -57,4 +57,4 @@ void LuaScriptsPlugin::setup(App& app) {
         );
 }
 
-} // namespace fei::project_runtime
+} // namespace ets::project_runtime

@@ -6,7 +6,7 @@
 #include <cmath>
 #include <stdexcept>
 
-namespace fei {
+namespace ets {
 
 void Time::tick() {
     auto now = std::chrono::steady_clock::now();
@@ -212,4 +212,4 @@ void TimePlugin::setup(App& app) {
     );
 }
 
-} // namespace fei
+} // namespace ets

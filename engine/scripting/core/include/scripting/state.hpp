@@ -8,7 +8,7 @@
 
 #include <string_view>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -24,4 +24,4 @@ install_script_module_states(World& world, const ScriptModuleDecl& module);
 
 bool is_script_state_type(TypeId type);
 
-} // namespace fei
+} // namespace ets

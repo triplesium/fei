@@ -5,7 +5,7 @@
 
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 AssetLoadRequestSender::~AssetLoadRequestSender() {
     close();
@@ -89,4 +89,4 @@ void AssetLoadRequests::process_system(
     requests->process(*server);
 }
 
-} // namespace fei
+} // namespace ets

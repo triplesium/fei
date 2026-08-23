@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-namespace fei {
+namespace ets {
 
 struct FpsCounter {
     float fps {0.0f};
@@ -39,7 +39,7 @@ fps_counter_system(ResRO<Time> time, ResRW<FpsCounter> fps_counter) {
     fps_counter->tick(time->delta());
 }
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class FpsCounterPlugin : public Plugin {
   public:
     void setup(App& app) override {
@@ -48,4 +48,4 @@ class FpsCounterPlugin : public Plugin {
     }
 };
 
-} // namespace fei
+} // namespace ets

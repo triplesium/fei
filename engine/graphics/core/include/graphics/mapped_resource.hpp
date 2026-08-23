@@ -6,7 +6,7 @@
 #include <memory>
 #include <span>
 
-namespace fei {
+namespace ets {
 
 class MappedResource {
   private:
@@ -29,4 +29,4 @@ class MappedResource {
     std::span<std::byte> data() const { return m_data; }
 };
 
-} // namespace fei
+} // namespace ets

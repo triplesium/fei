@@ -12,7 +12,7 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
-namespace fei {
+namespace ets {
 
 class GraphicsDeviceVulkan;
 class BufferVulkan;
@@ -165,4 +165,4 @@ class CommandBufferVulkan : public CommandBuffer {
     void mark_completed();
 };
 
-} // namespace fei
+} // namespace ets

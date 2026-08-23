@@ -9,7 +9,7 @@
 #include <utility>
 #include <yaml-cpp/yaml.h> // IWYU pragma: keep
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -323,8 +323,8 @@ Project::load(const std::filesystem::path& project_file) {
         std::move(absolute_file),
         root,
         std::move(asset_root),
-        root / ".fei"
+        root / ".entisium"
     );
 }
 
-} // namespace fei
+} // namespace ets

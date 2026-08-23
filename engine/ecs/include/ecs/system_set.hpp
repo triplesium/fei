@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 template<typename T>
 struct SystemSet;
@@ -199,4 +199,4 @@ SystemSetConfigs chain(std::convertible_to<SystemSetConfigs> auto&&... sets) {
     return SystemSetConfigs {std::move(system_set_configs)};
 }
 
-} // namespace fei
+} // namespace ets

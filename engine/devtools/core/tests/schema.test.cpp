@@ -15,8 +15,8 @@
 #include <unordered_map>
 #include <vector>
 
-using namespace fei;
-using namespace fei::devtools;
+using namespace ets;
+using namespace ets::devtools;
 
 namespace {
 

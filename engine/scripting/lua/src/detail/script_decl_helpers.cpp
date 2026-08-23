@@ -5,7 +5,7 @@
 #include <string_view>
 #include <utility>
 
-namespace fei {
+namespace ets {
 namespace {
 
 constexpr std::string_view lua_script_system_helpers = R"(
@@ -513,7 +513,7 @@ Status<LuaScriptError> install_lua_script_helpers(lua_State* L, int env_index) {
             L,
             lua_script_system_helpers.data(),
             lua_script_system_helpers.size(),
-            "fei_lua_script_helpers"
+            "ets_lua_script_helpers"
         ) != LUA_OK) {
         std::string message = lua_tostring(L, -1);
         lua_settop(L, base_top);
@@ -536,4 +536,4 @@ Status<LuaScriptError> install_lua_script_helpers(lua_State* L, int env_index) {
     return {};
 }
 
-} // namespace fei
+} // namespace ets

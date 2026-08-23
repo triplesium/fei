@@ -5,7 +5,7 @@
 #include <tuple>
 #include <type_traits>
 
-namespace fei {
+namespace ets {
 
 template<typename T>
 struct is_array : std::false_type {}; // NOLINT(readability-identifier-naming)
@@ -83,4 +83,4 @@ VertexAttributeValues::as_float4() const {
     return nullopt;
 }
 
-} // namespace fei
+} // namespace ets

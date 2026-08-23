@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::gltf_detail {
+namespace ets::gltf_detail {
 namespace {
 
 Result<std::span<const std::byte>, std::string>
@@ -196,4 +196,4 @@ Result<std::vector<std::unique_ptr<Image>>, std::string> convert_textures(
     return textures;
 }
 
-} // namespace fei::gltf_detail
+} // namespace ets::gltf_detail

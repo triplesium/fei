@@ -5,9 +5,9 @@
 #include "math/vector.hpp"
 #include "refl/reflect.hpp"
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct Transform2d {
     Vector2 position {0.0f, 0.0f};
     Vector2 scale {1.0f, 1.0f};
@@ -17,7 +17,7 @@ struct Transform2d {
     inline Matrix4x4 model_matrix() const {
         return translate(position.x, position.y, 0.0f) *
                rotate_z(rotation * DEG2RAD) *
-               fei::scale(scale.x, scale.y, 1.0f);
+               ets::scale(scale.x, scale.y, 1.0f);
     }
 };
 
@@ -30,7 +30,7 @@ struct GlobalTransform2d {
     const Matrix4x4& to_matrix() const { return matrix; }
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct Transform3d {
     Vector3 position {0.0f, 0.0f, 0.0f};
     Quaternion rotation {0.0f, 0.0f, 0.0f, 1.0f};
@@ -38,7 +38,7 @@ struct Transform3d {
 
     inline Matrix4x4 to_matrix() const {
         return translate(position.x, position.y, position.z) *
-               rotation.to_matrix() * fei::scale(scale.x, scale.y, scale.z);
+               rotation.to_matrix() * ets::scale(scale.x, scale.y, scale.z);
     }
 
     inline void set_euler(const Vector3& degrees) {
@@ -109,4 +109,4 @@ struct GlobalTransform3d {
     Vector3 up() const { return transform_vector(Vector3::Up).normalized(); }
 };
 
-} // namespace fei
+} // namespace ets

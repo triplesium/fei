@@ -8,7 +8,7 @@
 #include <string_view>
 #include <vector>
 
-namespace fei::runtime_protocol {
+namespace ets::runtime_protocol {
 
 inline constexpr uint32 protocol_version = 1;
 inline constexpr std::size_t c_max_inspection_request_payload_bytes =
@@ -118,4 +118,4 @@ encode_inspection_response(const InspectionResponse& message);
 [[nodiscard]] Result<InspectionResponse, std::string>
 decode_inspection_response(std::string_view json);
 
-} // namespace fei::runtime_protocol
+} // namespace ets::runtime_protocol

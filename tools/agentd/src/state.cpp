@@ -5,7 +5,7 @@
 #include <string>
 #include <utility>
 
-namespace fei::agentd {
+namespace ets::agentd {
 namespace {
 
 using Json = nlohmann::json;
@@ -423,4 +423,4 @@ std::string SupervisorState::capabilities_json() const {
         .dump();
 }
 
-} // namespace fei::agentd
+} // namespace ets::agentd

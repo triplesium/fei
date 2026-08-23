@@ -9,7 +9,7 @@
 
 #include <concepts>
 
-namespace fei {
+namespace ets {
 
 template<typename Target>
 struct ExtractResource {
@@ -70,4 +70,4 @@ App& add_extract_resource(App& app) {
     return app;
 }
 
-} // namespace fei
+} // namespace ets

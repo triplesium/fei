@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 enum class SystemParamRuntimeStateKind : std::uint8_t {
     Uninitialized,
@@ -132,4 +132,4 @@ struct RuntimeStateError {
     std::string message;
 };
 
-} // namespace fei
+} // namespace ets

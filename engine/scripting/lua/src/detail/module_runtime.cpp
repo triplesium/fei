@@ -7,7 +7,7 @@
 #include <string>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 Result<LuaScriptModuleId, LuaScriptError>
 LuaRuntime::load_module(const LuaScriptSource& source) {
@@ -256,4 +256,4 @@ Status<LuaScriptError> LuaRuntime::unset_module_global(
     return {};
 }
 
-} // namespace fei
+} // namespace ets

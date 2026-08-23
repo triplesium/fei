@@ -15,7 +15,7 @@
 #include <string_view>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -24,7 +24,7 @@ namespace runtime_inspection::ecs {
 inline constexpr std::size_t c_max_entity_inspect_response_bytes =
     std::size_t {4} * 1024 * 1024;
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct EntityInspectRequest {
     Entity entity {};
 };
@@ -61,7 +61,7 @@ class EntityInspectionProvider {
     static constexpr InspectionCost cost {InspectionCost::Low};
     static constexpr std::string_view request_schema_json {R"json({
         "$schema":"https://json-schema.org/draft/2020-12/schema",
-        "$id":"urn:fei:inspection:ecs.entity.inspect.v1:request",
+        "$id":"urn:entisium:inspection:ecs.entity.inspect.v1:request",
         "title":"Inspect ECS Entity Request",
         "type":"object",
         "additionalProperties":false,
@@ -77,7 +77,7 @@ class EntityInspectionProvider {
     })json"};
     static constexpr std::string_view response_schema_json {R"json({
         "$schema":"https://json-schema.org/draft/2020-12/schema",
-        "$id":"urn:fei:inspection:ecs.entity.inspect.v1:response",
+        "$id":"urn:entisium:inspection:ecs.entity.inspect.v1:response",
         "title":"Inspect ECS Entity Response",
         "type":"object",
         "additionalProperties":false,
@@ -137,4 +137,4 @@ Status<InspectionError>
 register_entity_inspection_provider(InspectionRegistry& registry);
 
 } // namespace runtime_inspection::ecs
-} // namespace fei
+} // namespace ets

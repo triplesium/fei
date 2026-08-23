@@ -13,7 +13,7 @@
 #include <string_view>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -26,7 +26,7 @@ struct ResourceBindingLimits {
 
 GLuint get_gl_limit(GLenum name) {
     GLint value = 0;
-    FEI_GL_CALL(glGetIntegerv(name, &value));
+    ETS_GL_CALL(glGetIntegerv(name, &value));
     return static_cast<GLuint>(value);
 }
 
@@ -46,7 +46,7 @@ void validate_resource_binding(
     const std::string& name
 ) {
     if (binding >= limit) {
-        fei::fatal(
+        ets::fatal(
             "OpenGL {} binding {} for resource '{}' exceeds device limit {}",
             kind,
             binding,
@@ -148,31 +148,31 @@ PipelineOpenGL::PipelineOpenGL(const ComputePipelineDescription& desc) :
 }
 
 void PipelineOpenGL::create_gl_resource() const {
-    FEI_PROFILE_SCOPE("OpenGL Pipeline Create");
-    m_program = FEI_GL_CALL(glCreateProgram());
+    ETS_PROFILE_SCOPE("OpenGL Pipeline Create");
+    m_program = ETS_GL_CALL(glCreateProgram());
     for (const auto& shader : m_shaders) {
         auto shader_gl = std::static_pointer_cast<const ShaderOpenGL>(shader);
         shader_gl->ensure_created();
-        FEI_GL_CALL(glAttachShader(m_program, shader_gl->id()));
+        ETS_GL_CALL(glAttachShader(m_program, shader_gl->id()));
     }
 
-    FEI_GL_CALL(glLinkProgram(m_program));
+    ETS_GL_CALL(glLinkProgram(m_program));
 
     GLint link_status;
-    FEI_GL_CALL(glGetProgramiv(m_program, GL_LINK_STATUS, &link_status));
+    ETS_GL_CALL(glGetProgramiv(m_program, GL_LINK_STATUS, &link_status));
     if (link_status == GL_FALSE) {
         GLint info_log_length;
-        FEI_GL_CALL(
+        ETS_GL_CALL(
             glGetProgramiv(m_program, GL_INFO_LOG_LENGTH, &info_log_length)
         );
         std::string info_log(info_log_length, ' ');
-        FEI_GL_CALL(glGetProgramInfoLog(
+        ETS_GL_CALL(glGetProgramInfoLog(
             m_program,
             info_log_length,
             nullptr,
             info_log.data()
         ));
-        fei::fatal("Failed to link OpenGL program: {}", info_log);
+        ets::fatal("Failed to link OpenGL program: {}", info_log);
     }
 
     process_resource_layouts();
@@ -180,7 +180,7 @@ void PipelineOpenGL::create_gl_resource() const {
 
 void PipelineOpenGL::destroy_gl_resource() {
     if (m_program != 0) {
-        FEI_GL_CALL(glDeleteProgram(m_program));
+        ETS_GL_CALL(glDeleteProgram(m_program));
         m_program = 0;
         m_resource_bindings.clear();
         m_memory_barriers = 0;
@@ -191,7 +191,7 @@ void PipelineOpenGL::validate_shader_resource_layouts() const {
     for (const auto& shader : m_shaders) {
         for (const auto& resource : shader->resources()) {
             if (resource.set >= m_resource_layouts.size()) {
-                fei::fatal(
+                ets::fatal(
                     "Shader '{}' resource '{}' uses set {}, binding {}, but "
                     "pipeline has only {} resource set layout(s)",
                     shader->path(),
@@ -217,7 +217,7 @@ void PipelineOpenGL::validate_shader_resource_layouts() const {
                     }
                 );
                 if (it == elements.end()) {
-                    fei::fatal(
+                    ets::fatal(
                         "Shader '{}' resource '{}' uses set {}, binding {}, "
                         "but pipeline resource set {} has no matching binding",
                         shader->path(),
@@ -233,7 +233,7 @@ void PipelineOpenGL::validate_shader_resource_layouts() const {
                         it->name,
                         array_index
                     )) {
-                    fei::fatal(
+                    ets::fatal(
                         "Shader '{}' resource set {}, binding {} is named "
                         "'{}', but pipeline layout names it '{}'",
                         shader->path(),
@@ -245,7 +245,7 @@ void PipelineOpenGL::validate_shader_resource_layouts() const {
                 }
 
                 if (!resource_kind_matches(resource.kind, it->kind)) {
-                    fei::fatal(
+                    ets::fatal(
                         "Shader '{}' resource '{}', set {}, binding {} is {}, "
                         "but pipeline layout declares {}",
                         shader->path(),
@@ -301,7 +301,7 @@ void PipelineOpenGL::process_resource_layouts() const {
             const auto& backend_name = backend_names.front();
             switch (element.kind) {
                 case ResourceKind::UniformBuffer: {
-                    auto index = FEI_GL_CALL(
+                    auto index = ETS_GL_CALL(
                         glGetUniformBlockIndex(m_program, backend_name.c_str())
                     );
                     if (index == GL_INVALID_INDEX) {
@@ -314,7 +314,7 @@ void PipelineOpenGL::process_resource_layouts() const {
                         element.name
                     );
                     auto binding = next_uniform_binding++;
-                    FEI_GL_CALL(
+                    ETS_GL_CALL(
                         glUniformBlockBinding(m_program, index, binding)
                     );
                     m_resource_bindings[slot][i] = UniformBinding {
@@ -326,7 +326,7 @@ void PipelineOpenGL::process_resource_layouts() const {
                 case ResourceKind::TextureReadOnly: {
                     std::vector<GLint> locations;
                     for (const auto& name : backend_names) {
-                        auto location = FEI_GL_CALL(
+                        auto location = ETS_GL_CALL(
                             glGetUniformLocation(m_program, name.c_str())
                         );
                         if (location != -1) {
@@ -344,7 +344,7 @@ void PipelineOpenGL::process_resource_layouts() const {
                     );
                     auto unit = next_texture_unit++;
                     for (auto location : locations) {
-                        FEI_GL_CALL(glProgramUniform1i(
+                        ETS_GL_CALL(glProgramUniform1i(
                             m_program,
                             location,
                             to_gl_int(unit)
@@ -360,7 +360,7 @@ void PipelineOpenGL::process_resource_layouts() const {
                 case ResourceKind::TextureReadWrite: {
                     std::vector<GLint> locations;
                     for (const auto& name : backend_names) {
-                        auto location = FEI_GL_CALL(
+                        auto location = ETS_GL_CALL(
                             glGetUniformLocation(m_program, name.c_str())
                         );
                         if (location != -1) {
@@ -378,7 +378,7 @@ void PipelineOpenGL::process_resource_layouts() const {
                     );
                     auto unit = next_image_unit++;
                     for (auto location : locations) {
-                        FEI_GL_CALL(glProgramUniform1i(
+                        ETS_GL_CALL(glProgramUniform1i(
                             m_program,
                             location,
                             to_gl_int(unit)
@@ -394,7 +394,7 @@ void PipelineOpenGL::process_resource_layouts() const {
                 }
                 case ResourceKind::StorageBufferReadOnly:
                 case ResourceKind::StorageBufferReadWrite: {
-                    auto index = FEI_GL_CALL(glGetProgramResourceIndex(
+                    auto index = ETS_GL_CALL(glGetProgramResourceIndex(
                         m_program,
                         GL_SHADER_STORAGE_BLOCK,
                         backend_name.c_str()
@@ -409,7 +409,7 @@ void PipelineOpenGL::process_resource_layouts() const {
                         element.name
                     );
                     auto binding = next_storage_binding++;
-                    FEI_GL_CALL(
+                    ETS_GL_CALL(
                         glShaderStorageBlockBinding(m_program, index, binding)
                     );
                     m_resource_bindings[slot][i] = ShaderStorageBinding {
@@ -427,7 +427,7 @@ void PipelineOpenGL::process_resource_layouts() const {
                     break;
                 }
                 default:
-                    fei::fatal(
+                    ets::fatal(
                         "ResourceKind {} not supported in PipelineOpenGL",
                         static_cast<uint32>(element.kind)
                     );
@@ -436,4 +436,4 @@ void PipelineOpenGL::process_resource_layouts() const {
     }
 }
 
-} // namespace fei
+} // namespace ets

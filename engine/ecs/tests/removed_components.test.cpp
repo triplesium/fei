@@ -6,8 +6,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <vector>
 
-using namespace fei;
-using namespace fei::ecs_test;
+using namespace ets;
+using namespace ets::ecs_test;
 
 namespace {
 

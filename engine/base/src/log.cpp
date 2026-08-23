@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-namespace fei::detail {
+namespace ets::detail {
 
 std::string make_log_prefix(LogLevel level, std::source_location loc) {
     auto get_filename = [](std::source_location location) {
@@ -31,4 +31,4 @@ void log(LogLevel level, const FormatString& format, std::format_args args) {
     }
 }
 
-} // namespace fei::detail
+} // namespace ets::detail

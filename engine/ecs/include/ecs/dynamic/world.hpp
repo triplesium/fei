@@ -8,7 +8,7 @@
 #include <optional>
 #include <string>
 
-namespace fei {
+namespace ets {
 
 class DynamicWorld final : public DynamicSystemParam {
   private:
@@ -40,4 +40,4 @@ class DynamicWorld final : public DynamicSystemParam {
     Commands* commands();
 };
 
-} // namespace fei
+} // namespace ets

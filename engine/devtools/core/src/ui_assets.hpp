@@ -4,7 +4,7 @@
 
 #include <string_view>
 
-namespace fei::devtools::detail {
+namespace ets::devtools::detail {
 
 struct UiAsset {
     std::string_view content;
@@ -12,7 +12,7 @@ struct UiAsset {
 };
 
 inline constexpr std::string_view c_discovery_json {
-    R"({"name":"fei-devtools","version":1,"manifest":"/api/v1/manifest","schemas":"/api/v1/schemas","status":"/api/v1/status","ui":"/ui/"})"
+    R"({"name":"entisium-devtools","version":1,"manifest":"/api/v1/manifest","schemas":"/api/v1/schemas","status":"/api/v1/status","ui":"/ui/"})"
 };
 
 inline constexpr std::string_view c_ui_content_security_policy {
@@ -23,4 +23,4 @@ inline constexpr std::string_view c_ui_content_security_policy {
 
 Optional<UiAsset> find_ui_asset(std::string_view path);
 
-} // namespace fei::devtools::detail
+} // namespace ets::devtools::detail

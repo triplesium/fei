@@ -12,7 +12,7 @@
 
 EMBED(Cousine_Regular_ttf, "text-test-font.ttf");
 
-using namespace fei;
+using namespace ets;
 
 TEST_CASE("Font reads metrics and rasterizes glyphs", "[text][font]") {
     auto reader = EmbeddedAssets::get("text-test-font.ttf").reader();

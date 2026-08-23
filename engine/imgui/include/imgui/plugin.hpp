@@ -3,9 +3,9 @@
 #include "app/plugin.hpp"
 #include "refl/reflect.hpp"
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct ImGuiInputCapture {
     bool mouse {false};
     bool keyboard {false};
@@ -16,7 +16,7 @@ struct ImGuiPluginConfig {
     bool docking {false};
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class ImGuiPlugin : public Plugin {
   public:
     explicit ImGuiPlugin(ImGuiPluginConfig config = {}) : m_config(config) {}
@@ -28,4 +28,4 @@ class ImGuiPlugin : public Plugin {
     ImGuiPluginConfig m_config;
 };
 
-} // namespace fei
+} // namespace ets

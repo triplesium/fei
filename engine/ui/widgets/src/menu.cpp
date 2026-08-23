@@ -4,7 +4,7 @@
 #include <functional>
 #include <vector>
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
 namespace {
 
@@ -299,4 +299,4 @@ void update_menus(
     input_focus_visible->visible = true;
 }
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

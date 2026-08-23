@@ -8,7 +8,7 @@
 #include <array>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -228,4 +228,4 @@ void SwapchainWebGpu::present() const {
 #endif
 }
 
-} // namespace fei
+} // namespace ets

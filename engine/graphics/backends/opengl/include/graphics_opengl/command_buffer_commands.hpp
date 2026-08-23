@@ -14,7 +14,7 @@
 #include <variant>
 #include <vector>
 
-namespace fei::opengl_commands {
+namespace ets::opengl_commands {
 
 struct BeginRenderPass {
     RenderPassDescription desc;
@@ -115,4 +115,4 @@ using Command = std::variant<
     GenerateMipmaps,
     CopyTexture>;
 
-} // namespace fei::opengl_commands
+} // namespace ets::opengl_commands

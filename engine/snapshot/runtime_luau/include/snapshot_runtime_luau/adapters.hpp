@@ -3,7 +3,7 @@
 #include "base/result.hpp"
 #include "snapshot/world_snapshot.hpp"
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -15,4 +15,4 @@ Status<snapshot::SnapshotError>
 configure_luau_adapters(World& world, snapshot::SnapshotRegistry& registry);
 
 } // namespace snapshot_runtime_luau
-} // namespace fei
+} // namespace ets

@@ -10,7 +10,7 @@
 #include <string_view>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class Type;
 
@@ -51,4 +51,4 @@ InvokeResult script_invoke_static_method(
     const std::vector<Ref>& arguments
 );
 
-} // namespace fei
+} // namespace ets

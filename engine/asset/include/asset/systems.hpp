@@ -2,7 +2,7 @@
 
 #include "ecs/system_set.hpp"
 
-namespace fei {
+namespace ets {
 
 struct AssetSystems {
     struct ProcessLoadRequests : SystemSet<ProcessLoadRequests> {};
@@ -11,4 +11,4 @@ struct AssetSystems {
     struct TrackAssets : SystemSet<TrackAssets> {};
 };
 
-} // namespace fei
+} // namespace ets

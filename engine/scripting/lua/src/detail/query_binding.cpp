@@ -8,7 +8,7 @@
 #include <cstddef>
 #include <string_view>
 
-namespace fei {
+namespace ets {
 namespace {
 
 struct LuaDynamicQueryIterator {
@@ -79,7 +79,7 @@ Type& register_lua_dynamic_query_type() {
 }
 
 bool lua_is_dynamic_query(TypeId type_id) {
-    return type_id == fei::type_id<DynamicQuery>();
+    return type_id == ets::type_id<DynamicQuery>();
 }
 
 int lua_dispatch_dynamic_query_index(lua_State* L, const char* key) {
@@ -92,4 +92,4 @@ int lua_dispatch_dynamic_query_index(lua_State* L, const char* key) {
     return 0;
 }
 
-} // namespace fei
+} // namespace ets

@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-namespace fei {
+namespace ets {
 
 // Matrix convention:
 // - Storage is row-major: mat[row][column], and data() returns row-major
@@ -17,7 +17,7 @@ namespace fei {
 // - View space is right-handed: cameras look down -Z.
 // - Projection helpers use OpenGL-style NDC z in [-1, 1].
 // - rotate_x/y/z and perspective fov arguments are radians.
-FEI_REFLECT()
+ETS_REFLECT()
 class Matrix3x3 {
   public:
     float mat[3][3];
@@ -230,7 +230,7 @@ class Matrix3x3 {
     Matrix3x3 inversed(float tolerance = 1e-06) const {
         Matrix3x3 inv_mat;
         float det = determinant();
-        if (fei::abs(det) < tolerance) {
+        if (ets::abs(det) < tolerance) {
             return Zero;
         }
 
@@ -255,7 +255,7 @@ class Matrix3x3 {
     }
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 class Matrix4x4 {
   public:
     float mat[4][4];
@@ -567,7 +567,7 @@ class Matrix4x4 {
         float m00 = mat[0][0], m01 = mat[0][1], m02 = mat[0][2];
 
         float det = m00 * t00 + m01 * t10 + m02 * t20;
-        if (fei::abs(det) < tolerance) {
+        if (ets::abs(det) < tolerance) {
             return Zero;
         }
 
@@ -621,7 +621,7 @@ class Matrix4x4 {
 
     Matrix4x4 inverse(float tolerance = EPSILON) const {
         float det = determinant();
-        if (fei::abs(det) < tolerance) {
+        if (ets::abs(det) < tolerance) {
             return Zero;
         }
 
@@ -706,12 +706,12 @@ inline Matrix4x4 scale(float x, float y, float z) {
 }
 
 inline Matrix4x4 scale(const Vector3& scale) {
-    return fei::scale(scale.x, scale.y, scale.z);
+    return ets::scale(scale.x, scale.y, scale.z);
 }
 
 inline Matrix4x4 rotate_x(float rad) {
-    float cos = fei::cos(rad);
-    float sin = fei::sin(rad);
+    float cos = ets::cos(rad);
+    float sin = ets::sin(rad);
     Matrix4x4 m {Matrix4x4::Identity};
     m[1][1] = cos;
     m[1][2] = -sin;
@@ -721,8 +721,8 @@ inline Matrix4x4 rotate_x(float rad) {
 }
 
 inline Matrix4x4 rotate_y(float rad) {
-    float cos = fei::cos(rad);
-    float sin = fei::sin(rad);
+    float cos = ets::cos(rad);
+    float sin = ets::sin(rad);
     Matrix4x4 m {Matrix4x4::Identity};
     m[0][0] = cos;
     m[0][2] = sin;
@@ -732,8 +732,8 @@ inline Matrix4x4 rotate_y(float rad) {
 }
 
 inline Matrix4x4 rotate_z(float rad) {
-    float cos = fei::cos(rad);
-    float sin = fei::sin(rad);
+    float cos = ets::cos(rad);
+    float sin = ets::sin(rad);
     Matrix4x4 m {Matrix4x4::Identity};
     m[0][0] = cos;
     m[0][1] = -sin;
@@ -794,4 +794,4 @@ inline Matrix4x4 perspective(
     return result;
 }
 
-} // namespace fei
+} // namespace ets

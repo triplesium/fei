@@ -6,7 +6,7 @@
 #include <memory>
 #include <string>
 
-namespace fei::agentd {
+namespace ets::agentd {
 
 class SupervisorState;
 
@@ -27,4 +27,4 @@ class AgentServer {
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace fei::agentd
+} // namespace ets::agentd

@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 DynamicQuery::DynamicQuery(
     std::string name,
@@ -236,4 +236,4 @@ bool DynamicQuery::matches_row(
     return false;
 }
 
-} // namespace fei
+} // namespace ets

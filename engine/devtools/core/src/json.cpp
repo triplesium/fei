@@ -9,7 +9,7 @@
 #include <string>
 #include <utility>
 
-namespace fei::devtools {
+namespace ets::devtools {
 namespace {
 
 const serialization::ValueCodecRegistry& wire_codecs() {
@@ -124,4 +124,4 @@ Result<Val, std::string> decode_json(TypeId type_id, std::string_view text) {
     return std::move(*value);
 }
 
-} // namespace fei::devtools
+} // namespace ets::devtools

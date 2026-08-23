@@ -5,11 +5,11 @@
 #include <string_view>
 #include <vector>
 
-#if defined(FEI_ENABLE_TRACY)
+#if defined(ETS_ENABLE_TRACY)
 #    include <tracy/Tracy.hpp>
 #endif
 
-namespace fei {
+namespace ets {
 
 enum class ProfileZoneKind : std::uint8_t {
     Generic,
@@ -89,7 +89,7 @@ void record_gpu_profile_duration(
 GpuProfileSummarySnapshot gpu_profile_summary_snapshot();
 void clear_gpu_profile_summary();
 
-#if defined(FEI_ENABLE_TRACY)
+#if defined(ETS_ENABLE_TRACY)
 
 class DynamicProfileScope {
   private:
@@ -117,7 +117,7 @@ class DynamicProfileScope {
 
 #endif
 
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
 
 class SummaryProfileScope {
   private:
@@ -148,29 +148,29 @@ class SummaryProfileScope {
 
 #endif
 
-} // namespace fei
+} // namespace ets
 
-#define FEI_PROFILE_CONCAT_IMPL(a, b) a##b
-#define FEI_PROFILE_CONCAT(a, b) FEI_PROFILE_CONCAT_IMPL(a, b)
-#define FEI_PROFILE_UNIQUE_NAME(name) FEI_PROFILE_CONCAT(name, __COUNTER__)
+#define ETS_PROFILE_CONCAT_IMPL(a, b) a##b
+#define ETS_PROFILE_CONCAT(a, b) ETS_PROFILE_CONCAT_IMPL(a, b)
+#define ETS_PROFILE_UNIQUE_NAME(name) ETS_PROFILE_CONCAT(name, __COUNTER__)
 
-#if defined(FEI_ENABLE_TRACY)
-#    define FEI_PROFILE_TRACY_FRAME() FrameMark
-#    define FEI_PROFILE_TRACY_SCOPE(name) ZoneScopedN(name);
-#    define FEI_PROFILE_TRACY_FUNCTION() ZoneScoped;
-#    define FEI_PROFILE_TRACY_DYNAMIC_SCOPE(name, file, function, line) \
-        ::fei::DynamicProfileScope FEI_PROFILE_UNIQUE_NAME(             \
-            fei_tracy_profile_scope_                                    \
+#if defined(ETS_ENABLE_TRACY)
+#    define ETS_PROFILE_TRACY_FRAME() FrameMark
+#    define ETS_PROFILE_TRACY_SCOPE(name) ZoneScopedN(name);
+#    define ETS_PROFILE_TRACY_FUNCTION() ZoneScoped;
+#    define ETS_PROFILE_TRACY_DYNAMIC_SCOPE(name, file, function, line) \
+        ::ets::DynamicProfileScope ETS_PROFILE_UNIQUE_NAME(             \
+            ets_tracy_profile_scope_                                    \
         ) {name, file, function, line};
 #else
-#    define FEI_PROFILE_TRACY_FRAME()
-#    define FEI_PROFILE_TRACY_SCOPE(name)
-#    define FEI_PROFILE_TRACY_FUNCTION()
-#    define FEI_PROFILE_TRACY_DYNAMIC_SCOPE(name, file, function, line)
+#    define ETS_PROFILE_TRACY_FRAME()
+#    define ETS_PROFILE_TRACY_SCOPE(name)
+#    define ETS_PROFILE_TRACY_FUNCTION()
+#    define ETS_PROFILE_TRACY_DYNAMIC_SCOPE(name, file, function, line)
 #endif
 
-#if defined(FEI_ENABLE_PROFILE_SUMMARY)
-#    define FEI_PROFILE_SUMMARY_SCOPE(                      \
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+#    define ETS_PROFILE_SUMMARY_SCOPE(                      \
         kind,                                               \
         schedule_id,                                        \
         name,                                               \
@@ -178,11 +178,11 @@ class SummaryProfileScope {
         function,                                           \
         line                                                \
     )                                                       \
-        ::fei::SummaryProfileScope FEI_PROFILE_UNIQUE_NAME( \
-            fei_summary_profile_scope_                      \
+        ::ets::SummaryProfileScope ETS_PROFILE_UNIQUE_NAME( \
+            ets_summary_profile_scope_                      \
         ) {kind, schedule_id, name, file, function, line};
 #else
-#    define FEI_PROFILE_SUMMARY_SCOPE( \
+#    define ETS_PROFILE_SUMMARY_SCOPE( \
         kind,                          \
         schedule_id,                   \
         name,                          \
@@ -192,14 +192,14 @@ class SummaryProfileScope {
     )
 #endif
 
-#define FEI_PROFILE_FRAME()    \
-    FEI_PROFILE_TRACY_FRAME(); \
-    ::fei::profile_frame_mark()
+#define ETS_PROFILE_FRAME()    \
+    ETS_PROFILE_TRACY_FRAME(); \
+    ::ets::profile_frame_mark()
 
-#define FEI_PROFILE_SCOPE(name)          \
-    FEI_PROFILE_TRACY_SCOPE(name)        \
-    FEI_PROFILE_SUMMARY_SCOPE(           \
-        ::fei::ProfileZoneKind::Generic, \
+#define ETS_PROFILE_SCOPE(name)          \
+    ETS_PROFILE_TRACY_SCOPE(name)        \
+    ETS_PROFILE_SUMMARY_SCOPE(           \
+        ::ets::ProfileZoneKind::Generic, \
         0,                               \
         name,                            \
         __FILE__,                        \
@@ -207,10 +207,10 @@ class SummaryProfileScope {
         __LINE__                         \
     )
 
-#define FEI_PROFILE_FUNCTION()           \
-    FEI_PROFILE_TRACY_FUNCTION()         \
-    FEI_PROFILE_SUMMARY_SCOPE(           \
-        ::fei::ProfileZoneKind::Generic, \
+#define ETS_PROFILE_FUNCTION()           \
+    ETS_PROFILE_TRACY_FUNCTION()         \
+    ETS_PROFILE_SUMMARY_SCOPE(           \
+        ::ets::ProfileZoneKind::Generic, \
         0,                               \
         __func__,                        \
         __FILE__,                        \
@@ -218,10 +218,10 @@ class SummaryProfileScope {
         __LINE__                         \
     )
 
-#define FEI_PROFILE_DYNAMIC_SCOPE(name, file, function, line)   \
-    FEI_PROFILE_TRACY_DYNAMIC_SCOPE(name, file, function, line) \
-    FEI_PROFILE_SUMMARY_SCOPE(                                  \
-        ::fei::ProfileZoneKind::Generic,                        \
+#define ETS_PROFILE_DYNAMIC_SCOPE(name, file, function, line)   \
+    ETS_PROFILE_TRACY_DYNAMIC_SCOPE(name, file, function, line) \
+    ETS_PROFILE_SUMMARY_SCOPE(                                  \
+        ::ets::ProfileZoneKind::Generic,                        \
         0,                                                      \
         name,                                                   \
         file,                                                   \
@@ -229,15 +229,15 @@ class SummaryProfileScope {
         line                                                    \
     )
 
-#define FEI_PROFILE_SYSTEM_SCOPE(schedule_id, profile_info) \
-    FEI_PROFILE_TRACY_DYNAMIC_SCOPE(                        \
+#define ETS_PROFILE_SYSTEM_SCOPE(schedule_id, profile_info) \
+    ETS_PROFILE_TRACY_DYNAMIC_SCOPE(                        \
         (profile_info).name,                                \
         (profile_info).file,                                \
         (profile_info).function,                            \
         (profile_info).line                                 \
     )                                                       \
-    FEI_PROFILE_SUMMARY_SCOPE(                              \
-        ::fei::ProfileZoneKind::System,                     \
+    ETS_PROFILE_SUMMARY_SCOPE(                              \
+        ::ets::ProfileZoneKind::System,                     \
         schedule_id,                                        \
         (profile_info).name,                                \
         (profile_info).file,                                \

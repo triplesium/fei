@@ -8,7 +8,7 @@
 #include <string>
 #include <utility>
 
-namespace fei::runtime_protocol {
+namespace ets::runtime_protocol {
 namespace {
 
 using Json = nlohmann::json;
@@ -270,4 +270,4 @@ PlaytestRegistry::find(std::string_view id) const {
     return &m_interfaces[entry->second];
 }
 
-} // namespace fei::runtime_protocol
+} // namespace ets::runtime_protocol

@@ -15,7 +15,7 @@
 #include <thread>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -120,7 +120,7 @@ class TextureReadbackWebGpu final : public TextureReadback {
         );
 
         WGPUCommandEncoderDescriptor encoder_descriptor {
-            .label = {"fei texture readback", WGPU_STRLEN},
+            .label = {"entisium texture readback", WGPU_STRLEN},
         };
         auto encoder = wgpuDeviceCreateCommandEncoder(
             m_state->device(),
@@ -469,4 +469,4 @@ void GraphicsDeviceWebGpu::flush() const {
     m_state->poll();
 }
 
-} // namespace fei
+} // namespace ets

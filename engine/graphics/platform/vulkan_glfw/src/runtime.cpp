@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -104,4 +104,4 @@ std::unique_ptr<GraphicsRuntime> VulkanGlfwBootstrap::initialize() {
     return std::make_unique<VulkanGlfwRuntime>(std::move(description));
 }
 
-} // namespace fei
+} // namespace ets

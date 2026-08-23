@@ -6,7 +6,7 @@
 
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 void ProjectPlugin::dependencies(PluginDependencies& dependencies) const {
     dependencies.require(
@@ -26,4 +26,4 @@ void ProjectPlugin::setup(App& app) {
     app.add_resource(std::move(m_project));
 }
 
-} // namespace fei
+} // namespace ets

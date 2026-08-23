@@ -9,11 +9,11 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 class Image;
 }
 
-namespace fei::gltf_detail {
+namespace ets::gltf_detail {
 
 Result<std::vector<std::unique_ptr<Image>>, std::string>
 convert_textures(
@@ -21,4 +21,4 @@ convert_textures(
     std::span<const std::uint8_t> srgb_textures
 );
 
-} // namespace fei::gltf_detail
+} // namespace ets::gltf_detail

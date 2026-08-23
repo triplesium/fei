@@ -7,7 +7,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace detail {
 
@@ -68,15 +68,15 @@ Ref element_ref(Ref owner, Element& value) {
     using Value = std::remove_cv_t<Element>;
     if constexpr (std::is_const_v<Element>) {
         (void)owner;
-        return Ref(static_cast<const Value*>(&value), fei::type_id<Value>());
+        return Ref(static_cast<const Value*>(&value), ets::type_id<Value>());
     } else {
         if (owner.is_const()) {
             return Ref(
                 static_cast<const Value*>(&value),
-                fei::type_id<Value>()
+                ets::type_id<Value>()
             );
         }
-        return Ref(static_cast<Value*>(&value), fei::type_id<Value>());
+        return Ref(static_cast<Value*>(&value), ets::type_id<Value>());
     }
 }
 
@@ -112,7 +112,7 @@ Status<ContainerError> consume_ref_value(
         }
     };
 
-    if (!value || value.type_id() != fei::type_id<Value>()) {
+    if (!value || value.type_id() != ets::type_id<Value>()) {
         return failure(container_error(
             ContainerError::Kind::InvalidElement,
             container_type,
@@ -149,7 +149,7 @@ Status<ContainerError> assign_ref_value(
     const char* operation
 ) {
     using Value = std::remove_cv_t<Element>;
-    if (!target || target.type_id() != fei::type_id<Value>() ||
+    if (!target || target.type_id() != ets::type_id<Value>() ||
         target.is_const()) {
         return failure(container_error(
             ContainerError::Kind::InvalidElement,
@@ -157,7 +157,7 @@ Status<ContainerError> assign_ref_value(
             std::string("Invalid assignment target passed to ") + operation
         ));
     }
-    if (!value || value.type_id() != fei::type_id<Value>()) {
+    if (!value || value.type_id() != ets::type_id<Value>()) {
         return failure(container_error(
             ContainerError::Kind::InvalidElement,
             container_type,
@@ -196,4 +196,4 @@ using ContainerDependencies = std::tuple<>;
 
 } // namespace detail
 
-} // namespace fei
+} // namespace ets

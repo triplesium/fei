@@ -6,13 +6,13 @@
 #include "refl/reflect.hpp"
 #include "snapshot/world_snapshot.hpp"
 
-namespace fei {
+namespace ets {
 
 class World;
 
 namespace snapshot_runtime {
 
-FEI_REFLECT(Resource)
+ETS_REFLECT(Resource)
 struct AutoCheckpointConfig {
     bool enabled {false};
     uint64 interval_frames {60};
@@ -32,11 +32,11 @@ struct AutoCheckpointState {
 Status<snapshot::SnapshotError>
 configure_builtin_adapters(World& world, snapshot::SnapshotRegistry& registry);
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class SnapshotRuntimePlugin : public Plugin {
   public:
     void setup(App& app) override;
 };
 
 } // namespace snapshot_runtime
-} // namespace fei
+} // namespace ets

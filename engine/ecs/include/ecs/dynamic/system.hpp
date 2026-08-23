@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class DynamicSystemExecutor {
   public:
@@ -113,4 +113,4 @@ class DynamicCondition : public Condition {
     ) override;
 };
 
-} // namespace fei
+} // namespace ets

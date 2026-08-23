@@ -10,9 +10,9 @@
 #include <filesystem>
 #include <nlohmann/json.hpp>
 
-using namespace fei;
-using namespace fei::runtime_inspection;
-using namespace fei::runtime_inspection::checkpoint;
+using namespace ets;
+using namespace ets::runtime_inspection;
+using namespace ets::runtime_inspection::checkpoint;
 
 namespace {
 
@@ -84,7 +84,7 @@ class CheckpointTempDirectory {
         const auto suffix =
             std::chrono::steady_clock::now().time_since_epoch().count();
         m_path = std::filesystem::temp_directory_path() /
-                 ("fei-checkpoint-inspection-" + std::to_string(suffix));
+                 ("entisium-checkpoint-inspection-" + std::to_string(suffix));
         std::filesystem::create_directories(m_path);
     }
 
@@ -294,7 +294,7 @@ TEST_CASE(
 ) {
     register_types();
     CheckpointTempDirectory temporary;
-    const auto path = temporary.file("turn-0.fei-snapshot.json");
+    const auto path = temporary.file("turn-0.entisium-snapshot.json");
 
     World source;
     install_archive_resources(source);

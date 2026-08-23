@@ -3,7 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 
-using namespace fei;
+using namespace ets;
 
 TEST_CASE(
     "Graphics enum helpers describe vertex and pixel sizes",

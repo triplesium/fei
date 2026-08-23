@@ -6,9 +6,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <thread>
 
-using namespace fei;
+using namespace ets;
 
-namespace fei {
+namespace ets {
 
 struct MainRenderSettings {
     int value {0};
@@ -27,7 +27,7 @@ struct ExtractResource<ExtractedRenderSettings> {
     }
 };
 
-} // namespace fei
+} // namespace ets
 
 namespace {
 

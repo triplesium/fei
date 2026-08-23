@@ -7,7 +7,7 @@
 #include <memory>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct ImGuiFrameVertex {
     Vector2 position;
@@ -66,4 +66,4 @@ struct ExtractedImGuiFrame {
 [[nodiscard]] std::shared_ptr<const ImGuiFrameSnapshot>
 capture_imgui_frame_snapshot();
 
-} // namespace fei
+} // namespace ets

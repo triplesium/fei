@@ -13,7 +13,7 @@
 #include <string>
 #include <webgpu/webgpu.h>
 
-namespace fei {
+namespace ets {
 
 class BufferWebGpu final : public Buffer {
   public:
@@ -191,4 +191,4 @@ class PipelineWebGpu final : public Pipeline {
     WGPUComputePipeline m_compute_pipeline {nullptr};
 };
 
-} // namespace fei
+} // namespace ets

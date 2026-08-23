@@ -7,8 +7,8 @@
 #include <string>
 #include <vector>
 
-using namespace fei;
-using namespace fei::devtools;
+using namespace ets;
+using namespace ets::devtools;
 
 TEST_CASE("Bridge queues requests and completes responses", "[devtools]") {
     Bridge bridge;
@@ -208,7 +208,7 @@ TEST_CASE("Bridge stores manifest JSON", "[devtools]") {
             .label = "Clear Input",
             .schema = "input.clear.v1",
             .response_type =
-                std::string {"fei::devtools::input::ClearInputResponse"},
+                std::string {"ets::devtools::input::ClearInputResponse"},
             .mode = PublishMode::OnDemand,
             .waitable = true,
             .endpoints =
@@ -227,7 +227,7 @@ TEST_CASE("Bridge stores manifest JSON", "[devtools]") {
             .schema = "rendering.render_schedule.v1",
             .response_type =
                 std::string {
-                    "fei::devtools::rendering::RenderScheduleSnapshot"
+                    "ets::devtools::rendering::RenderScheduleSnapshot"
                 },
             .mode = PublishMode::OnDemand,
             .waitable = true,
@@ -247,9 +247,9 @@ TEST_CASE("Bridge stores manifest JSON", "[devtools]") {
             .label = "Search Reflected Types",
             .schema = "reflection.search.v1",
             .request_type =
-                std::string {"fei::devtools::reflection::SearchRequest"},
+                std::string {"ets::devtools::reflection::SearchRequest"},
             .response_type =
-                std::string {"fei::devtools::reflection::SearchResponse"},
+                std::string {"ets::devtools::reflection::SearchResponse"},
             .mode = PublishMode::OnDemand,
             .waitable = true,
             .endpoints = {
@@ -299,7 +299,7 @@ TEST_CASE("Bridge stores manifest JSON", "[devtools]") {
     REQUIRE(
         manifest.find(
             "\"response_type\":"
-            "\"fei::devtools::input::ClearInputResponse\""
+            "\"ets::devtools::input::ClearInputResponse\""
         ) != std::string::npos
     );
     REQUIRE(manifest.find("\"kind\"") == std::string::npos);
@@ -318,10 +318,10 @@ TEST_CASE("Bridge stores manifest JSON", "[devtools]") {
 }
 
 TEST_CASE("DevTools embeds its schema-driven web UI", "[devtools][ui]") {
-    using namespace fei::devtools::detail;
+    using namespace ets::devtools::detail;
 
     auto discovery = nlohmann::json::parse(c_discovery_json);
-    REQUIRE(discovery.at("name") == "fei-devtools");
+    REQUIRE(discovery.at("name") == "entisium-devtools");
     REQUIRE(discovery.at("version") == 1);
     REQUIRE(discovery.at("manifest") == "/api/v1/manifest");
     REQUIRE(discovery.at("schemas") == "/api/v1/schemas");
@@ -331,7 +331,7 @@ TEST_CASE("DevTools embeds its schema-driven web UI", "[devtools][ui]") {
     auto index = find_ui_asset("/ui/");
     REQUIRE(index);
     REQUIRE(index->content_type == "text/html; charset=utf-8");
-    REQUIRE(index->content.find("FEI DevTools") != std::string_view::npos);
+    REQUIRE(index->content.find("ENTISIUM DevTools") != std::string_view::npos);
     REQUIRE(index->content.find("/ui/app.js") != std::string_view::npos);
     REQUIRE(
         index->content.find(R"(id="refresh-devtools")") !=
@@ -408,7 +408,7 @@ TEST_CASE("DevTools embeds its schema-driven web UI", "[devtools][ui]") {
         std::string_view::npos
     );
     REQUIRE(
-        script->content.find("fei-devtools-sidebar-show-blobs") !=
+        script->content.find("entisium-devtools-sidebar-show-blobs") !=
         std::string_view::npos
     );
     REQUIRE(

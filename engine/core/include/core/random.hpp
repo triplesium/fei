@@ -3,9 +3,9 @@
 #include "base/types.hpp"
 #include "refl/reflect.hpp"
 
-namespace fei {
+namespace ets {
 
-FEI_REFLECT(Resource)
+ETS_REFLECT(Resource)
 struct DeterministicRng {
     static constexpr uint64 c_default_seed = 0x9e3779b97f4a7c15ULL;
 
@@ -25,4 +25,4 @@ struct DeterministicRng {
     }
 };
 
-} // namespace fei
+} // namespace ets

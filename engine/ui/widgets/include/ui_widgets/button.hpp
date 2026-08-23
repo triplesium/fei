@@ -3,19 +3,19 @@
 #include "ecs/fwd.hpp"
 #include "refl/reflect.hpp"
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct Button {};
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct ActivateOnPress {};
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct Activate {
     Entity entity;
 
     bool operator==(const Activate&) const = default;
 };
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

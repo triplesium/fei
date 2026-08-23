@@ -1,6 +1,6 @@
 #pragma once
 
-namespace fei {
+namespace ets {
 
 class DeferredResourceOpenGL {
   public:
@@ -37,4 +37,4 @@ class DeferredResourceOpenGL {
     mutable bool m_created {false};
 };
 
-} // namespace fei
+} // namespace ets

@@ -29,7 +29,7 @@
 #include "ui_widgets/value_change.hpp"
 #include "window/window.hpp"
 
-namespace fei {
+namespace ets {
 
 class App;
 
@@ -463,89 +463,89 @@ void forward_text_input_changes(
     EventWriter<ValueChange<std::string>> changed
 );
 
-FEI_REFLECT(Plugin)
-class ButtonPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class ButtonPlugin : public ets::Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-FEI_REFLECT(Plugin)
-class CheckboxPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class CheckboxPlugin : public ets::Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-FEI_REFLECT(Plugin)
-class RadioGroupPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class RadioGroupPlugin : public ets::Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-FEI_REFLECT(Plugin)
-class SliderPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class SliderPlugin : public ets::Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-FEI_REFLECT(Plugin)
-class ScrollAreaPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class ScrollAreaPlugin : public ets::Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-FEI_REFLECT(Plugin)
-class ScrollbarPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class ScrollbarPlugin : public ets::Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-FEI_REFLECT(Plugin)
-class TextInputPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class TextInputPlugin : public ets::Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-FEI_REFLECT(Plugin)
-class PopoverPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class PopoverPlugin : public ets::Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-FEI_REFLECT(Plugin)
-class MenuPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class MenuPlugin : public ets::Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-FEI_REFLECT(Plugin)
-class ListBoxPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class ListBoxPlugin : public ets::Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-FEI_REFLECT(Plugin)
-class SelectPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class SelectPlugin : public ets::Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-FEI_REFLECT(Plugin)
-class TooltipPlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class TooltipPlugin : public ets::Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
 } // namespace ui_widgets
-} // namespace fei
+} // namespace ets

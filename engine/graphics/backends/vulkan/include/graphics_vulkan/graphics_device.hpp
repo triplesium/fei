@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class VulkanDeviceState;
 struct VulkanDeviceStateDescription;
@@ -115,4 +115,4 @@ class GraphicsDeviceVulkan : public GraphicsDevice {
     void destroy_submission_fences() const;
 };
 
-} // namespace fei
+} // namespace ets

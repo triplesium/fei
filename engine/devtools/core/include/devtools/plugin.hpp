@@ -3,10 +3,10 @@
 #include "app/plugin.hpp"
 #include "devtools/types.hpp"
 
-namespace fei::devtools {
+namespace ets::devtools {
 
-FEI_REFLECT(Plugin)
-class CorePlugin : public fei::Plugin {
+ETS_REFLECT(Plugin)
+class CorePlugin : public ets::Plugin {
   public:
     explicit CorePlugin(Config config = {});
 
@@ -17,4 +17,4 @@ class CorePlugin : public fei::Plugin {
     Config m_config;
 };
 
-} // namespace fei::devtools
+} // namespace ets::devtools

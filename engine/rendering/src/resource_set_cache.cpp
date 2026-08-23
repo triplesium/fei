@@ -2,7 +2,7 @@
 
 #include <functional>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -104,4 +104,4 @@ void RenderResourceSetCache::clear() {
     m_stats = {};
 }
 
-} // namespace fei
+} // namespace ets

@@ -3,7 +3,7 @@
 #include <tuple>
 #include <type_traits>
 
-namespace fei {
+namespace ets {
 
 template<typename T>
 struct FunctionTraits : public FunctionTraits<decltype(&T::operator())> {};
@@ -72,4 +72,4 @@ struct IndexInPackImpl<T, U, Ts...>
 template<typename T, typename... Ts>
 constexpr std::size_t IndexInPack = detail::IndexInPackImpl<T, Ts...>::value;
 
-} // namespace fei
+} // namespace ets

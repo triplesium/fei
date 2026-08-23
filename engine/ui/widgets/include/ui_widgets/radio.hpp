@@ -2,12 +2,12 @@
 
 #include "refl/reflect.hpp"
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct RadioButton {};
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct RadioGroup {};
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

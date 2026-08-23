@@ -5,7 +5,7 @@
 #include <string>
 #include <utility>
 
-namespace fei::devtools::pbr {
+namespace ets::devtools::pbr {
 
 namespace {
 
@@ -78,4 +78,4 @@ make_render_targets_snapshot(const DeferredViewTargets& targets) {
     return snapshot;
 }
 
-} // namespace fei::devtools::pbr
+} // namespace ets::devtools::pbr

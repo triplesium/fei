@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace fei::devtools {
+namespace ets::devtools {
 
 namespace {
 
@@ -54,4 +54,4 @@ Entity declare_capability(
     );
 }
 
-} // namespace fei::devtools
+} // namespace ets::devtools

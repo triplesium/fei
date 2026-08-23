@@ -6,7 +6,7 @@
 #include <string>
 #include <string_view>
 
-namespace fei {
+namespace ets {
 
 class Project;
 
@@ -29,4 +29,4 @@ struct ProjectDescriptor {
 );
 
 } // namespace agentd
-} // namespace fei
+} // namespace ets

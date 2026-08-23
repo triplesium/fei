@@ -11,7 +11,7 @@
 #include <glfw3webgpu.h>
 #include <stdexcept>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -124,4 +124,4 @@ std::unique_ptr<GraphicsRuntime> WebGpuGlfwBootstrap::initialize() {
     return std::make_unique<WebGpuGlfwRuntime>(description);
 }
 
-} // namespace fei
+} // namespace ets

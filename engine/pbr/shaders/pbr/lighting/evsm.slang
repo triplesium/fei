@@ -71,7 +71,7 @@ public bool shadow_uv_depth(
     }
 
     uv = light_space_position.xy * 0.5 + 0.5;
-#if FEI_SHADER_TARGET_WGSL
+#if ETS_SHADER_TARGET_WGSL
     uv.y = 1.0 - uv.y;
 #endif
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {

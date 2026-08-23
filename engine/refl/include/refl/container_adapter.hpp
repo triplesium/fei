@@ -9,7 +9,7 @@
 #include <string>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 struct ContainerError {
     enum class Kind {
@@ -216,4 +216,4 @@ class AssociativeContainerAdapter : public ContainerAdapter {
     }
 };
 
-} // namespace fei
+} // namespace ets

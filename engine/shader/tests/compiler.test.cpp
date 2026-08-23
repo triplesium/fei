@@ -10,7 +10,7 @@
 #include <string>
 #include <string_view>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -394,7 +394,7 @@ TEST_CASE(
 [shader("fragment")]
 float4 fragment_main() : SV_Target0
 {
-#if FEI_SHADER_TARGET_WGSL
+#if ETS_SHADER_TARGET_WGSL
     return float4(29.0, 0.0, 0.0, 1.0);
 #else
     return float4(17.0, 0.0, 0.0, 1.0);

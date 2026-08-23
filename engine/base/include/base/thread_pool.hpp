@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class ThreadPool {
   private:
@@ -63,4 +63,4 @@ class ThreadPool {
     void worker_loop();
 };
 
-} // namespace fei
+} // namespace ets

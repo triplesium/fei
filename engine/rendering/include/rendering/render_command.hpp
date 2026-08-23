@@ -2,7 +2,7 @@
 #include "ecs/world.hpp"
 #include "graphics/command_buffer.hpp"
 
-namespace fei {
+namespace ets {
 
 class RenderCommand {
   public:
@@ -11,4 +11,4 @@ class RenderCommand {
     virtual void execute(World& world, CommandBuffer& command_buffer) = 0;
 };
 
-} // namespace fei
+} // namespace ets

@@ -9,9 +9,9 @@
 #include <nlohmann/json.hpp>
 #include <string>
 
-using namespace fei;
-using namespace fei::runtime_inspection;
-using namespace fei::runtime_inspection::ecs;
+using namespace ets;
+using namespace ets::runtime_inspection;
+using namespace ets::runtime_inspection::ecs;
 
 namespace {
 

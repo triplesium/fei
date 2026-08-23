@@ -8,7 +8,7 @@
 #include <string>
 #include <system_error>
 
-namespace fei {
+namespace ets {
 
 AssetUuid AssetUuid::random() {
     std::array<std::uint8_t, 16> bytes {};
@@ -85,10 +85,10 @@ std::string AssetUuid::as_string() const {
     );
 }
 
-} // namespace fei
+} // namespace ets
 
-std::size_t std::hash<fei::AssetUuid>::operator()(
-    const fei::AssetUuid& value
+std::size_t std::hash<ets::AssetUuid>::operator()(
+    const ets::AssetUuid& value
 ) const noexcept {
     std::size_t hash = 1469598103934665603ULL;
     for (const auto byte : value.bytes()) {

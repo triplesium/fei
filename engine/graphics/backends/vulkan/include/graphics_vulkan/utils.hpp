@@ -6,7 +6,7 @@
 #include <string_view>
 #include <vulkan/vulkan_core.h>
 
-namespace fei {
+namespace ets {
 
 std::string_view vk_result_name(VkResult result);
 void check_vk(VkResult result, std::string_view operation);
@@ -37,4 +37,4 @@ VkColorComponentFlags to_vk_color_write_mask(ColorWriteMask mask);
 VkStencilOp to_vk_stencil_op(StencilOperation operation);
 VkIndexType to_vk_index_type(IndexFormat format);
 
-} // namespace fei
+} // namespace ets

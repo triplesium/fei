@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -256,7 +256,7 @@ WGPUPipelineLayout create_pipeline_layout(
 ) {
     auto handles = bind_group_layouts(layouts);
     WGPUPipelineLayoutDescriptor descriptor {};
-    descriptor.label = {"fei pipeline layout", WGPU_STRLEN};
+    descriptor.label = {"entisium pipeline layout", WGPU_STRLEN};
     descriptor.bindGroupLayoutCount = handles.size();
     descriptor.bindGroupLayouts = handles.data();
     auto result = wgpuDeviceCreatePipelineLayout(device, &descriptor);
@@ -273,7 +273,7 @@ BufferWebGpu::BufferWebGpu(
     const BufferDescription& desc
 ) : m_state(std::move(state)), m_desc(desc) {
     WGPUBufferDescriptor descriptor {};
-    descriptor.label = {"fei buffer", WGPU_STRLEN};
+    descriptor.label = {"entisium buffer", WGPU_STRLEN};
     descriptor.usage = buffer_usage(desc);
     descriptor.size = desc.size;
     m_buffer = wgpuDeviceCreateBuffer(m_state->device(), &descriptor);
@@ -304,7 +304,7 @@ TextureWebGpu::TextureWebGpu(
                                   desc.layer * 6 :
                                   desc.layer;
     WGPUTextureDescriptor descriptor {};
-    descriptor.label = {"fei texture", WGPU_STRLEN};
+    descriptor.label = {"entisium texture", WGPU_STRLEN};
     descriptor.usage = texture_usage(desc);
     descriptor.dimension = texture_dimension(desc.texture_type);
     descriptor.size = {
@@ -357,7 +357,7 @@ TextureViewWebGpu::TextureViewWebGpu(
         base_array_layer *= 6;
     }
     WGPUTextureViewDescriptor descriptor {};
-    descriptor.label = {"fei texture view", WGPU_STRLEN};
+    descriptor.label = {"entisium texture view", WGPU_STRLEN};
     descriptor.format = to_webgpu(format());
     descriptor.dimension = dimension;
     descriptor.baseMipLevel = desc.base_mip_level;
@@ -442,7 +442,7 @@ SamplerWebGpu::SamplerWebGpu(
     const SamplerDescription& desc
 ) : m_state(std::move(state)) {
     WGPUSamplerDescriptor descriptor {};
-    descriptor.label = {"fei sampler", WGPU_STRLEN};
+    descriptor.label = {"entisium sampler", WGPU_STRLEN};
     descriptor.addressModeU = address_mode(desc.address_mode_u);
     descriptor.addressModeV = address_mode(desc.address_mode_v);
     descriptor.addressModeW = address_mode(desc.address_mode_w);
@@ -522,7 +522,7 @@ ResourceLayoutWebGpu::ResourceLayoutWebGpu(
         entries.push_back(entry);
     }
     WGPUBindGroupLayoutDescriptor descriptor {};
-    descriptor.label = {"fei bind group layout", WGPU_STRLEN};
+    descriptor.label = {"entisium bind group layout", WGPU_STRLEN};
     descriptor.entryCount = entries.size();
     descriptor.entries = entries.data();
     m_layout = wgpuDeviceCreateBindGroupLayout(m_state->device(), &descriptor);
@@ -779,7 +779,7 @@ PipelineWebGpu::PipelineWebGpu(
     }
 
     auto pipeline_label =
-        "fei render pipeline (vertex: " + vertex_shader->path();
+        "entisium render pipeline (vertex: " + vertex_shader->path();
     if (fragment_shader) {
         pipeline_label += ", fragment: " + fragment_shader->path();
     }
@@ -830,7 +830,7 @@ PipelineWebGpu::PipelineWebGpu(
         fatal("WebGPU compute pipeline received a shader from another backend");
     }
     WGPUComputePipelineDescriptor descriptor {};
-    descriptor.label = {"fei compute pipeline", WGPU_STRLEN};
+    descriptor.label = {"entisium compute pipeline", WGPU_STRLEN};
     descriptor.layout = nullptr;
     descriptor.compute.module = shader->handle();
     descriptor.compute.entryPoint = shader->entry_point();
@@ -870,4 +870,4 @@ PipelineWebGpu::~PipelineWebGpu() {
     }
 }
 
-} // namespace fei
+} // namespace ets

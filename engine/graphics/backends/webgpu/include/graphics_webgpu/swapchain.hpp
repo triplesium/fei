@@ -7,7 +7,7 @@
 #include <mutex>
 #include <webgpu/webgpu.h>
 
-namespace fei {
+namespace ets {
 
 class SwapchainWebGpu final : public Swapchain {
   public:
@@ -41,4 +41,4 @@ class SwapchainWebGpu final : public Swapchain {
     bool acquire() const;
 };
 
-} // namespace fei
+} // namespace ets

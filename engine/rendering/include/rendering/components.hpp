@@ -6,7 +6,7 @@
 
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 struct MeshRenderable {
     Handle<Mesh> mesh;
@@ -24,4 +24,4 @@ struct MeshMaterial3d {
     Handle<T> material;
 };
 
-} // namespace fei
+} // namespace ets

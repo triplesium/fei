@@ -6,7 +6,7 @@
 #include <tuple>
 #include <vector>
 
-namespace fei::input_focus {
+namespace ets::input_focus {
 
 namespace {
 
@@ -139,4 +139,4 @@ void navigate_focus(
     }
 }
 
-} // namespace fei::input_focus
+} // namespace ets::input_focus

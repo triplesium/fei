@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace fei::gltf_detail {
+namespace ets::gltf_detail {
 
 struct ConvertedPrimitive {
     std::unique_ptr<Mesh> mesh;
@@ -24,4 +24,4 @@ struct ConvertedMesh {
 Result<std::vector<ConvertedMesh>, std::string>
 convert_meshes(const fastgltf::Asset& asset);
 
-} // namespace fei::gltf_detail
+} // namespace ets::gltf_detail

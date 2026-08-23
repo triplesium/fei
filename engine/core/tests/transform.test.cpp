@@ -8,7 +8,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -126,7 +126,7 @@ TEST_CASE(
                              rotate_y(rotation_radians.y) *
                              rotate_z(rotation_radians.z);
     auto expected_transform = translate(transform.position) *
-                              expected_rotation * fei::scale(transform.scale);
+                              expected_rotation * ets::scale(transform.scale);
 
     require_matrix_near(transform.rotation.to_matrix(), expected_rotation);
     require_matrix_near(transform.to_matrix(), expected_transform);

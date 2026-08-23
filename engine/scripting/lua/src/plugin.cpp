@@ -9,7 +9,7 @@
 #include "scripting_lua/runtime.hpp"
 #include "scripting_lua/script_system_registry.hpp"
 
-namespace fei {
+namespace ets {
 
 void LuaScriptingPlugin::setup(App& app) {
     app.add_resource(LuaRuntime {})
@@ -48,4 +48,4 @@ void LuaScriptingPlugin::setup(App& app) {
     }
 }
 
-} // namespace fei
+} // namespace ets

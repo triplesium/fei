@@ -1,4 +1,4 @@
-target("fei-agentd-core")
+target("entisium-agentd-core")
     set_kind("static")
     add_headerfiles(
         "src/artifact_store.hpp",
@@ -27,60 +27,60 @@ target("fei-agentd-core")
     )
     add_files("ui/index.html", "ui/app.css", "ui/app.js")
     add_includedirs("src", {public = true})
-    add_deps("fei-asset", "fei-base", "fei-project", "fei-runtime-protocol")
+    add_deps("entisium-asset", "entisium-base", "entisium-project", "entisium-runtime-protocol")
     add_packages("cpp-httplib", "nlohmann_json")
     if is_plat("windows") then
         add_syslinks("ws2_32")
     end
 
-target("fei-agentd")
+target("entisium-agentd")
     set_kind("binary")
     add_files("src/main.cpp")
-    add_deps("fei-agentd-core")
+    add_deps("entisium-agentd-core")
 
-target("fei-play-runner")
+target("entisium-play-runner")
     set_kind("static")
     add_headerfiles("src/play_runner.hpp")
     add_files("src/play_runner.cpp")
     add_includedirs("src", {public = true})
-    add_deps("fei-base")
+    add_deps("entisium-base")
     add_packages("luau", "nlohmann_json")
 
-target("fei-ctl")
+target("entisium-ctl")
     set_kind("binary")
     add_files("src/ctl.cpp")
-    add_deps("fei-play-runner")
+    add_deps("entisium-play-runner")
     add_packages("cpp-httplib", "nlohmann_json")
     if is_plat("windows") then
         add_syslinks("ws2_32")
     end
 
-target("fei-agentd-tests")
+target("entisium-agentd-tests")
     set_kind("binary")
     set_default(false)
-    add_rules("fei.test")
+    add_rules("entisium.test")
     add_files("tests/*.cpp")
-    add_deps("fei-agentd-core", "fei-play-runner")
+    add_deps("entisium-agentd-core", "entisium-play-runner")
     add_packages("nlohmann_json")
 
-target("fei-agentd-checkpoint-e2e-tests")
+target("entisium-agentd-checkpoint-e2e-tests")
     set_kind("binary")
     set_default(false)
-    add_rules("fei.test")
+    add_rules("entisium.test")
     add_files("tests/e2e/*.test.cpp")
     add_deps(
-        "fei-agentd-core",
-        "fei-ctl",
-        "fei-snapshot-runtime-fixture",
-        "fei-runtime-host"
+        "entisium-agentd-core",
+        "entisium-ctl",
+        "entisium-snapshot-runtime-fixture",
+        "entisium-runtime-host"
     )
     add_packages("cpp-httplib", "nlohmann_json")
     after_load(function(target)
-        local fixture = target:dep("fei-snapshot-runtime-fixture")
+        local fixture = target:dep("entisium-snapshot-runtime-fixture")
         local fixture_path = path.absolute(fixture:targetfile()):gsub("\\", "/")
-        local ctl = target:dep("fei-ctl")
+        local ctl = target:dep("entisium-ctl")
         local ctl_path = path.absolute(ctl:targetfile()):gsub("\\", "/")
-        local runtime_host = target:dep("fei-runtime-host")
+        local runtime_host = target:dep("entisium-runtime-host")
         local runtime_host_path =
             path.absolute(runtime_host:targetfile()):gsub("\\", "/")
         local project_path = path.join(
@@ -93,11 +93,11 @@ target("fei-agentd-checkpoint-e2e-tests")
         ):gsub("\\", "/")
         target:add(
             "defines",
-            "FEI_SNAPSHOT_RUNTIME_FIXTURE_PATH=\"" .. fixture_path .. "\"",
-            "FEI_CTL_PATH=\"" .. ctl_path .. "\"",
-            "FEI_CHECKPOINT_PROJECT_PATH=\"" .. project_path .. "\"",
-            "FEI_RUNTIME_HOST_PATH=\"" .. runtime_host_path .. "\"",
-            "FEI_CHECKPOINT_RENDER_PROJECT_PATH=\"" ..
+            "ETS_SNAPSHOT_RUNTIME_FIXTURE_PATH=\"" .. fixture_path .. "\"",
+            "ETS_CTL_PATH=\"" .. ctl_path .. "\"",
+            "ETS_CHECKPOINT_PROJECT_PATH=\"" .. project_path .. "\"",
+            "ETS_RUNTIME_HOST_PATH=\"" .. runtime_host_path .. "\"",
+            "ETS_CHECKPOINT_RENDER_PROJECT_PATH=\"" ..
                 checkpoint_render_project_path .. "\""
         )
     end)

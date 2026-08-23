@@ -14,7 +14,7 @@
 #include <utility>
 #include <variant>
 
-namespace fei {
+namespace ets {
 
 template<typename T>
 class TaskResult {
@@ -197,4 +197,4 @@ class TaskPool {
     void enqueue_completion(TaskCompletion completion);
 };
 
-} // namespace fei
+} // namespace ets

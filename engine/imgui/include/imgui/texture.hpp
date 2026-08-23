@@ -10,7 +10,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class Image;
 
@@ -74,4 +74,4 @@ class ImGuiRenderTextures {
     uint64 m_next_id {1};
 };
 
-} // namespace fei
+} // namespace ets

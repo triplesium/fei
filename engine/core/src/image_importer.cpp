@@ -8,7 +8,7 @@
 #include <string>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -104,4 +104,4 @@ Result<AssetImportArtifacts, std::string> ImageImporter::import(
     };
 }
 
-} // namespace fei
+} // namespace ets

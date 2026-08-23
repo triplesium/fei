@@ -4,9 +4,9 @@
 #include "refl/reflect.hpp"
 #include "ui_widgets/popover.hpp"
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct Tooltip {
     Entity content;
     float delay {0.5f};
@@ -17,7 +17,7 @@ struct Tooltip {
     };
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct TooltipState {
     float hovered_time {0.0f};
     bool visible {false};
@@ -25,4 +25,4 @@ struct TooltipState {
     bool operator==(const TooltipState&) const = default;
 };
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

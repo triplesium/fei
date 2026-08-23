@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 DynamicWorld::DynamicWorld(std::string name) : m_name(std::move(name)) {}
 
@@ -39,4 +39,4 @@ Commands* DynamicWorld::commands() {
     return &*m_commands;
 }
 
-} // namespace fei
+} // namespace ets

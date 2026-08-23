@@ -18,7 +18,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 template<typename Source, typename Target>
 class RenderAssetAdapter {
@@ -238,14 +238,14 @@ struct RenderAssetPlugin : public Plugin {
             .template add_resource<RenderAssets<Target>>()
             .add_systems(
                 RenderExtract,
-                FEI_SYSTEM_NAME(
+                ETS_SYSTEM_NAME(
                     "extract_render_assets",
                     (extract_render_assets<Source>)
                 )
             )
             .add_systems(
                 RenderUpdate,
-                FEI_SYSTEM_NAME(
+                ETS_SYSTEM_NAME(
                     "prepare_render_assets",
                     (prepare_assets<Source, Target, Adapter>)
                 ) | in_set<RenderingSystems::PrepareAssets>()
@@ -253,4 +253,4 @@ struct RenderAssetPlugin : public Plugin {
     }
 };
 
-} // namespace fei
+} // namespace ets

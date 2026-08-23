@@ -83,7 +83,7 @@ jobs:
         run: xmake f -m debug -y
 
       - name: Build reflection generator
-        run: xmake build -y -vD fei-reflgen
+        run: xmake build -y -vD entisium-reflgen
 
       - name: Run all tests
         run: xmake test -y

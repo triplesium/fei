@@ -11,7 +11,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class RenderQueue {
   private:
@@ -58,4 +58,4 @@ void flush_render_queue(
     ResRW<RenderFrameContext> frame
 );
 
-} // namespace fei
+} // namespace ets

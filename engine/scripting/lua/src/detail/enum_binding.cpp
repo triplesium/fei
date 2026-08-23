@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <lua.hpp>
 
-namespace fei::detail {
+namespace ets::detail {
 namespace {
 
 lua_Integer to_lua_integer(std::uint64_t value) {
@@ -72,4 +72,4 @@ void register_lua_enum(lua_State* L, const Enum& enm) {
     lua_setglobal(L, type->stripped_name().c_str());
 }
 
-} // namespace fei::detail
+} // namespace ets::detail

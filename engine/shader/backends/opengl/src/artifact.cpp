@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 namespace {
 
 struct ReflectedResource {
@@ -462,7 +462,7 @@ std::vector<ReflectedResource> reflect_resources(
     for (size_t i = 0; i < resource_count; ++i) {
         const auto& resource = resource_list[i];
         if (skipped_resource_ids.contains(resource.id) ||
-            c_string(resource.name) == "fei_dummy_sampler") {
+            c_string(resource.name) == "ets_dummy_sampler") {
             continue;
         }
         reflected.push_back(reflect_resource(
@@ -673,7 +673,7 @@ prepare_opengl_resource_names(const SpirvCrossCompiler& cross) {
         spvc_compiler_set_name(
             cross.compiler(),
             dummy_sampler,
-            "fei_dummy_sampler"
+            "ets_dummy_sampler"
         );
         names.skipped_resource_ids.insert(dummy_sampler);
     }
@@ -787,7 +787,7 @@ generate_opengl_shader_artifacts(const ShaderArtifactGenerationInput& input) {
 }
 
 std::string opengl_shader_artifact_cache_identity() {
-    constexpr std::string_view artifact_version = "fei-shader-artifact-v4";
+    constexpr std::string_view artifact_version = "entisium-shader-artifact-v4";
     auto* spirv_cross_version = spvc_get_commit_revision_and_timestamp();
     if (spirv_cross_version == nullptr) {
         return std::string(artifact_version);
@@ -795,4 +795,4 @@ std::string opengl_shader_artifact_cache_identity() {
     return std::string(artifact_version) + '|' + spirv_cross_version;
 }
 
-} // namespace fei
+} // namespace ets

@@ -1,4 +1,4 @@
-target("fei-runtime-host-core")
+target("entisium-runtime-host-core")
     set_kind("static")
     add_headerfiles("include/**.hpp")
     add_files(
@@ -16,47 +16,48 @@ target("fei-runtime-host-core")
     add_files("../../engine/imgui/fonts/Cousine-Regular.ttf", {zeroend = true})
     add_includedirs("include", {public = true})
     add_deps(
-        "fei-base",
-        "fei-app",
-        "fei-core",
-        "fei-project",
-        "fei-project-runtime",
-        "fei-project-scripting-lua",
-        "fei-project-scripting-luau",
-        "fei-window",
-        "fei-input",
-        "fei-rendering",
-        "fei-sprite",
-        "fei-input-focus",
-        "fei-text",
-        "fei-ui",
-        "fei-ui-widgets",
-        "fei-ui-rendering",
-        "fei-graphics-opengl",
-        "fei-graphics-opengl-glfw",
-        "fei-runtime-protocol",
-        "fei-runtime-inspection-ecs",
-        "fei-runtime-inspection-snapshot",
-        "fei-snapshot-runtime",
-        "fei-snapshot-runtime-asset",
-        "fei-snapshot-runtime-luau",
-        "fei-snapshot-runtime-physics2d",
-        "fei-snapshot-runtime-rendering",
-        "fei-snapshot-runtime-ui"
+        "entisium-base",
+        "entisium-app",
+        "entisium-core",
+        "entisium-project",
+        "entisium-project-runtime",
+        "entisium-project-scripting-lua",
+        "entisium-project-scripting-luau",
+        "entisium-window",
+        "entisium-window-glfw",
+        "entisium-input",
+        "entisium-rendering",
+        "entisium-sprite",
+        "entisium-input-focus",
+        "entisium-text",
+        "entisium-ui",
+        "entisium-ui-widgets",
+        "entisium-ui-rendering",
+        "entisium-graphics-opengl",
+        "entisium-graphics-opengl-glfw",
+        "entisium-runtime-protocol",
+        "entisium-runtime-inspection-ecs",
+        "entisium-runtime-inspection-snapshot",
+        "entisium-snapshot-runtime",
+        "entisium-snapshot-runtime-asset",
+        "entisium-snapshot-runtime-luau",
+        "entisium-snapshot-runtime-physics2d",
+        "entisium-snapshot-runtime-rendering",
+        "entisium-snapshot-runtime-ui"
     )
     add_packages("glfw", "nlohmann_json", "stb")
 
-target("fei-runtime-host")
+target("entisium-runtime-host")
     set_kind("binary")
     set_rundir("$(projectdir)")
-    add_rules("fei.reflect")
+    add_rules("entisium.reflect")
     add_files("src/main.cpp")
-    add_deps("fei-runtime-host-core", "fei-project")
+    add_deps("entisium-runtime-host-core", "entisium-project")
     add_packages("glfw", "glad")
 
-target("fei-runtime-host-tests")
+target("entisium-runtime-host-tests")
     set_kind("binary")
     set_default(false)
-    add_rules("fei.test")
+    add_rules("entisium.test")
     add_files("tests/*.cpp")
-    add_deps("fei-runtime-host-core")
+    add_deps("entisium-runtime-host-core")

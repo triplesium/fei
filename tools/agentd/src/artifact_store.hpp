@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei::agentd {
+namespace ets::agentd {
 
 struct ArtifactMetadata {
     std::string id;
@@ -48,4 +48,4 @@ class ArtifactStore {
     std::unordered_map<std::string, StoredArtifact> m_artifacts;
 };
 
-} // namespace fei::agentd
+} // namespace ets::agentd

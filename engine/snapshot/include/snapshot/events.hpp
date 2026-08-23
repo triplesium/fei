@@ -9,7 +9,7 @@
 #include <string_view>
 #include <utility>
 
-namespace fei::snapshot {
+namespace ets::snapshot {
 namespace detail {
 
 template<typename T>
@@ -232,4 +232,4 @@ bool register_event_resource(SnapshotRegistry& registry) {
     );
 }
 
-} // namespace fei::snapshot
+} // namespace ets::snapshot

@@ -5,15 +5,15 @@ describe("projectDirectoryFromArguments", () => {
     it("prefers command line project paths over the environment", () => {
         expect(
             projectDirectoryFromArguments(["--project", "D:\\Projects\\game"], {
-                FEI_EDITOR_PROJECT_DIR: "D:\\Projects\\fallback",
+                ETS_EDITOR_PROJECT_DIR: "D:\\Projects\\fallback",
             }),
         ).toBe("D:\\Projects\\game");
         expect(projectDirectoryFromArguments(["--project=/tmp/game"], {})).toBe("/tmp/game");
     });
 
-    it("falls back to FEI_EDITOR_PROJECT_DIR", () => {
+    it("falls back to ETS_EDITOR_PROJECT_DIR", () => {
         expect(
-            projectDirectoryFromArguments([], { FEI_EDITOR_PROJECT_DIR: "/tmp/fallback" }),
+            projectDirectoryFromArguments([], { ETS_EDITOR_PROJECT_DIR: "/tmp/fallback" }),
         ).toBe("/tmp/fallback");
     });
 });

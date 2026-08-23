@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 using SubAppSourceId = std::uint64_t;
 
@@ -170,4 +170,4 @@ class SubApp {
     bool m_shutdown {false};
 };
 
-} // namespace fei
+} // namespace ets

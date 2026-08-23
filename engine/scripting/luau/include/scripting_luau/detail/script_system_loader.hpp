@@ -8,7 +8,7 @@
 
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -22,4 +22,4 @@ Result<std::vector<SystemHandle>, ScriptError> install_luau_script_systems(
 );
 
 } // namespace detail
-} // namespace fei
+} // namespace ets

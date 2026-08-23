@@ -5,7 +5,7 @@
 
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 class Framebuffer;
 class GraphicsDevice;
@@ -40,4 +40,4 @@ void update_sprite_output(
     SpriteOutput& output
 );
 
-} // namespace fei
+} // namespace ets

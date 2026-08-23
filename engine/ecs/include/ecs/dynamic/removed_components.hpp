@@ -9,7 +9,7 @@
 #include <cstddef>
 #include <string>
 
-namespace fei {
+namespace ets {
 
 class DynamicRemovedComponents final : public DynamicSystemParam {
   private:
@@ -38,4 +38,4 @@ class DynamicRemovedComponents final : public DynamicSystemParam {
     std::uint64_t runtime_state_type() const override;
 };
 
-} // namespace fei
+} // namespace ets

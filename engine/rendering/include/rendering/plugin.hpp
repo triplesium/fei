@@ -3,7 +3,7 @@
 #include "app/plugin.hpp"
 #include "ecs/system_set.hpp"
 
-namespace fei {
+namespace ets {
 
 struct RenderingSystems {
     struct PrepareAssets : SystemSet<PrepareAssets> {};
@@ -23,18 +23,18 @@ struct RenderingSystems {
     struct Present : SystemSet<Present> {};
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class RenderingCorePlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class RenderingPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& /*app*/) override {}
 };
 
-} // namespace fei
+} // namespace ets

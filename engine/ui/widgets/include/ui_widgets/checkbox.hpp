@@ -3,12 +3,12 @@
 #include "ecs/fwd.hpp"
 #include "refl/reflect.hpp"
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct Checkbox {};
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct SetChecked {
     Entity entity;
     bool checked;
@@ -16,11 +16,11 @@ struct SetChecked {
     bool operator==(const SetChecked&) const = default;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct ToggleChecked {
     Entity entity;
 
     bool operator==(const ToggleChecked&) const = default;
 };
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

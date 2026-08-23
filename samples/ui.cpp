@@ -37,7 +37,7 @@
 #include <string_view>
 #include <tuple>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -74,7 +74,7 @@ void setup(
 ) {
     asset_server->emplace_source<FilesystemAssetSource>(
         "sample-ui-fonts",
-        FEI_ASSETS_PATH "/../engine/imgui/fonts"
+        ETS_ASSETS_PATH "/../engine/imgui/fonts"
     );
     const auto font =
         asset_server->load<text::Font>("sample-ui-fonts://Cousine-Regular.ttf");
@@ -800,7 +800,7 @@ int main(int argc, char** argv) {
         GlfwWindowConfig {
             .width = 960,
             .height = 540,
-            .title = "Fei UI Sample",
+            .title = "Entisium UI Sample",
         }
     );
     app.add_plugin<OpenGLGlfwPlugin>()

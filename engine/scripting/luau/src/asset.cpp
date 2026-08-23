@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 namespace {
 
 Result<AssetPath, AssetLoadError>
@@ -83,4 +83,4 @@ LuauScriptAssetLoader::load(Reader& reader, const LoadContext& context) {
     );
 }
 
-} // namespace fei
+} // namespace ets

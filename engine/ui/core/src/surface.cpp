@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace fei::ui {
+namespace ets::ui {
 
 namespace {
 
@@ -591,4 +591,4 @@ void Surface::translate_subtree(Entity entity, Vector2 offset) {
     }
 }
 
-} // namespace fei::ui
+} // namespace ets::ui

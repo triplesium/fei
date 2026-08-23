@@ -19,7 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -312,4 +312,4 @@ Result<RestoreResult, SnapshotError> restore(
 );
 
 } // namespace snapshot
-} // namespace fei
+} // namespace ets

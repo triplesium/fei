@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -41,9 +41,10 @@ class TemporaryMixedScriptProject {
         static std::atomic<std::uint64_t> sequence {0};
         const auto timestamp =
             std::chrono::steady_clock::now().time_since_epoch().count();
-        m_root = std::filesystem::temp_directory_path() /
-                 ("fei-project-mixed-scripts-" + std::to_string(timestamp) +
-                  "-" + std::to_string(sequence.fetch_add(1)));
+        m_root =
+            std::filesystem::temp_directory_path() /
+            ("entisium-project-mixed-scripts-" + std::to_string(timestamp) +
+             "-" + std::to_string(sequence.fetch_add(1)));
         std::filesystem::create_directories(m_root / "assets" / "scripts");
 
         const bool has_lua =

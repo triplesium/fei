@@ -54,7 +54,7 @@ export function RuntimeViewport({
                                 key={session.channelId}
                                 ref={onFrame}
                                 className="block size-full border-0 bg-[#111722]"
-                                title="fei project runtime"
+                                title="entisium project runtime"
                                 allow="fullscreen"
                                 src={session.source}
                             />

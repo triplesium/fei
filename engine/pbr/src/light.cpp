@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -730,4 +730,4 @@ void render_shadow_blur_passes(
     }
 }
 
-} // namespace fei
+} // namespace ets

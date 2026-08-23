@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -355,9 +355,9 @@ void VulkanDeviceState::create_instance() {
     VkApplicationInfo application_info {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
         .pNext = nullptr,
-        .pApplicationName = "fei",
+        .pApplicationName = "Entisium",
         .applicationVersion = VK_MAKE_VERSION(0, 1, 0),
-        .pEngineName = "fei",
+        .pEngineName = "Entisium",
         .engineVersion = VK_MAKE_VERSION(0, 1, 0),
         .apiVersion = VK_API_VERSION_1_1,
     };
@@ -601,4 +601,4 @@ void VulkanDeviceState::create_descriptor_pool() {
     );
 }
 
-} // namespace fei
+} // namespace ets

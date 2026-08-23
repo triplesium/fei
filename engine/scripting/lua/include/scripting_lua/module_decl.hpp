@@ -3,7 +3,7 @@
 #include "scripting/error.hpp"
 #include "scripting/module_decl.hpp"
 
-namespace fei {
+namespace ets {
 
 using LuaScriptError = ScriptError;
 using LuaScriptTypeRef = ScriptTypeRef;
@@ -13,4 +13,4 @@ using LuaScriptResourceFieldDecl = ScriptResourceFieldDecl;
 using LuaScriptResourceDecl = ScriptResourceDecl;
 using LuaScriptModuleDecl = ScriptModuleDecl;
 
-} // namespace fei
+} // namespace ets

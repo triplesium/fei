@@ -7,7 +7,7 @@
 #include <system_error>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -220,4 +220,4 @@ EmbeddedAssetSource::try_get_reader(const std::filesystem::path& path) const {
     return EmbeddedAssets::get(name).reader();
 }
 
-} // namespace fei
+} // namespace ets

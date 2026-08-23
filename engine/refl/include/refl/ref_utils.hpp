@@ -5,7 +5,7 @@
 #include <concepts>
 #include <type_traits>
 
-namespace fei {
+namespace ets {
 
 inline Ref make_ref(Ref ref) {
     return ref;
@@ -38,4 +38,4 @@ Ref make_ref(const T* ptr) {
     return Ref(ptr, Registry::instance().register_type<T>().id());
 }
 
-} // namespace fei
+} // namespace ets

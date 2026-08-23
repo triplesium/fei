@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei::text {
+namespace ets::text {
 
 class TextPipeline {
   private:
@@ -73,4 +73,4 @@ class TextPipeline {
     );
 };
 
-} // namespace fei::text
+} // namespace ets::text

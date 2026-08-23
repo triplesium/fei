@@ -8,8 +8,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <vector>
 
-using namespace fei;
-using namespace fei::refl_test;
+using namespace ets;
+using namespace ets::refl_test;
 
 namespace {
 
@@ -160,7 +160,7 @@ TEST_CASE("Generated reflection tags preserve values", "[refl][type][tag]") {
     auto& reflected_type = registry.get_type(type_id<ReflectedTaggedType>());
     REQUIRE(reflected_type.has_structured_name());
     REQUIRE(reflected_type.namespace_path().size() == 2);
-    CHECK(reflected_type.namespace_path()[0] == "fei");
+    CHECK(reflected_type.namespace_path()[0] == "ets");
     CHECK(reflected_type.namespace_path()[1] == "refl_test");
     CHECK(reflected_type.local_name() == "ReflectedTaggedType");
     constexpr TypeTagId plugin_tag {"Example"};
@@ -189,7 +189,7 @@ TEST_CASE("Generated reflection tags preserve values", "[refl][type][tag]") {
     auto& reflected_enum = registry.get_type(type_id<ReflectedTaggedEnum>());
     REQUIRE(reflected_enum.has_structured_name());
     REQUIRE(reflected_enum.namespace_path().size() == 2);
-    CHECK(reflected_enum.namespace_path()[0] == "fei");
+    CHECK(reflected_enum.namespace_path()[0] == "ets");
     CHECK(reflected_enum.namespace_path()[1] == "refl_test");
     CHECK(reflected_enum.local_name() == "ReflectedTaggedEnum");
     constexpr TypeTagId category_tag {"Category"};

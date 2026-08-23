@@ -7,7 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string_view>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -24,7 +24,7 @@ void register_document_test_component() {
 }
 
 constexpr std::string_view scene_source = R"(
-format: fei.scene
+format: entisium.scene
 version: 1
 entities:
   - id: "1a02e8da-05b6-41c4-b526-c9ad8bba17e4"
@@ -102,7 +102,7 @@ TEST_CASE(
 
 TEST_CASE("Scene documents validate entity references", "[scene][document]") {
     const auto invalid = parse_scene_document(R"(
-format: fei.scene
+format: entisium.scene
 version: 1
 entities:
   - id: "1a02e8da-05b6-41c4-b526-c9ad8bba17e4"
@@ -115,7 +115,7 @@ entities:
 
 TEST_CASE("Scene documents reject hierarchy cycles", "[scene][document]") {
     const auto invalid = parse_scene_document(R"(
-format: fei.scene
+format: entisium.scene
 version: 1
 entities:
   - id: "1a02e8da-05b6-41c4-b526-c9ad8bba17e4"

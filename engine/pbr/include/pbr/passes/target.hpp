@@ -4,7 +4,7 @@
 #include "graphics/texture.hpp"
 #include "window/window.hpp"
 
-namespace fei {
+namespace ets {
 
 struct RenderTarget {
     uint32 width {0};
@@ -74,4 +74,4 @@ void prepare_deferred_view_targets(
     ResRW<DeferredViewTargets> targets
 );
 
-} // namespace fei
+} // namespace ets

@@ -5,7 +5,7 @@
 
 #include <string>
 
-namespace fei::runtime_host {
+namespace ets::runtime_host {
 
 void request_quick_save_hotkeys(
     ResRO<KeyInput> input,
@@ -68,4 +68,4 @@ QuickSaveOutcome process_quick_save_requests(World& world) {
     };
 }
 
-} // namespace fei::runtime_host
+} // namespace ets::runtime_host

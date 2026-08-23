@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <exception>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -157,4 +157,4 @@ void SubApp::update() {
     }
 }
 
-} // namespace fei
+} // namespace ets

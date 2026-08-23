@@ -15,7 +15,7 @@
 #include <string_view>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 class CommandBuffer {
   protected:
@@ -260,4 +260,4 @@ class ScopedGpuProfileZone {
     ScopedGpuProfileZone& operator=(ScopedGpuProfileZone&&) = delete;
 };
 
-} // namespace fei
+} // namespace ets

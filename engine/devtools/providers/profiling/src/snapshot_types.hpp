@@ -7,9 +7,9 @@
 #include <string>
 #include <vector>
 
-namespace fei::devtools::profiling {
+namespace ets::devtools::profiling {
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct FrameStatsSnapshot {
     bool available {false};
     std::uint64_t frame_count {0};
@@ -18,7 +18,7 @@ struct FrameStatsSnapshot {
     double average_frame_ms {0.0};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct SummaryEntrySnapshot {
     std::uint64_t schedule_id {0};
     std::string schedule_name;
@@ -35,7 +35,7 @@ struct SummaryEntrySnapshot {
     double max_ms {0.0};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct SummarySnapshot {
     bool available {false};
     FrameStatsSnapshot frame_stats;
@@ -43,19 +43,19 @@ struct SummarySnapshot {
     std::vector<SummaryEntrySnapshot> zones;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct FrameHistorySampleSnapshot {
     std::uint64_t frame {0};
     double duration_ms {0.0};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct FrameHistorySnapshot {
     bool available {false};
     std::vector<FrameHistorySampleSnapshot> frames;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct GpuSummaryEntrySnapshot {
     std::string name;
     std::uint64_t count {0};
@@ -66,7 +66,7 @@ struct GpuSummaryEntrySnapshot {
     double max_ms {0.0};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct GpuSummarySnapshot {
     bool available {false};
     std::vector<GpuSummaryEntrySnapshot> entries;
@@ -74,10 +74,10 @@ struct GpuSummarySnapshot {
 
 FrameStatsSnapshot make_frame_stats_snapshot(const FrameProfileStats& stats);
 SummarySnapshot
-make_summary_snapshot(const fei::ProfileSummarySnapshot& source);
+make_summary_snapshot(const ets::ProfileSummarySnapshot& source);
 FrameHistorySnapshot
-make_frame_history_snapshot(const fei::ProfileSummarySnapshot& source);
+make_frame_history_snapshot(const ets::ProfileSummarySnapshot& source);
 GpuSummarySnapshot
-make_gpu_summary_snapshot(const fei::GpuProfileSummarySnapshot& source);
+make_gpu_summary_snapshot(const ets::GpuProfileSummarySnapshot& source);
 
-} // namespace fei::devtools::profiling
+} // namespace ets::devtools::profiling

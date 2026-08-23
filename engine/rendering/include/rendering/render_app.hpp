@@ -1,9 +1,8 @@
 #pragma once
 
-#include "base/move_only_function.hpp"
-
 #include "app/app.hpp"
 #include "app/sub_app_runner.hpp"
+#include "base/move_only_function.hpp"
 #include "ecs/change_detection.hpp"
 #include "ecs/query.hpp"
 #include "rendering/extract.hpp"
@@ -16,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 // Label for the rendering SubApp owned by App.
 struct RenderApp {};
@@ -30,9 +29,9 @@ using RenderRunnerFactory =
     MoveOnlyFunction<std::unique_ptr<RenderRunner>(SubApp)>;
 
 inline constexpr ScheduleId RenderExtract =
-    stable_type_hash("fei::RenderExtract");
+    stable_type_hash("ets::RenderExtract");
 inline constexpr ScheduleId RenderStartup =
-    stable_type_hash("fei::RenderStartup");
+    stable_type_hash("ets::RenderStartup");
 
 struct MainEntity {
     Entity entity;
@@ -212,4 +211,4 @@ App& add_render_to_main_component(App& app) {
     return app;
 }
 
-} // namespace fei
+} // namespace ets

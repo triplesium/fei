@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
-using namespace fei;
-using namespace fei::devtools::reflection;
+using namespace ets;
+using namespace ets::devtools::reflection;
 
 namespace reflection_metadata_test {
 

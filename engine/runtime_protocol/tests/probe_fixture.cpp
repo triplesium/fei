@@ -12,33 +12,33 @@
 
 namespace {
 
-fei::Result<std::string, fei::runtime_protocol::RuntimeInspectionError>
+ets::Result<std::string, ets::runtime_protocol::RuntimeInspectionError>
 inspect_runtime(
-    fei::World& world,
-    const fei::runtime_protocol::InspectionRequest& request
+    ets::World& world,
+    const ets::runtime_protocol::InspectionRequest& request
 ) {
-    if (!world.has_resource<fei::runtime_inspection::InspectionRegistry>()) {
-        return fei::failure(
-            fei::runtime_protocol::RuntimeInspectionError {
+    if (!world.has_resource<ets::runtime_inspection::InspectionRegistry>()) {
+        return ets::failure(
+            ets::runtime_protocol::RuntimeInspectionError {
                 .kind = "internal",
                 .message = "Runtime inspection registry is not installed",
             }
         );
     }
     auto response =
-        world.resource<fei::runtime_inspection::InspectionRegistry>().dispatch(
+        world.resource<ets::runtime_inspection::InspectionRegistry>().dispatch(
             world,
-            fei::runtime_inspection::InspectionInvocation {
+            ets::runtime_inspection::InspectionInvocation {
                 .provider = request.provider,
                 .schema = request.schema,
                 .payload_json = request.payload_json,
             }
         );
     if (!response) {
-        return fei::failure(
-            fei::runtime_protocol::RuntimeInspectionError {
+        return ets::failure(
+            ets::runtime_protocol::RuntimeInspectionError {
                 .kind = std::string(
-                    fei::runtime_inspection::inspection_error_kind_name(
+                    ets::runtime_inspection::inspection_error_kind_name(
                         response.error().kind
                     )
                 ),
@@ -52,30 +52,30 @@ inspect_runtime(
 } // namespace
 
 int main() {
-    fei::App app;
+    ets::App app;
     app.world().entity();
-    fei::runtime_inspection::InspectionRegistry inspection_registry;
+    ets::runtime_inspection::InspectionRegistry inspection_registry;
     auto registration =
-        fei::runtime_inspection::ecs::register_entity_inspection_provider(
+        ets::runtime_inspection::ecs::register_entity_inspection_provider(
             inspection_registry
         );
     if (!registration) {
         return 1;
     }
     registration =
-        fei::runtime_inspection::ecs::register_query_inspection_provider(
+        ets::runtime_inspection::ecs::register_query_inspection_provider(
             inspection_registry
         );
     if (!registration) {
         return 1;
     }
-    registration = fei::runtime_inspection::ecs::
+    registration = ets::runtime_inspection::ecs::
         register_world_summary_inspection_provider(inspection_registry);
     if (!registration) {
         return 1;
     }
     inspection_registry.freeze();
-    fei::runtime_protocol::RuntimeProbeConfig runtime_probe_config {
+    ets::runtime_protocol::RuntimeProbeConfig runtime_probe_config {
         .project = "runtime-probe-fixture",
         .project_file = "memory://runtime-probe-fixture",
         .build_id = "test-build",
@@ -87,14 +87,14 @@ int main() {
     );
     for (const auto& descriptor : inspection_registry.descriptors()) {
         runtime_probe_config.inspections.push_back(
-            fei::runtime_protocol::InspectionCapability {
+            ets::runtime_protocol::InspectionCapability {
                 .id = descriptor.id,
                 .label = descriptor.label,
                 .description = descriptor.description,
                 .schema = descriptor.schema,
                 .read_only = descriptor.read_only,
                 .cost = std::string(
-                    fei::runtime_inspection::inspection_cost_name(
+                    ets::runtime_inspection::inspection_cost_name(
                         descriptor.cost
                     )
                 ),
@@ -104,9 +104,9 @@ int main() {
         );
     }
     app.add_resource(std::move(inspection_registry));
-    app.add_plugin<fei::ReflectionPlugin>();
+    app.add_plugin<ets::ReflectionPlugin>();
     app.add_plugin(
-        fei::runtime_protocol::RuntimeProbePlugin {
+        ets::runtime_protocol::RuntimeProbePlugin {
             std::move(runtime_probe_config),
         }
     );

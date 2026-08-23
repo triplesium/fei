@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct GraphicsResourceSetSourceStats {
     std::string name;
@@ -149,4 +149,4 @@ struct ResourceTraits<GraphicsDevice> {
     static constexpr bool main_thread_only = false;
 };
 
-} // namespace fei
+} // namespace ets

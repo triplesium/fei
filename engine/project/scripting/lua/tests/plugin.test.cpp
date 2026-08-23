@@ -15,7 +15,7 @@
 #include <string_view>
 #include <utility>
 
-using namespace fei;
+using namespace ets;
 
 namespace {
 
@@ -29,8 +29,8 @@ class TemporaryScriptProject {
         const auto timestamp =
             std::chrono::steady_clock::now().time_since_epoch().count();
         m_root = std::filesystem::temp_directory_path() /
-                 ("fei-project-lua-scripts-" + std::to_string(timestamp) + "-" +
-                  std::to_string(sequence.fetch_add(1)));
+                 ("entisium-project-lua-scripts-" + std::to_string(timestamp) +
+                  "-" + std::to_string(sequence.fetch_add(1)));
         std::filesystem::create_directories(m_root / "assets" / "scripts");
 
         std::ofstream project_stream(project_file());

@@ -7,8 +7,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <vector>
 
-using namespace fei;
-using namespace fei::rendering_test;
+using namespace ets;
+using namespace ets::rendering_test;
 
 TEST_CASE(
     "view uniforms share one aligned dynamic buffer",

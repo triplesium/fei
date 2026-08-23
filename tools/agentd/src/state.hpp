@@ -14,7 +14,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace fei::agentd {
+namespace ets::agentd {
 
 class SupervisorState {
   public:
@@ -92,4 +92,4 @@ class SupervisorState {
     std::unordered_map<std::string, PendingInspection> m_pending_inspections;
 };
 
-} // namespace fei::agentd
+} // namespace ets::agentd

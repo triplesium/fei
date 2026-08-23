@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <string>
 
-namespace fei {
+namespace ets {
 namespace {
 
 Result<Cls&, InvokeFailure> script_class(Ref instance) {
@@ -33,7 +33,7 @@ bool is_script_visible(const Type& type) {
 
 ScriptTypeName script_type_name(const Type& type) {
     auto namespace_path = type.namespace_path();
-    if (!namespace_path.empty() && namespace_path.front() == "fei") {
+    if (!namespace_path.empty() && namespace_path.front() == "ets") {
         namespace_path = namespace_path.subspan(1);
     }
     return {
@@ -222,4 +222,4 @@ InvokeResult script_invoke_static_method(
     return best->invoke_variadic(arguments);
 }
 
-} // namespace fei
+} // namespace ets

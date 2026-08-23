@@ -6,7 +6,7 @@
 #include <functional>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -226,4 +226,4 @@ void transparent_pass(
     commands->end_render_pass();
 }
 
-} // namespace fei
+} // namespace ets

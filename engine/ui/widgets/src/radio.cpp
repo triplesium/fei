@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
 namespace {
 
@@ -252,4 +252,4 @@ void radio_self_update(
     }
 }
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

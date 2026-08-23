@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct OutputAttachmentDescription {
     PixelFormat format;
@@ -92,4 +92,4 @@ class Framebuffer {
     Optional<FramebufferAttachment> m_depth_attachment;
     OutputDescription m_output_description;
 };
-} // namespace fei
+} // namespace ets

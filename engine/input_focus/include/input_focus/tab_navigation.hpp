@@ -8,16 +8,16 @@
 
 #include <cstdint>
 
-namespace fei::input_focus {
+namespace ets::input_focus {
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct TabIndex {
     std::int32_t index {0};
 
     bool operator==(const TabIndex&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct TabGroup {
     std::int32_t order {0};
     bool modal {false};
@@ -29,7 +29,7 @@ struct TabGroup {
     [[nodiscard]] static TabGroup modal_group() { return {.modal = true}; }
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class NavAction {
     Next,
     Previous,
@@ -47,4 +47,4 @@ void navigate_focus(
     ResRW<InputFocusVisible> focus_visible
 );
 
-} // namespace fei::input_focus
+} // namespace ets::input_focus

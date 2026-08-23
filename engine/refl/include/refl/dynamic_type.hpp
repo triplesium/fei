@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct DynamicTypeError {
     enum class Kind {
@@ -49,4 +49,4 @@ struct DynamicStructLayout {
     std::vector<DynamicField> fields;
 };
 
-} // namespace fei
+} // namespace ets

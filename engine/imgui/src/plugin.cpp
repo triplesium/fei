@@ -29,7 +29,7 @@
 
 EMBED(Cousine_Regular_ttf, "Cousine-Regular.ttf");
 
-namespace fei {
+namespace ets {
 
 template<>
 struct ExtractResource<ExtractedImGuiFrame> {
@@ -91,7 +91,7 @@ void setup_imgui_platform(
         fatal("ImGuiPlugin failed to initialize the GLFW platform backend");
     }
     lifecycle->platform_initialized = true;
-    io.BackendRendererName = "fei-imgui";
+    io.BackendRendererName = "entisium-imgui";
     io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
     io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
 }
@@ -211,18 +211,18 @@ void ImGuiPlugin::setup(App& app) {
         })
         .add_systems(
             RenderStartup,
-            FEI_NAMED_SYSTEM(setup_imgui_renderer) | main_thread()
+            ETS_NAMED_SYSTEM(setup_imgui_renderer) | main_thread()
         )
         .add_systems(
             RenderUpdate,
-            FEI_NAMED_SYSTEM(prepare_imgui_pipeline) |
+            ETS_NAMED_SYSTEM(prepare_imgui_pipeline) |
                 in_set<RenderingSystems::PrepareResources>(),
-            FEI_NAMED_SYSTEM(sync_imgui_images) |
+            ETS_NAMED_SYSTEM(sync_imgui_images) |
                 in_set<RenderingSystems::PrepareResources>()
         )
         .add_systems(
             RenderUpdate,
-            FEI_NAMED_SYSTEM(render_imgui_overlay) |
+            ETS_NAMED_SYSTEM(render_imgui_overlay) |
                 in_set<RenderingSystems::Overlay>() | main_thread()
         );
 }
@@ -239,4 +239,4 @@ void ImGuiPlugin::cleanup(App& app) noexcept {
     ImGui::DestroyContext();
 }
 
-} // namespace fei
+} // namespace ets

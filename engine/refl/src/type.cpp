@@ -1,6 +1,6 @@
 #include "refl/type.hpp"
 
-namespace fei {
+namespace ets {
 
 bool Type::is_number() const {
     return is_integral() || is_floating_point();
@@ -30,4 +30,4 @@ std::string Type::stripped_name() const {
     return (pos == std::string::npos) ? m_name : m_name.substr(pos + 1);
 }
 
-} // namespace fei
+} // namespace ets

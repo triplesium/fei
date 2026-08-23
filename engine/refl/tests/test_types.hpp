@@ -6,14 +6,14 @@
 #include <sstream>
 #include <string>
 
-namespace fei::refl_test {
+namespace ets::refl_test {
 
-FEI_REFLECT(Example(name = rendering, phase = runtime))
+ETS_REFLECT(Example(name = rendering, phase = runtime))
 struct ReflectedTaggedType {
     int value;
 };
 
-FEI_REFLECT(Category(name = example))
+ETS_REFLECT(Category(name = example))
 enum class ReflectedTaggedEnum {
     Value,
 };
@@ -40,4 +40,4 @@ class StdoutCapture {
     std::string str() const { return m_stream.str(); }
 };
 
-} // namespace fei::refl_test
+} // namespace ets::refl_test

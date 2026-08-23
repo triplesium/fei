@@ -3,7 +3,7 @@
 #include "base/log.hpp"
 #include "graphics/enums.hpp"
 
-namespace fei {
+namespace ets {
 
 std::string opengl_error_string(GLenum const err) noexcept {
     switch (err) {
@@ -32,7 +32,7 @@ void opengl_check_error(const char* call, std::source_location loc) {
     GLenum error = glGetError();
     if (error) {
         auto error_str = opengl_error_string(error);
-        fei::fatal(
+        ets::fatal(
             FormatString("OpenGL call `{}` failed with 0x{:04X}: {}", loc),
             call,
             static_cast<unsigned int>(error),
@@ -52,7 +52,7 @@ GLint to_gl_address_mode(SamplerAddressMode address_mode) {
         case SamplerAddressMode::ClampToBorder:
             return GL_CLAMP_TO_BORDER;
         default:
-            fei::fatal("Unsupported SamplerAddressMode");
+            ets::fatal("Unsupported SamplerAddressMode");
             return 0;
     }
 }
@@ -64,7 +64,7 @@ GLuint to_gl_mag_filter(SamplerFilter mag_filter) {
         case SamplerFilter::Linear:
             return GL_LINEAR;
         default:
-            fei::fatal("Unsupported SamplerFilter");
+            ets::fatal("Unsupported SamplerFilter");
             return 0;
     }
 }
@@ -340,7 +340,7 @@ GLenum to_gl_sized_internal_format(PixelFormat format) {
         case PixelFormat::EacRg11Snorm:
             return GL_COMPRESSED_SIGNED_RG11_EAC;
         default:
-            fei::fatal("Unsupported PixelFormat");
+            ets::fatal("Unsupported PixelFormat");
     }
     return 0;
 }
@@ -355,7 +355,7 @@ GLenum to_gl_texture_target(BitFlags<TextureUsage> usage, TextureType type) {
     } else if (type == TextureType::Texture3D) {
         return GL_TEXTURE_3D;
     }
-    fei::fatal("Unsupported texture target");
+    ets::fatal("Unsupported texture target");
     return 0;
 }
 
@@ -449,7 +449,7 @@ GLenum to_gl_pixel_format(PixelFormat format) {
         case PixelFormat::Stencil8:
             return GL_STENCIL_INDEX;
         default:
-            fei::fatal("Unsupported PixelFormat");
+            ets::fatal("Unsupported PixelFormat");
     }
     return 0;
 }
@@ -506,7 +506,7 @@ GLenum to_gl_pixel_type(PixelFormat format) {
         case PixelFormat::Depth32Float:
             return GL_FLOAT;
         default:
-            fei::fatal("Unsupported PixelFormat");
+            ets::fatal("Unsupported PixelFormat");
     }
     return 0;
 }
@@ -587,4 +587,4 @@ GLenum to_gl_cull_mode(CullMode cull_mode) {
     return 0;
 }
 
-} // namespace fei
+} // namespace ets

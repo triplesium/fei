@@ -6,7 +6,7 @@
 #include <string>
 #include <system_error>
 
-namespace fei::agentd {
+namespace ets::agentd {
 namespace {
 
 bool same_file(
@@ -62,4 +62,4 @@ Status<std::string> validate_runtime_project(
     return {};
 }
 
-} // namespace fei::agentd
+} // namespace ets::agentd

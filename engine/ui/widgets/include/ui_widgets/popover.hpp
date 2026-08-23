@@ -3,9 +3,9 @@
 #include "ecs/fwd.hpp"
 #include "refl/reflect.hpp"
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class PopoverSide {
     Bottom,
     Top,
@@ -13,14 +13,14 @@ enum class PopoverSide {
     Left,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class PopoverAlign {
     Start,
     Center,
     End,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct PopoverPlacement {
     PopoverSide side {PopoverSide::Bottom};
     PopoverAlign align {PopoverAlign::Start};
@@ -31,10 +31,10 @@ struct PopoverPlacement {
 
 // An unstyled popup positioned relative to an anchor entity. The popover must
 // be an absolute child of a viewport-sized UI node.
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct Popover {
     Entity anchor;
     PopoverPlacement placement;
 };
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

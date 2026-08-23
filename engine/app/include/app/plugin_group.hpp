@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class App;
 
@@ -187,4 +187,4 @@ class PluginGroup {
     virtual PluginGroupBuilder build() = 0;
 };
 
-} // namespace fei
+} // namespace ets

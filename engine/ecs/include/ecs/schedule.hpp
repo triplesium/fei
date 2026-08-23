@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct SystemScheduleDebugInfo {
     SystemId id {0};
@@ -167,7 +167,7 @@ class Schedule {
         for (auto& [id, config] : m_systems) {
             for (auto before_id : config.dependencies.before) {
                 if (!m_systems.contains(before_id)) {
-                    fei::fatal(
+                    ets::fatal(
                         "System {} 'before' dependency target {} is not "
                         "registered",
                         id,
@@ -178,7 +178,7 @@ class Schedule {
             }
             for (auto after_id : config.dependencies.after) {
                 if (!m_systems.contains(after_id)) {
-                    fei::fatal(
+                    ets::fatal(
                         "System {} 'after' dependency target {} is not "
                         "registered",
                         id,
@@ -189,12 +189,12 @@ class Schedule {
             }
             for (auto set_id : config.dependencies.in_sets) {
                 if (!m_system_set_configs.contains(set_id)) {
-                    fei::fatal("SystemSet dependency not found");
+                    ets::fatal("SystemSet dependency not found");
                 }
                 auto& set_config = m_system_set_configs[set_id];
                 for (auto before_set : set_config.dependencies.before) {
                     if (!m_system_set_members.contains(before_set)) {
-                        fei::fatal("SystemSet dependency not found");
+                        ets::fatal("SystemSet dependency not found");
                     }
                     for (auto sys_id : m_system_set_members[before_set]) {
                         m_graph.add_edge(id, sys_id);
@@ -202,7 +202,7 @@ class Schedule {
                 }
                 for (auto after_set : set_config.dependencies.after) {
                     if (!m_system_set_members.contains(after_set)) {
-                        fei::fatal("SystemSet dependency not found");
+                        ets::fatal("SystemSet dependency not found");
                     }
                     for (auto sys_id : m_system_set_members[after_set]) {
                         m_graph.add_edge(sys_id, id);
@@ -294,4 +294,4 @@ class Schedules {
     restore_runtime_state(const SchedulesRuntimeState& state);
 };
 
-} // namespace fei
+} // namespace ets

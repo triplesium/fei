@@ -6,7 +6,7 @@
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
-namespace fei {
+namespace ets {
 
 class VulkanDeviceState;
 
@@ -53,4 +53,4 @@ class FramebufferVulkan : public Framebuffer {
     [[nodiscard]] uint32 layers() const { return m_layers; }
 };
 
-} // namespace fei
+} // namespace ets

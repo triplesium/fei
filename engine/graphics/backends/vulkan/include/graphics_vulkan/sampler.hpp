@@ -5,7 +5,7 @@
 #include <memory>
 #include <vulkan/vulkan_core.h>
 
-namespace fei {
+namespace ets {
 
 class VulkanDeviceState;
 
@@ -33,4 +33,4 @@ class SamplerVulkan : public Sampler {
     }
 };
 
-} // namespace fei
+} // namespace ets

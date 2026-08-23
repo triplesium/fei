@@ -3,7 +3,7 @@
 #include "asset/loader.hpp"
 #include "gltf/gltf.hpp"
 
-namespace fei {
+namespace ets {
 
 class GltfLoader : public AssetLoader<Gltf> {
   public:
@@ -11,4 +11,4 @@ class GltfLoader : public AssetLoader<Gltf> {
     load(Reader& reader, const LoadContext& context) override;
 };
 
-} // namespace fei
+} // namespace ets

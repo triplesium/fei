@@ -26,12 +26,12 @@ afterEach(async () => {
 
 describe("Editor Host", () => {
     it("bootstraps a session and stores credentials without returning the key", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "fei-editor-host-"));
+        const directory = await mkdtemp(join(tmpdir(), "entisium-editor-host-"));
         temporaryDirectories.push(directory);
         const distDirectory = join(directory, "dist");
         const credentialPath = join(directory, "credentials.json");
         await mkdir(distDirectory);
-        await writeFile(join(distDirectory, "index.html"), "<p>Fei Editor</p>", "utf8");
+        await writeFile(join(distDirectory, "index.html"), "<p>Entisium Editor</p>", "utf8");
         const host = createEditorHost({
             credentials: new EncryptedCredentialStore(credentialPath, testProtector),
             distDirectory,
@@ -94,16 +94,16 @@ describe("Editor Host", () => {
     });
 
     it("serves only the known WebAssembly runtime artifacts", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "fei-editor-runtime-"));
+        const directory = await mkdtemp(join(tmpdir(), "entisium-editor-runtime-"));
         temporaryDirectories.push(directory);
         const distDirectory = join(directory, "dist");
         const runtimeDirectory = join(directory, "runtime");
         await mkdir(distDirectory);
         await mkdir(runtimeDirectory);
-        await writeFile(join(distDirectory, "index.html"), "<p>Fei Editor</p>", "utf8");
+        await writeFile(join(distDirectory, "index.html"), "<p>Entisium Editor</p>", "utf8");
         await writeFile(
             join(runtimeDirectory, "sample-browser-project.html"),
-            "<p>Fei Runtime</p>",
+            "<p>Entisium Runtime</p>",
             "utf8",
         );
         const host = createEditorHost({
@@ -122,7 +122,7 @@ describe("Editor Host", () => {
             const runtime = await fetch(`${baseUrl}/sample-browser-project.html`);
             expect(runtime.status).toBe(200);
             expect(runtime.headers.get("content-type")).toBe("text/html; charset=utf-8");
-            expect(await runtime.text()).toContain("Fei Runtime");
+            expect(await runtime.text()).toContain("Entisium Runtime");
 
             const unknown = await fetch(`${baseUrl}/sample-browser-project.map`);
             expect(unknown.status).toBe(404);
@@ -132,13 +132,13 @@ describe("Editor Host", () => {
     });
 
     it("persists a custom Responses API model without exposing its credential", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "fei-editor-custom-model-"));
+        const directory = await mkdtemp(join(tmpdir(), "entisium-editor-custom-model-"));
         temporaryDirectories.push(directory);
         const distDirectory = join(directory, "dist");
         const credentialPath = join(directory, "credentials.json");
         const settingsPath = join(directory, "model-settings.json");
         await mkdir(distDirectory);
-        await writeFile(join(distDirectory, "index.html"), "<p>Fei Editor</p>", "utf8");
+        await writeFile(join(distDirectory, "index.html"), "<p>Entisium Editor</p>", "utf8");
 
         const startHost = () =>
             createEditorHost({
@@ -242,13 +242,13 @@ describe("Editor Host", () => {
     });
 
     it("serves an authenticated local project without browser file-system APIs", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "fei-editor-project-host-"));
+        const directory = await mkdtemp(join(tmpdir(), "entisium-editor-project-host-"));
         temporaryDirectories.push(directory);
         const distDirectory = join(directory, "dist");
         const projectDirectory = join(directory, "project");
         await mkdir(distDirectory);
         await mkdir(join(projectDirectory, "assets"), { recursive: true });
-        await writeFile(join(distDirectory, "index.html"), "<p>Fei Editor</p>", "utf8");
+        await writeFile(join(distDirectory, "index.html"), "<p>Entisium Editor</p>", "utf8");
         await writeFile(join(projectDirectory, "project.yaml"), "name: Host project\n", "utf8");
         await writeFile(join(projectDirectory, "assets", "main.luau"), "return {}\n", "utf8");
         const host = createEditorHost({
@@ -295,14 +295,14 @@ describe("Editor Host", () => {
     });
 
     it("opens the Host project when model credentials cannot be decrypted", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "fei-editor-project-credential-failure-"));
+        const directory = await mkdtemp(join(tmpdir(), "entisium-editor-project-credential-failure-"));
         temporaryDirectories.push(directory);
         const distDirectory = join(directory, "dist");
         const projectDirectory = join(directory, "project");
         const credentialPath = join(directory, "credentials.json");
         await mkdir(distDirectory);
         await mkdir(projectDirectory);
-        await writeFile(join(distDirectory, "index.html"), "<p>Fei Editor</p>", "utf8");
+        await writeFile(join(distDirectory, "index.html"), "<p>Entisium Editor</p>", "utf8");
         await writeFile(join(projectDirectory, "project.yaml"), "name: Host project\n", "utf8");
         await writeFile(
             credentialPath,

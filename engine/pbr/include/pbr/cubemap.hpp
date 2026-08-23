@@ -15,7 +15,7 @@
 #include <memory>
 #include <unordered_map>
 
-namespace fei {
+namespace ets {
 
 struct alignas(16) EquirectToCubemapUniform {
     uint32 width {};
@@ -57,10 +57,10 @@ class EquirectToCubemap {
     );
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class CubemapPlugin : public Plugin {
   public:
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

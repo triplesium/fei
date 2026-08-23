@@ -4,7 +4,7 @@
 
 #include <string>
 
-namespace fei {
+namespace ets {
 
 struct BrowserWindowConfig {
     std::string canvas_selector {"#canvas"};
@@ -14,11 +14,11 @@ struct BrowserCanvas {
     std::string selector;
 };
 
-FEI_REFLECT(Plugin)
+ETS_REFLECT(Plugin)
 class BrowserWindowPlugin final : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override;
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

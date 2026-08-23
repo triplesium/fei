@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 enum class CachedRenderPipelineId : uint32 {};
 enum class CachedComputePipelineId : uint32 {};
@@ -187,4 +187,4 @@ class PipelineCache {
     }
 };
 
-} // namespace fei
+} // namespace ets

@@ -8,7 +8,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 struct ExtractMainWorld {
     World* world {nullptr};
@@ -106,4 +106,4 @@ struct SystemParamAccess<Extract<P>> {
 
 } // namespace detail
 
-} // namespace fei
+} // namespace ets

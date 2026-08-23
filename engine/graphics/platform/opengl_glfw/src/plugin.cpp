@@ -11,7 +11,7 @@
 #include <GLFW/glfw3.h>
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -83,4 +83,4 @@ void OpenGLGlfwPlugin::setup(App& app) {
     install_graphics_bootstrap(app);
 }
 
-} // namespace fei
+} // namespace ets

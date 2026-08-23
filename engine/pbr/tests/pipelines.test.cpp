@@ -11,8 +11,8 @@
 #include "pbr/pipeline_specializer.hpp"
 #include "rendering/material.hpp"
 #include "rendering/mesh/mesh.hpp"
-#include "shader/shader.hpp"
 #include "rendering/shader_cache.hpp"
+#include "shader/shader.hpp"
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
@@ -26,8 +26,8 @@
 #include <utility>
 #include <vector>
 
-using namespace fei;
-using namespace fei::rendering_test;
+using namespace ets;
+using namespace ets::rendering_test;
 
 // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
 

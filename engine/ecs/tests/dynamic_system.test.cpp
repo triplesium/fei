@@ -15,8 +15,8 @@
 #include <utility>
 #include <vector>
 
-using namespace fei;
-using namespace fei::ecs_test;
+using namespace ets;
+using namespace ets::ecs_test;
 
 namespace {
 

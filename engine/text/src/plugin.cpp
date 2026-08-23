@@ -6,7 +6,7 @@
 #include "text/font.hpp"
 #include "text/pipeline.hpp"
 
-namespace fei::text {
+namespace ets::text {
 
 void TextPlugin::dependencies(PluginDependencies& dependencies) const {
     dependencies.require<AssetPlugin<Font, FontLoader>>();
@@ -21,4 +21,4 @@ void TextPlugin::setup(App& app) {
         );
 }
 
-} // namespace fei::text
+} // namespace ets::text

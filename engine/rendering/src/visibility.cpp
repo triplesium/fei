@@ -4,7 +4,7 @@
 
 #include <cmath>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -142,4 +142,4 @@ void check_mesh_visibility(
     }
 }
 
-} // namespace fei
+} // namespace ets

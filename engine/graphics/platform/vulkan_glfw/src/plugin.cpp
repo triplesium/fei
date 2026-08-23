@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 namespace {
 
@@ -108,4 +108,4 @@ void VulkanGlfwPlugin::setup(App& app) {
     install_graphics_bootstrap(app);
 }
 
-} // namespace fei
+} // namespace ets

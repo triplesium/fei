@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 
-using namespace fei;
-using namespace fei::ecs_test;
+using namespace ets;
+using namespace ets::ecs_test;
 
 TEST_CASE("ECS events can be sent, read, and aged", "[ecs][event]") {
     Registry::instance().register_type<PlayerMoved>();

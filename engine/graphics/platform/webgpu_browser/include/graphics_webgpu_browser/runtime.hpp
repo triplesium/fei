@@ -6,7 +6,7 @@
 #include <optional>
 #include <string>
 
-namespace fei {
+namespace ets {
 
 struct WebGpuBrowserBootstrapDescription {
     std::string canvas_selector {"#canvas"};
@@ -51,4 +51,4 @@ class WebGpuBrowserBootstrap final : public GraphicsBackendBootstrap {
     std::optional<WebGpuBrowserBootstrapDescription> m_description;
 };
 
-} // namespace fei
+} // namespace ets

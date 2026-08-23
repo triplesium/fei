@@ -6,7 +6,7 @@
 
 #include <memory>
 
-namespace fei {
+namespace ets {
 
 class RenderFrameContext {
   private:
@@ -39,4 +39,4 @@ void submit_render_frame(
     ResRW<RenderFrameContext> context
 );
 
-} // namespace fei
+} // namespace ets

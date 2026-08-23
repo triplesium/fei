@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::devtools::input {
+namespace ets::devtools::input {
 
 namespace {
 
@@ -154,4 +154,4 @@ void ProviderPlugin::setup(App& app) {
 
 void ProviderPlugin::finish(App&) {}
 
-} // namespace fei::devtools::input
+} // namespace ets::devtools::input

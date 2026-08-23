@@ -1,6 +1,6 @@
 #include "snapshot_types.hpp"
 
-namespace fei::devtools::rendering {
+namespace ets::devtools::rendering {
 
 RenderScheduleSnapshot
 make_render_schedule_snapshot(const ScheduleDebugInfo& debug) {
@@ -52,4 +52,4 @@ make_graphics_cache_snapshot(const GraphicsResourceCacheStats& stats) {
     return snapshot;
 }
 
-} // namespace fei::devtools::rendering
+} // namespace ets::devtools::rendering

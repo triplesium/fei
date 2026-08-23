@@ -6,12 +6,12 @@
 #include <cassert>
 #include <cstddef>
 
-namespace fei {
+namespace ets {
 
 // Quaternion stores the vector part in x/y/z and the scalar part in w.
 // Multiplication composes column-vector rotations right-to-left, matching
 // Matrix4x4 composition.
-FEI_REFLECT()
+ETS_REFLECT()
 class Quaternion {
   public:
     float x {0.0f};
@@ -96,7 +96,7 @@ class Quaternion {
     }
 
     float sqr_magnitude() const { return x * x + y * y + z * z + w * w; }
-    float magnitude() const { return fei::sqrt(sqr_magnitude()); }
+    float magnitude() const { return ets::sqrt(sqr_magnitude()); }
 
     Quaternion normalized() const {
         Quaternion ret = *this;
@@ -173,12 +173,12 @@ class Quaternion {
 
         Vector3 unit_axis = axis / axis_length;
         float half_angle = 0.5f * radians;
-        float sin_half = fei::sin(half_angle);
+        float sin_half = ets::sin(half_angle);
         return {
             unit_axis.x * sin_half,
             unit_axis.y * sin_half,
             unit_axis.z * sin_half,
-            fei::cos(half_angle),
+            ets::cos(half_angle),
         };
     }
 
@@ -192,14 +192,14 @@ class Quaternion {
         Quaternion result;
 
         if (trace > 0.0f) {
-            float s = fei::sqrt(trace + 1.0f) * 2.0f;
+            float s = ets::sqrt(trace + 1.0f) * 2.0f;
             result.w = 0.25f * s;
             result.x = (matrix[2][1] - matrix[1][2]) / s;
             result.y = (matrix[0][2] - matrix[2][0]) / s;
             result.z = (matrix[1][0] - matrix[0][1]) / s;
         } else if (matrix[0][0] > matrix[1][1] && matrix[0][0] > matrix[2][2]) {
             float s =
-                fei::sqrt(1.0f + matrix[0][0] - matrix[1][1] - matrix[2][2]) *
+                ets::sqrt(1.0f + matrix[0][0] - matrix[1][1] - matrix[2][2]) *
                 2.0f;
             result.w = (matrix[2][1] - matrix[1][2]) / s;
             result.x = 0.25f * s;
@@ -207,7 +207,7 @@ class Quaternion {
             result.z = (matrix[0][2] + matrix[2][0]) / s;
         } else if (matrix[1][1] > matrix[2][2]) {
             float s =
-                fei::sqrt(1.0f + matrix[1][1] - matrix[0][0] - matrix[2][2]) *
+                ets::sqrt(1.0f + matrix[1][1] - matrix[0][0] - matrix[2][2]) *
                 2.0f;
             result.w = (matrix[0][2] - matrix[2][0]) / s;
             result.x = (matrix[0][1] + matrix[1][0]) / s;
@@ -215,7 +215,7 @@ class Quaternion {
             result.z = (matrix[1][2] + matrix[2][1]) / s;
         } else {
             float s =
-                fei::sqrt(1.0f + matrix[2][2] - matrix[0][0] - matrix[1][1]) *
+                ets::sqrt(1.0f + matrix[2][2] - matrix[0][0] - matrix[1][1]) *
                 2.0f;
             result.w = (matrix[1][0] - matrix[0][1]) / s;
             result.x = (matrix[0][2] + matrix[2][0]) / s;
@@ -249,7 +249,7 @@ class Quaternion {
         Vector3 from_dir = from / from_length;
         Vector3 to_dir = to / to_length;
         float cos_theta =
-            fei::clamp(Vector3::dot(from_dir, to_dir), -1.0f, 1.0f);
+            ets::clamp(Vector3::dot(from_dir, to_dir), -1.0f, 1.0f);
 
         if (cos_theta >= 1.0f - EPSILON) {
             return Identity;
@@ -286,7 +286,7 @@ class Quaternion {
         Vector3 right = Vector3::cross(up_dir, z);
         if (right.sqr_magnitude() <= EPSILON) {
             Vector3 fallback_up =
-                fei::abs(f.y) < 1.0f - EPSILON ? Vector3::Up : Vector3::Right;
+                ets::abs(f.y) < 1.0f - EPSILON ? Vector3::Up : Vector3::Right;
             right = Vector3::cross(fallback_up, z);
         }
         right.normalize();
@@ -344,21 +344,21 @@ class Quaternion {
             cos_theta = -cos_theta;
         }
 
-        cos_theta = fei::clamp(cos_theta, -1.0f, 1.0f);
+        cos_theta = ets::clamp(cos_theta, -1.0f, 1.0f);
         if (cos_theta > 1.0f - EPSILON) {
             return nlerp(start, end, alpha);
         }
 
-        float theta = fei::acos(cos_theta);
-        float sin_theta = fei::sin(theta);
-        if (fei::abs(sin_theta) <= EPSILON) {
+        float theta = ets::acos(cos_theta);
+        float sin_theta = ets::sin(theta);
+        if (ets::abs(sin_theta) <= EPSILON) {
             return nlerp(start, end, alpha);
         }
 
-        float start_weight = fei::sin((1.0f - alpha) * theta) / sin_theta;
-        float end_weight = fei::sin(alpha * theta) / sin_theta;
+        float start_weight = ets::sin((1.0f - alpha) * theta) / sin_theta;
+        float end_weight = ets::sin(alpha * theta) / sin_theta;
         return (start * start_weight + end * end_weight).normalized();
     }
 };
 
-} // namespace fei
+} // namespace ets

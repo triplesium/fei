@@ -12,7 +12,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 class Constructor : public Callable {
   public:
@@ -146,4 +146,4 @@ class ConstructorImpl : public Constructor {
     }
 };
 
-} // namespace fei
+} // namespace ets

@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct DynamicTypeRef {
     std::string type_name;
@@ -180,4 +180,4 @@ compile_dynamic_system_params(const DynamicSystemDecl& decl);
 Result<DynamicSystemParams, DynamicSystemError>
 compile_dynamic_condition_params(const DynamicConditionDecl& decl);
 
-} // namespace fei
+} // namespace ets

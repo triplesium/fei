@@ -6,8 +6,8 @@
 #include <utility>
 #include <vector>
 
-using namespace fei;
-using namespace fei::ecs_test;
+using namespace ets;
+using namespace ets::ecs_test;
 
 static_assert(!std::is_same_v<Entity, std::uint32_t>);
 static_assert(std::is_trivially_copyable_v<Entity>);

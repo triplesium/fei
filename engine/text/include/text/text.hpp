@@ -13,25 +13,25 @@
 #include <string>
 #include <vector>
 
-namespace fei::text {
+namespace ets::text {
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct Text {
     std::string value;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct TextFont {
     Handle<Font> font;
     float font_size {16.0f};
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct TextColor {
     Color4F color {1.0f, 1.0f, 1.0f, 1.0f};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class LineBreak {
     WordBoundary,
     AnyCharacter,
@@ -39,14 +39,14 @@ enum class LineBreak {
     NoWrap,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class Justify {
     Left,
     Center,
     Right,
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct TextLayout {
     Justify justify {Justify::Left};
     LineBreak line_break {LineBreak::WordOrCharacter};
@@ -100,7 +100,7 @@ struct PositionedGlyph {
     }
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct TextLayoutInfo {
     Vector2 size;
     std::vector<PositionedGlyph> glyphs;
@@ -108,4 +108,4 @@ struct TextLayoutInfo {
     bool operator==(const TextLayoutInfo&) const = default;
 };
 
-} // namespace fei::text
+} // namespace ets::text

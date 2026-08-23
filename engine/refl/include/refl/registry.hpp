@@ -26,7 +26,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class Cls;
 struct DynamicStructDesc;
@@ -723,4 +723,4 @@ Type& type() {
 
 const std::string& type_name(TypeId id);
 
-} // namespace fei
+} // namespace ets

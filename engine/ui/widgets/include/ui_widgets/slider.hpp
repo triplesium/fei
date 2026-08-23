@@ -6,39 +6,39 @@
 #include <cmath>
 #include <cstdint>
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class SliderOrientation {
     Auto,
     Horizontal,
     Vertical,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class TrackClick {
     Drag,
     Step,
     Snap,
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct Slider {
     TrackClick track_click {TrackClick::Drag};
     SliderOrientation orientation {SliderOrientation::Auto};
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct SliderThumb {};
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct SliderValue {
     float value {0.0f};
 
     bool operator==(const SliderValue&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct SliderRange {
     float minimum {0.0f};
     float maximum {1.0f};
@@ -56,14 +56,14 @@ struct SliderRange {
     bool operator==(const SliderRange&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct SliderStep {
     float value {1.0f};
 
     bool operator==(const SliderStep&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct SliderPrecision {
     std::int32_t decimal_places {0};
 
@@ -75,7 +75,7 @@ struct SliderPrecision {
     bool operator==(const SliderPrecision&) const = default;
 };
 
-FEI_REFLECT(Component)
+ETS_REFLECT(Component)
 struct SliderDragState {
     bool dragging {false};
     bool changed {false};
@@ -84,14 +84,14 @@ struct SliderDragState {
     float pointer_position {0.0f};
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 enum class SliderValueChangeKind {
     Absolute,
     Relative,
     RelativeStep,
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct SliderValueChange {
     SliderValueChangeKind kind {SliderValueChangeKind::Absolute};
     float value {0.0f};
@@ -109,7 +109,7 @@ struct SliderValueChange {
     bool operator==(const SliderValueChange&) const = default;
 };
 
-FEI_REFLECT()
+ETS_REFLECT()
 struct SetSliderValue {
     Entity entity;
     SliderValueChange change;
@@ -117,4 +117,4 @@ struct SetSliderValue {
     bool operator==(const SetSliderValue&) const = default;
 };
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

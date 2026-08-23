@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 DynamicRemovedComponents::DynamicRemovedComponents(
     std::string name,
@@ -79,4 +79,4 @@ Status<RuntimeStateError> DynamicRemovedComponents::restore_runtime_state(
     return {};
 }
 
-} // namespace fei
+} // namespace ets

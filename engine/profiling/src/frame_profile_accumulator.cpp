@@ -1,6 +1,6 @@
 #include "frame_profile_accumulator.hpp"
 
-namespace fei::profiling_detail {
+namespace ets::profiling_detail {
 
 namespace {
 
@@ -70,4 +70,4 @@ void FrameProfileAccumulator::clear() {
     m_latest_frame_ms = 0.0;
 }
 
-} // namespace fei::profiling_detail
+} // namespace ets::profiling_detail

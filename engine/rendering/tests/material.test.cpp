@@ -12,8 +12,8 @@
 #include <utility>
 #include <vector>
 
-using namespace fei;
-using namespace fei::rendering_test;
+using namespace ets;
+using namespace ets::rendering_test;
 
 namespace {
 

@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct ShaderResourceBinding {
     std::string name;
@@ -59,4 +59,4 @@ class ShaderModule {
     const ShaderDefs& defs() const { return m_defs; }
 };
 
-} // namespace fei
+} // namespace ets

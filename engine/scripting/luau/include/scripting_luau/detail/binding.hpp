@@ -10,7 +10,7 @@
 
 struct lua_State;
 
-namespace fei::detail {
+namespace ets::detail {
 
 struct LuauBorrowedRef {
     Ref ref;
@@ -36,4 +36,4 @@ void push_luau_borrowed_ref(
     ScriptBorrowToken token
 );
 
-} // namespace fei::detail
+} // namespace ets::detail

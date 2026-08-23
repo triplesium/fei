@@ -9,10 +9,10 @@
 #include <memory>
 #include <string_view>
 
-namespace fei {
+namespace ets {
 namespace {
 
-constexpr const char* lua_entity_commands_metatable = "fei.EntityCommands";
+constexpr const char* lua_entity_commands_metatable = "ets.EntityCommands";
 
 struct LuaEntityCommands {
     World* world {nullptr};
@@ -320,7 +320,7 @@ Type& register_lua_commands_type() {
 }
 
 bool lua_is_commands(TypeId type_id) {
-    return type_id == fei::type_id<Commands>();
+    return type_id == ets::type_id<Commands>();
 }
 
 int lua_dispatch_commands_index(lua_State* L, const char* key) {
@@ -342,4 +342,4 @@ int lua_dispatch_commands_index(lua_State* L, const char* key) {
     return 0;
 }
 
-} // namespace fei
+} // namespace ets

@@ -20,7 +20,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 template<class T, class Alloc>
 struct GenericTypeInfo<std::vector<T, Alloc>> {
@@ -157,10 +157,10 @@ struct GenericTypeInfo<Optional<T>> {
     using Dependencies = std::tuple<T>;
 
     static TypeId generic_type_id() {
-        return TypeId(std::string_view {"fei::Optional"});
+        return TypeId(std::string_view {"ets::Optional"});
     }
 
-    static std::string generic_name() { return "fei::Optional"; }
+    static std::string generic_name() { return "ets::Optional"; }
 
     static std::vector<TypeId> argument_type_ids() { return {type_id<T>()}; }
 
@@ -211,4 +211,4 @@ struct GenericTypeInfo<std::tuple<Types...>> {
     }
 };
 
-} // namespace fei
+} // namespace ets

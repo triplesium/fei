@@ -4,8 +4,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace fei;
-using namespace fei::test;
+using namespace ets;
+using namespace ets::test;
 
 TEST_CASE("AABB reports center, size, and containment", "[math][primitive]") {
     Aabb bounds {{-1.0f, -2.0f, -3.0f}, {3.0f, 4.0f, 5.0f}};

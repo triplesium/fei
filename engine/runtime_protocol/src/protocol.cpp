@@ -8,7 +8,7 @@
 #include <unordered_set>
 #include <utility>
 
-namespace fei::runtime_protocol {
+namespace ets::runtime_protocol {
 namespace {
 
 using Json = nlohmann::json;
@@ -782,4 +782,4 @@ decode_inspection_response(std::string_view json) {
     );
 }
 
-} // namespace fei::runtime_protocol
+} // namespace ets::runtime_protocol

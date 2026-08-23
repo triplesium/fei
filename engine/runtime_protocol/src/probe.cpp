@@ -23,7 +23,7 @@
 #    include <unistd.h>
 #endif
 
-namespace fei::runtime_protocol {
+namespace ets::runtime_protocol {
 namespace {
 
 constexpr std::string_view c_loopback_host {"127.0.0.1"};
@@ -56,21 +56,21 @@ void advance_runtime_probe(WorldRef world, ResRW<RuntimeProbe> probe) {
 class RuntimeProbe::Impl {
   public:
     explicit Impl(RuntimeProbeConfig config) : m_config(std::move(config)) {
-        const auto port = read_environment_variable<uint16>("FEI_AGENTD_PORT");
-        const auto session = read_environment_variable("FEI_RUNTIME_SESSION");
+        const auto port = read_environment_variable<uint16>("ETS_AGENTD_PORT");
+        const auto session = read_environment_variable("ETS_RUNTIME_SESSION");
         if (!port && !session) {
             return;
         }
         if (!port || !session || session->empty()) {
             std::scoped_lock lock(m_status_mutex);
             m_last_error =
-                "FEI_AGENTD_PORT and FEI_RUNTIME_SESSION must be set together";
+                "ETS_AGENTD_PORT and ETS_RUNTIME_SESSION must be set together";
             warn("Runtime probe disabled: {}", m_last_error);
             return;
         }
 
         if (const auto build_id =
-                read_environment_variable("FEI_RUNTIME_BUILD_ID")) {
+                read_environment_variable("ETS_RUNTIME_BUILD_ID")) {
             m_config.build_id = *build_id;
         }
         m_port = *port;
@@ -287,7 +287,7 @@ class RuntimeProbe::Impl {
 
     bool poll_inspection_request(httplib::Client& client) {
         const httplib::Headers headers {
-            {"X-Fei-Runtime-Session", m_session},
+            {"X-Entisium-Runtime-Session", m_session},
         };
         auto response = client.Get("/api/v1/runtime/inspection/next", headers);
         if (!response) {
@@ -302,7 +302,7 @@ class RuntimeProbe::Impl {
         auto request = decode_inspection_request(response->body);
         if (!request) {
             warn(
-                "Rejected invalid inspection request from fei-agentd: {}",
+                "Rejected invalid inspection request from entisium-agentd: {}",
                 request.error()
             );
             return false;
@@ -337,7 +337,7 @@ class RuntimeProbe::Impl {
 
         while (m_running.load(std::memory_order_relaxed)) {
             if (!send_hello(client)) {
-                set_connection(false, "Failed to connect to fei-agentd");
+                set_connection(false, "Failed to connect to entisium-agentd");
                 if (!wait_for(c_reconnect_interval)) {
                     break;
                 }
@@ -346,7 +346,7 @@ class RuntimeProbe::Impl {
 
             set_connection(true);
             info(
-                "Runtime probe connected to fei-agentd on {}:{}",
+                "Runtime probe connected to entisium-agentd on {}:{}",
                 c_loopback_host,
                 m_port
             );
@@ -453,4 +453,4 @@ void RuntimeProbePlugin::cleanup(App& app) noexcept {
     app.resource<RuntimeProbe>().stop();
 }
 
-} // namespace fei::runtime_protocol
+} // namespace ets::runtime_protocol

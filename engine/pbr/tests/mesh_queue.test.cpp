@@ -10,8 +10,8 @@
 #include <memory>
 #include <vector>
 
-using namespace fei;
-using namespace fei::rendering_test;
+using namespace ets;
+using namespace ets::rendering_test;
 
 // NOLINTBEGIN(clang-analyzer-cplusplus.NewDeleteLeaks)
 

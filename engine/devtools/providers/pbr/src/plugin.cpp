@@ -33,7 +33,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::devtools::pbr {
+namespace ets::devtools::pbr {
 
 namespace {
 
@@ -642,4 +642,4 @@ void ProviderPlugin::setup(App& app) {
 
 void ProviderPlugin::finish(App&) {}
 
-} // namespace fei::devtools::pbr
+} // namespace ets::devtools::pbr

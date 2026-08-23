@@ -7,7 +7,7 @@
 #include <mutex>
 #include <queue>
 
-namespace fei {
+namespace ets {
 
 class AssetServer;
 template<typename T>
@@ -82,4 +82,4 @@ class AssetLoadRequests {
     );
 };
 
-} // namespace fei
+} // namespace ets

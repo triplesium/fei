@@ -2,13 +2,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-using namespace fei::agentd::detail;
+using namespace ets::agentd::detail;
 
 TEST_CASE("Agentd embeds its playtest observability UI", "[agentd][ui]") {
     const auto index = find_ui_asset("/ui/");
     REQUIRE(index);
     CHECK(index->content_type == "text/html; charset=utf-8");
-    CHECK(index->content.find("Fei Playtest") != std::string_view::npos);
+    CHECK(index->content.find("Entisium Playtest") != std::string_view::npos);
     CHECK(index->content.find(R"(id="game-frame")") != std::string_view::npos);
     CHECK(index->content.find(R"(id="timeline")") != std::string_view::npos);
 

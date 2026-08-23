@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <optional>
 
-namespace fei::profiling_detail {
+namespace ets::profiling_detail {
 
 class FrameProfileAccumulator {
   private:
@@ -25,4 +25,4 @@ class FrameProfileAccumulator {
     void clear();
 };
 
-} // namespace fei::profiling_detail
+} // namespace ets::profiling_detail

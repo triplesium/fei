@@ -9,7 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fei::devtools::pbr {
+namespace ets::devtools::pbr {
 
 struct PendingFrameCapture {
     std::string capability;
@@ -64,4 +64,4 @@ std::vector<byte> encode_jpeg(
     int quality
 );
 
-} // namespace fei::devtools::pbr
+} // namespace ets::devtools::pbr

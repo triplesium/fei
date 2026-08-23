@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class Column {
   private:
@@ -47,4 +47,4 @@ class Column {
     void clear();
 };
 
-} // namespace fei
+} // namespace ets

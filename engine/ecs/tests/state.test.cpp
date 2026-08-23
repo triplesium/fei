@@ -24,8 +24,8 @@ struct std::hash<state_test_types::CollidingState> {
     }
 };
 
-using namespace fei;
-using namespace fei::ecs_test;
+using namespace ets;
+using namespace ets::ecs_test;
 using state_test_types::CollidingState;
 
 namespace {

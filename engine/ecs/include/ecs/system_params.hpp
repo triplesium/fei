@@ -6,7 +6,7 @@
 
 #include <variant>
 
-namespace fei {
+namespace ets {
 
 // Resource params describe scheduler access only. A ResRO<T> system gets a
 // const T&, but T is still responsible for making its const API thread-safe
@@ -161,4 +161,4 @@ auto resource_missing() {
     };
 }
 
-} // namespace fei
+} // namespace ets

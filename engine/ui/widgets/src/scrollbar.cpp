@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <functional>
 
-namespace fei::ui_widgets {
+namespace ets::ui_widgets {
 
 namespace {
 
@@ -229,4 +229,4 @@ void update_scrollbars(
     }
 }
 
-} // namespace fei::ui_widgets
+} // namespace ets::ui_widgets

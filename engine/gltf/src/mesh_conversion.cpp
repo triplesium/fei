@@ -18,7 +18,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei::gltf_detail {
+namespace ets::gltf_detail {
 namespace {
 
 constexpr std::size_t max_decoded_accessor_bytes =
@@ -774,4 +774,4 @@ convert_meshes(const fastgltf::Asset& asset) {
     return meshes;
 }
 
-} // namespace fei::gltf_detail
+} // namespace ets::gltf_detail

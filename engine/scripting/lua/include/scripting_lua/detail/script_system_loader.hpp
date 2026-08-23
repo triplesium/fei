@@ -10,7 +10,7 @@
 
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 class World;
 
@@ -32,4 +32,4 @@ Result<std::vector<SystemHandle>, LuaScriptError> install_lua_script_systems(
 );
 
 } // namespace detail
-} // namespace fei
+} // namespace ets

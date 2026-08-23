@@ -5,7 +5,7 @@
 
 #include <webgpu/webgpu.h>
 
-namespace fei {
+namespace ets {
 
 WGPUTextureFormat to_webgpu(PixelFormat value);
 PixelFormat from_webgpu(WGPUTextureFormat value);
@@ -14,4 +14,4 @@ WGPUVertexFormat to_webgpu(VertexFormat value, bool normalized = false);
 WGPUCompareFunction to_webgpu(ComparisonKind value);
 WGPUTextureViewDimension to_webgpu(TextureViewType value);
 
-} // namespace fei
+} // namespace ets

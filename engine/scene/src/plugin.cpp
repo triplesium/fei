@@ -4,7 +4,7 @@
 #include "ecs/system_config.hpp"
 #include "scene/scene.hpp"
 
-namespace fei {
+namespace ets {
 
 void ScenePlugin::setup(App& app) {
     app.add_event<SceneSpawnedEvent>()
@@ -12,4 +12,4 @@ void ScenePlugin::setup(App& app) {
         .add_systems(Update, chain(cleanup_scene_instances, spawn_scene));
 }
 
-} // namespace fei
+} // namespace ets

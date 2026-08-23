@@ -4,7 +4,7 @@
 #include <cctype>
 #include <string>
 
-namespace fei::project_scripting {
+namespace ets::project_scripting {
 
 bool script_path_has_extension(
     const AssetReference& reference,
@@ -26,4 +26,4 @@ bool script_path_has_extension(
     return actual == expected;
 }
 
-} // namespace fei::project_scripting
+} // namespace ets::project_scripting

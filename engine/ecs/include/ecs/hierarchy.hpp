@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <vector>
 
-namespace fei {
+namespace ets {
 
 struct ChildOf {
     Entity parent {};
@@ -30,4 +30,4 @@ class Children {
     }
 };
 
-} // namespace fei
+} // namespace ets

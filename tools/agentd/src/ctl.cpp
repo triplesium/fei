@@ -21,7 +21,7 @@
 namespace {
 
 using Json = nlohmann::json;
-using JsonResult = fei::Result<Json, std::string>;
+using JsonResult = ets::Result<Json, std::string>;
 
 struct PlayTraceSession {
     std::string trace_id;
@@ -53,30 +53,31 @@ struct Options {
 };
 
 void print_help() {
-    std::cout << "usage: fei-ctl [--port PORT] "
-                 "project|status|capabilities|watch|restart|play-interfaces|"
-                 "play-reset\n"
-              << "       fei-ctl [--port PORT] inspect PROVIDER "
-                 "[--schema SCHEMA] --payload JSON\n"
-              << "       fei-ctl [--port PORT] inspect ecs.entity.inspect "
-                 "--entity ENTITY\n"
-              << "       fei-ctl [--port PORT] play-capture --output FILE\n"
-              << "       fei-ctl [--port PORT] play-observe --interface "
-                 "INTERFACE\n"
-              << "       fei-ctl [--port PORT] play-step --payload JSON\n"
-              << "       fei-ctl [--port PORT] play-run --eval CODE\n"
-              << "       fei-ctl [--port PORT] play-run --stdin\n"
-              << "       fei-ctl [--port PORT] checkpoint-create NAME "
-                 "[--strict]\n"
-              << "       fei-ctl [--port PORT] checkpoint-audit\n"
-              << "       fei-ctl [--port PORT] checkpoint-delete NAME\n"
-              << "       fei-ctl [--port PORT] checkpoint-clear\n"
-              << "       fei-ctl [--port PORT] checkpoint-export NAME "
-                 "--output FILE\n"
-              << "       fei-ctl [--port PORT] checkpoint-import NAME "
-                 "--input FILE\n"
-              << "       fei-ctl [--port PORT] checkpoint-list\n"
-              << "       fei-ctl [--port PORT] checkpoint-restore NAME\n";
+    std::cout
+        << "usage: entisium-ctl [--port PORT] "
+           "project|status|capabilities|watch|restart|play-interfaces|"
+           "play-reset\n"
+        << "       entisium-ctl [--port PORT] inspect PROVIDER "
+           "[--schema SCHEMA] --payload JSON\n"
+        << "       entisium-ctl [--port PORT] inspect ecs.entity.inspect "
+           "--entity ENTITY\n"
+        << "       entisium-ctl [--port PORT] play-capture --output FILE\n"
+        << "       entisium-ctl [--port PORT] play-observe --interface "
+           "INTERFACE\n"
+        << "       entisium-ctl [--port PORT] play-step --payload JSON\n"
+        << "       entisium-ctl [--port PORT] play-run --eval CODE\n"
+        << "       entisium-ctl [--port PORT] play-run --stdin\n"
+        << "       entisium-ctl [--port PORT] checkpoint-create NAME "
+           "[--strict]\n"
+        << "       entisium-ctl [--port PORT] checkpoint-audit\n"
+        << "       entisium-ctl [--port PORT] checkpoint-delete NAME\n"
+        << "       entisium-ctl [--port PORT] checkpoint-clear\n"
+        << "       entisium-ctl [--port PORT] checkpoint-export NAME "
+           "--output FILE\n"
+        << "       entisium-ctl [--port PORT] checkpoint-import NAME "
+           "--input FILE\n"
+        << "       entisium-ctl [--port PORT] checkpoint-list\n"
+        << "       entisium-ctl [--port PORT] checkpoint-restore NAME\n";
 }
 
 bool parse_options(int argc, char** argv, Options& options) {
@@ -361,11 +362,12 @@ void configure_client(httplib::Client& client) {
 bool print_status(httplib::Client& client, std::string* previous = nullptr) {
     auto response = client.Get("/api/v1/status");
     if (!response) {
-        std::cerr << "Failed to connect to fei-agentd\n";
+        std::cerr << "Failed to connect to entisium-agentd\n";
         return false;
     }
     if (response->status != 200) {
-        std::cerr << "fei-agentd returned HTTP " << response->status << '\n';
+        std::cerr << "entisium-agentd returned HTTP " << response->status
+                  << '\n';
         return false;
     }
     if (previous && *previous == response->body) {
@@ -385,11 +387,12 @@ bool print_status(httplib::Client& client, std::string* previous = nullptr) {
 bool print_project(httplib::Client& client) {
     auto response = client.Get("/api/v1/project");
     if (!response) {
-        std::cerr << "Failed to connect to fei-agentd\n";
+        std::cerr << "Failed to connect to entisium-agentd\n";
         return false;
     }
     if (response->status != 200) {
-        std::cerr << "fei-agentd returned HTTP " << response->status << '\n';
+        std::cerr << "entisium-agentd returned HTTP " << response->status
+                  << '\n';
         return false;
     }
     try {
@@ -404,11 +407,12 @@ std::optional<nlohmann::json>
 get_capabilities(httplib::Client& client, bool print) {
     auto response = client.Get("/api/v1/capabilities");
     if (!response) {
-        std::cerr << "Failed to connect to fei-agentd\n";
+        std::cerr << "Failed to connect to entisium-agentd\n";
         return std::nullopt;
     }
     if (response->status != 200) {
-        std::cerr << "fei-agentd returned HTTP " << response->status << '\n';
+        std::cerr << "entisium-agentd returned HTTP " << response->status
+                  << '\n';
         return std::nullopt;
     }
     try {
@@ -472,7 +476,7 @@ bool inspect_runtime(httplib::Client& client, const Options& options) {
             .dump();
     auto response = client.Post("/api/v1/inspection", body, "application/json");
     if (!response) {
-        std::cerr << "Failed to connect to fei-agentd\n";
+        std::cerr << "Failed to connect to entisium-agentd\n";
         return false;
     }
     try {
@@ -563,18 +567,18 @@ std::string response_error(const Json& document, std::string fallback) {
 JsonResult
 parse_json_response(httplib::Result response, std::string_view failure) {
     if (!response) {
-        return fei::failure(std::string(failure));
+        return ets::failure(std::string(failure));
     }
     Json document;
     try {
         document = Json::parse(response->body);
     } catch (const std::exception& error) {
-        return fei::failure(
+        return ets::failure(
             std::string(failure) + ": invalid JSON response: " + error.what()
         );
     }
     if (response->status < 200 || response->status >= 300) {
-        return fei::failure(response_error(
+        return ets::failure(response_error(
             document,
             std::string(failure) + ": HTTP " + std::to_string(response->status)
         ));
@@ -586,13 +590,13 @@ JsonResult
 inspection_payload(httplib::Result response, std::string_view failure) {
     auto document = parse_json_response(std::move(response), failure);
     if (!document) {
-        return fei::failure(std::move(document.error()));
+        return ets::failure(std::move(document.error()));
     }
     if (!document->is_object() || !document->value("ok", false)) {
-        return fei::failure(response_error(*document, std::string(failure)));
+        return ets::failure(response_error(*document, std::string(failure)));
     }
     if (!document->contains("payload")) {
-        return fei::failure(std::string(failure) + ": response has no payload");
+        return ets::failure(std::string(failure) + ": response has no payload");
     }
     return std::move(document->at("payload"));
 }
@@ -602,12 +606,12 @@ httplib::Headers trace_headers(const PlayTraceSession* trace) {
         return {};
     }
     httplib::Headers headers {
-        {"X-Fei-Trace-Id", trace->trace_id},
-        {"X-Fei-Parent-Span-Id", trace->span_id},
+        {"X-Entisium-Trace-Id", trace->trace_id},
+        {"X-Entisium-Parent-Span-Id", trace->span_id},
     };
     if (trace->active_call_index) {
         headers.emplace(
-            "X-Fei-Call-Index",
+            "X-Entisium-Call-Index",
             std::to_string(*trace->active_call_index)
         );
     }
@@ -619,7 +623,8 @@ start_play_trace(httplib::Client& client, std::string_view source) {
     auto response = parse_json_response(
         client.Post(
             "/api/v1/play/traces",
-            Json {{"source", source}, {"origin", "fei-ctl play-run"}}.dump(),
+            Json {{"source", source}, {"origin", "entisium-ctl play-run"}}
+                .dump(),
             "application/json"
         ),
         "Failed to start play trace"
@@ -687,7 +692,7 @@ JsonResult request_capture(
         "Failed to capture playtest frame"
     );
     if (!parsed) {
-        return fei::failure(std::move(parsed.error()));
+        return ets::failure(std::move(parsed.error()));
     }
 
     try {
@@ -696,13 +701,13 @@ JsonResult request_capture(
         const auto expected_bytes = metadata.at("bytes").get<std::size_t>();
         if (metadata.at("content_type").get<std::string_view>() !=
             "image/png") {
-            return fei::failure(
+            return ets::failure(
                 std::string("Capture metadata is not for a PNG artifact")
             );
         }
         if (!std::string_view(artifact).starts_with("/api/v1/artifacts/")) {
-            return fei::failure(
-                std::string("Invalid artifact URL returned by fei-agentd")
+            return ets::failure(
+                std::string("Invalid artifact URL returned by entisium-agentd")
             );
         }
         if (!output) {
@@ -710,7 +715,7 @@ JsonResult request_capture(
         }
         auto download = client.Get(artifact);
         if (!download || download->status != 200) {
-            return fei::failure(
+            return ets::failure(
                 std::string("Failed to download captured frame artifact")
             );
         }
@@ -718,14 +723,14 @@ JsonResult request_capture(
         if (download->get_header_value("Content-Type") != "image/png" ||
             download->body.size() != expected_bytes ||
             !std::string_view(download->body).starts_with(c_png_signature)) {
-            return fei::failure(
+            return ets::failure(
                 std::string("Downloaded capture artifact is invalid")
             );
         }
 
         std::ofstream file(*output, std::ios::binary | std::ios::trunc);
         if (!file) {
-            return fei::failure(
+            return ets::failure(
                 std::string("Failed to open capture output: ") + *output
             );
         }
@@ -734,14 +739,14 @@ JsonResult request_capture(
             static_cast<std::streamsize>(download->body.size())
         );
         if (!file) {
-            return fei::failure(
+            return ets::failure(
                 std::string("Failed to write capture output: ") + *output
             );
         }
         metadata["output"] = *output;
         return metadata;
     } catch (const std::exception& error) {
-        return fei::failure(
+        return ets::failure(
             std::string("Invalid capture response: ") + error.what()
         );
     }
@@ -757,9 +762,9 @@ bool capture_frame(httplib::Client& client, const Options& options) {
     return true;
 }
 
-fei::agentd::PlayControlBindings
+ets::agentd::PlayControlBindings
 make_play_bindings(httplib::Client& client, PlayTraceSession* trace = nullptr) {
-    return fei::agentd::PlayControlBindings {
+    return ets::agentd::PlayControlBindings {
         .interfaces = [&client, trace]() -> JsonResult {
             return inspection_payload(
                 client.Get("/api/v1/play/interfaces", trace_headers(trace)),
@@ -769,7 +774,7 @@ make_play_bindings(httplib::Client& client, PlayTraceSession* trace = nullptr) {
         .step = [&client, trace](
                     std::string_view interface_id,
                     const Json& action,
-                    std::optional<fei::uint32> ticks
+                    std::optional<ets::uint32> ticks
                 ) -> JsonResult {
             Json request {
                 {"interface", interface_id},
@@ -847,7 +852,7 @@ bool run_play_script(httplib::Client& client, const Options& options) {
     }
 
     auto trace = start_play_trace(client, source);
-    const auto observer = fei::agentd::PlayRunObserver {
+    const auto observer = ets::agentd::PlayRunObserver {
         .call_started =
             [&trace](std::size_t index, std::string_view, const Json&) {
                 if (trace) {
@@ -867,7 +872,7 @@ bool run_play_script(httplib::Client& client, const Options& options) {
                 }
             },
     };
-    const auto report = fei::agentd::run_luau_play_script(
+    const auto report = ets::agentd::run_luau_play_script(
         source,
         make_play_bindings(client, trace ? &*trace : nullptr),
         {},

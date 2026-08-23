@@ -33,6 +33,7 @@
 #include "snapshot_runtime_ui/adapters.hpp"
 #include "ui/surface.hpp"
 #include "window/window.hpp"
+#include "window_glfw/window.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -53,7 +54,7 @@
 
 EMBED(runtime_host_Cousine_Regular_ttf, "fonts/Cousine-Regular.ttf");
 
-namespace fei::runtime_host {
+namespace ets::runtime_host {
 namespace {
 
 using Json = nlohmann::json;
@@ -699,7 +700,7 @@ void validate_project_plugins(const ProjectRuntimeConfig& runtime) {
 
 RuntimeHostApplication::RuntimeHostApplication(Project project) {
     const bool has_luau_playtests = !project.config().playtests.empty();
-    auto engine_build = read_environment_variable("FEI_RUNTIME_BUILD_ID");
+    auto engine_build = read_environment_variable("ETS_RUNTIME_BUILD_ID");
     if (!engine_build) {
         auto detected_build = current_runtime_build_id();
         if (!detected_build) {
@@ -800,10 +801,10 @@ RuntimeHostApplication::RuntimeHostApplication(Project project) {
         .add_resource(QuickSaveRequests {})
         .add_resource(QuickSaveHotkeyLatch {})
         .add_resource(
-            WindowConfig {
+            GlfwWindowConfig {
                 .width = 1600,
                 .height = 900,
-                .title = "Fei Runtime Host",
+                .title = "Entisium Runtime Host",
             }
         )
         .add_systems(Last, request_quick_save_hotkeys);
@@ -856,9 +857,9 @@ void RuntimeHostApplication::run() {
     }
 
     const auto exit_after_seconds =
-        read_environment_variable<double>("FEI_EXIT_AFTER_SECONDS");
+        read_environment_variable<double>("ETS_EXIT_AFTER_SECONDS");
     const auto exit_after_frames =
-        read_environment_variable<std::uint64_t>("FEI_EXIT_AFTER_FRAMES");
+        read_environment_variable<std::uint64_t>("ETS_EXIT_AFTER_FRAMES");
     const auto start_time = std::chrono::steady_clock::now();
     std::uint64_t frame_count = 0;
 
@@ -893,7 +894,10 @@ void RuntimeHostApplication::run() {
         );
         snapshot_registry.resource<Project>(snapshot::ResourcePolicy::Ignore);
         snapshot_registry.resource<Window>(snapshot::ResourcePolicy::Ignore);
-        snapshot_registry.resource<WindowConfig>(
+        snapshot_registry.resource<GlfwWindow>(
+            snapshot::ResourcePolicy::Ignore
+        );
+        snapshot_registry.resource<GlfwWindowConfig>(
             snapshot::ResourcePolicy::Ignore
         );
         if (auto configured = snapshot_runtime::configure_builtin_adapters(
@@ -1431,10 +1435,10 @@ void RuntimeHostApplication::run() {
                         dispatch_manual_inspection(*request)
                     );
                 }
-                if (m_app.has_resource<Window>()) {
+                if (m_app.has_resource<GlfwWindow>()) {
                     glfwPollEvents();
                     if (glfwWindowShouldClose(
-                            m_app.resource<Window>().glfw_window
+                            m_app.resource<GlfwWindow>().handle
                         )) {
                         m_app.resource<AppStates>().should_stop = true;
                     }
@@ -1465,4 +1469,4 @@ void RuntimeHostApplication::run() {
     shutdown();
 }
 
-} // namespace fei::runtime_host
+} // namespace ets::runtime_host

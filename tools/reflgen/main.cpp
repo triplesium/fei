@@ -244,7 +244,7 @@ int main(int argc, char** argv) {
         normalize_options(options);
 
         if (options.aggregate) {
-            fei::reflgen::generate_aggregate_cpp_file(
+            ets::reflgen::generate_aggregate_cpp_file(
                 options.registrars,
                 options.output_file
             );
@@ -254,15 +254,15 @@ int main(int argc, char** argv) {
             return 0;
         }
 
-        fei::reflgen::HeaderParser parser(
+        ets::reflgen::HeaderParser parser(
             options.headers,
             options.includes,
             options.verbose
         );
         auto output = parser.parse();
         auto& result = output.result;
-        fei::reflgen::dedupe_reflected_types(result);
-        fei::reflgen::filter_codegen_unsupported_members(result);
+        ets::reflgen::dedupe_reflected_types(result);
+        ets::reflgen::filter_codegen_unsupported_members(result);
 
         std::cout << "\nParsing complete! Found " << result.classes.size()
                   << " classes and " << result.enums.size() << " enums in "
@@ -273,7 +273,7 @@ int main(int argc, char** argv) {
         }
 
         if (!options.output_file.empty()) {
-            fei::reflgen::generate_cpp_file(
+            ets::reflgen::generate_cpp_file(
                 result,
                 options.root_dir,
                 options.output_file,

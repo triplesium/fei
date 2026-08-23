@@ -4,7 +4,7 @@
 
 #include <utility>
 
-namespace fei {
+namespace ets {
 
 class ProjectPlugin : public Plugin {
   private:
@@ -17,4 +17,4 @@ class ProjectPlugin : public Plugin {
     void setup(App& app) override;
 };
 
-} // namespace fei
+} // namespace ets

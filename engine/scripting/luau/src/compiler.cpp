@@ -24,7 +24,7 @@
 #include <utility>
 #include <vector>
 
-namespace fei {
+namespace ets {
 namespace {
 
 using Luau::AstExpr;
@@ -2046,4 +2046,4 @@ Result<LuauScriptLibraryArtifact, ScriptError> compile_luau_script_library(
     };
 }
 
-} // namespace fei
+} // namespace ets
