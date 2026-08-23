@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
-export type ProjectOperation = "new" | "rename" | "delete" | null;
+export type ProjectOperation = "new" | "new-folder" | "rename" | "delete" | null;
 
 interface ProjectOperationDialogProps {
     operation: ProjectOperation;
@@ -24,6 +24,7 @@ interface ProjectOperationDialogProps {
 
 const titles: Record<Exclude<ProjectOperation, null>, string> = {
     new: "Create file",
+    "new-folder": "Create folder",
     rename: "Rename file",
     delete: "Delete file",
 };
@@ -49,7 +50,9 @@ export function ProjectOperationDialog({
                     <DialogDescription>
                         {destructive
                             ? "This removes the file from the project's asset directory."
-                            : "Paths are relative to the project’s Assets root."}
+                            : operation === "new-folder"
+                              ? "The folder path is relative to the project’s Assets root."
+                              : "Paths are relative to the project’s Assets root."}
                     </DialogDescription>
                 </DialogHeader>
                 <label className="grid gap-1.5 text-[10px] font-semibold text-[#b7bdc8]" htmlFor="operation-path">
@@ -66,7 +69,7 @@ export function ProjectOperationDialog({
                     />
                 </label>
                 {error && (
-                    <p className="m-0 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[9px] leading-4 text-[#ff9aaa]">
+                    <p className="m-0 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[10px] leading-4 text-[#ff9aaa]">
                         {error}
                     </p>
                 )}

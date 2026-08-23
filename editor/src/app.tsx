@@ -7,12 +7,15 @@ import {
 } from "dockview-react";
 import {
     Bot,
+    ChevronDown,
+    ChevronRight,
     Code2,
     File,
     FileCode2,
     FileJson,
     Folder,
     FolderOpen,
+    FolderPlus,
     Image,
     Pencil,
     Play,
@@ -21,7 +24,14 @@ import {
     Settings2,
     Terminal,
     Trash2,
+    X,
 } from "lucide-react";
+import {
+    hotkeysCoreFeature,
+    selectionFeature,
+    syncDataLoaderFeature,
+} from "@headless-tree/core";
+import { useTree } from "@headless-tree/react";
 import {
     createContext,
     useCallback,
@@ -45,6 +55,13 @@ import { EditorTopbar } from "./components/editor-topbar";
 import { SettingsDialog } from "./components/settings-dialog";
 import { Badge } from "./components/ui/badge";
 import { Button as UiButton } from "./components/ui/button";
+import {
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuSeparator,
+    ContextMenuTrigger,
+} from "./components/ui/context-menu";
 import { IconButton } from "./components/ui/icon-button";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { ScrollArea } from "./components/ui/scroll-area";
@@ -250,55 +267,192 @@ function FileTree({
     files,
     activePath,
     onSelect,
+    onContextSelect,
 }: {
     files: ProjectFileEntry[];
     activePath: string;
     onSelect(path: string): void;
+    onContextSelect(path: string): void;
 }) {
-    const renderNodes = (nodes: FileTreeNode[], depth = 0): React.ReactNode =>
-        nodes.map((node) => {
-            if (!node.entry) {
+    const rootId = "__assets_root__";
+    const treeData = useMemo(() => {
+        const rootNodes = buildFileTree(files);
+        const items = new Map<string, FileTreeNode>();
+        const register = (nodes: FileTreeNode[]) => {
+            for (const node of nodes) {
+                items.set(node.path, node);
+                register(node.children);
+            }
+        };
+        register(rootNodes);
+        items.set(rootId, {
+            name: "Assets",
+            path: rootId,
+            children: rootNodes,
+        });
+        return {
+            items,
+            expandedItems: [...items.values()]
+                .filter((item) => item.path !== rootId && !item.entry)
+                .map((item) => item.path),
+        };
+    }, [files]);
+    const activeItemId = useMemo(
+        () =>
+            [...treeData.items.values()].find((item) => item.entry?.path === activePath)
+                ?.path,
+        [activePath, treeData],
+    );
+
+    const tree = useTree<FileTreeNode>({
+        rootItemId: rootId,
+        initialState: {
+            expandedItems: treeData.expandedItems,
+            selectedItems: activeItemId ? [activeItemId] : [],
+        },
+        state: {
+            selectedItems: activeItemId ? [activeItemId] : [],
+        },
+        getItemName: (item) => item.getItemData().name,
+        isItemFolder: (item) => {
+            const entry = item.getItemData().entry;
+            return !entry || entry.kind === "directory";
+        },
+        dataLoader: {
+            getItem: (itemId) => treeData.items.get(itemId)!,
+            getChildren: (itemId) =>
+                treeData.items.get(itemId)?.children.map((child) => child.path) ?? [],
+        },
+        onPrimaryAction: (item) => {
+            const entry = item.getItemData().entry;
+            if (entry && entry.kind !== "directory" && !entry.readonly) onSelect(entry.path);
+        },
+        features: [syncDataLoaderFeature, selectionFeature, hotkeysCoreFeature],
+    });
+
+    useEffect(() => {
+        tree.rebuildTree();
+    }, [tree, treeData]);
+
+    return (
+        <div {...tree.getContainerProps("Project files")} className="min-h-full py-1 outline-none">
+            {tree.getItems().map((item) => {
+                const node = item.getItemData();
+                const entry = node.entry;
+                const active = entry?.path === activePath;
                 return (
-                    <div key={node.path} className="tree-directory">
-                        <div
-                            className="flex h-7 items-center gap-2 text-[11px] font-semibold text-[#b7bdc8]"
-                            style={{ paddingLeft: 8 + depth * 14 }}
+                    <button
+                        {...item.getProps()}
+                        key={item.getKey()}
+                        type="button"
+                        aria-current={active ? "page" : undefined}
+                        aria-disabled={entry?.readonly || undefined}
+                        data-file-operation-target={
+                            entry && entry.kind !== "directory" && !entry.readonly
+                                ? "true"
+                                : undefined
+                        }
+                        className={cn(
+                            "mx-1 flex h-7 w-[calc(100%-8px)] items-center gap-1 border-0 bg-transparent pr-2 text-left text-[12px] text-[#bdbdbd] outline-none transition-colors hover:bg-[#333] focus-visible:bg-[#363636]",
+                            item.isFolder() && "font-medium text-[#c7c7c7]",
+                            active &&
+                                "rounded-sm bg-[#464646] text-[#eeeeee] hover:bg-[#4a4a4a]",
+                            entry?.readonly && "text-[#929292]",
+                        )}
+                        style={{ paddingLeft: 5 + item.getItemMeta().level * 14 }}
+                        onContextMenu={() => {
+                            if (entry && entry.kind !== "directory") onContextSelect(entry.path);
+                        }}
+                    >
+                        <span className="grid size-3.5 shrink-0 place-items-center text-muted-foreground">
+                            {item.isFolder() &&
+                                (item.isExpanded() ? (
+                                    <ChevronDown size={13} strokeWidth={1.8} />
+                                ) : (
+                                    <ChevronRight size={13} strokeWidth={1.8} />
+                                ))}
+                        </span>
+                        <span
+                            className={cn(
+                                "grid size-4 shrink-0 place-items-center text-[#8d9cac]",
+                                active && "text-[#62b3ff]",
+                            )}
                         >
-                            <FolderOpen className="shrink-0 text-muted-foreground" size={14} strokeWidth={1.6} />
-                            <span className="truncate">{node.name}</span>
-                        </div>
-                        {renderNodes(node.children, depth + 1)}
+                            {item.isFolder() ? (
+                                <FolderOpen size={14} strokeWidth={1.6} />
+                            ) : entry ? (
+                                fileIcon(entry)
+                            ) : (
+                                <File size={14} strokeWidth={1.6} />
+                            )}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{node.name}</span>
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+function CodeFileTabs({
+    paths,
+    activePath,
+    dirty,
+    onSelect,
+    onClose,
+}: {
+    paths: string[];
+    activePath: string;
+    dirty: boolean;
+    onSelect(path: string): void;
+    onClose(path: string): void;
+}) {
+    if (paths.length === 0) return null;
+    return (
+        <div className="flex h-8 shrink-0 items-stretch overflow-x-auto bg-[#1d1d1d]">
+            {paths.map((path) => {
+                const active = path === activePath;
+                const label = assetRelativePath(path).split("/").at(-1) ?? path;
+                return (
+                    <div
+                        key={path}
+                        title={assetRelativePath(path)}
+                        className={cn(
+                            "group/file-tab flex min-w-0 max-w-52 shrink-0 items-center rounded-t bg-transparent text-[12px] text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground",
+                            active && "bg-[#191919] text-foreground hover:bg-[#191919]",
+                        )}
+                    >
+                        <button
+                            type="button"
+                            className="m-0 flex min-w-0 flex-1 items-center gap-1.5 self-stretch border-0 bg-transparent py-0 pr-1 pl-2.5 text-inherit outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/50"
+                            aria-current={active ? "page" : undefined}
+                            onClick={() => onSelect(path)}
+                        >
+                            <FileCode2 className={cn("size-3.5 shrink-0", active && "text-primary")} />
+                            <span className="min-w-0 flex-1 truncate">{label}</span>
+                            {active && dirty && <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-label="Unsaved" />}
+                        </button>
+                        <button
+                            type="button"
+                            aria-label={`Close ${label}`}
+                            className="mr-1 grid size-5 shrink-0 place-items-center rounded border-0 bg-transparent p-0 text-muted-foreground opacity-0 outline-none transition-[opacity,color,background-color] hover:bg-white/10 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring/50 group-hover/file-tab:opacity-100"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onClose(path);
+                            }}
+                        >
+                            <X className="size-3" />
+                        </button>
                     </div>
                 );
-            }
-            return (
-                <UiButton
-                    key={node.path}
-                    variant="ghost"
-                    size="sm"
-                    className={cn(
-                        "h-7 w-full justify-start gap-2 px-2 font-normal text-[#b7c2d0] hover:bg-muted",
-                        node.entry.path === activePath &&
-                            "bg-[#313844] text-foreground shadow-[inset_2px_0_var(--accent)] hover:bg-[#313844]",
-                    )}
-                    type="button"
-                    disabled={node.entry.readonly}
-                    aria-current={node.entry.path === activePath ? "page" : undefined}
-                    style={{ paddingLeft: 10 + depth * 14 }}
-                    onClick={() => onSelect(node.entry!.path)}
-                >
-                    <span className="shrink-0 text-primary">{fileIcon(node.entry)}</span>
-                    <span className="min-w-0 flex-1 truncate text-left">{node.name}</span>
-                    {node.entry.readonly && <Badge variant="outline">BIN</Badge>}
-                </UiButton>
-            );
-        });
-    return <>{renderNodes(buildFileTree(files))}</>;
+            })}
+        </div>
+    );
 }
 
 type CommandHandler = (request: AgentRequest) => Promise<unknown>;
 
-const workbenchLayoutStorageKey = "entisium-editor-dockview-layout-v2";
+const workbenchLayoutStorageKey = "entisium-editor-dockview-layout-v3";
 const dockviewComponents = { panel: DockPanel };
 const dockviewTabComponents = { engine: EnginePanelTab };
 const WorkbenchPanelsContext = createContext<Record<string, ReactNode>>({});
@@ -322,8 +476,8 @@ function EnginePanelTab({ api }: IDockviewPanelHeaderProps) {
                   ? Settings2
                   : Terminal;
     return (
-        <div className="flex h-full min-w-0 items-center gap-1.5 px-2.5 uppercase tracking-[0.07em]">
-            <Icon className="shrink-0 text-muted-foreground [.dv-active-tab_&]:text-primary" size={13} strokeWidth={1.7} />
+        <div className="flex h-full min-w-0 items-center gap-1.5 px-2.5 font-medium tracking-[0.01em]">
+            <Icon className="shrink-0 text-muted-foreground [.dv-active-tab_&]:text-foreground" size={14} strokeWidth={1.8} />
             <span className="truncate">{api.title}</span>
         </div>
     );
@@ -331,22 +485,23 @@ function EnginePanelTab({ api }: IDockviewPanelHeaderProps) {
 
 function addDefaultWorkbenchPanels(api: DockviewApi): void {
     api.addPanel({
-        id: "project",
+        id: "agent",
         component: "panel",
         tabComponent: "engine",
-        title: "Assets",
-        initialWidth: 230,
-        minimumWidth: 180,
-        maximumWidth: 360,
+        title: "Agent",
+        renderer: "always",
+        initialWidth: 400,
+        minimumWidth: 320,
+        maximumWidth: 560,
     });
     api.addPanel({
         id: "code",
         component: "panel",
         tabComponent: "engine",
         title: "Code",
-        position: { referencePanel: "project", direction: "right" },
-        initialWidth: 660,
-        minimumWidth: 380,
+        position: { referencePanel: "agent", direction: "right" },
+        initialWidth: 760,
+        minimumWidth: 440,
     });
     api.addPanel({
         id: "game",
@@ -354,29 +509,28 @@ function addDefaultWorkbenchPanels(api: DockviewApi): void {
         tabComponent: "engine",
         title: "Game",
         renderer: "always",
-        position: { referencePanel: "code", direction: "right" },
-        initialWidth: 520,
-        minimumWidth: 360,
+        inactive: true,
+        position: { referencePanel: "code", direction: "within" },
     });
     api.addPanel({
-        id: "agent",
+        id: "project",
         component: "panel",
         tabComponent: "engine",
-        title: "Agent",
-        renderer: "always",
-        position: { referencePanel: "game", direction: "right" },
-        initialWidth: 360,
-        minimumWidth: 280,
+        title: "Assets",
+        position: { referencePanel: "code", direction: "right" },
+        initialWidth: 260,
+        minimumWidth: 210,
+        maximumWidth: 360,
     });
     api.addPanel({
         id: "inspector",
         component: "panel",
         tabComponent: "engine",
         title: "Inspector",
-        position: { referencePanel: "game", direction: "below" },
-        initialHeight: 290,
-        minimumWidth: 260,
-        minimumHeight: 120,
+        position: { referencePanel: "project", direction: "below" },
+        initialHeight: 320,
+        minimumWidth: 210,
+        minimumHeight: 160,
     });
     api.addPanel({
         id: "console",
@@ -384,15 +538,18 @@ function addDefaultWorkbenchPanels(api: DockviewApi): void {
         tabComponent: "engine",
         title: "Console",
         position: { referencePanel: "code", direction: "below" },
-        initialHeight: 180,
-        minimumHeight: 90,
+        initialHeight: 170,
+        minimumHeight: 100,
+        maximumHeight: 320,
     });
 
-    const gameWidth = Math.max(460, Math.min(760, Math.round(api.width * 0.4)));
-    api.getPanel("project")?.group.api.setSize({ width: 230 });
-    api.getPanel("game")?.group.api.setSize({ width: gameWidth });
-    api.getPanel("console")?.group.api.setSize({ height: 180 });
-    api.getPanel("inspector")?.group.api.setSize({ height: 280 });
+    const agentWidth = Math.max(340, Math.min(440, Math.round(api.width * 0.28)));
+    const inspectorHeight = Math.max(220, Math.min(360, Math.round(api.height * 0.42)));
+    api.getPanel("agent")?.group.api.setSize({ width: agentWidth });
+    api.getPanel("project")?.group.api.setSize({ width: 260 });
+    api.getPanel("console")?.group.api.setSize({ height: 170 });
+    api.getPanel("inspector")?.group.api.setSize({ height: inspectorHeight });
+    api.getPanel("code")?.api.setActive();
 }
 
 export function App() {
@@ -402,16 +559,15 @@ export function App() {
     }
     const runtimeController = runtimeControllerRef.current;
 
-    const [projectName, setProjectName] = useState("No project open");
-    const [storageLabel, setStorageLabel] = useState("Local folder");
-    const [openFolderLabel, setOpenFolderLabel] = useState("Open Folder");
     const [files, setFiles] = useState<ProjectFileEntry[]>([]);
     const [activePath, setActivePath] = useState("");
+    const [openPaths, setOpenPaths] = useState<string[]>([]);
     const [content, setContent] = useState("");
     const [savedContent, setSavedContent] = useState("");
     const [cursor, setCursor] = useState({ line: 1, column: 1 });
     const [logs, setLogs] = useState<ConsoleEntry[]>([]);
     const [operation, setOperation] = useState<ProjectOperation>(null);
+    const [assetContextOnItem, setAssetContextOnItem] = useState(false);
     const [operationPath, setOperationPath] = useState("");
     const [operationError, setOperationError] = useState("");
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -437,6 +593,7 @@ export function App() {
     const handlersRef = useRef<Record<string, CommandHandler>>({});
     const dockviewApiRef = useRef<DockviewApi | null>(null);
     const dockviewLayoutListenerRef = useRef<{ dispose(): void } | null>(null);
+    const runtimeFocusedGameRef = useRef(false);
 
     const dirty = storage.isOpen && activePath.length > 0 && content !== savedContent;
 
@@ -512,32 +669,35 @@ export function App() {
     };
 
     const selectFile = async (path: string): Promise<void> => {
+        dockviewApiRef.current?.getPanel("code")?.api.setActive();
         if (path === activePath) return;
         if (dirty) await saveActiveFile();
         const next = (await storage.read(path)) ?? "";
+        setOpenPaths((current) => current.includes(path) ? current : [...current, path]);
         setActivePath(path);
         setContent(next);
         setSavedContent(next);
         setCursor({ line: 1, column: 1 });
     };
 
-    const loadOpenedProject = async (name: string): Promise<void> => {
-        setStorageLabel(name);
-        setOpenFolderLabel("Open Folder");
+    const loadOpenedProject = async (): Promise<void> => {
         try {
             const settings = await readProjectSettings();
             if (!settings.name.trim()) throw new Error("Project name is required.");
-            setProjectName(settings.name);
         } catch (error) {
-            setProjectName(name);
             appendConsole("error", "project", `invalid project settings: ${errorMessage(error)}`);
         }
         const entries = await refreshFiles();
+        setOpenPaths([]);
+        setActivePath("");
+        setContent("");
+        setSavedContent("");
         const preferred =
             entries.find((entry) => entry.path === "assets/main.luau") ??
-            entries.find((entry) => !entry.readonly);
+            entries.find((entry) => entry.kind !== "directory" && !entry.readonly);
         if (!preferred) return;
         const next = (await storage.read(preferred.path)) ?? "";
+        setOpenPaths([preferred.path]);
         setActivePath(preferred.path);
         setContent(next);
         setSavedContent(next);
@@ -556,7 +716,6 @@ export function App() {
             throw new Error("Changing the asset directory is not supported by this development editor yet.");
         }
         await storage.write("project.yaml", updateProjectSettingsSource(source, next));
-        setProjectName(next.name);
         if (runtimeState !== "stopped") stopRuntime("project settings changed");
         return next;
     };
@@ -589,7 +748,7 @@ export function App() {
         if (dirty) await saveActiveFile();
         const name = await storage.open();
         stopRuntime("project folder changed");
-        await loadOpenedProject(name);
+        await loadOpenedProject();
         appendConsole("info", "project", `opened local folder ${name}`);
     };
 
@@ -598,10 +757,19 @@ export function App() {
         const previous = activePath;
         const entries = await refreshFiles();
         const next =
-            entries.find((entry) => entry.path === previous && !entry.readonly) ??
-            entries.find((entry) => !entry.readonly);
+            entries.find(
+                (entry) =>
+                    entry.path === previous &&
+                    entry.kind !== "directory" &&
+                    !entry.readonly,
+            ) ?? entries.find((entry) => entry.kind !== "directory" && !entry.readonly);
         if (next) {
             const nextContent = (await storage.read(next.path)) ?? "";
+            setOpenPaths((current) => {
+                const available = new Set(entries.map((entry) => entry.path));
+                const retained = current.filter((path) => available.has(path));
+                return retained.includes(next.path) ? retained : [...retained, next.path];
+            });
             setActivePath(next.path);
             setContent(nextContent);
             setSavedContent(nextContent);
@@ -626,6 +794,7 @@ export function App() {
         await storage.write(path, initialContent);
         await refreshFiles();
         if (select) {
+            setOpenPaths((current) => current.includes(path) ? current : [...current, path]);
             setActivePath(path);
             setContent(initialContent);
             setSavedContent(initialContent);
@@ -633,11 +802,18 @@ export function App() {
         return { path, created: true };
     };
 
+    const createProjectDirectory = async (path: string): Promise<void> => {
+        assertMutablePath(path);
+        await storage.createDirectory(path);
+        await refreshFiles();
+    };
+
     const renameProjectFile = async (source: string, destination: string) => {
         assertMutablePath(source);
         assertMutablePath(destination);
         if (source === activePath && dirty) await saveActiveFile();
         await storage.rename(source, destination);
+        setOpenPaths((current) => current.map((path) => path === source ? destination : path));
         if (source === activePath) setActivePath(destination);
         await refreshFiles();
         return { source, destination, renamed: true };
@@ -648,10 +824,17 @@ export function App() {
         await storage.remove(path);
         const wasActive = path === activePath;
         const entries = await refreshFiles();
+        const remainingOpenPaths = openPaths.filter((candidate) => candidate !== path);
+        setOpenPaths(remainingOpenPaths);
         if (wasActive) {
-            const next = entries.find((entry) => !entry.readonly);
+            const next =
+                remainingOpenPaths
+                    .map((candidate) => entries.find((entry) => entry.path === candidate))
+                    .find((entry) => entry && !entry.readonly) ??
+                entries.find((entry) => !entry.readonly);
             if (next) {
                 const nextContent = (await storage.read(next.path)) ?? "";
+                setOpenPaths((current) => current.includes(next.path) ? current : [...current, next.path]);
                 setActivePath(next.path);
                 setContent(nextContent);
                 setSavedContent(nextContent);
@@ -664,11 +847,34 @@ export function App() {
         return { path, removed: true };
     };
 
+    const closeCodeFile = async (path: string): Promise<void> => {
+        const index = openPaths.indexOf(path);
+        if (index < 0) return;
+        if (path === activePath && dirty) await saveActiveFile();
+        const remaining = openPaths.filter((candidate) => candidate !== path);
+        setOpenPaths(remaining);
+        if (path !== activePath) return;
+
+        const nextPath = remaining[Math.min(index, remaining.length - 1)];
+        if (!nextPath) {
+            setActivePath("");
+            setContent("");
+            setSavedContent("");
+            setCursor({ line: 1, column: 1 });
+            return;
+        }
+        const next = (await storage.read(nextPath)) ?? "";
+        setActivePath(nextPath);
+        setContent(next);
+        setSavedContent(next);
+        setCursor({ line: 1, column: 1 });
+    };
+
     const projectSnapshot = async () => {
         if (dirty) await saveActiveFile();
         const entries = await storage.list();
         return Promise.all(
-            entries.map(async (entry) => ({
+            entries.filter((entry) => entry.kind !== "directory").map(async (entry) => ({
                 path: entry.path,
                 content:
                     entry.kind === "binary"
@@ -693,6 +899,7 @@ export function App() {
         setOperation(next);
         setOperationError("");
         if (next === "new") setOperationPath("new.luau");
+        else if (next === "new-folder") setOperationPath("new_folder");
         else setOperationPath(assetRelativePath(activePath));
     };
 
@@ -703,6 +910,9 @@ export function App() {
             if (operation === "new") {
                 await createProjectFile(path, newFileContent(path), true);
                 appendConsole("info", "project", `created ${displayPath}`);
+            } else if (operation === "new-folder") {
+                await createProjectDirectory(path);
+                appendConsole("info", "project", `created folder ${displayPath}`);
             } else if (operation === "rename") {
                 const source = activePath;
                 await renameProjectFile(source, path);
@@ -724,12 +934,9 @@ export function App() {
             .then(async (remembered) => {
                 if (cancelled) return;
                 if (remembered?.restored) {
-                    await loadOpenedProject(remembered.name);
+                    await loadOpenedProject();
                     appendConsole("info", "project", `restored local folder ${remembered.name}`);
                 } else if (remembered?.permissionRequired) {
-                    setProjectName(remembered.name);
-                    setStorageLabel("Permission required");
-                    setOpenFolderLabel(`Reopen ${remembered.name}`);
                     appendConsole("info", "editor", `reopen ${remembered.name} to grant access`);
                 } else {
                     appendConsole("info", "editor", "ready; open a local project folder");
@@ -749,6 +956,24 @@ export function App() {
 
     useEffect(() => {
         document.documentElement.dataset.entisiumEditorRuntime = runtimeState;
+    }, [runtimeState]);
+
+    useEffect(() => {
+        const api = dockviewApiRef.current;
+        if (!api) return;
+
+        if (runtimeState === "starting") {
+            if (api.activePanel?.id !== "game") {
+                api.getPanel("game")?.api.setActive();
+                runtimeFocusedGameRef.current = true;
+            }
+            return;
+        }
+
+        if (runtimeState === "stopped" && runtimeFocusedGameRef.current) {
+            if (api.activePanel?.id === "game") api.getPanel("code")?.api.setActive();
+            runtimeFocusedGameRef.current = false;
+        }
     }, [runtimeState]);
 
     useEffect(() => {
@@ -1144,7 +1369,18 @@ export function App() {
         }
 
         dockviewLayoutListenerRef.current?.dispose();
-        api.getPanel("project")?.api.setTitle("Assets");
+        for (const [id, title] of [
+            ["agent", "Agent"],
+            ["code", "Code"],
+            ["game", "Game"],
+            ["project", "Assets"],
+            ["inspector", "Inspector"],
+            ["console", "Console"],
+        ] as const) {
+            api.getPanel(id)?.api.setTitle(title);
+        }
+        api.getPanel("code")?.api.setActive();
+        localStorage.setItem(workbenchLayoutStorageKey, JSON.stringify(api.toJSON()));
         dockviewLayoutListenerRef.current = api.onDidLayoutChange(() => {
             localStorage.setItem(workbenchLayoutStorageKey, JSON.stringify(api.toJSON()));
         });
@@ -1231,73 +1467,97 @@ export function App() {
         />
     );
 
-    useEffect(() => {
-        dockviewApiRef.current
-            ?.getPanel("code")
-            ?.api.setTitle(
-                activePath ? `${assetRelativePath(activePath)}${dirty ? " •" : ""}` : "Code",
-            );
-    }, [activePath, dirty]);
-
     const workbenchPanels: Record<string, ReactNode> = {
         project: (
-            <ToolPanel>
-                <PanelToolbar>
-                    <span>{files.length > 0 ? `${files.length} files` : storageLabel}</span>
-                    <div className="flex items-center gap-px">
-                        <IconButton
-                            id="project-settings"
-                            label="Project settings"
-                            disabled={!storage.isOpen}
-                            onClick={() =>
-                                void showProjectSettings().catch((error) =>
-                                    appendConsole("error", "project", errorMessage(error)),
-                                )
-                            }
-                        >
-                            <Settings2 size={14} />
-                        </IconButton>
-                        <IconButton label="New file" disabled={!storage.isOpen} onClick={() => showOperation("new")}>
-                            <Plus size={14} />
-                        </IconButton>
-                        <IconButton label="Rename" disabled={!canEdit} onClick={() => showOperation("rename")}>
-                            <Pencil size={13} />
-                        </IconButton>
-                        <IconButton label="Delete" danger disabled={!canEdit} onClick={() => showOperation("delete")}>
-                            <Trash2 size={14} />
-                        </IconButton>
-                        <IconButton label="Refresh folder" disabled={!storage.isOpen} onClick={() => void refreshProjectFolder()}>
-                            <RefreshCw size={14} />
-                        </IconButton>
+            <ContextMenu>
+                <ContextMenuTrigger asChild>
+                    <div
+                        className="size-full"
+                        onContextMenu={(event) => {
+                            setAssetContextOnItem(
+                                event.target instanceof Element &&
+                                    Boolean(event.target.closest('[data-file-operation-target="true"]')),
+                            );
+                        }}
+                    >
+                        <ToolPanel>
+                            <ScrollArea className="min-h-0 flex-1">
+                            <nav className="min-h-full p-1.5" aria-label="Project files">
+                                {!storage.isOpen ? (
+                                    <PanelEmptyState>
+                                        <Folder size={28} strokeWidth={1.3} />
+                                        <span>Open a local project folder to begin.</span>
+                                    </PanelEmptyState>
+                                ) : (
+                                    <FileTree
+                                        files={files}
+                                        activePath={activePath}
+                                        onSelect={(path) => void selectFile(path)}
+                                        onContextSelect={(path) => void selectFile(path)}
+                                    />
+                                )}
+                            </nav>
+                            </ScrollArea>
+                        </ToolPanel>
                     </div>
-                </PanelToolbar>
-                <ScrollArea className="min-h-0 flex-1">
-                    <nav className="min-h-full p-1.5" aria-label="Project files">
-                        {!storage.isOpen ? (
-                            <PanelEmptyState>
-                                <Folder size={28} strokeWidth={1.3} />
-                                <span>Open a local project folder to begin.</span>
-                            </PanelEmptyState>
-                        ) : (
-                            <FileTree files={files} activePath={activePath} onSelect={(path) => void selectFile(path)} />
-                        )}
-                    </nav>
-                </ScrollArea>
-                <PanelStatus>
-                    <span className="truncate" title={storageLabel}>{storageLabel}</span>
-                    <span className={dirty ? "text-[#fbbf24]" : ""}>{canEdit ? (dirty ? "Unsaved" : "Saved") : "—"}</span>
-                </PanelStatus>
-            </ToolPanel>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                    <ContextMenuItem disabled={!storage.isOpen} onSelect={() => showOperation("new")}>
+                        <Plus />
+                        New File…
+                    </ContextMenuItem>
+                    <ContextMenuItem disabled={!storage.isOpen} onSelect={() => showOperation("new-folder")}>
+                        <FolderPlus />
+                        New Folder…
+                    </ContextMenuItem>
+                    <ContextMenuItem disabled={!canEdit || !assetContextOnItem} onSelect={() => showOperation("rename")}>
+                        <Pencil />
+                        Rename…
+                    </ContextMenuItem>
+                    <ContextMenuItem className="text-destructive" disabled={!canEdit || !assetContextOnItem} onSelect={() => showOperation("delete")}>
+                        <Trash2 />
+                        Delete…
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem disabled={!storage.isOpen} onSelect={() => void refreshProjectFolder()}>
+                        <RefreshCw />
+                        Refresh
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                        disabled={!storage.isOpen}
+                        onSelect={() =>
+                            void showProjectSettings().catch((error) =>
+                                appendConsole("error", "project", errorMessage(error)),
+                            )
+                        }
+                    >
+                        <Settings2 />
+                        Project Settings…
+                    </ContextMenuItem>
+                </ContextMenuContent>
+            </ContextMenu>
         ),
         code: (
             <ToolPanel className="editor-panel">
-                <CodeEditor
-                    path={activePath}
-                    value={content}
-                    readOnly={!canEdit}
-                    onChange={setContent}
-                    onCursorChange={(line, column) => setCursor({ line, column })}
+                <CodeFileTabs
+                    paths={openPaths}
+                    activePath={activePath}
+                    dirty={dirty}
+                    onSelect={(path) => void selectFile(path)}
+                    onClose={(path) => void closeCodeFile(path)}
                 />
+                {activePath ? (
+                    <CodeEditor
+                        key={activePath}
+                        path={activePath}
+                        value={content}
+                        readOnly={!canEdit}
+                        onChange={setContent}
+                        onCursorChange={(line, column) => setCursor({ line, column })}
+                    />
+                ) : (
+                    <PanelEmptyState>Select a file to edit.</PanelEmptyState>
+                )}
                 <PanelStatus className="justify-end">
                     <span>{dirty ? "● Unsaved" : "Saved"}</span>
                     <span>Ln {cursor.line}, Col {cursor.column}</span>
@@ -1314,8 +1574,8 @@ export function App() {
                         Clear
                     </UiButton>
                 </PanelToolbar>
-                <ScrollArea viewportRef={consoleRef} className="min-h-0 flex-1 bg-[#0a0e13]">
-                    <div className="min-h-full px-2.5 py-1.5 font-mono text-[10px] leading-[1.5]" aria-live="polite">
+                <ScrollArea viewportRef={consoleRef} className="min-h-0 flex-1 bg-[#191919]">
+                    <div className="min-h-full px-2.5 py-1.5 font-mono text-[12px] leading-[1.55]" aria-live="polite">
                         {logs.length === 0 && <PanelEmptyState>No console output.</PanelEmptyState>}
                         {logs.map((entry) => (
                             <div
@@ -1351,7 +1611,7 @@ export function App() {
             />
         ),
         agent: (
-            <ToolPanel className="min-h-0 bg-[#0d1117]">
+            <ToolPanel className="min-h-0 bg-[#191919]">
                 <PiAssistantThread
                     agent={piAgent}
                     enabled={agentGatewayState.state === "ready"}
@@ -1369,7 +1629,7 @@ export function App() {
                         <PanelSectionTitle>RUNTIME</PanelSectionTitle>
                         <dl className="mt-2">
                             {[["State", runtimeDetail], ["Script", runtimeScript], ["Frame", runtimeFrame]].map(([label, value]) => (
-                                <div key={label} className="grid grid-cols-[62px_minmax(0,1fr)] border-b border-border/55 py-1.5 text-[10px]">
+                                <div key={label} className="grid grid-cols-[62px_minmax(0,1fr)] border-b border-border/55 py-1.5 text-[12px]">
                                     <dt className="text-muted-foreground">{label}</dt>
                                     <dd className="m-0 truncate text-right text-[#b7bdc8]">{value}</dd>
                                 </div>
@@ -1379,7 +1639,7 @@ export function App() {
                     <Separator />
                     <PanelSection>
                         <PanelSectionTitle>AGENT API</PanelSectionTitle>
-                        <p className="text-[10px] leading-relaxed text-muted-foreground">UI and agents use the same command bus through <code className="font-mono text-primary">window.entisiumEditorAgent</code>.</p>
+                        <p className="text-[12px] leading-relaxed text-muted-foreground">UI and agents use the same command bus through <code className="font-mono text-primary">window.entisiumEditorAgent</code>.</p>
                         <div className="flex flex-wrap gap-1">
                             {agentApi.capabilities.map((capability) => <Badge key={capability}>{capability}</Badge>)}
                         </div>
@@ -1387,7 +1647,7 @@ export function App() {
                     <Separator />
                     <PanelSection>
                         <PanelSectionTitle>PI TOOLS</PanelSectionTitle>
-                        <p className="text-[10px] leading-relaxed text-muted-foreground">
+                        <p className="text-[12px] leading-relaxed text-muted-foreground">
                             {agentGatewayState.state === "ready"
                                 ? `${agentGatewayState.provider} · ${agentGatewayState.model}`
                                 : agentGatewayState.state === "unconfigured"
@@ -1420,8 +1680,6 @@ export function App() {
         <TooltipProvider delayDuration={450}>
             <div className="flex size-full flex-col overflow-hidden bg-background">
                 <EditorTopbar
-                    projectName={projectName}
-                    openFolderLabel={openFolderLabel}
                     projectOpen={storage.isOpen}
                     canSave={canEdit}
                     runtimeState={runtimeState}
@@ -1457,7 +1715,7 @@ export function App() {
                     }}
                 />
 
-                <main className="min-h-0 flex-1 bg-[#111318] p-[3px]">
+                <main className="min-h-0 flex-1 bg-[#101010] p-1">
                     <WorkbenchPanelsContext.Provider value={workbenchPanels}>
                         <DockviewReact
                             className="dockview-theme-entisium"
