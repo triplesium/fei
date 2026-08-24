@@ -47,6 +47,8 @@ struct LuauScriptLibraryArtifact {
     std::string bytecode;
 };
 
+bool is_native_luau_module(std::string_view specifier);
+
 Result<std::vector<std::string>, ScriptError>
 extract_luau_script_imports(const ScriptSource& source);
 

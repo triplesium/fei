@@ -66,6 +66,9 @@ LuauScriptAssetLoader::load(Reader& reader, const LoadContext& context) {
     std::vector<LuauScriptImport> imports;
     imports.reserve(specifiers->size());
     for (auto& specifier : *specifiers) {
+        if (is_native_luau_module(specifier)) {
+            continue;
+        }
         auto path = resolve_luau_import(context, specifier);
         if (!path) {
             return failure(std::move(path.error()));

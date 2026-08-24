@@ -6,6 +6,7 @@
 #include "ecs/fwd.hpp"
 #include "refl/enum.hpp"
 #include "refl/registry.hpp"
+#include "scripting/reflection_bridge.hpp"
 #include "scripting/state.hpp"
 
 #include <algorithm>
@@ -1933,7 +1934,16 @@ ImportLocals collect_import_locals(const Luau::AstStatBlock& root) {
     return result;
 }
 
-std::unordered_map<std::string, std::string> imported_type_namespaces(
+struct ImportedTypeBinding {
+    std::string qualified;
+    bool script_type {false};
+    bool prefix {false};
+};
+
+using ImportedTypeBindings =
+    std::unordered_map<std::string, ImportedTypeBinding>;
+
+ImportedTypeBindings imported_type_namespaces(
     const ScriptSource& source,
     const ImportLocals& imports
 ) {
@@ -1944,8 +1954,32 @@ std::unordered_map<std::string, std::string> imported_type_namespaces(
     const std::string source_path = delimiter == std::string::npos ?
                                         source.name :
                                         source.name.substr(delimiter + 3);
-    std::unordered_map<std::string, std::string> result;
+    ImportedTypeBindings result;
     for (const auto& [local, specifier] : imports) {
+        const std::string local_name {name_view(local->name)};
+        if (is_native_luau_module(specifier)) {
+            constexpr std::string_view native_prefix = "@entisium/";
+            const std::string_view module_name =
+                std::string_view {specifier}.substr(native_prefix.size());
+            for (const TypeId id :
+                 Registry::instance().types_with_annotation("ScriptModule")) {
+                auto type = Registry::instance().try_get_type(id);
+                if (!type || !is_script_visible(*type)) {
+                    continue;
+                }
+                const auto annotation = type->annotation("ScriptModule");
+                const auto owner =
+                    annotation ? annotation->value("name") : nullopt;
+                if (!owner || *owner != module_name) {
+                    continue;
+                }
+                result.emplace(
+                    local_name + "::" + std::string(type->local_name()),
+                    ImportedTypeBinding {.qualified = type->name()}
+                );
+            }
+            continue;
+        }
         auto dependency =
             (std::filesystem::path(source_path).parent_path() / specifier)
                 .lexically_normal();
@@ -1953,10 +1987,15 @@ std::unordered_map<std::string, std::string> imported_type_namespaces(
             dependency += ".luau";
         }
         result.emplace(
-            std::string(name_view(local->name)) + "::",
-            module_name_from_source(
-                source_prefix + dependency.generic_string()
-            ) + "."
+            local_name + "::",
+            ImportedTypeBinding {
+                .qualified = module_name_from_source(
+                                 source_prefix + dependency.generic_string()
+                             ) +
+                             ".",
+                .script_type = true,
+                .prefix = true,
+            }
         );
     }
     return result;
@@ -1964,11 +2003,17 @@ std::unordered_map<std::string, std::string> imported_type_namespaces(
 
 void qualify_imported_type_ref(
     DynamicTypeRef& type,
-    const std::unordered_map<std::string, std::string>& namespaces
+    const ImportedTypeBindings& namespaces
 ) {
-    for (const auto& [prefix, qualified] : namespaces) {
-        if (type.type_name.starts_with(prefix)) {
-            type.type_name = qualified + type.type_name.substr(prefix.size());
+    if (const auto exact = namespaces.find(type.type_name);
+        exact != namespaces.end() && !exact->second.prefix) {
+        type.type_name = exact->second.qualified;
+        return;
+    }
+    for (const auto& [prefix, binding] : namespaces) {
+        if (binding.prefix && type.type_name.starts_with(prefix)) {
+            type.type_name =
+                binding.qualified + type.type_name.substr(prefix.size());
             return;
         }
     }
@@ -1976,12 +2021,19 @@ void qualify_imported_type_ref(
 
 void qualify_imported_field_type(
     ScriptTypeRef& type,
-    const std::unordered_map<std::string, std::string>& namespaces
+    const ImportedTypeBindings& namespaces
 ) {
-    for (const auto& [prefix, qualified] : namespaces) {
-        if (type.type_name.starts_with(prefix)) {
-            type.type_name = qualified + type.type_name.substr(prefix.size());
-            type.script_type = true;
+    if (const auto exact = namespaces.find(type.type_name);
+        exact != namespaces.end() && !exact->second.prefix) {
+        type.type_name = exact->second.qualified;
+        type.script_type = exact->second.script_type;
+        return;
+    }
+    for (const auto& [prefix, binding] : namespaces) {
+        if (binding.prefix && type.type_name.starts_with(prefix)) {
+            type.type_name =
+                binding.qualified + type.type_name.substr(prefix.size());
+            type.script_type = binding.script_type;
             return;
         }
     }
@@ -1989,7 +2041,7 @@ void qualify_imported_field_type(
 
 void qualify_imported_system_types(
     DynamicSystemDecl& system,
-    const std::unordered_map<std::string, std::string>& namespaces
+    const ImportedTypeBindings& namespaces
 ) {
     const auto qualify_params = [&](auto& params) {
         for (auto& param : params) {
@@ -2321,6 +2373,11 @@ std::string plugin_runtime_source(
 }
 
 } // namespace
+
+bool is_native_luau_module(std::string_view specifier) {
+    constexpr std::string_view prefix = "@entisium/";
+    return specifier.starts_with(prefix) && specifier.size() > prefix.size();
+}
 
 Status<ScriptError> validate_luau_snapshot_safety(const ScriptSource& source) {
     enable_luau_language_features();
@@ -2685,6 +2742,17 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
                 declaration.systems.push_back(std::move(system));
             }
         }
+    }
+    const auto import_locals = collect_import_locals(*parsed.root);
+    const auto imported_namespaces =
+        imported_type_namespaces(source, import_locals);
+    for (auto& type : declaration.types) {
+        for (auto& field : type.fields) {
+            qualify_imported_field_type(field.type, imported_namespaces);
+        }
+    }
+    for (auto& system : declaration.systems) {
+        qualify_imported_system_types(system, imported_namespaces);
     }
     auto valid_dependencies = validate_system_dependencies(declaration.systems);
     if (!valid_dependencies) {

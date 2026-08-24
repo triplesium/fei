@@ -318,7 +318,9 @@ LuauScriptSystemRegistry::load_source(
     if (!imports) {
         return failure(std::move(imports.error()));
     }
-    if (!imports->empty()) {
+    if (std::ranges::any_of(*imports, [](const std::string& specifier) {
+            return !is_native_luau_module(specifier);
+        })) {
         return failure(
             LuauScriptError {
                 "Luau source modules cannot use require without an asset path"

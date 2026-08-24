@@ -20,6 +20,8 @@ struct StaticFactory {
     static StaticFactory make(int value) { return {.value = value}; }
 };
 
+struct NativeValue {};
+
 enum class Mode {
     Active,
 };
@@ -175,6 +177,57 @@ TEST_CASE(
         Registry::instance().get_type(type.type_id())
     ));
     REQUIRE(runtime.seal_module_script_namespaces(*module));
+    CHECK(runtime.call_module_function(*module, "verify"));
+}
+
+TEST_CASE(
+    "Luau runtime requires cached readonly native reflection modules",
+    "[scripting_luau][runtime][module][native]"
+) {
+    auto& registry = Registry::instance();
+    registry.register_cls<luau_runtime_test::nested::NativeValue>(
+        {"ets", "luau_runtime_test", "nested"},
+        "NativeValue"
+    );
+    registry
+        .add_generated_annotation_field<luau_runtime_test::nested::NativeValue>(
+            "ScriptModule",
+            "name",
+            "runtime-test"
+        );
+
+    const ScriptSource source {
+        .name = "native_module.luau",
+        .content = R"(
+            local first = require("@entisium/runtime-test")
+            local second = require("@entisium/runtime-test")
+
+            local function verify()
+                assert(first == second)
+                assert(first.NativeValue ~= nil)
+                local ok = pcall(function()
+                    first.NativeValue = nil
+                end)
+                assert(not ok)
+            end
+
+            return {
+                systems = { system(Update, verify) },
+            }
+        )",
+    };
+    auto artifact = compile_luau_script_module(
+        source,
+        LuauCompileOptions {.snapshot_safe = false}
+    );
+    const std::string artifact_error =
+        artifact.has_value() ? std::string {} : artifact.error().message;
+    INFO(artifact_error);
+    REQUIRE(artifact);
+
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module);
     CHECK(runtime.call_module_function(*module, "verify"));
 }
 

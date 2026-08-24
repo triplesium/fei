@@ -42,8 +42,83 @@ struct LuauRuntime::Impl {
 
     lua_State* state {nullptr};
     std::unordered_map<LuauScriptModuleId, Module> modules;
+    std::unordered_map<std::string, int> native_modules;
     std::uint64_t next_module_id {1};
     ScriptBorrowScope borrow_scope;
+
+    Result<int, std::string>
+    native_module_ref(lua_State* thread, const std::string& specifier) {
+        if (const auto cached = native_modules.find(specifier);
+            cached != native_modules.end()) {
+            return cached->second;
+        }
+
+        constexpr std::string_view prefix = "@entisium/";
+        if (!specifier.starts_with(prefix) ||
+            specifier.size() == prefix.size()) {
+            return failure(
+                "Invalid native Luau module specifier '" + specifier + "'"
+            );
+        }
+        const std::string_view module_name =
+            std::string_view {specifier}.substr(prefix.size());
+        const int base_top = lua_gettop(thread);
+        lua_newtable(thread);
+        const int exports = lua_absindex(thread, -1);
+        std::size_t export_count = 0;
+        for (const TypeId id :
+             Registry::instance().types_with_annotation("ScriptModule")) {
+            auto type = Registry::instance().try_get_type(id);
+            if (!type || !is_script_visible(*type)) {
+                continue;
+            }
+            const auto annotation = type->annotation("ScriptModule");
+            const auto owner = annotation ? annotation->value("name") : nullopt;
+            if (!owner || *owner != module_name) {
+                continue;
+            }
+
+            const std::string name {type->local_name()};
+            lua_getfield(thread, exports, name.c_str());
+            const bool occupied = !lua_isnil(thread, -1);
+            lua_pop(thread, 1);
+            if (occupied) {
+                lua_settop(thread, base_top);
+                return failure(
+                    "Native Luau module '" + specifier +
+                    "' has duplicate export '" + name + "'"
+                );
+            }
+
+            if (auto reflected_enum = Registry::instance().try_get_enum(id)) {
+                lua_newtable(thread);
+                for (const auto& [enumerator, underlying_value] :
+                     reflected_enum->enumerators()) {
+                    detail::push_luau_owned_value(
+                        thread,
+                        reflected_enum->make_val(underlying_value)
+                    );
+                    lua_setfield(thread, -2, enumerator.c_str());
+                }
+                lua_setreadonly(thread, -1, true);
+            } else {
+                detail::push_luau_type_token(thread, id);
+            }
+            lua_setfield(thread, exports, name.c_str());
+            ++export_count;
+        }
+        if (export_count == 0) {
+            lua_settop(thread, base_top);
+            return failure(
+                "Native Luau module '" + specifier + "' is not available"
+            );
+        }
+        lua_setreadonly(thread, exports, true);
+        const int reference = lua_ref(thread, exports);
+        lua_pop(thread, 1);
+        native_modules.emplace(specifier, reference);
+        return reference;
+    }
 
     static int require_module(lua_State* thread) {
         auto* impl =
@@ -53,6 +128,15 @@ struct LuauRuntime::Impl {
         std::size_t length = 0;
         const char* value = luaL_checklstring(thread, 1, &length);
         const std::string specifier {value, length};
+        if (is_native_luau_module(specifier)) {
+            auto native = impl->native_module_ref(thread, specifier);
+            if (!native) {
+                luaL_error(thread, "%s", native.error().c_str());
+                return 0;
+            }
+            lua_getref(thread, *native);
+            return 1;
+        }
         if (importer == nullptr) {
             luaL_error(thread, "Luau importer module is not loaded");
             return 0;
