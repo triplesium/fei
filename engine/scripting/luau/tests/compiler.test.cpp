@@ -667,7 +667,51 @@ TEST_CASE(
                         systems = { system(Update, tick) },
                     }
                 )",
-                "mutation of module state 'counter'",
+                "cannot reassign readonly module binding 'counter'",
+            },
+            {
+                R"(
+                    local counter = 0
+                    counter = 1
+                    local function tick() end
+                    return {
+                        systems = { system(Update, tick) },
+                    }
+                )",
+                "cannot reassign readonly module binding 'counter'",
+            },
+            {
+                R"(
+                    local counter = 0
+                    counter += 1
+                    local function tick() end
+                    return {
+                        systems = { system(Update, tick) },
+                    }
+                )",
+                "cannot reassign readonly module binding 'counter'",
+            },
+            {
+                R"(
+                    local counter = 0
+                    local function tick()
+                        counter = 1
+                    end
+                    return {
+                        systems = { system(Update, tick) },
+                    }
+                )",
+                "cannot reassign readonly module binding 'counter'",
+            },
+            {
+                R"(
+                    local function tick() end
+                    tick = function() end
+                    return {
+                        systems = { system(Update, tick) },
+                    }
+                )",
+                "cannot reassign readonly module binding 'tick'",
             },
             {
                 R"(
@@ -819,8 +863,9 @@ TEST_CASE(
     );
     REQUIRE_FALSE(library);
     CHECK(
-        library.error().message.find("mutation of module state 'value'") !=
-        std::string::npos
+        library.error().message.find(
+            "cannot reassign readonly module binding 'value'"
+        ) != std::string::npos
     );
 }
 

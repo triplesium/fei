@@ -122,8 +122,22 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
     Optional<ScriptError> error;
     std::string source_name;
 
-    explicit LuauSnapshotSafetyVisitor(std::string source) :
-        source_name(std::move(source)) {}
+    LuauSnapshotSafetyVisitor(
+        const Luau::AstStatBlock& root,
+        std::string source
+    ) : source_name(std::move(source)) {
+        for (const AstStat* statement : root.body) {
+            if (const auto* local = statement->as<AstStatLocal>()) {
+                for (const AstLocal* variable : local->vars) {
+                    m_readonly_module_bindings.insert(variable);
+                }
+                continue;
+            }
+            if (const auto* function = statement->as<AstStatLocalFunction>()) {
+                m_readonly_module_bindings.insert(function->name);
+            }
+        }
+    }
 
     bool visit(AstStatAssign* statement) override {
         for (AstExpr* target : statement->vars) {
@@ -250,6 +264,7 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
   private:
     std::unordered_set<const AstLocal*> m_module_state_aliases;
     std::unordered_set<const AstLocal*> m_native_module_imports;
+    std::unordered_set<const AstLocal*> m_readonly_module_bindings;
 
     static bool is_native_module_require(const AstExpr& expression) {
         const auto* call = expression.as<AstExprCall>();
@@ -318,6 +333,16 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
             );
             return false;
         }
+        if (const auto* local = target.as<AstExprLocal>();
+            local != nullptr &&
+            m_readonly_module_bindings.contains(local->local)) {
+            reject(
+                target.location,
+                "cannot reassign readonly module binding '" +
+                    std::string(name_view(local->local->name)) + "'"
+            );
+            return false;
+        }
         if (references_module_state(*root)) {
             const auto* local = root->as<AstExprLocal>();
             reject(
@@ -368,7 +393,7 @@ Status<ScriptError> validate_parsed_luau_snapshot_safety(
     const ScriptSource& source,
     Luau::AstStatBlock& root
 ) {
-    LuauSnapshotSafetyVisitor visitor {source.name};
+    LuauSnapshotSafetyVisitor visitor {root, source.name};
     root.visit(&visitor);
     if (visitor.error) {
         return failure(std::move(*visitor.error));
