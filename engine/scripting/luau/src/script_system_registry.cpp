@@ -33,6 +33,45 @@ LuauScriptSource script_source_for_asset(
     };
 }
 
+LuauImportedFunctionResolver make_imported_function_resolver(
+    const Assets<LuauScriptAsset>& assets,
+    AssetServer& asset_server,
+    const LuauScriptAsset& importer
+) {
+    return [&assets, &asset_server, &importer](
+               std::string_view specifier,
+               std::string_view export_name
+           ) -> Result<LuauImportedFunctionDecl, ScriptError> {
+        const auto imported = std::ranges::find(
+            importer.imports(),
+            specifier,
+            &LuauScriptImport::specifier
+        );
+        if (imported == importer.imports().end()) {
+            return failure(
+                ScriptError {
+                    "Luau imported system module '" + std::string(specifier) +
+                    "' is not a relative script import"
+                }
+            );
+        }
+        const auto asset = asset_server.load<LuauScriptAsset>(imported->path);
+        const auto script = assets.get(asset);
+        if (!script) {
+            return failure(
+                ScriptError {
+                    "Luau imported system module failed to load: " +
+                    imported->path.as_string()
+                }
+            );
+        }
+        return compile_luau_exported_function(
+            script_source_for_asset(assets, asset, *script),
+            export_name
+        );
+    };
+}
+
 Result<LoadedLuauScriptSystemModule, LuauScriptError>
 load_luau_script_system_module(
     LuauRuntime& runtime,
@@ -367,10 +406,13 @@ LuauScriptSystemRegistry::load_asset(
         return failure(LuauScriptError {"Luau script asset not found"});
     }
     const auto source = script_source_for_asset(assets, asset, *script);
-    auto artifact = compile_luau_script_module(
-        source,
-        LuauCompileOptions {.plugin_name = plugin_name}
-    );
+    LuauCompileOptions compile_options {.plugin_name = plugin_name};
+    if (asset_server != nullptr) {
+        compile_options.imported_function_resolver =
+            make_imported_function_resolver(assets, *asset_server, *script);
+    }
+    auto artifact =
+        compile_luau_script_module(source, std::move(compile_options));
     if (!artifact) {
         return failure(std::move(artifact.error()));
     }
@@ -497,10 +539,13 @@ Status<LuauScriptError> LuauScriptSystemRegistry::reload_asset(
         return failure(LuauScriptError {"Luau script asset not found"});
     }
     const auto source = script_source_for_asset(assets, asset, *script);
-    auto artifact = compile_luau_script_module(
-        source,
-        LuauCompileOptions {.plugin_name = module->plugin_name}
-    );
+    LuauCompileOptions compile_options {.plugin_name = module->plugin_name};
+    if (asset_server != nullptr) {
+        compile_options.imported_function_resolver =
+            make_imported_function_resolver(assets, *asset_server, *script);
+    }
+    auto artifact =
+        compile_luau_script_module(source, std::move(compile_options));
     if (!artifact) {
         return failure(std::move(artifact.error()));
     }

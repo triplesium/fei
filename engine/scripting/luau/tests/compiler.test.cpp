@@ -81,6 +81,61 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Luau compiler resolves imported exported system functions",
+    "[scripting_luau][compiler][system][import]"
+) {
+    const ScriptSource movement {
+        .name = "project://scripts/movement.luau",
+        .content = R"(
+            export function move(players: Query<Write<Player>>)
+            end
+        )",
+    };
+    const ScriptSource game {
+        .name = "project://scripts/game.luau",
+        .content = R"(
+            local Movement = require("./movement")
+
+            export type Player = {
+                speed: f32,
+            }
+
+            export local GamePlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, Movement.move)
+                end,
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(
+        game,
+        LuauCompileOptions {
+            .imported_function_resolver =
+                [&movement](std::string_view specifier, std::string_view name)
+                -> Result<LuauImportedFunctionDecl, ScriptError> {
+                if (specifier != "./movement") {
+                    return failure(ScriptError {"unexpected module specifier"});
+                }
+                return compile_luau_exported_function(movement, name);
+            },
+        }
+    );
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    REQUIRE(artifact->declaration.systems.size() == 1);
+    const auto& system = artifact->declaration.systems.front();
+    CHECK(system.name == "project.scripts.movement.move");
+    CHECK(system.schedule == Update);
+    REQUIRE(system.params.size() == 1);
+    const auto& query =
+        static_cast<const DynamicQueryParamDecl&>(*system.params.front());
+    REQUIRE(query.fields.size() == 1);
+    CHECK(query.fields.front().type.type_name == "project.scripts.game.Player");
+}
+
+TEST_CASE(
     "Luau compiler selects one of multiple exported Plugins",
     "[scripting_luau][compiler][plugin][export]"
 ) {

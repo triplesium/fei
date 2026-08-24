@@ -5,6 +5,7 @@
 #include "scripting/module_decl.hpp"
 #include "scripting/source.hpp"
 
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -16,6 +17,17 @@ enum class LuauSystemDeclarationLayout {
     ScheduleGroups,
 };
 
+struct LuauImportedFunctionDecl {
+    std::string name;
+    std::vector<DynamicSystemParamDeclPtr> params;
+};
+
+using LuauImportedFunctionResolver =
+    std::function<Result<LuauImportedFunctionDecl, ScriptError>(
+        std::string_view specifier,
+        std::string_view export_name
+    )>;
+
 struct LuauCompileOptions {
     // Project scripts default to snapshot-safe behavior. The opt-out exists
     // for low-level VM tests and tooling that never participates in rollback.
@@ -23,6 +35,9 @@ struct LuauCompileOptions {
     // Selects one exported Plugin from a value-export module. Empty selects
     // the sole Plugin and is rejected when the module exports more than one.
     std::string_view plugin_name;
+    // Resolves an exported function referenced through a relative require,
+    // for example systems.tick in app:add_system(Update, systems.tick).
+    LuauImportedFunctionResolver imported_function_resolver;
 };
 
 struct LuauPluginDependency {
@@ -53,6 +68,12 @@ Result<std::vector<std::string>, ScriptError>
 extract_luau_script_imports(const ScriptSource& source);
 
 Status<ScriptError> validate_luau_snapshot_safety(const ScriptSource& source);
+
+Result<LuauImportedFunctionDecl, ScriptError> compile_luau_exported_function(
+    const ScriptSource& source,
+    std::string_view export_name,
+    bool snapshot_safe = true
+);
 
 Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
     const ScriptSource& source,

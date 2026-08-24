@@ -1447,6 +1447,15 @@ void qualify_system_script_types(
 }
 
 using TopLevelFunctions = std::unordered_map<const AstLocal*, AstExprFunction*>;
+using ImportLocals = std::unordered_map<const AstLocal*, std::string>;
+
+ImportLocals collect_import_locals(const Luau::AstStatBlock& root);
+
+struct FunctionResolutionContext {
+    const TopLevelFunctions& functions;
+    const ImportLocals& imports;
+    const LuauImportedFunctionResolver& imported_function_resolver;
+};
 
 Result<std::vector<DynamicSystemParamDeclPtr>, ScriptError>
 compile_function_params(const AstExprFunction& function) {
@@ -1462,18 +1471,50 @@ compile_function_params(const AstExprFunction& function) {
     return params;
 }
 
-Result<const AstExprLocal*, ScriptError> top_level_function_ref(
+Result<LuauImportedFunctionDecl, ScriptError> compile_function_ref(
     const AstExpr& expression,
-    const TopLevelFunctions& functions,
-    std::string_view context
+    const FunctionResolutionContext& function_context,
+    std::string_view diagnostic_context
 ) {
     const auto* function_ref = expression.as<AstExprLocal>();
-    if (function_ref == nullptr || !functions.contains(function_ref->local)) {
+    if (function_ref != nullptr &&
+        function_context.functions.contains(function_ref->local)) {
+        auto params = compile_function_params(
+            *function_context.functions.at(function_ref->local)
+        );
+        if (!params) {
+            return failure(std::move(params.error()));
+        }
+        return LuauImportedFunctionDecl {
+            .name = std::string(name_view(function_ref->local->name)),
+            .params = std::move(*params),
+        };
+    }
+
+    const auto* member = expression.as<AstExprIndexName>();
+    const auto* module =
+        member != nullptr ? member->expr->as<AstExprLocal>() : nullptr;
+    const auto imported = module != nullptr ?
+                              function_context.imports.find(module->local) :
+                              function_context.imports.end();
+    if (member == nullptr || imported == function_context.imports.end()) {
         return failure(declaration_error(
-            std::string(context) + " must name a top-level local function"
+            std::string(diagnostic_context) +
+            " must name a top-level local or imported exported function"
         ));
     }
-    return function_ref;
+    if (!function_context.imported_function_resolver) {
+        return failure(declaration_error(
+            std::string(diagnostic_context) +
+            " references imported function '" + imported->second + "." +
+            std::string(name_view(member->index)) +
+            "' without a module resolver"
+        ));
+    }
+    return function_context.imported_function_resolver(
+        imported->second,
+        name_view(member->index)
+    );
 }
 
 bool is_read_only_condition_param(const DynamicSystemParamDecl& param) {
@@ -1495,7 +1536,7 @@ bool is_read_only_condition_param(const DynamicSystemParamDecl& param) {
 
 Result<DynamicConditionDecl, ScriptError> compile_condition(
     const AstExpr& expression,
-    const TopLevelFunctions& functions,
+    const FunctionResolutionContext& function_context,
     RequiredRuntimeTypes& required_runtime_types
 ) {
     const auto* call = expression.as<AstExprCall>();
@@ -1524,35 +1565,29 @@ Result<DynamicConditionDecl, ScriptError> compile_condition(
         return result;
     }
 
-    auto function_ref =
-        top_level_function_ref(expression, functions, "run_if argument");
-    if (!function_ref) {
-        return failure(std::move(function_ref.error()));
+    auto function =
+        compile_function_ref(expression, function_context, "run_if argument");
+    if (!function) {
+        return failure(std::move(function.error()));
     }
-    const auto* function = functions.at((*function_ref)->local);
-    auto params = compile_function_params(*function);
-    if (!params) {
-        return failure(std::move(params.error()));
-    }
-    if (!std::ranges::all_of(*params, [](const auto& param) {
+    if (!std::ranges::all_of(function->params, [](const auto& param) {
             return param && is_read_only_condition_param(*param);
         })) {
         return failure(declaration_error(
-            "condition '" +
-            std::string(name_view((*function_ref)->local->name)) +
+            "condition '" + function->name +
             "' may only use read-only resource and query parameters"
         ));
     }
     return DynamicConditionDecl {
-        .name = std::string(name_view((*function_ref)->local->name)),
-        .params = std::move(*params),
+        .name = std::move(function->name),
+        .params = std::move(function->params),
     };
 }
 
 Result<DynamicSystemDecl, ScriptError> compile_bare_system(
     const AstExpr& expression,
     ScheduleId schedule,
-    const TopLevelFunctions& functions,
+    const FunctionResolutionContext& function_context,
     RequiredRuntimeTypes& required_runtime_types
 ) {
     struct Modifier {
@@ -1586,19 +1621,14 @@ Result<DynamicSystemDecl, ScriptError> compile_bare_system(
     }
     std::ranges::reverse(modifiers);
 
-    auto function_ref =
-        top_level_function_ref(*base, functions, "system entry");
-    if (!function_ref) {
-        return failure(std::move(function_ref.error()));
-    }
-    const auto* function = functions.at((*function_ref)->local);
-    auto params = compile_function_params(*function);
-    if (!params) {
-        return failure(std::move(params.error()));
+    auto function =
+        compile_function_ref(*base, function_context, "system entry");
+    if (!function) {
+        return failure(std::move(function.error()));
     }
     DynamicSystemDecl result {
-        .name = std::string(name_view((*function_ref)->local->name)),
-        .params = std::move(*params),
+        .name = std::move(function->name),
+        .params = std::move(function->params),
         .schedule = schedule,
     };
 
@@ -1607,7 +1637,7 @@ Result<DynamicSystemDecl, ScriptError> compile_bare_system(
             if (modifier.name == "run_if") {
                 auto condition = compile_condition(
                     *argument,
-                    functions,
+                    function_context,
                     required_runtime_types
                 );
                 if (!condition) {
@@ -1616,9 +1646,9 @@ Result<DynamicSystemDecl, ScriptError> compile_bare_system(
                 result.conditions.push_back(std::move(*condition));
                 continue;
             }
-            auto target = top_level_function_ref(
+            auto target = compile_function_ref(
                 *argument,
-                functions,
+                function_context,
                 std::string(modifier.name) + " argument"
             );
             if (!target) {
@@ -1626,7 +1656,7 @@ Result<DynamicSystemDecl, ScriptError> compile_bare_system(
             }
             auto& dependencies =
                 modifier.name == "before" ? result.before : result.after;
-            dependencies.emplace_back(name_view((*target)->local->name));
+            dependencies.push_back(std::move(target->name));
         }
     }
     return result;
@@ -1641,7 +1671,7 @@ struct CompiledSystemGroup {
 Result<CompiledSystemGroup, ScriptError> compile_system_group(
     const AstExpr& expression,
     ScheduleId schedule,
-    const TopLevelFunctions& functions,
+    const FunctionResolutionContext& function_context,
     RequiredRuntimeTypes& required_runtime_types
 ) {
     const auto* call = expression.as<AstExprCall>();
@@ -1652,7 +1682,7 @@ Result<CompiledSystemGroup, ScriptError> compile_system_group(
         auto system = compile_bare_system(
             expression,
             schedule,
-            functions,
+            function_context,
             required_runtime_types
         );
         if (!system) {
@@ -1677,7 +1707,7 @@ Result<CompiledSystemGroup, ScriptError> compile_system_group(
         auto group = compile_system_group(
             *argument,
             schedule,
-            functions,
+            function_context,
             required_runtime_types
         );
         if (!group) {
@@ -1723,7 +1753,7 @@ Result<CompiledSystemGroup, ScriptError> compile_system_group(
 
 Result<DynamicSystemDecl, ScriptError> compile_legacy_system(
     const AstExpr& expression,
-    const TopLevelFunctions& functions,
+    const FunctionResolutionContext& function_context,
     RequiredRuntimeTypes& required_runtime_types
 ) {
     const auto* call = expression.as<AstExprCall>();
@@ -1742,7 +1772,7 @@ Result<DynamicSystemDecl, ScriptError> compile_legacy_system(
     return compile_bare_system(
         *call->args.data[1],
         *schedule,
-        functions,
+        function_context,
         required_runtime_types
     );
 }
@@ -1961,8 +1991,6 @@ struct ExportedPlugin {
     const AstExprTable* descriptor {nullptr};
     const AstExprFunction* build {nullptr};
 };
-
-using ImportLocals = std::unordered_map<const AstLocal*, std::string>;
 
 ImportLocals collect_import_locals(const Luau::AstStatBlock& root) {
     ImportLocals result;
@@ -2289,7 +2317,7 @@ find_exported_plugins(const Luau::AstStatBlock& root) {
 
 Result<std::vector<const AstExpr*>, ScriptError> compile_plugin_systems(
     const ExportedPlugin& plugin,
-    const TopLevelFunctions& functions,
+    const FunctionResolutionContext& function_context,
     RequiredRuntimeTypes& required_runtime_types,
     ScriptModuleDecl& declaration
 ) {
@@ -2386,7 +2414,7 @@ Result<std::vector<const AstExpr*>, ScriptError> compile_plugin_systems(
         auto group = compile_system_group(
             *call->args.data[1],
             *schedule,
-            functions,
+            function_context,
             required_runtime_types
         );
         if (!group) {
@@ -2491,6 +2519,88 @@ extract_luau_script_imports(const ScriptSource& source) {
     return std::move(visitor.imports);
 }
 
+Result<LuauImportedFunctionDecl, ScriptError> compile_luau_exported_function(
+    const ScriptSource& source,
+    std::string_view export_name,
+    bool snapshot_safe
+) {
+    if (!enable_luau_language_features()) {
+        return failure(
+            ScriptError {"Luau value export feature flag is unavailable"}
+        );
+    }
+    Luau::Allocator allocator;
+    Luau::AstNameTable names {allocator};
+    Luau::ParseResult parsed = Luau::Parser::parse(
+        source.content.data(),
+        source.content.size(),
+        names,
+        allocator
+    );
+    if (!parsed.errors.empty()) {
+        const Luau::ParseError& error = parsed.errors.front();
+        return failure(declaration_error(
+            source.name + ":" +
+            std::to_string(error.getLocation().begin.line + 1) + ": " +
+            error.getMessage()
+        ));
+    }
+    if (snapshot_safe) {
+        auto safe = validate_parsed_luau_snapshot_safety(source, *parsed.root);
+        if (!safe) {
+            return failure(std::move(safe.error()));
+        }
+    }
+
+    const AstExprFunction* exported_function = nullptr;
+    for (const AstStat* statement : parsed.root->body) {
+        const auto* function = statement->as<AstStatLocalFunction>();
+        if (function == nullptr || !function->name->isExported ||
+            name_view(function->name->name) != export_name) {
+            continue;
+        }
+        exported_function = function->func;
+        break;
+    }
+    if (exported_function == nullptr) {
+        return failure(declaration_error(
+            "module '" + source.name + "' does not export function '" +
+            std::string(export_name) + "'"
+        ));
+    }
+
+    auto params = compile_function_params(*exported_function);
+    if (!params) {
+        return failure(std::move(params.error()));
+    }
+    DynamicSystemDecl declaration {
+        .name = std::string(export_name),
+        .params = std::move(*params),
+    };
+    auto types = compile_exported_types(
+        *parsed.root,
+        module_name_from_source(source.name)
+    );
+    if (!types) {
+        return failure(std::move(types.error()));
+    }
+    std::unordered_map<std::string, std::string> script_types;
+    for (const auto& type : *types) {
+        script_types.emplace(type.name, type.qualified_name);
+    }
+    qualify_system_script_types(declaration, script_types);
+    const auto imports = collect_import_locals(*parsed.root);
+    qualify_imported_system_types(
+        declaration,
+        imported_type_namespaces(source, imports)
+    );
+    return LuauImportedFunctionDecl {
+        .name = module_name_from_source(source.name) + "." +
+                std::move(declaration.name),
+        .params = std::move(declaration.params),
+    };
+}
+
 Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
     const ScriptSource& source,
     LuauCompileOptions options
@@ -2537,6 +2647,12 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
             table = return_statement->list.data[0]->as<AstExprTable>();
         }
     }
+    const auto import_locals = collect_import_locals(*parsed.root);
+    const FunctionResolutionContext function_context {
+        .functions = functions,
+        .imports = import_locals,
+        .imported_function_resolver = options.imported_function_resolver,
+    };
     auto exported_plugins = find_exported_plugins(*parsed.root);
     if (!exported_plugins) {
         return failure(std::move(exported_plugins.error()));
@@ -2585,14 +2701,13 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
         }
         auto runtime_systems = compile_plugin_systems(
             *exported_plugin,
-            functions,
+            function_context,
             required_runtime_types,
             declaration
         );
         if (!runtime_systems) {
             return failure(std::move(runtime_systems.error()));
         }
-        const auto import_locals = collect_import_locals(*parsed.root);
         std::unordered_map<const AstLocal*, std::string> local_plugins;
         for (const auto& plugin : *exported_plugins) {
             local_plugins.emplace(plugin.local, plugin.name);
@@ -2749,7 +2864,7 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
             }
             auto system = compile_legacy_system(
                 *item.value,
-                functions,
+                function_context,
                 required_runtime_types
             );
             if (!system) {
@@ -2790,7 +2905,7 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
             auto system_group = compile_system_group(
                 *system_item.value,
                 *schedule,
-                functions,
+                function_context,
                 required_runtime_types
             );
             if (!system_group) {
@@ -2802,7 +2917,6 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
             }
         }
     }
-    const auto import_locals = collect_import_locals(*parsed.root);
     const auto imported_namespaces =
         imported_type_namespaces(source, import_locals);
     for (auto& type : declaration.types) {
