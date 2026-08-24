@@ -104,6 +104,15 @@ int main() {
 
 For more samples, please see the [samples folder](samples/).
 
+## Documentation
+
+- [Deterministic agent playtests](docs/playtest.md)
+- [ECS](docs/ecs.md)
+- [2D physics](docs/physics2d.md)
+- [Render app](docs/render-app.md)
+- [Shader compilation](docs/shader-compilation.md)
+- [Profiling](docs/profiling.md)
+
 ## Screenshots
 ![VXGI](docs/images/scene.jpg)
 

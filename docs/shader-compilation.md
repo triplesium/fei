@@ -204,9 +204,9 @@ installation location.
 filesystem, installs the configured `project_runtime::LuauScripts` plugin, and
 runs `project://main.luau`. The project smoke task checks that the Luau module
 loads and that its sprite reaches the presentation phase without JavaScript,
-console, or WebGPU errors. Native-only project playtest/protocol code remains
-outside the WASM target graph; a browser transport can be added separately
-without coupling project loading or scripting to HTTP.
+console, or WebGPU errors. The project also exposes its Luau playtest contract
+through the Editor runtime bridge. See [Playtest](playtest.md) for the contract
+and agent workflow.
 
 The development Web Editor is staged at `editor/index.html` beside the
 browser project output. On Edge and Chrome, it edits a user-authorized local
@@ -235,8 +235,13 @@ using the common `mcpServers` configuration shape can connect with:
 }
 ```
 
-The first MCP surface intentionally matches the built-in agent's safer tool
-set: project list/read/write/create and runtime status/play/stop/restart.
+The MCP surface matches the built-in agent's tool set: project
+list/read/write/create; runtime status/play/stop/restart; structured playtest
+discovery, observation, and fixed-tick steps; and a fallback gameplay loop with
+viewport observation, keyboard and normalized pointer input, bounded waits,
+input release, and recent runtime logs. Viewport observations are returned as
+image content. See [Playtest](playtest.md) for the recommended lifecycle,
+including required runtime cleanup.
 
 The editor source is a Vite, React, and TypeScript application in the
 repository-root `editor/` directory. Building `sample-browser-project` builds

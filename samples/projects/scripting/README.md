@@ -16,34 +16,11 @@ UI layout and rendering, reflected text components, standard button behavior,
 the Runtime Host's embedded fallback font, and real mouse input. Hover or click
 the face to exercise pointer interaction.
 
-When running under `entisium-agentd`, the built-in `runtime.pointer` playtest
-interface can position the pointer and hold `Left`, `Right`, or `Middle` for a
-bounded step. This makes UI clicks reproducible without desktop automation.
-
-Build the supervisor, CLI, and Runtime Host before launching a project:
-
-```powershell
-xmake build -y entisium-agentd
-xmake build -y entisium-ctl
-xmake build -y entisium-runtime-host
-```
-
-For example, launch the platformer from the repository root:
-
-```powershell
-build/windows/x64/debug/entisium-agentd.exe `
-  --project samples/projects/scripting/platformer.project.yaml `
-  --runtime build/windows/x64/debug/entisium-runtime-host.exe `
-  --port 8091
-```
-
-Then discover its contract or execute an ad-hoc control program:
-
-```powershell
-build/windows/x64/debug/entisium-ctl.exe --port 8091 play-interfaces
-build/windows/x64/debug/entisium-ctl.exe --port 8091 play-run --eval `
-  'return play.step("platformer.main", {horizontal=1, jump=true}, 72)'
-```
+The declarations are examples for projects loaded through the Web Editor. Copy
+or rename the desired configuration to `project.yaml`, open its directory in
+the Editor, and use the structured MCP workflow described in
+[`docs/playtest.md`](../../../docs/playtest.md). The Editor also exposes
+normalized pointer input as a fallback for UI projects.
 
 Expected completion conditions are:
 
@@ -53,14 +30,10 @@ Expected completion conditions are:
   id, producing `placed = 3` and `complete = true`.
 - Card battle: choose available damage cards from `hand` until `enemy_hp = 0`
   and `status = "won"`.
-- Rendered checkpoint arena: run `checkpoint_render.retry.luau` through
-  `entisium-ctl play-run --stdin`. It captures the initial frame, despawns the enemy,
-  restores and immediately recaptures the checkpoint, then renders a jumping
-  branch. The initial and restored PNG files should be byte-identical. Run
-  Runtime Host directly for continuous human play with `A`/`D` (or arrow keys)
-  to move, `W`/up arrow to jump, and `Space` to attack; Agent actions use the
-  same gameplay controller. `PageUp` stores a strict quick-save and `PageDown`
-  restores it without advancing the restored simulation state.
+- Rendered checkpoint arena: use `A`/`D` (or arrow keys) to move, `W`/up arrow
+  to jump, and `Space` to attack. Agent actions use the same gameplay
+  controller. `PageUp` stores a strict quick-save and `PageDown` restores it
+  without advancing the restored simulation state.
 
 Launch that continuous keyboard mode from the repository root with:
 
@@ -70,5 +43,5 @@ build/windows/x64/debug/entisium-runtime-host.exe `
 ```
 
 The playtest programs are intentionally not stored as fixed command sequences.
-Agents are expected to inspect each interface and construct different Luau
-control logic with `play-run`.
+Agents are expected to inspect each interface and choose actions from the live
+observation.
