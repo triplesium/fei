@@ -182,7 +182,6 @@ export function PiAssistantThread({
                 style={{ ["--thread-max-width" as string]: "44rem" }}
             >
                 <ThreadPrimitive.Viewport
-                    turnAnchor="top"
                     className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth px-2 pt-4 [scrollbar-gutter:stable]"
                     aria-live="polite"
                 >
