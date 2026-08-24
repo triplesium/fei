@@ -23,7 +23,7 @@ function errorMessage(error: unknown): string {
 
 export class EditorToolRegistry {
     readonly capabilities = Object.freeze(
-        editorToolDefinitions.map((definition) => definition.command),
+        [...new Set(editorToolDefinitions.map((definition) => definition.command))],
     );
 
     createAgentApi(options: EditorAgentApiOptions): EditorAgentApi {

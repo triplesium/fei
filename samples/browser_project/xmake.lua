@@ -8,6 +8,7 @@ target("sample-browser-project")
         "entisium-project-runtime",
         "entisium-project-scripting-luau",
         "entisium-runtime-inspection",
+        "entisium-runtime-inspection-playtest",
         "entisium-sprite",
         "entisium-ui-rendering",
         "entisium-window-browser",

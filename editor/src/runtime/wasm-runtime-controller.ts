@@ -15,6 +15,14 @@ interface RuntimeMessage {
     type: string;
     level?: string;
     message?: unknown;
+    requestId?: string;
+    mimeType?: unknown;
+    data?: unknown;
+    width?: unknown;
+    height?: unknown;
+    error?: unknown;
+    errorKind?: unknown;
+    value?: unknown;
 }
 function runtimeRequestId(): string {
     return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
@@ -44,6 +52,25 @@ export class WasmRuntimeController {
     private pollTimer: number | null = null;
     private startupTimer: number | null = null;
     private listening = false;
+    private readonly heldKeys = new Set<string>();
+    private readonly heldButtons = new Set<number>();
+    private pointer = { x: 0.5, y: 0.5 };
+    private readonly captureRequests = new Map<
+        string,
+        {
+            resolve: (capture: RuntimeCapture) => void;
+            reject: (error: Error) => void;
+            timeout: ReturnType<typeof globalThis.setTimeout>;
+        }
+    >();
+    private readonly inspectionRequests = new Map<
+        string,
+        {
+            resolve: (value: unknown) => void;
+            reject: (error: Error) => void;
+            timeout: ReturnType<typeof globalThis.setTimeout>;
+        }
+    >();
 
     getSnapshot(): RuntimeSnapshot {
         return { ...this.snapshot };
@@ -56,6 +83,122 @@ export class WasmRuntimeController {
 
     attachFrame(frame: HTMLIFrameElement | null): void {
         this.frameElement = frame;
+        if (!frame) {
+            this.heldKeys.clear();
+            this.heldButtons.clear();
+        }
+    }
+
+    capture(): Promise<RuntimeCapture> {
+        const { view } = this.runtimeElements();
+        const session = this.snapshot.session;
+        if (!session) throw new Error("The runtime session is unavailable.");
+        const requestId = runtimeRequestId();
+        return new Promise((resolve, reject) => {
+            const timeout = globalThis.setTimeout(() => {
+                this.captureRequests.delete(requestId);
+                reject(new Error("Runtime frame capture timed out."));
+            }, 5000);
+            this.captureRequests.set(requestId, { resolve, reject, timeout });
+            view.postMessage(
+                {
+                    source: "entisium-editor",
+                    channelId: session.channelId,
+                    type: "runtime.capture",
+                    requestId,
+                },
+                location.origin,
+            );
+        });
+    }
+
+    inspect(provider: string, schema: string, payload: unknown): Promise<unknown> {
+        const { view } = this.runtimeElements();
+        const session = this.snapshot.session;
+        if (!session) throw new Error("The runtime session is unavailable.");
+        if (!provider || !schema) {
+            throw new Error("Runtime inspection requires a provider and schema.");
+        }
+        const requestId = runtimeRequestId();
+        return new Promise((resolve, reject) => {
+            const timeout = globalThis.setTimeout(() => {
+                this.inspectionRequests.delete(requestId);
+                reject(new Error(`Runtime inspection '${provider}' timed out.`));
+            }, 5000);
+            this.inspectionRequests.set(requestId, { resolve, reject, timeout });
+            view.postMessage(
+                {
+                    source: "entisium-editor",
+                    channelId: session.channelId,
+                    type: "runtime.inspect",
+                    requestId,
+                    provider,
+                    schema,
+                    payload,
+                },
+                location.origin,
+            );
+        });
+    }
+
+    async key(code: string, action: string, durationMs = 80): Promise<unknown> {
+        if (!/^(?:Key[A-Z]|Digit[0-9]|Arrow(?:Up|Down|Left|Right)|Space|Enter|Escape|Tab|Shift(?:Left|Right)|Control(?:Left|Right)|Alt(?:Left|Right))$/.test(code)) {
+            throw new Error(`Unsupported runtime key code: ${code}`);
+        }
+        if (action === "press") {
+            this.dispatchKey(code, true);
+        } else if (action === "release") {
+            this.dispatchKey(code, false);
+        } else if (action === "tap") {
+            this.dispatchKey(code, true);
+            await delay(boundedDuration(durationMs, 80));
+            this.dispatchKey(code, false);
+        } else {
+            throw new Error("Runtime key action must be press, release, or tap.");
+        }
+        return { code, action, held: [...this.heldKeys] };
+    }
+
+    async pointerInput(
+        x: number,
+        y: number,
+        action: string,
+        buttonName = "left",
+        durationMs = 50,
+    ): Promise<unknown> {
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) {
+            throw new Error("Runtime pointer coordinates must be between 0 and 1.");
+        }
+        const button = { left: 0, middle: 1, right: 2 }[buttonName];
+        if (button === undefined) throw new Error(`Unsupported pointer button: ${buttonName}`);
+        this.pointer = { x, y };
+        if (action === "move") {
+            this.dispatchPointer("mousemove", button);
+        } else if (action === "press") {
+            this.heldButtons.add(button);
+            this.dispatchPointer("mousedown", button);
+        } else if (action === "release") {
+            this.heldButtons.delete(button);
+            this.dispatchPointer("mouseup", button);
+        } else if (action === "click") {
+            this.heldButtons.add(button);
+            this.dispatchPointer("mousedown", button);
+            await delay(boundedDuration(durationMs, 50));
+            this.heldButtons.delete(button);
+            this.dispatchPointer("mouseup", button);
+        } else {
+            throw new Error("Runtime pointer action must be move, press, release, or click.");
+        }
+        return { x, y, action, button: buttonName };
+    }
+
+    clearInput(): unknown {
+        for (const code of [...this.heldKeys]) this.dispatchKey(code, false);
+        for (const button of [...this.heldButtons]) {
+            this.heldButtons.delete(button);
+            this.dispatchPointer("mouseup", button);
+        }
+        return { cleared: true };
     }
 
     async start(files: RuntimeProjectFile[], force = false): Promise<void> {
@@ -81,6 +224,9 @@ export class WasmRuntimeController {
     }
 
     stop(reason = "runtime stopped", log = true): void {
+        if (this.frameElement) this.clearInput();
+        this.cancelCaptureRequests(reason);
+        this.cancelInspectionRequests(reason);
         this.stopMonitoring();
         this.frameElement = null;
         this.updateSnapshot({
@@ -138,8 +284,96 @@ export class WasmRuntimeController {
         } else if (message.type === "runtime.error") {
             this.emitLog("error", "runtime", String(message.message ?? "runtime failed"));
             this.updateSnapshot({ state: "failed", detail: "failed" });
+        } else if (message.type === "runtime.capture" && message.requestId) {
+            const pending = this.captureRequests.get(message.requestId);
+            if (!pending) return;
+            this.captureRequests.delete(message.requestId);
+            globalThis.clearTimeout(pending.timeout);
+            if (typeof message.error === "string") {
+                pending.reject(new Error(`Runtime frame capture failed: ${message.error}`));
+                return;
+            }
+            if (
+                message.mimeType !== "image/png" ||
+                typeof message.data !== "string" ||
+                typeof message.width !== "number" ||
+                typeof message.height !== "number"
+            ) {
+                pending.reject(new Error("The runtime returned an invalid frame capture."));
+                return;
+            }
+            pending.resolve({
+                mimeType: message.mimeType,
+                data: message.data,
+                width: message.width,
+                height: message.height,
+            });
+        } else if (message.type === "runtime.inspection" && message.requestId) {
+            const pending = this.inspectionRequests.get(message.requestId);
+            if (!pending) return;
+            this.inspectionRequests.delete(message.requestId);
+            globalThis.clearTimeout(pending.timeout);
+            if (typeof message.error === "string") {
+                const kind =
+                    typeof message.errorKind === "string" ? `${message.errorKind}: ` : "";
+                pending.reject(new Error(`Runtime inspection failed: ${kind}${message.error}`));
+                return;
+            }
+            pending.resolve(message.value);
         }
     };
+
+    private runtimeElements(): {
+        view: Window;
+        document: Document;
+        canvas: HTMLCanvasElement;
+    } {
+        if (this.snapshot.state !== "running") {
+            throw new Error("The runtime must be running before game interaction.");
+        }
+        const view = this.frameElement?.contentWindow;
+        const document = this.frameElement?.contentDocument;
+        const canvas = document?.querySelector<HTMLCanvasElement>("#canvas");
+        if (!view || !document || !canvas) throw new Error("The runtime viewport is unavailable.");
+        return { view, document, canvas };
+    }
+
+    private dispatchKey(code: string, down: boolean): void {
+        const { view } = this.runtimeElements();
+        const KeyboardEventConstructor = (
+            view as unknown as { KeyboardEvent: typeof KeyboardEvent }
+        ).KeyboardEvent;
+        if (down) this.heldKeys.add(code);
+        else this.heldKeys.delete(code);
+        view.dispatchEvent(
+            new KeyboardEventConstructor(down ? "keydown" : "keyup", {
+                code,
+                key: keyForCode(code),
+                bubbles: true,
+                cancelable: true,
+            }),
+        );
+    }
+
+    private dispatchPointer(type: "mousemove" | "mousedown" | "mouseup", button: number): void {
+        const { view, canvas } = this.runtimeElements();
+        const MouseEventConstructor = (
+            view as unknown as { MouseEvent: typeof MouseEvent }
+        ).MouseEvent;
+        const bounds = canvas.getBoundingClientRect();
+        const clientX = bounds.left + bounds.width * this.pointer.x;
+        const clientY = bounds.top + bounds.height * this.pointer.y;
+        canvas.dispatchEvent(
+            new MouseEventConstructor(type, {
+                bubbles: true,
+                cancelable: true,
+                clientX,
+                clientY,
+                button,
+                buttons: mouseButtonsMask(this.heldButtons),
+            }),
+        );
+    }
 
     private startMonitoring(): void {
         if (!this.listening) {
@@ -167,6 +401,22 @@ export class WasmRuntimeController {
             window.clearTimeout(this.startupTimer);
             this.startupTimer = null;
         }
+    }
+
+    private cancelCaptureRequests(reason: string): void {
+        for (const pending of this.captureRequests.values()) {
+            globalThis.clearTimeout(pending.timeout);
+            pending.reject(new Error(`Runtime frame capture cancelled: ${reason}`));
+        }
+        this.captureRequests.clear();
+    }
+
+    private cancelInspectionRequests(reason: string): void {
+        for (const pending of this.inspectionRequests.values()) {
+            globalThis.clearTimeout(pending.timeout);
+            pending.reject(new Error(`Runtime inspection cancelled: ${reason}`));
+        }
+        this.inspectionRequests.clear();
     }
 
     private pollRuntimeStatus(): void {
@@ -222,4 +472,38 @@ export class WasmRuntimeController {
     private emit(event: RuntimeEvent): void {
         for (const listener of this.listeners) listener(event);
     }
+}
+
+interface RuntimeCapture {
+    mimeType: "image/png";
+    data: string;
+    width: number;
+    height: number;
+}
+
+function boundedDuration(value: number, fallback: number): number {
+    return Number.isFinite(value) ? Math.max(0, Math.min(5000, value)) : fallback;
+}
+
+function delay(durationMs: number): Promise<void> {
+    return new Promise((resolve) => globalThis.setTimeout(resolve, durationMs));
+}
+
+function keyForCode(code: string): string {
+    if (code.startsWith("Key")) return code.slice(3).toLowerCase();
+    if (code.startsWith("Digit")) return code.slice(5);
+    return {
+        Space: " ",
+        Enter: "Enter",
+        Escape: "Escape",
+        Tab: "Tab",
+    }[code] ?? code;
+}
+
+function mouseButtonsMask(buttons: ReadonlySet<number>): number {
+    let mask = 0;
+    if (buttons.has(0)) mask |= 1;
+    if (buttons.has(2)) mask |= 2;
+    if (buttons.has(1)) mask |= 4;
+    return mask;
 }

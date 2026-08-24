@@ -10,6 +10,7 @@ import { createEditorTools } from "./tools";
 
 const systemPrompt = `You are the built-in agent for the Entisium Editor.
 Use the available tools to inspect and edit the current project and control its WebAssembly runtime.
+When playing a game, call play_interfaces first. Prefer structured play_observe and play_step calls, polling play_step_status until completed. Fall back to viewport capture and input tools when the game exposes no structured interface. Release held inputs when they are no longer needed.
 Do not claim an operation succeeded until its tool result confirms success.`;
 
 const unconfiguredStream: StreamFn = () => {

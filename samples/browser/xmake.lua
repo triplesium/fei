@@ -2,6 +2,7 @@ function add_browser_shell(shell_file)
     add_ldflags(
         "--shell-file",
         shell_file,
+        "-sEXPORTED_RUNTIME_METHODS=ccall",
         {force = true}
     )
     add_extrafiles(shell_file)

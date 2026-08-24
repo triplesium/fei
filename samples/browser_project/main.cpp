@@ -6,9 +6,13 @@
 #include "graphics_webgpu_browser/plugin.hpp"
 #include "project/project.hpp"
 #include "project_runtime/runtime.hpp"
+#include "project_scripting_luau/playtest.hpp"
 #include "project_scripting_luau/plugin.hpp"
 #include "rendering/plugin.hpp"
 #include "rendering/render_app.hpp"
+#include "runtime_inspection/provider.hpp"
+#include "runtime_inspection/registry.hpp"
+#include "runtime_inspection_playtest/playtest.hpp"
 #include "sprite/plugin.hpp"
 #include "sprite/renderer.hpp"
 #include "ui_rendering/plugin.hpp"
@@ -16,7 +20,85 @@
 
 #include <emscripten.h>
 #include <string>
+#include <string_view>
 #include <utility>
+
+namespace {
+
+ets::World* g_runtime_world = nullptr;
+
+void publish_inspection(
+    const char* request_id,
+    bool ok,
+    std::string_view value,
+    std::string_view error_kind,
+    std::string_view error_message
+) {
+    const std::string value_text(value);
+    const std::string error_kind_text(error_kind);
+    const std::string error_message_text(error_message);
+    EM_ASM(
+        {
+            window.entisiumPublishInspection(
+                UTF8ToString($0),
+                Boolean($1),
+                UTF8ToString($2),
+                UTF8ToString($3),
+                UTF8ToString($4),
+            );
+        },
+        request_id,
+        ok,
+        value_text.c_str(),
+        error_kind_text.c_str(),
+        error_message_text.c_str()
+    );
+}
+
+} // namespace
+
+extern "C" EMSCRIPTEN_KEEPALIVE void entisium_inspect_runtime(
+    const char* request_id,
+    const char* provider,
+    const char* schema,
+    const char* payload_json
+) {
+    if (g_runtime_world == nullptr ||
+        !g_runtime_world
+             ->has_resource<ets::runtime_inspection::InspectionRegistry>()) {
+        publish_inspection(
+            request_id,
+            false,
+            {},
+            "internal",
+            "Runtime inspection is not initialized"
+        );
+        return;
+    }
+    auto response =
+        g_runtime_world->resource<ets::runtime_inspection::InspectionRegistry>()
+            .dispatch(
+                *g_runtime_world,
+                ets::runtime_inspection::InspectionInvocation {
+                    .provider = provider,
+                    .schema = schema,
+                    .payload_json = payload_json,
+                }
+            );
+    if (!response) {
+        publish_inspection(
+            request_id,
+            false,
+            {},
+            ets::runtime_inspection::inspection_error_kind_name(
+                response.error().kind
+            ),
+            response.error().message
+        );
+        return;
+    }
+    publish_inspection(request_id, true, *response, {}, {});
+}
 
 namespace ets::browser_project_sample {
 namespace {
@@ -30,8 +112,24 @@ struct ProjectPresentation {
 };
 
 struct ProjectRenderSystems {
+    struct Capture : SystemSet<Capture> {};
     struct Report : SystemSet<Report> {};
 };
+
+void publish_runtime_world(WorldRef world) {
+    g_runtime_world = world.operator->();
+}
+
+bool capture_requested() {
+    return EM_ASM_INT({ return window.entisiumCaptureRequested ?.() ? 1 : 0; }) != 0;
+}
+
+void capture_project_frame() {
+    if (!capture_requested()) {
+        return;
+    }
+    EM_ASM({ window.entisiumCaptureFrame(); });
+}
 
 void publish_status(const char* status) {
     EM_ASM(
@@ -95,22 +193,28 @@ class BrowserProjectHostPlugin final : public Plugin {
         dependencies.require<WebGpuBrowserPlugin>()
             .require<BrowserInputPlugin>()
             .require<CorePlugin>()
+            .require<project_runtime::LuauPlaytestsPlugin>()
             .require<SpritePlugin>()
             .require<ui::rendering::UiRenderingPlugin>();
     }
 
     void setup(App& app) override {
         app.add_resource(ProjectStatus {})
+            .add_systems(First, publish_runtime_world)
             .add_systems(Last, report_project_scripts);
         app.sub_app<RenderApp>()
             .add_resource(ProjectPresentation {})
             .configure_sets(
                 RenderLast,
+                ProjectRenderSystems::Capture {}
+                    .before<RenderingSystems::Present>(),
                 ProjectRenderSystems::Report {}
                     .after<RenderingSystems::Present>()
             )
             .add_systems(
                 RenderLast,
+                capture_project_frame |
+                    in_set<ProjectRenderSystems::Capture>() | main_thread(),
                 report_project_frame | in_set<ProjectRenderSystems::Report>() |
                     main_thread()
             );
@@ -134,6 +238,20 @@ int main() {
     }
 
     App app;
+    runtime_inspection::InspectionRegistry inspections;
+    auto registered =
+        runtime_inspection::playtest::register_playtest_inspection_providers(
+            inspections
+        );
+    if (!registered) {
+        error(
+            "Failed to register playtest inspections: {}",
+            registered.error().message
+        );
+        return 1;
+    }
+    inspections.freeze();
+    app.add_resource(std::move(inspections));
     configure_project_runtime(app, std::move(*project));
     app.add_plugin<BrowserProjectHostPlugin>();
     app.run();

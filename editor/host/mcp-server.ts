@@ -5,8 +5,28 @@ import { fromJSONSchema } from "zod/v4";
 import { EditorCommandRelay } from "./editor-command-relay.js";
 import { editorToolDefinitions } from "./editor-tool-catalog.js";
 
+function asImage(value: unknown):
+    | { mimeType: string; data: string; width?: number; height?: number }
+    | undefined {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+    const image = value as Record<string, unknown>;
+    if (typeof image.mimeType !== "string" || typeof image.data !== "string") return undefined;
+    return {
+        mimeType: image.mimeType,
+        data: image.data,
+        width: typeof image.width === "number" ? image.width : undefined,
+        height: typeof image.height === "number" ? image.height : undefined,
+    };
+}
+
 function createMcpServer(relay: EditorCommandRelay): McpServer {
-    const server = new McpServer({ name: "entisium-editor", version: "0.1.0" });
+    const server = new McpServer(
+        { name: "entisium-editor", version: "0.1.0" },
+        {
+            instructions:
+                "Call play_interfaces first. Prefer play_observe and play_step for structured game interaction, polling play_step_status until completed. Fall back to runtime_observe and input tools when no structured interface is available. The Editor page must remain open.",
+        },
+    );
     for (const definition of editorToolDefinitions) {
         if (
             !definition.name ||
@@ -43,13 +63,26 @@ function createMcpServer(relay: EditorCommandRelay): McpServer {
                             ],
                         };
                     }
+                    const image = asImage(response.value);
                     return {
-                        content: [
-                            {
-                                type: "text" as const,
-                                text: JSON.stringify(response.value ?? null),
-                            },
-                        ],
+                        content: image
+                            ? [
+                                  {
+                                      type: "text" as const,
+                                      text: `Runtime viewport${image.width && image.height ? ` (${image.width}x${image.height})` : ""}.`,
+                                  },
+                                  {
+                                      type: "image" as const,
+                                      data: image.data,
+                                      mimeType: image.mimeType,
+                                  },
+                              ]
+                            : [
+                                  {
+                                      type: "text" as const,
+                                      text: JSON.stringify(response.value ?? null),
+                                  },
+                              ],
                     };
                 } catch (error) {
                     return {

@@ -60,6 +60,165 @@
                     location.origin,
                 );
             };
+            let pendingCaptureRequestId = null;
+            window.addEventListener("message", (event) => {
+                if (
+                    event.source !== window.parent ||
+                    event.origin !== location.origin ||
+                    event.data?.source !== "entisium-editor" ||
+                    event.data?.channelId !== editorChannelId
+                ) {
+                    return;
+                }
+                if (event.data?.type === "runtime.capture") {
+                    pendingCaptureRequestId = String(
+                        event.data.requestId ?? "",
+                    );
+                    return;
+                }
+                if (event.data?.type !== "runtime.inspect") return;
+                const requestId = String(event.data.requestId ?? "");
+                try {
+                    Module.ccall(
+                        "entisium_inspect_runtime",
+                        null,
+                        ["string", "string", "string", "string"],
+                        [
+                            requestId,
+                            String(event.data.provider ?? ""),
+                            String(event.data.schema ?? ""),
+                            JSON.stringify(event.data.payload ?? {}),
+                        ],
+                    );
+                } catch (error) {
+                    postEditorMessage("runtime.inspection", {
+                        requestId,
+                        errorKind: "internal",
+                        error: String(error?.message ?? error),
+                    });
+                }
+            });
+            window.entisiumPublishInspection = (
+                requestId,
+                ok,
+                valueJson,
+                errorKind,
+                errorMessage,
+            ) => {
+                if (!ok) {
+                    postEditorMessage("runtime.inspection", {
+                        requestId,
+                        errorKind,
+                        error: errorMessage,
+                    });
+                    return;
+                }
+                try {
+                    postEditorMessage("runtime.inspection", {
+                        requestId,
+                        value: JSON.parse(valueJson),
+                    });
+                } catch (error) {
+                    postEditorMessage("runtime.inspection", {
+                        requestId,
+                        errorKind: "internal",
+                        error: `Invalid inspection response: ${String(error?.message ?? error)}`,
+                    });
+                }
+            };
+            window.entisiumCaptureRequested = () =>
+                pendingCaptureRequestId !== null;
+            window.entisiumPublishCapture = (
+                pixels,
+                width,
+                height,
+                requestId,
+            ) => {
+                const source = document.createElement("canvas");
+                source.width = width;
+                source.height = height;
+                const sourceContext = source.getContext("2d");
+                sourceContext.putImageData(
+                    new ImageData(new Uint8ClampedArray(pixels), width, height),
+                    0,
+                    0,
+                );
+
+                const outputWidth = Math.min(width, 768);
+                const outputHeight = Math.max(
+                    1,
+                    Math.round((height * outputWidth) / width),
+                );
+                const output = document.createElement("canvas");
+                output.width = outputWidth;
+                output.height = outputHeight;
+                output
+                    .getContext("2d")
+                    .drawImage(source, 0, 0, outputWidth, outputHeight);
+                const data = output.toDataURL("image/png").split(",", 2)[1];
+                postEditorMessage("runtime.capture", {
+                    requestId,
+                    mimeType: "image/png",
+                    data,
+                    width: outputWidth,
+                    height: outputHeight,
+                });
+            };
+            window.entisiumCaptureFrame = async () => {
+                const requestId = pendingCaptureRequestId;
+                pendingCaptureRequestId = null;
+                if (requestId === null) return;
+                try {
+                    const device = Module.preinitializedWebGPUDevice;
+                    const context = Module.canvas.getContext("webgpu");
+                    const texture = context.getCurrentTexture();
+                    const width = texture.width;
+                    const height = texture.height;
+                    const bytesPerRow = Math.ceil((width * 4) / 256) * 256;
+                    const buffer = device.createBuffer({
+                        label: "Entisium runtime frame capture",
+                        size: bytesPerRow * height,
+                        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+                    });
+                    const encoder = device.createCommandEncoder();
+                    encoder.copyTextureToBuffer(
+                        { texture },
+                        { buffer, bytesPerRow, rowsPerImage: height },
+                        { width, height, depthOrArrayLayers: 1 },
+                    );
+                    device.queue.submit([encoder.finish()]);
+                    await buffer.mapAsync(GPUMapMode.READ);
+                    const mapped = new Uint8Array(buffer.getMappedRange());
+                    const pixels = new Uint8ClampedArray(width * height * 4);
+                    for (let row = 0; row < height; ++row) {
+                        pixels.set(
+                            mapped.subarray(
+                                row * bytesPerRow,
+                                row * bytesPerRow + width * 4,
+                            ),
+                            row * width * 4,
+                        );
+                    }
+                    buffer.unmap();
+                    buffer.destroy();
+                    for (let index = 0; index < pixels.length; index += 4) {
+                        const red = pixels[index];
+                        pixels[index] = pixels[index + 2];
+                        pixels[index + 2] = red;
+                    }
+                    window.entisiumPublishCapture(
+                        pixels,
+                        width,
+                        height,
+                        requestId,
+                    );
+                } catch (error) {
+                    postEditorMessage("runtime.capture", {
+                        requestId,
+                        error: String(error?.message ?? error),
+                    });
+                }
+            };
             const showError = (message) => {
                 errorElement.style.display = "block";
                 errorElement.textContent += `${message}\n`;

@@ -39,6 +39,16 @@ export interface AgentRequest {
     destination?: string;
     content?: string;
     settings?: Partial<ProjectSettings>;
+    code?: string;
+    action?: string;
+    durationMs?: number;
+    x?: number;
+    y?: number;
+    button?: string;
+    limit?: number;
+    provider?: string;
+    schema?: string;
+    payload?: unknown;
 }
 
 export interface AgentResponse {

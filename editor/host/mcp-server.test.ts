@@ -84,12 +84,22 @@ describe("Editor MCP server", () => {
         try {
             await client.connect(transport);
             const tools = await client.listTools();
-            expect(tools.tools.map((tool) => tool.name)).toContain("runtime_status");
+            expect(tools.tools.map((tool) => tool.name)).toEqual(
+                expect.arrayContaining([
+                    "runtime_status",
+                    "runtime_observe",
+                    "runtime_key",
+                    "play_interfaces",
+                    "play_observe",
+                    "play_step",
+                    "play_step_status",
+                ]),
+            );
 
             const commandPromise = nextCommand(commandStream);
-            const resultPromise = client.callTool({ name: "runtime_status", arguments: {} });
+            const resultPromise = client.callTool({ name: "runtime_observe", arguments: {} });
             const command = await commandPromise;
-            expect(command.request.type).toBe("runtime.status");
+            expect(command.request.type).toBe("runtime.observe");
             const completed = await fetch(`${baseUrl}/api/v1/editor/commands/result`, {
                 method: "POST",
                 headers: {
@@ -101,13 +111,21 @@ describe("Editor MCP server", () => {
                     response: {
                         requestId: "editor-response",
                         ok: true,
-                        value: { state: "stopped" },
+                        value: {
+                            mimeType: "image/png",
+                            data: "cG5n",
+                            width: 768,
+                            height: 432,
+                        },
                     },
                 }),
             });
             expect(completed.status).toBe(200);
             expect(await resultPromise).toMatchObject({
-                content: [{ type: "text", text: '{"state":"stopped"}' }],
+                content: [
+                    { type: "text", text: "Runtime viewport (768x432)." },
+                    { type: "image", data: "cG5n", mimeType: "image/png" },
+                ],
             });
         } finally {
             editorAbort.abort();

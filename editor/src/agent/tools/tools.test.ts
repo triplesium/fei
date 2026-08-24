@@ -68,6 +68,93 @@ describe("Editor agent tools", () => {
         });
     });
 
+    it("forwards runtime input and returns viewport images to the agent", async () => {
+        const requests: unknown[] = [];
+        const editor = createEditor(async (request) => {
+            requests.push(request);
+            return request.type === "runtime.observe"
+                ? {
+                      requestId: "response",
+                      ok: true,
+                      value: {
+                          mimeType: "image/png",
+                          data: "cG5n",
+                          width: 768,
+                          height: 432,
+                      },
+                  }
+                : { requestId: "response", ok: true, value: { held: [request.code] } };
+        });
+        const tools = createEditorTools(editor);
+
+        await tools
+            .find((candidate) => candidate.name === "runtime_key")
+            ?.execute("key-call", { code: "KeyW", action: "press" });
+        const observed = await tools
+            .find((candidate) => candidate.name === "runtime_observe")
+            ?.execute("observe-call", {});
+
+        expect(requests).toEqual([
+            { type: "runtime.key", code: "KeyW", action: "press", durationMs: undefined },
+            { type: "runtime.observe" },
+        ]);
+        expect(observed?.content).toEqual([
+            { type: "text", text: "Runtime viewport (768x432)." },
+            { type: "image", data: "cG5n", mimeType: "image/png" },
+        ]);
+    });
+
+    it("routes structured play tools through one runtime inspection command", async () => {
+        const requests: unknown[] = [];
+        const editor = createEditor(async (request) => {
+            requests.push(request);
+            return {
+                requestId: "response",
+                ok: true,
+                value: { request_id: "step-response", state: "pending" },
+            };
+        });
+        const tools = createEditorTools(editor);
+
+        await tools
+            .find((candidate) => candidate.name === "play_interfaces")
+            ?.execute("interfaces-call", {});
+        await tools.find((candidate) => candidate.name === "play_step")?.execute(
+            "step-call",
+            { interface: "game.main", action: { move: "left" }, ticks: 3 },
+        );
+        await tools
+            .find((candidate) => candidate.name === "play_step_status")
+            ?.execute("status-call", { requestId: "step-response" });
+
+        expect(requests).toHaveLength(3);
+        expect(requests[0]).toEqual({
+            type: "runtime.inspect",
+            provider: "play.interfaces",
+            schema: "play.interfaces.v1",
+            payload: {},
+        });
+        expect(requests[1]).toMatchObject({
+            type: "runtime.inspect",
+            provider: "play.step",
+            schema: "play.step.v1",
+            payload: {
+                interface: "game.main",
+                action: { move: "left" },
+                ticks: 3,
+            },
+        });
+        expect((requests[1] as { payload: { request_id: string } }).payload.request_id).toEqual(
+            expect.any(String),
+        );
+        expect(requests[2]).toEqual({
+            type: "runtime.inspect",
+            provider: "play.step_status",
+            schema: "play.step_status.v1",
+            payload: { request_id: "step-response" },
+        });
+    });
+
     it("surfaces command bus failures as tool errors", async () => {
         const editor = createEditor(async () => ({
             requestId: "response",

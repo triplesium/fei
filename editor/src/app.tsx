@@ -1086,6 +1086,43 @@ export function App() {
             script: runtimeScript,
             frame: runtimeFrame,
         }),
+          "runtime.observe": async () => ({
+              ...(await runtimeController.capture()),
+            state: runtimeState,
+        }),
+        "runtime.key": async ({ code, action, durationMs }) =>
+            runtimeController.key(code ?? "", action ?? "", durationMs),
+        "runtime.pointer": async ({ x, y, action, button, durationMs }) =>
+            runtimeController.pointerInput(
+                x ?? Number.NaN,
+                y ?? Number.NaN,
+                action ?? "",
+                button,
+                durationMs,
+            ),
+        "runtime.wait": async ({ durationMs }) => {
+            const duration = Math.max(0, Math.min(5000, durationMs ?? 0));
+            await new Promise((resolve) => window.setTimeout(resolve, duration));
+            const snapshot = runtimeController.getSnapshot();
+            return {
+                waitedMs: duration,
+                state: snapshot.state,
+                script: snapshot.script,
+                frame: snapshot.frame,
+            };
+        },
+        "runtime.clear_input": async () => runtimeController.clearInput(),
+        "runtime.inspect": async ({ provider, schema, payload }) =>
+            runtimeController.inspect(provider ?? "", schema ?? "", payload ?? {}),
+        "runtime.logs": async ({ limit }) => {
+            const count = Math.max(1, Math.min(100, Math.floor(limit ?? 20)));
+            return {
+                logs: logs
+                    .filter((entry) => entry.source === "game" || entry.source === "runtime")
+                    .slice(-count)
+                    .map(({ level, source, message, time }) => ({ level, source, message, time })),
+            };
+        },
     };
 
     const agentApi = useMemo<EditorAgentApi>(() => {
