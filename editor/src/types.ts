@@ -8,6 +8,42 @@ export interface ProjectFileEntry {
     readonly: boolean;
 }
 
+export type ProjectAssetType =
+    | "folder"
+    | "script"
+    | "image"
+    | "model"
+    | "text"
+    | "binary";
+
+export interface ProjectAssetMetadata {
+    id: string;
+    importer: string;
+    settings: Record<string, string>;
+    state: "unimported" | "imported";
+}
+
+export interface ProjectAssetInspection {
+    path: string;
+    kind: ProjectFileKind;
+    readonly: boolean;
+    assetType: ProjectAssetType;
+    extension: string;
+    size?: number;
+    modifiedAt: string;
+    mimeType?: string;
+    lineCount?: number;
+    fileCount?: number;
+    directoryCount?: number;
+    vertexCount?: number;
+    faceCount?: number;
+    nodeCount?: number;
+    meshCount?: number;
+    materialCount?: number;
+    metadata?: ProjectAssetMetadata;
+    metadataError?: string;
+}
+
 export interface RememberedProject {
     name: string;
     restored?: boolean;

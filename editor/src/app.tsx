@@ -58,8 +58,8 @@ import type {
 } from "./components/agent-model-dialog";
 import { AgentModelSelector } from "./components/agent-model-selector";
 import { EditorTopbar } from "./components/editor-topbar";
+import { ResourceInspector } from "./components/resource-inspector";
 import { SettingsDialog } from "./components/settings-dialog";
-import { Badge } from "./components/ui/badge";
 import { Button as UiButton } from "./components/ui/button";
 import {
     ContextMenu,
@@ -71,13 +71,10 @@ import {
 import { IconButton } from "./components/ui/icon-button";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { ScrollArea } from "./components/ui/scroll-area";
-import { Separator } from "./components/ui/separator";
 import { CodeEditor } from "./components/code-editor";
 import { RuntimeViewport } from "./components/runtime-viewport";
 import {
     PanelEmptyState,
-    PanelSection,
-    PanelSectionTitle,
     PanelStatus,
     PanelToolbar,
     ToolPanel,
@@ -100,6 +97,7 @@ import type {
     ConsoleEntry,
     ConsoleLevel,
     EditorAgentApi,
+    ProjectAssetInspection,
     ProjectFileEntry,
     ProjectSettings,
 } from "./types";
@@ -270,12 +268,14 @@ function buildFileTree(files: ProjectFileEntry[]): FileTreeNode[] {
 
 function FileTree({
     files,
-    activePath,
+    selectedPath,
     onSelect,
+    onInspect,
 }: {
     files: ProjectFileEntry[];
-    activePath: string;
+    selectedPath: string;
     onSelect(path: string): void;
+    onInspect(path: string): void;
 }) {
     const rootId = "__assets_root__";
     const treeData = useMemo(() => {
@@ -300,11 +300,11 @@ function FileTree({
                 .map((item) => item.path),
         };
     }, [files]);
-    const activeItemId = useMemo(
+    const selectedItemId = useMemo(
         () =>
-            [...treeData.items.values()].find((item) => item.entry?.path === activePath)
+            [...treeData.items.values()].find((item) => item.entry?.path === selectedPath)
                 ?.path,
-        [activePath, treeData],
+        [selectedPath, treeData],
     );
     // Headless Tree renders its cached item IDs once before rebuilding for new data.
     const previousItemsRef = useRef(treeData.items);
@@ -313,10 +313,10 @@ function FileTree({
         rootItemId: rootId,
         initialState: {
             expandedItems: treeData.expandedItems,
-            selectedItems: activeItemId ? [activeItemId] : [],
+            selectedItems: selectedItemId ? [selectedItemId] : [],
         },
         state: {
-            selectedItems: activeItemId ? [activeItemId] : [],
+            selectedItems: selectedItemId ? [selectedItemId] : [],
         },
         getItemName: (item) => item.getItemData().name,
         isItemFolder: (item) => {
@@ -331,7 +331,9 @@ function FileTree({
         },
         onPrimaryAction: (item) => {
             const entry = item.getItemData().entry;
-            if (entry && entry.kind !== "directory" && !entry.readonly) onSelect(entry.path);
+            if (!entry) return;
+            onInspect(entry.path);
+            if (entry.kind !== "directory" && !entry.readonly) onSelect(entry.path);
         },
         features: [syncDataLoaderFeature, selectionFeature, hotkeysCoreFeature],
     });
@@ -346,7 +348,7 @@ function FileTree({
             {tree.getItems().map((item) => {
                 const node = item.getItemData();
                 const entry = node.entry;
-                const active = entry?.path === activePath;
+                const active = entry?.path === selectedPath;
                 return (
                     <button
                         {...item.getProps()}
@@ -558,6 +560,11 @@ export function App() {
     const runtimeController = runtimeControllerRef.current;
 
     const [files, setFiles] = useState<ProjectFileEntry[]>([]);
+    const [selectedAssetPath, setSelectedAssetPath] = useState("");
+    const [assetInspection, setAssetInspection] = useState<ProjectAssetInspection | null>(null);
+    const [assetInspectionLoading, setAssetInspectionLoading] = useState(false);
+    const [assetInspectionError, setAssetInspectionError] = useState("");
+    const [assetPreviewUrl, setAssetPreviewUrl] = useState("");
     const [activePath, setActivePath] = useState("");
     const [openPaths, setOpenPaths] = useState<string[]>([]);
     const [content, setContent] = useState("");
@@ -595,6 +602,46 @@ export function App() {
     const runtimeFocusedGameRef = useRef(false);
 
     const dirty = storage.isOpen && activePath.length > 0 && content !== savedContent;
+
+    useEffect(() => {
+        let cancelled = false;
+        let previewUrl = "";
+        setAssetInspectionError("");
+        setAssetPreviewUrl("");
+        if (!selectedAssetPath) {
+            setAssetInspection(null);
+            setAssetInspectionLoading(false);
+            return;
+        }
+        setAssetInspection(null);
+        setAssetInspectionLoading(true);
+        void storage
+            .inspect(selectedAssetPath)
+            .then(async (inspection) => {
+                if (inspection.assetType === "image" && inspection.mimeType) {
+                    const bytes = await storage.bytes(selectedAssetPath);
+                    previewUrl = URL.createObjectURL(
+                        new Blob([bytes], { type: inspection.mimeType }),
+                    );
+                }
+                if (cancelled) {
+                    if (previewUrl) URL.revokeObjectURL(previewUrl);
+                    return;
+                }
+                setAssetInspection(inspection);
+                setAssetPreviewUrl(previewUrl);
+            })
+            .catch((error) => {
+                if (!cancelled) setAssetInspectionError(errorMessage(error));
+            })
+            .finally(() => {
+                if (!cancelled) setAssetInspectionLoading(false);
+            });
+        return () => {
+            cancelled = true;
+            if (previewUrl) URL.revokeObjectURL(previewUrl);
+        };
+    }, [selectedAssetPath, files]);
 
     const appendConsole = useCallback(
         (level: ConsoleLevel, source: string, message: unknown) => {
@@ -645,6 +692,7 @@ export function App() {
     const refreshFiles = async (): Promise<ProjectFileEntry[]> => {
         if (!storage.isOpen) {
             setFiles([]);
+            setSelectedAssetPath("");
             return [];
         }
         const entries = await storage.list();
@@ -668,6 +716,7 @@ export function App() {
     };
 
     const selectFile = async (path: string): Promise<void> => {
+        setSelectedAssetPath(path);
         dockviewApiRef.current?.getPanel("code")?.api.setActive();
         if (path === activePath) return;
         if (dirty) await saveActiveFile();
@@ -688,6 +737,7 @@ export function App() {
         }
         const entries = await refreshFiles();
         setOpenPaths([]);
+        setSelectedAssetPath("");
         setActivePath("");
         setContent("");
         setSavedContent("");
@@ -696,6 +746,7 @@ export function App() {
             entries.find((entry) => entry.kind !== "directory" && !entry.readonly);
         if (!preferred) return;
         const next = (await storage.read(preferred.path)) ?? "";
+        setSelectedAssetPath(preferred.path);
         setOpenPaths([preferred.path]);
         setActivePath(preferred.path);
         setContent(next);
@@ -754,6 +805,7 @@ export function App() {
     const refreshProjectFolder = async (): Promise<void> => {
         if (dirty) await saveActiveFile();
         const previous = activePath;
+        const previousSelection = selectedAssetPath;
         const entries = await refreshFiles();
         const next =
             entries.find(
@@ -773,6 +825,11 @@ export function App() {
             setContent(nextContent);
             setSavedContent(nextContent);
         }
+        setSelectedAssetPath(
+            entries.some((entry) => entry.path === previousSelection)
+                ? previousSelection
+                : (next?.path ?? entries[0]?.path ?? ""),
+        );
         appendConsole("info", "project", "refreshed local folder");
     };
 
@@ -793,6 +850,7 @@ export function App() {
         await storage.write(path, initialContent);
         await refreshFiles();
         if (select) {
+            setSelectedAssetPath(path);
             setOpenPaths((current) => current.includes(path) ? current : [...current, path]);
             setActivePath(path);
             setContent(initialContent);
@@ -805,6 +863,7 @@ export function App() {
         assertMutablePath(path);
         await storage.createDirectory(path);
         await refreshFiles();
+        setSelectedAssetPath(path);
     };
 
     const renameProjectFile = async (source: string, destination: string) => {
@@ -814,6 +873,7 @@ export function App() {
         await storage.rename(source, destination);
         setOpenPaths((current) => current.map((path) => path === source ? destination : path));
         if (source === activePath) setActivePath(destination);
+        if (source === selectedAssetPath) setSelectedAssetPath(destination);
         await refreshFiles();
         return { source, destination, renamed: true };
     };
@@ -824,6 +884,7 @@ export function App() {
             candidate === path || candidate.startsWith(`${path}/`);
         await storage.remove(path);
         const wasActive = containsPath(activePath);
+        const wasSelected = containsPath(selectedAssetPath);
         const entries = await refreshFiles();
         const remainingOpenPaths = openPaths.filter((candidate) => !containsPath(candidate));
         setOpenPaths(remainingOpenPaths);
@@ -849,6 +910,13 @@ export function App() {
                 setContent("");
                 setSavedContent("");
             }
+        }
+        if (wasSelected) {
+            const nextSelected =
+                remainingOpenPaths.find((candidate) =>
+                    entries.some((entry) => entry.path === candidate),
+                ) ?? entries[0]?.path ?? "";
+            setSelectedAssetPath(nextSelected);
         }
         return { path, removed: true };
     };
@@ -901,7 +969,10 @@ export function App() {
         await runtimeController.restart(snapshot);
     };
 
-    const showOperation = (next: Exclude<ProjectOperation, null>): void => {
+    const showOperation = (
+        next: Exclude<ProjectOperation, null>,
+        targetPath = assetContextPath,
+    ): void => {
         setOperation(next);
         setOperationError("");
         if (next === "new") {
@@ -911,8 +982,8 @@ export function App() {
             setOperationTargetPath("");
             setOperationPath("new_folder");
         } else {
-            setOperationTargetPath(assetContextPath);
-            setOperationPath(assetRelativePath(assetContextPath));
+            setOperationTargetPath(targetPath);
+            setOperationPath(assetRelativePath(targetPath));
         }
     };
 
@@ -1508,7 +1579,9 @@ export function App() {
                                 event.target instanceof Element
                                     ? event.target.closest<HTMLElement>("[data-asset-operation-path]")
                                     : null;
-                            setAssetContextPath(target?.dataset.assetOperationPath ?? "");
+                            const path = target?.dataset.assetOperationPath ?? "";
+                            setAssetContextPath(path);
+                            if (path) setSelectedAssetPath(path);
                         }}
                     >
                         <ToolPanel>
@@ -1522,8 +1595,9 @@ export function App() {
                                 ) : (
                                     <FileTree
                                         files={files}
-                                        activePath={activePath}
+                                        selectedPath={selectedAssetPath}
                                         onSelect={(path) => void selectFile(path)}
+                                        onInspect={setSelectedAssetPath}
                                     />
                                 )}
                             </nav>
@@ -1665,52 +1739,17 @@ export function App() {
         inspector: (
             <ToolPanel>
                 <ScrollArea className="min-h-0 flex-1">
-                    <PanelSection>
-                        <PanelSectionTitle>RUNTIME</PanelSectionTitle>
-                        <dl className="mt-2">
-                            {[["State", runtimeDetail], ["Script", runtimeScript], ["Frame", runtimeFrame]].map(([label, value]) => (
-                                <div key={label} className="grid grid-cols-[62px_minmax(0,1fr)] border-b border-border/55 py-1.5 text-[12px]">
-                                    <dt className="text-muted-foreground">{label}</dt>
-                                    <dd className="m-0 truncate text-right text-[#b7bdc8]">{value}</dd>
-                                </div>
-                            ))}
-                        </dl>
-                    </PanelSection>
-                    <Separator />
-                    <PanelSection>
-                        <PanelSectionTitle>AGENT API</PanelSectionTitle>
-                        <p className="text-[12px] leading-relaxed text-muted-foreground">Editor agents share one tool registry through <code className="font-mono text-primary">window.entisiumEditor</code>.</p>
-                        <div className="flex flex-wrap gap-1">
-                            {agentApi.capabilities.map((capability) => <Badge key={capability}>{capability}</Badge>)}
-                        </div>
-                    </PanelSection>
-                    <Separator />
-                    <PanelSection>
-                        <PanelSectionTitle>PI TOOLS</PanelSectionTitle>
-                        <p className="text-[12px] leading-relaxed text-muted-foreground">
-                            {agentGatewayState.state === "ready"
-                                ? `${agentGatewayState.provider} · ${agentGatewayState.model}`
-                                : agentGatewayState.state === "unconfigured"
-                                  ? `${agentGatewayState.provider} credential required`
-                                  : agentGatewayState.state === "unavailable"
-                                    ? "Local model gateway unavailable"
-                                    : "Connecting to local model gateway…"}
-                        </p>
-                        <div className="flex flex-wrap gap-1">
-                            {piAgent.status().tools.map((tool) => <Badge key={tool}>{tool}</Badge>)}
-                        </div>
-                        <UiButton
-                            variant="secondary"
-                            size="sm"
-                            className="mt-2"
-                            type="button"
-                            onClick={() => {
-                                openAgentSettings();
-                            }}
-                        >
-                            Configure Model
-                        </UiButton>
-                    </PanelSection>
+                    <ResourceInspector
+                        inspection={assetInspection}
+                        loading={assetInspectionLoading}
+                        error={assetInspectionError}
+                        previewUrl={assetPreviewUrl}
+                        onOpen={() => {
+                            if (selectedAssetPath) void selectFile(selectedAssetPath);
+                        }}
+                        onRename={() => showOperation("rename", selectedAssetPath)}
+                        onDelete={() => showOperation("delete", selectedAssetPath)}
+                    />
                 </ScrollArea>
             </ToolPanel>
         ),

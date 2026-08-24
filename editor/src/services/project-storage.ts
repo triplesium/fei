@@ -1,4 +1,8 @@
-import type { ProjectFileEntry, RememberedProject } from "../types";
+import type {
+    ProjectAssetInspection,
+    ProjectFileEntry,
+    RememberedProject,
+} from "../types";
 import { EditorHostRequestError, editorHost } from "./editor-host-client";
 
 interface ProjectSnapshot {
@@ -108,6 +112,13 @@ export class ProjectStorage {
         this.assertOpen();
         const result = await editorHost.json<ProjectFilesResponse>("/api/v1/project/files");
         return result.files;
+    }
+
+    async inspect(path: string): Promise<ProjectAssetInspection> {
+        this.assertOpen();
+        return editorHost.json<ProjectAssetInspection>(
+            `/api/v1/project/inspect?path=${encodeURIComponent(this.validatePath(path))}`,
+        );
     }
 
     async exists(path: string): Promise<boolean> {

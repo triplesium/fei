@@ -287,6 +287,17 @@ describe("Editor Host", () => {
                 "return 42\n",
             );
 
+            const inspected = await fetch(
+                `${baseUrl}/api/v1/project/inspect?path=${encodeURIComponent("assets/main.luau")}`,
+                { headers },
+            );
+            expect(inspected.status).toBe(200);
+            expect(await inspected.json()).toMatchObject({
+                path: "assets/main.luau",
+                assetType: "script",
+                lineCount: 1,
+            });
+
             const createdDirectory = await fetch(`${baseUrl}/api/v1/project/directory`, {
                 method: "POST",
                 headers: { ...headers, "Content-Type": "application/json" },

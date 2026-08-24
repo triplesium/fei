@@ -35,6 +35,27 @@ describe("HostProjectService", () => {
         ]);
         expect((await service.read("assets/main.luau"))?.toString("utf8")).toBe("return {}\n");
 
+        const metadataId = "6d174b91-4ab0-4329-bc43-3d3872f8451d";
+        await writeFile(
+            join(directory, "assets", "main.luau.meta"),
+            `id: ${metadataId}\nimporter: native\nsettings:\n  mode: test\n`,
+            "utf8",
+        );
+        expect(await service.list()).not.toContainEqual(
+            expect.objectContaining({ path: "assets/main.luau.meta" }),
+        );
+        expect(await service.inspect("assets/main.luau")).toMatchObject({
+            path: "assets/main.luau",
+            assetType: "script",
+            lineCount: 1,
+            metadata: {
+                id: metadataId,
+                importer: "native",
+                settings: { mode: "test" },
+                state: "imported",
+            },
+        });
+
         await service.createDirectory("assets/scripts");
         expect(await service.list()).toContainEqual({
             path: "assets/scripts",
@@ -42,15 +63,30 @@ describe("HostProjectService", () => {
             readonly: false,
         });
         await service.write("assets/new.luau", "return 42\n");
+        await writeFile(
+            join(directory, "assets", "new.luau.meta"),
+            `id: ${metadataId}\nimporter: native\nsettings: {}\n`,
+            "utf8",
+        );
         await service.rename("assets/new.luau", "assets/moved.luau");
         expect(await readFile(join(directory, "assets", "moved.luau"), "utf8")).toBe(
             "return 42\n",
         );
+        expect(await readFile(join(directory, "assets", "moved.luau.meta"), "utf8"))
+            .toContain(metadataId);
         await service.remove("assets/moved.luau");
         expect(await service.exists("assets/moved.luau")).toBe(false);
+        await expect(readFile(join(directory, "assets", "moved.luau.meta"))).rejects.toMatchObject({
+            code: "ENOENT",
+        });
 
         await service.createDirectory("assets/remove-me");
         await service.write("assets/remove-me/nested.luau", "return 7\n");
+        expect(await service.inspect("assets/remove-me")).toMatchObject({
+            assetType: "folder",
+            fileCount: 1,
+            directoryCount: 0,
+        });
         await service.remove("assets/remove-me");
         expect(await service.list()).not.toContainEqual(
             expect.objectContaining({ path: "assets/remove-me" }),

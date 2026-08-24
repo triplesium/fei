@@ -382,6 +382,15 @@ export function createEditorHost(options: HostOptions): {
                 return;
             }
 
+            if (request.method === "GET" && url.pathname === "/api/v1/project/inspect") {
+                json(
+                    response,
+                    200,
+                    await projects.inspect(url.searchParams.get("path") ?? ""),
+                );
+                return;
+            }
+
             if (request.method === "GET" && url.pathname === "/api/v1/project/file") {
                 const content = await projects.read(url.searchParams.get("path") ?? "");
                 if (!content) {
