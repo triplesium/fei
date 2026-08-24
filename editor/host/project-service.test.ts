@@ -48,6 +48,14 @@ describe("HostProjectService", () => {
         );
         await service.remove("assets/moved.luau");
         expect(await service.exists("assets/moved.luau")).toBe(false);
+
+        await service.createDirectory("assets/remove-me");
+        await service.write("assets/remove-me/nested.luau", "return 7\n");
+        await service.remove("assets/remove-me");
+        expect(await service.list()).not.toContainEqual(
+            expect.objectContaining({ path: "assets/remove-me" }),
+        );
+
         await expect(service.createDirectory("outside")).rejects.toThrow("inside assets");
         service.dispose();
     });

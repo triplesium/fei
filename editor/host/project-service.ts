@@ -9,7 +9,6 @@ import {
     rename,
     rm,
     stat,
-    unlink,
     writeFile,
 } from "node:fs/promises";
 import { basename, dirname, resolve, sep } from "node:path";
@@ -143,9 +142,16 @@ export class HostProjectService {
     }
 
     async remove(path: string): Promise<void> {
-        const file = await this.existingFile(path, true);
-        if (!file) throw new Error(`Project file not found: ${path}`);
-        await unlink(file);
+        const { root, file } = await this.candidate(path);
+        const resolved = await realpath(file);
+        if (!resolved.startsWith(`${root}${sep}`)) {
+            throw new Error("Project path escapes the project root through a symbolic link.");
+        }
+        const entry = await stat(resolved);
+        if (!entry.isFile() && !entry.isDirectory()) {
+            throw new Error("Project path is not a regular file or directory inside the project root.");
+        }
+        await rm(resolved, { recursive: entry.isDirectory() });
     }
 
     subscribe(listener: (event: HostProjectEvent) => void): () => void {
