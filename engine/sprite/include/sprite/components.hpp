@@ -11,13 +11,13 @@
 
 namespace ets {
 
-ETS_REFLECT(Component)
+ETS_REFLECT(Component, ScriptPrelude)
 struct Camera2d {
     float vertical_size {10.0f};
     Color4F clear_color {0.08f, 0.09f, 0.12f, 1.0f};
 };
 
-ETS_REFLECT(Component)
+ETS_REFLECT(Component, ScriptPrelude)
 struct Sprite {
     Handle<Image> image;
     Vector2 size {1.0f, 1.0f};

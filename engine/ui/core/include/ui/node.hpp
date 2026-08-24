@@ -18,7 +18,7 @@ enum class LengthUnit {
     Percent,
 };
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 struct Length {
     float value {0.0f};
     LengthUnit unit {LengthUnit::Auto};
@@ -45,7 +45,7 @@ struct Length {
     return Length::percent(value);
 }
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 struct Edges {
     Length left;
     Length right;
@@ -77,13 +77,13 @@ struct Edges {
     return Edges::axes(horizontal, vertical);
 }
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 enum class Display {
     Flex,
     None,
 };
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 enum class PositionType {
     Relative,
     Absolute,
@@ -147,7 +147,7 @@ enum class FlexDirection {
     Column,
 };
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 enum class AlignItems {
     Start,
     Center,
@@ -155,7 +155,7 @@ enum class AlignItems {
     Stretch,
 };
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 enum class JustifyContent {
     Start,
     Center,
@@ -163,7 +163,7 @@ enum class JustifyContent {
     SpaceBetween,
 };
 
-ETS_REFLECT(Component)
+ETS_REFLECT(Component, ScriptPrelude)
 struct Node {
     Display display {Display::Flex};
     PositionType position_type {PositionType::Relative};
@@ -204,7 +204,7 @@ struct ResolvedBorder {
     bool operator==(const ResolvedBorder&) const = default;
 };
 
-ETS_REFLECT(Component)
+ETS_REFLECT(Component, ScriptPrelude)
 struct BorderRadius {
     Length top_left;
     Length top_right;
@@ -258,7 +258,7 @@ struct CalculatedClip {
     }
 };
 
-ETS_REFLECT(Component)
+ETS_REFLECT(Component, ScriptPrelude)
 struct BackgroundColor {
     Color4F color {0.0f, 0.0f, 0.0f, 0.0f};
 };

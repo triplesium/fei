@@ -179,6 +179,45 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Project Luau scripts require native engine modules",
+    "[project-runtime][luau][script][require][native]"
+) {
+    TemporaryMixedScriptProject directory({
+        ScriptFile {
+            .path = "scripts/native_module.luau",
+            .content = std::string_view {R"(
+                local core = require("@entisium/core")
+
+                local function verify(
+                    transforms: Query<Read<core.Transform2d>>
+                )
+                    assert(core.Transform2d ~= nil)
+                    assert(core.Time ~= nil)
+                    assert(core.Random ~= nil)
+                    assert(Time ~= nil)
+                    assert(Random == nil)
+                    assert(transforms ~= nil)
+                end
+
+                return {
+                    systems = { system(Update, verify) },
+                }
+            )"},
+        },
+    });
+    auto app = load_app(directory);
+
+    apply_script_queues(app);
+
+    const auto& scripts = app.resource<project_runtime::LuauScriptsState>();
+    REQUIRE(scripts.scripts.size() == 1);
+    REQUIRE(
+        scripts.scripts[0].status == project_runtime::LuauScriptStatus::Loaded
+    );
+    app.run_schedule(Update);
+}
+
+TEST_CASE(
     "Project Luau scripts require cached library modules",
     "[project-runtime][luau][script][require]"
 ) {

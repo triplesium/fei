@@ -31,6 +31,10 @@ bool is_script_visible(const Type& type) {
     return type.has_structured_name() && !type.has_annotation("NoScript");
 }
 
+bool is_script_prelude(const Type& type) {
+    return is_script_visible(type) && type.has_annotation("ScriptPrelude");
+}
+
 ScriptTypeName script_type_name(const Type& type) {
     auto namespace_path = type.namespace_path();
     if (!namespace_path.empty() && namespace_path.front() == "ets") {

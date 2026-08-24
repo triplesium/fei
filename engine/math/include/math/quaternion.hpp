@@ -11,7 +11,7 @@ namespace ets {
 // Quaternion stores the vector part in x/y/z and the scalar part in w.
 // Multiplication composes column-vector rotations right-to-left, matching
 // Matrix4x4 composition.
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 class Quaternion {
   public:
     float x {0.0f};

@@ -19,7 +19,7 @@
 
 namespace ets {
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 class Image {
   private:
     std::unique_ptr<unsigned char[]> m_data;

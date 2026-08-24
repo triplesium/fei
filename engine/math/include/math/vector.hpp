@@ -13,7 +13,7 @@ class Vector2;
 class Vector3;
 class Vector4;
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 class Vector2 {
   public:
     float x {0.0f}, y {0.0f};
@@ -157,7 +157,7 @@ class Vector2 {
     }
 };
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 class Vector3 {
   public:
     float x {0.f};
@@ -363,7 +363,7 @@ class Vector3 {
     float angle(const Vector3& rhs) const { return Vector3::angle(*this, rhs); }
 };
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 class Vector4 {
   public:
     float x {0.0f};

@@ -24,7 +24,7 @@ struct InputSystems {
     struct ApplyDevtools : SystemSet<ApplyDevtools> {};
 };
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 enum class KeyCode : std::int32_t {
 #define KEY_CODE(name, code) name = (code),
 #include "keycode.def"
@@ -68,7 +68,7 @@ struct KeyEvent {
     bool repeat {false};
 };
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 class KeyInput {
   public:
     KeyInput();
@@ -92,7 +92,7 @@ class KeyInput {
     std::unordered_map<KeyCode, KeyStateInternal> m_keys;
 };
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 enum class MouseButton : std::int32_t {
     Left = 0,
     Right = 1,
@@ -148,7 +148,7 @@ class VirtualInput {
     bool m_exclusive {false};
 };
 
-ETS_REFLECT(Resource)
+ETS_REFLECT(Resource, ScriptPrelude)
 class MouseInput {
   public:
     MouseInput();
@@ -175,7 +175,7 @@ class MouseInput {
     std::unordered_map<MouseButton, KeyStateInternal> m_keys;
 };
 
-ETS_REFLECT(Resource)
+ETS_REFLECT(Resource, ScriptPrelude)
 class MouseScrollInput {
   public:
     void set_delta(Vector2 delta) { m_delta = delta; }

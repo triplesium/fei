@@ -22,7 +22,7 @@ struct FixedTimeSnapshotState {
     double elapsed {};
 };
 
-ETS_REFLECT(Resource)
+ETS_REFLECT(Resource, ScriptPrelude)
 struct Time {
     Time() : m_last_tick_time(std::chrono::steady_clock::now()) {}
 
@@ -51,7 +51,7 @@ struct Time {
     Optional<float> m_fixed_delta;
 };
 
-ETS_REFLECT(Resource)
+ETS_REFLECT(Resource, ScriptPrelude)
 class FixedTime {
   public:
     FixedTime() = default;

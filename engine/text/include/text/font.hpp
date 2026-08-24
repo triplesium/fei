@@ -28,7 +28,7 @@ struct RasterizedGlyph {
     std::vector<uint8> pixels;
 };
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 class Font {
   private:
     struct Impl;

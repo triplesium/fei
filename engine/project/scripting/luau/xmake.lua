@@ -25,6 +25,7 @@ if not is_plat("wasm") then
         add_rules("entisium.test", "entisium.reflect")
         add_files("tests/*.cpp")
         add_deps(
+            "entisium-core",
             "entisium-project-runtime",
             "entisium-project-scripting-lua",
             "entisium-project-scripting-luau"

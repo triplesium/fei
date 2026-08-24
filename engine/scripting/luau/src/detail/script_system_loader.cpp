@@ -40,6 +40,21 @@ Status<ScriptError> bind_type_ref(
                 }
             );
         }
+        if (type_ref.type_name == type->name()) {
+            return {};
+        }
+        if (!is_script_prelude(*type)) {
+            const auto annotation = type->annotation("ScriptModule");
+            const auto owner = annotation ? annotation->value("name") : nullopt;
+            std::string message =
+                "Type '" + type->name() + "' is not in ScriptPrelude";
+            if (owner) {
+                message += "; require(\"@entisium/";
+                message += *owner;
+                message += "\") and qualify the type through that local";
+            }
+            return failure(ScriptError {std::move(message)});
+        }
         return runtime.bind_module_script_type(module, *type);
     }
     return runtime.bind_module_type(module, type_ref.type_name, *type);
@@ -194,7 +209,7 @@ Status<ScriptError> bind_declared_types(
             continue;
         }
         if (type.has_structured_name()) {
-            if (!is_script_visible(type)) {
+            if (!is_script_prelude(type)) {
                 continue;
             }
             auto status = runtime.bind_module_script_type(module, type);
@@ -221,7 +236,7 @@ Status<ScriptError> bind_declared_types(
             return failure(ScriptError {std::move(type.error().message)});
         }
         if (type->has_structured_name()) {
-            if (!is_script_visible(*type)) {
+            if (!is_script_prelude(*type)) {
                 continue;
             }
             auto status = runtime.bind_module_script_enum(module, enm);

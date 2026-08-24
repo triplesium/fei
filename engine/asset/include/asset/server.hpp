@@ -46,7 +46,7 @@ struct AssetTypeRegistration {
     TypeId events_resource_type;
 };
 
-ETS_REFLECT(Resource)
+ETS_REFLECT(Resource, ScriptPrelude)
 class AssetServer {
   private:
     struct AssetTypeAccess {

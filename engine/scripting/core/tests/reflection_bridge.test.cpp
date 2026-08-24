@@ -9,6 +9,8 @@ namespace ets::scripting_test {
 
 struct VisibleType {};
 struct HiddenType {};
+struct PreludeType {};
+struct HiddenPreludeType {};
 
 struct StaticFactory {
     int value {0};
@@ -51,6 +53,39 @@ TEST_CASE(
     registry.add_generated_annotation<scripting_test::HiddenType>("NoScript");
 
     CHECK_FALSE(is_script_visible(type));
+}
+
+TEST_CASE(
+    "ScriptPrelude reflection annotation selects visible global aliases",
+    "[scripting][reflection]"
+) {
+    auto& registry = Registry::instance();
+    registry.register_cls<scripting_test::PreludeType>(
+        {"ets", "scripting_test"},
+        "PreludeType"
+    );
+    registry.add_generated_annotation<scripting_test::PreludeType>(
+        "ScriptPrelude"
+    );
+
+    const auto& type = registry.get_type<scripting_test::PreludeType>();
+    CHECK(is_script_visible(type));
+    CHECK(is_script_prelude(type));
+
+    registry.register_cls<scripting_test::HiddenPreludeType>(
+        {"ets", "scripting_test"},
+        "HiddenPreludeType"
+    );
+    registry.add_generated_annotation<scripting_test::HiddenPreludeType>(
+        "ScriptPrelude"
+    );
+    registry.add_generated_annotation<scripting_test::HiddenPreludeType>(
+        "NoScript"
+    );
+    const auto& hidden =
+        registry.get_type<scripting_test::HiddenPreludeType>();
+    CHECK_FALSE(is_script_visible(hidden));
+    CHECK_FALSE(is_script_prelude(hidden));
 }
 
 TEST_CASE(

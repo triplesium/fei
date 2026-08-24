@@ -7,7 +7,7 @@
 
 namespace ets {
 
-ETS_REFLECT(Component)
+ETS_REFLECT(Component, ScriptPrelude)
 struct Transform2d {
     Vector2 position {0.0f, 0.0f};
     Vector2 scale {1.0f, 1.0f};
@@ -30,7 +30,7 @@ struct GlobalTransform2d {
     const Matrix4x4& to_matrix() const { return matrix; }
 };
 
-ETS_REFLECT(Component)
+ETS_REFLECT(Component, ScriptPrelude)
 struct Transform3d {
     Vector3 position {0.0f, 0.0f, 0.0f};
     Quaternion rotation {0.0f, 0.0f, 0.0f, 1.0f};

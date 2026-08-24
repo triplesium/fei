@@ -15,18 +15,18 @@
 
 namespace ets::text {
 
-ETS_REFLECT(Component)
+ETS_REFLECT(Component, ScriptPrelude)
 struct Text {
     std::string value;
 };
 
-ETS_REFLECT(Component)
+ETS_REFLECT(Component, ScriptPrelude)
 struct TextFont {
     Handle<Font> font;
     float font_size {16.0f};
 };
 
-ETS_REFLECT(Component)
+ETS_REFLECT(Component, ScriptPrelude)
 struct TextColor {
     Color4F color {1.0f, 1.0f, 1.0f, 1.0f};
 };

@@ -3,7 +3,7 @@
 
 namespace ets {
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 struct Camera3d {
     float fov_y {45.0f};
     float aspect_ratio {16.0f / 9.0f};

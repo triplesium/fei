@@ -20,6 +20,7 @@ struct ScriptTypeName {
 };
 
 bool is_script_visible(const Type& type);
+bool is_script_prelude(const Type& type);
 ScriptTypeName script_type_name(const Type& type);
 std::string
 script_type_path(const Type& type, std::string_view separator = ".");

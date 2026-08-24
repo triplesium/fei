@@ -29,6 +29,10 @@ struct Config {
     int value {0};
 };
 
+struct ModuleOnlyConfig {
+    int value {0};
+};
+
 } // namespace ets::luau_system_test
 
 namespace {
@@ -231,8 +235,8 @@ void register_luau_system_test_types() {
 } // namespace
 
 TEST_CASE(
-    "Luau system loader exposes structured reflected names by default",
-    "[scripting_luau][system][namespace]"
+    "Luau system loader exposes ScriptPrelude reflected names",
+    "[scripting_luau][system][namespace][prelude]"
 ) {
     auto& registry = Registry::instance();
     registry
@@ -241,6 +245,9 @@ TEST_CASE(
             "Config"
         )
         .add_property("value", &luau_system_test::Config::value);
+    registry.add_generated_annotation<luau_system_test::Config>(
+        "ScriptPrelude"
+    );
     const ScriptSource source {
         .name = "structured_name.luau",
         .content = R"(
@@ -271,6 +278,54 @@ TEST_CASE(
     REQUIRE(systems);
     world.run_schedule(Update);
     CHECK(remove_script_module_systems(world, *systems));
+}
+
+TEST_CASE(
+    "Luau system loader only exposes ScriptPrelude types as globals",
+    "[scripting_luau][system][prelude]"
+) {
+    auto& registry = Registry::instance();
+    registry
+        .register_cls<luau_system_test::ModuleOnlyConfig>(
+            {"ets", "luau_system_test"},
+            "ModuleOnlyConfig"
+        )
+        .add_property("value", &luau_system_test::ModuleOnlyConfig::value);
+    registry.add_generated_annotation_field<
+        luau_system_test::ModuleOnlyConfig>("ScriptModule", "name", "test");
+
+    const ScriptSource source {
+        .name = "module_only_type.luau",
+        .content = R"(
+            local function verify(
+                config: ResRO<luau_system_test.ModuleOnlyConfig>
+            )
+                assert(config.value == 7)
+            end
+
+            return {
+                systems = { system(Update, verify) },
+            }
+        )",
+    };
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact);
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module);
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(luau_system_test::ModuleOnlyConfig {.value = 7});
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE_FALSE(systems);
+    CHECK(systems.error().message.find("is not in ScriptPrelude") !=
+          std::string::npos);
+    CHECK(systems.error().message.find("@entisium/test") != std::string::npos);
 }
 
 TEST_CASE(
