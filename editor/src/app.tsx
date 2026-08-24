@@ -37,6 +37,7 @@ import {
     useCallback,
     useContext,
     useEffect,
+    useLayoutEffect,
     useMemo,
     useRef,
     useState,
@@ -271,12 +272,10 @@ function FileTree({
     files,
     activePath,
     onSelect,
-    onContextSelect,
 }: {
     files: ProjectFileEntry[];
     activePath: string;
     onSelect(path: string): void;
-    onContextSelect(path: string): void;
 }) {
     const rootId = "__assets_root__";
     const treeData = useMemo(() => {
@@ -307,6 +306,8 @@ function FileTree({
                 ?.path,
         [activePath, treeData],
     );
+    // Headless Tree renders its cached item IDs once before rebuilding for new data.
+    const previousItemsRef = useRef(treeData.items);
 
     const tree = useTree<FileTreeNode>({
         rootItemId: rootId,
@@ -323,7 +324,8 @@ function FileTree({
             return !entry || entry.kind === "directory";
         },
         dataLoader: {
-            getItem: (itemId) => treeData.items.get(itemId)!,
+            getItem: (itemId) =>
+                treeData.items.get(itemId) ?? previousItemsRef.current.get(itemId)!,
             getChildren: (itemId) =>
                 treeData.items.get(itemId)?.children.map((child) => child.path) ?? [],
         },
@@ -334,8 +336,9 @@ function FileTree({
         features: [syncDataLoaderFeature, selectionFeature, hotkeysCoreFeature],
     });
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         tree.rebuildTree();
+        previousItemsRef.current = treeData.items;
     }, [tree, treeData]);
 
     return (
@@ -351,11 +354,7 @@ function FileTree({
                         type="button"
                         aria-current={active ? "page" : undefined}
                         aria-disabled={entry?.readonly || undefined}
-                        data-file-operation-target={
-                            entry && entry.kind !== "directory" && !entry.readonly
-                                ? "true"
-                                : undefined
-                        }
+                        data-asset-operation-path={entry?.path}
                         className={cn(
                             "mx-1 flex h-7 w-[calc(100%-8px)] items-center gap-1 border-0 bg-transparent pr-2 text-left text-[12px] text-[#bdbdbd] outline-none transition-colors hover:bg-[#333] focus-visible:bg-[#363636]",
                             item.isFolder() && "font-medium text-[#c7c7c7]",
@@ -364,9 +363,6 @@ function FileTree({
                             entry?.readonly && "text-[#929292]",
                         )}
                         style={{ paddingLeft: 5 + item.getItemMeta().level * 14 }}
-                        onContextMenu={() => {
-                            if (entry && entry.kind !== "directory") onContextSelect(entry.path);
-                        }}
                     >
                         <span className="grid size-3.5 shrink-0 place-items-center text-muted-foreground">
                             {item.isFolder() &&
@@ -569,7 +565,8 @@ export function App() {
     const [cursor, setCursor] = useState({ line: 1, column: 1 });
     const [logs, setLogs] = useState<ConsoleEntry[]>([]);
     const [operation, setOperation] = useState<ProjectOperation>(null);
-    const [assetContextOnItem, setAssetContextOnItem] = useState(false);
+    const [assetContextPath, setAssetContextPath] = useState("");
+    const [operationTargetPath, setOperationTargetPath] = useState("");
     const [operationPath, setOperationPath] = useState("");
     const [operationError, setOperationError] = useState("");
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -823,17 +820,24 @@ export function App() {
 
     const removeProjectFile = async (path: string) => {
         assertMutablePath(path);
+        const containsPath = (candidate: string): boolean =>
+            candidate === path || candidate.startsWith(`${path}/`);
         await storage.remove(path);
-        const wasActive = path === activePath;
+        const wasActive = containsPath(activePath);
         const entries = await refreshFiles();
-        const remainingOpenPaths = openPaths.filter((candidate) => candidate !== path);
+        const remainingOpenPaths = openPaths.filter((candidate) => !containsPath(candidate));
         setOpenPaths(remainingOpenPaths);
         if (wasActive) {
             const next =
                 remainingOpenPaths
                     .map((candidate) => entries.find((entry) => entry.path === candidate))
-                    .find((entry) => entry && !entry.readonly) ??
-                entries.find((entry) => !entry.readonly);
+                    .find(
+                        (entry) =>
+                            entry && entry.kind !== "directory" && !entry.readonly,
+                    ) ??
+                entries.find(
+                    (entry) => entry.kind !== "directory" && !entry.readonly,
+                );
             if (next) {
                 const nextContent = (await storage.read(next.path)) ?? "";
                 setOpenPaths((current) => current.includes(next.path) ? current : [...current, next.path]);
@@ -900,9 +904,16 @@ export function App() {
     const showOperation = (next: Exclude<ProjectOperation, null>): void => {
         setOperation(next);
         setOperationError("");
-        if (next === "new") setOperationPath("new.luau");
-        else if (next === "new-folder") setOperationPath("new_folder");
-        else setOperationPath(assetRelativePath(activePath));
+        if (next === "new") {
+            setOperationTargetPath("");
+            setOperationPath("new.luau");
+        } else if (next === "new-folder") {
+            setOperationTargetPath("");
+            setOperationPath("new_folder");
+        } else {
+            setOperationTargetPath(assetContextPath);
+            setOperationPath(assetRelativePath(assetContextPath));
+        }
     };
 
     const applyOperation = async (): Promise<void> => {
@@ -916,11 +927,11 @@ export function App() {
                 await createProjectDirectory(path);
                 appendConsole("info", "project", `created folder ${displayPath}`);
             } else if (operation === "rename") {
-                const source = activePath;
+                const source = operationTargetPath;
                 await renameProjectFile(source, path);
                 appendConsole("info", "project", `renamed ${assetRelativePath(source)} to ${displayPath}`);
             } else if (operation === "delete") {
-                await removeProjectFile(activePath);
+                await removeProjectFile(operationTargetPath);
                 appendConsole("info", "project", `deleted ${displayPath}`);
             }
             setOperation(null);
@@ -1493,10 +1504,11 @@ export function App() {
                     <div
                         className="size-full"
                         onContextMenu={(event) => {
-                            setAssetContextOnItem(
-                                event.target instanceof Element &&
-                                    Boolean(event.target.closest('[data-file-operation-target="true"]')),
-                            );
+                            const target =
+                                event.target instanceof Element
+                                    ? event.target.closest<HTMLElement>("[data-asset-operation-path]")
+                                    : null;
+                            setAssetContextPath(target?.dataset.assetOperationPath ?? "");
                         }}
                     >
                         <ToolPanel>
@@ -1512,7 +1524,6 @@ export function App() {
                                         files={files}
                                         activePath={activePath}
                                         onSelect={(path) => void selectFile(path)}
-                                        onContextSelect={(path) => void selectFile(path)}
                                     />
                                 )}
                             </nav>
@@ -1529,11 +1540,21 @@ export function App() {
                         <FolderPlus />
                         New Folder…
                     </ContextMenuItem>
-                    <ContextMenuItem disabled={!canEdit || !assetContextOnItem} onSelect={() => showOperation("rename")}>
+                    <ContextMenuItem
+                        disabled={
+                            !assetContextPath ||
+                            files.find((entry) => entry.path === assetContextPath)?.kind === "directory"
+                        }
+                        onSelect={() => showOperation("rename")}
+                    >
                         <Pencil />
                         Rename…
                     </ContextMenuItem>
-                    <ContextMenuItem className="text-destructive" disabled={!canEdit || !assetContextOnItem} onSelect={() => showOperation("delete")}>
+                    <ContextMenuItem
+                        className="text-destructive"
+                        disabled={!assetContextPath}
+                        onSelect={() => showOperation("delete")}
+                    >
                         <Trash2 />
                         Delete…
                     </ContextMenuItem>

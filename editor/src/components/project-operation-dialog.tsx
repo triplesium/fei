@@ -25,8 +25,8 @@ interface ProjectOperationDialogProps {
 const titles: Record<Exclude<ProjectOperation, null>, string> = {
     new: "Create file",
     "new-folder": "Create folder",
-    rename: "Rename file",
-    delete: "Delete file",
+    rename: "Rename asset",
+    delete: "Delete asset",
 };
 
 export function ProjectOperationDialog({
@@ -49,7 +49,7 @@ export function ProjectOperationDialog({
                     <DialogTitle>{operation ? titles[operation] : "File operation"}</DialogTitle>
                     <DialogDescription>
                         {destructive
-                            ? "This removes the file from the project's asset directory."
+                            ? "This removes the selected file or folder from the project's asset directory."
                             : operation === "new-folder"
                               ? "The folder path is relative to the project’s Assets root."
                               : "Paths are relative to the project’s Assets root."}
