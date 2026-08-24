@@ -215,9 +215,28 @@ handle is remembered in IndexedDB so the editor can restore it when permission
 persists, or request access again without opening the directory picker. Play
 injects text and binary project files into an isolated iframe runtime before
 startup, and Stop destroys that iframe. The page exposes the same operations
-used by its controls through `window.entisiumEditorAgent`, including project
+used by agents through `window.entisiumEditor.commands`, including project
 list/read/write/create/rename/remove and runtime play/stop/restart/status
-commands.
+commands. `window.entisiumEditorAgent` remains as a compatibility alias.
+
+The local Editor Host also exposes a local-only MCP Streamable HTTP endpoint at
+`http://127.0.0.1:3100/mcp` by default. MCP calls are relayed to the currently
+connected Editor page and execute through the same command registry as the
+built-in Pi agent. Keep the Editor page open while using MCP tools. A client
+using the common `mcpServers` configuration shape can connect with:
+
+```json
+{
+    "mcpServers": {
+        "entisium-editor": {
+            "url": "http://127.0.0.1:3100/mcp"
+        }
+    }
+}
+```
+
+The first MCP surface intentionally matches the built-in agent's safer tool
+set: project list/read/write/create and runtime status/play/stop/restart.
 
 The editor source is a Vite, React, and TypeScript application in the
 repository-root `editor/` directory. Building `sample-browser-project` builds
