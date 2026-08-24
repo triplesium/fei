@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EditorAgentApi } from "../../types";
+import { editorToolRegistry } from "../editor-tool-registry";
 import { createEditorTools } from ".";
 
 function createEditor(
@@ -12,6 +13,29 @@ function createEditor(
 }
 
 describe("Editor agent tools", () => {
+    it("derives the command API and Pi tools from the shared registry", async () => {
+        const commands: string[] = [];
+        const editor = editorToolRegistry.createAgentApi({
+            handler: (command) => async () => {
+                commands.push(command);
+                return { state: "stopped" };
+            },
+            requestId: () => "registry-response",
+        });
+
+        expect(editor.capabilities).toContain("runtime.status");
+        const tool = createEditorTools(editor).find(
+            (candidate) => candidate.name === "runtime_status",
+        );
+        const result = await tool?.execute("tool-call", {});
+
+        expect(commands).toEqual(["runtime.status"]);
+        expect(result?.details).toEqual({
+            command: "runtime.status",
+            value: { state: "stopped" },
+        });
+    });
+
     it("forwards project file arguments through the Editor command bus", async () => {
         const requests: unknown[] = [];
         const editor = createEditor(async (request) => {

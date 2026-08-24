@@ -68,9 +68,19 @@ export interface EditorPiAgentApi {
     subscribe(listener: (event: AgentEvent) => void | Promise<void>): () => void;
 }
 
+export interface EntisiumEditorApi {
+    commands: EditorAgentApi;
+    agents: {
+        pi: EditorPiAgentApi;
+    };
+}
+
 declare global {
     interface Window {
+        entisiumEditor: EntisiumEditorApi;
+        /** @deprecated Use entisiumEditor.commands. */
         entisiumEditorAgent: EditorAgentApi;
+        /** @deprecated Use entisiumEditor.agents.pi. */
         entisiumEditorPi: EditorPiAgentApi;
     }
 }

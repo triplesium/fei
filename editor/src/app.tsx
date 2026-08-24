@@ -44,6 +44,10 @@ import {
 } from "react";
 import { parseDocument } from "yaml";
 import { EditorPiAgent } from "./agent/editor-pi-agent";
+import {
+    editorToolRegistry,
+    type EditorCommandHandler,
+} from "./agent/editor-tool-registry";
 import { EditorModelGateway, type ModelGatewayState } from "./agent/model-gateway";
 import { PiAssistantThread } from "./agent/pi-assistant-thread";
 import type {
@@ -91,7 +95,6 @@ import {
 import { ProjectStorage } from "./services/project-storage";
 import type {
     AgentRequest,
-    AgentResponse,
     ConsoleEntry,
     ConsoleLevel,
     EditorAgentApi,
@@ -450,8 +453,6 @@ function CodeFileTabs({
     );
 }
 
-type CommandHandler = (request: AgentRequest) => Promise<unknown>;
-
 const workbenchLayoutStorageKey = "entisium-editor-dockview-layout-v3";
 const dockviewComponents = { panel: DockPanel };
 const dockviewTabComponents = { engine: EnginePanelTab };
@@ -590,7 +591,7 @@ export function App() {
     const [agentStreaming, setAgentStreaming] = useState(false);
     const [runtimeSnapshot, setRuntimeSnapshot] = useState(() => runtimeController.getSnapshot());
     const consoleRef = useRef<HTMLDivElement>(null);
-    const handlersRef = useRef<Record<string, CommandHandler>>({});
+    const handlersRef = useRef<Record<string, EditorCommandHandler>>({});
     const dockviewApiRef = useRef<DockviewApi | null>(null);
     const dockviewLayoutListenerRef = useRef<{ dispose(): void } | null>(null);
     const runtimeFocusedGameRef = useRef(false);
@@ -1087,50 +1088,28 @@ export function App() {
     };
 
     const agentApi = useMemo<EditorAgentApi>(() => {
-        const invoke = async (request: AgentRequest): Promise<AgentResponse> => {
-            const id = request?.requestId ?? requestId();
-            const type = request?.type ?? "";
-            appendConsole("command", "agent", type || "invalid command");
-            try {
-                const handler = handlersRef.current[type];
-                if (!handler) throw new Error(`Unsupported editor command: ${type}`);
-                return { requestId: id, ok: true, value: await handler(request) };
-            } catch (error) {
-                const message = errorMessage(error);
-                appendConsole("error", "agent", message);
-                return { requestId: id, ok: false, error: { code: "command_failed", message } };
-            }
-        };
-        return {
-            capabilities: Object.freeze([
-                "project.list",
-                "project.settings.get",
-                "project.settings.update",
-                "project.read",
-                "project.write",
-                "project.create",
-                "project.rename",
-                "project.remove",
-                "runtime.play",
-                "runtime.stop",
-                "runtime.restart",
-                "runtime.status",
-            ]),
-            invoke,
-        };
+        return editorToolRegistry.createAgentApi({
+            handler: (command) => handlersRef.current[command],
+            requestId,
+            onInvoke: (command) =>
+                appendConsole("command", "agent", command || "invalid command"),
+            onError: (message) => appendConsole("error", "agent", message),
+        });
     }, [appendConsole]);
-
-    useEffect(() => {
-        window.entisiumEditorAgent = agentApi;
-    }, [agentApi]);
 
     const piAgent = useMemo(() => new EditorPiAgent(agentApi), [agentApi]);
     const modelGateway = useMemo(() => new EditorModelGateway(), []);
 
     useEffect(() => {
+        window.entisiumEditor = {
+            commands: agentApi,
+            agents: { pi: piAgent },
+        };
+        // Compatibility aliases for integrations using the original split entry points.
+        window.entisiumEditorAgent = agentApi;
         window.entisiumEditorPi = piAgent;
         return () => piAgent.dispose();
-    }, [piAgent]);
+    }, [agentApi, piAgent]);
 
     useEffect(() => {
         const updateStreaming = () => setAgentStreaming(piAgent.snapshot().streaming);
@@ -1639,7 +1618,7 @@ export function App() {
                     <Separator />
                     <PanelSection>
                         <PanelSectionTitle>AGENT API</PanelSectionTitle>
-                        <p className="text-[12px] leading-relaxed text-muted-foreground">UI and agents use the same command bus through <code className="font-mono text-primary">window.entisiumEditorAgent</code>.</p>
+                        <p className="text-[12px] leading-relaxed text-muted-foreground">Editor agents share one tool registry through <code className="font-mono text-primary">window.entisiumEditor</code>.</p>
                         <div className="flex flex-wrap gap-1">
                             {agentApi.capabilities.map((capability) => <Badge key={capability}>{capability}</Badge>)}
                         </div>
