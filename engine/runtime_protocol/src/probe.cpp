@@ -27,6 +27,9 @@ namespace ets::runtime_protocol {
 namespace {
 
 constexpr std::string_view c_loopback_host {"127.0.0.1"};
+constexpr std::string_view c_control_port_environment {
+    "ETS_RUNTIME_CONTROL_PORT"
+};
 constexpr std::chrono::milliseconds c_reconnect_interval {500};
 constexpr std::chrono::milliseconds c_inspection_wait_interval {5};
 
@@ -56,15 +59,16 @@ void advance_runtime_probe(WorldRef world, ResRW<RuntimeProbe> probe) {
 class RuntimeProbe::Impl {
   public:
     explicit Impl(RuntimeProbeConfig config) : m_config(std::move(config)) {
-        const auto port = read_environment_variable<uint16>("ETS_AGENTD_PORT");
+        const auto port =
+            read_environment_variable<uint16>(c_control_port_environment);
         const auto session = read_environment_variable("ETS_RUNTIME_SESSION");
         if (!port && !session) {
             return;
         }
         if (!port || !session || session->empty()) {
             std::scoped_lock lock(m_status_mutex);
-            m_last_error =
-                "ETS_AGENTD_PORT and ETS_RUNTIME_SESSION must be set together";
+            m_last_error = "ETS_RUNTIME_CONTROL_PORT and "
+                           "ETS_RUNTIME_SESSION must be set together";
             warn("Runtime probe disabled: {}", m_last_error);
             return;
         }
@@ -302,7 +306,8 @@ class RuntimeProbe::Impl {
         auto request = decode_inspection_request(response->body);
         if (!request) {
             warn(
-                "Rejected invalid inspection request from entisium-agentd: {}",
+                "Rejected invalid inspection request from runtime control "
+                "endpoint: {}",
                 request.error()
             );
             return false;
@@ -337,7 +342,10 @@ class RuntimeProbe::Impl {
 
         while (m_running.load(std::memory_order_relaxed)) {
             if (!send_hello(client)) {
-                set_connection(false, "Failed to connect to entisium-agentd");
+                set_connection(
+                    false,
+                    "Failed to connect to runtime control endpoint"
+                );
                 if (!wait_for(c_reconnect_interval)) {
                     break;
                 }
@@ -346,7 +354,7 @@ class RuntimeProbe::Impl {
 
             set_connection(true);
             info(
-                "Runtime probe connected to entisium-agentd on {}:{}",
+                "Runtime probe connected to runtime control endpoint at {}:{}",
                 c_loopback_host,
                 m_port
             );
