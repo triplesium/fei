@@ -26,6 +26,7 @@ struct Options {
     std::filesystem::path depfile;
     std::string dep_target;
     std::string function_name = "register_reflection";
+    std::string script_module;
     bool aggregate = false;
     bool verbose = false;
 };
@@ -63,6 +64,11 @@ void configure_options(CLI::App& app, Options& options) {
         "--function",
         options.function_name,
         "Generated registration function name"
+    );
+    app.add_option(
+        "--script-module",
+        options.script_module,
+        "Script module that owns the reflected types"
     );
     auto* registrar_option = app.add_option_function<std::string>(
         "--registrar",
@@ -277,7 +283,8 @@ int main(int argc, char** argv) {
                 result,
                 options.root_dir,
                 options.output_file,
-                options.function_name
+                options.function_name,
+                options.script_module
             );
             write_stamp_file(options.stamp_file);
             write_depfile(

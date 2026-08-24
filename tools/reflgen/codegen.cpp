@@ -143,7 +143,8 @@ void generate_cpp_file(
     const ParseResult& result,
     const std::filesystem::path& root_dir,
     const std::filesystem::path& output_file,
-    const std::string& function_name
+    const std::string& function_name,
+    const std::string& script_module
 ) {
     if (output_file.has_parent_path()) {
         std::filesystem::create_directories(output_file.parent_path());
@@ -231,6 +232,11 @@ void generate_cpp_file(
                     << ">(\"" << tag.key << "\");\n";
             }
         }
+        if (!script_module.empty()) {
+            out << "registry.add_generated_annotation_field<" << cls.name
+                << R"(>("ScriptModule", "name", ")" << script_module
+                << "\");\n";
+        }
         if (generated_plugin_name) {
             out << "register_generated_plugin<" << cls.name << ">(\""
                 << *generated_plugin_name << "\");\n";
@@ -268,6 +274,11 @@ void generate_cpp_file(
                 out << "registry.add_generated_annotation<" << enum_info.name
                     << ">(\"" << tag.key << "\");\n";
             }
+        }
+        if (!script_module.empty()) {
+            out << "registry.add_generated_annotation_field<" << enum_info.name
+                << R"(>("ScriptModule", "name", ")" << script_module
+                << "\");\n";
         }
     }
 

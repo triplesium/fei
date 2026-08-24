@@ -12,7 +12,8 @@ void generate_cpp_file(
     const ParseResult& result,
     const std::filesystem::path& root_dir,
     const std::filesystem::path& output_file,
-    const std::string& function_name
+    const std::string& function_name,
+    const std::string& script_module
 );
 
 void generate_aggregate_cpp_file(

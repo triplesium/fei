@@ -82,6 +82,14 @@ local function target_symbol_name(target_name)
     return "register_" .. safe_identifier(target_name) .. "_reflection"
 end
 
+local function script_module_name(target_name)
+    local prefix = "entisium-"
+    if target_name:sub(1, #prefix) == prefix then
+        return target_name:sub(#prefix + 1)
+    end
+    return target_name
+end
+
 local function reflected_target_enabled(target)
     return target:values("entisium.reflect") == true
 end
@@ -434,7 +442,8 @@ local function make_reflgen_args(
     function_name,
     stamp_file,
     depfile,
-    dep_target
+    dep_target,
+    script_module
 )
     local args = {
         "--rootdir",
@@ -444,6 +453,11 @@ local function make_reflgen_args(
         "--function",
         function_name
     }
+
+    if script_module and #script_module > 0 then
+        table.insert(args, "--script-module")
+        table.insert(args, script_module)
+    end
 
     if stamp_file then
         table.insert(args, "--stamp")
@@ -476,6 +490,7 @@ local function module_inputs(target)
         module_file = target:values("entisium.reflect.module_file"),
         module_function = target:values("entisium.reflect.module_function"),
         module_marker_file = target:values("entisium.reflect.module_marker_file"),
+        script_module = target:values("entisium.reflect.script_module"),
         headers = reflection_headers(target),
         include_dirs = include_dirs,
         entries = file_entries(target)
@@ -626,6 +641,7 @@ function configure_target(target)
     target:set("values", "entisium.reflect.module_file", path.join(autogendir, "reflection.cpp"))
     target:set("values", "entisium.reflect.module_function", target_symbol_name(target:name()))
     target:set("values", "entisium.reflect.module_marker_file", path.join(autogendir, "module.reflmod"))
+    target:set("values", "entisium.reflect.script_module", script_module_name(target:name()))
     target:add("deps", "entisium-reflgen", {links = false})
 
     for _, entry in ipairs(file_entries(target)) do
@@ -695,7 +711,8 @@ local function generate_files(target)
                     entry.function_name,
                     entry.marker,
                     header_depfile,
-                    reflgen_dep_target(entry)
+                    reflgen_dep_target(entry),
+                    inputs.script_module
                 )
             )
         end, {
@@ -707,7 +724,8 @@ local function generate_files(target)
                 entry.output_file,
                 entry.function_name,
                 entry.header,
-                table.concat(inputs.include_dirs, ";")
+                table.concat(inputs.include_dirs, ";"),
+                inputs.script_module
             },
             dependfile = dependfile
         })
@@ -811,7 +829,8 @@ function buildcmd_file(target, batchcmds, sourcefile, opt)
             entry.function_name,
             entry.marker,
             header_depfile,
-            reflgen_dep_target(entry)
+            reflgen_dep_target(entry),
+            inputs.script_module
         )
     )
     batchcmds:compile(entry.output_file, objectfile)
@@ -825,7 +844,8 @@ function buildcmd_file(target, batchcmds, sourcefile, opt)
         entry.output_file,
         entry.function_name,
         entry.header,
-        table.concat(inputs.include_dirs, ";")
+        table.concat(inputs.include_dirs, ";"),
+        inputs.script_module
     )
     batchcmds:set_depmtime(os.mtime(objectfile))
     batchcmds:set_depcache(project_absolute_path(entry.output_file .. ".d"))
