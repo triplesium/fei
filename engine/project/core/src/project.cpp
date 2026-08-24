@@ -212,6 +212,49 @@ Project::load(const std::filesystem::path& project_file) {
                 }
             }
         }
+        const auto game_node = document["game"];
+        if (game_node) {
+            if (!game_node.IsMap()) {
+                return failure(load_error(
+                    ProjectLoadErrorKind::InvalidConfig,
+                    absolute_file,
+                    "Project field 'game' must be a mapping"
+                ));
+            }
+            const auto plugin_node = game_node["plugin"];
+            if (!plugin_node || !plugin_node.IsScalar()) {
+                return failure(load_error(
+                    ProjectLoadErrorKind::InvalidConfig,
+                    absolute_file,
+                    "Project field 'game.plugin' must be a module#export string"
+                ));
+            }
+            const std::string plugin_reference = plugin_node.as<std::string>();
+            const auto separator = plugin_reference.rfind('#');
+            if (separator == std::string::npos || separator == 0 ||
+                separator + 1 == plugin_reference.size()) {
+                return failure(load_error(
+                    ProjectLoadErrorKind::InvalidConfig,
+                    absolute_file,
+                    "Project field 'game.plugin' must use module#export"
+                ));
+            }
+            YAML::Node script_node;
+            script_node = plugin_reference.substr(0, separator);
+            auto script =
+                parse_project_asset_reference(script_node, "game plugin");
+            if (!script) {
+                return failure(load_error(
+                    ProjectLoadErrorKind::InvalidConfig,
+                    absolute_file,
+                    std::move(script.error())
+                ));
+            }
+            config.game = ProjectGameConfig {
+                .script = std::move(*script),
+                .plugin = plugin_reference.substr(separator + 1),
+            };
+        }
         const auto scripts_node = document["scripts"];
         if (scripts_node) {
             if (!scripts_node.IsSequence()) {

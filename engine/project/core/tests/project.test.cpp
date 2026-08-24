@@ -147,6 +147,25 @@ scripts:
     );
 }
 
+TEST_CASE("Project loads a named game plugin export", "[project][plugin]") {
+    TemporaryProjectDirectory directory;
+    directory.write_config(R"(
+name: Test Game
+game:
+  plugin: project://scripts/game.luau#GamePlugin
+)");
+
+    auto project = Project::load(directory.project_file());
+
+    REQUIRE(project);
+    REQUIRE(project->config().game);
+    CHECK(
+        project->config().game->script.fallback_path.as_string() ==
+        "project://scripts/game.luau"
+    );
+    CHECK(project->config().game->plugin == "GamePlugin");
+}
+
 TEST_CASE("Project loads Luau playtest declarations", "[project][playtest]") {
     TemporaryProjectDirectory directory;
     directory.write_config(R"(

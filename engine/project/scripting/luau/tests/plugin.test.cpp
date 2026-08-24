@@ -36,7 +36,8 @@ class TemporaryMixedScriptProject {
     explicit TemporaryMixedScriptProject(
         std::vector<ScriptFile> scripts,
         std::vector<ScriptFile> playtests = {},
-        std::vector<ScriptFile> libraries = {}
+        std::vector<ScriptFile> libraries = {},
+        Optional<std::string_view> game_plugin = nullopt
     ) {
         static std::atomic<std::uint64_t> sequence {0};
         const auto timestamp =
@@ -72,9 +73,16 @@ class TemporaryMixedScriptProject {
         if (has_luau) {
             project_stream << "    - project_runtime::LuauScripts\n";
         }
-        project_stream << "scripts:\n";
-        for (const auto& script : scripts) {
-            project_stream << "  - project://" << script.path << "\n";
+        if (game_plugin) {
+            project_stream << "game:\n  plugin: \"" << *game_plugin << "\"\n";
+        }
+        if (scripts.empty()) {
+            project_stream << "scripts: []\n";
+        } else {
+            project_stream << "scripts:\n";
+            for (const auto& script : scripts) {
+                project_stream << "  - project://" << script.path << "\n";
+            }
         }
         if (!playtests.empty()) {
             project_stream << "playtests:\n";
@@ -609,6 +617,186 @@ TEST_CASE(
     REQUIRE(state.scripts.size() == 1);
     CHECK(state.scripts[0].status == project_runtime::LuauScriptStatus::Failed);
     CHECK(state.scripts[0].error.contains("not found"));
+}
+
+TEST_CASE(
+    "Project installs a named exported Luau game Plugin",
+    "[project-runtime][luau][plugin][export]"
+) {
+    TemporaryMixedScriptProject directory(
+        {},
+        {},
+        {
+            ScriptFile {
+                .path = "scripts/game.luau",
+                .content = std::string_view {R"(
+                    export type Counter = {
+                        value: i32,
+                    }
+
+                    local function tick(counter: ResRW<Counter>)
+                        counter.value += 3
+                    end
+
+                    export local GamePlugin = Plugin.new {
+                        build = function(app: App)
+                            app:insert_resource(Counter { value = 2 })
+                            app:add_system(Update, tick)
+                        end,
+                    }
+                )"},
+            },
+        },
+        std::string_view {"project://scripts/game.luau#GamePlugin"}
+    );
+    auto app = load_app(directory);
+
+    const auto& scripts = app.resource<project_runtime::LuauScriptsState>();
+    REQUIRE(scripts.scripts.size() == 1);
+    REQUIRE(
+        scripts.scripts[0].status == project_runtime::LuauScriptStatus::Loaded
+    );
+
+    app.run_schedule(Update);
+
+    auto counter_type =
+        Registry::instance().try_get_type("project.scripts.game.Counter");
+    REQUIRE(counter_type);
+    const Ref counter = app.world().resource(counter_type->id());
+    auto value = Registry::instance()
+                     .get_cls(counter_type->id())
+                     .get_property("value")
+                     .get(counter);
+    REQUIRE(value);
+    CHECK(value->get<int>() == 5);
+}
+
+TEST_CASE(
+    "Exported Luau Plugins install transitive dependencies",
+    "[project-runtime][luau][plugin][export][dependency]"
+) {
+    TemporaryMixedScriptProject directory(
+        {},
+        {},
+        {
+            ScriptFile {
+                .path = "scripts/player.luau",
+                .content = std::string_view {R"(
+                    export type Counter = {
+                        value: i32,
+                    }
+
+                    local function player_tick(counter: ResRW<Counter>)
+                        counter.value += 1
+                    end
+
+                    local function bonus_tick(counter: ResRW<Counter>)
+                        counter.value += 100
+                    end
+
+                    export local PlayerPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:insert_resource(Counter { value = 1 })
+                            app:add_system(Update, player_tick)
+                        end,
+                    }
+
+                    export local BonusPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, bonus_tick)
+                        end,
+                    }
+                )"},
+            },
+            ScriptFile {
+                .path = "scripts/game.luau",
+                .content = std::string_view {R"(
+                    local Player = require("./player")
+
+                    local function game_tick(counter: ResRW<Player.Counter>)
+                        counter.value += 10
+                    end
+
+                    export local GamePlugin = Plugin.new {
+                        dependencies = {
+                            Player.PlayerPlugin,
+                            Player.BonusPlugin,
+                        },
+                        build = function(app: App)
+                            app:add_system(Update, game_tick)
+                        end,
+                    }
+                )"},
+            },
+        },
+        std::string_view {"project://scripts/game.luau#GamePlugin"}
+    );
+    auto app = load_app(directory);
+
+    const auto& scripts = app.resource<project_runtime::LuauScriptsState>();
+    REQUIRE(scripts.scripts.size() == 1);
+    REQUIRE(
+        scripts.scripts[0].status == project_runtime::LuauScriptStatus::Loaded
+    );
+
+    app.run_schedule(Update);
+
+    auto counter_type =
+        Registry::instance().try_get_type("project.scripts.player.Counter");
+    REQUIRE(counter_type);
+    const Ref counter = app.world().resource(counter_type->id());
+    auto value = Registry::instance()
+                     .get_cls(counter_type->id())
+                     .get_property("value")
+                     .get(counter);
+    REQUIRE(value);
+    CHECK(value->get<int>() == 112);
+}
+
+TEST_CASE(
+    "Exported Luau Plugins reject dependency cycles",
+    "[project-runtime][luau][plugin][export][dependency]"
+) {
+    TemporaryMixedScriptProject directory(
+        {},
+        {},
+        {
+            ScriptFile {
+                .path = "scripts/game.luau",
+                .content = std::string_view {R"(
+                    local Other = require("./other")
+
+                    export local GamePlugin = Plugin.new {
+                        dependencies = { Other.OtherPlugin },
+                        build = function(app: App)
+                        end,
+                    }
+                )"},
+            },
+            ScriptFile {
+                .path = "scripts/other.luau",
+                .content = std::string_view {R"(
+                    local Game = require("./game")
+
+                    export local OtherPlugin = Plugin.new {
+                        dependencies = { Game.GamePlugin },
+                        build = function(app: App)
+                        end,
+                    }
+                )"},
+            },
+        },
+        std::string_view {"project://scripts/game.luau#GamePlugin"}
+    );
+    auto app = load_app(directory);
+    apply_script_queues(app);
+
+    const auto& scripts = app.resource<project_runtime::LuauScriptsState>();
+    REQUIRE(scripts.scripts.size() == 1);
+    CHECK(
+        scripts.scripts[0].status == project_runtime::LuauScriptStatus::Failed
+    );
+    CHECK(scripts.scripts[0].error.contains("Circular Luau Plugin dependency"));
 }
 
 TEST_CASE(

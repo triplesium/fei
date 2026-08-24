@@ -1,3 +1,5 @@
+export type WebProjectSprite = {}
+
 local function initialize(
     commands: Commands,
     assets: ResRW<AssetServer>
@@ -33,12 +35,9 @@ local function animate(
     end
 end
 
-return {
-    types = {
-        WebProjectSprite = {},
-    },
-    systems = {
-        system(StartUp, initialize),
-        system(Update, animate),
-    },
+export local GamePlugin = Plugin.new {
+    build = function(app: App)
+        app:add_system(StartUp, initialize)
+        app:add_system(Update, animate)
+    end,
 }

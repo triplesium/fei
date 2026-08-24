@@ -46,6 +46,35 @@ void LuauScriptsPlugin::setup(App& app) {
         detail::LuauProjectScriptBackend>(app);
     auto& registry = app.resource<LuauScriptSystemRegistry>();
     auto& assets = app.resource<Assets<LuauScriptAsset>>();
+    if (const auto& game = app.resource<Project>().config().game;
+        game && project_scripting::script_path_has_extension(
+                    game->script,
+                    detail::LuauProjectScriptBackend::extension
+                )) {
+        LuauScriptState script {.reference = game->script};
+        auto& asset_server = app.resource<AssetServer>();
+        auto path = asset_server.resolve(game->script);
+        if (!path) {
+            script.status = LuauScriptStatus::Failed;
+            script.error = std::move(path.error().message);
+        } else {
+            script.path = *path;
+            script.asset = asset_server.load<LuauScriptAsset>(*path);
+            const auto load_state = assets.load_state(script.asset);
+            if (load_state && *load_state == AssetLoadState::Failed) {
+                script.status = LuauScriptStatus::Failed;
+                if (auto error = assets.load_error(script.asset)) {
+                    script.error = error->message;
+                } else {
+                    script.error =
+                        detail::LuauProjectScriptBackend::asset_load_failure;
+                }
+            } else {
+                registry.queue_asset(script.asset, game->plugin);
+            }
+        }
+        scripts.scripts.push_back(std::move(script));
+    }
     registry.apply_queued_requests(
         app.resource<LuauRuntime>(),
         app.world(),

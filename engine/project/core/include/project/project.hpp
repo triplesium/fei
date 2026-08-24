@@ -1,6 +1,7 @@
 #pragma once
 #include "app/plugin_id.hpp"
 #include "asset/reference.hpp"
+#include "base/optional.hpp"
 #include "base/result.hpp"
 
 #include <cstdint>
@@ -26,10 +27,16 @@ struct ProjectRuntimeConfig {
     std::vector<PluginId> plugins;
 };
 
+struct ProjectGameConfig {
+    AssetReference script;
+    std::string plugin;
+};
+
 struct ProjectConfig {
     std::string name;
     std::filesystem::path asset_directory {"assets"};
     ProjectRuntimeConfig runtime;
+    Optional<ProjectGameConfig> game;
     std::vector<AssetReference> scripts;
     std::vector<AssetReference> playtests;
 };

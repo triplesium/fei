@@ -5,5 +5,5 @@ runtime:
   plugins:
     - project_runtime::LuauScripts
 
-scripts:
-  - project://main.luau
+game:
+  plugin: "project://main.luau#GamePlugin"
