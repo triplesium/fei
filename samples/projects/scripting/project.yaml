@@ -12,6 +12,3 @@ runtime:
 
 scripts:
   - project://scripts/movement.luau
-
-playtests:
-  - project://scripts/main.playtest.luau

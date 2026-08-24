@@ -38,7 +38,6 @@ struct ProjectConfig {
     ProjectRuntimeConfig runtime;
     Optional<ProjectGameConfig> game;
     std::vector<AssetReference> scripts;
-    std::vector<AssetReference> playtests;
 };
 
 class Project {

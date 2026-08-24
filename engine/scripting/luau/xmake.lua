@@ -12,7 +12,7 @@ target("entisium-scripting-luau")
         "entisium-asset",
         "entisium-scripting"
     )
-    add_packages("luau")
+    add_packages("luau", "nlohmann_json")
 
 if not is_plat("wasm") then
     target("entisium-scripting-luau-tests")

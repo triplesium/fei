@@ -229,10 +229,6 @@ make_snapshot_archive_metadata(
     for (const auto& script : project.config().scripts) {
         append_reference(runtime, script);
     }
-    for (const auto& playtest : project.config().playtests) {
-        append_reference(runtime, playtest);
-    }
-
     auto scripts = script_digest(project.asset_root());
     if (!scripts) {
         return failure(std::move(scripts.error()));

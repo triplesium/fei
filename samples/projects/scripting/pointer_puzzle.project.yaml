@@ -12,6 +12,3 @@ runtime:
 
 scripts:
   - project://scripts/pointer_puzzle_test.luau
-
-playtests:
-  - project://scripts/pointer_puzzle_test.playtest.luau

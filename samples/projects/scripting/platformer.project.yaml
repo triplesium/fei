@@ -12,6 +12,3 @@ runtime:
 
 scripts:
   - project://scripts/platformer_test.luau
-
-playtests:
-  - project://scripts/platformer_test.playtest.luau

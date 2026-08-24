@@ -166,31 +166,6 @@ game:
     CHECK(project->config().game->plugin == "GamePlugin");
 }
 
-TEST_CASE("Project loads Luau playtest declarations", "[project][playtest]") {
-    TemporaryProjectDirectory directory;
-    directory.write_config(R"(
-name: Test Game
-playtests:
-  - project://scripts/main.playtest.luau
-  - asset: "1a02e8da-05b6-41c4-b526-c9ad8bba17e4"
-    path: scripts/menu.playtest.luau
-)");
-
-    auto project = Project::load(directory.project_file());
-
-    REQUIRE(project);
-    REQUIRE(project->config().playtests.size() == 2);
-    CHECK(
-        project->config().playtests[0].fallback_path.as_string() ==
-        "project://scripts/main.playtest.luau"
-    );
-    REQUIRE(project->config().playtests[1].id);
-    CHECK(
-        project->config().playtests[1].fallback_path.as_string() ==
-        "project://scripts/menu.playtest.luau"
-    );
-}
-
 TEST_CASE("Project rejects invalid configuration", "[project]") {
     TemporaryProjectDirectory directory;
 
@@ -286,28 +261,6 @@ TEST_CASE("Project rejects invalid configuration", "[project]") {
         REQUIRE_FALSE(project);
         CHECK(project.error().kind == ProjectLoadErrorKind::InvalidConfig);
         CHECK(project.error().message.find("project://") != std::string::npos);
-    }
-
-    SECTION("playtests is not a sequence") {
-        directory.write_config(
-            "name: Test Game\n"
-            "playtests: project://scripts/main.playtest.luau\n"
-        );
-        auto project = Project::load(directory.project_file());
-        REQUIRE_FALSE(project);
-        CHECK(project.error().kind == ProjectLoadErrorKind::InvalidConfig);
-        CHECK(project.error().message.find("playtests") != std::string::npos);
-    }
-
-    SECTION("playtest path escapes the project source") {
-        directory.write_config(
-            "name: Test Game\n"
-            "playtests:\n  - project://../main.playtest.luau\n"
-        );
-        auto project = Project::load(directory.project_file());
-        REQUIRE_FALSE(project);
-        CHECK(project.error().kind == ProjectLoadErrorKind::InvalidConfig);
-        CHECK(project.error().message.find("safe") != std::string::npos);
     }
 
     SECTION("legacy main scene is rejected") {

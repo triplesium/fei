@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -157,6 +158,9 @@ class LuauScriptSystemRegistry {
     }
     void clear_queue_errors() { m_queue_errors.clear(); }
     std::size_t size() const { return m_modules.size(); }
+    std::span<const LoadedLuauScriptSystemModule> modules() const {
+        return m_modules;
+    }
     std::uint64_t snapshot_generation() const { return m_snapshot_generation; }
     std::vector<TypeId> snapshot_resource_types() const;
 };

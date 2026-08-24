@@ -699,7 +699,12 @@ void validate_project_plugins(const ProjectRuntimeConfig& runtime) {
 } // namespace
 
 RuntimeHostApplication::RuntimeHostApplication(Project project) {
-    const bool has_luau_playtests = !project.config().playtests.empty();
+    const bool has_luau_scripts = std::ranges::any_of(
+        project.config().runtime.plugins,
+        [](const PluginId& plugin) {
+            return plugin.qualified_name() == "project_runtime::LuauScripts";
+        }
+    );
     auto engine_build = read_environment_variable("ETS_RUNTIME_BUILD_ID");
     if (!engine_build) {
         auto detected_build = current_runtime_build_id();
@@ -811,7 +816,7 @@ RuntimeHostApplication::RuntimeHostApplication(Project project) {
     m_app.add_plugin<snapshot_runtime::SnapshotRuntimePlugin>();
     validate_project_plugins(project.config().runtime);
     configure_project_runtime(m_app, std::move(project));
-    if (has_luau_playtests) {
+    if (has_luau_scripts) {
         m_app.add_plugin(project_runtime::LuauPlaytestsPlugin {});
     }
     runtime_probe_config.manual_inspection_dispatch = true;
@@ -975,14 +980,6 @@ void RuntimeHostApplication::run() {
             }
             if (m_app.has_resource<project_runtime::LuauScriptsState>()) {
                 snapshot_registry.resource<project_runtime::LuauScriptsState>(
-                    snapshot::ResourcePolicy::Ignore
-                );
-            }
-            const auto playtest_runtime_type =
-                project_runtime::luau_playtest_runtime_resource_type();
-            if (m_app.world().has_resource(playtest_runtime_type)) {
-                snapshot_registry.set_resource_policy(
-                    playtest_runtime_type,
                     snapshot::ResourcePolicy::Ignore
                 );
             }

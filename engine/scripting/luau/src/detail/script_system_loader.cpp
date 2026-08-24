@@ -271,8 +271,11 @@ Result<std::vector<SystemHandle>, ScriptError> install_luau_script_systems(
         return failure(std::move(declared_types.error()));
     }
     auto bind_type = [&](const ScriptTypeBinding& binding) {
-        return runtime
-            .bind_module_type(module, binding.local_name, *binding.type);
+        return runtime.bind_module_exported_type(
+            module,
+            binding.local_name,
+            *binding.type
+        );
     };
     auto create_executor = [&](const DynamicSystemDecl& system)
         -> Result<std::unique_ptr<DynamicSystemExecutor>, ScriptError> {

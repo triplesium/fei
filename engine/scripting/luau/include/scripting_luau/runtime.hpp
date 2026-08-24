@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/result.hpp"
+#include "base/types.hpp"
 #include "scripting/error.hpp"
 #include "scripting/source.hpp"
 #include "scripting_luau/compiler.hpp"
@@ -9,6 +10,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 
 namespace ets {
 
@@ -28,6 +30,18 @@ inline constexpr LuauScriptModuleId invalid_luau_script_module_id =
 struct LuauScriptImportBinding {
     std::string specifier;
     LuauScriptModuleId module {invalid_luau_script_module_id};
+};
+
+struct LuauPlaytestDeclaration {
+    std::string id;
+    std::string label;
+    std::string description;
+    uint32 decision_ticks {1};
+    uint32 minimum_ticks {1};
+    uint32 maximum_ticks {1};
+    bool allow_tick_override {false};
+    std::string action_schema_json;
+    std::string observation_schema_json;
 };
 
 class LuauRuntime {
@@ -59,6 +73,11 @@ class LuauRuntime {
         const std::string& name,
         const Type& type
     );
+    Status<LuauScriptError> bind_module_exported_type(
+        LuauScriptModuleId module,
+        const std::string& name,
+        const Type& type
+    );
     Status<LuauScriptError>
     bind_module_script_type(LuauScriptModuleId module, const Type& type);
     Status<LuauScriptError> bind_module_enum(
@@ -83,6 +102,24 @@ class LuauRuntime {
         LuauScriptModuleId module,
         const std::string& function_name,
         std::span<const Ref> args
+    );
+    [[nodiscard]] std::span<const LuauPlaytestDeclaration>
+    module_playtests(LuauScriptModuleId module) const;
+    Status<LuauScriptError> begin_module_playtest_step(
+        LuauScriptModuleId module,
+        std::size_t playtest,
+        World& world,
+        std::string_view action_json
+    );
+    Status<LuauScriptError> end_module_playtest_step(
+        LuauScriptModuleId module,
+        std::size_t playtest,
+        World& world
+    );
+    Result<std::string, LuauScriptError> observe_module_playtest(
+        LuauScriptModuleId module,
+        std::size_t playtest,
+        World& world
     );
 };
 

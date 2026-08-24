@@ -164,6 +164,9 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
                 m_native_module_imports.insert(statement->vars.data[index]);
                 continue;
             }
+            if (is_module_require(*statement->values.data[index])) {
+                m_module_imports.insert(statement->vars.data[index]);
+            }
             if (references_module_state(*statement->values.data[index])) {
                 m_module_state_aliases.insert(statement->vars.data[index]);
             }
@@ -213,6 +216,8 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
                 return false;
             }
         }
+        const bool imported_type_call =
+            accepts_imported_type_token(*expression);
 
         std::vector<std::string_view> path;
         static const std::unordered_set<std::string_view> mutating_calls {
@@ -236,7 +241,8 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
         }
         for (AstExpr* argument : expression->args) {
             if (references_module_state(*argument) &&
-                !plugin_system_registration) {
+                !plugin_system_registration &&
+                !(imported_type_call && is_direct_module_export(*argument))) {
                 reject(
                     expression->location,
                     "captured module state cannot be passed to a call"
@@ -263,24 +269,61 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
 
   private:
     std::unordered_set<const AstLocal*> m_module_state_aliases;
+    std::unordered_set<const AstLocal*> m_module_imports;
     std::unordered_set<const AstLocal*> m_native_module_imports;
     std::unordered_set<const AstLocal*> m_readonly_module_bindings;
 
-    static bool is_native_module_require(const AstExpr& expression) {
+    static const AstExprConstantString*
+    module_require_specifier(const AstExpr& expression) {
         const auto* call = expression.as<AstExprCall>();
         if (call == nullptr || call->args.size != 1) {
-            return false;
+            return nullptr;
         }
         const auto* global = call->func->as<AstExprGlobal>();
         const auto* specifier = call->args.data[0]->as<AstExprConstantString>();
-        return global != nullptr && name_view(global->name) == "require" &&
-               specifier != nullptr &&
-               is_native_luau_module(
-                   std::string_view {
-                       specifier->value.data,
-                       specifier->value.size,
-                   }
-               );
+        return global != nullptr && name_view(global->name) == "require" ?
+                   specifier :
+                   nullptr;
+    }
+
+    static bool is_module_require(const AstExpr& expression) {
+        return module_require_specifier(expression) != nullptr;
+    }
+
+    static bool is_native_module_require(const AstExpr& expression) {
+        const auto* specifier = module_require_specifier(expression);
+        return specifier != nullptr && is_native_luau_module(
+                                           std::string_view {
+                                               specifier->value.data,
+                                               specifier->value.size,
+                                           }
+                                       );
+    }
+
+    bool is_direct_module_export(const AstExpr& expression) const {
+        const auto* member = expression.as<AstExprIndexName>();
+        const auto* module =
+            member != nullptr ? member->expr->as<AstExprLocal>() : nullptr;
+        return module != nullptr && m_module_imports.contains(module->local);
+    }
+
+    static bool accepts_imported_type_token(const AstExprCall& expression) {
+        const auto* method = expression.func->as<AstExprIndexName>();
+        if (expression.self && method != nullptr &&
+            name_view(method->index) == "resource") {
+            return true;
+        }
+        const auto* global = expression.func->as<AstExprGlobal>();
+        if (global == nullptr) {
+            return false;
+        }
+        static const std::unordered_set<std::string_view> functions {
+            "Read",
+            "Write",
+            "With",
+            "Without",
+        };
+        return functions.contains(name_view(global->name));
     }
 
     static bool append_path(
@@ -2315,13 +2358,18 @@ find_exported_plugins(const Luau::AstStatBlock& root) {
     return result;
 }
 
-Result<std::vector<const AstExpr*>, ScriptError> compile_plugin_systems(
+struct PluginRuntimeEntries {
+    std::vector<const AstExpr*> systems;
+    std::vector<const AstExpr*> playtests;
+};
+
+Result<PluginRuntimeEntries, ScriptError> compile_plugin_entries(
     const ExportedPlugin& plugin,
     const FunctionResolutionContext& function_context,
     RequiredRuntimeTypes& required_runtime_types,
     ScriptModuleDecl& declaration
 ) {
-    std::vector<const AstExpr*> runtime_entries;
+    PluginRuntimeEntries runtime_entries;
     const AstLocal* app = plugin.build->args.data[0];
     std::unordered_map<std::string, std::string> declared_types;
     for (const auto& type : declaration.types) {
@@ -2339,10 +2387,20 @@ Result<std::vector<const AstExpr*>, ScriptError> compile_plugin_systems(
         if (call == nullptr || method == nullptr || receiver == nullptr ||
             receiver->local != app || !call->self) {
             return failure(declaration_error(
-                "Plugin build currently supports only app:add_system(...) calls"
+                "Plugin build contains an unsupported statement"
             ));
         }
         const std::string_view method_name = name_view(method->index);
+        if (method_name == "add_playtest") {
+            if (call->args.size != 1 ||
+                call->args.data[0]->as<AstExprTable>() == nullptr) {
+                return failure(declaration_error(
+                    "app:add_playtest expects one declaration table"
+                ));
+            }
+            runtime_entries.playtests.push_back(call->args.data[0]);
+            continue;
+        }
         if (method_name == "add_resource" || method_name == "insert_resource") {
             if (call->args.size != 1) {
                 return failure(declaration_error(
@@ -2423,7 +2481,7 @@ Result<std::vector<const AstExpr*>, ScriptError> compile_plugin_systems(
         for (auto& system : group->systems) {
             declaration.systems.push_back(std::move(system));
         }
-        runtime_entries.push_back(call->args.data[1]);
+        runtime_entries.systems.push_back(call->args.data[1]);
     }
     return runtime_entries;
 }
@@ -2446,13 +2504,20 @@ expression_source(const ScriptSource& source, const Luau::Location& location) {
 
 std::string plugin_runtime_source(
     const ScriptSource& source,
-    const std::vector<const AstExpr*>& systems
+    const PluginRuntimeEntries& entries
 ) {
     std::string generated {source.content};
     generated.append("\nexport const __ets_systems = {\n");
-    for (const AstExpr* system : systems) {
+    for (const AstExpr* system : entries.systems) {
         generated.append("    ");
         generated.append(expression_source(source, system->location));
+        generated.append(",\n");
+    }
+    generated.append("}\n");
+    generated.append("export const __ets_playtests = {\n");
+    for (const AstExpr* playtest : entries.playtests) {
+        generated.append("    ");
+        generated.append(expression_source(source, playtest->location));
         generated.append(",\n");
     }
     generated.append("}\n");
@@ -2699,14 +2764,14 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
         for (const auto& type : declaration.types) {
             script_types.emplace(type.name, type.qualified_name);
         }
-        auto runtime_systems = compile_plugin_systems(
+        auto runtime_entries = compile_plugin_entries(
             *exported_plugin,
             function_context,
             required_runtime_types,
             declaration
         );
-        if (!runtime_systems) {
-            return failure(std::move(runtime_systems.error()));
+        if (!runtime_entries) {
+            return failure(std::move(runtime_entries.error()));
         }
         std::unordered_map<const AstLocal*, std::string> local_plugins;
         for (const auto& plugin : *exported_plugins) {
@@ -2744,7 +2809,7 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
             return type.id();
         });
         const std::string generated =
-            plugin_runtime_source(source, *runtime_systems);
+            plugin_runtime_source(source, *runtime_entries);
         return LuauScriptModuleArtifact {
             .declaration = std::move(declaration),
             .bytecode = Luau::compile(generated),

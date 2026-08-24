@@ -35,7 +35,6 @@ class TemporaryMixedScriptProject {
   public:
     explicit TemporaryMixedScriptProject(
         std::vector<ScriptFile> scripts,
-        std::vector<ScriptFile> playtests = {},
         std::vector<ScriptFile> libraries = {},
         Optional<std::string_view> game_plugin = nullopt
     ) {
@@ -59,9 +58,8 @@ class TemporaryMixedScriptProject {
                        ".luau";
             });
         };
-        const bool has_luau = contains_luau(scripts) ||
-                              contains_luau(playtests) ||
-                              contains_luau(libraries);
+        const bool has_luau =
+            contains_luau(scripts) || contains_luau(libraries);
 
         std::ofstream project_stream(project_file());
         project_stream << "name: Mixed Script Runtime\n"
@@ -84,12 +82,6 @@ class TemporaryMixedScriptProject {
                 project_stream << "  - project://" << script.path << "\n";
             }
         }
-        if (!playtests.empty()) {
-            project_stream << "playtests:\n";
-            for (const auto& playtest : playtests) {
-                project_stream << "  - project://" << playtest.path << "\n";
-            }
-        }
         auto write_files = [this](const auto& entries) {
             for (const auto& script : entries) {
                 if (!script.content) {
@@ -103,7 +95,6 @@ class TemporaryMixedScriptProject {
             }
         };
         write_files(scripts);
-        write_files(playtests);
         write_files(libraries);
     }
 
@@ -249,7 +240,6 @@ TEST_CASE(
                 )"},
             },
         },
-        {},
         {
             ScriptFile {
                 .path = "scripts/lib/counter.luau",
@@ -301,7 +291,6 @@ TEST_CASE(
                 )"},
             },
         },
-        {},
         {
             ScriptFile {
                 .path = "scripts/lib/first.luau",
@@ -415,7 +404,6 @@ TEST_CASE(
                     )"},
                 },
             },
-            {},
             {
                 ScriptFile {
                     .path = "scripts/invalid.luau",
@@ -435,32 +423,19 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Project Luau playtests declare actions and observations",
-    "[project-runtime][luau][playtest]"
+    "Project Luau Plugins register playtest actions and observations",
+    "[project-runtime][luau][playtest][plugin]"
 ) {
     TemporaryMixedScriptProject directory(
+        {},
         {
             ScriptFile {
-                .path = "scripts/playtest_game.luau",
+                .path = "scripts/game.luau",
                 .content = std::string_view {R"(
-                    return {
-                        types = {
-                            Control = {
-                                value = field(i32, 0),
-                            },
-                        },
-                        resources = {
-                            Control = {},
-                        },
-                        systems = {},
+                    export type Control = {
+                        value: i32,
                     }
-                )"},
-            },
-        },
-        {
-            ScriptFile {
-                .path = "scripts/main.playtest.luau",
-                .content = std::string_view {R"(
+
                     local function begin_step(ctx, action)
                         ctx:resource(Control).value = action.value
                     end
@@ -470,44 +445,45 @@ TEST_CASE(
                     end
 
                     local function observe(ctx)
-                        return {
-                            value = ctx:resource(Control).value,
-                        }
+                        return { value = ctx:resource(Control).value }
                     end
 
-                    return playtest {
-                        id = "game.main",
-                        label = "Main controls",
-                        types = {
-                            Control = "project.scripts.playtest_game.Control",
-                        },
-                        ticks = {
-                            default = 4,
-                            min = 1,
-                            max = 10,
-                            overridable = true,
-                        },
-                        action = {
-                            type = "object",
-                            properties = {
-                                value = {type = "integer"},
-                            },
-                            required = {"value"},
-                        },
-                        observation = {
-                            type = "object",
-                            properties = {
-                                value = {type = "integer"},
-                            },
-                            required = {"value"},
-                        },
-                        begin_step = begin_step,
-                        end_step = end_step,
-                        observe = observe,
+                    export local GamePlugin = Plugin.new {
+                        build = function(app: App)
+                            app:insert_resource(Control { value = 0 })
+                            app:add_playtest {
+                                id = "game.main",
+                                label = "Main controls",
+                                ticks = {
+                                    default = 4,
+                                    min = 1,
+                                    max = 10,
+                                    overridable = true,
+                                },
+                                action = {
+                                    type = "object",
+                                    properties = {
+                                        value = {type = "integer"},
+                                    },
+                                    required = {"value"},
+                                },
+                                observation = {
+                                    type = "object",
+                                    properties = {
+                                        value = {type = "integer"},
+                                    },
+                                    required = {"value"},
+                                },
+                                begin_step = begin_step,
+                                end_step = end_step,
+                                observe = observe,
+                            }
+                        end,
                     }
                 )"},
             },
-        }
+        },
+        std::string_view {"project://scripts/game.luau#GamePlugin"}
     );
     auto project = Project::load(directory.project_file());
     REQUIRE(project);
@@ -518,106 +494,20 @@ TEST_CASE(
     app.add_plugin(project_runtime::LuauPlaytestsPlugin {});
     app.finish();
 
-    CHECK(app.world().has_resource(
-        project_runtime::luau_playtest_runtime_resource_type()
-    ));
     auto& registry = app.resource<runtime_protocol::PlaytestRegistry>();
     const auto* interface = registry.find("game.main");
     REQUIRE(interface != nullptr);
     CHECK(interface->descriptor.decision_ticks == 4);
     CHECK(interface->descriptor.minimum_ticks == 1);
     CHECK(interface->descriptor.maximum_ticks == 10);
-    CHECK(
-        nlohmann::json::parse(interface->descriptor.action_schema_json)
-            .at("properties")
-            .contains("value")
-    );
-
     REQUIRE(interface->begin_step(app.world(), R"({"value":7})"));
     auto observation = interface->observe(app.world());
     REQUIRE(observation);
     CHECK(nlohmann::json::parse(*observation).at("value") == 7);
     REQUIRE(interface->end_step(app.world()));
-
     observation = interface->observe(app.world());
     REQUIRE(observation);
     CHECK(nlohmann::json::parse(*observation).at("value") == 0);
-}
-
-TEST_CASE(
-    "Project Luau playtests require the playtest declaration helper",
-    "[project-runtime][luau][playtest]"
-) {
-    TemporaryMixedScriptProject directory(
-        {
-            ScriptFile {
-                .path = "scripts/gameplay.luau",
-                .content = std::string_view {R"(
-                    return {
-                        systems = {},
-                    }
-                )"},
-            },
-        },
-        {
-            ScriptFile {
-                .path = "scripts/main.playtest.luau",
-                .content = std::string_view {"return {}"},
-            },
-        }
-    );
-    auto project = Project::load(directory.project_file());
-    REQUIRE(project);
-
-    App app;
-    app.add_resource(runtime_protocol::PlaytestRegistry {});
-    configure_project_runtime(app, std::move(*project));
-    app.add_plugin(project_runtime::LuauPlaytestsPlugin {});
-
-    REQUIRE_THROWS_AS(app.finish(), std::runtime_error);
-}
-
-TEST_CASE(
-    "Project Luau playtests reject hidden persistent state",
-    "[project-runtime][luau][playtest][snapshot]"
-) {
-    TemporaryMixedScriptProject directory(
-        {
-            ScriptFile {
-                .path = "scripts/gameplay.luau",
-                .content = std::string_view {R"(
-                    return {
-                        systems = {},
-                    }
-                )"},
-            },
-        },
-        {
-            ScriptFile {
-                .path = "scripts/main.playtest.luau",
-                .content = std::string_view {R"(
-                    local observations = 0
-                    local function observe()
-                        observations += 1
-                        return {}
-                    end
-                    return playtest {
-                        id = "game.unsafe",
-                        observe = observe,
-                    }
-                )"},
-            },
-        }
-    );
-    auto project = Project::load(directory.project_file());
-    REQUIRE(project);
-
-    App app;
-    app.add_resource(runtime_protocol::PlaytestRegistry {});
-    configure_project_runtime(app, std::move(*project));
-    app.add_plugin(project_runtime::LuauPlaytestsPlugin {});
-
-    REQUIRE_THROWS_AS(app.finish(), std::runtime_error);
 }
 
 TEST_CASE(
@@ -663,7 +553,6 @@ TEST_CASE(
     "[project-runtime][luau][plugin][export]"
 ) {
     TemporaryMixedScriptProject directory(
-        {},
         {},
         {
             ScriptFile {
@@ -715,7 +604,6 @@ TEST_CASE(
     "[project-runtime][luau][plugin][export][dependency]"
 ) {
     TemporaryMixedScriptProject directory(
-        {},
         {},
         {
             ScriptFile {
@@ -797,7 +685,6 @@ TEST_CASE(
     "[project-runtime][luau][plugin][export][dependency]"
 ) {
     TemporaryMixedScriptProject directory(
-        {},
         {},
         {
             ScriptFile {

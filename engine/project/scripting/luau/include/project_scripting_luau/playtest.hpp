@@ -3,17 +3,16 @@
 #include "app/plugin.hpp"
 #include "project/plugin.hpp"
 #include "project_scripting_luau/plugin.hpp"
-#include "refl/type.hpp"
+#include "runtime_protocol/playtest_plugin.hpp"
 
 namespace ets::project_runtime {
-
-[[nodiscard]] TypeId luau_playtest_runtime_resource_type();
 
 class LuauPlaytestsPlugin : public Plugin {
   public:
     void dependencies(PluginDependencies& dependencies) const override {
         dependencies.require<ProjectPlugin>();
         dependencies.require<LuauScriptsPlugin>();
+        dependencies.require<runtime_protocol::PlaytestPlugin>();
     }
 
     void setup(App& app) override;

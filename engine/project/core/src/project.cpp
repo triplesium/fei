@@ -278,29 +278,6 @@ Project::load(const std::filesystem::path& project_file) {
                 config.scripts.push_back(std::move(*script));
             }
         }
-        const auto playtests_node = document["playtests"];
-        if (playtests_node) {
-            if (!playtests_node.IsSequence()) {
-                return failure(load_error(
-                    ProjectLoadErrorKind::InvalidConfig,
-                    absolute_file,
-                    "Project field 'playtests' must be a sequence"
-                ));
-            }
-            config.playtests.reserve(playtests_node.size());
-            for (const auto& playtest_node : playtests_node) {
-                auto playtest =
-                    parse_project_asset_reference(playtest_node, "playtest");
-                if (!playtest) {
-                    return failure(load_error(
-                        ProjectLoadErrorKind::InvalidConfig,
-                        absolute_file,
-                        std::move(playtest.error())
-                    ));
-                }
-                config.playtests.push_back(std::move(*playtest));
-            }
-        }
         if (document["main_scene"]) {
             return failure(load_error(
                 ProjectLoadErrorKind::InvalidConfig,

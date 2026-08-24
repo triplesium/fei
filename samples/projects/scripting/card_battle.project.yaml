@@ -12,6 +12,3 @@ runtime:
 
 scripts:
   - project://scripts/card_battle_test.luau
-
-playtests:
-  - project://scripts/card_battle_test.playtest.luau

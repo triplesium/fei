@@ -2,21 +2,17 @@ target("entisium-project-scripting-luau")
     set_kind("static")
     add_rules("entisium.reflect")
     add_headerfiles("include/**.hpp")
-    add_files("src/plugin.cpp")
+    add_files("src/plugin.cpp", "src/playtest.cpp")
     add_includedirs("include", {public = true})
     add_deps(
         "entisium-app",
         "entisium-asset",
         "entisium-project",
         "entisium-project-scripting",
-        "entisium-scripting-luau"
+        "entisium-scripting-luau",
+        "entisium-playtest"
     )
     add_packages("luau")
-    if not is_plat("wasm") then
-        add_files("src/playtest.cpp")
-        add_deps("entisium-runtime-protocol")
-        add_packages("nlohmann_json")
-    end
 
 if not is_plat("wasm") then
     target("entisium-project-scripting-luau-tests")

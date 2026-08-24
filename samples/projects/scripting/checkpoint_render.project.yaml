@@ -14,6 +14,3 @@ runtime:
 
 scripts:
   - project://scripts/checkpoint_render.luau
-
-playtests:
-  - project://scripts/checkpoint_render.playtest.luau

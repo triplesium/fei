@@ -136,6 +136,39 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Luau Plugin playtests use imported reflected types",
+    "[scripting_luau][compiler][plugin][playtest][import]"
+) {
+    auto artifact = compile_luau_script_module(
+        ScriptSource {
+            .name = "project://scripts/playtest.luau",
+            .content = R"(
+                local Gameplay = require("./gameplay")
+
+                local function begin_step(ctx, action)
+                    ctx:resource(Gameplay.State).value = action.value
+                end
+
+                export local PlaytestPlugin = Plugin.new {
+                    build = function(app: App)
+                        app:add_playtest {
+                            id = "game.main",
+                            action = {type = "object"},
+                            begin_step = begin_step,
+                        }
+                    end,
+                }
+            )",
+        }
+    );
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    CHECK(artifact->uses_value_exports);
+    CHECK(artifact->plugin_name == "PlaytestPlugin");
+}
+
+TEST_CASE(
     "Luau compiler selects one of multiple exported Plugins",
     "[scripting_luau][compiler][plugin][export]"
 ) {
