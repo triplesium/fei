@@ -115,6 +115,45 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "LuauScriptSystemRegistry installs an exported Plugin",
+    "[scripting_luau][system][registry][plugin][export]"
+) {
+    register_luau_registry_test_types();
+    World world;
+    add_luau_script_system_resources(world);
+    world.add_resource(LuauRegistryCounter {.value = 3});
+
+    luau_scripts(world).queue_source(
+        LuauScriptSource {
+            .name = "exported_plugin.luau",
+            .content = R"(
+                local function tick(counter: ResRW<LuauRegistryCounter>)
+                    counter.value += 5
+                end
+
+                export local CounterPlugin = Plugin.new {
+                    build = function(app: App)
+                        app:add_system(Update, tick)
+                    end,
+                }
+            )",
+        }
+    );
+
+    apply_luau_script_queue(world);
+
+    auto& scripts = luau_scripts(world);
+    REQUIRE(scripts.queue_errors().empty());
+    REQUIRE(scripts.size() == 1);
+    auto loaded = scripts.get(module_id_at(0));
+    REQUIRE(loaded);
+    CHECK(loaded->plugin_name == "CounterPlugin");
+
+    world.run_schedule(Update);
+    CHECK(world.resource<LuauRegistryCounter>().value == 8);
+}
+
+TEST_CASE(
     "LuauScriptSystemRegistry waits for loading assets",
     "[scripting_luau][system][registry]"
 ) {
@@ -148,6 +187,90 @@ TEST_CASE(
 
     world.run_schedule(Update);
     REQUIRE(world.resource<LuauRegistryCounter>().value == 5);
+}
+
+TEST_CASE(
+    "LuauScriptSystemRegistry activates multiple Plugins from one module",
+    "[scripting_luau][system][registry][plugin][dependency]"
+) {
+    register_luau_registry_test_types();
+    World world;
+    add_luau_script_system_resources(world);
+    world.add_resource(LuauRegistryCounter {});
+    auto script = luau_assets(world).emplace(R"(
+        local function core_tick(counter: ResRW<LuauRegistryCounter>)
+            counter.value += 1
+        end
+
+        local function debug_tick(counter: ResRW<LuauRegistryCounter>)
+            counter.value += 10
+        end
+
+        export local CorePlugin = Plugin.new {
+            build = function(app: App)
+                app:add_system(Update, core_tick)
+            end,
+        }
+
+        export local DebugPlugin = Plugin.new {
+            dependencies = { CorePlugin },
+            build = function(app: App)
+                app:add_system(Update, debug_tick)
+            end,
+        }
+    )");
+
+    auto& scripts = luau_scripts(world);
+    scripts.queue_asset(script, "DebugPlugin");
+    apply_luau_script_queue(world);
+
+    REQUIRE(scripts.queue_errors().empty());
+    REQUIRE(scripts.size() == 2);
+    REQUIRE(scripts.find_asset(script, "CorePlugin"));
+    REQUIRE(scripts.find_asset(script, "DebugPlugin"));
+
+    world.run_schedule(Update);
+    CHECK(world.resource<LuauRegistryCounter>().value == 11);
+
+    const auto generation = scripts.snapshot_generation();
+    scripts.queue_asset(script, "DebugPlugin");
+    apply_luau_script_queue(world);
+    CHECK(scripts.size() == 2);
+    CHECK(scripts.snapshot_generation() == generation);
+
+    auto script_asset = luau_assets(world).modify(script);
+    REQUIRE(script_asset);
+    script_asset->set_content(R"(
+        local function core_tick(counter: ResRW<LuauRegistryCounter>)
+            counter.value += 2
+        end
+
+        local function debug_tick(counter: ResRW<LuauRegistryCounter>)
+            counter.value += 20
+        end
+
+        export local CorePlugin = Plugin.new {
+            build = function(app: App)
+                app:add_system(Update, core_tick)
+            end,
+        }
+
+        export local DebugPlugin = Plugin.new {
+            dependencies = { CorePlugin },
+            build = function(app: App)
+                app:add_system(Update, debug_tick)
+            end,
+        }
+    )");
+    const auto core = scripts.find_asset(script, "CorePlugin");
+    REQUIRE(core);
+    scripts.queue_reload_asset(*core);
+    apply_luau_script_queue(world);
+    REQUIRE(scripts.queue_errors().empty());
+    REQUIRE(scripts.size() == 2);
+
+    world.run_schedule(Update);
+    CHECK(world.resource<LuauRegistryCounter>().value == 33);
 }
 
 TEST_CASE(

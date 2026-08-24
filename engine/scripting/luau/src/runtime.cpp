@@ -535,6 +535,16 @@ int optional_helper(lua_State* state) {
     return 1;
 }
 
+int plugin_new_helper(lua_State* state) {
+    if (lua_gettop(state) != 1 || !lua_istable(state, 1)) {
+        luaL_error(state, "Plugin.new expects exactly one descriptor table");
+        return 0;
+    }
+    lua_setreadonly(state, 1, true);
+    lua_pushvalue(state, 1);
+    return 1;
+}
+
 void install_module_helpers(lua_State* state) {
     lua_pushcfunction(state, system_helper, "system");
     lua_setglobal(state, "system");
@@ -557,6 +567,11 @@ void install_module_helpers(lua_State* state) {
     lua_setglobal(state, "field");
     lua_pushcfunction(state, optional_helper, "optional");
     lua_setglobal(state, "optional");
+    lua_newtable(state);
+    lua_pushcfunction(state, plugin_new_helper, "Plugin.new");
+    lua_setfield(state, -2, "new");
+    lua_setreadonly(state, -1, true);
+    lua_setglobal(state, "Plugin");
 
     const char* query_descriptors[] = {
         "Read",
@@ -662,6 +677,9 @@ Result<LuauScriptModuleId, LuauScriptError> LuauRuntime::load_module(
                         ) -> Result<LuauScriptModuleId, LuauScriptError> {
         for (const auto& entry : loaded.functions) {
             lua_unref(root, entry.second);
+        }
+        if (loaded.exports_ref != 0) {
+            lua_unref(root, loaded.exports_ref);
         }
         lua_unref(root, thread_ref);
         m_impl->modules.erase(id);
@@ -777,7 +795,15 @@ Result<LuauScriptModuleId, LuauScriptError> LuauRuntime::load_module(
         );
     }
 
-    lua_getfield(thread, -1, "systems");
+    const int module_index = lua_absindex(thread, -1);
+    if (artifact.uses_value_exports) {
+        lua_pushvalue(thread, module_index);
+        loaded.exports_ref = lua_ref(thread, -1);
+        lua_pop(thread, 1);
+        lua_getfield(thread, module_index, "__ets_systems");
+    } else {
+        lua_getfield(thread, module_index, "systems");
+    }
     if (!lua_istable(thread, -1)) {
         return fail_loading(
             LuauScriptError {"Luau module systems field must be a table"}
@@ -978,6 +1004,7 @@ Result<LuauScriptModuleId, LuauScriptError> LuauRuntime::load_library(
     const int thread_ref = lua_ref(root, -1);
     lua_pop(root, 1);
     luaL_sandboxthread(thread);
+    install_module_helpers(thread);
 
     const auto id = static_cast<LuauScriptModuleId>(m_impl->next_module_id++);
     auto [loaded_entry, inserted] = m_impl->modules.emplace(

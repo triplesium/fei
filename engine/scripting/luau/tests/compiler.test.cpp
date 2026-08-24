@@ -8,6 +8,126 @@
 namespace ets::test {
 
 TEST_CASE(
+    "Luau compiler builds exported plugin declarations",
+    "[scripting_luau][compiler][plugin][export]"
+) {
+    const ScriptSource source {
+        .name = "project://scripts/player.luau",
+        .content = R"(
+            export type Player = {
+                health: i32,
+                speed: f32,
+            }
+
+            local function move(players: Query<Write<Player>>)
+            end
+
+            export local PlayerPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, move)
+                end,
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    CHECK(artifact->uses_value_exports);
+    CHECK(artifact->plugin_name == "PlayerPlugin");
+    REQUIRE(artifact->declaration.types.size() == 1);
+    CHECK(
+        artifact->declaration.types.front().qualified_name ==
+        "project.scripts.player.Player"
+    );
+    REQUIRE(artifact->declaration.systems.size() == 1);
+    CHECK(artifact->declaration.systems.front().name == "move");
+    CHECK(artifact->declaration.systems.front().schedule == Update);
+}
+
+TEST_CASE(
+    "Luau exported types resolve imported type namespaces",
+    "[scripting_luau][compiler][type][import]"
+) {
+    auto artifact = compile_luau_script_module(
+        ScriptSource {
+            .name = "project://scripts/game.luau",
+            .content = R"(
+                local Player = require("./player")
+
+                export type Selection = {
+                    player: Player.Player,
+                }
+
+                export local GamePlugin = Plugin.new {
+                    dependencies = { Player.PlayerPlugin },
+                    build = function(app: App)
+                    end,
+                }
+            )",
+        }
+    );
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    REQUIRE(artifact->declaration.types.size() == 1);
+    REQUIRE(artifact->declaration.types[0].fields.size() == 1);
+    CHECK(
+        artifact->declaration.types[0].fields[0].type.type_name ==
+        "project.scripts.player.Player"
+    );
+    CHECK(artifact->declaration.types[0].fields[0].type.script_type);
+}
+
+TEST_CASE(
+    "Luau compiler selects one of multiple exported Plugins",
+    "[scripting_luau][compiler][plugin][export]"
+) {
+    const ScriptSource source {
+        .name = "project://scripts/features.luau",
+        .content = R"(
+            local function core()
+            end
+
+            local function debug_draw()
+            end
+
+            export local CorePlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, core)
+                end,
+            }
+
+            export local DebugPlugin = Plugin.new {
+                dependencies = { CorePlugin },
+                build = function(app: App)
+                    app:add_system(Update, debug_draw)
+                end,
+            }
+        )",
+    };
+
+    auto ambiguous = compile_luau_script_module(source);
+    REQUIRE_FALSE(ambiguous);
+    CHECK(ambiguous.error().message.contains("select one by name"));
+
+    auto debug = compile_luau_script_module(
+        source,
+        LuauCompileOptions {.plugin_name = "DebugPlugin"}
+    );
+    if (!debug) {
+        FAIL(debug.error().message);
+    }
+    CHECK(debug->plugin_name == "DebugPlugin");
+    REQUIRE(debug->plugin_dependencies.size() == 1);
+    CHECK(debug->plugin_dependencies[0].import_specifier.empty());
+    CHECK(debug->plugin_dependencies[0].plugin_name == "CorePlugin");
+    REQUIRE(debug->declaration.systems.size() == 1);
+    CHECK(debug->declaration.systems[0].name == "debug_draw");
+}
+
+TEST_CASE(
     "Luau compiler resolves fixed main schedules",
     "[scripting_luau][compiler][schedule]"
 ) {

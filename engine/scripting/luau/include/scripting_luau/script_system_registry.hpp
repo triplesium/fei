@@ -10,6 +10,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -52,6 +54,7 @@ struct LoadedLuauScriptSystemModule {
     LuauScriptSystemModuleState state {LuauScriptSystemModuleState::Loaded};
     Handle<LuauScriptAsset> asset;
     std::vector<TypeId> snapshot_resources;
+    std::string plugin_name;
 };
 
 struct LuauScriptSystemRequestError {
@@ -76,11 +79,13 @@ class LuauScriptSystemRegistry {
         LuauScriptSource source;
         LuauScriptSystemModuleId module {invalid_luau_script_system_module_id};
         Handle<LuauScriptAsset> asset;
+        std::string plugin_name;
     };
 
     std::vector<LoadedLuauScriptSystemModule> m_modules;
     std::unordered_map<AssetId, LoadedLibrary> m_libraries;
     std::unordered_set<AssetId> m_entry_assets;
+    std::unordered_set<std::string> m_loading_plugins;
     std::unordered_map<AssetId, std::unordered_set<AssetId>>
         m_reverse_dependencies;
     std::vector<QueuedRequest> m_queued_requests;
@@ -100,7 +105,8 @@ class LuauScriptSystemRegistry {
         World& world,
         const Assets<LuauScriptAsset>& assets,
         AssetServer* asset_server,
-        Handle<LuauScriptAsset> asset
+        Handle<LuauScriptAsset> asset,
+        std::string_view plugin_name = {}
     );
     Status<LuauScriptError> reload_asset(
         LuauRuntime& runtime,
@@ -122,6 +128,7 @@ class LuauScriptSystemRegistry {
   public:
     void queue_source(LuauScriptSource source);
     void queue_asset(Handle<LuauScriptAsset> asset);
+    void queue_asset(Handle<LuauScriptAsset> asset, std::string plugin_name);
     void queue_reload_asset(LuauScriptSystemModuleId module);
     void queue_unload(LuauScriptSystemModuleId module);
     void apply_queued_requests(
@@ -135,6 +142,10 @@ class LuauScriptSystemRegistry {
     get(LuauScriptSystemModuleId module) const;
     Optional<LuauScriptSystemModuleId>
     find_asset(Handle<LuauScriptAsset> asset) const;
+    Optional<LuauScriptSystemModuleId> find_asset(
+        Handle<LuauScriptAsset> asset,
+        std::string_view plugin_name
+    ) const;
     bool is_loaded(LuauScriptSystemModuleId module) const;
 
     bool has_queued_requests() const { return !m_queued_requests.empty(); }

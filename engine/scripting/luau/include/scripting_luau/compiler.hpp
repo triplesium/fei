@@ -6,6 +6,7 @@
 #include "scripting/source.hpp"
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ets {
@@ -19,11 +20,22 @@ struct LuauCompileOptions {
     // Project scripts default to snapshot-safe behavior. The opt-out exists
     // for low-level VM tests and tooling that never participates in rollback.
     bool snapshot_safe {true};
+    // Selects one exported Plugin from a value-export module. Empty selects
+    // the sole Plugin and is rejected when the module exports more than one.
+    std::string_view plugin_name;
+};
+
+struct LuauPluginDependency {
+    std::string import_specifier;
+    std::string plugin_name;
 };
 
 struct LuauScriptModuleArtifact {
     ScriptModuleDecl declaration;
     std::string bytecode;
+    std::string plugin_name;
+    std::vector<LuauPluginDependency> plugin_dependencies;
+    bool uses_value_exports {false};
     LuauSystemDeclarationLayout system_layout {
         LuauSystemDeclarationLayout::Flat
     };

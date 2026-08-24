@@ -11,9 +11,12 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstring>
+#include <filesystem>
 #include <iterator>
 #include <limits>
 #include <Luau/Ast.h>
+#include <Luau/Common.h>
 #include <Luau/Compiler.h>
 #include <Luau/Parser.h>
 #include <memory>
@@ -26,6 +29,18 @@
 
 namespace ets {
 namespace {
+
+bool enable_luau_language_features() {
+    bool found = false;
+    for (auto* flag = Luau::FValue<bool>::list; flag != nullptr;
+         flag = flag->next) {
+        if (std::strcmp(flag->name, "LuauExportValueSyntax") == 0) {
+            flag->value = true;
+            found = true;
+        }
+    }
+    return found;
+}
 
 using Luau::AstExpr;
 using Luau::AstExprCall;
@@ -40,15 +55,19 @@ using Luau::AstExprIndexName;
 using Luau::AstExprLocal;
 using Luau::AstExprTable;
 using Luau::AstLocal;
+using Luau::AstStat;
 using Luau::AstStatAssign;
 using Luau::AstStatCompoundAssign;
+using Luau::AstStatExpr;
 using Luau::AstStatFunction;
 using Luau::AstStatLocal;
 using Luau::AstStatLocalFunction;
 using Luau::AstStatReturn;
+using Luau::AstStatTypeAlias;
 using Luau::AstType;
 using Luau::AstTypeOptional;
 using Luau::AstTypeReference;
+using Luau::AstTypeTable;
 using Luau::AstTypeUnion;
 
 std::string_view name_view(Luau::AstName name);
@@ -162,8 +181,11 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
     }
 
     bool visit(AstExprCall* expression) override {
+        bool plugin_system_registration = false;
         if (expression->self) {
             const auto* method = expression->func->as<AstExprIndexName>();
+            plugin_system_registration =
+                method != nullptr && name_view(method->index) == "add_system";
             if (method != nullptr && references_module_state(*method->expr)) {
                 reject(
                     expression->location,
@@ -194,7 +216,8 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
             }
         }
         for (AstExpr* argument : expression->args) {
-            if (references_module_state(*argument)) {
+            if (references_module_state(*argument) &&
+                !plugin_system_registration) {
                 reject(
                     expression->location,
                     "captured module state cannot be passed to a call"
@@ -817,7 +840,7 @@ std::string module_name_from_source(std::string_view source_name) {
 
 Result<std::string, ScriptError>
 record_name(const AstExprTable::Item& item, std::string_view context) {
-    if (item.kind != AstExprTable::Item::Record || item.key == nullptr) {
+    if (item.kind != AstExprTable::Item::Kind::Record || item.key == nullptr) {
         return failure(declaration_error(
             std::string {context} + " entries must use named fields"
         ));
@@ -1176,7 +1199,7 @@ compile_states(const AstExprTable& table, const std::string& module_name) {
         std::unordered_set<std::string> value_names;
         std::unordered_set<std::uint64_t> value_ids;
         for (const auto& value_item : values->items) {
-            if (value_item.kind != AstExprTable::Item::List) {
+            if (value_item.kind != AstExprTable::Item::Kind::List) {
                 return failure(declaration_error(
                     "state '" + *name + "' values must be a string array"
                 ));
@@ -1738,9 +1761,569 @@ validate_system_dependencies(const std::vector<DynamicSystemDecl>& systems) {
     return {};
 }
 
+Result<ScriptTypeRef, ScriptError> compile_exported_field_type(
+    const AstType& annotation,
+    const std::string& module_name,
+    const std::unordered_set<std::string>& local_types
+) {
+    const AstType* value = &annotation;
+    bool optional = false;
+    if (const auto* union_type = annotation.as<AstTypeUnion>()) {
+        const AstTypeReference* reference = nullptr;
+        bool has_nil = false;
+        for (const AstType* member : union_type->types) {
+            if (member->is<AstTypeOptional>()) {
+                has_nil = true;
+            } else if (
+                const auto* candidate = member->as<AstTypeReference>();
+                candidate != nullptr && reference == nullptr
+            ) {
+                reference = candidate;
+            } else {
+                return failure(declaration_error(
+                    "exported ECS fields must use a named type or T?"
+                ));
+            }
+        }
+        if (!has_nil || reference == nullptr) {
+            return failure(declaration_error(
+                "exported ECS fields must use a named type or T?"
+            ));
+        }
+        value = reference;
+        optional = true;
+    }
+
+    const auto* reference = value->as<AstTypeReference>();
+    if (reference == nullptr || reference->hasParameterList) {
+        return failure(declaration_error(
+            "exported ECS fields must use non-generic named types"
+        ));
+    }
+    std::string type_name;
+    if (reference->prefix) {
+        type_name.append(name_view(*reference->prefix));
+        type_name.append("::");
+    }
+    type_name.append(name_view(reference->name));
+    type_name = normalize_primitive_name(std::move(type_name));
+    const bool local_type =
+        !reference->prefix && local_types.contains(type_name);
+    if (local_type) {
+        type_name = module_name + "." + type_name;
+    }
+    const bool entity_type = type_name == "entity";
+    if (optional && !entity_type) {
+        return failure(declaration_error(
+            "optional exported ECS fields currently support only entity values"
+        ));
+    }
+    return ScriptTypeRef {
+        .type_name = std::move(type_name),
+        .type_id = entity_type ? Optional<TypeId> {type_id<Entity>()} : nullopt,
+        .script_type = local_type,
+        .optional = optional,
+    };
+}
+
+Result<std::vector<ScriptTypeDecl>, ScriptError> compile_exported_types(
+    const Luau::AstStatBlock& root,
+    const std::string& module_name
+) {
+    std::unordered_set<std::string> names;
+    for (const AstStat* statement : root.body) {
+        const auto* alias = statement->as<AstStatTypeAlias>();
+        if (alias == nullptr || !alias->exported) {
+            continue;
+        }
+        const std::string name {name_view(alias->name)};
+        if (!names.insert(name).second) {
+            return failure(
+                declaration_error("duplicate exported ECS type '" + name + "'")
+            );
+        }
+    }
+
+    std::vector<ScriptTypeDecl> result;
+    for (const AstStat* statement : root.body) {
+        const auto* alias = statement->as<AstStatTypeAlias>();
+        if (alias == nullptr || !alias->exported) {
+            continue;
+        }
+        const std::string name {name_view(alias->name)};
+        if (alias->generics.size != 0 || alias->genericPacks.size != 0) {
+            return failure(declaration_error(
+                "exported ECS type '" + name + "' cannot be generic"
+            ));
+        }
+        const auto* table = alias->type->as<AstTypeTable>();
+        if (table == nullptr || table->indexer != nullptr) {
+            return failure(declaration_error(
+                "exported ECS type '" + name +
+                "' must be a table type with named fields"
+            ));
+        }
+        ScriptTypeDecl type {
+            .name = name,
+            .qualified_name = module_name + "." + name,
+        };
+        std::unordered_set<std::string> fields;
+        for (const auto& property : table->props) {
+            const std::string field_name {name_view(property.name)};
+            if (!fields.insert(field_name).second) {
+                return failure(declaration_error(
+                    "duplicate field '" + field_name + "' in type '" + name +
+                    "'"
+                ));
+            }
+            auto field_type =
+                compile_exported_field_type(*property.type, module_name, names);
+            if (!field_type) {
+                return failure(std::move(field_type.error()));
+            }
+            type.fields.push_back(
+                ScriptFieldDecl {
+                    .name = field_name,
+                    .type = std::move(*field_type),
+                }
+            );
+        }
+        std::ranges::sort(type.fields, {}, &ScriptFieldDecl::name);
+        result.push_back(std::move(type));
+    }
+    std::ranges::sort(result, {}, &ScriptTypeDecl::name);
+    return result;
+}
+
+struct ExportedPlugin {
+    std::string name;
+    const AstLocal* local {nullptr};
+    const AstExprTable* descriptor {nullptr};
+    const AstExprFunction* build {nullptr};
+};
+
+using ImportLocals = std::unordered_map<const AstLocal*, std::string>;
+
+ImportLocals collect_import_locals(const Luau::AstStatBlock& root) {
+    ImportLocals result;
+    for (const AstStat* statement : root.body) {
+        const auto* local = statement->as<AstStatLocal>();
+        if (local == nullptr) {
+            continue;
+        }
+        const auto count = std::min(local->vars.size, local->values.size);
+        for (std::size_t index = 0; index < count; ++index) {
+            const auto* call = local->values.data[index]->as<AstExprCall>();
+            const auto* callee =
+                call != nullptr ? call->func->as<AstExprGlobal>() : nullptr;
+            const auto* specifier =
+                call != nullptr && call->args.size == 1 ?
+                    call->args.data[0]->as<AstExprConstantString>() :
+                    nullptr;
+            if (callee == nullptr || name_view(callee->name) != "require" ||
+                specifier == nullptr) {
+                continue;
+            }
+            result.emplace(
+                local->vars.data[index],
+                std::string {specifier->value.data, specifier->value.size}
+            );
+        }
+    }
+    return result;
+}
+
+std::unordered_map<std::string, std::string> imported_type_namespaces(
+    const ScriptSource& source,
+    const ImportLocals& imports
+) {
+    const auto delimiter = source.name.find("://");
+    const std::string source_prefix = delimiter == std::string::npos ?
+                                          std::string {} :
+                                          source.name.substr(0, delimiter + 3);
+    const std::string source_path = delimiter == std::string::npos ?
+                                        source.name :
+                                        source.name.substr(delimiter + 3);
+    std::unordered_map<std::string, std::string> result;
+    for (const auto& [local, specifier] : imports) {
+        auto dependency =
+            (std::filesystem::path(source_path).parent_path() / specifier)
+                .lexically_normal();
+        if (dependency.extension().empty()) {
+            dependency += ".luau";
+        }
+        result.emplace(
+            std::string(name_view(local->name)) + "::",
+            module_name_from_source(
+                source_prefix + dependency.generic_string()
+            ) + "."
+        );
+    }
+    return result;
+}
+
+void qualify_imported_type_ref(
+    DynamicTypeRef& type,
+    const std::unordered_map<std::string, std::string>& namespaces
+) {
+    for (const auto& [prefix, qualified] : namespaces) {
+        if (type.type_name.starts_with(prefix)) {
+            type.type_name = qualified + type.type_name.substr(prefix.size());
+            return;
+        }
+    }
+}
+
+void qualify_imported_field_type(
+    ScriptTypeRef& type,
+    const std::unordered_map<std::string, std::string>& namespaces
+) {
+    for (const auto& [prefix, qualified] : namespaces) {
+        if (type.type_name.starts_with(prefix)) {
+            type.type_name = qualified + type.type_name.substr(prefix.size());
+            type.script_type = true;
+            return;
+        }
+    }
+}
+
+void qualify_imported_system_types(
+    DynamicSystemDecl& system,
+    const std::unordered_map<std::string, std::string>& namespaces
+) {
+    const auto qualify_params = [&](auto& params) {
+        for (auto& param : params) {
+            if (param->decl_type_id() == type_id<DynamicResourceParamDecl>()) {
+                qualify_imported_type_ref(
+                    static_cast<DynamicResourceParamDecl&>(*param).type,
+                    namespaces
+                );
+            } else if (
+                param->decl_type_id() == type_id<DynamicQueryParamDecl>()
+            ) {
+                auto& query = static_cast<DynamicQueryParamDecl&>(*param);
+                for (auto& field : query.fields) {
+                    qualify_imported_type_ref(field.type, namespaces);
+                }
+                const auto qualify_filter =
+                    [&](const auto& recurse,
+                        DynamicQueryFilterDecl& filter) -> void {
+                    qualify_imported_type_ref(filter.type, namespaces);
+                    for (auto& child : filter.filters) {
+                        recurse(recurse, child);
+                    }
+                };
+                for (auto& filter : query.filters) {
+                    qualify_filter(qualify_filter, filter);
+                }
+            } else if (
+                param->decl_type_id() == type_id<DynamicStateParamDecl>()
+            ) {
+                qualify_imported_type_ref(
+                    static_cast<DynamicStateParamDecl&>(*param).type,
+                    namespaces
+                );
+            } else if (
+                param->decl_type_id() == type_id<DynamicNextStateParamDecl>()
+            ) {
+                qualify_imported_type_ref(
+                    static_cast<DynamicNextStateParamDecl&>(*param).type,
+                    namespaces
+                );
+            } else if (
+                param->decl_type_id() ==
+                type_id<DynamicRemovedComponentsParamDecl>()
+            ) {
+                qualify_imported_type_ref(
+                    static_cast<DynamicRemovedComponentsParamDecl&>(*param)
+                        .type,
+                    namespaces
+                );
+            } else if (
+                param->decl_type_id() == type_id<DynamicEventParamDecl>()
+            ) {
+                qualify_imported_type_ref(
+                    static_cast<DynamicEventParamDecl&>(*param).type,
+                    namespaces
+                );
+            }
+        }
+    };
+    qualify_params(system.params);
+    for (auto& condition : system.conditions) {
+        qualify_params(condition.params);
+    }
+}
+
+Result<std::vector<LuauPluginDependency>, ScriptError>
+compile_plugin_dependencies(
+    const ExportedPlugin& plugin,
+    const ImportLocals& imports,
+    const std::unordered_map<const AstLocal*, std::string>& local_plugins
+) {
+    const auto dependencies_value =
+        plugin.descriptor->getRecord("dependencies");
+    if (!dependencies_value) {
+        return std::vector<LuauPluginDependency> {};
+    }
+    const auto* dependencies = (*dependencies_value)->as<AstExprTable>();
+    if (dependencies == nullptr) {
+        return failure(declaration_error(
+            "Plugin dependencies must be an array of imported plugins"
+        ));
+    }
+    std::vector<LuauPluginDependency> result;
+    for (const auto& item : dependencies->items) {
+        if (item.kind != AstExprTable::Item::Kind::List) {
+            return failure(
+                declaration_error("Plugin dependencies must be an array")
+            );
+        }
+        if (const auto* local = item.value->as<AstExprLocal>()) {
+            const auto dependency = local_plugins.find(local->local);
+            if (dependency == local_plugins.end()) {
+                return failure(declaration_error(
+                    "local Plugin dependency must name an exported Plugin"
+                ));
+            }
+            result.push_back(
+                LuauPluginDependency {
+                    .plugin_name = dependency->second,
+                }
+            );
+            continue;
+        }
+        const auto* member = item.value->as<AstExprIndexName>();
+        const auto* module =
+            member != nullptr ? member->expr->as<AstExprLocal>() : nullptr;
+        const auto imported =
+            module != nullptr ? imports.find(module->local) : imports.end();
+        if (member == nullptr || imported == imports.end()) {
+            return failure(declaration_error(
+                "Plugin dependency must use Module.ExportedPlugin from require"
+            ));
+        }
+        result.push_back(
+            LuauPluginDependency {
+                .import_specifier = imported->second,
+                .plugin_name = std::string(name_view(member->index)),
+            }
+        );
+    }
+    return result;
+}
+
+Result<std::vector<ExportedPlugin>, ScriptError>
+find_exported_plugins(const Luau::AstStatBlock& root) {
+    std::vector<ExportedPlugin> result;
+    std::unordered_set<std::string> names;
+    for (const AstStat* statement : root.body) {
+        const auto* local = statement->as<AstStatLocal>();
+        if (local == nullptr) {
+            continue;
+        }
+        const auto count = std::min(local->vars.size, local->values.size);
+        for (std::size_t index = 0; index < count; ++index) {
+            const AstLocal* variable = local->vars.data[index];
+            if (!variable->isExported) {
+                continue;
+            }
+            const auto* call = local->values.data[index]->as<AstExprCall>();
+            const auto* member =
+                call != nullptr ? call->func->as<AstExprIndexName>() : nullptr;
+            const auto* owner =
+                member != nullptr ? member->expr->as<AstExprGlobal>() : nullptr;
+            if (call == nullptr || member == nullptr || owner == nullptr ||
+                name_view(owner->name) != "Plugin" ||
+                name_view(member->index) != "new") {
+                continue;
+            }
+            const std::string plugin_name {name_view(variable->name)};
+            if (!names.insert(plugin_name).second) {
+                return failure(declaration_error(
+                    "duplicate exported Plugin '" + plugin_name + "'"
+                ));
+            }
+            if (call->args.size != 1) {
+                return failure(declaration_error(
+                    "Plugin.new expects exactly one descriptor table"
+                ));
+            }
+            const auto* descriptor = call->args.data[0]->as<AstExprTable>();
+            if (descriptor == nullptr) {
+                return failure(
+                    declaration_error("Plugin.new expects a descriptor table")
+                );
+            }
+            const auto build_value = descriptor->getRecord("build");
+            const auto* build =
+                build_value ? (*build_value)->as<AstExprFunction>() : nullptr;
+            if (build == nullptr || build->args.size != 1) {
+                return failure(declaration_error(
+                    "Plugin.new requires build = function(app) ... end"
+                ));
+            }
+            result.push_back(
+                ExportedPlugin {
+                    .name = plugin_name,
+                    .local = variable,
+                    .descriptor = descriptor,
+                    .build = build,
+                }
+            );
+        }
+    }
+    return result;
+}
+
+Result<std::vector<const AstExpr*>, ScriptError> compile_plugin_systems(
+    const ExportedPlugin& plugin,
+    const TopLevelFunctions& functions,
+    RequiredRuntimeTypes& required_runtime_types,
+    ScriptModuleDecl& declaration
+) {
+    std::vector<const AstExpr*> runtime_entries;
+    const AstLocal* app = plugin.build->args.data[0];
+    std::unordered_map<std::string, std::string> declared_types;
+    for (const auto& type : declaration.types) {
+        declared_types.emplace(type.name, type.qualified_name);
+    }
+    for (const AstStat* statement : plugin.build->body->body) {
+        const auto* expression = statement->as<AstStatExpr>();
+        const auto* call = expression != nullptr ?
+                               expression->expr->as<AstExprCall>() :
+                               nullptr;
+        const auto* method =
+            call != nullptr ? call->func->as<AstExprIndexName>() : nullptr;
+        const auto* receiver =
+            method != nullptr ? method->expr->as<AstExprLocal>() : nullptr;
+        if (call == nullptr || method == nullptr || receiver == nullptr ||
+            receiver->local != app || !call->self) {
+            return failure(declaration_error(
+                "Plugin build currently supports only app:add_system(...) calls"
+            ));
+        }
+        const std::string_view method_name = name_view(method->index);
+        if (method_name == "add_resource" || method_name == "insert_resource") {
+            if (call->args.size != 1) {
+                return failure(declaration_error(
+                    "app:add_resource and app:insert_resource expect one value"
+                ));
+            }
+            const auto* constructor = call->args.data[0]->as<AstExprCall>();
+            const auto* type_name = constructor != nullptr ?
+                                        constructor->func->as<AstExprGlobal>() :
+                                        nullptr;
+            const auto* values =
+                constructor != nullptr && constructor->args.size == 1 ?
+                    constructor->args.data[0]->as<AstExprTable>() :
+                    nullptr;
+            if (type_name == nullptr || values == nullptr) {
+                return failure(declaration_error(
+                    "resource values must use Type { field = literal }"
+                ));
+            }
+            std::string resource_type {name_view(type_name->name)};
+            if (const auto declared = declared_types.find(resource_type);
+                declared != declared_types.end()) {
+                resource_type = declared->second;
+            }
+            ScriptResourceDecl resource {
+                .type = std::move(resource_type),
+                .init_if_missing = method_name == "add_resource",
+            };
+            std::unordered_set<std::string> field_names;
+            for (const auto& item : values->items) {
+                auto field_name = record_name(item, "resource values");
+                if (!field_name) {
+                    return failure(std::move(field_name.error()));
+                }
+                if (!field_names.insert(*field_name).second) {
+                    return failure(declaration_error(
+                        "duplicate resource field '" + *field_name + "'"
+                    ));
+                }
+                auto value = compile_resource_value(*item.value);
+                if (!value) {
+                    return failure(std::move(value.error()));
+                }
+                resource.initial_values.push_back(
+                    ScriptResourceFieldDecl {
+                        .name = std::move(*field_name),
+                        .value = std::move(*value),
+                    }
+                );
+            }
+            std::ranges::sort(
+                resource.initial_values,
+                {},
+                &ScriptResourceFieldDecl::name
+            );
+            declaration.resources.push_back(std::move(resource));
+            continue;
+        }
+        if (method_name != "add_system" || call->args.size != 2) {
+            return failure(
+                declaration_error("unsupported Plugin build App method")
+            );
+        }
+        auto schedule =
+            schedule_id(*call->args.data[0], required_runtime_types);
+        if (!schedule) {
+            return failure(std::move(schedule.error()));
+        }
+        auto group = compile_system_group(
+            *call->args.data[1],
+            *schedule,
+            functions,
+            required_runtime_types
+        );
+        if (!group) {
+            return failure(std::move(group.error()));
+        }
+        for (auto& system : group->systems) {
+            declaration.systems.push_back(std::move(system));
+        }
+        runtime_entries.push_back(call->args.data[1]);
+    }
+    return runtime_entries;
+}
+
+std::string_view
+expression_source(const ScriptSource& source, const Luau::Location& location) {
+    std::vector<std::size_t> line_starts {0};
+    for (std::size_t index = 0; index < source.content.size(); ++index) {
+        if (source.content[index] == '\n') {
+            line_starts.push_back(index + 1);
+        }
+    }
+    const auto offset = [&](const Luau::Position& position) {
+        return line_starts.at(position.line) + position.column;
+    };
+    const auto begin = offset(location.begin);
+    const auto end = offset(location.end);
+    return std::string_view {source.content}.substr(begin, end - begin);
+}
+
+std::string plugin_runtime_source(
+    const ScriptSource& source,
+    const std::vector<const AstExpr*>& systems
+) {
+    std::string generated {source.content};
+    generated.append("\nexport const __ets_systems = {\n");
+    for (const AstExpr* system : systems) {
+        generated.append("    ");
+        generated.append(expression_source(source, system->location));
+        generated.append(",\n");
+    }
+    generated.append("}\n");
+    return generated;
+}
+
 } // namespace
 
 Status<ScriptError> validate_luau_snapshot_safety(const ScriptSource& source) {
+    enable_luau_language_features();
     Luau::Allocator allocator;
     Luau::AstNameTable names {allocator};
     Luau::ParseResult parsed = Luau::Parser::parse(
@@ -1764,6 +2347,7 @@ Status<ScriptError> validate_luau_snapshot_safety(const ScriptSource& source) {
 
 Result<std::vector<std::string>, ScriptError>
 extract_luau_script_imports(const ScriptSource& source) {
+    enable_luau_language_features();
     Luau::Allocator allocator;
     Luau::AstNameTable names {allocator};
     Luau::ParseResult parsed = Luau::Parser::parse(
@@ -1795,6 +2379,11 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
     const ScriptSource& source,
     LuauCompileOptions options
 ) {
+    if (!enable_luau_language_features()) {
+        return failure(
+            ScriptError {"Luau value export feature flag is unavailable"}
+        );
+    }
     Luau::Allocator allocator;
     Luau::AstNameTable names {allocator};
     Luau::ParseResult parsed = Luau::Parser::parse(
@@ -1831,6 +2420,115 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
         ) {
             table = return_statement->list.data[0]->as<AstExprTable>();
         }
+    }
+    auto exported_plugins = find_exported_plugins(*parsed.root);
+    if (!exported_plugins) {
+        return failure(std::move(exported_plugins.error()));
+    }
+    if (!exported_plugins->empty()) {
+        if (table != nullptr) {
+            return failure(declaration_error(
+                "value exports and a top-level return declaration cannot be "
+                "mixed"
+            ));
+        }
+        const ExportedPlugin* exported_plugin = nullptr;
+        if (options.plugin_name.empty()) {
+            if (exported_plugins->size() != 1) {
+                return failure(declaration_error(
+                    "module exports multiple Plugins; select one by name"
+                ));
+            }
+            exported_plugin = &exported_plugins->front();
+        } else {
+            const auto selected = std::ranges::find(
+                *exported_plugins,
+                options.plugin_name,
+                &ExportedPlugin::name
+            );
+            if (selected == exported_plugins->end()) {
+                return failure(declaration_error(
+                    "module does not export requested Plugin '" +
+                    std::string(options.plugin_name) + "'"
+                ));
+            }
+            exported_plugin = &*selected;
+        }
+        ScriptModuleDecl declaration {
+            .name = module_name_from_source(source.name),
+            .source_name = source.name,
+        };
+        auto types = compile_exported_types(*parsed.root, declaration.name);
+        if (!types) {
+            return failure(std::move(types.error()));
+        }
+        declaration.types = std::move(*types);
+        std::unordered_map<std::string, std::string> script_types;
+        for (const auto& type : declaration.types) {
+            script_types.emplace(type.name, type.qualified_name);
+        }
+        auto runtime_systems = compile_plugin_systems(
+            *exported_plugin,
+            functions,
+            required_runtime_types,
+            declaration
+        );
+        if (!runtime_systems) {
+            return failure(std::move(runtime_systems.error()));
+        }
+        const auto import_locals = collect_import_locals(*parsed.root);
+        std::unordered_map<const AstLocal*, std::string> local_plugins;
+        for (const auto& plugin : *exported_plugins) {
+            local_plugins.emplace(plugin.local, plugin.name);
+        }
+        auto plugin_dependencies = compile_plugin_dependencies(
+            *exported_plugin,
+            import_locals,
+            local_plugins
+        );
+        if (!plugin_dependencies) {
+            return failure(std::move(plugin_dependencies.error()));
+        }
+        const auto imported_namespaces =
+            imported_type_namespaces(source, import_locals);
+        for (auto& type : declaration.types) {
+            for (auto& field : type.fields) {
+                qualify_imported_field_type(field.type, imported_namespaces);
+            }
+        }
+        for (auto& system : declaration.systems) {
+            qualify_system_script_types(system, script_types);
+            qualify_imported_system_types(system, imported_namespaces);
+        }
+        auto valid_dependencies =
+            validate_system_dependencies(declaration.systems);
+        if (!valid_dependencies) {
+            return failure(std::move(valid_dependencies.error()));
+        }
+        std::vector<TypeId> required_types(
+            required_runtime_types.begin(),
+            required_runtime_types.end()
+        );
+        std::ranges::sort(required_types, {}, [](TypeId type) {
+            return type.id();
+        });
+        const std::string generated =
+            plugin_runtime_source(source, *runtime_systems);
+        return LuauScriptModuleArtifact {
+            .declaration = std::move(declaration),
+            .bytecode = Luau::compile(generated),
+            .plugin_name = exported_plugin->name,
+            .plugin_dependencies = std::move(*plugin_dependencies),
+            .uses_value_exports = true,
+            .system_layout = LuauSystemDeclarationLayout::Flat,
+            .required_runtime_types = std::move(required_types),
+        };
+    }
+    if (!options.plugin_name.empty()) {
+        return failure(declaration_error(
+            "module does not export requested Plugin '" +
+            std::string(options.plugin_name) + "'"
+        ));
     }
     if (table == nullptr) {
         return failure(declaration_error(
@@ -1922,13 +2620,13 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
     LuauSystemDeclarationLayout system_layout =
         LuauSystemDeclarationLayout::Flat;
     if (systems->items.size > 0 &&
-        systems->items.data[0].kind != AstExprTable::Item::List) {
+        systems->items.data[0].kind != AstExprTable::Item::Kind::List) {
         system_layout = LuauSystemDeclarationLayout::ScheduleGroups;
     }
     std::unordered_set<ScheduleId> declared_schedules;
     for (const AstExprTable::Item& item : systems->items) {
         if (system_layout == LuauSystemDeclarationLayout::Flat) {
-            if (item.kind != AstExprTable::Item::List) {
+            if (item.kind != AstExprTable::Item::Kind::List) {
                 return failure(declaration_error(
                     "systems cannot mix legacy entries and schedule groups"
                 ));
@@ -1946,7 +2644,8 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
             continue;
         }
 
-        if (item.kind != AstExprTable::Item::General || item.key == nullptr) {
+        if (item.kind != AstExprTable::Item::Kind::General ||
+            item.key == nullptr) {
             return failure(declaration_error(
                 "schedule groups must use [Schedule] = {...} entries"
             ));
@@ -1967,7 +2666,7 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
             );
         }
         for (const auto& system_item : group->items) {
-            if (system_item.kind != AstExprTable::Item::List) {
+            if (system_item.kind != AstExprTable::Item::Kind::List) {
                 return failure(
                     declaration_error("schedule group systems must be an array")
                 );
@@ -2011,6 +2710,7 @@ Result<LuauScriptLibraryArtifact, ScriptError> compile_luau_script_library(
     const ScriptSource& source,
     LuauCompileOptions options
 ) {
+    enable_luau_language_features();
     Luau::Allocator allocator;
     Luau::AstNameTable names {allocator};
     Luau::ParseResult parsed = Luau::Parser::parse(

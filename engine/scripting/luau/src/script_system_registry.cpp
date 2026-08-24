@@ -38,17 +38,36 @@ load_luau_script_system_module(
     LuauRuntime& runtime,
     World& world,
     const LuauScriptSource& source,
-    std::span<const LuauScriptImportBinding> imports = {}
+    std::span<const LuauScriptImportBinding> imports = {},
+    std::string_view expected_plugin = {},
+    const LuauScriptModuleArtifact* prepared_artifact = nullptr
 ) {
     const std::unordered_set<TypeId> resources_before(
         world.resource_types().begin(),
         world.resource_types().end()
     );
-    auto artifact = compile_luau_script_module(source);
-    if (!artifact) {
-        return failure(std::move(artifact.error()));
+    Optional<LuauScriptModuleArtifact> compiled_artifact;
+    if (prepared_artifact == nullptr) {
+        auto compiled = compile_luau_script_module(
+            source,
+            LuauCompileOptions {.plugin_name = expected_plugin}
+        );
+        if (!compiled) {
+            return failure(std::move(compiled.error()));
+        }
+        compiled_artifact = std::move(*compiled);
+        prepared_artifact = &*compiled_artifact;
     }
-    auto module = runtime.load_module(*artifact, imports);
+    const auto& artifact = *prepared_artifact;
+    if (!expected_plugin.empty() && artifact.plugin_name != expected_plugin) {
+        return failure(
+            LuauScriptError {
+                "Luau module does not export requested plugin '" +
+                    std::string(expected_plugin) + "'",
+            }
+        );
+    }
+    auto module = runtime.load_module(artifact, imports);
     if (!module) {
         return failure(std::move(module.error()));
     }
@@ -56,7 +75,7 @@ load_luau_script_system_module(
         world,
         runtime,
         *module,
-        artifact->declaration
+        artifact.declaration
     );
     if (!systems) {
         runtime.unload_module(*module);
@@ -68,7 +87,7 @@ load_luau_script_system_module(
             snapshot_resources.push_back(type);
         }
     }
-    for (const auto& resource : artifact->declaration.resources) {
+    for (const auto& resource : artifact.declaration.resources) {
         auto type = Registry::instance().try_get_type(resource.type);
         if (type) {
             snapshot_resources.push_back(type->id());
@@ -83,6 +102,7 @@ load_luau_script_system_module(
         .module = *module,
         .systems = std::move(*systems),
         .snapshot_resources = std::move(snapshot_resources),
+        .plugin_name = artifact.plugin_name,
     };
 }
 
@@ -120,9 +140,43 @@ void LuauScriptSystemRegistry::queue_asset(Handle<LuauScriptAsset> asset) {
     );
 }
 
+void LuauScriptSystemRegistry::queue_asset(
+    Handle<LuauScriptAsset> asset,
+    std::string plugin_name
+) {
+    m_queued_requests.push_back(
+        QueuedRequest {
+            .kind = LuauScriptSystemRequestKind::LoadAsset,
+            .asset = asset,
+            .plugin_name = std::move(plugin_name),
+        }
+    );
+}
+
 void LuauScriptSystemRegistry::queue_reload_asset(
     LuauScriptSystemModuleId module
 ) {
+    if (const auto loaded = get(module);
+        loaded &&
+        loaded->source_kind == LuauScriptSystemModuleSourceKind::Asset &&
+        loaded->asset) {
+        for (std::size_t index = 0; index < m_modules.size(); ++index) {
+            const auto& candidate = m_modules[index];
+            if (candidate.state == LuauScriptSystemModuleState::Loaded &&
+                candidate.source_kind ==
+                    LuauScriptSystemModuleSourceKind::Asset &&
+                candidate.asset && candidate.asset.id() == loaded->asset.id()) {
+                m_queued_requests.push_back(
+                    QueuedRequest {
+                        .kind = LuauScriptSystemRequestKind::ReloadAsset,
+                        .module =
+                            static_cast<LuauScriptSystemModuleId>(index + 1),
+                    }
+                );
+            }
+        }
+        return;
+    }
     m_queued_requests.push_back(
         QueuedRequest {
             .kind = LuauScriptSystemRequestKind::ReloadAsset,
@@ -199,16 +253,18 @@ void LuauScriptSystemRegistry::apply_queued_requests(
                 if (requeue_if_loading(request, request.asset)) {
                     break;
                 }
+                const auto module_count_before = m_modules.size();
                 auto loaded = load_asset(
                     runtime,
                     world,
                     assets,
                     asset_server,
-                    request.asset
+                    request.asset,
+                    request.plugin_name
                 );
                 if (!loaded) {
                     record_error(request, std::move(loaded.error()));
-                } else {
+                } else if (m_modules.size() != module_count_before) {
                     ++m_snapshot_generation;
                 }
                 break;
@@ -283,11 +339,46 @@ LuauScriptSystemRegistry::load_asset(
     World& world,
     const Assets<LuauScriptAsset>& assets,
     AssetServer* asset_server,
-    Handle<LuauScriptAsset> asset
+    Handle<LuauScriptAsset> asset,
+    std::string_view plugin_name
 ) {
+    auto existing = plugin_name.empty() ? find_asset(asset) :
+                                          find_asset(asset, plugin_name);
+    if (existing) {
+        return *existing;
+    }
+    const std::string loading_key =
+        std::to_string(asset.id()) + "#" + std::string(plugin_name);
+    if (!m_loading_plugins.insert(loading_key).second) {
+        return failure(
+            LuauScriptError {"Circular Luau Plugin dependency detected"}
+        );
+    }
+    struct LoadingGuard {
+        std::unordered_set<std::string>& loading;
+        std::string key;
+        ~LoadingGuard() { loading.erase(key); }
+    } loading_guard {m_loading_plugins, loading_key};
+
     auto script = assets.get(asset);
     if (!script) {
         return failure(LuauScriptError {"Luau script asset not found"});
+    }
+    const auto source = script_source_for_asset(assets, asset, *script);
+    auto artifact = compile_luau_script_module(
+        source,
+        LuauCompileOptions {.plugin_name = plugin_name}
+    );
+    if (!artifact) {
+        return failure(std::move(artifact.error()));
+    }
+    if (!plugin_name.empty() && artifact->plugin_name != plugin_name) {
+        return failure(
+            LuauScriptError {
+                "Luau module does not export requested plugin '" +
+                    std::string(plugin_name) + "'",
+            }
+        );
     }
     std::vector<LuauScriptImportBinding> bindings;
     std::vector<AssetId> dependencies;
@@ -296,23 +387,62 @@ LuauScriptSystemRegistry::load_asset(
             LuauScriptError {"Luau asset imports require an AssetServer"}
         );
     }
-    std::vector<AssetId> loading_stack {asset.id()};
-    for (const auto& import : script->imports()) {
-        auto dependency = asset_server->load<LuauScriptAsset>(import.path);
-        auto loaded = load_library_asset(
+    for (const auto& plugin_dependency : artifact->plugin_dependencies) {
+        if (!plugin_dependency.import_specifier.empty()) {
+            continue;
+        }
+        auto loaded = load_asset(
             runtime,
+            world,
             assets,
-            *asset_server,
-            dependency,
-            loading_stack
+            asset_server,
+            asset,
+            plugin_dependency.plugin_name
         );
         if (!loaded) {
             return failure(std::move(loaded.error()));
         }
+    }
+    std::vector<AssetId> loading_stack {asset.id()};
+    for (const auto& import : script->imports()) {
+        auto dependency = asset_server->load<LuauScriptAsset>(import.path);
+        LuauScriptModuleId loaded_module {invalid_luau_script_module_id};
+        bool activates_plugin = false;
+        for (const auto& plugin_dependency : artifact->plugin_dependencies) {
+            if (plugin_dependency.import_specifier != import.specifier) {
+                continue;
+            }
+            activates_plugin = true;
+            auto loaded = load_asset(
+                runtime,
+                world,
+                assets,
+                asset_server,
+                dependency,
+                plugin_dependency.plugin_name
+            );
+            if (!loaded) {
+                return failure(std::move(loaded.error()));
+            }
+            loaded_module = get(*loaded)->module;
+        }
+        if (!activates_plugin) {
+            auto loaded = load_library_asset(
+                runtime,
+                assets,
+                *asset_server,
+                dependency,
+                loading_stack
+            );
+            if (!loaded) {
+                return failure(std::move(loaded.error()));
+            }
+            loaded_module = *loaded;
+        }
         bindings.push_back(
             LuauScriptImportBinding {
                 .specifier = import.specifier,
-                .module = *loaded,
+                .module = loaded_module,
             }
         );
         dependencies.push_back(dependency.id());
@@ -320,8 +450,10 @@ LuauScriptSystemRegistry::load_asset(
     auto module = load_luau_script_system_module(
         runtime,
         world,
-        script_source_for_asset(assets, asset, *script),
-        bindings
+        source,
+        bindings,
+        plugin_name,
+        &*artifact
     );
     if (!module) {
         return failure(std::move(module.error()));
@@ -362,6 +494,23 @@ Status<LuauScriptError> LuauScriptSystemRegistry::reload_asset(
     if (!script) {
         return failure(LuauScriptError {"Luau script asset not found"});
     }
+    const auto source = script_source_for_asset(assets, asset, *script);
+    auto artifact = compile_luau_script_module(
+        source,
+        LuauCompileOptions {.plugin_name = module->plugin_name}
+    );
+    if (!artifact) {
+        return failure(std::move(artifact.error()));
+    }
+    if (!module->plugin_name.empty() &&
+        artifact->plugin_name != module->plugin_name) {
+        return failure(
+            LuauScriptError {
+                "Luau module no longer exports requested plugin '" +
+                    module->plugin_name + "'",
+            }
+        );
+    }
     std::vector<LuauScriptImportBinding> bindings;
     std::vector<AssetId> dependencies;
     if (!script->imports().empty() && asset_server == nullptr) {
@@ -369,23 +518,62 @@ Status<LuauScriptError> LuauScriptSystemRegistry::reload_asset(
             LuauScriptError {"Luau asset imports require an AssetServer"}
         );
     }
+    for (const auto& plugin_dependency : artifact->plugin_dependencies) {
+        if (!plugin_dependency.import_specifier.empty()) {
+            continue;
+        }
+        auto dependency = load_asset(
+            runtime,
+            world,
+            assets,
+            asset_server,
+            asset,
+            plugin_dependency.plugin_name
+        );
+        if (!dependency) {
+            return failure(std::move(dependency.error()));
+        }
+    }
     std::vector<AssetId> loading_stack {asset.id()};
     for (const auto& import : script->imports()) {
         auto dependency = asset_server->load<LuauScriptAsset>(import.path);
-        auto imported = load_library_asset(
-            runtime,
-            assets,
-            *asset_server,
-            dependency,
-            loading_stack
-        );
-        if (!imported) {
-            return failure(std::move(imported.error()));
+        LuauScriptModuleId loaded_module {invalid_luau_script_module_id};
+        bool activates_plugin = false;
+        for (const auto& plugin_dependency : artifact->plugin_dependencies) {
+            if (plugin_dependency.import_specifier != import.specifier) {
+                continue;
+            }
+            activates_plugin = true;
+            auto loaded = load_asset(
+                runtime,
+                world,
+                assets,
+                asset_server,
+                dependency,
+                plugin_dependency.plugin_name
+            );
+            if (!loaded) {
+                return failure(std::move(loaded.error()));
+            }
+            loaded_module = get(*loaded)->module;
+        }
+        if (!activates_plugin) {
+            auto loaded = load_library_asset(
+                runtime,
+                assets,
+                *asset_server,
+                dependency,
+                loading_stack
+            );
+            if (!loaded) {
+                return failure(std::move(loaded.error()));
+            }
+            loaded_module = *loaded;
         }
         bindings.push_back(
             LuauScriptImportBinding {
                 .specifier = import.specifier,
-                .module = *imported,
+                .module = loaded_module,
             }
         );
         dependencies.push_back(dependency.id());
@@ -393,8 +581,10 @@ Status<LuauScriptError> LuauScriptSystemRegistry::reload_asset(
     auto loaded = load_luau_script_system_module(
         runtime,
         world,
-        script_source_for_asset(assets, asset, *script),
-        bindings
+        source,
+        bindings,
+        module->plugin_name,
+        &*artifact
     );
     if (!loaded) {
         return failure(std::move(loaded.error()));
@@ -422,6 +612,7 @@ Status<LuauScriptError> LuauScriptSystemRegistry::reload_asset(
     module->module = loaded->module;
     module->systems = std::move(loaded->systems);
     module->snapshot_resources = std::move(loaded->snapshot_resources);
+    module->plugin_name = std::move(loaded->plugin_name);
     for (AssetId dependency : module->dependencies) {
         m_reverse_dependencies[dependency].erase(asset.id());
     }
@@ -445,6 +636,9 @@ LuauScriptSystemRegistry::load_library_asset(
 ) {
     if (!asset) {
         return failure(LuauScriptError {"Luau library asset is invalid"});
+    }
+    if (auto active = find_asset(asset)) {
+        return get(*active)->module;
     }
     if (const auto loaded = m_libraries.find(asset.id());
         loaded != m_libraries.end()) {
@@ -585,7 +779,27 @@ LuauScriptSystemRegistry::find_asset(Handle<LuauScriptAsset> asset) const {
     for (std::size_t index = 0; index < m_modules.size(); ++index) {
         const auto& module = m_modules[index];
         if (module.source_kind == LuauScriptSystemModuleSourceKind::Asset &&
-            module.asset && module.asset.id() == asset.id()) {
+            module.asset && module.asset.id() == asset.id() &&
+            module.state == LuauScriptSystemModuleState::Loaded) {
+            return static_cast<LuauScriptSystemModuleId>(index + 1);
+        }
+    }
+    return nullopt;
+}
+
+Optional<LuauScriptSystemModuleId> LuauScriptSystemRegistry::find_asset(
+    Handle<LuauScriptAsset> asset,
+    std::string_view plugin_name
+) const {
+    if (!asset) {
+        return nullopt;
+    }
+    for (std::size_t index = 0; index < m_modules.size(); ++index) {
+        const auto& module = m_modules[index];
+        if (module.source_kind == LuauScriptSystemModuleSourceKind::Asset &&
+            module.asset && module.asset.id() == asset.id() &&
+            module.plugin_name == plugin_name &&
+            module.state == LuauScriptSystemModuleState::Loaded) {
             return static_cast<LuauScriptSystemModuleId>(index + 1);
         }
     }
