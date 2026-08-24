@@ -44,6 +44,7 @@ import {
 } from "react";
 import { parseDocument } from "yaml";
 import { EditorPiAgent } from "./agent/editor-pi-agent";
+import { connectEditorCommandBridge } from "./agent/editor-command-bridge";
 import {
     editorToolRegistry,
     type EditorCommandHandler,
@@ -1110,6 +1111,8 @@ export function App() {
         window.entisiumEditorPi = piAgent;
         return () => piAgent.dispose();
     }, [agentApi, piAgent]);
+
+    useEffect(() => connectEditorCommandBridge(agentApi), [agentApi]);
 
     useEffect(() => {
         const updateStreaming = () => setAgentStreaming(piAgent.snapshot().streaming);

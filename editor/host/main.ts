@@ -33,6 +33,7 @@ const host = createEditorHost({
 
 const address = await host.listen();
 console.log(`[entisium editor] local host listening on http://${address.host}:${address.port}`);
+console.log(`[entisium editor] MCP endpoint available at http://${address.host}:${address.port}/mcp`);
 
 function shutdown(): void {
     host.server.close(() => process.exit(0));

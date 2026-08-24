@@ -31,6 +31,11 @@ import {
     type ProjectDirectoryPicker,
 } from "./project-service.js";
 import { toProxyEvent } from "./proxy-events.js";
+import {
+    EditorCommandRelay,
+    type EditorCommandResponse,
+} from "./editor-command-relay.js";
+import { handleMcpRequest } from "./mcp-server.js";
 
 const maximumJsonBodyBytes = 4 * 1024 * 1024;
 interface HostOptions {
@@ -45,6 +50,7 @@ interface HostOptions {
     projectDirectory?: string;
     pickProjectDirectory?: ProjectDirectoryPicker;
     projectService?: HostProjectService;
+    commandRelay?: EditorCommandRelay;
 }
 
 interface ProxyRequest {
@@ -149,6 +155,16 @@ function bearerToken(request: IncomingMessage): string | undefined {
     return authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
 }
 
+function isLoopbackRequest(request: IncomingMessage): boolean {
+    const address = request.socket.remoteAddress;
+    return Boolean(
+        address === "::1" ||
+            address === "127.0.0.1" ||
+            address?.startsWith("127.") ||
+            address?.startsWith("::ffff:127."),
+    );
+}
+
 function modelForClient(model: Model<any>): Model<any> {
     return structuredClone(model);
 }
@@ -176,6 +192,7 @@ export function createEditorHost(options: HostOptions): {
     const projects =
         options.projectService ??
         new HostProjectService(options.projectDirectory, options.pickProjectDirectory);
+    const commands = options.commandRelay ?? new EditorCommandRelay();
 
     const server = createServer(async (request, response) => {
         const origin = request.headers.origin;
@@ -198,6 +215,20 @@ export function createEditorHost(options: HostOptions): {
 
         const url = new URL(request.url ?? "/", `http://${request.headers.host ?? `${host}:${port}`}`);
         try {
+            if (url.pathname === "/mcp") {
+                if (!isLoopbackRequest(request)) {
+                    json(response, 403, { error: "The Editor MCP endpoint is local-only." });
+                    return;
+                }
+                await handleMcpRequest(
+                    request,
+                    response,
+                    request.method === "POST" ? await readJson(request) : {},
+                    commands,
+                );
+                return;
+            }
+
             if (request.method === "GET" && url.pathname === "/api/v1/bootstrap") {
                 const modelSettings = await modelRegistry.snapshot();
                 const active = await modelRegistry.activeModel();
@@ -228,6 +259,29 @@ export function createEditorHost(options: HostOptions): {
 
             if (request.method === "GET" && url.pathname === "/api/v1/editor-settings") {
                 json(response, 200, await editorSettings.read());
+                return;
+            }
+
+            if (request.method === "GET" && url.pathname === "/api/v1/editor/commands") {
+                commands.attach(request, response);
+                return;
+            }
+
+            if (request.method === "POST" && url.pathname === "/api/v1/editor/commands/result") {
+                const body = asObject(await readJson(request));
+                const result = asObject(body.response) as unknown as EditorCommandResponse;
+                if (
+                    typeof body.id !== "string" ||
+                    typeof result.requestId !== "string" ||
+                    typeof result.ok !== "boolean"
+                ) {
+                    throw new Error("Editor command results require id and response fields.");
+                }
+                if (!commands.complete(body.id, result)) {
+                    json(response, 404, { error: "Editor command is no longer pending." });
+                    return;
+                }
+                json(response, 200, { ok: true });
                 return;
             }
 
@@ -468,7 +522,10 @@ export function createEditorHost(options: HostOptions): {
             }
         }
     });
-    server.once("close", () => projects.dispose());
+    server.once("close", () => {
+        commands.dispose();
+        projects.dispose();
+    });
 
     return {
         server,
