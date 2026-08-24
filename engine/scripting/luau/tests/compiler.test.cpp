@@ -743,6 +743,18 @@ TEST_CASE(
                 )",
                 "nondeterministic API 'math.random'",
             },
+            {
+                R"(
+                    local core = require("@entisium/core")
+                    local function tick()
+                        core.Random = nil
+                    end
+                    return {
+                        systems = { system(Update, tick) },
+                    }
+                )",
+                "assignment to readonly native module 'core'",
+            },
         };
 
     for (const auto& [content, expected] : invalid_sources) {
@@ -773,6 +785,23 @@ TEST_CASE(
         )",
     };
     CHECK(compile_luau_script_module(safe_nested_capture));
+
+    const ScriptSource safe_native_module_capture {
+        .name = "safe_native_module_capture.luau",
+        .content = R"(
+            local core = require("@entisium/core")
+            local function use_type(value)
+                assert(value ~= nil)
+            end
+            local function tick()
+                use_type(core.Random)
+            end
+            return {
+                systems = { system(Update, tick) },
+            }
+        )",
+    };
+    CHECK(compile_luau_script_module(safe_native_module_capture));
 
     auto library = compile_luau_script_library(
         ScriptSource {

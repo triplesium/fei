@@ -146,6 +146,10 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
         const auto count =
             std::min(statement->vars.size, statement->values.size);
         for (std::size_t index = 0; index < count; ++index) {
+            if (is_native_module_require(*statement->values.data[index])) {
+                m_native_module_imports.insert(statement->vars.data[index]);
+                continue;
+            }
             if (references_module_state(*statement->values.data[index])) {
                 m_module_state_aliases.insert(statement->vars.data[index]);
             }
@@ -245,6 +249,24 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
 
   private:
     std::unordered_set<const AstLocal*> m_module_state_aliases;
+    std::unordered_set<const AstLocal*> m_native_module_imports;
+
+    static bool is_native_module_require(const AstExpr& expression) {
+        const auto* call = expression.as<AstExprCall>();
+        if (call == nullptr || call->args.size != 1) {
+            return false;
+        }
+        const auto* global = call->func->as<AstExprGlobal>();
+        const auto* specifier = call->args.data[0]->as<AstExprConstantString>();
+        return global != nullptr && name_view(global->name) == "require" &&
+               specifier != nullptr &&
+               is_native_luau_module(
+                   std::string_view {
+                       specifier->value.data,
+                       specifier->value.size,
+                   }
+               );
+    }
 
     static bool append_path(
         const AstExpr& expression,
@@ -285,6 +307,17 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
             );
             return false;
         }
+        if (const auto* local = root->as<AstExprLocal>();
+            local != nullptr &&
+            m_native_module_imports.contains(local->local)) {
+            reject(
+                target.location,
+                "assignment to readonly native module '" +
+                    std::string(name_view(local->local->name)) +
+                    "' is not allowed"
+            );
+            return false;
+        }
         if (references_module_state(*root)) {
             const auto* local = root->as<AstExprLocal>();
             reject(
@@ -303,7 +336,8 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
         const auto* root = assignment_root(expression);
         const auto* local = root->as<AstExprLocal>();
         return local != nullptr &&
-               ((local->upvalue && local->local->functionDepth == 0) ||
+               ((local->upvalue && local->local->functionDepth == 0 &&
+                 !m_native_module_imports.contains(local->local)) ||
                 m_module_state_aliases.contains(local->local));
     }
 
