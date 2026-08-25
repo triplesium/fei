@@ -26,6 +26,8 @@ class DynamicEvents {
     };
 
     void send(TypeId type, Val event);
+    void register_type(TypeId type);
+    [[nodiscard]] bool registered(TypeId type) const;
     void update();
     [[nodiscard]] const Channel* channel(TypeId type) const;
     [[nodiscard]] Channel* channel(TypeId type);

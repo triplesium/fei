@@ -549,3 +549,36 @@ TEST_CASE(
     REQUIRE(writer_state->kind == SystemParamRuntimeStateKind::Stateless);
     REQUIRE_FALSE(reader.validate_runtime_state(*writer_state));
 }
+
+TEST_CASE(
+    "ECS dynamic event params require explicit type registration",
+    "[ecs][dynamic][event]"
+) {
+    register_components();
+    World world;
+    DynamicEventParam optional_reader(
+        "events",
+        type_id<Velocity>(),
+        DynamicEventParamKind::ReaderRO,
+        true
+    );
+    auto optional_missing = optional_reader.prepare(world, {});
+    REQUIRE(optional_missing);
+    CHECK_FALSE(*optional_missing);
+
+    DynamicEventParam writer(
+        "events",
+        type_id<Velocity>(),
+        DynamicEventParamKind::Writer
+    );
+    REQUIRE_FALSE(writer.prepare(world, {}));
+
+    auto& events = world.add_resource(DynamicEvents {});
+    REQUIRE_FALSE(writer.prepare(world, {}));
+    events.register_type(type_id<Velocity>());
+    REQUIRE(events.registered(type_id<Velocity>()));
+    REQUIRE(writer.prepare(world, {}));
+    auto optional_registered = optional_reader.prepare(world, {});
+    REQUIRE(optional_registered);
+    CHECK(*optional_registered);
+}

@@ -12,6 +12,14 @@ void DynamicEvents::send(TypeId type, Val event) {
     ++channel.event_count;
 }
 
+void DynamicEvents::register_type(TypeId type) {
+    m_channels.try_emplace(type);
+}
+
+bool DynamicEvents::registered(TypeId type) const {
+    return m_channels.contains(type);
+}
+
 void DynamicEvents::update() {
     for (auto& [_, channel] : m_channels) {
         std::swap(channel.previous, channel.current);
@@ -85,11 +93,18 @@ DynamicEventParam::prepare(World& world, SystemTicks) {
             m_events = nullptr;
             return Ref {};
         }
-        world.add_resource(DynamicEvents {});
+        return failure(
+            DynamicSystemError {"Dynamic event type is not registered"}
+        );
     }
     m_events = &world.resource<DynamicEvents>();
-    if (m_optional && m_events->channel(m_event_type) == nullptr) {
-        return Ref {};
+    if (!m_events->registered(m_event_type)) {
+        if (m_optional && m_kind == DynamicEventParamKind::ReaderRO) {
+            return Ref {};
+        }
+        return failure(
+            DynamicSystemError {"Dynamic event type is not registered"}
+        );
     }
     if (m_kind != DynamicEventParamKind::Writer && !m_initialized) {
         m_cursor = m_events->oldest_event_count(m_event_type);
