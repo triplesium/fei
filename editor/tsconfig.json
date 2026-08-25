@@ -12,7 +12,8 @@
         "module": "ESNext",
         "moduleResolution": "Bundler",
         "paths": {
-            "@/*": ["./src/*"]
+            "@/*": ["./src/*"],
+            "@editor-platform/*": ["./src/platform/host/*"]
         },
         "types": ["vite/client", "wicg-file-system-access"],
         "resolveJsonModule": true,

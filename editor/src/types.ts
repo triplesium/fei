@@ -48,6 +48,7 @@ export interface RememberedProject {
     name: string;
     restored?: boolean;
     permissionRequired?: boolean;
+    source?: "local" | "bundled";
 }
 
 export type { RuntimeSession, RuntimeState } from "./runtime/types";

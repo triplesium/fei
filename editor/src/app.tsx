@@ -44,22 +44,24 @@ import {
     type ReactNode,
 } from "react";
 import { parseDocument } from "yaml";
-import { EditorPiAgent } from "./agent/editor-pi-agent";
-import { connectEditorCommandBridge } from "./agent/editor-command-bridge";
 import {
+    AgentModelSelector,
+    EditorModelGateway,
+    EditorPiAgent,
+    PiAssistantThread,
+    SettingsDialog,
+    connectEditorCommandBridge,
     editorToolRegistry,
     type EditorCommandHandler,
-} from "./agent/editor-tool-registry";
-import { EditorModelGateway, type ModelGatewayState } from "./agent/model-gateway";
-import { PiAssistantThread } from "./agent/pi-assistant-thread";
-import type {
+    editorSettings,
     AgentModelDraft,
     AgentModelEditorTarget,
-} from "./components/agent-model-dialog";
-import { AgentModelSelector } from "./components/agent-model-selector";
+    type EditorModelSettingsUpdate,
+    type EditorSettings,
+    type ModelGatewayState,
+} from "@editor-platform/agent";
 import { EditorTopbar } from "./components/editor-topbar";
 import { ResourceInspector } from "./components/resource-inspector";
-import { SettingsDialog } from "./components/settings-dialog";
 import { Button as UiButton } from "./components/ui/button";
 import {
     ContextMenu,
@@ -86,12 +88,8 @@ import {
 import { ProjectSettingsDialog } from "./components/project-settings-dialog";
 import { WasmRuntimeController } from "./runtime/wasm-runtime-controller";
 import { cn } from "./lib/utils";
-import {
-    editorHost,
-    type EditorModelSettingsUpdate,
-    type EditorSettings,
-} from "./services/editor-host-client";
-import { ProjectStorage } from "./services/project-storage";
+import { editorCapabilities } from "@editor-platform/capabilities";
+import { ProjectStorage } from "@editor-platform/project-storage";
 import type {
     AgentRequest,
     ConsoleEntry,
@@ -452,7 +450,9 @@ function CodeFileTabs({
     );
 }
 
-const workbenchLayoutStorageKey = "entisium-editor-dockview-layout-v3";
+const workbenchLayoutStorageKey = editorCapabilities.agent
+    ? "entisium-editor-dockview-layout-v3"
+    : "entisium-editor-dockview-layout-browser-v1";
 const dockviewComponents = { panel: DockPanel };
 const dockviewTabComponents = { engine: EnginePanelTab };
 const WorkbenchPanelsContext = createContext<Record<string, ReactNode>>({});
@@ -484,22 +484,26 @@ function EnginePanelTab({ api }: IDockviewPanelHeaderProps) {
 }
 
 function addDefaultWorkbenchPanels(api: DockviewApi): void {
-    api.addPanel({
-        id: "agent",
-        component: "panel",
-        tabComponent: "engine",
-        title: "Agent",
-        renderer: "always",
-        initialWidth: 400,
-        minimumWidth: 320,
-        maximumWidth: 560,
-    });
+    if (editorCapabilities.agent) {
+        api.addPanel({
+            id: "agent",
+            component: "panel",
+            tabComponent: "engine",
+            title: "Agent",
+            renderer: "always",
+            initialWidth: 400,
+            minimumWidth: 320,
+            maximumWidth: 560,
+        });
+    }
     api.addPanel({
         id: "code",
         component: "panel",
         tabComponent: "engine",
         title: "Code",
-        position: { referencePanel: "agent", direction: "right" },
+        ...(editorCapabilities.agent
+            ? { position: { referencePanel: "agent", direction: "right" as const } }
+            : {}),
         initialWidth: 760,
         minimumWidth: 440,
     });
@@ -545,7 +549,9 @@ function addDefaultWorkbenchPanels(api: DockviewApi): void {
 
     const agentWidth = Math.max(340, Math.min(440, Math.round(api.width * 0.28)));
     const inspectorHeight = Math.max(220, Math.min(360, Math.round(api.height * 0.42)));
-    api.getPanel("agent")?.group.api.setSize({ width: agentWidth });
+    if (editorCapabilities.agent) {
+        api.getPanel("agent")?.group.api.setSize({ width: agentWidth });
+    }
     api.getPanel("project")?.group.api.setSize({ width: 260 });
     api.getPanel("console")?.group.api.setSize({ height: 170 });
     api.getPanel("inspector")?.group.api.setSize({ height: inspectorHeight });
@@ -1019,7 +1025,13 @@ export function App() {
                 if (cancelled) return;
                 if (remembered?.restored) {
                     await loadOpenedProject();
-                    appendConsole("info", "project", `restored local folder ${remembered.name}`);
+                    appendConsole(
+                        "info",
+                        "project",
+                        remembered.source === "bundled"
+                            ? `opened bundled project ${remembered.name}`
+                            : `restored local folder ${remembered.name}`,
+                    );
                 } else if (remembered?.permissionRequired) {
                     appendConsole("info", "editor", `reopen ${remembered.name} to grant access`);
                 } else {
@@ -1221,6 +1233,7 @@ export function App() {
     const modelGateway = useMemo(() => new EditorModelGateway(), []);
 
     useEffect(() => {
+        if (!editorCapabilities.agent) return () => piAgent.dispose();
         window.entisiumEditor = {
             commands: agentApi,
             agents: { pi: piAgent },
@@ -1231,15 +1244,20 @@ export function App() {
         return () => piAgent.dispose();
     }, [agentApi, piAgent]);
 
-    useEffect(() => connectEditorCommandBridge(agentApi), [agentApi]);
+    useEffect(
+        () => (editorCapabilities.agent ? connectEditorCommandBridge(agentApi) : undefined),
+        [agentApi],
+    );
 
     useEffect(() => {
+        if (!editorCapabilities.agent) return;
         const updateStreaming = () => setAgentStreaming(piAgent.snapshot().streaming);
         updateStreaming();
         return piAgent.subscribeState(updateStreaming);
     }, [piAgent]);
 
     useEffect(() => {
+        if (!editorCapabilities.agent) return;
         let cancelled = false;
         void modelGateway.connect(piAgent).then((state) => {
             if (!cancelled) setAgentGatewayState(state);
@@ -1250,8 +1268,9 @@ export function App() {
     }, [modelGateway, piAgent]);
 
     useEffect(() => {
+        if (!editorCapabilities.agent) return;
         let cancelled = false;
-        void editorHost
+        void editorSettings
             .getEditorSettings()
             .then((settings) => {
                 if (!cancelled) setEditorPreferences(settings);
@@ -1470,14 +1489,17 @@ export function App() {
         }
 
         dockviewLayoutListenerRef.current?.dispose();
-        for (const [id, title] of [
-            ["agent", "Agent"],
+        const panels = [
             ["code", "Code"],
             ["game", "Game"],
             ["project", "Assets"],
             ["inspector", "Inspector"],
             ["console", "Console"],
-        ] as const) {
+        ] as const;
+        const visiblePanels: readonly (readonly [string, string])[] = editorCapabilities.agent
+            ? [["agent", "Agent"], ...panels]
+            : panels;
+        for (const [id, title] of visiblePanels) {
             api.getPanel(id)?.api.setTitle(title);
         }
         api.getPanel("code")?.api.setActive();
@@ -1724,18 +1746,22 @@ export function App() {
                 }}
             />
         ),
-        agent: (
-            <ToolPanel className="min-h-0 bg-[#191919]">
-                <PiAssistantThread
-                    agent={piAgent}
-                    enabled={agentGatewayState.state === "ready"}
-                    modelControl={agentModelControl}
-                    density={editorPreferences.appearance.agentDensity}
-                    onConfigure={openAgentSettings}
-                    onNewChat={resetAgentConversation}
-                />
-            </ToolPanel>
-        ),
+        ...(editorCapabilities.agent
+            ? {
+                  agent: (
+                      <ToolPanel className="min-h-0 bg-[#191919]">
+                          <PiAssistantThread
+                              agent={piAgent}
+                              enabled={agentGatewayState.state === "ready"}
+                              modelControl={agentModelControl}
+                              density={editorPreferences.appearance.agentDensity}
+                              onConfigure={openAgentSettings}
+                              onNewChat={resetAgentConversation}
+                          />
+                      </ToolPanel>
+                  ),
+              }
+            : {}),
         inspector: (
             <ToolPanel>
                 <ScrollArea className="min-h-0 flex-1">
@@ -1780,6 +1806,7 @@ export function App() {
                         );
                     }}
                     onOpenSettings={openAgentSettings}
+                    settingsAvailable={editorCapabilities.agent}
                     onResetWorkbench={resetWorkbenchLayout}
                     onPlay={() => {
                         void playRuntime().catch((error) =>
@@ -1829,37 +1856,39 @@ export function App() {
                     onSave={applyProjectSettings}
                 />
 
-                <SettingsDialog
-                    open={globalSettingsOpen}
-                    onOpenChange={setGlobalSettingsOpen}
-                    draft={agentModelDraft}
-                    target={agentModelTarget}
-                    providers={agentModelSettings?.providers}
-                    activeProviderId={activeAgentProviderId}
-                    activeModelId={activeAgentModelId}
-                    credentialConfigured={draftCredentialConfigured}
-                    providerValid={agentProviderDraftValid}
-                    modelValid={agentModelDraftValid}
-                    saving={agentSettingsSaving}
-                    error={agentSettingsError || undefined}
-                    onDraftChange={(patch) =>
-                        setAgentModelDraft((current) => ({ ...current, ...patch }))
-                    }
-                    onActivate={selectAgentModel}
-                    onAddProvider={addAgentProvider}
-                    onAddModel={addAgentModel}
-                    onEditProvider={editAgentProvider}
-                    onEditModel={editAgentModel}
-                    onBack={() => {
-                        setAgentModelTarget(null);
-                        setAgentSettingsError("");
-                    }}
-                    onSaveProvider={saveAgentProviderSettings}
-                    onSaveModel={saveAgentModelSettings}
-                    onDeleteProvider={deleteAgentProvider}
-                    onDeleteModel={deleteAgentModel}
-                    onRemoveCredential={removeAgentCredential}
-                />
+                {editorCapabilities.agent && (
+                    <SettingsDialog
+                        open={globalSettingsOpen}
+                        onOpenChange={setGlobalSettingsOpen}
+                        draft={agentModelDraft}
+                        target={agentModelTarget}
+                        providers={agentModelSettings?.providers}
+                        activeProviderId={activeAgentProviderId}
+                        activeModelId={activeAgentModelId}
+                        credentialConfigured={draftCredentialConfigured}
+                        providerValid={agentProviderDraftValid}
+                        modelValid={agentModelDraftValid}
+                        saving={agentSettingsSaving}
+                        error={agentSettingsError || undefined}
+                        onDraftChange={(patch) =>
+                            setAgentModelDraft((current) => ({ ...current, ...patch }))
+                        }
+                        onActivate={selectAgentModel}
+                        onAddProvider={addAgentProvider}
+                        onAddModel={addAgentModel}
+                        onEditProvider={editAgentProvider}
+                        onEditModel={editAgentModel}
+                        onBack={() => {
+                            setAgentModelTarget(null);
+                            setAgentSettingsError("");
+                        }}
+                        onSaveProvider={saveAgentProviderSettings}
+                        onSaveModel={saveAgentModelSettings}
+                        onDeleteProvider={deleteAgentProvider}
+                        onDeleteModel={deleteAgentModel}
+                        onRemoveCredential={removeAgentCredential}
+                    />
+                )}
             </div>
         </TooltipProvider>
     );

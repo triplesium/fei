@@ -15,6 +15,7 @@ interface EditorTopbarProps {
     projectOpen: boolean;
     canSave: boolean;
     runtimeState: RuntimeState;
+    settingsAvailable?: boolean;
     onOpenProject(): void;
     onSave(): void;
     onOpenProjectSettings(): void;
@@ -29,6 +30,7 @@ export function EditorTopbar({
     projectOpen,
     canSave,
     runtimeState,
+    settingsAvailable = true,
     onOpenProject,
     onSave,
     onOpenProjectSettings,
@@ -53,10 +55,12 @@ export function EditorTopbar({
                             <DropdownMenuItem disabled={!canSave} onSelect={onSave}>
                                 Save<DropdownMenuShortcut>Ctrl+S</DropdownMenuShortcut>
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onSelect={onOpenSettings}>
-                                Settings…<DropdownMenuShortcut>Ctrl+,</DropdownMenuShortcut>
-                            </DropdownMenuItem>
+                            {settingsAvailable && <DropdownMenuSeparator />}
+                            {settingsAvailable && (
+                                <DropdownMenuItem onSelect={onOpenSettings}>
+                                    Settings…<DropdownMenuShortcut>Ctrl+,</DropdownMenuShortcut>
+                                </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem disabled={!projectOpen} onSelect={onOpenProjectSettings}>
                                 Project Settings…
                             </DropdownMenuItem>
