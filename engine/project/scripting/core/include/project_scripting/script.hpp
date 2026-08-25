@@ -1,11 +1,9 @@
 #pragma once
 
-#include "app/app.hpp"
 #include "asset/assets.hpp"
-#include "asset/server.hpp"
+#include "asset/reference.hpp"
 #include "base/optional.hpp"
 #include "ecs/system_params.hpp"
-#include "project/project.hpp"
 
 #include <cstdint>
 #include <string>
@@ -43,48 +41,6 @@ bool script_path_has_extension(
     const AssetReference& reference,
     std::string_view extension
 );
-
-template<typename Backend>
-ScriptsState<Backend> load_project_scripts(App& app) {
-    ScriptsState<Backend> state;
-    const auto& references = app.resource<Project>().config().scripts;
-
-    auto& asset_server = app.resource<AssetServer>();
-    auto& assets = app.resource<Assets<typename Backend::Asset>>();
-    auto& registry = app.resource<typename Backend::Registry>();
-    for (const auto& reference : references) {
-        if (!script_path_has_extension(reference, Backend::extension)) {
-            continue;
-        }
-
-        typename ScriptsState<Backend>::Script script {
-            .reference = reference,
-        };
-        auto path = asset_server.resolve(reference);
-        if (!path) {
-            script.status = ScriptStatus::Failed;
-            script.error = std::move(path.error().message);
-            state.scripts.push_back(std::move(script));
-            continue;
-        }
-
-        script.path = *path;
-        script.asset = asset_server.load<typename Backend::Asset>(*path);
-        const auto load_state = assets.load_state(script.asset);
-        if (load_state && *load_state == AssetLoadState::Failed) {
-            script.status = ScriptStatus::Failed;
-            if (auto error = assets.load_error(script.asset)) {
-                script.error = error->message;
-            } else {
-                script.error = Backend::asset_load_failure;
-            }
-        } else {
-            Backend::queue_asset(registry, script.asset);
-        }
-        state.scripts.push_back(std::move(script));
-    }
-    return state;
-}
 
 template<typename Backend>
 void refresh_project_script_states(

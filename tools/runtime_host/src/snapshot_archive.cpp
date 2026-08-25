@@ -220,14 +220,12 @@ make_snapshot_archive_metadata(
     }
 
     StableDigest runtime;
-    runtime.append("entisium.project-runtime.v1");
+    runtime.append("entisium.project-runtime.v2");
     runtime.append(project.config().name);
     runtime.append(project.config().asset_directory.generic_string());
-    for (const auto& plugin : project.config().runtime.plugins) {
-        runtime.append(plugin.qualified_name());
-    }
-    for (const auto& script : project.config().scripts) {
-        append_reference(runtime, script);
+    if (const auto& plugin = project.config().plugin; plugin) {
+        append_reference(runtime, plugin->module);
+        runtime.append(plugin->export_name);
     }
     auto scripts = script_digest(project.asset_root());
     if (!scripts) {

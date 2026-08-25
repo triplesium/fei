@@ -1,14 +1,4 @@
 name: Luau 2D Platformer Playtest
 asset_directory: assets
 
-runtime:
-  plugins:
-    - OpenGLGlfw
-    - Rendering
-    - Sprite
-    - Input
-    - Time
-    - project_runtime::LuauScripts
-
-scripts:
-  - project://scripts/platformer_test.luau
+plugin: project://scripts/platformer_test.luau#PlatformerPlugin

@@ -1,5 +1,4 @@
 #pragma once
-#include "app/plugin_id.hpp"
 #include "asset/reference.hpp"
 #include "base/optional.hpp"
 #include "base/result.hpp"
@@ -7,7 +6,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
-#include <vector>
 
 namespace ets {
 
@@ -23,21 +21,15 @@ struct ProjectLoadError {
     std::string message;
 };
 
-struct ProjectRuntimeConfig {
-    std::vector<PluginId> plugins;
-};
-
-struct ProjectGameConfig {
-    AssetReference script;
-    std::string plugin;
+struct ProjectEntryPluginConfig {
+    AssetReference module;
+    std::string export_name;
 };
 
 struct ProjectConfig {
     std::string name;
     std::filesystem::path asset_directory {"assets"};
-    ProjectRuntimeConfig runtime;
-    Optional<ProjectGameConfig> game;
-    std::vector<AssetReference> scripts;
+    Optional<ProjectEntryPluginConfig> plugin;
 };
 
 class Project {

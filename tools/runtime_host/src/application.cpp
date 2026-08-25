@@ -1,5 +1,6 @@
 #include "runtime_host/application.hpp"
 
+#include "app/reflection_plugin.hpp"
 #include "asset/embed.hpp"
 #include "asset/server.hpp"
 #include "base/env.hpp"
@@ -7,12 +8,15 @@
 #include "core/time.hpp"
 #include "graphics/graphics_device.hpp"
 #include "graphics/swapchain.hpp"
+#include "graphics_opengl_glfw/plugin.hpp"
 #include "input/input.hpp"
 #include "physics2d/physics_world.hpp"
+#include "physics2d/plugin.hpp"
 #include "project/project.hpp"
 #include "project_runtime/runtime.hpp"
 #include "project_scripting_luau/playtest.hpp"
 #include "project_scripting_luau/plugin.hpp"
+#include "rendering/plugin.hpp"
 #include "rendering/render_app.hpp"
 #include "runtime_host/quick_save.hpp"
 #include "runtime_host/snapshot_archive.hpp"
@@ -31,8 +35,12 @@
 #include "snapshot_runtime_physics2d/adapters.hpp"
 #include "snapshot_runtime_rendering/adapters.hpp"
 #include "snapshot_runtime_ui/adapters.hpp"
+#include "sprite/plugin.hpp"
 #include "ui/surface.hpp"
+#include "ui_rendering/plugin.hpp"
+#include "ui_widgets/plugin.hpp"
 #include "window/window.hpp"
+#include "window_glfw/input.hpp"
 #include "window_glfw/window.hpp"
 
 #include <algorithm>
@@ -685,26 +693,9 @@ register_playtest_inspection_providers(
     );
 }
 
-void validate_project_plugins(const ProjectRuntimeConfig& runtime) {
-    for (const auto& plugin : runtime.plugins) {
-        if (plugin.qualified_name() == "runtime_protocol::RuntimeProbe") {
-            throw std::runtime_error(
-                "Plugin 'runtime_protocol::RuntimeProbe' is managed by "
-                "Runtime Host and cannot be enabled by a project"
-            );
-        }
-    }
-}
-
 } // namespace
 
 RuntimeHostApplication::RuntimeHostApplication(Project project) {
-    const bool has_luau_scripts = std::ranges::any_of(
-        project.config().runtime.plugins,
-        [](const PluginId& plugin) {
-            return plugin.qualified_name() == "project_runtime::LuauScripts";
-        }
-    );
     auto engine_build = read_environment_variable("ETS_RUNTIME_BUILD_ID");
     if (!engine_build) {
         auto detected_build = current_runtime_build_id();
@@ -814,11 +805,17 @@ RuntimeHostApplication::RuntimeHostApplication(Project project) {
         )
         .add_systems(Last, request_quick_save_hotkeys);
     m_app.add_plugin<snapshot_runtime::SnapshotRuntimePlugin>();
-    validate_project_plugins(project.config().runtime);
     configure_project_runtime(m_app, std::move(project));
-    if (has_luau_scripts) {
-        m_app.add_plugin(project_runtime::LuauPlaytestsPlugin {});
-    }
+    m_app.add_plugin<ReflectionPlugin>()
+        .add_plugin<OpenGLGlfwPlugin>()
+        .add_plugin<RenderingPlugin>()
+        .add_plugin<SpritePlugin>()
+        .add_plugin<GlfwInputPlugin>()
+        .add_plugin<TimePlugin>()
+        .add_plugin<PhysicsPlugin2d>()
+        .add_plugin<ui::rendering::UiRenderingPlugin>()
+        .add_plugin<ui_widgets::ButtonPlugin>()
+        .add_plugin<project_runtime::LuauPlaytestsPlugin>();
     runtime_probe_config.manual_inspection_dispatch = true;
     m_app.add_plugin(
         runtime_protocol::RuntimeProbePlugin {

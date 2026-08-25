@@ -1,6 +1,7 @@
-#include "project_scripting_lua/plugin.hpp"
+#include "core/plugin.hpp"
 
 #include "app/app.hpp"
+#include "app/reflection_plugin.hpp"
 #include "project/project.hpp"
 #include "project_runtime/runtime.hpp"
 #include "project_scripting_luau/playtest.hpp"
@@ -16,7 +17,6 @@
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -47,40 +47,14 @@ class TemporaryMixedScriptProject {
              "-" + std::to_string(sequence.fetch_add(1)));
         std::filesystem::create_directories(m_root / "assets" / "scripts");
 
-        const bool has_lua =
-            std::ranges::any_of(scripts, [](const auto& script) {
-                return std::filesystem::path {script.path}.extension() ==
-                       ".lua";
-            });
-        const auto contains_luau = [](const auto& entries) {
-            return std::ranges::any_of(entries, [](const auto& script) {
-                return std::filesystem::path {script.path}.extension() ==
-                       ".luau";
-            });
-        };
-        const bool has_luau =
-            contains_luau(scripts) || contains_luau(libraries);
-
         std::ofstream project_stream(project_file());
         project_stream << "name: Mixed Script Runtime\n"
-                          "asset_directory: assets\n"
-                          "runtime:\n  plugins:\n";
-        if (has_lua) {
-            project_stream << "    - project_runtime::LuaScripts\n";
-        }
-        if (has_luau) {
-            project_stream << "    - project_runtime::LuauScripts\n";
-        }
+                          "asset_directory: assets\n";
         if (game_plugin) {
-            project_stream << "game:\n  plugin: \"" << *game_plugin << "\"\n";
-        }
-        if (scripts.empty()) {
-            project_stream << "scripts: []\n";
-        } else {
-            project_stream << "scripts:\n";
-            for (const auto& script : scripts) {
-                project_stream << "  - project://" << script.path << "\n";
-            }
+            project_stream << "plugin: \"" << *game_plugin << "\"\n";
+        } else if (!scripts.empty()) {
+            project_stream << "plugin: \"project://" << scripts.front().path
+                           << "#EntryPlugin\"\n";
         }
         auto write_files = [this](const auto& entries) {
             for (const auto& script : entries) {
@@ -121,6 +95,9 @@ App load_app(const TemporaryMixedScriptProject& directory) {
 
     App app;
     configure_project_runtime(app, std::move(*project));
+    app.add_plugin<ReflectionPlugin>();
+    app.add_plugin<CorePlugin>();
+    app.add_plugin<project_runtime::LuauScriptsPlugin>();
     app.finish();
     return app;
 }
@@ -131,43 +108,6 @@ void apply_script_queues(App& app) {
 }
 
 } // namespace
-
-TEST_CASE(
-    "Project Lua and Luau scripts load from one script list",
-    "[project-runtime][lua][luau][script]"
-) {
-    TemporaryMixedScriptProject directory({
-        ScriptFile {
-            .path = "scripts/legacy.lua",
-            .content = std::string_view {"-- Lua project entry\n"},
-        },
-        ScriptFile {
-            .path = "scripts/gameplay.luau",
-            .content = std::string_view {R"(
-                return {
-                    systems = {},
-                }
-            )"},
-        },
-    });
-    auto app = load_app(directory);
-
-    auto& lua = app.resource<project_runtime::LuaScriptsState>();
-    auto& luau = app.resource<project_runtime::LuauScriptsState>();
-    REQUIRE(lua.scripts.size() == 1);
-    REQUIRE(luau.scripts.size() == 1);
-    CHECK(lua.scripts[0].reference.fallback_path.path().extension() == ".lua");
-    CHECK(
-        luau.scripts[0].reference.fallback_path.path().extension() == ".luau"
-    );
-
-    apply_script_queues(app);
-
-    CHECK(lua.scripts[0].status == project_runtime::LuaScriptStatus::Loaded);
-    CHECK(luau.scripts[0].status == project_runtime::LuauScriptStatus::Loaded);
-    CHECK(lua.scripts[0].module.has_value());
-    CHECK(luau.scripts[0].module.has_value());
-}
 
 TEST_CASE(
     "Project Luau scripts require native engine modules",
@@ -190,8 +130,10 @@ TEST_CASE(
                     assert(transforms ~= nil)
                 end
 
-                return {
-                    systems = { system(Update, verify) },
+                export local EntryPlugin = Plugin.new {
+                    build = function(app: App)
+                        app:add_system(Update, verify)
+                    end,
                 }
             )"},
         },
@@ -224,18 +166,15 @@ TEST_CASE(
                         state.value = first.next(0) * 10 + second.next(1)
                     end
 
-                    return {
-                        types = {
-                            RequireState = {
-                                value = field(i32, 0),
-                            },
-                        },
-                        resources = {
-                            RequireState = {},
-                        },
-                        systems = {
-                            [Update] = { tick },
-                        },
+                    export type RequireState = {
+                        value: i32,
+                    }
+
+                    export local EntryPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_resource(RequireState { value = 0 })
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )"},
             },
@@ -244,11 +183,9 @@ TEST_CASE(
             ScriptFile {
                 .path = "scripts/lib/counter.luau",
                 .content = std::string_view {R"(
-                    return {
-                        next = function(value: number)
-                            return value + 1
-                        end,
-                    }
+                    export function next(value: number)
+                        return value + 1
+                    end
                 )"},
             },
         }
@@ -285,8 +222,9 @@ TEST_CASE(
                 .path = "scripts/gameplay.luau",
                 .content = std::string_view {R"(
                     local first = require("./lib/first")
-                    return {
-                        systems = {},
+                    export local EntryPlugin = Plugin.new {
+                        build = function(app: App)
+                        end,
                     }
                 )"},
             },
@@ -296,14 +234,14 @@ TEST_CASE(
                 .path = "scripts/lib/first.luau",
                 .content = std::string_view {R"(
                     local second = require("./second")
-                    return { second = second }
+                    export local dependency = second
                 )"},
             },
             ScriptFile {
                 .path = "scripts/lib/second.luau",
                 .content = std::string_view {R"(
                     local first = require("./first")
-                    return { first = first }
+                    export local dependency = first
                 )"},
             },
         }
@@ -330,8 +268,10 @@ TEST_CASE(
                 .path = "scripts/gameplay.luau",
                 .content = std::string_view {R"(
                     local missing = require("./missing")
-                    return {
-                        systems = {},
+                    export local EntryPlugin = Plugin.new {
+                        dependencies = { missing.DependencyPlugin },
+                        build = function(app: App)
+                        end,
                     }
                 )"},
             },
@@ -353,8 +293,10 @@ TEST_CASE(
                 .content = std::string_view {R"(
                     local name = "missing"
                     local missing = require("./" .. name)
-                    return {
-                        systems = {},
+                    export local EntryPlugin = Plugin.new {
+                        dependencies = { missing.DependencyPlugin },
+                        build = function(app: App)
+                        end,
                     }
                 )"},
             },
@@ -375,8 +317,10 @@ TEST_CASE(
                 .path = "scripts/gameplay.luau",
                 .content = std::string_view {R"(
                     local outside = require("../../outside")
-                    return {
-                        systems = {},
+                    export local EntryPlugin = Plugin.new {
+                        dependencies = { outside.DependencyPlugin },
+                        build = function(app: App)
+                        end,
                     }
                 )"},
             },
@@ -391,15 +335,17 @@ TEST_CASE(
         CHECK(scripts.scripts[0].error.contains("escapes its asset source"));
     }
 
-    SECTION("non-table export") {
+    SECTION("top-level return") {
         TemporaryMixedScriptProject directory(
             {
                 ScriptFile {
                     .path = "scripts/gameplay.luau",
                     .content = std::string_view {R"(
                         local invalid = require("./invalid")
-                        return {
-                            systems = {},
+                        export local EntryPlugin = Plugin.new {
+                            dependencies = { invalid.DependencyPlugin },
+                            build = function(app: App)
+                            end,
                         }
                     )"},
                 },
@@ -418,7 +364,9 @@ TEST_CASE(
             scripts.scripts[0].status ==
             project_runtime::LuauScriptStatus::Failed
         );
-        CHECK(scripts.scripts[0].error.contains("must return a table"));
+        CHECK(
+            scripts.scripts[0].error.contains("top-level return declarations")
+        );
     }
 }
 
@@ -733,6 +681,19 @@ TEST_CASE(
         ScriptFile {
             .path = "scripts/pure_luau.luau",
             .content = std::string_view {R"(
+                export type Position = {
+                    x: f32,
+                }
+
+                export type Velocity = {
+                    x: f32,
+                }
+
+                export type ProjectState = {
+                    mover: entity,
+                    ticks: i32,
+                }
+
                 local function initialize(
                     world: World,
                     state: ResRW<ProjectState>
@@ -741,8 +702,8 @@ TEST_CASE(
                         return
                     end
                     local mover = world:spawn(
-                        Position.new(),
-                        Velocity.new()
+                        Position.new { x = 1.0 },
+                        Velocity.new { x = 2.0 }
                     )
                     state.mover = mover:id()
                 end
@@ -757,26 +718,12 @@ TEST_CASE(
                     state.ticks += 1
                 end
 
-                return {
-                    types = {
-                        Position = {
-                            x = field(f32, 1.0),
-                        },
-                        Velocity = {
-                            x = field(f32, 2.0),
-                        },
-                        ProjectState = {
-                            mover = field(entity, 0),
-                            ticks = field(i32, 0),
-                        },
-                    },
-                    resources = {
-                        ProjectState = {},
-                    },
-                    systems = {
-                        system(StartUp, initialize),
-                        system(Update, move),
-                    },
+                export local EntryPlugin = Plugin.new {
+                    build = function(app: App)
+                        app:add_resource(ProjectState {})
+                        app:add_system(StartUp, initialize)
+                        app:add_system(Update, move)
+                    end,
                 }
             )"},
         },

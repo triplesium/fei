@@ -4,8 +4,6 @@
 
 #include <algorithm>
 #include <string>
-#include <utility>
-
 namespace ets::project_runtime {
 
 void detail::LuaProjectScriptBackend::queue_asset(
@@ -41,20 +39,7 @@ Optional<std::string> detail::LuaProjectScriptBackend::request_error(
 }
 
 void LuaScriptsPlugin::setup(App& app) {
-    auto scripts = project_scripting::load_project_scripts<
-        detail::LuaProjectScriptBackend>(app);
-    auto& registry = app.resource<LuaScriptSystemRegistry>();
-    auto& assets = app.resource<Assets<LuaScriptAsset>>();
-    registry
-        .apply_queued_requests(app.resource<LuaRuntime>(), app.world(), assets);
-    project_scripting::refresh_project_script_states<
-        detail::LuaProjectScriptBackend>(scripts, registry, assets);
-    app.add_resource(std::move(scripts))
-        .add_systems(
-            PostUpdate,
-            project_scripting::update_project_script_states<
-                detail::LuaProjectScriptBackend>
-        );
+    app.add_resource(LuaScriptsState {});
 }
 
 } // namespace ets::project_runtime

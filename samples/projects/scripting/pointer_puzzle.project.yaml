@@ -1,14 +1,4 @@
 name: Luau 2D Pointer Puzzle Playtest
 asset_directory: assets
 
-runtime:
-  plugins:
-    - OpenGLGlfw
-    - Rendering
-    - Sprite
-    - Input
-    - Time
-    - project_runtime::LuauScripts
-
-scripts:
-  - project://scripts/pointer_puzzle_test.luau
+plugin: project://scripts/pointer_puzzle_test.luau#PointerPuzzlePlugin

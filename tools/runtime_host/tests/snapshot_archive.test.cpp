@@ -23,11 +23,11 @@ class MetadataProject {
         m_root = std::filesystem::temp_directory_path() /
                  ("entisium-snapshot-metadata-" + std::to_string(suffix));
         std::filesystem::create_directories(m_root / "assets");
-        std::ofstream(m_root / "project.yaml") << "name: Metadata Test\n"
-                                                  "asset_directory: assets\n"
-                                                  "scripts:\n"
-                                                  "  - project://main.luau\n";
-        write_script("return { value = 1 }\n");
+        std::ofstream(m_root / "project.yaml")
+            << "name: Metadata Test\n"
+               "asset_directory: assets\n"
+               "plugin: project://main.luau#MainPlugin\n";
+        write_script("export local value = 1\n");
     }
 
     ~MetadataProject() {
@@ -70,7 +70,7 @@ TEST_CASE(
     CHECK_FALSE(first->runtime_signature.empty());
     CHECK_FALSE(first->script_hash.empty());
 
-    fixture.write_script("return { value = 2 }\n");
+    fixture.write_script("export local value = 2\n");
     auto changed =
         runtime_host::make_snapshot_archive_metadata(*project, "test-build");
     REQUIRE(changed);

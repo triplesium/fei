@@ -1,16 +1,4 @@
 name: Luau 2D UI Demo
 asset_directory: assets
 
-runtime:
-  plugins:
-    - OpenGLGlfw
-    - Rendering
-    - Sprite
-    - Input
-    - Time
-    - ui::rendering::UiRendering
-    - ui_widgets::Button
-    - project_runtime::LuauScripts
-
-scripts:
-  - project://scripts/ui_demo.luau
+plugin: project://scripts/ui_demo.luau#UiDemoPlugin

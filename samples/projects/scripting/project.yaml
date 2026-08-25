@@ -1,14 +1,4 @@
 name: Luau 2D Collect Game
 asset_directory: assets
 
-runtime:
-  plugins:
-    - OpenGLGlfw
-    - Rendering
-    - Sprite
-    - Input
-    - Time
-    - project_runtime::LuauScripts
-
-scripts:
-  - project://scripts/movement.luau
+plugin: project://scripts/movement.luau#MovementPlugin

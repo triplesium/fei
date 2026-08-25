@@ -23,7 +23,6 @@ if not is_plat("wasm") then
         add_deps(
             "entisium-core",
             "entisium-project-runtime",
-            "entisium-project-scripting-lua",
             "entisium-project-scripting-luau"
         )
         add_packages("nlohmann_json")

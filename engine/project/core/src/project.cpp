@@ -1,11 +1,9 @@
 #include "project/project.hpp"
 
 #include <filesystem>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <unordered_set>
 #include <utility>
 #include <yaml-cpp/yaml.h> // IWYU pragma: keep
 
@@ -156,77 +154,13 @@ Project::load(const std::filesystem::path& project_file) {
             }
             config.asset_directory = asset_directory_node.as<std::string>();
         }
-        const auto runtime_node = document["runtime"];
-        if (runtime_node) {
-            if (!runtime_node.IsMap()) {
+        const auto plugin_node = document["plugin"];
+        if (plugin_node) {
+            if (!plugin_node.IsScalar()) {
                 return failure(load_error(
                     ProjectLoadErrorKind::InvalidConfig,
                     absolute_file,
-                    "Project field 'runtime' must be a mapping"
-                ));
-            }
-
-            const auto plugins_node = runtime_node["plugins"];
-            if (plugins_node) {
-                if (!plugins_node.IsSequence()) {
-                    return failure(load_error(
-                        ProjectLoadErrorKind::InvalidConfig,
-                        absolute_file,
-                        "Project field 'runtime.plugins' must be a sequence"
-                    ));
-                }
-
-                std::unordered_set<std::string> plugin_ids;
-                config.runtime.plugins.reserve(plugins_node.size());
-                for (const auto& plugin_node : plugins_node) {
-                    if (!plugin_node.IsScalar()) {
-                        return failure(load_error(
-                            ProjectLoadErrorKind::InvalidConfig,
-                            absolute_file,
-                            "Project runtime plugin ids must be strings"
-                        ));
-                    }
-
-                    auto plugin_name = plugin_node.as<std::string>();
-                    try {
-                        PluginId plugin_id(std::move(plugin_name));
-                        const auto qualified_name =
-                            std::string(plugin_id.qualified_name());
-                        if (!plugin_ids.emplace(qualified_name).second) {
-                            return failure(load_error(
-                                ProjectLoadErrorKind::InvalidConfig,
-                                absolute_file,
-                                "Duplicate project runtime plugin '" +
-                                    qualified_name + "'"
-                            ));
-                        }
-                        config.runtime.plugins.push_back(std::move(plugin_id));
-                    } catch (const std::runtime_error& plugin_error) {
-                        return failure(load_error(
-                            ProjectLoadErrorKind::InvalidConfig,
-                            absolute_file,
-                            "Invalid project runtime plugin id: " +
-                                std::string(plugin_error.what())
-                        ));
-                    }
-                }
-            }
-        }
-        const auto game_node = document["game"];
-        if (game_node) {
-            if (!game_node.IsMap()) {
-                return failure(load_error(
-                    ProjectLoadErrorKind::InvalidConfig,
-                    absolute_file,
-                    "Project field 'game' must be a mapping"
-                ));
-            }
-            const auto plugin_node = game_node["plugin"];
-            if (!plugin_node || !plugin_node.IsScalar()) {
-                return failure(load_error(
-                    ProjectLoadErrorKind::InvalidConfig,
-                    absolute_file,
-                    "Project field 'game.plugin' must be a module#export string"
+                    "Project field 'plugin' must be a module#export string"
                 ));
             }
             const std::string plugin_reference = plugin_node.as<std::string>();
@@ -236,54 +170,31 @@ Project::load(const std::filesystem::path& project_file) {
                 return failure(load_error(
                     ProjectLoadErrorKind::InvalidConfig,
                     absolute_file,
-                    "Project field 'game.plugin' must use module#export"
+                    "Project field 'plugin' must use module#export"
                 ));
             }
-            YAML::Node script_node;
-            script_node = plugin_reference.substr(0, separator);
-            auto script =
-                parse_project_asset_reference(script_node, "game plugin");
-            if (!script) {
+            YAML::Node module_node;
+            module_node = plugin_reference.substr(0, separator);
+            auto module =
+                parse_project_asset_reference(module_node, "plugin module");
+            if (!module) {
                 return failure(load_error(
                     ProjectLoadErrorKind::InvalidConfig,
                     absolute_file,
-                    std::move(script.error())
+                    std::move(module.error())
                 ));
             }
-            config.game = ProjectGameConfig {
-                .script = std::move(*script),
-                .plugin = plugin_reference.substr(separator + 1),
+            config.plugin = ProjectEntryPluginConfig {
+                .module = std::move(*module),
+                .export_name = plugin_reference.substr(separator + 1),
             };
-        }
-        const auto scripts_node = document["scripts"];
-        if (scripts_node) {
-            if (!scripts_node.IsSequence()) {
-                return failure(load_error(
-                    ProjectLoadErrorKind::InvalidConfig,
-                    absolute_file,
-                    "Project field 'scripts' must be a sequence"
-                ));
-            }
-            config.scripts.reserve(scripts_node.size());
-            for (const auto& script_node : scripts_node) {
-                auto script =
-                    parse_project_asset_reference(script_node, "script");
-                if (!script) {
-                    return failure(load_error(
-                        ProjectLoadErrorKind::InvalidConfig,
-                        absolute_file,
-                        std::move(script.error())
-                    ));
-                }
-                config.scripts.push_back(std::move(*script));
-            }
         }
         if (document["main_scene"]) {
             return failure(load_error(
                 ProjectLoadErrorKind::InvalidConfig,
                 absolute_file,
                 "Project field 'main_scene' is no longer supported; load "
-                "scene assets from a project script"
+                "scene assets from the project entry Plugin"
             ));
         }
     } catch (const YAML::Exception& yaml_error) {

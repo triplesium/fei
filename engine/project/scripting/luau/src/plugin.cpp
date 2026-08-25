@@ -42,18 +42,17 @@ Optional<std::string> detail::LuauProjectScriptBackend::request_error(
 }
 
 void LuauScriptsPlugin::setup(App& app) {
-    auto scripts = project_scripting::load_project_scripts<
-        detail::LuauProjectScriptBackend>(app);
+    LuauScriptsState scripts;
     auto& registry = app.resource<LuauScriptSystemRegistry>();
     auto& assets = app.resource<Assets<LuauScriptAsset>>();
-    if (const auto& game = app.resource<Project>().config().game;
-        game && project_scripting::script_path_has_extension(
-                    game->script,
-                    detail::LuauProjectScriptBackend::extension
-                )) {
-        LuauScriptState script {.reference = game->script};
+    if (const auto& plugin = app.resource<Project>().config().plugin;
+        plugin && project_scripting::script_path_has_extension(
+                      plugin->module,
+                      detail::LuauProjectScriptBackend::extension
+                  )) {
+        LuauScriptState script {.reference = plugin->module};
         auto& asset_server = app.resource<AssetServer>();
-        auto path = asset_server.resolve(game->script);
+        auto path = asset_server.resolve(plugin->module);
         if (!path) {
             script.status = LuauScriptStatus::Failed;
             script.error = std::move(path.error().message);
@@ -70,7 +69,7 @@ void LuauScriptsPlugin::setup(App& app) {
                         detail::LuauProjectScriptBackend::asset_load_failure;
                 }
             } else {
-                registry.queue_asset(script.asset, game->plugin);
+                registry.queue_asset(script.asset, plugin->export_name);
             }
         }
         scripts.scripts.push_back(std::move(script));
