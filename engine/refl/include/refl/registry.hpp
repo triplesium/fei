@@ -11,6 +11,7 @@
 
 #include <array>
 #include <concepts>
+#include <cstdint>
 #include <cstring>
 #include <functional>
 #include <initializer_list>
@@ -355,6 +356,7 @@ class Registry {
     types_with_annotation(std::string_view annotation) const;
     bool has_enum(TypeId id) const;
     void clear_generated_metadata();
+    std::uint64_t class_epoch() const { return m_class_epoch; }
 
     Result<Type&, DynamicTypeError>
     register_dynamic_struct(DynamicStructDesc desc);
@@ -703,6 +705,7 @@ class Registry {
     }
 
     std::unordered_map<TypeId, Type> m_types;
+    std::uint64_t m_class_epoch {0};
     std::unordered_map<std::string, TypeId> m_type_ids_by_name;
     std::unordered_map<TypeTagId, std::string> m_tag_names;
     std::unordered_map<TypeId, Cls> m_classes;

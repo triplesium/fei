@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -44,6 +45,7 @@ class Cls {
     std::unordered_map<std::string, std::vector<std::unique_ptr<Method>>>
         m_methods;
     std::vector<std::unique_ptr<Constructor>> m_constructors;
+    std::uint64_t m_property_revision {0};
 
     using ToStringFunc = std::string (*)(Ref);
     ToStringFunc m_to_string_func = nullptr;
@@ -63,6 +65,7 @@ class Cls {
         Registry::instance().register_type<std::remove_cvref_t<MemberType>>();
         m_properties[name] =
             std::make_unique<PropertyImpl<P>>(name, member_ptr);
+        ++m_property_revision;
         return *this;
     }
 
@@ -70,6 +73,7 @@ class Cls {
     add_offset_property(std::string name, TypeId type_id, std::size_t offset) {
         m_properties[name] =
             std::make_unique<OffsetProperty>(name, m_type_id, type_id, offset);
+        ++m_property_revision;
         return *this;
     }
 
@@ -135,6 +139,7 @@ class Cls {
     std::vector<Property*> get_properties() const;
 
     TypeId type_id() const { return m_type_id; }
+    std::uint64_t property_revision() const { return m_property_revision; }
 };
 
 } // namespace ets

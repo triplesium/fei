@@ -419,6 +419,7 @@ bool Registry::has_enum(TypeId id) const {
 }
 
 void Registry::clear_generated_metadata() {
+    ++m_class_epoch;
     m_classes.clear();
     m_enums.clear();
     m_tag_names.clear();

@@ -62,6 +62,11 @@ struct LuauTestError {
     int code {0};
 };
 
+struct LuauPropertyCacheTarget {
+    int first {0};
+    int second {0};
+};
+
 enum class LuauTestMode {
     Idle,
     Active,
@@ -1215,6 +1220,60 @@ TEST_CASE(
     CHECK(
         query_mutation.error().message.find("read-only") != std::string::npos
     );
+}
+
+TEST_CASE(
+    "Luau property cache follows reflected property replacement",
+    "[scripting_luau][borrow][property][cache]"
+) {
+    auto& registry = Registry::instance();
+    registry.register_cls<LuauPropertyCacheTarget>().add_property(
+        "value",
+        &LuauPropertyCacheTarget::first
+    );
+    const ScriptSource source {
+        .name = "property_cache.luau",
+        .content = R"(
+            local function increment(
+                target: ResRW<LuauPropertyCacheTarget>
+            )
+                target.value += 1
+            end
+
+            export local PropertyCachePlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, increment)
+                end,
+            }
+        )",
+    };
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact);
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module);
+
+    LuauPropertyCacheTarget target {.first = 1, .second = 10};
+    Ref target_ref {target};
+    REQUIRE(runtime.call_module_function(
+        *module,
+        "increment",
+        std::span<const Ref> {&target_ref, 1}
+    ));
+    CHECK(target.first == 2);
+    CHECK(target.second == 10);
+
+    registry.register_cls<LuauPropertyCacheTarget>().add_property(
+        "value",
+        &LuauPropertyCacheTarget::second
+    );
+    REQUIRE(runtime.call_module_function(
+        *module,
+        "increment",
+        std::span<const Ref> {&target_ref, 1}
+    ));
+    CHECK(target.first == 2);
+    CHECK(target.second == 11);
 }
 
 TEST_CASE(

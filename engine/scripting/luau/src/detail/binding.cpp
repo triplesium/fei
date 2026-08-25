@@ -17,11 +17,14 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <lua.h>
 #include <lualib.h>
 #include <memory>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -61,12 +64,65 @@ struct LuauTypeToken {
     TypeId type;
 };
 
+struct TransparentStringHash {
+    using is_transparent = void;
+
+    std::size_t operator()(std::string_view value) const noexcept {
+        return std::hash<std::string_view> {}(value);
+    }
+};
+
+enum class LuauPrimitiveKind {
+    None,
+    Entity,
+    Boolean,
+    Float,
+    Double,
+    SignedChar,
+    UnsignedChar,
+    Short,
+    UnsignedShort,
+    Int,
+    UnsignedInt,
+    Long,
+    UnsignedLong,
+    LongLong,
+    UnsignedLongLong,
+    String,
+};
+
+struct LuauPropertyBinding {
+    Property* property {nullptr};
+    LuauPrimitiveKind primitive_kind {LuauPrimitiveKind::None};
+};
+
+using LuauPropertyMap = std::unordered_map<
+    std::string,
+    LuauPropertyBinding,
+    TransparentStringHash,
+    std::equal_to<>>;
+
+struct LuauClassBinding {
+    Cls* cls {nullptr};
+    std::uint64_t property_revision {0};
+    LuauPropertyMap properties;
+};
+
+struct LuauBindingCache {
+    std::uint64_t class_epoch {0};
+    std::unordered_map<TypeId, LuauClassBinding> classes;
+};
+
 bool borrow_is_valid(const ScriptBorrowScope* scope, ScriptBorrowToken token) {
     return scope != nullptr && scope->valid(token);
 }
 
 void destroy_object(void* userdata) {
     static_cast<LuauObject*>(userdata)->~LuauObject();
+}
+
+void destroy_binding_cache(void* userdata) {
+    static_cast<LuauBindingCache*>(userdata)->~LuauBindingCache();
 }
 
 LuauObject& check_object(lua_State* state, int index) {
@@ -83,6 +139,118 @@ LuauObject& check_object(lua_State* state, int index) {
 int raise_message(lua_State* state, const std::string& message) {
     luaL_error(state, "%s", message.c_str());
     return 0;
+}
+
+LuauBindingCache& binding_cache(lua_State* state) {
+    auto* cache = static_cast<LuauBindingCache*>(
+        lua_touserdata(state, lua_upvalueindex(1))
+    );
+    if (cache == nullptr) {
+        luaL_error(state, "Luau reflection binding cache is unavailable");
+    }
+    return *cache;
+}
+
+LuauPrimitiveKind primitive_kind(TypeId type) {
+    if (type == type_id<Entity>()) {
+        return LuauPrimitiveKind::Entity;
+    }
+    if (type == type_id<bool>()) {
+        return LuauPrimitiveKind::Boolean;
+    }
+    if (type == type_id<float>()) {
+        return LuauPrimitiveKind::Float;
+    }
+    if (type == type_id<double>()) {
+        return LuauPrimitiveKind::Double;
+    }
+    if (type == type_id<signed char>()) {
+        return LuauPrimitiveKind::SignedChar;
+    }
+    if (type == type_id<unsigned char>()) {
+        return LuauPrimitiveKind::UnsignedChar;
+    }
+    if (type == type_id<short>()) {
+        return LuauPrimitiveKind::Short;
+    }
+    if (type == type_id<unsigned short>()) {
+        return LuauPrimitiveKind::UnsignedShort;
+    }
+    if (type == type_id<int>()) {
+        return LuauPrimitiveKind::Int;
+    }
+    if (type == type_id<unsigned int>()) {
+        return LuauPrimitiveKind::UnsignedInt;
+    }
+    if (type == type_id<long>()) {
+        return LuauPrimitiveKind::Long;
+    }
+    if (type == type_id<unsigned long>()) {
+        return LuauPrimitiveKind::UnsignedLong;
+    }
+    if (type == type_id<long long>()) {
+        return LuauPrimitiveKind::LongLong;
+    }
+    if (type == type_id<unsigned long long>()) {
+        return LuauPrimitiveKind::UnsignedLongLong;
+    }
+    if (type == type_id<std::string>()) {
+        return LuauPrimitiveKind::String;
+    }
+    return LuauPrimitiveKind::None;
+}
+
+Result<LuauPropertyBinding&, std::string>
+resolve_property(LuauBindingCache& cache, TypeId type, std::string_view name) {
+    auto& registry = Registry::instance();
+    if (cache.class_epoch != registry.class_epoch()) {
+        cache.classes.clear();
+        cache.class_epoch = registry.class_epoch();
+    }
+
+    auto cached_class = cache.classes.find(type);
+    if (cached_class == cache.classes.end()) {
+        auto cls = registry.try_get_cls(type);
+        if (!cls) {
+            return failure(std::move(cls.error().message));
+        }
+        cached_class =
+            cache.classes
+                .emplace(
+                    type,
+                    LuauClassBinding {
+                        .cls = &*cls,
+                        .property_revision = cls->property_revision(),
+                    }
+                )
+                .first;
+    } else if (
+        cached_class->second.property_revision !=
+        cached_class->second.cls->property_revision()
+    ) {
+        cached_class->second.properties.clear();
+        cached_class->second.property_revision =
+            cached_class->second.cls->property_revision();
+    }
+
+    auto cached_property = cached_class->second.properties.find(name);
+    if (cached_property != cached_class->second.properties.end()) {
+        return cached_property->second;
+    }
+    auto property =
+        cached_class->second.cls->try_get_property(std::string {name});
+    if (!property) {
+        return failure(std::move(property.error().message));
+    }
+    auto [cached, inserted] = cached_class->second.properties.emplace(
+        std::string {name},
+        LuauPropertyBinding {
+            .property = &*property,
+            .primitive_kind = primitive_kind(property->type_id()),
+        }
+    );
+    static_cast<void>(inserted);
+    return cached->second;
 }
 
 bool push_primitive(lua_State* state, Ref ref) {
@@ -135,6 +303,9 @@ void push_ref(lua_State* state, Ref ref, const LuauObject& parent) {
         lua_pushnil(state);
         return;
     }
+    if (push_primitive(state, ref)) {
+        return;
+    }
     auto adapter =
         Registry::instance().try_get_container_adapter(ref.type_id());
     if (adapter && adapter->kind() == ContainerKind::Optional) {
@@ -156,9 +327,186 @@ void push_ref(lua_State* state, Ref ref, const LuauObject& parent) {
         push_ref(state, *value, parent);
         return;
     }
-    if (!push_primitive(state, ref)) {
-        push_object(state, ref, parent.owner, parent.scope, parent.token);
+    push_object(state, ref, parent.owner, parent.scope, parent.token);
+}
+
+void push_property_ref(
+    lua_State* state,
+    Ref ref,
+    const LuauObject& parent,
+    LuauPrimitiveKind kind
+) {
+    switch (kind) {
+        case LuauPrimitiveKind::Entity:
+            lua_pushunsigned(state, ref.get_const<Entity>().value);
+            return;
+        case LuauPrimitiveKind::Boolean:
+            lua_pushboolean(state, ref.get_const<bool>());
+            return;
+        case LuauPrimitiveKind::Float:
+            lua_pushnumber(state, static_cast<double>(ref.get_const<float>()));
+            return;
+        case LuauPrimitiveKind::Double:
+            lua_pushnumber(state, ref.get_const<double>());
+            return;
+        case LuauPrimitiveKind::SignedChar:
+            lua_pushinteger(state, ref.get_const<signed char>());
+            return;
+        case LuauPrimitiveKind::UnsignedChar:
+            lua_pushinteger(state, ref.get_const<unsigned char>());
+            return;
+        case LuauPrimitiveKind::Short:
+            lua_pushinteger(state, ref.get_const<short>());
+            return;
+        case LuauPrimitiveKind::UnsignedShort:
+            lua_pushinteger(state, ref.get_const<unsigned short>());
+            return;
+        case LuauPrimitiveKind::Int:
+            lua_pushinteger(state, ref.get_const<int>());
+            return;
+        case LuauPrimitiveKind::UnsignedInt:
+            lua_pushinteger(
+                state,
+                static_cast<lua_Integer>(ref.get_const<unsigned int>())
+            );
+            return;
+        case LuauPrimitiveKind::Long:
+            lua_pushinteger(state, ref.get_const<long>());
+            return;
+        case LuauPrimitiveKind::UnsignedLong:
+            lua_pushinteger(
+                state,
+                static_cast<lua_Integer>(ref.get_const<unsigned long>())
+            );
+            return;
+        case LuauPrimitiveKind::LongLong:
+            lua_pushinteger(
+                state,
+                static_cast<lua_Integer>(ref.get_const<long long>())
+            );
+            return;
+        case LuauPrimitiveKind::UnsignedLongLong:
+            lua_pushinteger(
+                state,
+                static_cast<lua_Integer>(ref.get_const<unsigned long long>())
+            );
+            return;
+        case LuauPrimitiveKind::String: {
+            const auto& value = ref.get_const<std::string>();
+            lua_pushlstring(state, value.data(), value.size());
+            return;
+        }
+        case LuauPrimitiveKind::None:
+            push_ref(state, ref, parent);
+            return;
     }
+}
+
+template<typename T>
+Result<bool, InvokeFailure>
+set_property_value(Property& property, Ref object, T value) {
+    auto assigned = property.set(object, Ref(value));
+    if (!assigned) {
+        return failure(std::move(assigned.error()));
+    }
+    return true;
+}
+
+Result<bool, InvokeFailure> try_set_primitive_property(
+    lua_State* state,
+    int index,
+    Ref object,
+    const LuauPropertyBinding& binding
+) {
+    const auto incompatible = [&]() -> Result<bool, InvokeFailure> {
+        return failure(
+            InvokeFailure::invalid_call(
+                "value is incompatible with reflected type '" +
+                type_name(binding.property->type_id()) + "'"
+            )
+        );
+    };
+    switch (binding.primitive_kind) {
+        case LuauPrimitiveKind::Entity:
+            if (!lua_isnumber(state, index)) {
+                return incompatible();
+            }
+            return set_property_value(
+                *binding.property,
+                object,
+                Entity {
+                    static_cast<std::uint32_t>(lua_tounsigned(state, index)),
+                }
+            );
+        case LuauPrimitiveKind::Boolean:
+            if (!lua_isboolean(state, index)) {
+                return incompatible();
+            }
+            return set_property_value(
+                *binding.property,
+                object,
+                lua_toboolean(state, index) != 0
+            );
+        case LuauPrimitiveKind::Float:
+            if (!lua_isnumber(state, index)) {
+                return incompatible();
+            }
+            return set_property_value(
+                *binding.property,
+                object,
+                static_cast<float>(lua_tonumber(state, index))
+            );
+        case LuauPrimitiveKind::Double:
+            if (!lua_isnumber(state, index)) {
+                return incompatible();
+            }
+            return set_property_value(
+                *binding.property,
+                object,
+                lua_tonumber(state, index)
+            );
+        case LuauPrimitiveKind::Int:
+            if (!lua_isnumber(state, index)) {
+                return incompatible();
+            }
+            return set_property_value(
+                *binding.property,
+                object,
+                static_cast<int>(lua_tointeger(state, index))
+            );
+        case LuauPrimitiveKind::UnsignedInt:
+            if (!lua_isnumber(state, index)) {
+                return incompatible();
+            }
+            return set_property_value(
+                *binding.property,
+                object,
+                lua_tounsigned(state, index)
+            );
+        case LuauPrimitiveKind::String: {
+            if (!lua_isstring(state, index)) {
+                return incompatible();
+            }
+            std::size_t size = 0;
+            const char* text = lua_tolstring(state, index, &size);
+            return set_property_value(
+                *binding.property,
+                object,
+                std::string(text, size)
+            );
+        }
+        case LuauPrimitiveKind::None:
+        case LuauPrimitiveKind::SignedChar:
+        case LuauPrimitiveKind::UnsignedChar:
+        case LuauPrimitiveKind::Short:
+        case LuauPrimitiveKind::UnsignedShort:
+        case LuauPrimitiveKind::Long:
+        case LuauPrimitiveKind::UnsignedLong:
+        case LuauPrimitiveKind::LongLong:
+        case LuauPrimitiveKind::UnsignedLongLong:
+            return false;
+    }
+    return false;
 }
 
 void push_owned_value(lua_State* state, Val value) {
@@ -726,14 +1074,19 @@ int borrowed_index(lua_State* state) {
         push_luau_asset_server_member(state, key)) {
         return 1;
     }
-    auto value = script_get_property(object.ref, key);
-    if (value) {
-        push_ref(state, *value, object);
-        return 1;
+    auto property =
+        resolve_property(binding_cache(state), object.ref.type_id(), key);
+    if (!property) {
+        if (script_has_method(object.ref, key)) {
+            lua_pushstring(state, key);
+            lua_pushcclosure(state, invoke_method, key, 1);
+            return 1;
+        }
+        return raise_message(state, property.error());
     }
-    if (script_has_method(object.ref, key)) {
-        lua_pushstring(state, key);
-        lua_pushcclosure(state, invoke_method, key, 1);
+    auto value = property->property->get(object.ref);
+    if (value) {
+        push_property_ref(state, *value, object, property->primitive_kind);
         return 1;
     }
     return raise_message(state, value.error().message);
@@ -748,19 +1101,24 @@ int borrowed_newindex(lua_State* state) {
         luaL_error(state, "attempt to mutate a read-only ECS borrow");
     }
     const char* key = luaL_checkstring(state, 2);
-    auto cls = Registry::instance().try_get_cls(object.ref.type_id());
-    if (!cls) {
-        return raise_message(state, cls.error().message);
-    }
-    auto property = cls->try_get_property(key);
+    auto property =
+        resolve_property(binding_cache(state), object.ref.type_id(), key);
     if (!property) {
-        return raise_message(state, property.error().message);
+        return raise_message(state, property.error());
     }
-    auto value = value_for_type(state, 3, property->type_id());
+    auto primitive_assignment =
+        try_set_primitive_property(state, 3, object.ref, *property);
+    if (!primitive_assignment) {
+        return raise_message(state, primitive_assignment.error().message);
+    }
+    if (*primitive_assignment) {
+        return 0;
+    }
+    auto value = value_for_type(state, 3, property->property->type_id());
     if (!value) {
         return raise_message(state, value.error());
     }
-    auto assigned = script_set_property(object.ref, key, value->ref());
+    auto assigned = property->property->set(object.ref, value->ref());
     if (!assigned) {
         return raise_message(state, assigned.error().message);
     }
@@ -906,10 +1264,20 @@ int borrowed_iter(lua_State* state) {
 
 void install_luau_borrowed_object_metatable(lua_State* state) {
     if (luaL_newmetatable(state, c_borrowed_metatable)) {
-        lua_pushcfunction(state, borrowed_index, "borrowed.__index");
-        lua_setfield(state, -2, "__index");
-        lua_pushcfunction(state, borrowed_newindex, "borrowed.__newindex");
-        lua_setfield(state, -2, "__newindex");
+        const int metatable = lua_gettop(state);
+        auto* cache = new (lua_newuserdatadtor(
+            state,
+            sizeof(LuauBindingCache),
+            destroy_binding_cache
+        )) LuauBindingCache {};
+        static_cast<void>(cache);
+        lua_pushvalue(state, -1);
+        lua_pushcclosure(state, borrowed_index, "borrowed.__index", 1);
+        lua_setfield(state, metatable, "__index");
+        lua_pushvalue(state, -1);
+        lua_pushcclosure(state, borrowed_newindex, "borrowed.__newindex", 1);
+        lua_setfield(state, metatable, "__newindex");
+        lua_pop(state, 1);
         lua_pushcfunction(state, borrowed_equal, "borrowed.__eq");
         lua_setfield(state, -2, "__eq");
         lua_pushcfunction(state, borrowed_call, "borrowed.__call");
