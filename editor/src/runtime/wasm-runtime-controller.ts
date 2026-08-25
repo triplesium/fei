@@ -4,8 +4,8 @@ import type {
     RuntimeProjectFile,
     RuntimeSnapshot,
 } from "./types";
+import { runtimeSource } from "@editor-platform/runtime";
 
-const runtimeSource = "/runtime/index.html";
 const startupTimeoutMilliseconds = 60_000;
 const statusPollMilliseconds = 100;
 

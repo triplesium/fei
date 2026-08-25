@@ -132,5 +132,9 @@ target("entisium-editor-demo")
             },
             {curdir = os.projectdir()}
         )
+        os.cp(
+            path.join(output_root, "runtime"),
+            path.join(editor_output, "runtime")
+        )
     end)
 end

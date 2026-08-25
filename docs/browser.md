@@ -101,9 +101,15 @@ npm start -- --project ../samples/browser_project/project
 
 The host serves the Editor and runtime from `http://127.0.0.1:3100` by default. Use `ETS_EDITOR_HOST_PORT` to select another port and `ETS_EDITOR_RUNTIME_DIR` to point at a different staged WASM directory. Use `npm run dev -- --project <directory>` when working on the Editor frontend.
 
-The `entisium-editor-demo` output is fully static. Serve the configured output root and open `editor-demo/index.html`; the sibling `runtime/` directory must be served from the same origin. Use HTTPS outside localhost because WebGPU and the File System Access API require a secure context.
+The `entisium-editor-demo` output is fully static and self-contained. Serve the configured output root and open `editor-demo/index.html`; its runtime is packaged under `editor-demo/runtime/`. Use HTTPS outside localhost because WebGPU and the File System Access API require a secure context.
 
 On first launch, the demo copies its configured project into an origin-private browser workspace and opens it automatically. Each project content version receives a separate workspace, so rebuilding the demo does not overwrite edits made to an older version. Edge and Chrome users can also open a user-authorized local folder containing `project.yaml` and project assets; that directory handle is remembered in IndexedDB when permission persists. Play injects the project's text and binary files into an isolated iframe; Stop destroys that iframe. The demo build does not contain the Agent, model settings, Host APIs, or MCP command bridge.
+
+## Deploy the demo to GitHub Pages
+
+The `Deploy Editor Demo to GitHub Pages` workflow builds and deploys the static demo whenever `main` is updated. Its automatic deployment bundles `samples/projects/skyline_strike`. Run the workflow manually from the Actions page to supply a different repository-relative project directory through the `project` input.
+
+In the repository's **Settings > Pages** page, select **GitHub Actions** as the publishing source. The workflow uploads the self-contained `editor-demo/` output directly, so the Editor opens at the Pages site URL with its same-origin `runtime/`; no Host service or API key is required. The deployed site URL is available from the `github-pages` environment after the deploy job completes.
 
 In the full Editor, the supported browser command registry is `window.entisiumEditor.commands`. `window.entisiumEditorAgent` remains a deprecated compatibility alias.
 
