@@ -22,4 +22,11 @@ if not is_plat("wasm") then
         add_files("tests/*.cpp")
         add_deps("entisium-scripting-luau", "entisium-scripting-lua", "entisium-core", "entisium-math")
         add_packages("luau", "lua")
+
+    target("entisium-scripting-luau-query-benchmark")
+        set_kind("binary")
+        set_default(false)
+        add_files("benchmarks/query_benchmark.cpp")
+        add_deps("entisium-scripting-luau")
+        add_packages("luau")
 end
