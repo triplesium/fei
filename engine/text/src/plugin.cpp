@@ -1,10 +1,15 @@
 #include "text/plugin.hpp"
 
 #include "app/app.hpp"
+#include "asset/embed.hpp"
 #include "asset/plugin.hpp"
 #include "text/editable.hpp"
 #include "text/font.hpp"
 #include "text/pipeline.hpp"
+
+#ifndef __EMSCRIPTEN__
+EMBED(text_Cousine_Regular_ttf, "fonts/Cousine-Regular.ttf");
+#endif
 
 namespace ets::text {
 

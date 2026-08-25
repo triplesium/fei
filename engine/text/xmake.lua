@@ -1,8 +1,25 @@
 target("entisium-text")
     set_kind("static")
     add_rules("entisium.reflect")
+if is_plat("wasm") then
+    add_embedded_asset(
+        "fonts/Cousine-Regular.ttf",
+        path.join(os.scriptdir(), "../imgui/fonts/Cousine-Regular.ttf")
+    )
+else
+    add_rules(
+        "utils.bin2obj",
+        {
+            extensions = {".ttf"},
+            symbol_prefix = "_binary_text_"
+        }
+    )
+end
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")
+if not is_plat("wasm") then
+    add_files("../imgui/fonts/Cousine-Regular.ttf", {zeroend = true})
+end
     add_includedirs("include", {public = true})
     add_deps("entisium-base", "entisium-refl", "entisium-ecs", "entisium-app", "entisium-asset", "entisium-math", "entisium-core")
     add_packages("stb")

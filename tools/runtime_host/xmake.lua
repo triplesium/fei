@@ -6,14 +6,6 @@ target("entisium-runtime-host-core")
         "src/quick_save.cpp",
         "src/snapshot_archive.cpp"
     )
-    add_rules(
-        "utils.bin2obj",
-        {
-            extensions = {".ttf"},
-            symbol_prefix = "_binary_runtime_host_"
-        }
-    )
-    add_files("../../engine/imgui/fonts/Cousine-Regular.ttf", {zeroend = true})
     add_includedirs("include", {public = true})
     add_deps(
         "entisium-base",

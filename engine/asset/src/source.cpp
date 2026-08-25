@@ -32,6 +32,16 @@ bool is_within(
     return !relative.is_absolute() && *relative.begin() != "..";
 }
 
+#ifdef __EMSCRIPTEN__
+const FilesystemAssetSource& wasm_embedded_assets() {
+    static const FilesystemAssetSource source {
+        "embedded",
+        "/entisium/embedded",
+    };
+    return source;
+}
+#endif
+
 } // namespace
 
 Reader AssetSource::get_reader(const std::filesystem::path& path) const {
@@ -208,16 +218,25 @@ std::string EmbeddedAssetSource::name() const {
 }
 
 bool EmbeddedAssetSource::exists(const std::filesystem::path& path) const {
-    return EmbeddedAssets::has(path.generic_string());
+    const bool registered = EmbeddedAssets::has(path.generic_string());
+#ifdef __EMSCRIPTEN__
+    return registered || wasm_embedded_assets().exists(path);
+#else
+    return registered;
+#endif
 }
 
 Result<Reader, std::string>
 EmbeddedAssetSource::try_get_reader(const std::filesystem::path& path) const {
     const auto name = path.generic_string();
-    if (!EmbeddedAssets::has(name)) {
-        return failure("No embedded asset found with name: " + name);
+    if (EmbeddedAssets::has(name)) {
+        return EmbeddedAssets::get(name).reader();
     }
-    return EmbeddedAssets::get(name).reader();
+#ifdef __EMSCRIPTEN__
+    return wasm_embedded_assets().try_get_reader(path);
+#else
+    return failure("No embedded asset found with name: " + name);
+#endif
 }
 
 } // namespace ets

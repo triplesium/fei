@@ -1,7 +1,6 @@
 #include "runtime_host/application.hpp"
 
 #include "app/reflection_plugin.hpp"
-#include "asset/embed.hpp"
 #include "asset/server.hpp"
 #include "base/env.hpp"
 #include "base/log.hpp"
@@ -59,8 +58,6 @@
 #define STB_IMAGE_WRITE_STATIC
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image_write.h>
-
-EMBED(runtime_host_Cousine_Regular_ttf, "fonts/Cousine-Regular.ttf");
 
 namespace ets::runtime_host {
 namespace {

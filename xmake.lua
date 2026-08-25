@@ -115,6 +115,20 @@ add_defines("ETS_PROFILE_OUTPUT_PATH=\"" .. project_dir .. "/build/profile/lates
 
 local shader_sources = {}
 
+function add_embedded_asset(name, file)
+    local normalized_name = name:gsub("\\", "/")
+    if #normalized_name == 0 or normalized_name:sub(1, 1) == "/" or
+        normalized_name:find("..", 1, true) then
+        raise("invalid embedded asset name: " .. name)
+    end
+
+    add_values(
+        "entisium.embedded_assets",
+        normalized_name .. "=" .. path.absolute(file):gsub("\\", "/"),
+        {public = true}
+    )
+end
+
 function add_asset_bundle(prefix, root)
     if not prefix or #prefix == 0 then
         raise("asset bundle prefix is required")
@@ -185,6 +199,30 @@ local function target_asset_bundles(target)
         })
     end
     return bundles
+end
+
+local function target_embedded_assets(target)
+    local assets = {}
+    local owners = {target}
+    table.join2(owners, target:orderdeps())
+    for _, owner in ipairs(owners) do
+        for _, entry in ipairs(
+            table.wrap(owner:values("entisium.embedded_assets"))
+        ) do
+            local separator = entry:find("=", 1, true)
+            if not separator then
+                raise("invalid embedded asset: " .. entry)
+            end
+            local name = entry:sub(1, separator - 1)
+            local file = entry:sub(separator + 1)
+            local existing = assets[name]
+            if existing and existing ~= file then
+                raise("embedded asset name already registered: " .. name)
+            end
+            assets[name] = file
+        end
+    end
+    return assets
 end
 
 function add_shader_source(prefix, root)
@@ -271,6 +309,47 @@ rule("entisium.shader_sources")
 rule_end()
 
 add_rules("entisium.shader_sources")
+
+rule("entisium.embedded_assets")
+    after_load(function(target)
+        if not target:is_plat("wasm") or target:kind() ~= "binary" then
+            return
+        end
+
+        local assets = target_embedded_assets(target)
+        local names = table.keys(assets)
+        table.sort(names)
+        for _, name in ipairs(names) do
+            local file = assets[name]
+            target:add(
+                "ldflags",
+                "--preload-file=" .. file .. "@/entisium/embedded/" .. name,
+                {force = true}
+            )
+            target:add("extrafiles", file)
+        end
+    end)
+    before_build(function(target)
+        if not target:is_plat("wasm") or target:kind() ~= "binary" then
+            return
+        end
+
+        import("core.project.depend")
+        local files = table.values(target_embedded_assets(target))
+        table.sort(files)
+        depend.on_changed(function()
+            os.rm(target:targetfile())
+        end, {
+            dependfile = target:dependfile(
+                path.join(target:autogendir(), "embedded_assets")
+            ),
+            files = files,
+            values = files,
+        })
+    end)
+rule_end()
+
+add_rules("entisium.embedded_assets")
 
 rule("entisium.asset_bundles")
     after_load(function(target)
