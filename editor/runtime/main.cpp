@@ -6,6 +6,7 @@
 #include "ecs/system_params.hpp"
 #include "graphics_webgpu_browser/plugin.hpp"
 #include "project/project.hpp"
+#include "project_clock.hpp"
 #include "project_runtime/runtime.hpp"
 #include "project_scripting_luau/playtest.hpp"
 #include "project_scripting_luau/plugin.hpp"
@@ -172,7 +173,8 @@ void report_project_scripts(
 
 void report_project_frame(
     ResRO<SpritePhase> phase,
-    ResRW<ProjectPresentation> presentation
+    ResRW<ProjectPresentation> presentation,
+    ResRO<ProjectPresentationSignal> signal
 ) {
     if (presentation->published || !phase->active || phase->batches.empty()) {
         return;
@@ -184,8 +186,17 @@ void report_project_frame(
                 "web project presented";
         }
     );
+    signal->present();
     publish_status("web project presented");
     presentation->published = true;
+}
+
+void release_project_clock(
+    ResRW<ProjectClockGate> gate,
+    ResRW<Time> time,
+    ResRW<FixedTime> fixed_time
+) {
+    gate->release_if_presented(*time, *fixed_time);
 }
 
 class BrowserProjectHostPlugin final : public Plugin {
@@ -201,11 +212,15 @@ class BrowserProjectHostPlugin final : public Plugin {
     }
 
     void setup(App& app) override {
+        ProjectPresentationSignal presentation_signal;
         app.add_resource(ProjectStatus {})
+            .add_resource(ProjectClockGate(presentation_signal))
             .add_systems(First, publish_runtime_world)
+            .add_systems(PreUpdate, release_project_clock)
             .add_systems(Last, report_project_scripts);
         app.sub_app<RenderApp>()
             .add_resource(ProjectPresentation {})
+            .add_resource(std::move(presentation_signal))
             .configure_sets(
                 RenderLast,
                 ProjectRenderSystems::Capture {}
@@ -220,6 +235,10 @@ class BrowserProjectHostPlugin final : public Plugin {
                 report_project_frame | in_set<ProjectRenderSystems::Report>() |
                     main_thread()
             );
+    }
+
+    void finish(App& app) override {
+        app.resource<ProjectClockGate>().arm(app.resource<Time>());
     }
 };
 

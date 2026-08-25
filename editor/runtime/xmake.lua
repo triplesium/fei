@@ -1,9 +1,27 @@
+target("entisium-editor-runtime-clock")
+    set_kind("static")
+    add_headerfiles("project_clock.hpp")
+    add_files("project_clock.cpp")
+    add_includedirs(".", {public = true})
+    add_deps("entisium-core")
+
+if not is_plat("wasm") then
+target("entisium-editor-runtime-clock-tests")
+    set_kind("binary")
+    set_default(false)
+    add_rules("entisium.test")
+    add_files("tests/*.cpp")
+    add_deps("entisium-editor-runtime-clock")
+end
+
+if is_plat("wasm") then
 target("entisium-editor-runtime")
     set_kind("binary")
     add_rules("entisium.reflect")
     add_files("main.cpp")
     add_deps(
         "entisium-core",
+        "entisium-editor-runtime-clock",
         "entisium-project-runtime",
         "entisium-project-scripting-luau",
         "entisium-runtime-inspection",
@@ -59,3 +77,4 @@ target("entisium-editor-runtime")
             end
         end
     end)
+end

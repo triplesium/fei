@@ -35,7 +35,7 @@ export type AgentControl = {
 }
 
 local function apply_agent_control(
-    time: ResRO<core.Time>,
+    time: ResRO<core.FixedTime>,
     control: ResRO<AgentControl>,
     players: Query<Write<core.Transform2d>, With<Player>>
 )

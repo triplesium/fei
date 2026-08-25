@@ -343,7 +343,6 @@ if is_plat("wasm") then
     includes("tools/reflgen")
     includes("engine")
     includes("samples/browser")
-    includes("editor/runtime")
     includes("samples/browser_project")
 else
     includes("tools")
@@ -351,3 +350,5 @@ else
     includes("samples")
     includes("tests")
 end
+
+includes("editor/runtime")
