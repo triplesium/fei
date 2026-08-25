@@ -13,9 +13,13 @@ void Time::tick() {
     float raw_delta = 0.0f;
     if (m_fixed_delta) {
         raw_delta = *m_fixed_delta;
+    } else if (!m_last_tick_time) {
+        m_delta_time = 0.0f;
+        m_last_tick_time = now;
+        return;
     } else {
         raw_delta = std::chrono::duration_cast<std::chrono::duration<float>>(
-                        now - m_last_tick_time
+                        now - *m_last_tick_time
         )
                         .count();
     }

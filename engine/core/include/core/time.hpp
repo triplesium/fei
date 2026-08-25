@@ -24,7 +24,7 @@ struct FixedTimeSnapshotState {
 
 ETS_REFLECT(Resource, ScriptPrelude)
 struct Time {
-    Time() : m_last_tick_time(std::chrono::steady_clock::now()) {}
+    Time() = default;
 
     void tick();
     float delta() const;
@@ -42,9 +42,7 @@ struct Time {
     float time_scale {1.0f};
 
   private:
-    std::chrono::steady_clock::time_point m_last_tick_time {
-        std::chrono::steady_clock::now()
-    };
+    Optional<std::chrono::steady_clock::time_point> m_last_tick_time;
     float m_delta_time = 0.0f;
     float m_elapsed_time = 0.0f;
     float m_max_delta = 0.25f;

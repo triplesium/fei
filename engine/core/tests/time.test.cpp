@@ -4,9 +4,11 @@
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace ets;
@@ -57,6 +59,16 @@ TEST_CASE("Time applies time scale to delta", "[core][time]") {
 
     REQUIRE(time.delta() == 0.0f);
     REQUIRE(time.elapsed_time() >= 0.0f);
+}
+
+TEST_CASE("Time ignores time before its first real tick", "[core][time]") {
+    Time time;
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    time.tick();
+
+    CHECK(time.delta() == 0.0f);
+    CHECK(time.elapsed_time() == 0.0f);
 }
 
 TEST_CASE(
