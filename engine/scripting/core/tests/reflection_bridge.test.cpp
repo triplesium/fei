@@ -82,8 +82,7 @@ TEST_CASE(
     registry.add_generated_annotation<scripting_test::HiddenPreludeType>(
         "NoScript"
     );
-    const auto& hidden =
-        registry.get_type<scripting_test::HiddenPreludeType>();
+    const auto& hidden = registry.get_type<scripting_test::HiddenPreludeType>();
     CHECK_FALSE(is_script_visible(hidden));
     CHECK_FALSE(is_script_prelude(hidden));
 }
