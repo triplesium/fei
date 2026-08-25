@@ -69,19 +69,16 @@ App make_script_app() {
                     counter.value += 1
                 end
 
-                return {
-                    types = {
-                        Counter = {
-                            value = field(i32, 0),
-                            target = field(entity, 0),
-                        },
-                    },
-                    resources = {
-                        Counter = {},
-                    },
-                    systems = {
-                        [Update] = { tick },
-                    },
+                export type Counter = {
+                    value: i32,
+                    target: entity,
+                }
+
+                export local SnapshotCounterPlugin = Plugin.new {
+                    build = function(app: App)
+                        app:insert_resource(Counter {})
+                        app:add_system(Update, tick)
+                    end,
                 }
             )",
         }
@@ -213,8 +210,8 @@ TEST_CASE(
         LuauScriptSource {
             .name = "additional_module.luau",
             .content = R"(
-                return {
-                    systems = {},
+                export type AdditionalState = {
+                    value: i32,
                 }
             )",
         }
