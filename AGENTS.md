@@ -54,10 +54,6 @@
 - `xmake tidy --fix entisium-math`: apply clang-tidy fix-its in place for one
   target.
 
-## Sample Rendering Debugging
-
-- When debugging a running `sample-*` target, use the `devtools` skill.
-
 ## Coding Style & Naming Conventions
 
 - Follow `.editorconfig`, `.clang-format`, and nearby code rather than
