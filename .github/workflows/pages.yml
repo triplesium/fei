@@ -26,6 +26,7 @@ jobs:
     timeout-minutes: 120
     env:
       EDITOR_DEMO_PROJECT: ${{ inputs.project || 'samples/projects/skyline_strike' }}
+      LLVM_ROOT: /usr/lib/llvm-18
 
     steps:
       - name: Checkout repository
@@ -45,6 +46,13 @@ jobs:
           package-cache: true
           package-cache-key: ubuntu-wasm-release-emscripten6-slang2026.14.1
           project-path: '.'
+
+      - name: Install libclang
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libclang-18-dev
+          test -f "$LLVM_ROOT/include/clang-c/Index.h"
+          test -f "$LLVM_ROOT/lib/libclang.so"
 
       - name: Configure release demo
         run: >-
