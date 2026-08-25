@@ -47,7 +47,7 @@ jobs:
 
   xmake:
     name: tests / Windows / debug
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 120
     env:
       LLVM_ROOT: 'C:\Program Files\LLVM'
@@ -86,4 +86,4 @@ jobs:
         run: xmake build -y -vD entisium-reflgen
 
       - name: Run all tests
-        run: xmake test -y
+        run: xmake test -y -vD
