@@ -22,11 +22,11 @@ concurrency:
 jobs:
   build:
     name: build / WebAssembly / release
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     timeout-minutes: 120
     env:
       EDITOR_DEMO_PROJECT: ${{ inputs.project || 'samples/projects/skyline_strike' }}
-      LLVM_ROOT: /usr/lib/llvm-18
+      LLVM_ROOT: 'C:\Program Files\LLVM'
 
     steps:
       - name: Checkout repository
@@ -44,20 +44,13 @@ jobs:
         with:
           xmake-version: '3.0.9'
           package-cache: true
-          package-cache-key: ubuntu-wasm-release-emscripten6-slang2026.14.1
+          package-cache-key: windows-wasm-release-emscripten6-slang2026.14.1
           project-path: '.'
-
-      - name: Install libclang
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y libclang-18-dev
-          test -f "$LLVM_ROOT/include/clang-c/Index.h"
-          test -f "$LLVM_ROOT/lib/libclang.so"
 
       - name: Configure release demo
         run: >-
           xmake f -p wasm -m release --shader_targets=webgpu
-          --editor_demo_project="$EDITOR_DEMO_PROJECT" -y
+          --editor_demo_project="$env:EDITOR_DEMO_PROJECT" -y
 
       - name: Build release demo
         run: xmake build -y -vD entisium-editor-demo
