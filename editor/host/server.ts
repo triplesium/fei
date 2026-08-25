@@ -497,7 +497,7 @@ export function createEditorHost(options: HostOptions): {
                 return;
             }
 
-            if (url.pathname.startsWith("/sample-browser-project.")) {
+            if (url.pathname.startsWith("/runtime/")) {
                 await serveRuntimeAsset(options.runtimeDirectory, url.pathname, response);
                 return;
             }
@@ -581,17 +581,20 @@ async function serveRuntimeAsset(
     pathname: string,
     response: ServerResponse,
 ): Promise<void> {
-    const name = pathname.slice(1);
-    if (!/^sample-browser-project\.(?:data|html|js|wasm)$/.test(name)) {
+    const name = decodeURIComponent(pathname.slice("/runtime/".length));
+    if (
+        name !== "index.html" &&
+        !/^entisium-editor-runtime\.(?:data|js|wasm)$/.test(name)
+    ) {
         json(response, 404, { error: "Unknown WebAssembly runtime asset." });
         return;
     }
-    const file = resolve(directory, name);
+    const file = resolve(directory, "runtime", name);
     try {
         await access(file);
     } catch {
         json(response, 404, {
-            error: "WebAssembly runtime assets have not been built. Run the sample-browser-project build first.",
+            error: "WebAssembly runtime assets have not been built. Run the entisium-editor-runtime build first.",
         });
         return;
     }

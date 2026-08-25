@@ -14,7 +14,7 @@ export default defineConfig({
     server: {
         proxy: {
             "/api": "http://127.0.0.1:3100",
-            "/sample-browser-project": "http://127.0.0.1:3100",
+            "/runtime": "http://127.0.0.1:3100",
         },
     },
     build: {

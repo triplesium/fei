@@ -97,7 +97,7 @@ task("web-editor-smoke")
         import("tasks.browser_smoke", {
             rootdir = path.join(os.projectdir(), "tools")
         }).run({
-            target = "sample-browser-project",
+            target = "entisium-editor-runtime",
             page = "editor/index.html",
             scenario = "editor",
             browser = option.get("browser"),

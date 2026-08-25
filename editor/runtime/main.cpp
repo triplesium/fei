@@ -100,7 +100,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void entisium_inspect_runtime(
     publish_inspection(request_id, true, *response, {}, {});
 }
 
-namespace ets::browser_project_sample {
+namespace ets::editor_runtime {
 namespace {
 
 struct ProjectStatus {
@@ -222,11 +222,11 @@ class BrowserProjectHostPlugin final : public Plugin {
 };
 
 } // namespace
-} // namespace ets::browser_project_sample
+} // namespace ets::editor_runtime
 
 int main() {
     using namespace ets;
-    using namespace ets::browser_project_sample;
+    using namespace ets::editor_runtime;
 
     publish_status("loading web project");
     auto project = Project::load("/entisium/assets/web-project/project.yaml");

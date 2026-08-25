@@ -5,7 +5,7 @@ import type {
     RuntimeSnapshot,
 } from "./types";
 
-const runtimeSource = "../sample-browser-project.html";
+const runtimeSource = "/runtime/index.html";
 const startupTimeoutMilliseconds = 60_000;
 const statusPollMilliseconds = 100;
 

@@ -99,10 +99,10 @@ describe("Editor Host", () => {
         const distDirectory = join(directory, "dist");
         const runtimeDirectory = join(directory, "runtime");
         await mkdir(distDirectory);
-        await mkdir(runtimeDirectory);
+        await mkdir(join(runtimeDirectory, "runtime"), { recursive: true });
         await writeFile(join(distDirectory, "index.html"), "<p>Entisium Editor</p>", "utf8");
         await writeFile(
-            join(runtimeDirectory, "sample-browser-project.html"),
+            join(runtimeDirectory, "runtime", "index.html"),
             "<p>Entisium Runtime</p>",
             "utf8",
         );
@@ -119,12 +119,12 @@ describe("Editor Host", () => {
         const baseUrl = `http://${address.host}:${address.port}`;
 
         try {
-            const runtime = await fetch(`${baseUrl}/sample-browser-project.html`);
+            const runtime = await fetch(`${baseUrl}/runtime/index.html`);
             expect(runtime.status).toBe(200);
             expect(runtime.headers.get("content-type")).toBe("text/html; charset=utf-8");
             expect(await runtime.text()).toContain("Entisium Runtime");
 
-            const unknown = await fetch(`${baseUrl}/sample-browser-project.map`);
+            const unknown = await fetch(`${baseUrl}/runtime/entisium-editor-runtime.map`);
             expect(unknown.status).toBe(404);
         } finally {
             await new Promise<void>((resolveClose) => host.server.close(() => resolveClose()));
