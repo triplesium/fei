@@ -69,7 +69,7 @@ local function initialize_hud(
 )
     local font = assets:load(
         text.Font,
-        "fonts/Cousine-Regular.ttf"
+        "embedded://fonts/Cousine-Regular.ttf"
     )
     if not assets:is_loaded(font) then
         error(assets:load_error(font) or "HUD font did not load")
