@@ -12,11 +12,6 @@
 
 namespace ets {
 
-enum class LuauSystemDeclarationLayout {
-    Flat,
-    ScheduleGroups,
-};
-
 struct LuauImportedFunctionDecl {
     std::string name;
     std::vector<DynamicSystemParamDeclPtr> params;
@@ -50,10 +45,6 @@ struct LuauScriptModuleArtifact {
     std::string bytecode;
     std::string plugin_name;
     std::vector<LuauPluginDependency> plugin_dependencies;
-    bool uses_value_exports {false};
-    LuauSystemDeclarationLayout system_layout {
-        LuauSystemDeclarationLayout::Flat
-    };
     std::vector<TypeId> required_runtime_types;
 };
 

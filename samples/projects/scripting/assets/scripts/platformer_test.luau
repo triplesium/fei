@@ -1,3 +1,20 @@
+export type PlatformPlayer = {
+    velocity_y: f32,
+    speed: f32,
+    grounded: i32,
+}
+
+export type PlatformInput = {
+    horizontal: f32,
+    jump: i32,
+}
+
+export type PlatformState = {
+    player: entity,
+    won: i32,
+    ticks: i32,
+}
+
 local floor_y = -1.85
 
 local function initialize(
@@ -65,7 +82,7 @@ local function initialize(
         Transform2d.new {
             position = Vector2.new(-3.0, floor_y),
         },
-        PlatformPlayer.new()
+        PlatformPlayer.new {speed = 5.0, grounded = 1}
     )
     state.player = player:id()
 end
@@ -113,29 +130,11 @@ local function simulate(
     state.ticks += 1
 end
 
-return {
-    types = {
-        PlatformPlayer = {
-            velocity_y = field(f32, 0.0),
-            speed = field(f32, 5.0),
-            grounded = field(i32, 1),
-        },
-        PlatformInput = {
-            horizontal = field(f32, 0.0),
-            jump = field(i32, 0),
-        },
-        PlatformState = {
-            player = field(entity, 0),
-            won = field(i32, 0),
-            ticks = field(i32, 0),
-        },
-    },
-    resources = {
-        PlatformInput = {},
-        PlatformState = {},
-    },
-    systems = {
-        system(StartUp, initialize),
-        system(Update, simulate),
-    },
+export local PlatformerPlugin = Plugin.new {
+    build = function(app: App)
+        app:add_resource(PlatformInput {})
+        app:add_resource(PlatformState {})
+        app:add_system(StartUp, initialize)
+        app:add_system(Update, simulate)
+    end,
 }

@@ -1,3 +1,10 @@
+export type UiDemoButton = {}
+export type UiDemoLabel = {}
+export type UiDemoState = {
+    button: entity,
+    clicks: i32,
+}
+
 local function initialize(
     commands: Commands,
     assets: ResRW<AssetServer>,
@@ -133,20 +140,10 @@ local function update_button(
     end
 end
 
-return {
-    types = {
-        UiDemoButton = {},
-        UiDemoLabel = {},
-        UiDemoState = {
-            button = field(entity, 0),
-            clicks = field(i32, 0),
-        },
-    },
-    resources = {
-        UiDemoState = {},
-    },
-    systems = {
-        system(StartUp, initialize),
-        system(Update, update_button),
-    },
+export local UiDemoPlugin = Plugin.new {
+    build = function(app: App)
+        app:add_resource(UiDemoState {})
+        app:add_system(StartUp, initialize)
+        app:add_system(Update, update_button)
+    end,
 }

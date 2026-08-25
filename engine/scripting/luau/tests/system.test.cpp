@@ -4,6 +4,7 @@
 #include "asset/server.hpp"
 #include "asset/source.hpp"
 #include "ecs/commands.hpp"
+#include "ecs/dynamic/events.hpp"
 #include "ecs/dynamic/query.hpp"
 #include "ecs/dynamic/world.hpp"
 #include "ecs/state.hpp"
@@ -256,8 +257,10 @@ TEST_CASE(
                 assert(config.value == 7)
             end
 
-            return {
-                systems = { system(Update, verify) },
+            export local TestPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, verify)
+                end,
             }
         )",
     };
@@ -291,8 +294,11 @@ TEST_CASE(
             "ModuleOnlyConfig"
         )
         .add_property("value", &luau_system_test::ModuleOnlyConfig::value);
-    registry.add_generated_annotation_field<
-        luau_system_test::ModuleOnlyConfig>("ScriptModule", "name", "test");
+    registry.add_generated_annotation_field<luau_system_test::ModuleOnlyConfig>(
+        "ScriptModule",
+        "name",
+        "test"
+    );
 
     const ScriptSource source {
         .name = "module_only_type.luau",
@@ -303,8 +309,10 @@ TEST_CASE(
                 assert(config.value == 7)
             end
 
-            return {
-                systems = { system(Update, verify) },
+            export local TestPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, verify)
+                end,
             }
         )",
     };
@@ -323,8 +331,10 @@ TEST_CASE(
         artifact->declaration
     );
     REQUIRE_FALSE(systems);
-    CHECK(systems.error().message.find("is not in ScriptPrelude") !=
-          std::string::npos);
+    CHECK(
+        systems.error().message.find("is not in ScriptPrelude") !=
+        std::string::npos
+    );
     CHECK(systems.error().message.find("@entisium/test") != std::string::npos);
 }
 
@@ -380,11 +390,14 @@ TEST_CASE(
                 state.readonly_rejected = true
             end
 
-            return {
-                systems = {
-                    system(Update, load_asset),
-                    system(Update, reject_readonly_load),
-                },
+            export local AssetPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_systems(
+                        Update,
+                        load_asset,
+                        reject_readonly_load
+                    )
+                end,
             }
         )",
     };
@@ -452,10 +465,10 @@ TEST_CASE(
                 state.spawned = world:spawn(nested):id()
             end
 
-            return {
-                systems = {
-                    system(Update, construct_values),
-                },
+            export local ConstructionPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, construct_values)
+                end,
             }
         )",
     };
@@ -499,6 +512,15 @@ TEST_CASE(
     const ScriptSource source {
         .name = "dynamic_types_system.luau",
         .content = R"(
+            export type Health = {
+                current: i32,
+            }
+
+            export type CombatState = {
+                last_created: i32,
+                ticks: i32,
+            }
+
             local function tick(
                 health_values: Query<Write<Health>>,
                 state: ResRW<CombatState>
@@ -511,24 +533,11 @@ TEST_CASE(
                 end
             end
 
-            return {
-                types = {
-                    Health = {
-                        current = field(i32, 10),
-                    },
-                    CombatState = {
-                        last_created = field(i32, 0),
-                        ticks = field(i32, 0),
-                    },
-                },
-                resources = {
-                    CombatState = {
-                        ticks = 2,
-                    },
-                },
-                systems = {
-                    system(Update, tick),
-                },
+            export local CombatPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_resource(CombatState {ticks = 2})
+                    app:add_system(Update, tick)
+                end,
             }
         )",
     };
@@ -564,7 +573,7 @@ TEST_CASE(
         world.get_component(entity, health_type->id())
     );
     REQUIRE(current.has_value());
-    CHECK(current->get<int>() == 15);
+    CHECK(current->get<int>() == 5);
 
     auto state_type =
         Registry::instance().try_get_type("dynamic_types_system.CombatState");
@@ -630,10 +639,10 @@ TEST_CASE(
                 world:set_resource(state:make_error(total))
             end
 
-            return {
-                systems = {
-                    system(Update, use_world),
-                },
+            export local WorldPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, use_world)
+                end,
             }
         )",
     };
@@ -684,6 +693,11 @@ TEST_CASE(
     const ScriptSource source {
         .name = "optional_entity_system.luau",
         .content = R"(
+            export type TargetState = {
+                observed: entity,
+                target: entity?,
+            }
+
             local function tick(
                 entities: Query<Entity>,
                 state: ResRW<TargetState>
@@ -699,19 +713,11 @@ TEST_CASE(
                 end
             end
 
-            return {
-                types = {
-                    TargetState = {
-                        observed = field(entity, 0),
-                        target = field(optional(entity), nil),
-                    },
-                },
-                resources = {
-                    TargetState = {},
-                },
-                systems = {
-                    system(Update, tick),
-                },
+            export local TargetPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_resource(TargetState {})
+                    app:add_system(Update, tick)
+                end,
             }
         )",
     };
@@ -763,10 +769,10 @@ TEST_CASE(
                 end
             end
 
-            return {
-                systems = {
-                    system(Update, invalidate),
-                },
+            export local QueryPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, invalidate)
+                end,
             }
         )",
     };
@@ -831,12 +837,10 @@ TEST_CASE(
                 return escaped_query:size()
             end
 
-            return {
-                systems = {
-                    system(Update, capture),
-                    system(Update, use_entity),
-                    system(Update, use_query),
-                },
+            export local BorrowPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_systems(Update, capture, use_entity, use_query)
+                end,
             }
         )",
     };
@@ -903,10 +907,10 @@ TEST_CASE(
                 commands:add_resource(state:make_position(11))
             end
 
-            return {
-                systems = {
-                    system(Update, apply_commands),
-                },
+            export local CommandsPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, apply_commands)
+                end,
             }
         )",
     };
@@ -1001,10 +1005,10 @@ TEST_CASE(
                 end
             end
 
-            return {
-                systems = {
-                    system(MainSchedules.Update, movement_system),
-                },
+            export local MovementPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(MainSchedules.Update, movement_system)
+                end,
             }
         )",
     };
@@ -1117,16 +1121,19 @@ TEST_CASE(
                 end
             end
 
-            return {
-                systems = {
-                    system(Update, mutate),
-                    system(Update, mutate_method),
-                    system(Update, capture),
-                    system(Update, use_escaped),
-                    system(Update, capture_entity),
-                    system(Update, use_escaped_entity),
-                    system(Update, mutate_query),
-                },
+            export local BorrowPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_systems(
+                        Update,
+                        mutate,
+                        mutate_method,
+                        capture,
+                        use_escaped,
+                        capture_entity,
+                        use_escaped_entity,
+                        mutate_query
+                    )
+                end,
             }
         )",
     };
@@ -1229,10 +1236,10 @@ TEST_CASE(
                 config.executions += 1
             end
 
-            return {
-                systems = {
-                    [Update] = { discard_removed },
-                },
+            export local RemovedPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, discard_removed)
+                end,
             }
         )",
     };
@@ -1287,16 +1294,17 @@ TEST_CASE(
                 config.schedule_order = config.schedule_order * 10 + 3
             end
 
-            return {
-                systems = {
-                    [Update] = {
+            export local SchedulePlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(
+                        Update,
                         chain(
                             first,
                             second:run_if(enabled),
                             third
-                        ),
-                    },
-                },
+                        )
+                    )
+                end,
             }
         )",
     };
@@ -1367,18 +1375,25 @@ TEST_CASE(
                 config.state_order = config.state_order * 10 + 4
             end
 
-            return {
-                systems = {
-                    [Update] = {
-                        update_idle:run_if(in_state(LuauTestMode.Idle)),
-                    },
-                    [OnExit(LuauTestMode.Idle)] = { exit_idle },
-                    [OnTransition(
-                        LuauTestMode.Idle,
-                        LuauTestMode.Active
-                    )] = { idle_to_active },
-                    [OnEnter(LuauTestMode.Active)] = { enter_active },
-                },
+            export local StatePlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(
+                        Update,
+                        update_idle:run_if(in_state(LuauTestMode.Idle))
+                    )
+                    app:add_system(OnExit(LuauTestMode.Idle), exit_idle)
+                    app:add_system(
+                        OnTransition(
+                            LuauTestMode.Idle,
+                            LuauTestMode.Active
+                        ),
+                        idle_to_active
+                    )
+                    app:add_system(
+                        OnEnter(LuauTestMode.Active),
+                        enter_active
+                    )
+                end,
             }
         )",
     };
@@ -1415,6 +1430,184 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Luau Plugins initialize and insert exported state types",
+    "[scripting_luau][system][plugin][state]"
+) {
+    register_luau_system_test_types();
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(LuauTestConfig {});
+
+    const ScriptSource source {
+        .name = "project://scripts/plugin_state.luau",
+        .content = R"(
+            export type GameFlow = "Boot" | "Running" | "Paused"
+
+            local function update_boot(
+                config: ResRW<LuauTestConfig>,
+                state: State<GameFlow>,
+                next_state: NextState<GameFlow>
+            )
+                assert(state:get() == GameFlow.Boot)
+                config.state_order = config.state_order * 10 + 1
+                next_state:set(GameFlow.Running)
+            end
+
+            local function exit_boot(config: ResRW<LuauTestConfig>)
+                config.state_order = config.state_order * 10 + 2
+            end
+
+            local function enter_running(config: ResRW<LuauTestConfig>)
+                config.state_order = config.state_order * 10 + 3
+            end
+
+            export local StatePlugin = Plugin.new {
+                build = function(app: App)
+                    app:init_state(GameFlow.Boot)
+                    app:add_system(
+                        Update,
+                        update_boot:run_if(in_state(GameFlow.Boot))
+                    )
+                    app:add_system(OnExit(GameFlow.Boot), exit_boot)
+                    app:add_system(
+                        OnEnter(GameFlow.Running),
+                        enter_running
+                    )
+                end,
+            }
+        )",
+    };
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact);
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module);
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems);
+    world.sort_systems();
+
+    world.run_state_transitions();
+    world.run_schedule(Update);
+    world.run_state_transitions();
+    CHECK(world.resource<LuauTestConfig>().state_order == 123);
+
+    REQUIRE(remove_script_module_systems(world, *systems));
+    const ScriptSource inserted_source {
+        .name = "project://scripts/plugin_state.luau",
+        .content = R"(
+            export type GameFlow = "Boot" | "Running" | "Paused"
+
+            local function verify_paused(
+                config: ResRW<LuauTestConfig>,
+                state: State<GameFlow>
+            )
+                assert(state:get() == GameFlow.Paused)
+                config.state_order = config.state_order * 10 + 4
+            end
+
+            local function enter_paused(config: ResRW<LuauTestConfig>)
+                config.state_order = config.state_order * 10 + 5
+            end
+
+            export local StatePlugin = Plugin.new {
+                build = function(app: App)
+                    app:insert_state(GameFlow.Paused)
+                    app:add_system(Update, verify_paused)
+                    app:add_system(
+                        OnEnter(GameFlow.Paused),
+                        enter_paused
+                    )
+                end,
+            }
+        )",
+    };
+    auto inserted_artifact = compile_luau_script_module(inserted_source);
+    REQUIRE(inserted_artifact);
+    auto inserted_module = runtime.load_module(*inserted_artifact);
+    REQUIRE(inserted_module);
+    auto inserted_systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *inserted_module,
+        inserted_artifact->declaration
+    );
+    REQUIRE(inserted_systems);
+    world.sort_systems();
+    world.run_state_transitions();
+    world.run_schedule(Update);
+    CHECK(world.resource<LuauTestConfig>().state_order == 12354);
+}
+
+TEST_CASE(
+    "Luau Plugins explicitly register dynamic event channels",
+    "[scripting_luau][system][plugin][event]"
+) {
+    register_luau_system_test_types();
+    World world;
+    world.add_resource(CommandsQueue {});
+    world.add_resource(LuauTestConfig {});
+
+    const ScriptSource source {
+        .name = "project://scripts/plugin_events.luau",
+        .content = R"(
+            export type DamageEvent = {
+                amount: i32,
+            }
+
+            local function send_damage(
+                events: EventWriter<DamageEvent>
+            )
+                events:send(DamageEvent.new { amount = 3 })
+            end
+
+            local function read_damage(
+                events: EventReaderRO<DamageEvent>?,
+                config: ResRW<LuauTestConfig>
+            )
+                assert(events ~= nil)
+                for event in events do
+                    config.executions += event.amount
+                end
+            end
+
+            export local EventsPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_event(DamageEvent)
+                    app:add_system(
+                        Update,
+                        chain(send_damage, read_damage)
+                    )
+                end,
+            }
+        )",
+    };
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact);
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module);
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems);
+    REQUIRE(world.has_resource<DynamicEvents>());
+    REQUIRE(world.resource<DynamicEvents>().registered(
+        TypeId {artifact->declaration.types[0].qualified_name}
+    ));
+    world.sort_systems();
+    world.run_schedule(Update);
+    CHECK(world.resource<LuauTestConfig>().executions == 3);
+}
+
+TEST_CASE(
     "Luau modules declare states without resetting them on reload",
     "[scripting_luau][system][state][reload]"
 ) {
@@ -1426,6 +1619,8 @@ TEST_CASE(
     const ScriptSource source {
         .name = "script_state.luau",
         .content = R"(
+            export type GameFlow = "Boot" | "Running" | "Paused"
+
             local function enter_boot(config: ResRW<LuauTestConfig>)
                 config.state_order = config.state_order * 10 + 1
             end
@@ -1452,25 +1647,21 @@ TEST_CASE(
                 config.state_order = config.state_order * 10 + 5
             end
 
-            return {
-                states = {
-                    GameFlow = {
-                        initial = "Boot",
-                        values = { "Boot", "Running", "Paused" },
-                    },
-                },
-                systems = {
-                    [Update] = {
-                        update_boot:run_if(in_state(GameFlow.Boot)),
-                    },
-                    [OnEnter(GameFlow.Boot)] = { enter_boot },
-                    [OnExit(GameFlow.Boot)] = { exit_boot },
-                    [OnTransition(
-                        GameFlow.Boot,
-                        GameFlow.Running
-                    )] = { boot_to_running },
-                    [OnEnter(GameFlow.Running)] = { enter_running },
-                },
+            export local StatePlugin = Plugin.new {
+                build = function(app: App)
+                    app:init_state(GameFlow.Boot)
+                    app:add_system(
+                        Update,
+                        update_boot:run_if(in_state(GameFlow.Boot))
+                    )
+                    app:add_system(OnEnter(GameFlow.Boot), enter_boot)
+                    app:add_system(OnExit(GameFlow.Boot), exit_boot)
+                    app:add_system(
+                        OnTransition(GameFlow.Boot, GameFlow.Running),
+                        boot_to_running
+                    )
+                    app:add_system(OnEnter(GameFlow.Running), enter_running)
+                end,
             }
         )",
     };
@@ -1509,6 +1700,8 @@ TEST_CASE(
     const ScriptSource reloaded_source {
         .name = "script_state.luau",
         .content = R"(
+            export type GameFlow = "Paused" | "Running" | "Boot"
+
             local function verify_running(
                 config: ResRW<LuauTestConfig>,
                 state: State<GameFlow>
@@ -1517,16 +1710,11 @@ TEST_CASE(
                 config.state_order = config.state_order * 10 + 6
             end
 
-            return {
-                states = {
-                    GameFlow = {
-                        initial = "Paused",
-                        values = { "Paused", "Running", "Boot" },
-                    },
-                },
-                systems = {
-                    [Update] = { verify_running },
-                },
+            export local StatePlugin = Plugin.new {
+                build = function(app: App)
+                    app:init_state(GameFlow.Paused)
+                    app:add_system(Update, verify_running)
+                end,
             }
         )",
     };
@@ -1549,14 +1737,12 @@ TEST_CASE(
     const ScriptSource invalid_reload {
         .name = "script_state.luau",
         .content = R"(
-            return {
-                states = {
-                    GameFlow = {
-                        initial = "Boot",
-                        values = { "Boot", "Paused" },
-                    },
-                },
-                systems = {},
+            export type GameFlow = "Boot" | "Paused"
+
+            export local StatePlugin = Plugin.new {
+                build = function(app: App)
+                    app:init_state(GameFlow.Boot)
+                end,
             }
         )",
     };

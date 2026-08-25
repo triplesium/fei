@@ -58,10 +58,10 @@ constexpr auto increment_source = R"(
         counter.value += 4
     end
 
-    return {
-        systems = {
-            system(Update, tick),
-        },
+    export local CounterPlugin = Plugin.new {
+        build = function(app: App)
+            app:add_system(Update, tick)
+        end,
     }
 )";
 
@@ -151,6 +151,38 @@ TEST_CASE(
 
     world.run_schedule(Update);
     CHECK(world.resource<LuauRegistryCounter>().value == 8);
+}
+
+TEST_CASE(
+    "LuauScriptSystemRegistry loads export-only modules",
+    "[scripting_luau][system][registry][module][export]"
+) {
+    World world;
+    add_luau_script_system_resources(world);
+
+    luau_scripts(world).queue_source(
+        LuauScriptSource {
+            .name = "shared.luau",
+            .content = R"(
+                export type SharedValue = {
+                    value: i32,
+                }
+
+                export function add(lhs: number, rhs: number): number
+                    return lhs + rhs
+                end
+            )",
+        }
+    );
+    apply_luau_script_queue(world);
+
+    auto& scripts = luau_scripts(world);
+    REQUIRE(scripts.queue_errors().empty());
+    auto loaded = scripts.get(module_id_at(0));
+    REQUIRE(loaded);
+    CHECK(loaded->plugin_name.empty());
+    CHECK(loaded->systems.empty());
+    CHECK(Registry::instance().try_get_type("shared.SharedValue"));
 }
 
 TEST_CASE(
@@ -303,8 +335,10 @@ TEST_CASE(
             counter.value += 7
         end
 
-        return {
-            systems = { system(Update, tick) },
+        export local CounterPlugin = Plugin.new {
+            build = function(app: App)
+                app:add_system(Update, tick)
+            end,
         }
     )");
     scripts.queue_reload_asset(*module_id);
@@ -327,8 +361,10 @@ TEST_CASE(
             counter.value += 100
         end
 
-        return {
-            systems = { system(NotASchedule, tick) },
+        export local CounterPlugin = Plugin.new {
+            build = function(app: App)
+                app:add_system(NotASchedule, tick)
+            end,
         }
     )");
     scripts.queue_reload_asset(*module_id);
@@ -355,6 +391,8 @@ TEST_CASE(
     world.add_resource(LuauRegistryCounter {});
 
     auto script = luau_assets(world).emplace(R"(
+        export type FlowState = "Idle" | "Active"
+
         local function leave_idle(
             counter: ResRW<LuauRegistryCounter>,
             next_state: NextState<FlowState>
@@ -367,19 +405,15 @@ TEST_CASE(
             counter.value += 10
         end
 
-        return {
-            states = {
-                FlowState = {
-                    initial = "Idle",
-                    values = { "Idle", "Active" },
-                },
-            },
-            systems = {
-                [Update] = {
-                    leave_idle:run_if(in_state(FlowState.Idle)),
-                },
-                [OnEnter(FlowState.Active)] = { enter_active },
-            },
+        export local StatePlugin = Plugin.new {
+            build = function(app: App)
+                app:init_state(FlowState.Idle)
+                app:add_system(
+                    Update,
+                    leave_idle:run_if(in_state(FlowState.Idle))
+                )
+                app:add_system(OnEnter(FlowState.Active), enter_active)
+            end,
         }
     )");
 
@@ -398,6 +432,8 @@ TEST_CASE(
     auto script_asset = luau_assets(world).modify(script);
     REQUIRE(script_asset);
     script_asset->set_content(R"(
+        export type FlowState = "Active" | "Idle"
+
         local function verify_active(
             counter: ResRW<LuauRegistryCounter>,
             state: State<FlowState>
@@ -406,16 +442,11 @@ TEST_CASE(
             counter.value += 100
         end
 
-        return {
-            states = {
-                FlowState = {
-                    initial = "Idle",
-                    values = { "Active", "Idle" },
-                },
-            },
-            systems = {
-                [Update] = { verify_active },
-            },
+        export local StatePlugin = Plugin.new {
+            build = function(app: App)
+                app:init_state(FlowState.Idle)
+                app:add_system(Update, verify_active)
+            end,
         }
     )");
     scripts.queue_reload_asset(*module_id);
@@ -428,14 +459,12 @@ TEST_CASE(
     script_asset = luau_assets(world).modify(script);
     REQUIRE(script_asset);
     script_asset->set_content(R"(
-        return {
-            states = {
-                FlowState = {
-                    initial = "Idle",
-                    values = { "Idle" },
-                },
-            },
-            systems = {},
+        export type FlowState = "Idle"
+
+        export local StatePlugin = Plugin.new {
+            build = function(app: App)
+                app:init_state(FlowState.Idle)
+            end,
         }
     )");
     scripts.queue_reload_asset(*module_id);

@@ -1,6 +1,5 @@
 #include "scripting_luau/runtime.hpp"
 
-#include "app/app.hpp"
 #include "ecs/dynamic/state.hpp"
 #include "ecs/dynamic/world.hpp"
 #include "refl/enum.hpp"
@@ -14,7 +13,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <exception>
-#include <functional>
 #include <iterator>
 #include <limits>
 #include <lua.h>
@@ -1239,14 +1237,10 @@ Result<LuauScriptModuleId, LuauScriptError> LuauRuntime::load_module(
     }
 
     const int module_index = lua_absindex(thread, -1);
-    if (artifact.uses_value_exports) {
-        lua_pushvalue(thread, module_index);
-        loaded.exports_ref = lua_ref(thread, -1);
-        lua_pop(thread, 1);
-        lua_getfield(thread, module_index, "__ets_systems");
-    } else {
-        lua_getfield(thread, module_index, "systems");
-    }
+    lua_pushvalue(thread, module_index);
+    loaded.exports_ref = lua_ref(thread, -1);
+    lua_pop(thread, 1);
+    lua_getfield(thread, module_index, "__ets_systems");
     if (!lua_istable(thread, -1)) {
         return fail_loading(
             LuauScriptError {"Luau module systems field must be a table"}
@@ -1335,136 +1329,47 @@ Result<LuauScriptModuleId, LuauScriptError> LuauRuntime::load_module(
         return {};
     };
 
-    if (artifact.system_layout == LuauSystemDeclarationLayout::Flat) {
-        for (std::size_t index = 0; index < artifact.declaration.systems.size();
-             ++index) {
-            lua_rawgeti(thread, systems_index, static_cast<int>(index + 1));
-            auto stored =
-                store_system_entry(artifact.declaration.systems[index], -1);
-            lua_pop(thread, 1);
-            if (!stored) {
-                return fail_loading(std::move(stored.error()));
-            }
-        }
-    } else {
-        std::unordered_set<ScheduleId> loaded_schedules;
-        for (const auto& first_system : artifact.declaration.systems) {
-            if (!loaded_schedules.insert(first_system.schedule).second) {
-                continue;
-            }
-            std::vector<const DynamicSystemDecl*> schedule_systems;
-            for (const auto& system : artifact.declaration.systems) {
-                if (system.schedule == first_system.schedule) {
-                    schedule_systems.push_back(&system);
-                }
-            }
-
-            if (first_system.schedule <= FixedLast) {
-                lua_rawgeti(
-                    thread,
-                    systems_index,
-                    static_cast<int>(first_system.schedule)
-                );
-            } else {
-                const auto key = dynamic_schedule_key(first_system.schedule);
-                lua_getfield(thread, systems_index, key.c_str());
-            }
-            if (!lua_istable(thread, -1)) {
-                return fail_loading(
-                    LuauScriptError {
-                        "Luau module schedule group is not a table"
-                    }
-                );
-            }
-            const int schedule_group_index = lua_absindex(thread, -1);
-            std::size_t next_system = 0;
-            std::function<Status<LuauScriptError>(int)> load_entry;
-            load_entry = [&](int entry_index) -> Status<LuauScriptError> {
-                entry_index = lua_absindex(thread, entry_index);
-                if (is_system_chain(thread, entry_index)) {
-                    const auto entry_count = lua_objlen(thread, entry_index);
-                    for (int index = 0; index < entry_count; ++index) {
-                        lua_rawgeti(thread, entry_index, index + 1);
-                        auto loaded = load_entry(-1);
-                        lua_pop(thread, 1);
-                        if (!loaded) {
-                            return failure(std::move(loaded.error()));
-                        }
-                    }
-                    return {};
-                }
-                if (next_system >= schedule_systems.size()) {
-                    return failure(
-                        LuauScriptError {"Luau schedule group contains more "
-                                         "systems than its "
-                                         "declaration"}
-                    );
-                }
-                auto stored = store_system_entry(
-                    *schedule_systems[next_system],
-                    entry_index
-                );
-                if (!stored) {
-                    return failure(std::move(stored.error()));
-                }
-                ++next_system;
-                return {};
-            };
-
-            const auto entry_count = lua_objlen(thread, schedule_group_index);
-            for (int index = 0; index < entry_count; ++index) {
-                lua_rawgeti(thread, schedule_group_index, index + 1);
-                auto loaded = load_entry(-1);
-                lua_pop(thread, 1);
-                if (!loaded) {
-                    return fail_loading(std::move(loaded.error()));
-                }
-            }
-            if (next_system != schedule_systems.size()) {
-                return fail_loading(
-                    LuauScriptError {
-                        "Luau schedule group contains fewer systems than its "
-                        "declaration"
-                    }
-                );
-            }
-            lua_pop(thread, 1);
+    for (std::size_t index = 0; index < artifact.declaration.systems.size();
+         ++index) {
+        lua_rawgeti(thread, systems_index, static_cast<int>(index + 1));
+        auto stored =
+            store_system_entry(artifact.declaration.systems[index], -1);
+        lua_pop(thread, 1);
+        if (!stored) {
+            return fail_loading(std::move(stored.error()));
         }
     }
-    if (artifact.uses_value_exports) {
-        lua_getfield(thread, module_index, "__ets_playtests");
-        if (!lua_istable(thread, -1)) {
-            return fail_loading(
-                LuauScriptError {
-                    "Luau Plugin playtest declarations must be a table"
+    lua_getfield(thread, module_index, "__ets_playtests");
+    if (!lua_istable(thread, -1)) {
+        return fail_loading(
+            LuauScriptError {
+                "Luau Plugin playtest declarations must be a table"
+            }
+        );
+    }
+    const int playtests = lua_absindex(thread, -1);
+    const auto count = static_cast<std::size_t>(lua_objlen(thread, playtests));
+    loaded.playtests.reserve(count);
+    loaded.playtest_callbacks.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
+        lua_rawgeti(thread, playtests, static_cast<int>(index + 1));
+        try {
+            auto parsed = parse_playtest(thread, -1);
+            loaded.playtests.push_back(std::move(parsed.declaration));
+            loaded.playtest_callbacks.push_back(
+                Impl::Module::PlaytestCallbacks {
+                    .begin_step = parsed.begin_step,
+                    .end_step = parsed.end_step,
+                    .observe = parsed.observe,
                 }
             );
-        }
-        const int playtests = lua_absindex(thread, -1);
-        const auto count =
-            static_cast<std::size_t>(lua_objlen(thread, playtests));
-        loaded.playtests.reserve(count);
-        loaded.playtest_callbacks.reserve(count);
-        for (std::size_t index = 0; index < count; ++index) {
-            lua_rawgeti(thread, playtests, static_cast<int>(index + 1));
-            try {
-                auto parsed = parse_playtest(thread, -1);
-                loaded.playtests.push_back(std::move(parsed.declaration));
-                loaded.playtest_callbacks.push_back(
-                    Impl::Module::PlaytestCallbacks {
-                        .begin_step = parsed.begin_step,
-                        .end_step = parsed.end_step,
-                        .observe = parsed.observe,
-                    }
-                );
-            } catch (const std::exception& error) {
-                lua_pop(thread, 1);
-                return fail_loading(LuauScriptError {error.what()});
-            }
+        } catch (const std::exception& error) {
             lua_pop(thread, 1);
+            return fail_loading(LuauScriptError {error.what()});
         }
         lua_pop(thread, 1);
     }
+    lua_pop(thread, 1);
     lua_settop(thread, 0);
 
     lua_settop(root, root_top);

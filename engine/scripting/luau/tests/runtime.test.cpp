@@ -59,8 +59,10 @@ TEST_CASE(
                 assert(value == 2)
             end
 
-            return {
-                systems = { system(Update, tick) },
+            export local CounterPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, tick)
+                end,
             }
         )",
     };
@@ -74,6 +76,57 @@ TEST_CASE(
     CHECK(runtime.call_module_function(*module, "tick"));
     CHECK(runtime.unload_module(*module));
     CHECK_FALSE(runtime.call_module_function(*module, "tick"));
+}
+
+TEST_CASE(
+    "Luau runtime imports export-only libraries",
+    "[scripting_luau][runtime][library][export]"
+) {
+    auto library = compile_luau_script_library(
+        ScriptSource {
+            .name = "project://scripts/helpers.luau",
+            .content = R"(
+                export function add(lhs: number, rhs: number): number
+                    return lhs + rhs
+                end
+            )",
+        }
+    );
+    REQUIRE(library);
+
+    auto module = compile_luau_script_module(
+        ScriptSource {
+            .name = "project://scripts/game.luau",
+            .content = R"(
+                local Helpers = require("./helpers")
+
+                local function verify()
+                    assert(Helpers.add(2, 3) == 5)
+                end
+
+                export local GamePlugin = Plugin.new {
+                    build = function(app: App)
+                        app:add_system(Update, verify)
+                    end,
+                }
+            )",
+        }
+    );
+    REQUIRE(module);
+
+    LuauRuntime runtime;
+    auto loaded_library = runtime.load_library(*library);
+    REQUIRE(loaded_library);
+    const LuauScriptImportBinding import {
+        .specifier = "./helpers",
+        .module = *loaded_library,
+    };
+    auto loaded_module = runtime.load_module(
+        *module,
+        std::span<const LuauScriptImportBinding> {&import, 1}
+    );
+    REQUIRE(loaded_module);
+    CHECK(runtime.call_module_function(*loaded_module, "verify"));
 }
 
 TEST_CASE(
@@ -108,8 +161,10 @@ TEST_CASE(
                 assert(not ok)
             end
 
-            return {
-                systems = { system(Update, verify) },
+            export local ReflectionPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, verify)
+                end,
             }
         )",
     };
@@ -211,8 +266,10 @@ TEST_CASE(
                 assert(value.value == 23)
             end
 
-            return {
-                systems = { system(Update, verify) },
+            export local NativePlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, verify)
+                end,
             }
         )",
     };
@@ -261,8 +318,10 @@ TEST_CASE(
                 assert(not ok)
             end
 
-            return {
-                systems = { system(Update, verify) },
+            export local NamespacePlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, verify)
+                end,
             }
         )",
     };
@@ -301,15 +360,16 @@ TEST_CASE(
             local function last()
             end
 
-            return {
-                systems = {
-                    [Update] = {
+            export local SystemsPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(
+                        Update,
                         chain(
                             first,
                             chain(tick:run_if(enabled), last)
-                        ),
-                    },
-                },
+                        )
+                    )
+                end,
             }
         )",
     };

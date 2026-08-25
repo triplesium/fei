@@ -1,3 +1,19 @@
+export type PuzzlePiece = {
+    id: i32,
+    placed: i32,
+}
+
+export type PuzzleTarget = {
+    id: i32,
+}
+
+export type PuzzleState = {
+    initialized: i32,
+    selected: i32,
+    placed: i32,
+    actions: i32,
+}
+
 local function initialize(
     commands: Commands,
     assets: ResRW<AssetServer>,
@@ -80,26 +96,9 @@ local function initialize(
     state.initialized = 1
 end
 
-return {
-    types = {
-        PuzzlePiece = {
-            id = field(i32, 0),
-            placed = field(i32, 0),
-        },
-        PuzzleTarget = {
-            id = field(i32, 0),
-        },
-        PuzzleState = {
-            initialized = field(i32, 0),
-            selected = field(i32, 0),
-            placed = field(i32, 0),
-            actions = field(i32, 0),
-        },
-    },
-    resources = {
-        PuzzleState = {},
-    },
-    systems = {
-        system(StartUp, initialize),
-    },
+export local PointerPuzzlePlugin = Plugin.new {
+    build = function(app: App)
+        app:add_resource(PuzzleState {})
+        app:add_system(StartUp, initialize)
+    end,
 }

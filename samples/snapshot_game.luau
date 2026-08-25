@@ -1,3 +1,50 @@
+export type GridPosition = {x: i32, y: i32}
+export type Fighter = {
+    kind: i32,
+    team: i32,
+    hp: i32,
+    max_hp: i32,
+    attack: i32,
+    range: i32,
+}
+export type StatusEffects = {poison_turns: i32, shield: i32}
+export type Inventory = {potions: i32}
+export type EnemyBrain = {target: entity}
+export type Loot = {healing: i32}
+export type DamageEvent = {
+    source: entity,
+    target: entity,
+    amount: i32,
+    poison_turns: i32,
+}
+export type DeathEvent = {source: entity, target: entity, kind: i32}
+export type ActionQueue = {
+    has_action: bool,
+    kind: i32,
+    dx: i32,
+    dy: i32,
+}
+export type DungeonMap = {width: i32, height: i32}
+export type DungeonState = {
+    initialized: bool,
+    turn: i32,
+    score: i32,
+    enemies_remaining: i32,
+    removed_actors: i32,
+    victory: bool,
+    defeat: bool,
+    player: entity,
+    exit_x: i32,
+    exit_y: i32,
+}
+export type DeterministicRng = {state: i32}
+export type Telemetry = {
+    changed_fighters: i32,
+    added_loot: i32,
+    removed_fighters: i32,
+}
+export type CombatLog = {count: i32, last: str}
+
 local TEAM_PLAYER, TEAM_ENEMY = 0, 1
 local ACTOR_HERO, ACTOR_GOBLIN, ACTOR_VENOM, ACTOR_ARCHER = 0, 1, 2, 3
 local ACTION_MOVE, ACTION_ATTACK, ACTION_USE_POTION, ACTION_WAIT = 0, 1, 2, 3
@@ -255,51 +302,29 @@ local function finish_turn(
     if state.enemies_remaining == 0 then state.victory = true end
 end
 
-return {
-    types = {
-        GridPosition = { x = field(i32, 0), y = field(i32, 0) },
-        Fighter = {
-            kind = field(i32, 0), team = field(i32, 0), hp = field(i32, 0),
-            max_hp = field(i32, 0), attack = field(i32, 0), range = field(i32, 1),
-        },
-        StatusEffects = { poison_turns = field(i32, 0), shield = field(i32, 0) },
-        Inventory = { potions = field(i32, 0) },
-        EnemyBrain = { target = field(entity, 0) },
-        Loot = { healing = field(i32, 0) },
-        DamageEvent = {
-            source = field(entity, 0), target = field(entity, 0),
-            amount = field(i32, 0), poison_turns = field(i32, 0),
-        },
-        DeathEvent = { source = field(entity, 0), target = field(entity, 0), kind = field(i32, 0) },
-        ActionQueue = {
-            has_action = field(bool, false), kind = field(i32, 3),
-            dx = field(i32, 0), dy = field(i32, 0),
-        },
-        DungeonMap = { width = field(i32, 12), height = field(i32, 8) },
-        DungeonState = {
-            initialized = field(bool, false), turn = field(i32, 0), score = field(i32, 0),
-            enemies_remaining = field(i32, 0), removed_actors = field(i32, 0),
-            victory = field(bool, false), defeat = field(bool, false),
-            player = field(entity, 0), exit_x = field(i32, 0), exit_y = field(i32, 0),
-        },
-        DeterministicRng = { state = field(i32, 13579) },
-        Telemetry = {
-            changed_fighters = field(i32, 0), added_loot = field(i32, 0),
-            removed_fighters = field(i32, 0),
-        },
-        CombatLog = { count = field(i32, 0), last = field(str, "") },
-    },
-    resources = {
-        ActionQueue = {}, DungeonMap = {}, DungeonState = {},
-        DeterministicRng = {}, Telemetry = {}, CombatLog = {},
-    },
-    systems = {
-        [Update] = {
+export local SnapshotGamePlugin = Plugin.new {
+    build = function(app: App)
+        app:add_resource(ActionQueue {kind = 3})
+        app:add_resource(DungeonMap {width = 12, height = 8})
+        app:add_resource(DungeonState {})
+        app:add_resource(DeterministicRng {state = 13579})
+        app:add_resource(Telemetry {})
+        app:add_resource(CombatLog {})
+        app:add_event(DamageEvent)
+        app:add_event(DeathEvent)
+        app:add_system(
+            Update,
             chain(
-                setup_game, tick_status, apply_player_action, enemy_ai,
-                resolve_damage, resolve_deaths, observe_removals,
-                observe_changes, finish_turn
-            ),
-        },
-    },
+                setup_game,
+                tick_status,
+                apply_player_action,
+                enemy_ai,
+                resolve_damage,
+                resolve_deaths,
+                observe_removals,
+                observe_changes,
+                finish_turn
+            )
+        )
+    end,
 }

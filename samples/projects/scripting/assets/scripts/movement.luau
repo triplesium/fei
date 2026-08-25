@@ -1,3 +1,22 @@
+export type Player = {
+    speed: f32,
+}
+
+export type Collectible = {
+    value: i32,
+}
+
+export type GameState = {
+    player: entity,
+    collectible: entity,
+    score: i32,
+}
+
+export type PlaytestInput = {
+    move_x: f32,
+    move_y: f32,
+}
+
 local function initialize(
     commands: Commands,
     assets: ResRW<AssetServer>,
@@ -25,7 +44,7 @@ local function initialize(
         Transform2d.new {
             position = Vector2.new(-2.5, 0.0),
         },
-        Player.new()
+        Player.new {speed = 3.5}
     )
 
     local collectible = commands:spawn(
@@ -37,7 +56,7 @@ local function initialize(
         Transform2d.new {
             position = Vector2.new(2.0, 0.0),
         },
-        Collectible.new()
+        Collectible.new {value = 1}
     )
 
     state.player = player:id()
@@ -111,31 +130,11 @@ local function collect(
     end
 end
 
-return {
-    types = {
-        Player = {
-            speed = field(f32, 3.5),
-        },
-        Collectible = {
-            value = field(i32, 1),
-        },
-        GameState = {
-            player = field(entity, 0),
-            collectible = field(entity, 0),
-            score = field(i32, 0),
-        },
-        PlaytestInput = {
-            move_x = field(f32, 0.0),
-            move_y = field(f32, 0.0),
-        },
-    },
-    resources = {
-        GameState = {},
-        PlaytestInput = {},
-    },
-    systems = {
-        system(StartUp, initialize),
-        system(Update, move_player),
-        system(Update, collect),
-    },
+export local MovementPlugin = Plugin.new {
+    build = function(app: App)
+        app:add_resource(GameState {})
+        app:add_resource(PlaytestInput {})
+        app:add_system(StartUp, initialize)
+        app:add_systems(Update, move_player, collect)
+    end,
 }

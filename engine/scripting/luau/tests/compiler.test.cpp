@@ -4,6 +4,8 @@
 #include "ecs/dynamic/system_decl.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <filesystem>
+#include <fstream>
 
 namespace ets::test {
 
@@ -34,7 +36,6 @@ TEST_CASE(
     if (!artifact) {
         FAIL(artifact.error().message);
     }
-    CHECK(artifact->uses_value_exports);
     CHECK(artifact->plugin_name == "PlayerPlugin");
     REQUIRE(artifact->declaration.types.size() == 1);
     CHECK(
@@ -133,6 +134,114 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Luau compiler initializes exported state types from Plugins",
+    "[scripting_luau][compiler][plugin][state]"
+) {
+    const ScriptSource source {
+        .name = "project://scripts/state.luau",
+        .content = R"(
+            export type GameFlow = "Boot" | "Running" | "Paused"
+
+            local function update(state: State<GameFlow>)
+                assert(state:get() == GameFlow.Boot)
+            end
+
+            local function enter_running()
+            end
+
+            export local StatePlugin = Plugin.new {
+                build = function(app: App)
+                    app:init_state(GameFlow.Boot)
+                    app:add_system(
+                        Update,
+                        update:run_if(in_state(GameFlow.Boot))
+                    )
+                    app:add_system(
+                        OnEnter(GameFlow.Running),
+                        enter_running
+                    )
+                end,
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    REQUIRE(artifact->declaration.states.size() == 1);
+    const auto& state = artifact->declaration.states[0];
+    CHECK(state.name == "GameFlow");
+    CHECK(state.initial == "Boot");
+    CHECK(state.init_if_missing);
+    REQUIRE(state.values.size() == 3);
+    CHECK(state.values[0].name == "Boot");
+    CHECK(state.values[1].name == "Running");
+    CHECK(state.values[2].name == "Paused");
+    REQUIRE(artifact->declaration.systems.size() == 2);
+    CHECK(
+        artifact->declaration.systems[0].params[0]->decl_type_id() ==
+        type_id<DynamicStateParamDecl>()
+    );
+}
+
+TEST_CASE(
+    "Luau compiler requires Plugins to declare dynamic events",
+    "[scripting_luau][compiler][plugin][event]"
+) {
+    const ScriptSource source {
+        .name = "project://scripts/events.luau",
+        .content = R"(
+            export type DamageEvent = {
+                amount: i32,
+            }
+
+            local function send_damage(
+                events: EventWriter<DamageEvent>
+            )
+                events:send(DamageEvent.new { amount = 3 })
+            end
+
+            local function read_damage(
+                events: EventReaderRO<DamageEvent>?
+            )
+            end
+
+            export local EventsPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_event(DamageEvent)
+                    app:add_systems(Update, send_damage, read_damage)
+                end,
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    REQUIRE(artifact->declaration.events.size() == 1);
+    CHECK(
+        artifact->declaration.events[0].type ==
+        "project.scripts.events.DamageEvent"
+    );
+
+    ScriptSource undeclared = source;
+    const auto declaration = undeclared.content.find(
+        "                    app:add_event(DamageEvent)\n"
+    );
+    REQUIRE(declaration != std::string::npos);
+    undeclared.content.erase(
+        declaration,
+        std::string_view {"                    app:add_event(DamageEvent)\n"}
+            .size()
+    );
+    auto invalid = compile_luau_script_module(undeclared);
+    REQUIRE_FALSE(invalid);
+    CHECK(invalid.error().message.find("app:add_event") != std::string::npos);
+}
+
+TEST_CASE(
     "Luau compiler resolves imported exported system functions",
     "[scripting_luau][compiler][system][import]"
 ) {
@@ -216,7 +325,6 @@ TEST_CASE(
     if (!artifact) {
         FAIL(artifact.error().message);
     }
-    CHECK(artifact->uses_value_exports);
     CHECK(artifact->plugin_name == "PlaytestPlugin");
 }
 
@@ -277,10 +385,10 @@ TEST_CASE(
             local function fixed_system()
             end
 
-            return {
-                systems = {
-                    system(MainSchedules.FixedUpdate, fixed_system),
-                },
+            export local FixedPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(MainSchedules.FixedUpdate, fixed_system)
+                end,
             }
         )",
     };
@@ -300,11 +408,11 @@ TEST_CASE(
     const ScriptSource source {
         .name = "project://scripts/gameplay/movement.luau",
         .content = R"(
-            return {
-                types = {
-                    Position = {},
-                },
-                systems = {},
+            export type Position = {}
+
+            export local MovementPlugin = Plugin.new {
+                build = function(app: App)
+                end,
             }
         )",
     };
@@ -322,25 +430,89 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Luau compiler rejects source-declared module identity",
+    "Luau compiler rejects top-level return declarations",
     "[scripting_luau][compiler][module][error]"
 ) {
-    const ScriptSource source {
-        .name = "movement.luau",
-        .content = R"(
-            return {
-                name = "game.movement",
-                systems = {},
-            }
-        )",
+    const std::vector<std::string> sources {
+        "return {}",
+        "return nil",
     };
 
-    auto artifact = compile_luau_script_module(source);
-    REQUIRE_FALSE(artifact);
-    CHECK(
-        artifact.error().message.find("derived from the source path") !=
-        std::string::npos
+    for (const auto& content : sources) {
+        auto artifact = compile_luau_script_module(
+            ScriptSource {.name = "movement.luau", .content = content}
+        );
+        REQUIRE_FALSE(artifact);
+        CHECK(
+            artifact.error().message.find("top-level return declarations") !=
+            std::string::npos
+        );
+    }
+}
+
+TEST_CASE(
+    "Luau compiler accepts export-only modules",
+    "[scripting_luau][compiler][module][export]"
+) {
+    auto artifact = compile_luau_script_module(
+        ScriptSource {
+            .name = "project://scripts/math_helpers.luau",
+            .content = R"(
+                export type Offset = {
+                    value: i32,
+                }
+
+                export function add(lhs: i32, rhs: i32): i32
+                    return lhs + rhs
+                end
+            )",
+        }
     );
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    CHECK(artifact->plugin_name.empty());
+    CHECK(artifact->declaration.systems.empty());
+    REQUIRE(artifact->declaration.types.size() == 1);
+    CHECK(artifact->declaration.types[0].name == "Offset");
+}
+
+TEST_CASE(
+    "Luau sample modules use exported Plugins",
+    "[scripting_luau][compiler][sample][plugin]"
+) {
+    const auto repository =
+        std::filesystem::path {ETS_ASSETS_PATH}.parent_path();
+    const std::vector<std::filesystem::path> samples {
+        "samples/snapshot_game.luau",
+        "samples/projects/scripting/assets/scripts/card_battle_test.luau",
+        "samples/projects/scripting/assets/scripts/checkpoint_render.luau",
+        "samples/projects/scripting/assets/scripts/movement.luau",
+        "samples/projects/scripting/assets/scripts/platformer_test.luau",
+        "samples/projects/scripting/assets/scripts/pointer_puzzle_test.luau",
+        "samples/projects/scripting/assets/scripts/ui_demo.luau",
+    };
+    for (const auto& relative : samples) {
+        const auto path = repository / relative;
+        std::ifstream input(path, std::ios::binary);
+        INFO(path.string());
+        REQUIRE(input);
+        const std::string content {
+            std::istreambuf_iterator<char>(input),
+            std::istreambuf_iterator<char>(),
+        };
+        auto artifact = compile_luau_script_module(
+            ScriptSource {
+                .name = relative.generic_string(),
+                .content = content,
+            },
+            LuauCompileOptions {.snapshot_safe = false}
+        );
+        if (!artifact) {
+            FAIL(artifact.error().message);
+        }
+        CHECK_FALSE(artifact->plugin_name.empty());
+    }
 }
 
 TEST_CASE(
@@ -358,10 +530,10 @@ TEST_CASE(
             )
             end
 
-            return {
-                systems = {
-                    system(MainSchedules.Update, movement_system),
-                },
+            export local MovementPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(MainSchedules.Update, movement_system)
+                end,
             }
         )",
     };
@@ -425,8 +597,10 @@ TEST_CASE(
             local function invalid_system(value)
             end
 
-            return {
-                systems = { system(Update, invalid_system) },
+            export local InvalidPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, invalid_system)
+                end,
             }
         )",
     };
@@ -440,7 +614,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Luau compiler extracts script types resources and defaults",
+    "Luau compiler extracts exported script types and resources",
     "[scripting_luau][compiler][types][resources]"
 ) {
     const ScriptSource source {
@@ -452,27 +626,25 @@ TEST_CASE(
             )
             end
 
-            return {
-                types = {
-                    Health = {
-                        current = field(i32, 100),
-                        scale = field(f32, 1.5),
-                    },
-                    CombatConfig = {
-                        enabled = field(bool, true),
-                        health = Health,
-                        label = field(str, "combat"),
-                    },
-                },
-                resources = {
-                    CombatConfig = {
+            export type Health = {
+                current: i32,
+                scale: f32,
+            }
+
+            export type CombatConfig = {
+                enabled: bool,
+                health: Health,
+                label: str,
+            }
+
+            export local CombatPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_resource(CombatConfig {
                         enabled = false,
                         label = "runtime",
-                    },
-                },
-                systems = {
-                    system(Update, tick),
-                },
+                    })
+                    app:add_system(Update, tick)
+                end,
             }
         )",
     };
@@ -488,22 +660,22 @@ TEST_CASE(
     CHECK(config_type.qualified_name == "combat.CombatConfig");
     REQUIRE(config_type.fields.size() == 3);
     CHECK(config_type.fields[0].name == "enabled");
-    CHECK(config_type.fields[0].default_value.get<bool>());
+    CHECK_FALSE(config_type.fields[0].has_default);
     CHECK(config_type.fields[1].name == "health");
     CHECK(config_type.fields[1].type.type_name == "combat.Health");
     CHECK(config_type.fields[1].type.script_type);
     CHECK_FALSE(config_type.fields[1].has_default);
     CHECK(config_type.fields[2].name == "label");
     CHECK(config_type.fields[2].type.type_name == "string");
-    CHECK(config_type.fields[2].default_value.get<std::string>() == "combat");
+    CHECK_FALSE(config_type.fields[2].has_default);
 
     const auto& health_type = artifact->declaration.types[1];
     REQUIRE(health_type.fields.size() == 2);
     CHECK(health_type.fields[0].name == "current");
     CHECK(health_type.fields[0].type.type_name == "i32");
-    CHECK(health_type.fields[0].default_value.get<int>() == 100);
+    CHECK_FALSE(health_type.fields[0].has_default);
     CHECK(health_type.fields[1].name == "scale");
-    CHECK(health_type.fields[1].default_value.get<float>() == 1.5F);
+    CHECK_FALSE(health_type.fields[1].has_default);
 
     REQUIRE(artifact->declaration.resources.size() == 1);
     const auto& resource = artifact->declaration.resources.front();
@@ -526,26 +698,29 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Luau compiler rejects incompatible script field defaults",
+    "Luau compiler rejects unsupported exported field annotations",
     "[scripting_luau][compiler][types]"
 ) {
     const ScriptSource source {
         .name = "invalid_type.luau",
         .content = R"(
-            return {
-                types = {
-                    Health = {
-                        current = field(i32, 1.5),
-                    },
-                },
-                systems = {},
+            export type Health = {
+                current: {number},
+            }
+
+            export local InvalidPlugin = Plugin.new {
+                build = function(app: App)
+                end,
             }
         )",
     };
 
     auto artifact = compile_luau_script_module(source);
     REQUIRE_FALSE(artifact.has_value());
-    CHECK(artifact.error().message.find("32-bit integer") != std::string::npos);
+    CHECK(
+        artifact.error().message.find("non-generic named types") !=
+        std::string::npos
+    );
 }
 
 TEST_CASE(
@@ -555,16 +730,14 @@ TEST_CASE(
     const ScriptSource source {
         .name = "optional_entity.luau",
         .content = R"(
-            return {
-                types = {
-                    TargetState = {
-                        target = field(optional(entity), nil),
-                    },
-                },
-                resources = {
-                    TargetState = {},
-                },
-                systems = {},
+            export type TargetState = {
+                target: entity?,
+            }
+
+            export local TargetPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_resource(TargetState {})
+                end,
             }
         )",
     };
@@ -588,24 +761,19 @@ TEST_CASE(
     const ScriptSource source {
         .name = "invalid_state.luau",
         .content = R"(
-            return {
-                states = {
-                    GameState = {
-                        initial = "Missing",
-                        values = { "Menu", "Playing" },
-                    },
-                },
-                systems = {},
+            export type GameState = "Menu" | "Playing"
+
+            export local InvalidPlugin = Plugin.new {
+                build = function(app: App)
+                    app:init_state(GameState.Missing)
+                end,
             }
         )",
     };
 
     auto artifact = compile_luau_script_module(source);
     REQUIRE_FALSE(artifact);
-    CHECK(
-        artifact.error().message.find("is not present in values") !=
-        std::string::npos
-    );
+    CHECK(artifact.error().message.find("Missing") != std::string::npos);
 }
 
 TEST_CASE(
@@ -628,17 +796,18 @@ TEST_CASE(
             local function third()
             end
 
-            return {
-                systems = {
-                    [Update] = {
+            export local SystemsPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_systems(
+                        Update,
                         third,
                         second
                             :after(first)
                             :before(third)
                             :run_if(enabled),
-                        first,
-                    },
-                },
+                        first
+                    )
+                end,
             }
         )",
     };
@@ -648,9 +817,6 @@ TEST_CASE(
         FAIL(artifact.error().message);
     }
     REQUIRE(artifact);
-    CHECK(
-        artifact->system_layout == LuauSystemDeclarationLayout::ScheduleGroups
-    );
     REQUIRE(artifact->declaration.systems.size() == 3);
     const auto& second = artifact->declaration.systems[1];
     CHECK(second.name == "second");
@@ -670,8 +836,10 @@ TEST_CASE(
             R"(
                 local function first() end
                 local function missing() end
-                return {
-                    systems = { [Update] = { first:after(missing) } },
+                export local InvalidPlugin = Plugin.new {
+                    build = function(app: App)
+                        app:add_system(Update, first:after(missing))
+                    end,
                 }
             )",
             "unregistered system",
@@ -680,13 +848,14 @@ TEST_CASE(
             R"(
                 local function first() end
                 local function second() end
-                return {
-                    systems = {
-                        [Update] = {
+                export local InvalidPlugin = Plugin.new {
+                    build = function(app: App)
+                        app:add_systems(
+                            Update,
                             first:after(second),
-                            second:after(first),
-                        },
-                    },
+                            second:after(first)
+                        )
+                    end,
                 }
             )",
             "cycle detected",
@@ -694,8 +863,10 @@ TEST_CASE(
         {
             R"(
                 local function tick() end
-                return {
-                    systems = { [Update] = { chain(tick) } },
+                export local InvalidPlugin = Plugin.new {
+                    build = function(app: App)
+                        app:add_system(Update, chain(tick))
+                    end,
                 }
             )",
             "at least two",
@@ -706,10 +877,10 @@ TEST_CASE(
                     return true
                 end
                 local function tick() end
-                return {
-                    systems = {
-                        [Update] = { tick:run_if(writable) },
-                    },
+                export local InvalidPlugin = Plugin.new {
+                    build = function(app: App)
+                        app:add_system(Update, tick:run_if(writable))
+                    end,
                 }
             )",
             "read-only",
@@ -738,16 +909,17 @@ TEST_CASE(
             local function third() end
             local function independent() end
 
-            return {
-                systems = {
-                    [Update] = {
+            export local SystemsPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_systems(
+                        Update,
                         chain(
                             first,
                             chain(second:run_if(enabled), third)
                         ),
-                        independent,
-                    },
-                },
+                        independent
+                    )
+                end,
             }
         )",
     };
@@ -782,8 +954,10 @@ TEST_CASE(
                 R"(
                     counter = 0
                     local function tick() end
-                    return {
-                        systems = { system(Update, tick) },
+                    export local InvalidPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )",
                 "assignment to global 'counter'",
@@ -791,8 +965,10 @@ TEST_CASE(
             {
                 R"(
                     function tick() end
-                    return {
-                        systems = { system(Update, tick) },
+                    export local InvalidPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )",
                 "assignment to global 'tick'",
@@ -803,8 +979,10 @@ TEST_CASE(
                     local function tick()
                         counter += 1
                     end
-                    return {
-                        systems = { system(Update, tick) },
+                    export local InvalidPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )",
                 "cannot reassign readonly module binding 'counter'",
@@ -814,8 +992,10 @@ TEST_CASE(
                     local counter = 0
                     counter = 1
                     local function tick() end
-                    return {
-                        systems = { system(Update, tick) },
+                    export local InvalidPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )",
                 "cannot reassign readonly module binding 'counter'",
@@ -825,8 +1005,10 @@ TEST_CASE(
                     local counter = 0
                     counter += 1
                     local function tick() end
-                    return {
-                        systems = { system(Update, tick) },
+                    export local InvalidPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )",
                 "cannot reassign readonly module binding 'counter'",
@@ -837,8 +1019,10 @@ TEST_CASE(
                     local function tick()
                         counter = 1
                     end
-                    return {
-                        systems = { system(Update, tick) },
+                    export local InvalidPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )",
                 "cannot reassign readonly module binding 'counter'",
@@ -847,8 +1031,10 @@ TEST_CASE(
                 R"(
                     local function tick() end
                     tick = function() end
-                    return {
-                        systems = { system(Update, tick) },
+                    export local InvalidPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )",
                 "cannot reassign readonly module binding 'tick'",
@@ -859,8 +1045,10 @@ TEST_CASE(
                     local function tick()
                         cache.value = cache.value + 1
                     end
-                    return {
-                        systems = { system(Update, tick) },
+                    export local InvalidPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )",
                 "mutation of module state 'cache'",
@@ -871,8 +1059,10 @@ TEST_CASE(
                     local function tick()
                         table.insert(cache, 1)
                     end
-                    return {
-                        systems = { system(Update, tick) },
+                    export local InvalidPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )",
                 "cannot mutate captured module state",
@@ -884,8 +1074,10 @@ TEST_CASE(
                         local alias = cache
                         alias.value += 1
                     end
-                    return {
-                        systems = { system(Update, tick) },
+                    export local InvalidPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )",
                 "mutation of module state 'alias'",
@@ -899,8 +1091,10 @@ TEST_CASE(
                     local function tick()
                         mutate(cache)
                     end
-                    return {
-                        systems = { system(Update, tick) },
+                    export local InvalidPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )",
                 "captured module state cannot be passed to a call",
@@ -910,8 +1104,10 @@ TEST_CASE(
                     local function tick()
                         math.snapshot_unsafe_value = 1
                     end
-                    return {
-                        systems = { system(Update, tick) },
+                    export local InvalidPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )",
                 "assignment to global 'math'",
@@ -921,8 +1117,10 @@ TEST_CASE(
                     local function tick()
                         local value = math.random()
                     end
-                    return {
-                        systems = { system(Update, tick) },
+                    export local InvalidPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )",
                 "nondeterministic API 'math.random'",
@@ -933,8 +1131,10 @@ TEST_CASE(
                     local function tick()
                         core.Random = nil
                     end
-                    return {
-                        systems = { system(Update, tick) },
+                    export local InvalidPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, tick)
+                        end,
                     }
                 )",
                 "assignment to readonly native module 'core'",
@@ -963,8 +1163,10 @@ TEST_CASE(
                 add(2)
                 assert(total == 2)
             end
-            return {
-                systems = { system(Update, tick) },
+            export local SafePlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, tick)
+                end,
             }
         )",
     };
@@ -980,8 +1182,10 @@ TEST_CASE(
             local function tick()
                 use_type(core.Random)
             end
-            return {
-                systems = { system(Update, tick) },
+            export local SafePlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, tick)
+                end,
             }
         )",
     };
@@ -992,12 +1196,10 @@ TEST_CASE(
             .name = "stateful_library.luau",
             .content = R"(
                 local value = 0
-                return {
-                    next = function()
-                        value += 1
-                        return value
-                    end,
-                }
+                export function next(): number
+                    value += 1
+                    return value
+                end
             )",
         }
     );

@@ -1,3 +1,13 @@
+export type CardBattleState = {
+    initialized: i32,
+    turn: i32,
+    player_hp: i32,
+    enemy_hp: i32,
+    energy: i32,
+    actions: i32,
+    status: i32,
+}
+
 local function initialize(
     commands: Commands,
     assets: ResRW<AssetServer>,
@@ -70,22 +80,9 @@ local function initialize(
     state.energy = 3
 end
 
-return {
-    types = {
-        CardBattleState = {
-            initialized = field(i32, 0),
-            turn = field(i32, 0),
-            player_hp = field(i32, 0),
-            enemy_hp = field(i32, 0),
-            energy = field(i32, 0),
-            actions = field(i32, 0),
-            status = field(i32, 0),
-        },
-    },
-    resources = {
-        CardBattleState = {},
-    },
-    systems = {
-        system(StartUp, initialize),
-    },
+export local CardBattlePlugin = Plugin.new {
+    build = function(app: App)
+        app:add_resource(CardBattleState {})
+        app:add_system(StartUp, initialize)
+    end,
 }

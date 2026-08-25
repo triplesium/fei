@@ -1,3 +1,35 @@
+export type CheckpointArenaActor = {
+    kind: i32,
+    health: i32,
+}
+
+export type CheckpointArenaPlayer = {
+    velocity_y: f32,
+    speed: f32,
+    grounded: i32,
+}
+
+export type CheckpointArenaState = {
+    initialized: i32,
+    player: entity,
+    enemy: entity?,
+    physics_probe: entity,
+    enemy_alive: i32,
+    turn: i32,
+    actions: i32,
+    score: i32,
+    move_axis: f32,
+    move_action_started: i32,
+    jump_requested: i32,
+    attack_requested: i32,
+}
+
+export type ArenaUiRoot = {}
+export type ArenaStatusLabel = {}
+export type ArenaEnemyHealthFill = {}
+export type ArenaVictoryPanel = {}
+export type CheckpointArenaPhysicsProbe = {}
+
 local function initialize(
     commands: Commands,
     assets: ResRW<AssetServer>,
@@ -55,7 +87,7 @@ local function initialize(
         },
         Transform2d.new {position = Vector2.new(-3.35, -1.15)},
         CheckpointArenaActor.new {kind = 1, health = 10},
-        CheckpointArenaPlayer.new()
+        CheckpointArenaPlayer.new {speed = 3.5, grounded = 1}
     )
     local enemy = commands:spawn(
         Sprite.new {
@@ -394,44 +426,13 @@ local function sync_status_ui(
     end
 end
 
-return {
-    types = {
-        CheckpointArenaActor = {
-            kind = field(i32, 0),
-            health = field(i32, 0),
-        },
-        CheckpointArenaPlayer = {
-            velocity_y = field(f32, 0.0),
-            speed = field(f32, 3.5),
-            grounded = field(i32, 1),
-        },
-        CheckpointArenaState = {
-            initialized = field(i32, 0),
-            player = field(entity, 0),
-            enemy = field(optional(entity), nil),
-            physics_probe = field(entity, 0),
-            enemy_alive = field(i32, 0),
-            turn = field(i32, 0),
-            actions = field(i32, 0),
-            score = field(i32, 0),
-            move_axis = field(f32, 0.0),
-            move_action_started = field(i32, 0),
-            jump_requested = field(i32, 0),
-            attack_requested = field(i32, 0),
-        },
-        ArenaUiRoot = {},
-        ArenaStatusLabel = {},
-        ArenaEnemyHealthFill = {},
-        ArenaVictoryPanel = {},
-        CheckpointArenaPhysicsProbe = {},
-    },
-    resources = {
-        CheckpointArenaState = {},
-    },
-    systems = {
-        [StartUp] = {initialize},
-        [Update] = {
-            chain(handle_actions, sync_actor_visuals, sync_status_ui),
-        },
-    },
+export local CheckpointRenderPlugin = Plugin.new {
+    build = function(app: App)
+        app:add_resource(CheckpointArenaState {})
+        app:add_system(StartUp, initialize)
+        app:add_system(
+            Update,
+            chain(handle_actions, sync_actor_visuals, sync_status_ui)
+        )
+    end,
 }
