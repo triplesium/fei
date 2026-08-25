@@ -206,13 +206,19 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
         bool plugin_system_registration = false;
         if (expression->self) {
             const auto* method = expression->func->as<AstExprIndexName>();
-            plugin_system_registration =
-                method != nullptr && name_view(method->index) == "add_system";
+            if (method != nullptr) {
+                const auto method_name = name_view(method->index);
+                plugin_system_registration =
+                    method_name == "add_system" || method_name == "add_systems";
+            }
             if (method != nullptr && references_module_state(*method->expr)) {
                 reject(
                     expression->location,
                     "method calls cannot mutate captured module state"
                 );
+                return false;
+            }
+            if (plugin_system_registration) {
                 return false;
             }
         }
@@ -241,7 +247,6 @@ class LuauSnapshotSafetyVisitor final : public Luau::AstVisitor {
         }
         for (AstExpr* argument : expression->args) {
             if (references_module_state(*argument) &&
-                !plugin_system_registration &&
                 !(imported_type_call && is_direct_module_export(*argument))) {
                 reject(
                     expression->location,
@@ -1794,6 +1799,23 @@ Result<CompiledSystemGroup, ScriptError> compile_system_group(
     return result;
 }
 
+void append_system_runtime_entries(
+    const AstExpr& expression,
+    std::vector<const AstExpr*>& entries
+) {
+    const auto* call = expression.as<AstExprCall>();
+    const auto* callee =
+        call != nullptr ? call->func->as<AstExprGlobal>() : nullptr;
+    if (call == nullptr || callee == nullptr ||
+        name_view(callee->name) != "chain") {
+        entries.push_back(&expression);
+        return;
+    }
+    for (const AstExpr* argument : call->args) {
+        append_system_runtime_entries(*argument, entries);
+    }
+}
+
 Result<DynamicSystemDecl, ScriptError> compile_legacy_system(
     const AstExpr& expression,
     const FunctionResolutionContext& function_context,
@@ -2459,29 +2481,45 @@ Result<PluginRuntimeEntries, ScriptError> compile_plugin_entries(
             declaration.resources.push_back(std::move(resource));
             continue;
         }
-        if (method_name != "add_system" || call->args.size != 2) {
+        if (method_name != "add_system" && method_name != "add_systems") {
             return failure(
                 declaration_error("unsupported Plugin build App method")
             );
+        }
+        if (method_name == "add_system" && call->args.size != 2) {
+            return failure(declaration_error(
+                "app:add_system expects a schedule and one system group"
+            ));
+        }
+        if (method_name == "add_systems" && call->args.size < 2) {
+            return failure(declaration_error(
+                "app:add_systems expects a schedule and at least one system "
+                "group"
+            ));
         }
         auto schedule =
             schedule_id(*call->args.data[0], required_runtime_types);
         if (!schedule) {
             return failure(std::move(schedule.error()));
         }
-        auto group = compile_system_group(
-            *call->args.data[1],
-            *schedule,
-            function_context,
-            required_runtime_types
-        );
-        if (!group) {
-            return failure(std::move(group.error()));
+        for (std::size_t index = 1; index < call->args.size; ++index) {
+            auto group = compile_system_group(
+                *call->args.data[index],
+                *schedule,
+                function_context,
+                required_runtime_types
+            );
+            if (!group) {
+                return failure(std::move(group.error()));
+            }
+            for (auto& system : group->systems) {
+                declaration.systems.push_back(std::move(system));
+            }
+            append_system_runtime_entries(
+                *call->args.data[index],
+                runtime_entries.systems
+            );
         }
-        for (auto& system : group->systems) {
-            declaration.systems.push_back(std::move(system));
-        }
-        runtime_entries.systems.push_back(call->args.data[1]);
     }
     return runtime_entries;
 }

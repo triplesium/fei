@@ -81,6 +81,58 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Luau compiler adds multiple systems from exported Plugins",
+    "[scripting_luau][compiler][plugin][system]"
+) {
+    const ScriptSource source {
+        .name = "project://scripts/systems.luau",
+        .content = R"(
+            local function enabled(): boolean
+                return true
+            end
+
+            local function first()
+            end
+
+            local function second()
+            end
+
+            local function third()
+            end
+
+            local function last()
+            end
+
+            export local SystemsPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_systems(
+                        Update,
+                        first,
+                        second:after(first):run_if(enabled),
+                        chain(third, last)
+                    )
+                end,
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    REQUIRE(artifact->declaration.systems.size() == 4);
+    const auto& systems = artifact->declaration.systems;
+    CHECK(systems[0].name == "first");
+    CHECK(systems[1].name == "second");
+    CHECK(systems[1].after == std::vector<std::string> {"first"});
+    REQUIRE(systems[1].conditions.size() == 1);
+    CHECK(systems[1].conditions[0].name == "enabled");
+    CHECK(systems[2].name == "third");
+    CHECK(systems[2].before == std::vector<std::string> {"last"});
+    CHECK(systems[3].name == "last");
+}
+
+TEST_CASE(
     "Luau compiler resolves imported exported system functions",
     "[scripting_luau][compiler][system][import]"
 ) {

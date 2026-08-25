@@ -136,6 +136,56 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Luau runtime loads multiple systems from exported Plugins",
+    "[scripting_luau][runtime][plugin][system]"
+) {
+    const ScriptSource source {
+        .name = "project://scripts/systems.luau",
+        .content = R"(
+            local function enabled(): boolean
+                return true
+            end
+
+            local function first()
+            end
+
+            local function second()
+            end
+
+            local function third()
+            end
+
+            local function last()
+            end
+
+            export local SystemsPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_systems(
+                        Update,
+                        first,
+                        second:run_if(enabled),
+                        chain(third, last)
+                    )
+                end,
+            }
+        )",
+    };
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact);
+
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module);
+    CHECK(runtime.call_module_function(*module, "first"));
+    CHECK(runtime.call_module_function(*module, "second"));
+    CHECK(runtime.call_module_function(*module, "third"));
+    CHECK(runtime.call_module_function(*module, "last"));
+    auto enabled = runtime.call_module_condition(*module, "enabled", {});
+    REQUIRE(enabled);
+    CHECK(*enabled);
+}
+
+TEST_CASE(
     "Luau runtime invokes reflected static methods through type tokens",
     "[scripting_luau][runtime][reflection][static]"
 ) {
