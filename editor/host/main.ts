@@ -20,7 +20,7 @@ const host = createEditorHost({
     credentials: new EncryptedCredentialStore(),
     editorSettingsStore: new FileEditorSettingsStore(),
     modelSettingsStore: new FileEditorModelSettingsStore(),
-    distDirectory: resolve(process.cwd(), "dist"),
+    distDirectory: resolve(process.cwd(), "dist", "host"),
     runtimeDirectory: resolve(
         process.env.ETS_EDITOR_RUNTIME_DIR ??
             resolve(process.cwd(), "..", "build", "wasm", "wasm32", "debug"),

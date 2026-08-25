@@ -45,7 +45,7 @@ To start the Web Editor, build its WebAssembly runtime:
 
 ```bash
 xmake f -p wasm -m debug --shader_targets=webgpu -y
-xmake build -y entisium-editor-runtime
+xmake build -y entisium-editor
 ```
 
 Then start the local Editor host:

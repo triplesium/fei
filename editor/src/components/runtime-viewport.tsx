@@ -44,7 +44,7 @@ export function RuntimeViewport({
                 </Badge>
             </PanelToolbar>
             <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#080b10] p-2 [container-type:size]">
-                <div className="w-[min(100cqw,calc(100cqh*16/9))] max-w-full">
+                <div className="runtime-stage w-[min(100cqw,calc(100cqh*16/9))] max-w-full">
                     <AspectRatio
                         ratio={16 / 9}
                         className="overflow-hidden rounded-md border border-border/70 bg-[#0a0e13] shadow-[0_12px_36px_rgb(0_0_0/0.28)]"

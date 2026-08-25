@@ -350,29 +350,30 @@ async function runSmokeTest(client, url, selectedScenario) {
         await waitFor(client, "the web editor", async () => {
             return evaluate(client, "document.documentElement.dataset.entisiumEditorReady === 'true'");
         }, errors);
-        const unopened = await evaluate(client, `({
+        const startup = await evaluate(client, `({
             openFolderAvailable: typeof window.showDirectoryPicker === "function",
-            openFolderDisabled: document.querySelector("#open-folder").disabled,
-            playDisabled: document.querySelector("#play").disabled,
-            editorDisabled: document.querySelector("#source-editor").dataset.disabled === "true",
+            agentAvailable: typeof window.entisiumEditorAgent !== "undefined",
+            playEnabled: document.querySelector("#play")?.disabled === false,
+            editorAvailable: (() => {
+                const editor = document.querySelector("#source-editor");
+                return Boolean(editor) && editor.dataset.disabled === "false";
+            })(),
             gameRatio: (() => {
                 const rect = document.querySelector(".runtime-stage").getBoundingClientRect();
                 return rect.width / rect.height;
             })(),
         })`);
-        if (!unopened.openFolderAvailable || unopened.openFolderDisabled ||
-            !unopened.playDisabled || !unopened.editorDisabled) {
-            throw new Error("the editor did not enter the expected unopened local-folder state");
+        if (!startup.openFolderAvailable || startup.agentAvailable ||
+            !startup.playEnabled || !startup.editorAvailable) {
+            throw new Error(
+                `the editor did not open its bundled project: ${JSON.stringify(startup)}`,
+            );
         }
-        if (Math.abs(unopened.gameRatio - 16 / 9) > 0.02) {
-            throw new Error(`the editor Game viewport is not 16:9 (${unopened.gameRatio})`);
+        if (Math.abs(startup.gameRatio - 16 / 9) > 0.02) {
+            throw new Error(`the editor Game viewport is not 16:9 (${startup.gameRatio})`);
         }
-        const project = await evaluate(client, "window.entisiumEditorAgent.invoke({type: 'project.list'})");
-        if (project.ok || !project.error?.message.includes("Open a local project folder")) {
-            throw new Error("project commands were not gated on local-folder permission");
-        }
-        console.log("browser smoke: local-folder editor startup passed");
-        return {entisiumEditorRuntime: "stopped", entisiumEditorProjectStatus: "local folder required"};
+        console.log("browser smoke: bundled-project editor startup passed");
+        return {entisiumEditorRuntime: "stopped", entisiumEditorProjectStatus: "bundled project ready"};
     }
 
     if (selectedScenario === "project") {

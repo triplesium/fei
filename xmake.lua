@@ -33,6 +33,12 @@ option("shader_targets")
     set_description("Comma-separated runtime shader targets to build")
 option_end()
 
+option("editor_demo_project")
+    set_default("samples/projects/skyline_strike")
+    set_showmenu(true)
+    set_description("Project directory bundled by entisium-editor-demo")
+option_end()
+
 includes("packages")
 
 if is_plat("wasm") then
@@ -168,8 +174,8 @@ function add_browser_shell(shell_file)
             return
         end
         local script_pattern = script_name:gsub("(%W)", "%%%1")
-        local script_tag = '<script async type="text/javascript" src="' ..
-            script_pattern .. '"></script>'
+        local script_tag = '<script[^>]-src=["\']?' ..
+            script_pattern .. '["\']?[^>]*></script>'
         local script_loader = [[<script>
             const emscriptenScript = document.createElement("script");
             emscriptenScript.async = true;

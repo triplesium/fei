@@ -33,6 +33,16 @@ xmake build -y entisium-shader-webgpu
 xmake build -y sample-browser
 xmake build -y sample-browser-project
 xmake build -y entisium-editor-runtime
+xmake build -y entisium-editor
+xmake build -y entisium-editor-demo
+```
+
+Select the project bundled by the static demo while configuring the build. The default is `samples/projects/skyline_strike`:
+
+```bash
+xmake f -p wasm -m release --shader_targets=webgpu \
+    --editor_demo_project=samples/projects/skyline_strike -y
+xmake build -y entisium-editor-demo
 ```
 
 Use the corresponding smoke tasks after changing the browser runtime or Editor:
@@ -53,12 +63,13 @@ Build outputs are staged under `build/wasm/wasm32/<mode>/`. Serve that directory
 | --- | --- | --- |
 | `sample-browser` | `sample-browser.html` | WebGPU sprite, text, UI, input, scrolling, and asset smoke coverage |
 | `sample-browser-project` | `sample-browser-project.html` | Project runtime fixture covering Luau loading and sprite presentation |
-| `entisium-editor-runtime` | `runtime/index.html` | Isolated Editor runtime with project injection, inspection, capture, and playtest bridges |
-| `entisium-editor-runtime` | `editor/index.html` | Web Editor staged beside its runtime output |
+| `entisium-editor-runtime` | `runtime/index.html` | Shared isolated Editor runtime with project injection, inspection, capture, and playtest bridges |
+| `entisium-editor` | `editor/index.html` | Full Web Editor using the local Host for projects, Agent models, and MCP |
+| `entisium-editor-demo` | `editor-demo/index.html` | Static Web Editor using browser-authorized project folders without Agent or MCP |
 
 The `sample-browser-project` fixture loads `samples/browser_project/project/project.yaml` from the preloaded Emscripten filesystem, installs the configured Luau project plugins, and runs `project://main.luau`.
 
-The Editor uses the separately built `entisium-editor-runtime`. That target does not preload the sample project. Play sends the open project's complete snapshot to a fresh iframe before the C++ runtime starts. Its playtest contract is available through the Editor runtime bridge; see [Playtest](playtest.md) for the control workflow.
+Both Editor targets use the separately built `entisium-editor-runtime`. That target does not preload the sample project. Play sends the open project's complete snapshot to a fresh iframe before the C++ runtime starts. Its playtest contract is available through the Editor runtime bridge; see [Playtest](playtest.md) for the control workflow.
 
 ## Runtime model
 
@@ -78,9 +89,9 @@ Compiled shader variants are cached at `/entisium/cache/shaders`. The current ca
 
 ## Run the local Editor
 
-The Editor is a Vite, React, and TypeScript application under `editor/`. The `entisium-editor-runtime` build runs its production build and stages `editor/dist/` beside the WASM runtime. Runtime artifacts are staged under the stable `runtime/` path rather than exposing target output names to the Editor.
+The Editor is a Vite, React, and TypeScript application under `editor/`. The `entisium-editor` and `entisium-editor-demo` targets compile the same application against Host and browser platform implementations respectively, then stage their output beside the shared WASM runtime. Runtime artifacts use the stable `runtime/` path rather than exposing target output names to the Editor.
 
-For local development, first build `entisium-editor-runtime`, then start the Editor host:
+For local development, first build `entisium-editor`, then start the Editor host:
 
 ```bash
 cd editor
@@ -90,9 +101,11 @@ npm start -- --project ../samples/browser_project/project
 
 The host serves the Editor and runtime from `http://127.0.0.1:3100` by default. Use `ETS_EDITOR_HOST_PORT` to select another port and `ETS_EDITOR_RUNTIME_DIR` to point at a different staged WASM directory. Use `npm run dev -- --project <directory>` when working on the Editor frontend.
 
-On Edge and Chrome, the Editor can also open a user-authorized local folder containing `project.yaml` and project assets. The directory handle is remembered in IndexedDB when permission persists. Play injects the project's text and binary files into an isolated iframe; Stop destroys that iframe.
+The `entisium-editor-demo` output is fully static. Serve the configured output root and open `editor-demo/index.html`; the sibling `runtime/` directory must be served from the same origin. Use HTTPS outside localhost because WebGPU and the File System Access API require a secure context.
 
-The supported browser command registry is `window.entisiumEditor.commands`. `window.entisiumEditorAgent` remains a deprecated compatibility alias.
+On first launch, the demo copies its configured project into an origin-private browser workspace and opens it automatically. Each project content version receives a separate workspace, so rebuilding the demo does not overwrite edits made to an older version. Edge and Chrome users can also open a user-authorized local folder containing `project.yaml` and project assets; that directory handle is remembered in IndexedDB when permission persists. Play injects the project's text and binary files into an isolated iframe; Stop destroys that iframe. The demo build does not contain the Agent, model settings, Host APIs, or MCP command bridge.
+
+In the full Editor, the supported browser command registry is `window.entisiumEditor.commands`. `window.entisiumEditorAgent` remains a deprecated compatibility alias.
 
 ## Connect through MCP
 
