@@ -1,13 +1,13 @@
-# Profiling Guide for Agents
+# Profiling
 
-This project has two CPU profiling paths:
+This guide is intended for contributors and automated performance investigations. The project has two CPU profiling paths:
 
 - Tracy zones for interactive timeline inspection.
 - Engine-side summary CSV files for agent-readable reports.
 
 The default build keeps profiling disabled.
 
-## Enable Profiling
+## Enable profiling
 
 Use a debug build with both Tracy and summary output enabled:
 
@@ -24,7 +24,7 @@ build/profile/latest
 
 Each profiling run overwrites that directory.
 
-## Run a Bounded Capture
+## Run a bounded capture
 
 Use the `profile` task so samples exit on their own:
 
@@ -47,7 +47,7 @@ ETS_EXIT_AFTER_SECONDS
 
 `App::run()` reads those values and exits normally after the limit is reached.
 
-## Read the Terminal Report
+## Read the terminal report
 
 The task prints:
 
@@ -55,9 +55,7 @@ The task prints:
 - `Top zones by self time`
 - frame count, mean, p50, p95, and max duration
 
-Prefer `self` time when deciding what to inspect first. `total` time includes
-child zones and can make a schedule or wrapper look expensive because of nested
-work.
+Prefer `self` time when deciding what to inspect first. `total` time includes child zones and can make a schedule or wrapper look expensive because of nested work.
 
 Example workflow:
 
@@ -71,7 +69,7 @@ Then inspect:
 2. The slowest OpenGL or engine zone by `self` time.
 3. Frame `p95` and `max` for spikes.
 
-## Read the CSV Files
+## Read the CSV files
 
 The summary backend writes:
 
@@ -93,12 +91,11 @@ Use `systems.csv` for ECS system timing. Useful columns:
 - `line`
 - `function`
 
-Use `zones.csv` for manual scopes such as OpenGL uploads, command execution,
-device flush, shader compile, and swap buffers.
+Use `zones.csv` for manual scopes such as OpenGL uploads, command execution, device flush, shader compile, and swap buffers.
 
 Use `frames.csv` for frame-time distribution work.
 
-## System Names
+## System names
 
 ECS system names come from:
 
@@ -107,8 +104,7 @@ ECS system names come from:
 - Windows symbolization via `SymFromAddr` when no explicit name is provided.
 - `system#<id>` fallback when no stable name can be found.
 
-Prefer explicit names for templates and lambdas that should be easy to read in
-reports:
+Prefer explicit names for templates and lambdas that should be easy to read in reports:
 
 ```cpp
 app.add_systems(Update, ETS_SYSTEM_NAME("init_shader_cache", [](...) {
@@ -122,13 +118,11 @@ For normal free functions:
 app.add_systems(Update, ETS_NAMED_SYSTEM(update_transforms));
 ```
 
-The named wrappers preserve the original function hash and access metadata, so
-dependency ordering still uses the original callable.
+The named wrappers preserve the original function hash and access metadata, so dependency ordering still uses the original callable.
 
-## Manual Scopes
+## Manual scopes
 
-Use manual scopes for engine work that is not an ECS system or is too broad at
-the system level:
+Use manual scopes for engine work that is not an ECS system or is too broad at the system level:
 
 ```cpp
 ETS_PROFILE_SCOPE("OpenGL Texture Upload");
@@ -146,21 +140,16 @@ Use dynamic scopes only when the name and source location come from metadata:
 ETS_PROFILE_DYNAMIC_SCOPE(name, file, function, line);
 ```
 
-Do not add scopes everywhere. Add them around expensive or ambiguous blocks that
-help answer a concrete profiling question.
+Do not add scopes everywhere. Add them around expensive or ambiguous blocks that help answer a concrete profiling question.
 
 ## Tracy
 
-With `--tracy=y`, the same macros emit Tracy CPU zones. Run the sample and attach
-the Tracy viewer to inspect the timeline.
+With `--tracy=y`, the same macros emit Tracy CPU zones. Run the sample and attach the Tracy viewer to inspect the timeline.
 
 Current scope:
 
 - CPU zones only.
 - No GPU query zones.
-- No callstack sampling, system tracing, frame images, fibers, or other high
-  overhead Tracy features.
+- No callstack sampling, system tracing, frame images, fibers, or other high overhead Tracy features.
 
-If Tracy shows `ILT+...` names, prefer the summary CSV or explicit
-`ETS_NAMED_SYSTEM` / `ETS_SYSTEM_NAME` wrappers. The Windows symbolizer attempts
-to resolve incremental-link thunks, but explicit names are still clearer.
+If Tracy shows `ILT+...` names, prefer the summary CSV or explicit `ETS_NAMED_SYSTEM` / `ETS_SYSTEM_NAME` wrappers. The Windows symbolizer attempts to resolve incremental-link thunks, but explicit names are still clearer.

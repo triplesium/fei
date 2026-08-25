@@ -35,10 +35,11 @@ Expected completion conditions are:
   controller. `PageUp` stores a strict quick-save and `PageDown` restores it
   without advancing the restored simulation state.
 
-Launch that continuous keyboard mode from the repository root with:
+Launch that continuous keyboard mode from the repository root without relying
+on a platform-specific build-output path:
 
 ```powershell
-build/windows/x64/debug/entisium-runtime-host.exe `
+xmake run entisium-runtime-host `
   samples/projects/scripting/checkpoint_render.project.yaml
 ```
 
