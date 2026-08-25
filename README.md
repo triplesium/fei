@@ -4,105 +4,127 @@
 
 ## Highlights
 
-- Bevy-like system declarations using C++ functions
-- Component memory management based on archetypes
-- Rendering stack with graphics abstractions and an OpenGL backend
-- PBR rendering pipeline, deferred shading, shadow mapping, IBL, and VXGI
-- Runtime reflection and metadata generation
-- Lua scripting integration
+- **Engine and runtime**
+    - **Application model:** Bevy-inspired plugins, schedules, systems, and queries
+    - **ECS:** Archetype-based storage with events, change detection, and parallel system execution
+    - **Reflection and scripting:** Runtime reflection and generated metadata with Lua and Luau
+    - **Platforms:** Native and WebAssembly runtime targets
+- **Rendering**
+    - **Backends:** Shared graphics and rendering abstractions across OpenGL, Vulkan, and WebGPU
+    - **2D:** Sprites, text, UI widgets, and Box2D physics
+    - **3D:** PBR rendering with deferred shading, shadows, IBL, and VXGI
+    - **Shaders:** Runtime Slang compilation to GLSL, SPIR-V, and WGSL
+- **Tools and agents**
+    - **Editor:** Web-based editing with a built-in agent and MCP support
+    - **Playtesting:** An extensible framework for agent-driven playtesting
 
 ## Requirements
 
 - A C++23-capable compiler
 - [xmake](https://xmake.io/)
-
-Most third-party libraries can be resolved by `xmake`.
+- Node.js and npm when building the Web Editor
 
 ## Build
 
-First, follow the instructions to install [xmake](https://xmake.io/).
-Once xmake is ready, simply clone the repository and run xmake.
+Install [xmake](https://xmake.io/), then clone the repository:
+
 ```bash
 git clone https://github.com/triplesium/entisium.git
 cd entisium
-xmake
 ```
 
-Basic reflection like type names, type ids, and type-erased wrappers (`Ref` and `Val`) do not need generated metadata. But if you want to use the scripting module, or retrieve method or property information of an object, you need to generate reflection metadata.
+Build and run a native sample:
 
-To do this, run the `reflgen` xmake task.
 ```bash
-xmake reflgen
+xmake f -m debug -y
+xmake build -y sample-sprite
+xmake run sample-sprite
 ```
-It builds and runs the `entisium-reflgen` generator for reflected xmake targets. Generated C++ files are written under `build/.gens/<target>/reflection/` and compiled into the corresponding target.
+
+To start the Web Editor, build its WebAssembly runtime:
+
+```bash
+xmake f -p wasm -m debug --shader_targets=webgpu -y
+xmake build -y entisium-editor-runtime
+```
+
+Then start the local Editor host:
+
+```bash
+cd editor
+npm start -- --project ../samples/browser_project/project
+```
+
+Open the local URL printed by the Editor host.
 
 ## Examples
 
-Below is a minimal example of our core ECS functionality.
+A minimal ECS application can spawn entities with deferred commands and update
+them through a query:
+
 ```cpp
 struct Position {
-    float x;
-    float y;
+    float x {};
+    float y {};
 };
 
 struct Velocity {
-    float dx;
-    float dy;
+    float x {};
+    float y {};
 };
 
-struct Tag {};
+struct Moving {};
 
-void start(Commands commands) {
-    for (auto i = 0u; i < 10u; ++i) {
+void startup(Commands commands) {
+    for (unsigned index = 0; index < 10; ++index) {
+        const auto value = static_cast<float>(index);
         commands.spawn().add(
-            Position {.x = i * 1.f, .y = i * 1.f},
-            Velocity {.dx = 0.1f, .dy = 0.1f},
-            Tag {}
+            Position {.x = value, .y = value},
+            Velocity {.x = 0.1F, .y = 0.1F},
+            Moving {}
         );
     }
 }
 
 void update(
-    Res<Time> time, 
-    Query<Position, Velocity>::Filter<With<Tag>> query
+    ResRO<Time> time,
+    Query<Position, const Velocity>::Filter<With<Moving>> query
 ) {
-    for (auto [pos, vel] : query) {
-        pos.x += vel.dx * time->delta();
-        pos.y += vel.dy * time->delta();
+    for (auto [position, velocity] : query) {
+        position->x += velocity.x * time->delta();
+        position->y += velocity.y * time->delta();
     }
 }
 
 int main() {
-    App()
-        .add_plugins(TimePlugin())
-        .add_systems(StartUp, start)
-        .add_systems(Update, update)
-        .run();
-    return 0;
+    App app;
+    app.add_plugin<TimePlugin>()
+        .add_systems(StartUp, startup)
+        .add_systems(Update, update);
+    app.run();
 }
 ```
 
-Also, you can do some system ordering. It's very similar to Bevy.
+System sets can order groups of systems, while `chain` orders systems within a
+group:
+
 ```cpp
 struct PhysicsSet : SystemSet<PhysicsSet> {};
-struct MovementSet: SystemSet<MovementSet> {};
+struct MovementSet : SystemSet<MovementSet> {};
+
 int main() {
-    App()
-        .configure_sets(chain(PhysicsSet(), MovementSet()))
+    App app;
+    app.configure_sets(Update, chain(PhysicsSet {}, MovementSet {}))
         .add_systems(
             Update,
             update_physics | in_set<PhysicsSet>(),
-            move_player | in_set<MovementSet>(),
-            move_enemy | in_set<MovementSet>() | after(move_player)
-            // Or replace the above two lines with:
-            // chain(move_player, move_enemy) | in_set<MovementSet>()
-        )
-        .run();
-    return 0;
+            chain(move_player, move_enemy) | in_set<MovementSet>()
+        );
+    app.run();
 }
 ```
 
-For more samples, please see the [samples folder](samples/).
+See [`samples/`](samples/) for more examples.
 
 ## Documentation
 
