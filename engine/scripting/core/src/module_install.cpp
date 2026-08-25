@@ -1,5 +1,6 @@
 #include "scripting/module_install.hpp"
 
+#include "ecs/dynamic/events.hpp"
 #include "ecs/dynamic/system_decl.hpp"
 #include "ecs/world.hpp"
 #include "refl/cls.hpp"
@@ -394,6 +395,26 @@ install_script_module_resources(World& world, const ScriptModuleDecl& decl) {
     return {};
 }
 
+Status<ScriptError>
+install_script_module_events(World& world, const ScriptModuleDecl& decl) {
+    if (decl.events.empty()) {
+        return {};
+    }
+    if (!world.has_resource<DynamicEvents>()) {
+        world.add_resource(DynamicEvents {});
+    }
+    auto& events = world.resource<DynamicEvents>();
+    for (const auto& event : decl.events) {
+        auto type =
+            resolve_dynamic_type_ref(DynamicTypeRef {.type_name = event.type});
+        if (!type) {
+            return failure(ScriptError {std::move(type.error().message)});
+        }
+        events.register_type(*type);
+    }
+    return {};
+}
+
 Result<SystemAccess, ScriptError>
 script_system_access_for_decl(const DynamicSystemDecl& decl) {
     auto params = compile_dynamic_system_params(decl);
@@ -594,6 +615,10 @@ Result<std::vector<SystemHandle>, ScriptError> install_script_module(
     auto resources = install_script_module_resources(world, decl);
     if (!resources) {
         return failure(std::move(resources.error()));
+    }
+    auto events = install_script_module_events(world, decl);
+    if (!events) {
+        return failure(std::move(events.error()));
     }
     return install_script_module_systems(world, decl, create_executor, options);
 }

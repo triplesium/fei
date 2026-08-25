@@ -42,6 +42,10 @@ struct ScriptResourceDecl {
     bool init_if_missing {true};
 };
 
+struct ScriptEventDecl {
+    std::string type;
+};
+
 struct ScriptStateValueDecl {
     std::string name;
     std::uint64_t id {0};
@@ -53,6 +57,7 @@ struct ScriptStateDecl {
     TypeId type_id;
     std::string initial;
     std::vector<ScriptStateValueDecl> values;
+    bool init_if_missing {true};
 };
 
 struct ScriptModuleDecl {
@@ -60,6 +65,7 @@ struct ScriptModuleDecl {
     std::string source_name;
     std::vector<ScriptTypeDecl> types;
     std::vector<ScriptResourceDecl> resources;
+    std::vector<ScriptEventDecl> events;
     std::vector<ScriptStateDecl> states;
     std::vector<DynamicSystemDecl> systems;
 };

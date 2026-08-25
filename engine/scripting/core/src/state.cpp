@@ -430,12 +430,15 @@ install_script_state(World& world, const ScriptStateDecl& state) {
     for (const auto& value : state.values) {
         allowed.insert(value.id);
     }
-    auto valid = validate_existing_state(world, state, runtime, allowed);
-    if (!valid) {
-        return valid;
+    if (state.init_if_missing) {
+        auto valid = validate_existing_state(world, state, runtime, allowed);
+        if (!valid) {
+            return valid;
+        }
     }
 
-    if (!world.has_resource(runtime->state_resource)) {
+    if (!state.init_if_missing ||
+        !world.has_resource(runtime->state_resource)) {
         auto initial = make_script_state_value(state, state.initial);
         if (!initial) {
             return failure(std::move(initial.error()));
@@ -445,7 +448,8 @@ install_script_state(World& world, const ScriptStateDecl& state) {
             ScriptStateStorage {.current = std::move(*initial)}
         );
     }
-    if (!world.has_resource(runtime->next_state_resource)) {
+    if (!state.init_if_missing ||
+        !world.has_resource(runtime->next_state_resource)) {
         world.add_keyed_resource(
             runtime->next_state_resource,
             ScriptNextStateStorage {}
@@ -458,6 +462,11 @@ install_script_state(World& world, const ScriptStateDecl& state) {
             runtime->transition_resource,
             ScriptStateTransitionStorage {}
         );
+    } else if (!state.init_if_missing) {
+        storage<ScriptStateTransitionStorage>(
+            world,
+            runtime->transition_resource
+        ) = ScriptStateTransitionStorage {};
     }
     {
         std::unique_lock lock(runtime->schema_mutex);
