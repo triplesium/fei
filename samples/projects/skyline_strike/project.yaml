@@ -1,0 +1,4 @@
+name: Skyline Strike
+asset_directory: assets
+
+plugin: project://scripts/main.luau#SkylineStrikePlugin
