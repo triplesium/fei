@@ -2,6 +2,8 @@
 
 `Entisium` is a toy C++ ECS-based 3D game engine inspired by [Bevy](https://github.com/bevyengine/bevy).
 
+> **[Try the Web Editor Demo](https://triplesium.github.io/entisium/)** — Runs in the browser with a bundled sample project. Agent features are not included.
+
 ## Highlights
 
 - **Engine and runtime**
