@@ -1,4 +1,4 @@
-name: Deploy Editor Demo to GitHub Pages
+name: Deploy Editor Demo
 
 on:
   push:
