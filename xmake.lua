@@ -48,7 +48,7 @@ option_end()
 includes("packages")
 
 if has_config("tests") then
-    add_requires("catch2")
+    add_requires("catch2 v3.15.2")
 end
 
 if is_plat("wasm") then

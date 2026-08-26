@@ -62,7 +62,7 @@ jobs:
         with:
           xmake-version: '3.0.9'
           package-cache: true
-          package-cache-key: windows-2022-msvc14.44-vulkan-${{ env.VULKAN_SDK_VERSION }}
+          package-cache-key: windows-2022-msvc14.44-vulkan-${{ env.VULKAN_SDK_VERSION }}-catch2-3.15.2
           project-path: '.'
 
       - name: Install Vulkan SDK
@@ -71,7 +71,7 @@ jobs:
           vulkan_version: ${{ env.VULKAN_SDK_VERSION }}
           cache: true
           stripdown: false
-          install_runtime: false
+          install_runtime: true
 
       - name: Show xmake version
         run: xmake --version
