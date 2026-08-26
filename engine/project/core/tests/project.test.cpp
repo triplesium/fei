@@ -70,19 +70,16 @@ TEST_CASE("Project loads project.yaml", "[project]") {
     auto project = Project::load(directory.project_file());
 
     REQUIRE(project);
+    const auto canonical_root =
+        std::filesystem::weakly_canonical(directory.path());
     CHECK(project->config().name == "Test Game");
     CHECK(project->config().asset_directory == "assets");
-    CHECK(
-        project->root() == std::filesystem::weakly_canonical(directory.path())
-    );
-    CHECK(
-        project->asset_root() ==
-        std::filesystem::weakly_canonical(directory.path() / "assets")
-    );
-    CHECK(project->cache_root() == directory.path() / ".entisium");
+    CHECK(project->root() == canonical_root);
+    CHECK(project->asset_root() == canonical_root / "assets");
+    CHECK(project->cache_root() == canonical_root / ".entisium");
     CHECK(
         project->imported_asset_root() ==
-        directory.path() / ".entisium" / "imported"
+        canonical_root / ".entisium" / "imported"
     );
 }
 
@@ -182,6 +179,8 @@ TEST_CASE(
     directory.write_asset("readme.txt", "project asset");
     auto project = Project::load(directory.project_file());
     REQUIRE(project);
+    const auto canonical_root =
+        std::filesystem::weakly_canonical(directory.path());
 
     App app;
     app.add_plugin(ProjectPlugin {std::move(*project)});
@@ -194,7 +193,7 @@ TEST_CASE(
     CHECK(asset_server.has_source("project"));
     CHECK(
         app.resource<AssetDatabase>().import_cache_root() ==
-        directory.path() / ".entisium" / "imported"
+        canonical_root / ".entisium" / "imported"
     );
     auto bytes = asset_server.read_asset_bytes("project://readme.txt");
     REQUIRE(bytes);
