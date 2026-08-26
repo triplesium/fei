@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <thread>
 
 using namespace ets;
@@ -35,13 +36,29 @@ class MemorySource : public AssetSource {
 
     bool exists(const std::filesystem::path& path) const override {
         auto asset_path = path.generic_string();
-        return asset_path == "scene.obj" || asset_path == "albedo.png";
+        return asset_path == "scene.obj" || asset_path == "albedo.png" ||
+               asset_path == "quad.obj";
     }
 
     Result<Reader, std::string>
     try_get_reader(const std::filesystem::path& path) const override {
         if (!exists(path)) {
             return failure("memory asset not found: " + path.generic_string());
+        }
+        if (path == "quad.obj") {
+            constexpr std::string_view quad = R"(
+v 0.5 0.5 0.0
+v 0.5 -0.5 0.0
+v -0.5 -0.5 0.0
+v -0.5 0.5 0.0
+vt 1.0 1.0
+vt 1.0 0.0
+vt 0.0 0.0
+vt 0.0 1.0
+f 1/1 2/2 4/4
+f 2/2 3/3 4/4
+)";
+            return Reader(quad);
         }
         return Reader(m_bytes.data(), m_bytes.size());
     }
@@ -277,10 +294,11 @@ TEST_CASE("SceneLoader maps OBJ shapes to scene nodes", "[scene][loader]") {
     app.add_plugin<AssetsPlugin>().add_plugin<ScenePlugin>();
     app.finish();
     auto& asset_server = app.resource<AssetServer>();
+    asset_server.emplace_source<MemorySource>();
     asset_server.add_without_loader<Mesh>();
     asset_server.add_without_loader<StandardMaterial>();
 
-    auto scene_handle = asset_server.load<Scene>("quad.obj");
+    auto scene_handle = asset_server.load<Scene>("memory://quad.obj");
     auto scene = app.resource<Assets<Scene>>().get(scene_handle);
     REQUIRE(scene);
     REQUIRE(scene->validate());

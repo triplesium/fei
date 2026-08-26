@@ -4,6 +4,7 @@
 #include "app/reflection_plugin.hpp"
 #include "asset/assets.hpp"
 #include "asset/server.hpp"
+#include "asset/source.hpp"
 #include "core/image.hpp"
 #include "ecs/event.hpp"
 #include "ecs/hierarchy.hpp"
@@ -33,12 +34,76 @@
 #include <algorithm>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
 
 using namespace ets;
 
 namespace {
+
+class SnapshotImageSource : public AssetSource {
+  private:
+    std::vector<std::byte> m_bytes;
+
+    void append_u32(std::uint32_t value) {
+        for (std::size_t byte = 0; byte < sizeof(value); ++byte) {
+            m_bytes.push_back(
+                std::byte {
+                    static_cast<unsigned char>((value >> (byte * 8U)) & 0xffU),
+                }
+            );
+        }
+    }
+
+    void append_u64(std::uint64_t value) {
+        for (std::size_t byte = 0; byte < sizeof(value); ++byte) {
+            m_bytes.push_back(
+                std::byte {
+                    static_cast<unsigned char>((value >> (byte * 8U)) & 0xffU),
+                }
+            );
+        }
+    }
+
+  public:
+    SnapshotImageSource() {
+        constexpr std::string_view magic = "FEIIMAGE";
+        for (const auto character : magic) {
+            m_bytes.push_back(
+                std::byte {static_cast<unsigned char>(character)}
+            );
+        }
+        append_u32(1);
+        append_u32(1);
+        append_u32(1);
+        append_u32(1);
+        append_u32(4);
+        append_u32(static_cast<std::uint32_t>(PixelFormat::Rgba8Unorm));
+        append_u32(static_cast<std::uint32_t>(TextureType::Texture2D));
+        append_u32(1);
+        append_u64(4);
+        m_bytes.insert(m_bytes.end(), 4, std::byte {0xff});
+    }
+
+    std::string name() const override { return "snapshot-ui"; }
+
+    bool exists(const std::filesystem::path& path) const override {
+        return path == "image.feiimage";
+    }
+
+    Result<Reader, std::string>
+    try_get_reader(const std::filesystem::path& path) const override {
+        if (!exists(path)) {
+            return failure(
+                "snapshot UI asset not found: " + path.generic_string()
+            );
+        }
+        return Reader(m_bytes.data(), m_bytes.size());
+    }
+};
 
 struct ComplexUiWorld {
     App app;
@@ -71,6 +136,7 @@ struct ComplexUiWorld {
             .add_plugin<ui_widgets::MenuPlugin>()
             .add_plugin<ui_widgets::SelectPlugin>();
         app.finish();
+        app.resource<AssetServer>().emplace_source<SnapshotImageSource>();
 
         auto& world = app.world();
         root = make_entity();
@@ -151,7 +217,7 @@ struct ComplexUiWorld {
         world.add_component(caret, ui_widgets::TextCaret {});
 
         const auto image_handle = app.resource<AssetServer>().load<Image>(
-            "project://spot_texture.png"
+            "snapshot-ui://image.feiimage"
         );
         world.add_component(
             image,
