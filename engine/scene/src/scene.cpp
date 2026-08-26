@@ -12,7 +12,6 @@
 #include "rendering/components.hpp"
 #include "rendering/mesh/mesh.hpp"
 
-#include <filesystem>
 #include <memory>
 #include <string>
 #include <tiny_obj_loader.h>
@@ -25,14 +24,13 @@
 namespace ets {
 
 AssetLoadResult<Scene>
-SceneLoader::load(Reader& /*reader*/, const LoadContext& context) {
+SceneLoader::load(Reader& reader, const LoadContext& context) {
     auto scene = std::make_unique<Scene>();
 
     tinyobj::ObjReaderConfig reader_config;
     tinyobj::ObjReader obj_reader;
 
-    auto obj_path = ETS_ASSETS_PATH / context.asset_path().path();
-    if (!obj_reader.ParseFromFile(obj_path.string(), reader_config)) {
+    if (!obj_reader.ParseFromString(reader.as_string(), "", reader_config)) {
         auto message = obj_reader.Error().empty() ?
                            "Failed to parse OBJ scene" :
                            "TinyObjReader: " + obj_reader.Error();
