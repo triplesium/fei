@@ -2,6 +2,7 @@
 
 #include "app/app.hpp"
 #include "app/reflection_plugin.hpp"
+#include "asset/assets.hpp"
 #include "asset/server.hpp"
 #include "core/image.hpp"
 #include "ecs/event.hpp"
@@ -328,8 +329,12 @@ TEST_CASE(
     CHECK(text_layout->disposition == snapshot::AuditDisposition::Rebuild);
     REQUIRE(test.checkpoints.create("complex-ui", world, true));
 
-    const auto image_id =
-        world.get_component<ui::ImageNode>(test.image).image.id();
+    const auto image_path = world.resource<AssetServer>().asset_path(
+        AssetServer::asset_key(
+            world.get_component<ui::ImageNode>(test.image).image
+        )
+    );
+    REQUIRE(image_path);
     world.get_component_rw<ui_widgets::SliderValue>(test.slider).write().value =
         0.1f;
     world.remove_component<ui::Checked>(test.checkbox);
@@ -375,7 +380,14 @@ TEST_CASE(
     );
     CHECK(world.has_component<ui_widgets::Expanded>(menu_button));
     CHECK(world.has_component<ui_widgets::MenuOpen>(menu_button));
-    CHECK(world.get_component<ui::ImageNode>(image).image.id() == image_id);
+    const auto restored_image = world.get_component<ui::ImageNode>(image).image;
+    REQUIRE(restored_image);
+    const auto restored_image_path = world.resource<AssetServer>().asset_path(
+        AssetServer::asset_key(restored_image)
+    );
+    REQUIRE(restored_image_path);
+    CHECK(*restored_image_path == *image_path);
+    REQUIRE(world.resource<Assets<Image>>().get(restored_image));
     REQUIRE(world.resource<input_focus::InputFocus>().get());
     CHECK(*world.resource<input_focus::InputFocus>().get() == text_input);
     REQUIRE(world.resource<input_focus::InputFocus>().notified_entity);
