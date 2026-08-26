@@ -31,7 +31,9 @@
 - `xmake`: build the default project targets and resolve xmake packages.
 - Prefer `-y` in `[options]` for build/test/run commands to avoid package
   prompts, e.g. `xmake test -y entisium-math-tests/default`.
-- `xmake f -m debug` or `xmake f -m release`: select the build mode.
+- `xmake f -m debug` or `xmake f -m release`: select the build mode. Add
+  `--tests=y` when configuring a build that should include test targets and
+  Catch2; tests are disabled by default.
 - `xmake test`: build and run all registered Catch2 tests, including
   `set_default(false)` targets.
 - `xmake test entisium-math-tests/default`: run one module test case.

@@ -39,7 +39,17 @@ option("editor_demo_project")
     set_description("Project directory bundled by entisium-editor-demo")
 option_end()
 
+option("tests")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Build and register test targets")
+option_end()
+
 includes("packages")
+
+if has_config("tests") then
+    add_requires("catch2")
+end
 
 if is_plat("wasm") then
     add_requires("emscripten 6.0.0")
@@ -52,7 +62,6 @@ end
 
 if is_plat("wasm") then
     add_requires(
-        "catch2",
         "stb",
         "tinyobjloader",
         "mikktspace",
@@ -71,7 +80,7 @@ if is_plat("wasm") then
         }
     )
 else
-    add_requires("catch2", "stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "fastgltf v0.9.0")
+    add_requires("stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "fastgltf v0.9.0")
     add_requires("box2d v3.1.1", {configs = {shared = false}})
     add_requires("luau 0.734", {configs = {shared = false, extern_c = false}})
     add_requires("yaml-cpp")
@@ -417,6 +426,10 @@ add_rules("entisium.executable_startup")
 
 rule("entisium.test")
     on_load(function(target)
+        if not has_config("tests") then
+            target:set("enabled", false)
+            return
+        end
         target:add("packages", "catch2")
         target:add("tests", "default")
     end)
