@@ -86,4 +86,4 @@ jobs:
         run: xmake build -y -vD entisium-reflgen
 
       - name: Run all tests
-        run: xmake test -y -vD
+        run: xmake test -y -v
