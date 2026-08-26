@@ -12,12 +12,15 @@ package("luau")
 
     on_install(function(package)
         io.replace("extern/isocline/src/completers.c", "__finddata64_t", "_finddatai64_t", {plain = true})
+        if package:is_plat("wasm") then
+            io.replace("CMakeLists.txt", "-fexceptions", "-fwasm-exceptions", {plain = true})
+        end
 
         local configs = {
             "-DLUAU_BUILD_TESTS=OFF",
             "-DLUAU_BUILD_CLI=OFF",
             "-DCMAKE_POLICY_DEFAULT_CMP0057=NEW",
-            "-DCMAKE_BUILD_TYPE=" .. (package:is_debug() and "Debug" or "RelWithDebInfo"),
+            "-DCMAKE_BUILD_TYPE=" .. (package:is_debug() and "Debug" or "Release"),
             "-DBUILD_SHARED_LIBS=" .. (package:config("shared") and "ON" or "OFF"),
             "-DLUAU_BUILD_WEB=" .. ((package:is_plat("wasm") or package:config("build_web")) and "ON" or "OFF"),
             "-DLUAU_EXTERN_C=" .. (package:config("extern_c") and "ON" or "OFF"),

@@ -44,7 +44,7 @@ jobs:
         with:
           xmake-version: '3.0.9'
           package-cache: true
-          package-cache-key: windows-wasm-release-emscripten6-slang2026.14.1
+          package-cache-key: windows-wasm-release-emscripten6-slang2026.14.1-prebuilt-luau-release
           project-path: '.'
 
       - name: Configure release demo
