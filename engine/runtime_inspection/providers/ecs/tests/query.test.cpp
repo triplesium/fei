@@ -180,6 +180,8 @@ TEST_CASE(
     "ECS query inspection registers a JSON provider",
     "[runtime-inspection][ecs][registry]"
 ) {
+    register_generated_reflection();
+
     InspectionRegistry registry;
     REQUIRE(register_query_inspection_provider(registry));
     registry.freeze();
