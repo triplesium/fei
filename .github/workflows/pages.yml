@@ -23,7 +23,7 @@ jobs:
   build:
     name: build / WebAssembly / release
     runs-on: windows-latest
-    timeout-minutes: 120
+    timeout-minutes: 360
     env:
       EDITOR_DEMO_PROJECT: ${{ inputs.project || 'samples/projects/skyline_strike' }}
       LLVM_ROOT: 'C:\Program Files\LLVM'

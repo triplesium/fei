@@ -48,7 +48,7 @@ jobs:
   xmake:
     name: tests / Windows / debug
     runs-on: windows-2022
-    timeout-minutes: 120
+    timeout-minutes: 360
     env:
       LLVM_ROOT: 'C:\Program Files\LLVM'
       VULKAN_SDK_VERSION: '1.4.350.0'
@@ -62,7 +62,7 @@ jobs:
         with:
           xmake-version: '3.0.9'
           package-cache: true
-          package-cache-key: windows-vs2026-vulkan-${{ env.VULKAN_SDK_VERSION }}
+          package-cache-key: windows-2022-msvc14.44-vulkan-${{ env.VULKAN_SDK_VERSION }}
           project-path: '.'
 
       - name: Install Vulkan SDK
