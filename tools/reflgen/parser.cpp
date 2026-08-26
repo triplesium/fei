@@ -113,11 +113,24 @@ void visit_children(CXCursor cursor, Visitor visitor) {
 [[nodiscard]] ReflectionTag
 parse_group_field(std::string_view group, std::string_view text) {
     const auto separator = text.find('=');
-    if (separator == std::string_view::npos ||
-        text.find('=', separator + 1) != std::string_view::npos) {
+    if (separator == std::string_view::npos) {
+        const auto key = trim(text);
+        if (!valid_tag_key(key)) {
+            throw std::runtime_error(
+                "Invalid ETS_REFLECT group field key '" + key + "'"
+            );
+        }
+        return ReflectionTag {
+            .key = std::string(group) + "." + key,
+            .value = "true",
+            .group = std::string(group),
+            .field = key,
+        };
+    }
+    if (text.find('=', separator + 1) != std::string_view::npos) {
         throw std::runtime_error(
             "ETS_REFLECT group field '" + std::string(text) +
-            "' must use exactly one '='"
+            "' must use at most one '='"
         );
     }
 

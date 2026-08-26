@@ -164,12 +164,15 @@ TEST_CASE("Generated reflection tags preserve values", "[refl][type][tag]") {
     CHECK(reflected_type.namespace_path()[1] == "refl_test");
     CHECK(reflected_type.local_name() == "ReflectedTaggedType");
     constexpr TypeTagId plugin_tag {"Example"};
+    constexpr TypeTagId plugin_enabled_tag {"Example.enabled"};
     constexpr TypeTagId plugin_name_tag {"Example.name"};
     constexpr TypeTagId plugin_phase_tag {"Example.phase"};
 
     const auto plugin = reflected_type.annotation("Example");
     REQUIRE(plugin);
     CHECK(plugin->name() == "Example");
+    REQUIRE(plugin->value("enabled"));
+    CHECK(*plugin->value("enabled") == "true");
     REQUIRE(plugin->value("name"));
     CHECK(*plugin->value("name") == "rendering");
     REQUIRE(plugin->value("phase"));
@@ -179,6 +182,9 @@ TEST_CASE("Generated reflection tags preserve values", "[refl][type][tag]") {
     // The flattened tag API remains available as a compatibility index.
     REQUIRE(reflected_type.has_tag(plugin_tag));
     REQUIRE_FALSE(reflected_type.tag_value(plugin_tag));
+    REQUIRE(reflected_type.has_tag(plugin_enabled_tag));
+    REQUIRE(reflected_type.tag_value(plugin_enabled_tag));
+    CHECK(*reflected_type.tag_value(plugin_enabled_tag) == "true");
     REQUIRE(reflected_type.has_tag(plugin_name_tag));
     REQUIRE(reflected_type.tag_value(plugin_name_tag));
     CHECK(*reflected_type.tag_value(plugin_name_tag) == "rendering");

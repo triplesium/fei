@@ -8,7 +8,7 @@
 
 namespace ets::refl_test {
 
-ETS_REFLECT(Example(name = rendering, phase = runtime))
+ETS_REFLECT(Example(enabled, name = rendering, phase = runtime))
 struct ReflectedTaggedType {
     int value;
 };
