@@ -73,6 +73,16 @@ jobs:
           stripdown: false
           install_runtime: true
 
+      - name: Configure Vulkan runtime
+        shell: pwsh
+        run: |
+          $runtime = Join-Path $env:VULKAN_SDK 'runtime\x64'
+          $loader = Join-Path $runtime 'vulkan-1.dll'
+          if (-not (Test-Path -LiteralPath $loader)) {
+            throw "Vulkan runtime loader not found at $loader"
+          }
+          $runtime | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Show xmake version
         run: xmake --version
 
