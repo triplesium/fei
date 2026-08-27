@@ -16,7 +16,7 @@ class FrameProfileHistory {
   public:
     static constexpr std::size_t Capacity = 600;
 
-    void push(std::int64_t duration_ns);
+    std::uint64_t push(std::int64_t duration_ns);
     [[nodiscard]] std::vector<FrameProfileHistorySample> samples() const;
     void clear();
 

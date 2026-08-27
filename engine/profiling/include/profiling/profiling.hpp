@@ -53,6 +53,18 @@ struct ProfileSummarySnapshot {
     std::vector<ProfileFrameSample> frames;
 };
 
+struct ProfileFrameDetailSnapshot {
+    std::uint64_t frame {0};
+    double duration_ms {0.0};
+    std::vector<ProfileEntrySnapshot> systems;
+    std::vector<ProfileEntrySnapshot> zones;
+};
+
+struct ProfileFrameDetailsSnapshot {
+    bool available {false};
+    std::vector<ProfileFrameDetailSnapshot> details;
+};
+
 struct ProfileCaptureStatus {
     bool available {false};
     bool recording {false};
@@ -86,6 +98,8 @@ std::string profile_schedule_name(std::uint64_t schedule_id);
 void profile_frame_mark();
 FrameProfileStats profile_frame_stats();
 ProfileSummarySnapshot profile_summary_snapshot();
+ProfileFrameDetailsSnapshot
+profile_frame_details_snapshot(const std::vector<std::uint64_t>& frames);
 ProfileCaptureStatus profile_capture_status();
 void start_profile_capture(std::uint64_t frame_limit = 0);
 void stop_profile_capture();

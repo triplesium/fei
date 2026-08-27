@@ -10,6 +10,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <deque>
 #include <limits>
 #include <mutex>
 #include <string>
@@ -56,6 +57,17 @@ struct ProfileRecord {
     ProfileStats stats;
 };
 
+struct FrameProfileRecord {
+    std::string key;
+    ProfileStats stats;
+};
+
+struct FrameProfileDetail {
+    std::uint64_t frame {0};
+    std::int64_t duration_ns {0};
+    std::vector<FrameProfileRecord> records;
+};
+
 #endif
 
 struct ProfileState {
@@ -74,7 +86,9 @@ struct ProfileState {
     std::unordered_map<std::string, GpuRecord> gpu_records;
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     std::unordered_map<std::string, ProfileRecord> records;
+    std::unordered_map<std::string, ProfileStats> current_frame_records;
     profiling_detail::FrameProfileHistory frame_history;
+    std::deque<FrameProfileDetail> frame_details;
     std::atomic<bool> capture_recording {true};
     std::uint64_t capture_frame_limit {0};
     std::uint64_t capture_frames_remaining {0};
@@ -288,6 +302,29 @@ void record_profile_scope(
         it->second.line = line;
     }
     it->second.stats.add(total_ns, self_ns);
+    state.current_frame_records[key].add(total_ns, self_ns);
+}
+
+FrameProfileDetail take_frame_detail(
+    ProfileState& state,
+    std::uint64_t frame,
+    std::int64_t duration_ns
+) {
+    FrameProfileDetail detail {
+        .frame = frame,
+        .duration_ns = duration_ns,
+    };
+    detail.records.reserve(state.current_frame_records.size());
+    for (auto& [key, stats] : state.current_frame_records) {
+        detail.records.push_back(
+            FrameProfileRecord {
+                .key = key,
+                .stats = stats,
+            }
+        );
+    }
+    state.current_frame_records.clear();
+    return detail;
 }
 
 #endif
@@ -341,10 +378,18 @@ void profile_frame_mark() {
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     auto duration = state.frame_stats.mark(profile_now_ns());
     if (!duration) {
+        state.current_frame_records.clear();
         return;
     }
     if (state.capture_recording.load(std::memory_order_relaxed)) {
-        state.frame_history.push(*duration);
+        const auto frame = state.frame_history.push(*duration);
+        if (state.frame_details.size() >=
+            profiling_detail::FrameProfileHistory::Capacity) {
+            state.frame_details.pop_front();
+        }
+        state.frame_details.push_back(
+            take_frame_detail(state, frame, *duration)
+        );
         if (state.capture_frames_remaining > 0) {
             --state.capture_frames_remaining;
             if (state.capture_frames_remaining == 0) {
@@ -400,6 +445,54 @@ ProfileSummarySnapshot profile_summary_snapshot() {
 #endif
 }
 
+ProfileFrameDetailsSnapshot
+profile_frame_details_snapshot(const std::vector<std::uint64_t>& frames) {
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    ProfileFrameDetailsSnapshot snapshot {.available = true};
+    auto& state = profile_state();
+    std::scoped_lock lock(state.mutex);
+    snapshot.details.reserve(frames.size());
+    for (const auto frame : frames) {
+        auto detail_it = std::ranges::find(
+            state.frame_details,
+            frame,
+            &FrameProfileDetail::frame
+        );
+        if (detail_it == state.frame_details.end()) {
+            continue;
+        }
+
+        ProfileFrameDetailSnapshot detail {
+            .frame = detail_it->frame,
+            .duration_ms = ns_to_ms(detail_it->duration_ns),
+        };
+        detail.systems.reserve(detail_it->records.size());
+        detail.zones.reserve(detail_it->records.size());
+        for (const auto& frame_record : detail_it->records) {
+            const auto record_it = state.records.find(frame_record.key);
+            if (record_it == state.records.end()) {
+                continue;
+            }
+            auto record = record_it->second;
+            record.stats = frame_record.stats;
+            auto entry = make_profile_entry(record);
+            if (record.kind == ProfileZoneKind::System) {
+                detail.systems.push_back(std::move(entry));
+            } else {
+                detail.zones.push_back(std::move(entry));
+            }
+        }
+        sort_profile_entries(detail.systems);
+        sort_profile_entries(detail.zones);
+        snapshot.details.push_back(std::move(detail));
+    }
+    return snapshot;
+#else
+    (void)frames;
+    return {};
+#endif
+}
+
 ProfileCaptureStatus profile_capture_status() {
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     auto& state = profile_state();
@@ -423,7 +516,9 @@ void start_profile_capture(std::uint64_t frame_limit) {
     std::scoped_lock lock(state.mutex);
     state.frame_stats.clear();
     state.records.clear();
+    state.current_frame_records.clear();
     state.frame_history.clear();
+    state.frame_details.clear();
     state.capture_frame_limit = frame_limit;
     state.capture_frames_remaining = frame_limit;
     state.capture_recording.store(true, std::memory_order_relaxed);
@@ -467,7 +562,9 @@ void clear_profile_summary() {
     state.frame_stats.clear();
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     state.records.clear();
+    state.current_frame_records.clear();
     state.frame_history.clear();
+    state.frame_details.clear();
 #endif
 }
 

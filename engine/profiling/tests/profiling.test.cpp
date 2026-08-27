@@ -172,6 +172,59 @@ TEST_CASE(
 #endif
 }
 
+TEST_CASE(
+    "profile frame details retain CPU samples for each captured frame",
+    "[base][profiling][frames]"
+) {
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    struct TestProfileInfo {
+        std::string name;
+        std::string file;
+        std::string function;
+        std::uint32_t line;
+    };
+
+    ets::clear_profile_schedule_names();
+    ets::register_profile_schedule_name(9, "FrameSchedule");
+    ets::start_profile_capture();
+    ets::profile_frame_mark();
+
+    const TestProfileInfo profile {
+        .name = "frame_system",
+        .file = "frame.cpp",
+        .function = "frame_system()",
+        .line = 31,
+    };
+    {
+        ETS_PROFILE_SYSTEM_SCOPE(9, profile);
+        ETS_PROFILE_SCOPE("frame_zone");
+        std::this_thread::sleep_for(std::chrono::milliseconds {1});
+    }
+    ets::profile_frame_mark();
+    ets::stop_profile_capture();
+
+    const auto details =
+        ets::profile_frame_details_snapshot(std::vector<std::uint64_t> {0, 99});
+    REQUIRE(details.available);
+    REQUIRE(details.details.size() == 1);
+    const auto& detail = details.details.front();
+    CHECK(detail.frame == 0);
+    CHECK(detail.duration_ms > 0.0);
+    REQUIRE(detail.systems.size() == 1);
+    CHECK(detail.systems.front().name == "frame_system");
+    CHECK(detail.systems.front().schedule_name == "FrameSchedule");
+    REQUIRE(detail.zones.size() == 1);
+    CHECK(detail.zones.front().name == "frame_zone");
+
+    ets::clear_profile_summary();
+    CHECK(ets::profile_frame_details_snapshot({0}).details.empty());
+#else
+    const auto details = ets::profile_frame_details_snapshot({0});
+    CHECK_FALSE(details.available);
+    CHECK(details.details.empty());
+#endif
+}
+
 TEST_CASE("profile system scopes can write summary csv", "[base][profiling]") {
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     struct TestProfileInfo {
