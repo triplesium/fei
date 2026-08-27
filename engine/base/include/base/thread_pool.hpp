@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base/optional.hpp"
+
 #include <condition_variable>
 #include <cstddef>
 #include <functional>
@@ -57,10 +59,12 @@ class ThreadPool {
 
     std::size_t thread_count() const { return m_workers.size(); }
 
+    [[nodiscard]] Optional<std::size_t> current_worker_index() const noexcept;
+
     static std::size_t default_thread_count();
 
   private:
-    void worker_loop();
+    void worker_loop(std::size_t worker_index);
 };
 
 } // namespace ets
