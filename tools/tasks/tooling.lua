@@ -143,15 +143,25 @@ function collect_files(target_names, file_patterns)
     local targets = collect_targets(target_names)
     local files = {}
     local file_kinds = {}
+    local file_contexts = {}
     local seen = {}
 
     for _, target in ipairs(targets) do
+        local header_sourcekind
         for _, sourcebatch in pairs(target:sourcebatches()) do
             if source_batch_should_include(sourcebatch) then
+                if not header_sourcekind or sourcebatch.sourcekind == "cxx" then
+                    header_sourcekind = sourcebatch.sourcekind
+                end
                 for _, source in ipairs(sourcebatch.sourcefiles) do
                     local file = insert_unique(files, seen, source)
                     if file then
                         file_kinds[file] = "source"
+                        file_contexts[file] = {
+                            file = source,
+                            sourcekind = sourcebatch.sourcekind,
+                            target = target,
+                        }
                     end
                 end
             end
@@ -161,6 +171,11 @@ function collect_files(target_names, file_patterns)
             local file = insert_unique(files, seen, header)
             if file then
                 file_kinds[file] = "header"
+                file_contexts[file] = {
+                    file = header,
+                    sourcekind = header_sourcekind or "cxx",
+                    target = target,
+                }
             end
         end
     end
@@ -168,7 +183,7 @@ function collect_files(target_names, file_patterns)
     table.sort(files)
     local source_count, header_count
     files, source_count, header_count = filter_files(files, file_kinds, file_patterns)
-    return files, source_count, header_count, #targets
+    return files, source_count, header_count, #targets, file_contexts
 end
 
 function find_program(name)

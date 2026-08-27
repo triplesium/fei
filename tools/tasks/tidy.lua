@@ -1,22 +1,21 @@
 import("async.runjobs")
+import("core.base.task")
 import("utils.progress")
 
-local compile_commands_path = "build/compile_commands.json"
 local tooling = import("tasks.tooling", {
     rootdir = path.join(os.projectdir(), "tools")
 })
-local project_include_dirs = os.dirs(
-    path.join(os.projectdir(), "engine", "**", "include")
-)
-table.sort(project_include_dirs)
 
-local function check_compile_commands()
-    if not os.isfile(compile_commands_path) then
-        raise(
-            compile_commands_path ..
-                " not found; run: xmake project -k compile_commands build"
-        )
+local function make_compile_args(context)
+    local compiler_instance = context.target:compiler(context.sourcekind)
+    local args = compiler_instance:compflags({
+        sourcefile = context.file,
+        target = context.target,
+    })
+    for index, argument in ipairs(args) do
+        args[index] = tostring(argument)
     end
+    return args
 end
 
 local function count_diagnostics(output)
@@ -29,19 +28,32 @@ local function count_diagnostics(output)
     return count
 end
 
-local function make_clang_tidy_args(file, extra_args)
-    local args = {"--quiet", "-p", "build"}
-    if file:find("[/\\]include[/\\]") then
-        for _, include_dir in ipairs(project_include_dirs) do
-            table.insert(args, "--extra-arg-before=-I" .. include_dir)
-        end
-    end
+local function make_clang_tidy_args(file, compile_args, extra_args)
+    local args = {"--quiet"}
     table.join2(args, extra_args or {})
+    if is_host("windows") then
+        for _, argument in ipairs(compile_args) do
+            table.insert(args, "--extra-arg-before=" .. argument)
+        end
+        table.insert(args, file)
+        table.insert(args, "--")
+        return args
+    end
+
     table.insert(args, file)
+    table.insert(args, "--")
+    table.join2(args, compile_args)
     return args
 end
 
-local function run_clang_tidy_file(clang_tidy, file, progress_value, extra_args, verbose)
+local function run_clang_tidy_file(
+    clang_tidy,
+    file,
+    compile_args,
+    progress_value,
+    extra_args,
+    verbose
+)
     progress.show(progress_value, "clang-tidy.analyzing %s", file)
 
     local result = {
@@ -53,7 +65,7 @@ local function run_clang_tidy_file(clang_tidy, file, progress_value, extra_args,
     try
     {
         function ()
-            local args = make_clang_tidy_args(file, extra_args)
+            local args = make_clang_tidy_args(file, compile_args, extra_args)
             if verbose then
                 progress.show_output("${dim}%s %s", clang_tidy, os.args(args))
             end
@@ -86,7 +98,17 @@ local function run_clang_tidy_file(clang_tidy, file, progress_value, extra_args,
     return result
 end
 
-local function run_clang_tidy(clang_tidy, files, source_count, header_count, target_count, jobs, extra_args, verbose)
+local function run_clang_tidy(
+    clang_tidy,
+    files,
+    compile_args,
+    source_count,
+    header_count,
+    target_count,
+    jobs,
+    extra_args,
+    verbose
+)
     if #files == 0 then
         print("clang-tidy: no files found")
         return
@@ -117,6 +139,7 @@ local function run_clang_tidy(clang_tidy, files, source_count, header_count, tar
         local result = run_clang_tidy_file(
             clang_tidy,
             files[index],
+            compile_args[files[index]],
             opt.progress,
             extra_args,
             verbose
@@ -147,9 +170,14 @@ end
 
 function run(options)
     options = options or {}
-    check_compile_commands()
+    task.run("config", {}, {loadonly = true})
     local clang_tidy = tooling.find_program("clang-tidy")
-    local files, source_count, header_count, target_count = tooling.collect_files(options.targets, options.files)
+    local files, source_count, header_count, target_count, file_contexts =
+        tooling.collect_files(options.targets, options.files)
+    local compile_args = {}
+    for _, file in ipairs(files) do
+        compile_args[file] = make_compile_args(file_contexts[file])
+    end
     local extra_args = {"--header-filter=^$"}
     if options.fix then
         table.join2(extra_args, {"--fix", "--format-style=file"})
@@ -158,6 +186,7 @@ function run(options)
     run_clang_tidy(
         clang_tidy,
         files,
+        compile_args,
         source_count,
         header_count,
         target_count,
