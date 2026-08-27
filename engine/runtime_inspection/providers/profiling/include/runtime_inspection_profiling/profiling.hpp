@@ -20,6 +20,7 @@ namespace runtime_inspection::profiling {
 inline constexpr std::size_t c_max_profiling_response_bytes =
     std::size_t {4} * 1024 * 1024;
 inline constexpr std::uint64_t c_max_profile_capture_frames = 60'000;
+inline constexpr std::size_t c_max_profile_detail_frames = 60;
 
 struct EmptyRequest {};
 
@@ -30,6 +31,14 @@ struct SummaryResponse {
 struct FrameHistoryResponse {
     bool available {false};
     std::vector<ProfileFrameSample> frames;
+};
+
+struct FrameDetailsRequest {
+    std::vector<std::uint64_t> frames;
+};
+
+struct FrameDetailsResponse {
+    ProfileFrameDetailsSnapshot snapshot;
 };
 
 struct GpuSummaryResponse {
@@ -134,6 +143,39 @@ class GpuSummaryProvider {
     inspect(World& world, const Request& request) const;
 };
 
+class FrameDetailsProvider {
+  public:
+    using Request = FrameDetailsRequest;
+    using Response = FrameDetailsResponse;
+
+    static constexpr std::string_view id {"profiling.frame_detail"};
+    static constexpr std::string_view label {"Profiling Frame Details"};
+    static constexpr std::string_view description {
+        "Return CPU system and zone timings for selected captured frames."
+    };
+    static constexpr std::string_view schema {"profiling.frame_detail.v1"};
+    static constexpr bool read_only {true};
+    static constexpr InspectionCost cost {InspectionCost::Moderate};
+    static constexpr std::string_view request_schema_json {R"json({
+        "type":"object","additionalProperties":false,"required":["frames"],
+        "properties":{
+            "frames":{"type":"array","minItems":1,"maxItems":60,
+                "items":{"type":"integer","minimum":0}}
+        }
+    })json"};
+    static constexpr std::string_view response_schema_json {R"json({
+        "type":"object","additionalProperties":false,
+        "required":["available","details"],
+        "properties":{
+            "available":{"type":"boolean"},
+            "details":{"type":"array","maxItems":60}
+        }
+    })json"};
+
+    [[nodiscard]] Result<Response, InspectionError>
+    inspect(World& world, const Request& request) const;
+};
+
 class ControlProvider {
   public:
     using Request = ControlRequest;
@@ -142,7 +184,7 @@ class ControlProvider {
     static constexpr std::string_view id {"profiling.control"};
     static constexpr std::string_view label {"Control Profiling Capture"};
     static constexpr std::string_view description {
-        "Start, stop, clear, or begin a bounded CPU profiling capture."
+        "Query, start, stop, clear, or begin a bounded CPU profiling capture."
     };
     static constexpr std::string_view schema {"profiling.control.v1"};
     static constexpr bool read_only {false};
@@ -150,7 +192,7 @@ class ControlProvider {
     static constexpr std::string_view request_schema_json {R"json({
         "type":"object","additionalProperties":false,"required":["action"],
         "properties":{
-            "action":{"enum":["start","capture","stop","clear"]},
+            "action":{"enum":["status","start","capture","stop","clear"]},
             "frames":{"type":"integer","minimum":1,"maximum":60000}
         }
     })json"};
@@ -172,6 +214,7 @@ class ControlProvider {
 
 static_assert(InspectionProvider<SummaryProvider>);
 static_assert(InspectionProvider<FrameHistoryProvider>);
+static_assert(InspectionProvider<FrameDetailsProvider>);
 static_assert(InspectionProvider<GpuSummaryProvider>);
 static_assert(InspectionProvider<ControlProvider>);
 
@@ -180,6 +223,9 @@ profiling_summary_json(World& world, std::string_view request_json);
 
 [[nodiscard]] Result<std::string, InspectionError>
 profiling_frame_history_json(World& world, std::string_view request_json);
+
+[[nodiscard]] Result<std::string, InspectionError>
+profiling_frame_details_json(World& world, std::string_view request_json);
 
 [[nodiscard]] Result<std::string, InspectionError>
 profiling_gpu_summary_json(World& world, std::string_view request_json);

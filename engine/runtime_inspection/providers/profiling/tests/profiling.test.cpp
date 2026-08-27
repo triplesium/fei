@@ -41,11 +41,12 @@ TEST_CASE(
     REQUIRE(register_profiling_inspection_providers(registry));
     CHECK(registry.contains(SummaryProvider::id));
     CHECK(registry.contains(FrameHistoryProvider::id));
+    CHECK(registry.contains(FrameDetailsProvider::id));
     CHECK(registry.contains(GpuSummaryProvider::id));
     CHECK(registry.contains(ControlProvider::id));
-    REQUIRE(registry.descriptors().size() == 4);
+    REQUIRE(registry.descriptors().size() == 5);
     CHECK(registry.descriptors()[0].schema == SummaryProvider::schema);
-    CHECK(registry.descriptors()[3].read_only == false);
+    CHECK(registry.descriptors()[4].read_only == false);
 }
 
 TEST_CASE(
@@ -152,6 +153,22 @@ TEST_CASE(
     World world;
     const ControlProvider provider;
 
+    auto status = provider.inspect(
+        world,
+        ControlRequest {.action = "status", .frames = 0}
+    );
+    REQUIRE(status);
+    CHECK(status->status.available == profile_capture_status().available);
+
+    auto status_with_frames = provider.inspect(
+        world,
+        ControlRequest {.action = "status", .frames = 1}
+    );
+    REQUIRE_FALSE(status_with_frames);
+    CHECK(
+        status_with_frames.error().kind == InspectionErrorKind::InvalidRequest
+    );
+
     auto unknown = provider.inspect(
         world,
         ControlRequest {.action = "unknown", .frames = 0}
@@ -197,7 +214,54 @@ TEST_CASE(
     CHECK(frame_json.contains("available"));
     CHECK(frame_json.at("frames").is_array());
 
+    auto empty_details =
+        profiling_frame_details_json(world, R"({"frames":[]})");
+    REQUIRE_FALSE(empty_details);
+    CHECK(empty_details.error().kind == InspectionErrorKind::InvalidRequest);
+
+    auto invalid_detail =
+        profiling_frame_details_json(world, R"({"frames":[-1]})");
+    REQUIRE_FALSE(invalid_detail);
+    CHECK(invalid_detail.error().kind == InspectionErrorKind::InvalidRequest);
+
     auto unexpected = profiling_summary_json(world, R"({"extra":true})");
     REQUIRE_FALSE(unexpected);
     CHECK(unexpected.error().kind == InspectionErrorKind::InvalidRequest);
+}
+
+TEST_CASE(
+    "profiling frame detail inspection returns selected CPU samples",
+    "[runtime-inspection][profiling][frames]"
+) {
+    World world;
+
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    start_profile_capture();
+    profile_frame_mark();
+    {
+        ETS_PROFILE_SCOPE("inspection_frame_zone");
+        std::this_thread::sleep_for(std::chrono::milliseconds {1});
+    }
+    profile_frame_mark();
+    stop_profile_capture();
+#else
+    clear_profile_summary();
+#endif
+
+    auto response = profiling_frame_details_json(world, R"({"frames":[0,99]})");
+    REQUIRE(response);
+    const auto json = nlohmann::json::parse(*response);
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    CHECK(json.at("available") == true);
+    REQUIRE(json.at("details").size() == 1);
+    CHECK(json.at("details").at(0).at("frame") == 0);
+    REQUIRE(json.at("details").at(0).at("zones").size() == 1);
+    CHECK(
+        json.at("details").at(0).at("zones").at(0).at("name") ==
+        "inspection_frame_zone"
+    );
+#else
+    CHECK(json.at("available") == false);
+    CHECK(json.at("details").empty());
+#endif
 }

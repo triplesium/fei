@@ -136,6 +136,32 @@ Json frame_history_json(const FrameHistoryResponse& response) {
     };
 }
 
+Json frame_details_json(const ProfileFrameDetailsSnapshot& snapshot) {
+    Json details = Json::array();
+    for (const auto& detail : snapshot.details) {
+        Json systems = Json::array();
+        for (const auto& system : detail.systems) {
+            systems.push_back(entry_json(system));
+        }
+        Json zones = Json::array();
+        for (const auto& zone : detail.zones) {
+            zones.push_back(entry_json(zone));
+        }
+        details.push_back(
+            Json {
+                {"frame", detail.frame},
+                {"duration_ms", detail.duration_ms},
+                {"systems", std::move(systems)},
+                {"zones", std::move(zones)},
+            }
+        );
+    }
+    return Json {
+        {"available", snapshot.available},
+        {"details", std::move(details)},
+    };
+}
+
 Json gpu_summary_json(const GpuProfileSummarySnapshot& snapshot) {
     Json entries = Json::array();
     for (const auto& entry : snapshot.entries) {
@@ -198,6 +224,15 @@ FrameHistoryProvider::inspect(World&, const EmptyRequest&) const {
     };
 }
 
+Result<FrameDetailsResponse, InspectionError> FrameDetailsProvider::inspect(
+    World&,
+    const FrameDetailsRequest& request
+) const {
+    return FrameDetailsResponse {
+        .snapshot = profile_frame_details_snapshot(request.frames),
+    };
+}
+
 Result<GpuSummaryResponse, InspectionError>
 GpuSummaryProvider::inspect(World&, const EmptyRequest&) const {
     return GpuSummaryResponse {.snapshot = gpu_profile_summary_snapshot()};
@@ -217,7 +252,13 @@ ControlProvider::inspect(World&, const ControlRequest& request) const {
         );
     }
 
-    if (request.action == "start") {
+    if (request.action == "status") {
+        if (request.frames != 0) {
+            return failure(invalid_request(
+                "Profiling action 'status' does not accept frames"
+            ));
+        }
+    } else if (request.action == "start") {
         if (request.frames != 0) {
             return failure(invalid_request(
                 "Profiling action 'start' does not accept frames"
@@ -280,6 +321,42 @@ profiling_frame_history_json(World& world, std::string_view request_json) {
         return failure(std::move(response.error()));
     }
     return checked_json(frame_history_json(*response));
+}
+
+Result<std::string, InspectionError>
+profiling_frame_details_json(World& world, std::string_view request_json) {
+    auto request = parse_object(request_json);
+    if (!request) {
+        return failure(std::move(request.error()));
+    }
+    if (auto fields = require_fields(*request, {"frames"}, {"frames"});
+        !fields) {
+        return failure(std::move(fields.error()));
+    }
+    const auto& frames_json = request->at("frames");
+    if (!frames_json.is_array() || frames_json.empty() ||
+        frames_json.size() > c_max_profile_detail_frames) {
+        return failure(invalid_request(
+            "Profiling frame details requires between 1 and " +
+            std::to_string(c_max_profile_detail_frames) + " frame numbers"
+        ));
+    }
+
+    FrameDetailsRequest frame_request;
+    frame_request.frames.reserve(frames_json.size());
+    for (const auto& frame : frames_json) {
+        if (!frame.is_number_unsigned()) {
+            return failure(invalid_request(
+                "Profiling frame detail numbers must be unsigned integers"
+            ));
+        }
+        frame_request.frames.push_back(frame.get<std::uint64_t>());
+    }
+    auto response = FrameDetailsProvider {}.inspect(world, frame_request);
+    if (!response) {
+        return failure(std::move(response.error()));
+    }
+    return checked_json(frame_details_json(response->snapshot));
 }
 
 Result<std::string, InspectionError>
@@ -346,6 +423,13 @@ register_profiling_inspection_providers(InspectionRegistry& registry) {
     status = registry.add<FrameHistoryProvider>([](World& world,
                                                    std::string_view payload) {
         return profiling_frame_history_json(world, payload);
+    });
+    if (!status) {
+        return status;
+    }
+    status = registry.add<FrameDetailsProvider>([](World& world,
+                                                   std::string_view payload) {
+        return profiling_frame_details_json(world, payload);
     });
     if (!status) {
         return status;
