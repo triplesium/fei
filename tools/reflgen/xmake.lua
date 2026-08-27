@@ -138,4 +138,10 @@ rule("entisium.reflect")
             rootdir = path.join(os.projectdir(), "tools")
         }).clean(target)
     end)
+
+    after_build(function(target)
+        import("reflgen.rules", {
+            rootdir = path.join(os.projectdir(), "tools")
+        }).validate_aggregate(target)
+    end)
 rule_end()

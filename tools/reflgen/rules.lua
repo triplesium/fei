@@ -1,4 +1,5 @@
 import("core.project.depend")
+import("core.project.config")
 import("core.project.project")
 
 local function normalize_path(filepath)
@@ -197,6 +198,7 @@ local function file_entries(target)
             stable = stable,
             marker = path.join(autogendir, "files", stable .. ".reflgen"),
             output_file = path.join(autogendir, "files", stable .. ".cpp"),
+            metadata_file = path.join(autogendir, "files", stable .. ".reflmeta"),
             function_name = "register_" .. target_name .. "_" .. stable .. "_reflection"
         })
     end
@@ -379,7 +381,18 @@ end
 
 local function reflgen_program()
     local target = assert(project.target("entisium-reflgen"), "target entisium-reflgen not found")
-    local program = target:targetfile()
+    local program = project_absolute_path(target:targetfile())
+    local mode = config.get("mode")
+    if mode then
+        local configured_program = path.join(
+            path.directory(program),
+            mode,
+            path.filename(program)
+        )
+        if os.isfile(configured_program) then
+            return configured_program
+        end
+    end
     if os.isfile(program) then
         return program
     end
@@ -446,7 +459,8 @@ local function make_reflgen_args(
     stamp_file,
     depfile,
     dep_target,
-    script_module
+    script_module,
+    metadata_file
 )
     local args = {
         "--rootdir",
@@ -460,6 +474,11 @@ local function make_reflgen_args(
     if script_module and #script_module > 0 then
         table.insert(args, "--script-module")
         table.insert(args, script_module)
+    end
+
+    if metadata_file then
+        table.insert(args, "--metadata-output")
+        table.insert(args, normalize_path(metadata_file))
     end
 
     if stamp_file then
@@ -518,6 +537,7 @@ local function aggregate_inputs(target)
     local output_file = target:values("entisium.reflect.aggregate_file")
     local functions = {}
     local files = {}
+    local metadata_files = {}
     for _, reflected_target in ipairs(collect_reflected_targets(target)) do
         local function_name = reflected_target:values("entisium.reflect.module_function")
         local module_file = reflected_target:values("entisium.reflect.module_file")
@@ -527,6 +547,10 @@ local function aggregate_inputs(target)
         if module_file then
             insert_unique(files, module_file)
         end
+        for _, entry in ipairs(file_entries(reflected_target)) do
+            insert_unique(metadata_files, entry.metadata_file)
+            insert_unique(files, entry.metadata_file)
+        end
     end
     for _, file in ipairs(reflgen_sources()) do
         insert_unique(files, file)
@@ -534,7 +558,16 @@ local function aggregate_inputs(target)
     for _, file in ipairs(reflection_runtime_headers()) do
         insert_unique(files, file)
     end
-    return output_file, functions, files
+    return output_file, functions, files, metadata_files
+end
+
+local function metadata_validation_args(metadata_files)
+    local args = {"--validate-metadata"}
+    for _, metadata_file in ipairs(metadata_files) do
+        table.insert(args, "--metadata")
+        table.insert(args, normalize_path(metadata_file))
+    end
+    return args
 end
 
 local function write_stamp_file(stamp_file)
@@ -738,6 +771,10 @@ local function generate_files(target)
     for _, entry in ipairs(inputs.entries) do
         local dependfile = project_absolute_path(entry.output_file .. ".d")
         local header_depfile = reflgen_depfile(entry)
+        local depfiles = depfiles_with_reflgen(
+            parse_reflgen_depfile(header_depfile, {entry.header})
+        )
+        insert_unique(depfiles, entry.metadata_file)
         ensure_directory(path.directory(dependfile))
 
         depend.on_changed(function ()
@@ -751,16 +788,16 @@ local function generate_files(target)
                     entry.marker,
                     header_depfile,
                     reflgen_dep_target(entry),
-                    inputs.script_module
+                    inputs.script_module,
+                    entry.metadata_file
                 )
             )
         end, {
-            files = depfiles_with_reflgen(
-                parse_reflgen_depfile(header_depfile, {entry.header})
-            ),
+            files = depfiles,
             values = {
-                "entisium.reflect.file.v5",
+                "entisium.reflect.file.v6",
                 entry.output_file,
+                entry.metadata_file,
                 entry.function_name,
                 entry.header,
                 table.concat(inputs.include_dirs, ";"),
@@ -802,7 +839,7 @@ local function generate_module(target)
     end, {
         files = depfiles,
         values = {
-            "entisium.reflect.module.v5",
+            "entisium.reflect.module.v6",
             inputs.module_file,
             inputs.module_function,
             table.concat(functions, ";")
@@ -817,18 +854,21 @@ local function generate_aggregate(target)
         return
     end
 
-    local _, functions, files = aggregate_inputs(target)
+    local _, functions, files, metadata_files = aggregate_inputs(target)
 
     local dependfile = project_absolute_path(output_file .. ".d")
     ensure_directory(path.directory(dependfile))
 
     depend.on_changed(function ()
+        if #metadata_files > 0 then
+            os.vrunv(reflgen_program(), metadata_validation_args(metadata_files))
+        end
         write_aggregate(output_file, functions)
         write_stamp_file(target:values("entisium.reflect.aggregate_marker_file"))
     end, {
         files = files,
         values = {
-            "entisium.reflect.aggregate.v5",
+            "entisium.reflect.aggregate.v6",
             output_file,
             table.concat(functions, ";")
         },
@@ -851,6 +891,10 @@ function buildcmd_file(target, batchcmds, sourcefile, opt)
     cleanup_legacy_runner_files(target)
     local objectfile = target:objectfile(entry.output_file)
     local header_depfile = reflgen_depfile(entry)
+    local depfiles = depfiles_with_reflgen(
+        parse_reflgen_depfile(header_depfile, {entry.header})
+    )
+    insert_unique(depfiles, entry.metadata_file)
     table.insert(target:objectfiles(), objectfile)
 
     batchcmds:show_progress(
@@ -869,18 +913,16 @@ function buildcmd_file(target, batchcmds, sourcefile, opt)
             entry.marker,
             header_depfile,
             reflgen_dep_target(entry),
-            inputs.script_module
+            inputs.script_module,
+            entry.metadata_file
         )
     )
     batchcmds:compile(entry.output_file, objectfile)
-    batchcmds:add_depfiles(
-        depfiles_with_reflgen(
-            parse_reflgen_depfile(header_depfile, {entry.header})
-        )
-    )
+    batchcmds:add_depfiles(depfiles)
     batchcmds:add_depvalues(
-        "entisium.reflect.file.v5",
+        "entisium.reflect.file.v6",
         entry.output_file,
+        entry.metadata_file,
         entry.function_name,
         entry.header,
         table.concat(inputs.include_dirs, ";"),
@@ -926,7 +968,7 @@ function buildcmd_module(target, batchcmds, opt)
     batchcmds:compile(inputs.module_file, objectfile)
     batchcmds:add_depfiles(depfiles)
     batchcmds:add_depvalues(
-        "entisium.reflect.module.v5",
+        "entisium.reflect.module.v6",
         inputs.module_file,
         inputs.module_function,
         table.concat(functions, ";")
@@ -955,12 +997,19 @@ function buildcmd_aggregate(target, batchcmds, opt)
     batchcmds:compile(output_file, objectfile)
     batchcmds:add_depfiles(files)
     batchcmds:add_depvalues(
-        "entisium.reflect.aggregate.v5",
+        "entisium.reflect.aggregate.v6",
         output_file,
         table.concat(functions, ";")
     )
     batchcmds:set_depmtime(os.mtime(objectfile))
     batchcmds:set_depcache(project_absolute_path(output_file .. ".d"))
+end
+
+function validate_aggregate(target)
+    local output_file, _, _, metadata_files = aggregate_inputs(target)
+    if output_file and #metadata_files > 0 then
+        os.vrunv(reflgen_program(), metadata_validation_args(metadata_files))
+    end
 end
 
 function generate(target)
