@@ -134,8 +134,13 @@ build/profile/latest/frames.csv
 
 Use `systems.csv` for ECS system timing. Useful columns:
 
+- `schedule_id`
+- `system_id`
 - `schedule`
 - `system`
+- `symbol_kind`
+- `symbol_module`
+- `symbol_id`
 - `self_ms`
 - `total_ms`
 - `count`
@@ -148,6 +153,59 @@ Use `zones.csv` for manual scopes such as OpenGL uploads, command execution, dev
 
 Use `frames.csv` for frame-time distribution work.
 
+## Offline system symbols
+
+Profiling keeps timing identity separate from symbol identity. A system is
+aggregated by `schedule_id` and `system_id`; the `symbol_*` fields are only used
+to replace the fallback display name. This remains correct when identical code
+folding gives two logical systems the same function address.
+
+No `add_systems(...)` call-site changes are required.
+
+### WebAssembly
+
+Configure and build a profiling runtime normally, including release builds:
+
+```powershell
+xmake f -p wasm -a wasm32 -m release --profile_summary=y -y
+xmake build -y entisium-editor-runtime
+```
+
+The final link uses Emscripten's symbol map and produces:
+
+```text
+build/wasm/wasm32/release/entisium-editor-runtime.html.symbols
+build/wasm/wasm32/release/profile-symbols/<wasm-sha256>.json
+```
+
+Runtime records use `wasm:<sha256>` plus the final Wasm function index. The
+Editor loads the matching manifest through the authenticated Editor Host API
+and caches it by build ID. Symbol manifests are deliberately not copied into
+the public `runtime/` asset directory.
+
+Archive the manifest with profiling captures. A manifest from a different Wasm
+binary is rejected because its `module_id` does not match.
+
+### MSVC
+
+When `profile_summary` is enabled for Windows, release builds retain full PDBs
+and disable incremental linking:
+
+```powershell
+xmake f -p windows -a x64 -m release --profile_summary=y -y
+xmake build -y <target>
+```
+
+Runtime records use the PE CodeView PDB GUID and Age as `symbol_module`, and the
+module-relative RVA as `symbol_id`. Keep each produced EXE or DLL together with
+its matching PDB when archiving a capture. DbgHelp can resolve `module_base +
+RVA`; it also validates the PDB identity embedded in the PE. Absolute process
+addresses are never persisted.
+
+The existing in-process DbgHelp lookup remains a display fallback on Windows,
+so a local run can still show names immediately. The raw GUID/Age and RVA stay
+in the inspection response and `systems.csv` for later symbolization.
+
 ## System names
 
 ECS system names come from:
@@ -155,6 +213,8 @@ ECS system names come from:
 - `ETS_NAMED_SYSTEM(fn)` for function systems.
 - `ETS_SYSTEM_NAME("name", callable)` for lambdas, templates, or local callables.
 - Windows symbolization via `SymFromAddr` when no explicit name is provided.
+- WebAssembly offline symbolization in the Editor when a matching build
+  manifest is available.
 - `system#<id>` fallback when no stable name can be found.
 
 Prefer explicit names for templates and lambdas that should be easy to read in reports:
