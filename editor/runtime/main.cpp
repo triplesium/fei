@@ -14,6 +14,7 @@
 #include "runtime_inspection/provider.hpp"
 #include "runtime_inspection/registry.hpp"
 #include "runtime_inspection_playtest/playtest.hpp"
+#include "runtime_inspection_profiling/profiling.hpp"
 #include "sprite/plugin.hpp"
 #include "sprite/renderer.hpp"
 #include "ui_rendering/plugin.hpp"
@@ -265,6 +266,17 @@ int main() {
     if (!registered) {
         error(
             "Failed to register playtest inspections: {}",
+            registered.error().message
+        );
+        return 1;
+    }
+    registered =
+        runtime_inspection::profiling::register_profiling_inspection_providers(
+            inspections
+        );
+    if (!registered) {
+        error(
+            "Failed to register profiling inspections: {}",
             registered.error().message
         );
         return 1;

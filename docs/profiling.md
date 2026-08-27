@@ -7,6 +7,35 @@ This guide is intended for contributors and automated performance investigations
 
 The default build keeps profiling disabled.
 
+## Editor runtime inspection
+
+The Editor runtime registers versioned profiling inspection providers over its
+existing `runtime.inspect` bridge:
+
+- `profiling.summary` / `profiling.summary.v1`
+- `profiling.frame_history` / `profiling.frame_history.v1`
+- `profiling.gpu_summary` / `profiling.gpu_summary.v1`
+- `profiling.control` / `profiling.control.v1`
+
+CPU system and zone details require a runtime built with
+`--profile_summary=y`. Frame statistics and GPU summary availability are
+reported independently. A build without CPU summary instrumentation keeps the
+providers registered and returns `available: false`; attempts to start a CPU
+capture return an `unsupported` inspection error.
+
+The control provider accepts these requests:
+
+```json
+{"action":"start"}
+{"action":"capture","frames":300}
+{"action":"stop"}
+{"action":"clear"}
+```
+
+`start` begins an unbounded capture after clearing prior CPU summary data.
+`capture` stops automatically after the requested number of completed frames.
+The frame history remains bounded to its most recent 600 samples.
+
 ## Enable profiling
 
 Use a debug build with both Tracy and summary output enabled:

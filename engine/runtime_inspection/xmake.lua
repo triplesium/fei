@@ -1,4 +1,5 @@
 includes("core")
 includes("providers/ecs")
 includes("providers/playtest")
+includes("providers/profiling")
 includes("providers/snapshot")

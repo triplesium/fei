@@ -18,6 +18,7 @@ if is_plat("wasm") then
     includes("runtime_protocol")
     includes("runtime_inspection/core")
     includes("runtime_inspection/providers/playtest")
+    includes("runtime_inspection/providers/profiling")
     includes("core")
     includes("rendering")
     includes("sprite")

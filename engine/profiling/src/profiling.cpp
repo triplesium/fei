@@ -7,6 +7,7 @@
 #endif
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <limits>
@@ -74,6 +75,9 @@ struct ProfileState {
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     std::unordered_map<std::string, ProfileRecord> records;
     profiling_detail::FrameProfileHistory frame_history;
+    std::atomic<bool> capture_recording {true};
+    std::uint64_t capture_frame_limit {0};
+    std::uint64_t capture_frames_remaining {0};
 #    if defined(ETS_PROFILE_OUTPUT_PATH)
     std::string output_directory = ETS_PROFILE_OUTPUT_PATH;
 #    else
@@ -339,7 +343,15 @@ void profile_frame_mark() {
     if (!duration) {
         return;
     }
-    state.frame_history.push(*duration);
+    if (state.capture_recording.load(std::memory_order_relaxed)) {
+        state.frame_history.push(*duration);
+        if (state.capture_frames_remaining > 0) {
+            --state.capture_frames_remaining;
+            if (state.capture_frames_remaining == 0) {
+                state.capture_recording.store(false, std::memory_order_relaxed);
+            }
+        }
+    }
 #else
     (void)state.frame_stats.mark(profile_now_ns());
 #endif
@@ -385,6 +397,44 @@ ProfileSummarySnapshot profile_summary_snapshot() {
     return ProfileSummarySnapshot {
         .frame_stats = profile_frame_stats(),
     };
+#endif
+}
+
+ProfileCaptureStatus profile_capture_status() {
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    auto& state = profile_state();
+    std::scoped_lock lock(state.mutex);
+    return ProfileCaptureStatus {
+        .available = true,
+        .recording = state.capture_recording.load(std::memory_order_relaxed),
+        .bounded = state.capture_frame_limit > 0,
+        .frame_limit = state.capture_frame_limit,
+        .frames_remaining = state.capture_frames_remaining,
+    };
+#else
+    return {};
+#endif
+}
+
+void start_profile_capture(std::uint64_t frame_limit) {
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    ensure_profile_summary_atexit();
+    auto& state = profile_state();
+    std::scoped_lock lock(state.mutex);
+    state.frame_stats.clear();
+    state.records.clear();
+    state.frame_history.clear();
+    state.capture_frame_limit = frame_limit;
+    state.capture_frames_remaining = frame_limit;
+    state.capture_recording.store(true, std::memory_order_relaxed);
+#else
+    (void)frame_limit;
+#endif
+}
+
+void stop_profile_capture() {
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    profile_state().capture_recording.store(false, std::memory_order_relaxed);
 #endif
 }
 
@@ -501,8 +551,12 @@ SummaryProfileScope::SummaryProfileScope(
     std::uint32_t line
 ) :
     m_kind(kind), m_schedule_id(schedule_id), m_name(name), m_file(file),
-    m_function(function), m_line(line), m_active(true) {
+    m_function(function), m_line(line) {
+    if (!profile_state().capture_recording.load(std::memory_order_relaxed)) {
+        return;
+    }
     ensure_profile_summary_atexit();
+    m_active = true;
     active_scopes.push_back(
         ActiveProfileScope {
             .start_ns = profile_now_ns(),

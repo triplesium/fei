@@ -1,0 +1,203 @@
+#include "runtime_inspection_profiling/profiling.hpp"
+
+#include "ecs/world.hpp"
+
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <nlohmann/json.hpp>
+#include <string>
+#include <thread>
+
+using namespace ets;
+using namespace ets::runtime_inspection;
+using namespace ets::runtime_inspection::profiling;
+
+namespace {
+
+Result<std::string, InspectionError> dispatch(
+    InspectionRegistry& registry,
+    World& world,
+    std::string_view provider,
+    std::string_view schema,
+    std::string_view payload
+) {
+    return registry.dispatch(
+        world,
+        InspectionInvocation {
+            .provider = provider,
+            .schema = schema,
+            .payload_json = payload,
+        }
+    );
+}
+
+} // namespace
+
+TEST_CASE(
+    "profiling inspection providers register stable schemas",
+    "[runtime-inspection][profiling][registry]"
+) {
+    InspectionRegistry registry;
+    REQUIRE(register_profiling_inspection_providers(registry));
+    CHECK(registry.contains(SummaryProvider::id));
+    CHECK(registry.contains(FrameHistoryProvider::id));
+    CHECK(registry.contains(GpuSummaryProvider::id));
+    CHECK(registry.contains(ControlProvider::id));
+    REQUIRE(registry.descriptors().size() == 4);
+    CHECK(registry.descriptors()[0].schema == SummaryProvider::schema);
+    CHECK(registry.descriptors()[3].read_only == false);
+}
+
+TEST_CASE(
+    "profiling summary inspection returns system metadata",
+    "[runtime-inspection][profiling][summary]"
+) {
+    World world;
+    InspectionRegistry registry;
+    REQUIRE(register_profiling_inspection_providers(registry));
+    registry.freeze();
+
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    struct ProfileInfo {
+        std::string name;
+        std::string file;
+        std::string function;
+        std::uint32_t line;
+    };
+
+    register_profile_schedule_name(42, "TestSchedule");
+    start_profile_capture();
+    const ProfileInfo profile {
+        .name = "scripts/test.luau::update",
+        .file = "scripts/test.luau",
+        .function = "update",
+        .line = 7,
+    };
+    { ETS_PROFILE_SYSTEM_SCOPE(42, profile); }
+#else
+    clear_profile_summary();
+#endif
+
+    auto response = dispatch(
+        registry,
+        world,
+        SummaryProvider::id,
+        SummaryProvider::schema,
+        "{}"
+    );
+    if (!response) {
+        FAIL("Profiling summary dispatch failed: " << response.error().message);
+    }
+    const auto json = nlohmann::json::parse(*response);
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    CHECK(json.at("available") == true);
+    REQUIRE(json.at("systems").size() == 1);
+    CHECK(json.at("systems").at(0).at("schedule_name") == "TestSchedule");
+    CHECK(json.at("systems").at(0).at("name") == "scripts/test.luau::update");
+    stop_profile_capture();
+#else
+    CHECK(json.at("available") == false);
+    CHECK(json.at("systems").empty());
+#endif
+    CHECK(json.contains("frame_stats"));
+    CHECK(json.contains("zones"));
+}
+
+TEST_CASE(
+    "bounded profiling capture stops after the requested frames",
+    "[runtime-inspection][profiling][control]"
+) {
+    World world;
+    const ControlProvider provider;
+
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    auto started = provider.inspect(
+        world,
+        ControlRequest {.action = "capture", .frames = 2}
+    );
+    REQUIRE(started);
+    CHECK(started->status.available);
+    CHECK(started->status.recording);
+    CHECK(started->status.bounded);
+    CHECK(started->status.frame_limit == 2);
+    CHECK(started->status.frames_remaining == 2);
+
+    profile_frame_mark();
+    std::this_thread::sleep_for(std::chrono::milliseconds {1});
+    profile_frame_mark();
+    auto status = profile_capture_status();
+    CHECK(status.recording);
+    CHECK(status.frames_remaining == 1);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds {1});
+    profile_frame_mark();
+    status = profile_capture_status();
+    CHECK_FALSE(status.recording);
+    CHECK(status.frames_remaining == 0);
+    REQUIRE(profile_summary_snapshot().frames.size() == 2);
+#else
+    auto started = provider.inspect(
+        world,
+        ControlRequest {.action = "capture", .frames = 2}
+    );
+    REQUIRE_FALSE(started);
+    CHECK(started.error().kind == InspectionErrorKind::Unsupported);
+#endif
+}
+
+TEST_CASE(
+    "profiling control validates actions and frame counts",
+    "[runtime-inspection][profiling][control]"
+) {
+    World world;
+    const ControlProvider provider;
+
+    auto unknown = provider.inspect(
+        world,
+        ControlRequest {.action = "unknown", .frames = 0}
+    );
+    REQUIRE_FALSE(unknown);
+    CHECK(unknown.error().kind == InspectionErrorKind::InvalidRequest);
+
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    auto missing_frames = provider.inspect(
+        world,
+        ControlRequest {.action = "capture", .frames = 0}
+    );
+    REQUIRE_FALSE(missing_frames);
+    CHECK(missing_frames.error().kind == InspectionErrorKind::InvalidRequest);
+#endif
+
+    auto malformed =
+        control_profiling_json(world, R"({"action":"capture","frames":-1})");
+    REQUIRE_FALSE(malformed);
+    CHECK(malformed.error().kind == InspectionErrorKind::InvalidRequest);
+}
+
+TEST_CASE(
+    "profiling frame and GPU inspections return bounded JSON",
+    "[runtime-inspection][profiling][gpu][frames]"
+) {
+    World world;
+    clear_gpu_profile_summary();
+    record_gpu_profile_duration("Render/Main", 2'000'000);
+    record_gpu_profile_duration("Render/Main", 4'000'000);
+
+    auto gpu = profiling_gpu_summary_json(world, "{}");
+    REQUIRE(gpu);
+    const auto gpu_json = nlohmann::json::parse(*gpu);
+    CHECK(gpu_json.at("available") == true);
+    REQUIRE(gpu_json.at("entries").size() == 1);
+    CHECK(gpu_json.at("entries").at(0).at("name") == "Render/Main");
+    CHECK(gpu_json.at("entries").at(0).at("mean_ms") == 3.0);
+
+    auto frames = profiling_frame_history_json(world, "{}");
+    REQUIRE(frames);
+    const auto frame_json = nlohmann::json::parse(*frames);
+    CHECK(frame_json.contains("available"));
+    CHECK(frame_json.at("frames").is_array());
+
+    auto unexpected = profiling_summary_json(world, R"({"extra":true})");
+    REQUIRE_FALSE(unexpected);
+    CHECK(unexpected.error().kind == InspectionErrorKind::InvalidRequest);
+}

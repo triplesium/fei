@@ -53,6 +53,14 @@ struct ProfileSummarySnapshot {
     std::vector<ProfileFrameSample> frames;
 };
 
+struct ProfileCaptureStatus {
+    bool available {false};
+    bool recording {false};
+    bool bounded {false};
+    std::uint64_t frame_limit {0};
+    std::uint64_t frames_remaining {0};
+};
+
 struct GpuProfileEntrySnapshot {
     std::string name;
     std::uint64_t count {0};
@@ -78,6 +86,9 @@ std::string profile_schedule_name(std::uint64_t schedule_id);
 void profile_frame_mark();
 FrameProfileStats profile_frame_stats();
 ProfileSummarySnapshot profile_summary_snapshot();
+ProfileCaptureStatus profile_capture_status();
+void start_profile_capture(std::uint64_t frame_limit = 0);
+void stop_profile_capture();
 void clear_profile_frame_stats();
 void flush_profile_summary();
 void clear_profile_summary();

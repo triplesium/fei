@@ -26,6 +26,7 @@ target("entisium-editor-runtime")
         "entisium-project-scripting-luau",
         "entisium-runtime-inspection",
         "entisium-runtime-inspection-playtest",
+        "entisium-runtime-inspection-profiling",
         "entisium-sprite",
         "entisium-ui-rendering",
         "entisium-window-browser",
