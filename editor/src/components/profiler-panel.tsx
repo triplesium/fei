@@ -166,7 +166,7 @@ function HotspotList({ title, entries }: { title: string; entries: ProfileEntry[
                 <div className="divide-y divide-[#303030]">
                     {hotspots.map((entry) => (
                         <div
-                            key={`${entry.scheduleId}:${entry.file}:${entry.line}:${entry.name}`}
+                            key={`${entry.scheduleId}:${entry.systemId}:${entry.file}:${entry.line}:${entry.name}`}
                             className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-1.5 text-[11px]"
                         >
                             <span className="truncate" title={entry.name}>{entry.name}</span>
@@ -255,7 +255,7 @@ function CpuEntriesTable({ entries, filter }: { entries: ProfileEntry[]; filter:
                 <tbody>
                     {rows.map((entry) => (
                         <tr
-                            key={`${entry.scheduleId}:${entry.file}:${entry.line}:${entry.name}`}
+                            key={`${entry.scheduleId}:${entry.systemId}:${entry.file}:${entry.line}:${entry.name}`}
                             className="border-b border-[#292929] text-[#b8c0ca] hover:bg-[#252c33]"
                             title={entry.file ? `${entry.file}:${entry.line}` : entry.functionName}
                         >
@@ -395,81 +395,86 @@ export function ProfilerPanel({ runtimeState, sessionId, inspect }: ProfilerPane
         const poll = async (): Promise<void> => {
             if (polling) return;
             polling = true;
-            const results = await Promise.allSettled([
-                inspectProfileSummary(inspect),
-                inspectProfileFrameHistory(inspect),
-                inspectGpuProfileSummary(inspect),
-                controlProfiling(inspect, "status"),
-            ]);
-            if (cancelled) {
-                polling = false;
-                return;
-            }
+            try {
+                const results = await Promise.allSettled([
+                    inspectProfileSummary(inspect),
+                    inspectProfileFrameHistory(inspect),
+                    inspectGpuProfileSummary(inspect),
+                    controlProfiling(inspect, "status"),
+                ]);
+                if (cancelled) return;
 
-            const [summaryResult, historyResult, gpuResult, statusResult] = results;
-            let detailFailure = "";
-            let nextFrameDetails = frameDetailsRef.current;
-            if (historyResult.status === "fulfilled") {
-                const retainedFrames = new Set(
-                    historyResult.value.frames.map((frame) => frame.frame),
-                );
-                nextFrameDetails = new Map(
-                    [...frameDetailsRef.current].filter(
-                        ([frame]) => retainedFrames.has(frame) || frame === selectedFrame,
-                    ),
-                );
-                const missingFrames = historyResult.value.frames
-                    .map((frame) => frame.frame)
-                    .filter((frame) => !nextFrameDetails.has(frame));
-                const selectedIsMissing =
-                    selectedFrame !== null && missingFrames.includes(selectedFrame);
-                const recentMissing = missingFrames
-                    .filter((frame) => frame !== selectedFrame)
-                    .slice(-(frameDetailBatchSize - (selectedIsMissing ? 1 : 0)));
-                const detailFrames = selectedIsMissing
-                    ? [selectedFrame, ...recentMissing]
-                    : recentMissing;
-                if (detailFrames.length > 0) {
-                    try {
-                        const response = await resolveProfileFrameDetails(
-                            await inspectProfileFrameDetails(inspect, detailFrames),
-                        );
-                        for (const detail of response.details) {
-                            nextFrameDetails.set(detail.frame, detail);
+                const [summaryResult, historyResult, gpuResult, statusResult] = results;
+                let detailFailure = "";
+                let nextFrameDetails = frameDetailsRef.current;
+                if (historyResult.status === "fulfilled") {
+                    const retainedFrames = new Set(
+                        historyResult.value.frames.map((frame) => frame.frame),
+                    );
+                    nextFrameDetails = new Map(
+                        [...frameDetailsRef.current].filter(
+                            ([frame]) => retainedFrames.has(frame) || frame === selectedFrame,
+                        ),
+                    );
+                    const missingFrames = historyResult.value.frames
+                        .map((frame) => frame.frame)
+                        .filter((frame) => !nextFrameDetails.has(frame));
+                    const selectedIsMissing =
+                        selectedFrame !== null && missingFrames.includes(selectedFrame);
+                    const recentMissing = missingFrames
+                        .filter((frame) => frame !== selectedFrame)
+                        .slice(-(frameDetailBatchSize - (selectedIsMissing ? 1 : 0)));
+                    const detailFrames = selectedIsMissing
+                        ? [selectedFrame, ...recentMissing]
+                        : recentMissing;
+                    if (detailFrames.length > 0) {
+                        try {
+                            const response = await resolveProfileFrameDetails(
+                                await inspectProfileFrameDetails(inspect, detailFrames),
+                            );
+                            for (const detail of response.details) {
+                                nextFrameDetails.set(detail.frame, detail);
+                            }
+                        } catch (caught) {
+                            detailFailure = errorMessage(caught);
                         }
-                    } catch (caught) {
-                        detailFailure = errorMessage(caught);
                     }
                 }
-            }
-            polling = false;
-            if (cancelled) return;
 
-            if (summaryResult.status === "fulfilled") {
-                const resolvedSummary = await resolveProfileSummary(summaryResult.value);
-                if (!cancelled) setSummary(resolvedSummary);
-            }
-            if (historyResult.status === "fulfilled") {
-                setHistory(historyResult.value);
-                frameDetailsRef.current = nextFrameDetails;
-                setFrameDetails(new Map(nextFrameDetails));
-            }
-            if (gpuResult.status === "fulfilled") setGpuSummary(gpuResult.value);
-            if (statusResult.status === "fulfilled") setCaptureStatus(statusResult.value);
+                const resolvedSummary =
+                    summaryResult.status === "fulfilled"
+                        ? await resolveProfileSummary(summaryResult.value)
+                        : null;
+                if (cancelled) return;
 
-            const failures = results
-                .filter((result): result is PromiseRejectedResult => result.status === "rejected")
-                .map((result) => errorMessage(result.reason));
-            setError(failures[0] ?? detailFailure);
-            if (results.some((result) => result.status === "fulfilled")) {
-                setLastUpdated(
-                    new Date().toLocaleTimeString([], {
-                        hour12: false,
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                    }),
-                );
+                if (resolvedSummary) setSummary(resolvedSummary);
+                if (historyResult.status === "fulfilled") {
+                    setHistory(historyResult.value);
+                    frameDetailsRef.current = nextFrameDetails;
+                    setFrameDetails(new Map(nextFrameDetails));
+                }
+                if (gpuResult.status === "fulfilled") setGpuSummary(gpuResult.value);
+                if (statusResult.status === "fulfilled") setCaptureStatus(statusResult.value);
+
+                const failures = results
+                    .filter(
+                        (result): result is PromiseRejectedResult =>
+                            result.status === "rejected",
+                    )
+                    .map((result) => errorMessage(result.reason));
+                setError(failures[0] ?? detailFailure);
+                if (results.some((result) => result.status === "fulfilled")) {
+                    setLastUpdated(
+                        new Date().toLocaleTimeString([], {
+                            hour12: false,
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                        }),
+                    );
+                }
+            } finally {
+                polling = false;
             }
         };
 
