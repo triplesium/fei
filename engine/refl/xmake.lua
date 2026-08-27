@@ -1,5 +1,6 @@
 target("entisium-refl")
     set_kind("static")
+    add_rules("entisium.reflect")
     add_headerfiles("include/**.hpp")
     add_files("src/*.cpp")
     add_includedirs("include", {public = true})

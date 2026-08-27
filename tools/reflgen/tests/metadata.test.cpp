@@ -75,6 +75,11 @@ TEST_CASE(
         "use \"Missing\" \"ets::Window\" \"window.hpp\" 0\n",
         {"Unknown annotation 'Missing'", "ets::Window", "window.hpp"}
     );
+    require_validation_error(
+        "use \"ScriptModule\" \"ets::Window\" \"window.hpp\" 1 "
+        "\"name\" \"core\"\n",
+        {"Unknown annotation 'ScriptModule'", "ets::Window"}
+    );
 }
 
 TEST_CASE(

@@ -176,22 +176,6 @@ void validate_reflection_metadata(
     std::map<std::string, std::string> schema_names_by_type;
     std::vector<MetadataUse> uses;
 
-    const auto add_builtin = [&](MetadataSchema schema) {
-        schema_names_by_type.emplace(schema.type, schema.name);
-        schemas.emplace(schema.name, std::move(schema));
-    };
-    add_builtin({
-        .name = "ScriptPrelude",
-        .type = "ets::annotations::ScriptPrelude",
-        .source = "refl/annotations.hpp",
-    });
-    add_builtin({
-        .name = "ScriptModule",
-        .type = "ets::annotations::ScriptModule",
-        .source = "refl/annotations.hpp",
-        .fields = {{"name", "string"}},
-    });
-
     for (const auto& filename : metadata_files) {
         const std::filesystem::path file {filename};
         std::ifstream in(file, std::ios::binary);

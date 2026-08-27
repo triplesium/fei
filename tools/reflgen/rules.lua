@@ -2,6 +2,16 @@ import("core.project.depend")
 import("core.project.config")
 import("core.project.project")
 
+local reflection_headers_cache = {}
+local file_entries_cache = {}
+local reflected_targets_cache = {}
+local dependency_closure_cache = {}
+local include_directives_cache = {}
+local module_inputs_cache = {}
+local aggregate_inputs_cache = {}
+local validated_targets_cache = {}
+local header_owners_cache = nil
+
 local function normalize_path(filepath)
     local normalized = tostring(filepath):gsub("\\", "/")
     return normalized
@@ -159,6 +169,11 @@ local function collect_target_headers(headers, target)
 end
 
 local function reflection_headers(target)
+    local cached = reflection_headers_cache[target:name()]
+    if cached then
+        return cached
+    end
+
     local headers = {}
     collect_target_headers(headers, target)
     table.sort(headers)
@@ -169,10 +184,16 @@ local function reflection_headers(target)
             table.insert(reflected_headers, header)
         end
     end
+    reflection_headers_cache[target:name()] = reflected_headers
     return reflected_headers
 end
 
 local function file_entries(target)
+    local cached = file_entries_cache[target:name()]
+    if cached then
+        return cached
+    end
+
     local autogendir = target:values("entisium.reflect.dir")
     if not autogendir then
         autogendir = path.join(os.projectdir(), "build/.gens", target:name(), "reflection")
@@ -202,10 +223,16 @@ local function file_entries(target)
             function_name = "register_" .. target_name .. "_" .. stable .. "_reflection"
         })
     end
+    file_entries_cache[target:name()] = entries
     return entries
 end
 
 local function collect_reflected_targets(root_target)
+    local cached = reflected_targets_cache[root_target:name()]
+    if cached then
+        return cached
+    end
+
     local reflected_targets = {}
     local visited = {}
 
@@ -227,6 +254,7 @@ local function collect_reflected_targets(root_target)
     end
 
     visit(root_target)
+    reflected_targets_cache[root_target:name()] = reflected_targets
     return reflected_targets
 end
 
@@ -239,6 +267,11 @@ local function comparable_file_path(filepath)
 end
 
 local function target_dependency_closure(target)
+    local cached = dependency_closure_cache[target:name()]
+    if cached then
+        return cached
+    end
+
     local deps = {}
 
     local function visit(dep_name)
@@ -260,10 +293,15 @@ local function target_dependency_closure(target)
     for _, dep in ipairs(table.wrap(target:get("deps"))) do
         visit(dep)
     end
+    dependency_closure_cache[target:name()] = deps
     return deps
 end
 
 local function project_header_owners()
+    if header_owners_cache then
+        return header_owners_cache
+    end
+
     local owners = {}
     for _, target in ipairs(project.ordertargets()) do
         local headers = {}
@@ -275,6 +313,7 @@ local function project_header_owners()
             end
         end
     end
+    header_owners_cache = owners
     return owners
 end
 
@@ -285,9 +324,16 @@ local function project_local_file(filepath)
 end
 
 local function include_directives(header)
+    local cache_key = comparable_file_path(header)
+    local cached = include_directives_cache[cache_key]
+    if cached then
+        return cached
+    end
+
     local includes = {}
     local content = io.readfile(header)
     if not content then
+        include_directives_cache[cache_key] = includes
         return includes
     end
 
@@ -297,6 +343,7 @@ local function include_directives(header)
             table.insert(includes, include)
         end
     end
+    include_directives_cache[cache_key] = includes
     return includes
 end
 
@@ -320,7 +367,11 @@ local function resolve_project_include(include, header, include_dirs)
 end
 
 local function validate_reflect_dependencies(target, inputs)
+    if validated_targets_cache[target:name()] then
+        return
+    end
     if #inputs.headers == 0 then
+        validated_targets_cache[target:name()] = true
         return
     end
 
@@ -349,6 +400,7 @@ local function validate_reflect_dependencies(target, inputs)
             end
         end
     end
+    validated_targets_cache[target:name()] = true
 end
 
 local function reflgen_sources()
@@ -504,11 +556,16 @@ local function make_reflgen_args(
 end
 
 local function module_inputs(target)
+    local cached = module_inputs_cache[target:name()]
+    if cached then
+        return cached
+    end
+
     local include_dirs = {}
     insert_unique(include_dirs, os.projectdir())
     insert_unique(include_dirs, path.join(os.projectdir(), "engine"))
     collect_recursive_include_dirs(include_dirs, target)
-    return {
+    local inputs = {
         module_file = target:values("entisium.reflect.module_file"),
         module_function = target:values("entisium.reflect.module_function"),
         module_marker_file = target:values("entisium.reflect.module_marker_file"),
@@ -517,6 +574,8 @@ local function module_inputs(target)
         include_dirs = include_dirs,
         entries = file_entries(target)
     }
+    module_inputs_cache[target:name()] = inputs
+    return inputs
 end
 
 local function depfiles_with_reflgen(files)
@@ -534,6 +593,14 @@ local function depfiles_with_reflgen(files)
 end
 
 local function aggregate_inputs(target)
+    local cached = aggregate_inputs_cache[target:name()]
+    if cached then
+        return cached.output_file,
+            cached.functions,
+            cached.files,
+            cached.metadata_files
+    end
+
     local output_file = target:values("entisium.reflect.aggregate_file")
     local functions = {}
     local files = {}
@@ -558,6 +625,13 @@ local function aggregate_inputs(target)
     for _, file in ipairs(reflection_runtime_headers()) do
         insert_unique(files, file)
     end
+    local inputs = {
+        output_file = output_file,
+        functions = functions,
+        files = files,
+        metadata_files = metadata_files
+    }
+    aggregate_inputs_cache[target:name()] = inputs
     return output_file, functions, files, metadata_files
 end
 
@@ -632,8 +706,6 @@ local function write_aggregate(output_file, functions)
         "// This file is generated by entisium-reflgen",
         "",
         "#include \"refl/generated.hpp\"",
-        "#include \"refl/annotations.hpp\"",
-        "#include \"refl/cls.hpp\"",
         "#include \"refl/registry.hpp\"",
         "",
         "namespace ets::refl::generated {"
@@ -649,39 +721,6 @@ local function write_aggregate(output_file, functions)
     table.insert(lines, "")
     table.insert(lines, "void register_generated_reflection() {")
     table.insert(lines, "    auto& registry = Registry::instance();")
-    table.insert(lines, "    registry.register_cls<annotations::ScriptPrelude>();")
-    table.insert(lines, "    refl::generated::AnnotationWriter::register_schema<")
-    table.insert(lines, "        annotations::ScriptPrelude>(")
-    table.insert(lines, "        registry,")
-    table.insert(lines, "        \"ScriptPrelude\",")
-    table.insert(lines, "        {},")
-    table.insert(lines, "        [](AnnotationView) {")
-    table.insert(lines, "            return annotations::ScriptPrelude {};")
-    table.insert(lines, "        },")
-    table.insert(lines, "        [](const annotations::ScriptPrelude&) {")
-    table.insert(lines, "            return std::vector<AnnotationField> {};")
-    table.insert(lines, "        }")
-    table.insert(lines, "    );")
-    table.insert(lines, "    registry.register_cls<annotations::ScriptModule>()")
-    table.insert(lines, "        .add_property(\"name\", &annotations::ScriptModule::name);")
-    table.insert(lines, "    refl::generated::AnnotationWriter::register_schema<")
-    table.insert(lines, "        annotations::ScriptModule>(")
-    table.insert(lines, "        registry,")
-    table.insert(lines, "        \"ScriptModule\",")
-    table.insert(lines, "        {\"name\"},")
-    table.insert(lines, "        [](AnnotationView annotation) {")
-    table.insert(lines, "            annotations::ScriptModule value {};")
-    table.insert(lines, "            if (const auto name = annotation.value(\"name\")) {")
-    table.insert(lines, "                value.name = *name;")
-    table.insert(lines, "            }")
-    table.insert(lines, "            return value;")
-    table.insert(lines, "        },")
-    table.insert(lines, "        [](const annotations::ScriptModule& value) {")
-    table.insert(lines, "            return std::vector<AnnotationField> {")
-    table.insert(lines, "                {\"name\", value.name},")
-    table.insert(lines, "            };")
-    table.insert(lines, "        }")
-    table.insert(lines, "    );")
 
     for _, function_name in ipairs(functions) do
         table.insert(lines, format("    refl::generated::%s(registry);", function_name))
@@ -715,6 +754,9 @@ function configure_target(target)
     target:set("values", "entisium.reflect.module_marker_file", path.join(autogendir, "module.reflmod"))
     target:set("values", "entisium.reflect.script_module", script_module_name(target:name()))
     target:add("deps", "entisium-reflgen", {links = false})
+    if target:name() ~= "entisium-refl" then
+        target:add("deps", "entisium-refl")
+    end
 
     for _, entry in ipairs(file_entries(target)) do
         target:add("files", entry.marker, {always_added = true})
