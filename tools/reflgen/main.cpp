@@ -1,4 +1,5 @@
 #include "codegen.hpp"
+#include "metadata.hpp"
 #include "model.hpp"
 #include "parser.hpp"
 
@@ -12,22 +13,24 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace {
 
 struct Options {
     std::vector<std::string> headers;
     std::vector<std::string> includes;
+    std::vector<std::string> metadata_files;
     std::vector<std::string> registrars;
     std::filesystem::path root_dir = std::filesystem::current_path();
     std::filesystem::path output_file;
+    std::filesystem::path metadata_output;
     std::filesystem::path stamp_file;
     std::filesystem::path depfile;
     std::string dep_target;
     std::string function_name = "register_reflection";
     std::string script_module;
     bool aggregate = false;
+    bool validate_metadata = false;
     bool verbose = false;
 };
 
@@ -48,12 +51,30 @@ void configure_options(CLI::App& app, Options& options) {
     include_option->trigger_on_parse();
     app.add_flag("-v,--verbose", options.verbose, "Enable verbose output");
     app.add_flag("--aggregate", options.aggregate, "Generate aggregate output");
+    app.add_flag(
+        "--validate-metadata",
+        options.validate_metadata,
+        "Validate reflection metadata files"
+    );
     app.add_option(
         "--rootdir",
         options.root_dir,
         "Root directory for relative paths"
     );
     app.add_option("-o,--output", options.output_file, "Output C++ file");
+    app.add_option(
+        "--metadata-output",
+        options.metadata_output,
+        "Reflection metadata file to write"
+    );
+    auto* metadata_option = app.add_option_function<std::string>(
+        "--metadata",
+        [&options](const std::string& metadata) {
+            options.metadata_files.push_back(metadata);
+        },
+        "Reflection metadata file to validate"
+    );
+    metadata_option->trigger_on_parse();
     app.add_option("--depfile", options.depfile, "Dependency file to write");
     app.add_option(
         "--dep-target",
@@ -93,6 +114,12 @@ void normalize_options(Options& options) {
         options.headers.end()
     );
 
+    if (options.validate_metadata) {
+        if (options.metadata_files.empty()) {
+            throw std::runtime_error("no reflection metadata files provided");
+        }
+        return;
+    }
     if (options.headers.empty() && !options.aggregate) {
         throw std::runtime_error("no headers provided");
     }
@@ -249,6 +276,13 @@ int main(int argc, char** argv) {
     try {
         normalize_options(options);
 
+        if (options.validate_metadata) {
+            ets::reflgen::validate_reflection_metadata(options.metadata_files);
+            std::cout << "Validated " << options.metadata_files.size()
+                      << " reflection metadata files.\n";
+            return 0;
+        }
+
         if (options.aggregate) {
             ets::reflgen::generate_aggregate_cpp_file(
                 options.registrars,
@@ -269,6 +303,11 @@ int main(int argc, char** argv) {
         auto& result = output.result;
         ets::reflgen::dedupe_reflected_types(result);
         ets::reflgen::filter_codegen_unsupported_members(result);
+        ets::reflgen::write_reflection_metadata(
+            result,
+            options.metadata_output,
+            options.script_module
+        );
 
         std::cout << "\nParsing complete! Found "
                   << result.annotation_schemas.size() << " annotation schemas, "

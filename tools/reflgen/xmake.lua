@@ -80,6 +80,13 @@ target("entisium-reflgen")
     add_headerfiles("*.hpp")
     add_packages("llvm-libclang", "cli11")
 
+target("entisium-reflgen-tests")
+    set_kind("binary")
+    set_default(false)
+    add_rules("entisium.test")
+    add_files("metadata.cpp", "tests/*.cpp")
+    add_includedirs(".")
+
 rule("entisium.reflect.file")
     set_extensions(".reflgen")
 
