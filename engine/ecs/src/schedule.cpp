@@ -25,14 +25,22 @@ namespace {
 
 #if defined(ETS_ENABLE_TRACY) || defined(ETS_ENABLE_PROFILE_SUMMARY)
 void resolve_system_profile(SystemConfig& config) {
-    if (!config.profile.named() && config.system->has_profile_key()) {
+    if (config.system->has_profile_key()) {
         auto& registry = SystemProfileRegistry::instance();
-        auto profile = registry.symbolize(config.system->profile_key());
-        if (!profile) {
-            profile = registry.find(config.system->profile_key());
+        const auto profile_key = config.system->profile_key();
+        if (!config.profile.symbol.valid()) {
+            config.profile.symbol = registry.symbol_ref(profile_key);
         }
-        if (profile && profile->named()) {
-            config.profile = std::move(*profile);
+
+        if (!config.profile.named()) {
+            auto profile = registry.symbolize(profile_key);
+            if (!profile) {
+                profile = registry.find(profile_key);
+            }
+            if (profile && profile->named()) {
+                profile->symbol = config.profile.symbol;
+                config.profile = std::move(*profile);
+            }
         }
     }
 
@@ -55,7 +63,7 @@ void run_profiled_system(
 ) {
 #if defined(ETS_ENABLE_TRACY) || defined(ETS_ENABLE_PROFILE_SUMMARY)
     resolve_system_profile(config);
-    ETS_PROFILE_SYSTEM_SCOPE(schedule, config.profile);
+    ETS_PROFILE_SYSTEM_SCOPE(schedule, config.id, config.profile);
 #endif
     config.system->run(world);
 }

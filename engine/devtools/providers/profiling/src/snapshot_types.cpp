@@ -17,7 +17,12 @@ namespace {
 SummaryEntrySnapshot make_summary_entry(const ProfileEntrySnapshot& source) {
     return SummaryEntrySnapshot {
         .schedule_id = source.schedule_id,
+        .system_id = source.system_id,
         .schedule_name = source.schedule_name,
+        .symbol_kind =
+            std::string(profile_symbol_kind_name(source.symbol.kind)),
+        .symbol_module = source.symbol.module_id,
+        .symbol_id = source.symbol.value,
         .name = source.name,
         .file = source.file,
         .function = source.function,

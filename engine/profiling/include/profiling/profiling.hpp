@@ -1,5 +1,7 @@
 #pragma once
 
+#include "profiling/profile_symbol.hpp"
+
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -26,7 +28,9 @@ struct FrameProfileStats {
 struct ProfileEntrySnapshot {
     ProfileZoneKind kind {ProfileZoneKind::Generic};
     std::uint64_t schedule_id {0};
+    std::uint64_t system_id {0};
     std::string schedule_name;
+    ProfileSymbolRef symbol;
     std::string name;
     std::string file;
     std::string function;
@@ -148,6 +152,8 @@ class SummaryProfileScope {
   private:
     ProfileZoneKind m_kind;
     std::uint64_t m_schedule_id;
+    std::uint64_t m_system_id;
+    const ProfileSymbolRef* m_symbol;
     std::string_view m_name;
     std::string_view m_file;
     std::string_view m_function;
@@ -158,6 +164,8 @@ class SummaryProfileScope {
     SummaryProfileScope(
         ProfileZoneKind kind,
         std::uint64_t schedule_id,
+        std::uint64_t system_id,
+        const ProfileSymbolRef* symbol,
         std::string_view name,
         std::string_view file,
         std::string_view function,
@@ -198,6 +206,8 @@ class SummaryProfileScope {
 #    define ETS_PROFILE_SUMMARY_SCOPE(                      \
         kind,                                               \
         schedule_id,                                        \
+        system_id,                                          \
+        symbol,                                             \
         name,                                               \
         file,                                               \
         function,                                           \
@@ -205,11 +215,13 @@ class SummaryProfileScope {
     )                                                       \
         ::ets::SummaryProfileScope ETS_PROFILE_UNIQUE_NAME( \
             ets_summary_profile_scope_                      \
-        ) {kind, schedule_id, name, file, function, line};
+        ) {kind, schedule_id, system_id, symbol, name, file, function, line};
 #else
 #    define ETS_PROFILE_SUMMARY_SCOPE( \
         kind,                          \
         schedule_id,                   \
+        system_id,                     \
+        symbol,                        \
         name,                          \
         file,                          \
         function,                      \
@@ -226,6 +238,8 @@ class SummaryProfileScope {
     ETS_PROFILE_SUMMARY_SCOPE(           \
         ::ets::ProfileZoneKind::Generic, \
         0,                               \
+        0,                               \
+        nullptr,                         \
         name,                            \
         __FILE__,                        \
         __func__,                        \
@@ -237,6 +251,8 @@ class SummaryProfileScope {
     ETS_PROFILE_SUMMARY_SCOPE(           \
         ::ets::ProfileZoneKind::Generic, \
         0,                               \
+        0,                               \
+        nullptr,                         \
         __func__,                        \
         __FILE__,                        \
         __func__,                        \
@@ -248,24 +264,28 @@ class SummaryProfileScope {
     ETS_PROFILE_SUMMARY_SCOPE(                                  \
         ::ets::ProfileZoneKind::Generic,                        \
         0,                                                      \
+        0,                                                      \
+        nullptr,                                                \
         name,                                                   \
         file,                                                   \
         function,                                               \
         line                                                    \
     )
 
-#define ETS_PROFILE_SYSTEM_SCOPE(schedule_id, profile_info) \
-    ETS_PROFILE_TRACY_DYNAMIC_SCOPE(                        \
-        (profile_info).name,                                \
-        (profile_info).file,                                \
-        (profile_info).function,                            \
-        (profile_info).line                                 \
-    )                                                       \
-    ETS_PROFILE_SUMMARY_SCOPE(                              \
-        ::ets::ProfileZoneKind::System,                     \
-        schedule_id,                                        \
-        (profile_info).name,                                \
-        (profile_info).file,                                \
-        (profile_info).function,                            \
-        (profile_info).line                                 \
+#define ETS_PROFILE_SYSTEM_SCOPE(schedule_id, system_id, profile_info) \
+    ETS_PROFILE_TRACY_DYNAMIC_SCOPE(                                   \
+        (profile_info).name,                                           \
+        (profile_info).file,                                           \
+        (profile_info).function,                                       \
+        (profile_info).line                                            \
+    )                                                                  \
+    ETS_PROFILE_SUMMARY_SCOPE(                                         \
+        ::ets::ProfileZoneKind::System,                                \
+        schedule_id,                                                   \
+        system_id,                                                     \
+        &(profile_info).symbol,                                        \
+        (profile_info).name,                                           \
+        (profile_info).file,                                           \
+        (profile_info).function,                                       \
+        (profile_info).line                                            \
     )

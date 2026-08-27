@@ -60,6 +60,7 @@ TEST_CASE(
 
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     struct ProfileInfo {
+        ProfileSymbolRef symbol;
         std::string name;
         std::string file;
         std::string function;
@@ -74,7 +75,7 @@ TEST_CASE(
         .function = "update",
         .line = 7,
     };
-    { ETS_PROFILE_SYSTEM_SCOPE(42, profile); }
+    { ETS_PROFILE_SYSTEM_SCOPE(42, 1, profile); }
 #else
     clear_profile_summary();
 #endif
@@ -94,6 +95,8 @@ TEST_CASE(
     CHECK(json.at("available") == true);
     REQUIRE(json.at("systems").size() == 1);
     CHECK(json.at("systems").at(0).at("schedule_name") == "TestSchedule");
+    CHECK(json.at("systems").at(0).at("system_id") == 1);
+    CHECK(json.at("systems").at(0).at("symbol_kind") == "none");
     CHECK(json.at("systems").at(0).at("name") == "scripts/test.luau::update");
     stop_profile_capture();
 #else

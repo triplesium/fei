@@ -125,6 +125,7 @@ TEST_CASE(
 ) {
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     struct TestProfileInfo {
+        ets::ProfileSymbolRef symbol;
         std::string name;
         std::string file;
         std::string function;
@@ -133,6 +134,7 @@ TEST_CASE(
 
     ets::clear_profile_schedule_names();
     ets::clear_profile_summary();
+    ets::start_profile_capture();
     ets::register_profile_schedule_name(7, "TestSchedule");
 
     TestProfileInfo outer {
@@ -141,17 +143,10 @@ TEST_CASE(
         .function = "outer_system()",
         .line = 20,
     };
-    TestProfileInfo inner {
-        .name = "inner_system",
-        .file = "test.cpp",
-        .function = "inner_system()",
-        .line = 21,
-    };
-
     {
-        ETS_PROFILE_SYSTEM_SCOPE(7, outer);
+        ETS_PROFILE_SYSTEM_SCOPE(7, 1, outer);
         std::this_thread::sleep_for(std::chrono::milliseconds {2});
-        { ETS_PROFILE_SYSTEM_SCOPE(7, inner); }
+        { ETS_PROFILE_SYSTEM_SCOPE(7, 2, outer); }
     }
 
     const auto snapshot = ets::profile_summary_snapshot();
@@ -160,9 +155,13 @@ TEST_CASE(
     REQUIRE(snapshot.systems.front().name == "outer_system");
     REQUIRE(snapshot.systems.front().schedule_name == "TestSchedule");
     REQUIRE(
+        snapshot.systems.front().system_id != snapshot.systems.back().system_id
+    );
+    REQUIRE(
         snapshot.systems.front().total_ms >= snapshot.systems.back().total_ms
     );
     REQUIRE(snapshot.zones.empty());
+    ets::stop_profile_capture();
 #else
     const auto snapshot = ets::profile_summary_snapshot();
     REQUIRE_FALSE(snapshot.available);
@@ -178,6 +177,7 @@ TEST_CASE(
 ) {
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     struct TestProfileInfo {
+        ets::ProfileSymbolRef symbol;
         std::string name;
         std::string file;
         std::string function;
@@ -196,7 +196,7 @@ TEST_CASE(
         .line = 31,
     };
     {
-        ETS_PROFILE_SYSTEM_SCOPE(9, profile);
+        ETS_PROFILE_SYSTEM_SCOPE(9, 1, profile);
         ETS_PROFILE_SCOPE("frame_zone");
         std::this_thread::sleep_for(std::chrono::milliseconds {1});
     }
@@ -228,6 +228,7 @@ TEST_CASE(
 TEST_CASE("profile system scopes can write summary csv", "[base][profiling]") {
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     struct TestProfileInfo {
+        ets::ProfileSymbolRef symbol;
         std::string name;
         std::string file;
         std::string function;
@@ -240,6 +241,7 @@ TEST_CASE("profile system scopes can write summary csv", "[base][profiling]") {
 
     ets::clear_profile_schedule_names();
     ets::clear_profile_summary();
+    ets::start_profile_capture();
     ets::set_profile_summary_output_directory(output_dir.string());
     ets::register_profile_schedule_name(7, "TestSchedule");
 
@@ -250,8 +252,9 @@ TEST_CASE("profile system scopes can write summary csv", "[base][profiling]") {
         .line = 12,
     };
 
-    { ETS_PROFILE_SYSTEM_SCOPE(7, profile); }
+    { ETS_PROFILE_SYSTEM_SCOPE(7, 1, profile); }
     ets::flush_profile_summary();
+    ets::stop_profile_capture();
 
     REQUIRE_FALSE(std::filesystem::exists(output_dir / "summary.json"));
 

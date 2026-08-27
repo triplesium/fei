@@ -91,7 +91,11 @@ Json frame_stats_json(const FrameProfileStats& stats) {
 Json entry_json(const ProfileEntrySnapshot& entry) {
     return Json {
         {"schedule_id", entry.schedule_id},
+        {"system_id", entry.system_id},
         {"schedule_name", entry.schedule_name},
+        {"symbol_kind", profile_symbol_kind_name(entry.symbol.kind)},
+        {"symbol_module", entry.symbol.module_id},
+        {"symbol_id", entry.symbol.value},
         {"name", entry.name},
         {"file", entry.file},
         {"function", entry.function},

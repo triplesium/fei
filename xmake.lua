@@ -45,6 +45,12 @@ option("tests")
     set_description("Build and register test targets")
 option_end()
 
+if is_plat("windows") and has_config("profile_summary") then
+    set_symbols("debug")
+    set_strip("none")
+    add_ldflags("/DEBUG:FULL", "/INCREMENTAL:NO", {force = true})
+end
+
 includes("packages")
 
 if has_config("tests") then
@@ -167,6 +173,9 @@ function add_browser_shell(shell_file)
         {force = true}
     )
     add_extrafiles(shell_file)
+    if has_config("profile_summary") then
+        add_ldflags("--emit-symbol-map", {force = true})
+    end
 
     before_build(function(target)
         local html_path = target:targetfile()
@@ -179,6 +188,44 @@ function add_browser_shell(shell_file)
         local html_path = target:targetfile()
         local html = io.readfile(html_path)
         local script_name = target:name() .. ".js"
+        local profile_build_id = ""
+        if has_config("profile_summary") then
+            import("core.base.json")
+
+            local wasm_path = path.join(
+                target:targetdir(),
+                target:name() .. ".wasm"
+            )
+            local digest = hash.sha256(wasm_path)
+            profile_build_id = "wasm:" .. digest
+
+            local symbol_map_path = html_path .. ".symbols"
+            assert(
+                os.isfile(symbol_map_path),
+                "missing Emscripten symbol map: " .. symbol_map_path
+            )
+            local symbols = {}
+            for line in io.readfile(symbol_map_path):gmatch("[^\r\n]+") do
+                local symbol_id, function_name = line:match("^(%d+):(.*)$")
+                if symbol_id and function_name then
+                    symbols[symbol_id] = { ["function"] = function_name }
+                end
+            end
+            local symbol_directory = path.join(
+                target:targetdir(),
+                "profile-symbols"
+            )
+            os.mkdir(symbol_directory)
+            io.writefile(
+                path.join(symbol_directory, digest .. ".json"),
+                json.encode({
+                    schema = "entisium.profile-symbols.v1",
+                    module_id = profile_build_id,
+                    kind = "wasm-function-index",
+                    symbols = symbols,
+                })
+            )
+        end
         if html:find(script_name .. "?dev=", 1, true) then
             return
         end
@@ -186,6 +233,8 @@ function add_browser_shell(shell_file)
         local script_tag = '<script[^>]-src=["\']?' ..
             script_pattern .. '["\']?[^>]*></script>'
         local script_loader = [[<script>
+            globalThis.ETS_PROFILE_BUILD_ID = "]] ..
+            profile_build_id .. [[";
             const emscriptenScript = document.createElement("script");
             emscriptenScript.async = true;
             emscriptenScript.src = "]] .. script_name .. [[?dev=" + resourceVersion;

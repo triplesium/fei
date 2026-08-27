@@ -1,5 +1,7 @@
 #pragma once
 
+#include "profiling/profile_symbol.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -13,6 +15,7 @@
 namespace ets {
 
 struct SystemProfileInfo {
+    ProfileSymbolRef symbol;
     std::string name;
     std::string file;
     std::string function;
@@ -58,6 +61,7 @@ class SystemProfileRegistry {
     }
 
     std::optional<SystemProfileInfo> find(std::size_t key) const;
+    ProfileSymbolRef symbol_ref(std::size_t address) const;
     std::optional<SystemProfileInfo> symbolize(std::size_t address) const;
     void clear();
 };

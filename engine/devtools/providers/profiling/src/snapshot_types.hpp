@@ -21,7 +21,11 @@ struct FrameStatsSnapshot {
 ETS_REFLECT()
 struct SummaryEntrySnapshot {
     std::uint64_t schedule_id {0};
+    std::uint64_t system_id {0};
     std::string schedule_name;
+    std::string symbol_kind;
+    std::string symbol_module;
+    std::uint64_t symbol_id {0};
     std::string name;
     std::string file;
     std::string function;

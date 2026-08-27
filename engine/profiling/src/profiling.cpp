@@ -49,7 +49,9 @@ struct ProfileStats {
 struct ProfileRecord {
     ProfileZoneKind kind = ProfileZoneKind::Generic;
     std::uint64_t schedule_id = 0;
+    std::uint64_t system_id = 0;
     std::string schedule_name;
+    ProfileSymbolRef symbol;
     std::string name;
     std::string file;
     std::string function;
@@ -118,10 +120,16 @@ thread_local std::vector<ActiveProfileScope> active_scopes;
 std::string profile_record_key(
     ProfileZoneKind kind,
     std::uint64_t schedule_id,
+    std::uint64_t system_id,
     std::string_view name,
     std::string_view file,
     std::uint32_t line
 ) {
+    if (kind == ProfileZoneKind::System) {
+        return std::to_string(static_cast<unsigned>(kind)) + '|' +
+               std::to_string(schedule_id) + '|' + std::to_string(system_id);
+    }
+
     std::string key;
     key.reserve(name.size() + file.size() + 64);
     key += std::to_string(static_cast<unsigned>(kind));
@@ -202,7 +210,9 @@ ProfileEntrySnapshot make_profile_entry(const ProfileRecord& record) {
     return ProfileEntrySnapshot {
         .kind = record.kind,
         .schedule_id = record.schedule_id,
+        .system_id = record.system_id,
         .schedule_name = record.schedule_name,
+        .symbol = record.symbol,
         .name = record.name,
         .file = record.file,
         .function = record.function,
@@ -231,14 +241,19 @@ void write_system_records(
     const std::vector<ProfileEntrySnapshot>& records
 ) {
     std::ofstream out(path);
-    out << "schedule,system,total_ms,self_ms,count,mean_ms,self_mean_ms,min_ms,"
+    out << "schedule_id,system_id,schedule,system,symbol_kind,symbol_module,"
+           "symbol_id,total_ms,self_ms,count,mean_ms,self_mean_ms,min_ms,"
            "max_ms,file,line,function\n";
 
     for (const auto& record : records) {
-        out << escape_csv(record.schedule_name) << ','
-            << escape_csv(record.name) << ',' << record.total_ms << ','
-            << record.self_ms << ',' << record.count << ',' << record.mean_ms
-            << ',' << record.self_mean_ms << ',' << record.min_ms << ','
+        out << record.schedule_id << ',' << record.system_id << ','
+            << escape_csv(record.schedule_name) << ','
+            << escape_csv(record.name) << ','
+            << profile_symbol_kind_name(record.symbol.kind) << ','
+            << escape_csv(record.symbol.module_id) << ',' << record.symbol.value
+            << ',' << record.total_ms << ',' << record.self_ms << ','
+            << record.count << ',' << record.mean_ms << ','
+            << record.self_mean_ms << ',' << record.min_ms << ','
             << record.max_ms << ',' << escape_csv(record.file) << ','
             << record.line << ',' << escape_csv(record.function) << '\n';
     }
@@ -275,6 +290,8 @@ void write_frame_records(
 void record_profile_scope(
     ProfileZoneKind kind,
     std::uint64_t schedule_id,
+    std::uint64_t system_id,
+    const ProfileSymbolRef* symbol,
     std::string_view name,
     std::string_view file,
     std::string_view function,
@@ -284,11 +301,16 @@ void record_profile_scope(
 ) {
     auto& state = profile_state();
     std::scoped_lock lock(state.mutex);
-    auto key = profile_record_key(kind, schedule_id, name, file, line);
+    auto key =
+        profile_record_key(kind, schedule_id, system_id, name, file, line);
     auto [it, inserted] = state.records.try_emplace(key);
     if (inserted) {
         it->second.kind = kind;
         it->second.schedule_id = schedule_id;
+        it->second.system_id = system_id;
+        if (symbol) {
+            it->second.symbol = *symbol;
+        }
         if (kind == ProfileZoneKind::System) {
             auto schedule_it = state.schedule_names.find(schedule_id);
             it->second.schedule_name =
@@ -642,13 +664,16 @@ void clear_gpu_profile_summary() {
 SummaryProfileScope::SummaryProfileScope(
     ProfileZoneKind kind,
     std::uint64_t schedule_id,
+    std::uint64_t system_id,
+    const ProfileSymbolRef* symbol,
     std::string_view name,
     std::string_view file,
     std::string_view function,
     std::uint32_t line
 ) :
-    m_kind(kind), m_schedule_id(schedule_id), m_name(name), m_file(file),
-    m_function(function), m_line(line) {
+    m_kind(kind), m_schedule_id(schedule_id), m_system_id(system_id),
+    m_symbol(symbol), m_name(name), m_file(file), m_function(function),
+    m_line(line) {
     if (!profile_state().capture_recording.load(std::memory_order_relaxed)) {
         return;
     }
@@ -680,6 +705,8 @@ SummaryProfileScope::~SummaryProfileScope() {
     record_profile_scope(
         m_kind,
         m_schedule_id,
+        m_system_id,
+        m_symbol,
         m_name,
         m_file,
         m_function,

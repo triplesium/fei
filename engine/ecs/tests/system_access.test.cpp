@@ -171,6 +171,14 @@ TEST_CASE(
     "[ecs][system][profile]"
 ) {
 #if defined(_WIN32)
+    const auto symbol = SystemProfileRegistry::instance().symbol_ref(
+        system_profile_key(named_profile_system)
+    );
+    REQUIRE(symbol.valid());
+    CHECK(symbol.kind == ProfileSymbolKind::PeRva);
+    INFO("profile module: " << symbol.module_id);
+    CHECK(symbol.module_id.starts_with("pdb:"));
+    CHECK(symbol.value > 0);
     auto profile = SystemProfileRegistry::instance().symbolize(
         system_profile_key(named_profile_system)
     );

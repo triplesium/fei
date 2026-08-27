@@ -80,7 +80,14 @@ TEST_CASE(
                 ProfileEntrySnapshot {
                     .kind = ProfileZoneKind::System,
                     .schedule_id = 7,
+                    .system_id = 11,
                     .schedule_name = "Update",
+                    .symbol =
+                        ProfileSymbolRef {
+                            .kind = ProfileSymbolKind::WasmFunctionIndex,
+                            .module_id = "wasm:0123",
+                            .value = 42,
+                        },
                     .name = "update_scene",
                     .file = "scene.cpp",
                     .function = "update_scene()",
@@ -117,6 +124,10 @@ TEST_CASE(
     REQUIRE(snapshot.frame_stats.frame_count == 120);
     REQUIRE(snapshot.systems.size() == 1);
     REQUIRE(snapshot.systems.front().schedule_name == "Update");
+    REQUIRE(snapshot.systems.front().system_id == 11);
+    REQUIRE(snapshot.systems.front().symbol_kind == "wasm-function-index");
+    REQUIRE(snapshot.systems.front().symbol_module == "wasm:0123");
+    REQUIRE(snapshot.systems.front().symbol_id == 42);
     REQUIRE(snapshot.systems.front().name == "update_scene");
     REQUIRE(snapshot.systems.front().self_ms == Catch::Approx(18.0));
     REQUIRE(snapshot.zones.size() == 1);
