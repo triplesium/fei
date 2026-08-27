@@ -14,6 +14,7 @@ existing `runtime.inspect` bridge:
 
 - `profiling.summary` / `profiling.summary.v1`
 - `profiling.frame_history` / `profiling.frame_history.v1`
+- `profiling.frame_detail` / `profiling.frame_detail.v1`
 - `profiling.gpu_summary` / `profiling.gpu_summary.v1`
 - `profiling.control` / `profiling.control.v1`
 
@@ -26,15 +27,38 @@ capture return an `unsupported` inspection error.
 The control provider accepts these requests:
 
 ```json
+{"action":"status"}
 {"action":"start"}
 {"action":"capture","frames":300}
 {"action":"stop"}
 {"action":"clear"}
 ```
 
-`start` begins an unbounded capture after clearing prior CPU summary data.
+`status` returns the current capture state without changing it. `start` begins
+an unbounded capture after clearing prior CPU summary data.
 `capture` stops automatically after the requested number of completed frames.
 The frame history remains bounded to its most recent 600 samples.
+`profiling.frame_detail` accepts up to 60 frame numbers per request and returns
+the CPU system and zone timings captured in each frame still present in that
+rolling history.
+
+The Editor exposes these providers through the dockable `Profiler` tab beside
+the Console. Its overview shows the rolling frame history and current frame
+statistics. Live mode follows the newest frame; clicking a frame pins the
+selection and updates the CPU Systems, CPU Zones, and overview hotspots to that
+frame's samples. Use the previous and next controls to step through neighboring
+frames. The Editor backfills frame details into a local cache while the runtime
+is running, so the retained 600-frame window remains inspectable after the game
+stops. Use Live to resume following the newest frame.
+
+GPU timestamps remain a sortable, filterable capture-wide aggregate. Graphics
+backends currently report resolved durations without the originating frame
+number, so the Editor does not attribute delayed GPU query results to a selected
+frame. Recording controls operate on the runtime capture, while the target FPS
+selector only changes the Editor's frame-budget guide. Stopping the game freezes
+the most recently received data in the Editor. The next runtime session starts
+with an empty view, and Clear remains available for discarding frozen data while
+the game is stopped.
 
 ## Enable profiling
 

@@ -6,6 +6,7 @@ import {
     type IDockviewPanelProps,
 } from "dockview-react";
 import {
+    Activity,
     Bot,
     ChevronDown,
     ChevronRight,
@@ -75,6 +76,7 @@ import { TooltipProvider } from "./components/ui/tooltip";
 import { ScrollArea } from "./components/ui/scroll-area";
 import { CodeEditor } from "./components/code-editor";
 import { RuntimeViewport } from "./components/runtime-viewport";
+import { ProfilerPanel } from "./components/profiler-panel";
 import {
     PanelEmptyState,
     PanelStatus,
@@ -472,6 +474,8 @@ function EnginePanelTab({ api }: IDockviewPanelHeaderProps) {
                 ? Play
                 : api.id === "agent"
                   ? Bot
+                : api.id === "profiler"
+                  ? Activity
                 : api.id === "inspector"
                   ? Settings2
                   : Terminal;
@@ -542,10 +546,11 @@ function addDefaultWorkbenchPanels(api: DockviewApi): void {
         tabComponent: "engine",
         title: "Console",
         position: { referencePanel: "code", direction: "below" },
-        initialHeight: 170,
+        initialHeight: 280,
         minimumHeight: 100,
-        maximumHeight: 320,
+        maximumHeight: 520,
     });
+    addProfilerWorkbenchPanel(api);
 
     const agentWidth = Math.max(340, Math.min(440, Math.round(api.width * 0.28)));
     const inspectorHeight = Math.max(220, Math.min(360, Math.round(api.height * 0.42)));
@@ -553,9 +558,28 @@ function addDefaultWorkbenchPanels(api: DockviewApi): void {
         api.getPanel("agent")?.group.api.setSize({ width: agentWidth });
     }
     api.getPanel("project")?.group.api.setSize({ width: 260 });
-    api.getPanel("console")?.group.api.setSize({ height: 170 });
+    api.getPanel("console")?.group.api.setSize({ height: 280 });
     api.getPanel("inspector")?.group.api.setSize({ height: inspectorHeight });
     api.getPanel("code")?.api.setActive();
+}
+
+function addProfilerWorkbenchPanel(api: DockviewApi): boolean {
+    if (api.getPanel("profiler")) return false;
+    api.addPanel({
+        id: "profiler",
+        component: "panel",
+        tabComponent: "engine",
+        title: "Profiler",
+        inactive: true,
+        position: {
+            referencePanel: api.getPanel("console") ? "console" : "code",
+            direction: api.getPanel("console") ? "within" : "below",
+        },
+        initialHeight: 280,
+        minimumHeight: 180,
+        maximumHeight: 520,
+    });
+    return true;
 }
 
 export function App() {
@@ -692,6 +716,11 @@ export function App() {
 
     const attachRuntimeFrame = useCallback(
         (frame: HTMLIFrameElement | null) => runtimeController.attachFrame(frame),
+        [runtimeController],
+    );
+    const inspectRuntime = useCallback(
+        (provider: string, schema: string, payload: unknown) =>
+            runtimeController.inspect(provider, schema, payload),
         [runtimeController],
     );
 
@@ -1488,6 +1517,10 @@ export function App() {
             localStorage.setItem(workbenchLayoutStorageKey, JSON.stringify(api.toJSON()));
         }
 
+        if (addProfilerWorkbenchPanel(api)) {
+            api.getPanel("profiler")?.group.api.setSize({ height: 280 });
+        }
+
         dockviewLayoutListenerRef.current?.dispose();
         const panels = [
             ["code", "Code"],
@@ -1495,6 +1528,7 @@ export function App() {
             ["project", "Assets"],
             ["inspector", "Inspector"],
             ["console", "Console"],
+            ["profiler", "Profiler"],
         ] as const;
         const visiblePanels: readonly (readonly [string, string])[] = editorCapabilities.agent
             ? [["agent", "Agent"], ...panels]
@@ -1744,6 +1778,13 @@ export function App() {
                         appendConsole("error", "runtime", errorMessage(error)),
                     );
                 }}
+            />
+        ),
+        profiler: (
+            <ProfilerPanel
+                runtimeState={runtimeState}
+                sessionId={runtimeSession?.channelId ?? null}
+                inspect={inspectRuntime}
             />
         ),
         ...(editorCapabilities.agent
