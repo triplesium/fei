@@ -1,7 +1,6 @@
 #include "core/plugin.hpp"
 
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "project/project.hpp"
 #include "project_runtime/runtime.hpp"
 #include "project_scripting_luau/playtest.hpp"
@@ -95,7 +94,6 @@ App load_app(const TemporaryMixedScriptProject& directory) {
 
     App app;
     configure_project_runtime(app, std::move(*project));
-    app.add_plugin<ReflectionPlugin>();
     app.add_plugin<CorePlugin>();
     app.add_plugin<project_runtime::LuauScriptsPlugin>();
     app.finish();

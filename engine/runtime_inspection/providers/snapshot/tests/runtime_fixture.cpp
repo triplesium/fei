@@ -1,5 +1,4 @@
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "ecs/world.hpp"
 #include "project/project.hpp"
 #include "refl/cls.hpp"
@@ -514,7 +513,6 @@ int main(int argc, char** argv) {
         }
     );
     app.add_resource(std::move(inspections));
-    app.add_plugin<ets::ReflectionPlugin>();
     app.add_plugin(
         ets::runtime_protocol::RuntimeProbePlugin {std::move(probe)}
     );

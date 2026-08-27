@@ -1,6 +1,5 @@
 #include "runtime_host/application.hpp"
 
-#include "app/reflection_plugin.hpp"
 #include "asset/server.hpp"
 #include "base/env.hpp"
 #include "base/log.hpp"
@@ -803,8 +802,7 @@ RuntimeHostApplication::RuntimeHostApplication(Project project) {
         .add_systems(Last, request_quick_save_hotkeys);
     m_app.add_plugin<snapshot_runtime::SnapshotRuntimePlugin>();
     configure_project_runtime(m_app, std::move(project));
-    m_app.add_plugin<ReflectionPlugin>()
-        .add_plugin<OpenGLGlfwPlugin>()
+    m_app.add_plugin<OpenGLGlfwPlugin>()
         .add_plugin<RenderingPlugin>()
         .add_plugin<SpritePlugin>()
         .add_plugin<GlfwInputPlugin>()

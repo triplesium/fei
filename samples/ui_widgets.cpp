@@ -1,5 +1,4 @@
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "asset/server.hpp"
 #include "asset/source.hpp"
 #include "base/log.hpp"
@@ -909,8 +908,7 @@ int main(int argc, char** argv) {
         );
 
     if (options.devtools) {
-        app.add_plugin<ReflectionPlugin>()
-            .add_plugin(devtools::CorePlugin {})
+        app.add_plugin(devtools::CorePlugin {})
             .add_plugin(devtools::input::ProviderPlugin {})
             .add_plugin(devtools::rendering::ProviderPlugin {});
     }

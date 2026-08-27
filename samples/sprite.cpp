@@ -1,5 +1,4 @@
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "asset/server.hpp"
 #include "base/log.hpp"
 #include "core/image.hpp"
@@ -163,8 +162,7 @@ int main(int argc, char** argv) {
         .add_systems(PreStartUp, setup_sprite_scene)
         .add_systems(Update, animate_sprite);
     if (options.devtools) {
-        app.add_plugin<ReflectionPlugin>()
-            .add_plugin(devtools::CorePlugin {})
+        app.add_plugin(devtools::CorePlugin {})
             .add_plugin(devtools::rendering::ProviderPlugin {});
     }
     app.run();

@@ -1,7 +1,6 @@
 #include "ecs/query.hpp"
 
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "devtools/bridge.hpp"
 #include "devtools/json.hpp"
 #include "devtools/types.hpp"
@@ -77,7 +76,6 @@ TEST_CASE(
     register_query_test_types();
 
     App app;
-    app.add_plugin<ReflectionPlugin>();
     app.add_resource(Bridge {});
     app.add_plugin<ProviderPlugin>();
     app.finish();

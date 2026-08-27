@@ -6,8 +6,7 @@
 #include "core/transform.hpp"
 #include "ecs/world.hpp"
 #include "input/input.hpp"
-#include "refl/cls.hpp"
-#include "refl/registry.hpp"
+#include "refl/generated.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -17,9 +16,7 @@ TEST_CASE(
     "Runtime snapshot adapters restore clocks RNG and rebuild input",
     "[snapshot][runtime][determinism]"
 ) {
-    Registry::instance()
-        .register_cls<DeterministicRng>({"snapshot_runtime_test"}, "Rng")
-        .add_property("state", &DeterministicRng::state);
+    register_generated_reflection();
 
     World world;
     Time time;

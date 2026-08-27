@@ -1,5 +1,4 @@
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "asset/handle.hpp"
 #include "asset/plugin.hpp"
 #include "asset/server.hpp"
@@ -354,7 +353,6 @@ int main(int argc, char** argv) {
     );
 
     if (options.devtools) {
-        app.add_plugin<ReflectionPlugin>();
         app.add_plugin(
             devtools::CorePlugin {devtools::Config {
                 .host = "127.0.0.1",

@@ -1,5 +1,4 @@
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "base/log.hpp"
 #include "core/plugin.hpp"
 #include "ecs/system_config.hpp"
@@ -205,7 +204,6 @@ class BrowserProjectHostPlugin final : public Plugin {
         dependencies.require<WebGpuBrowserPlugin>()
             .require<BrowserInputPlugin>()
             .require<CorePlugin>()
-            .require<ReflectionPlugin>()
             .require<project_runtime::LuauPlaytestsPlugin>()
             .require<SpritePlugin>()
             .require<ui::rendering::UiRenderingPlugin>();

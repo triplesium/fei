@@ -1,7 +1,6 @@
 #include "snapshot_runtime_physics2d/adapters.hpp"
 
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "core/time.hpp"
 #include "core/transform.hpp"
 #include "ecs/event.hpp"
@@ -272,7 +271,7 @@ TEST_CASE(
     "[snapshot][physics2d][boundary]"
 ) {
     App app;
-    app.add_plugin<ReflectionPlugin>().add_plugin<PhysicsPlugin2d>();
+    app.add_plugin<PhysicsPlugin2d>();
     configure_fixed_step(app);
 
     snapshot::CheckpointStore checkpoints;
@@ -331,7 +330,7 @@ TEST_CASE(
     "[snapshot][physics2d][retry]"
 ) {
     App app;
-    app.add_plugin<ReflectionPlugin>().add_plugin<PhysicsPlugin2d>();
+    app.add_plugin<PhysicsPlugin2d>();
     configure_fixed_step(app);
 
     spawn_body(

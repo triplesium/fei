@@ -1,7 +1,6 @@
 #include "gltf/gltf.hpp"
 
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "asset/assets.hpp"
 #include "asset/plugin.hpp"
 #include "asset/server.hpp"
@@ -212,7 +211,6 @@ int main(int argc, char** argv) {
         .add_plugin<TimePlugin>()
         .add_plugin<EnvironmentMapPlugin>()
         .add_plugin<GltfPlugin>()
-        .add_plugin<ReflectionPlugin>()
         .add_systems(PreStartUp, setup)
         .add_systems(Update, spawn_default_gltf_scene);
 

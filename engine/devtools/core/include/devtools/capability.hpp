@@ -1,7 +1,6 @@
 #pragma once
 
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "base/log.hpp"
 #include "base/result.hpp"
 #include "devtools/bridge.hpp"
@@ -75,19 +74,6 @@ Entity add_capability(App& app) {
             "devtools::CorePlugin before its provider.",
             Definition::id
         );
-    }
-
-    if constexpr (
-        !std::is_void_v<typename Definition::RequestBody> ||
-        !std::is_void_v<typename Definition::ResponseBody>
-    ) {
-        if (!app.has_plugin<ReflectionPlugin>()) {
-            fatal(
-                "DevTools capability '{}' requires ReflectionPlugin. Add "
-                "ReflectionPlugin before its provider.",
-                Definition::id
-            );
-        }
     }
 
     auto entity = declare_capability<Definition>(app.world());

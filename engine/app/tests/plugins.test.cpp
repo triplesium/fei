@@ -1,5 +1,5 @@
 #include "app/plugin_registry.hpp"
-#include "app/reflection_plugin.hpp"
+#include "refl/registry.hpp"
 #include "test_types.hpp"
 
 #include <algorithm>
@@ -24,6 +24,20 @@ TEST_CASE("App reports added plugin types", "[app][plugin]") {
     REQUIRE(AppTestPlugin::setup_count == 1);
 }
 
+TEST_CASE(
+    "App registers generated reflection during construction",
+    "[app][reflection]"
+) {
+    auto& registry = Registry::instance();
+    registry.clear_generated_metadata();
+    REQUIRE_FALSE(registry.try_get_cls(type_id<AppTestPlugin>()));
+
+    App app;
+
+    REQUIRE(registry.try_get_cls(type_id<AppTestPlugin>()));
+    CHECK(registry.get_type(type_id<AppTestPlugin>()).has_annotation("Plugin"));
+}
+
 TEST_CASE("App adds reflected plugins by name", "[app][plugin][reflection]") {
     AppTestPlugin::setup_count = 0;
     PluginTrace::reset();
@@ -31,11 +45,9 @@ TEST_CASE("App adds reflected plugins by name", "[app][plugin][reflection]") {
     App app;
     app.add_plugin("app_test::AppTest");
     app.add_plugin("ordered");
-    app.add_plugin("Reflection");
 
     REQUIRE(app.has_plugin<AppTestPlugin>());
     REQUIRE(app.has_plugin<OrderedPluginA>());
-    REQUIRE(app.has_plugin<ReflectionPlugin>());
 
     app.finish();
     CHECK(AppTestPlugin::setup_count == 1);
@@ -100,7 +112,7 @@ TEST_CASE("Plugin registry rejects duplicate names", "[app][plugin]") {
 
 TEST_CASE("Plugin registry enumerates plugins by id", "[app][plugin]") {
     const auto plugins = plugin_registry().plugins();
-    REQUIRE(plugins.size() >= 3);
+    REQUIRE(plugins.size() >= 2);
     CHECK(std::ranges::is_sorted(plugins, {}, [](const auto* descriptor) {
         return descriptor->id.qualified_name();
     }));

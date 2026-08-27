@@ -1,7 +1,6 @@
 #include "scene/scene.hpp"
 
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "asset/plugin.hpp"
 #include "asset/server.hpp"
 #include "base/log.hpp"
@@ -619,7 +618,6 @@ int main(int argc, char** argv) {
         .add_plugin<EnvironmentMapPlugin>()
         .add_plugin<ScenePlugin>()
         .add_plugin<GltfPlugin>()
-        .add_plugin<ReflectionPlugin>()
         .add_plugin<LuaScriptingPlugin>()
         .add_systems(PreStartUp, configure_vxgi)
         .add_systems(PreStartUp, setup)

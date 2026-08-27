@@ -592,14 +592,6 @@ void ProviderPlugin::setup(App& app) {
             RenderTargets::id
         );
     }
-    if (!app.has_plugin<ReflectionPlugin>()) {
-        fatal(
-            "DevTools capability '{}' requires ReflectionPlugin. Add "
-            "ReflectionPlugin before its provider.",
-            RenderTargets::id
-        );
-    }
-
     auto& render_app = app.sub_app<RenderApp>();
     if (!render_app.has_resource<DeferredViewTargets>()) {
         fatal(

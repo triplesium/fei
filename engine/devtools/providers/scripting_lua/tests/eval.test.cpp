@@ -1,5 +1,4 @@
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "asset/plugin.hpp"
 #include "devtools/bridge.hpp"
 #include "devtools/json.hpp"
@@ -40,7 +39,6 @@ Entity queue_eval_request(App& app, Token token, std::string source) {
 
 void configure_eval_app(App& app, devtools::scripting_lua::Config config = {}) {
     app.add_plugin<AssetsPlugin>()
-        .add_plugin<ReflectionPlugin>()
         .add_plugin<LuaScriptingPlugin>()
         .add_resource(Bridge {})
         .add_plugin(ProviderPlugin {config});

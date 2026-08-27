@@ -1,5 +1,4 @@
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "runtime_inspection/provider.hpp"
 #include "runtime_inspection/registry.hpp"
 #include "runtime_inspection_ecs/entity.hpp"
@@ -104,7 +103,6 @@ int main() {
         );
     }
     app.add_resource(std::move(inspection_registry));
-    app.add_plugin<ets::ReflectionPlugin>();
     app.add_plugin(
         ets::runtime_protocol::RuntimeProbePlugin {
             std::move(runtime_probe_config),

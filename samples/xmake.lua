@@ -42,6 +42,7 @@ add_sample("registered_system")
 
 target("sample-snapshot-game")
     set_kind("binary")
+    add_rules("entisium.reflect")
     add_files("snapshot_game.cpp")
     add_extrafiles("snapshot_game.luau")
     add_deps("entisium-snapshot-runtime-luau")

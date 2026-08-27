@@ -425,11 +425,14 @@ rule_end()
 add_rules("entisium.executable_startup")
 
 rule("entisium.test")
+    add_deps("entisium.reflect")
+
     on_load(function(target)
         if not has_config("tests") then
             target:set("enabled", false)
             return
         end
+        target:add("deps", "entisium-refl")
         target:add("packages", "catch2")
         target:add("tests", "default")
     end)

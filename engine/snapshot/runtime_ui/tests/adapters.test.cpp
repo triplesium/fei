@@ -1,7 +1,6 @@
 #include "snapshot_runtime_ui/adapters.hpp"
 
 #include "app/app.hpp"
-#include "app/reflection_plugin.hpp"
 #include "asset/assets.hpp"
 #include "asset/server.hpp"
 #include "asset/source.hpp"
@@ -128,7 +127,6 @@ struct ComplexUiWorld {
                    .height = 480,
                }
         )
-            .add_plugin<ReflectionPlugin>()
             .add_plugin<ui_widgets::CheckboxPlugin>()
             .add_plugin<ui_widgets::SliderPlugin>()
             .add_plugin<ui_widgets::ScrollAreaPlugin>()

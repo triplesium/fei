@@ -3,6 +3,7 @@
 #include "base/env.hpp"
 #include "ecs/commands.hpp"
 #include "profiling/profiling.hpp"
+#include "refl/generated.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -44,6 +45,7 @@ void run_profiled_schedule(App& app, ScheduleId schedule, const char* name) {
 } // namespace
 
 App::App() : m_runner(run_default) {
+    register_generated_reflection();
     add_resource<AppStates>();
     add_resource<CommandsQueue>();
     configure_sets(
