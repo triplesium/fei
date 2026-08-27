@@ -140,6 +140,15 @@ bool ClassInfo::is_abstract() const {
 }
 
 void dedupe_reflected_types(ParseResult& result) {
+    std::unordered_set<std::string> seen_annotation_schemas;
+    std::vector<AnnotationSchemaInfo> annotation_schemas;
+    for (auto& schema : result.annotation_schemas) {
+        if (seen_annotation_schemas.insert(schema.reflected_name).second) {
+            annotation_schemas.push_back(std::move(schema));
+        }
+    }
+    result.annotation_schemas = std::move(annotation_schemas);
+
     std::unordered_set<std::string> seen_classes;
     std::vector<ClassInfo> classes;
     for (auto& cls : result.classes) {

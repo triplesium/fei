@@ -5,6 +5,7 @@
 #include "refl/method.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
+#include "scripting/annotations.hpp"
 
 #include <algorithm>
 #include <string>
@@ -28,11 +29,13 @@ Result<Cls&, InvokeFailure> script_class(Ref instance) {
 } // namespace
 
 bool is_script_visible(const Type& type) {
-    return type.has_structured_name() && !type.has_annotation("NoScript");
+    return type.has_structured_name() &&
+           !type.has_annotation<annotations::NoScript>();
 }
 
 bool is_script_prelude(const Type& type) {
-    return is_script_visible(type) && type.has_annotation("ScriptPrelude");
+    return is_script_visible(type) &&
+           type.has_annotation<annotations::ScriptPrelude>();
 }
 
 ScriptTypeName script_type_name(const Type& type) {

@@ -5,6 +5,7 @@
 #include "refl/enum.hpp"
 #include "refl/registry.hpp"
 #include "refl/type.hpp"
+#include "scripting/annotations.hpp"
 #include "scripting/reflection_bridge.hpp"
 #include "scripting/state.hpp"
 #include "scripting_luau/detail/binding.hpp"
@@ -424,14 +425,15 @@ struct LuauRuntime::Impl {
         const int exports = lua_absindex(thread, -1);
         std::size_t export_count = 0;
         for (const TypeId id :
-             Registry::instance().types_with_annotation("ScriptModule")) {
+             Registry::instance()
+                 .types_with_annotation<annotations::ScriptModule>()) {
             auto type = Registry::instance().try_get_type(id);
             if (!type || !is_script_visible(*type)) {
                 continue;
             }
-            const auto annotation = type->annotation("ScriptModule");
-            const auto owner = annotation ? annotation->value("name") : nullopt;
-            if (!owner || *owner != module_name) {
+            const auto annotation =
+                type->annotation<annotations::ScriptModule>();
+            if (!annotation || annotation->name != module_name) {
                 continue;
             }
 

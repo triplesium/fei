@@ -1,6 +1,6 @@
 #include "app/app.hpp"
 #include "asset/plugin.hpp"
-#include "ecs/type_tags.hpp"
+#include "ecs/annotations.hpp"
 #include "graphics/backend.hpp"
 #include "graphics/resource.hpp"
 #include "graphics/swapchain.hpp"
@@ -118,14 +118,16 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Generated reflection tags 2D rendering components",
+    "Generated reflection annotates 2D rendering components",
     "[sprite][refl][tag]"
 ) {
     register_generated_reflection();
     auto& registry = Registry::instance();
 
-    CHECK(registry.get_type<Camera2d>().has_tag(ComponentTypeTag));
-    CHECK(registry.get_type<Sprite>().has_tag(ComponentTypeTag));
+    CHECK(
+        registry.get_type<Camera2d>().has_annotation<annotations::Component>()
+    );
+    CHECK(registry.get_type<Sprite>().has_annotation<annotations::Component>());
 }
 
 TEST_CASE("Camera2d projection preserves vertical size", "[sprite][camera]") {

@@ -297,72 +297,13 @@ Registry::try_get_container_adapter(TypeId id) {
     return *it->second;
 }
 
-Type& Registry::add_generated_tag(TypeId type_id, std::string tag) {
-    const TypeTagId tag_id {std::string_view {tag}};
-    auto existing = m_tag_names.find(tag_id);
-    if (existing != m_tag_names.end() && existing->second != tag) {
-        fatal(
-            "Type tag collision for id {}: '{}' conflicts with '{}'",
-            tag_id.id(),
-            tag,
-            existing->second
-        );
-    }
-
-    m_tag_names.emplace(tag_id, std::move(tag));
-    auto& registered_type = get_type(type_id);
-    if (registered_type.has_tag(tag_id) && registered_type.tag_value(tag_id)) {
-        fatal(
-            "Type '{}' reflection tag '{}' is declared both with and without "
-            "a value",
-            registered_type.name(),
-            *tag_name(tag_id)
-        );
-    }
-    registered_type.add_tag(tag_id);
-    return registered_type;
-}
-
-Type& Registry::add_generated_tag(
-    TypeId type_id,
-    std::string tag,
-    std::string value
-) {
-    const TypeTagId tag_id {std::string_view {tag}};
-    auto existing = m_tag_names.find(tag_id);
-    if (existing != m_tag_names.end() && existing->second != tag) {
-        fatal(
-            "Type tag collision for id {}: '{}' conflicts with '{}'",
-            tag_id.id(),
-            tag,
-            existing->second
-        );
-    }
-
-    m_tag_names.emplace(tag_id, std::move(tag));
-    auto& registered_type = get_type(type_id);
-    if (registered_type.has_tag(tag_id)) {
-        const auto existing_value = registered_type.tag_value(tag_id);
-        if (!existing_value || *existing_value != value) {
-            fatal(
-                "Type '{}' reflection tag '{}' has conflicting values",
-                registered_type.name(),
-                *tag_name(tag_id)
-            );
-        }
-        return registered_type;
-    }
-    registered_type.add_tag(tag_id);
-    registered_type.set_tag_value(tag_id, std::move(value));
-    return registered_type;
-}
-
 Type& Registry::add_generated_annotation(
     TypeId type_id,
     std::string annotation
 ) {
-    auto& registered_type = add_generated_tag(type_id, annotation);
-    registered_type.add_annotation(std::move(annotation));
+    auto& registered_type = get_type(type_id);
+    auto& stored = registered_type.add_annotation(std::move(annotation));
+    bind_generated_annotation(registered_type, stored);
     return registered_type;
 }
 
@@ -372,34 +313,170 @@ Type& Registry::add_generated_annotation_field(
     std::string field,
     std::string value
 ) {
+    const std::string annotation_name = annotation;
     auto& registered_type = add_generated_annotation(type_id, annotation);
-    const std::string tag = annotation + "." + field;
-    add_generated_tag(type_id, tag, value);
     registered_type.set_annotation_field(
         std::move(annotation),
         std::move(field),
         std::move(value)
     );
+    auto position = std::ranges::lower_bound(
+        registered_type.m_annotations,
+        annotation_name,
+        {},
+        &Annotation::name
+    );
+    bind_generated_annotation(registered_type, *position);
     return registered_type;
 }
 
-Optional<std::string_view> Registry::tag_name(TypeTagId tag) const {
-    auto it = m_tag_names.find(tag);
-    if (it == m_tag_names.end()) {
-        return nullopt;
+void Registry::register_generated_annotation_schema(
+    std::string name,
+    TypeId schema_type,
+    std::vector<std::string> fields,
+    GeneratedAnnotationFactory factory,
+    GeneratedAnnotationEncoder encoder
+) {
+    std::ranges::sort(fields);
+    if (std::ranges::adjacent_find(fields) != fields.end()) {
+        fatal("Annotation schema '{}' contains duplicate fields", name);
     }
-    return std::string_view {it->second};
-}
 
-std::vector<TypeId> Registry::types_with_tag(TypeTagId tag) const {
-    std::vector<TypeId> result;
-    for (const auto& [id, reflected_type] : m_types) {
-        if (reflected_type.has_tag(tag)) {
-            result.push_back(id);
+    auto existing = m_annotation_schemas.find(name);
+    if (existing != m_annotation_schemas.end()) {
+        if (existing->second.type != schema_type ||
+            existing->second.fields != fields) {
+            fatal("Annotation schema '{}' has conflicting registrations", name);
+        }
+        return;
+    }
+    for (const auto& [registered_name, schema] : m_annotation_schemas) {
+        if (schema.type == schema_type) {
+            fatal(
+                "Annotation schema type '{}' is registered as both '{}' and "
+                "'{}'",
+                registered_type_name(schema_type).value_or("<unknown>"),
+                registered_name,
+                name
+            );
         }
     }
-    std::ranges::sort(result);
-    return result;
+
+    const bool inserted = m_annotation_schemas
+                              .emplace(
+                                  name,
+                                  GeneratedAnnotationSchema {
+                                      .type = schema_type,
+                                      .fields = std::move(fields),
+                                      .factory = std::move(factory),
+                                      .encoder = std::move(encoder),
+                                  }
+                              )
+                              .second;
+    ETS_ASSERT(inserted);
+
+    for (auto& [_, reflected_type] : m_types) {
+        auto annotation = std::ranges::lower_bound(
+            reflected_type.m_annotations,
+            name,
+            {},
+            &Annotation::name
+        );
+        if (annotation != reflected_type.m_annotations.end() &&
+            annotation->name == name) {
+            bind_generated_annotation(reflected_type, *annotation);
+        }
+    }
+}
+
+Type& Registry::add_typed_annotation(
+    TypeId type_id,
+    TypeId schema_type,
+    std::shared_ptr<const void> payload
+) {
+    auto schema = m_annotation_schemas.end();
+    for (auto candidate = m_annotation_schemas.begin();
+         candidate != m_annotation_schemas.end();
+         ++candidate) {
+        if (candidate->second.type == schema_type) {
+            schema = candidate;
+            break;
+        }
+    }
+    if (schema == m_annotation_schemas.end()) {
+        fatal(
+            "Annotation schema type '{}' is not registered",
+            registered_type_name(schema_type).value_or("<unknown>")
+        );
+    }
+
+    auto fields = schema->second.encoder(payload.get());
+    std::ranges::sort(fields, {}, &AnnotationField::name);
+    auto& reflected_type = get_type(type_id);
+    auto& annotation = reflected_type.add_annotation(schema->first);
+    annotation.fields = std::move(fields);
+    annotation.schema_type = schema_type;
+    annotation.payload = std::move(payload);
+    bind_generated_annotation(reflected_type, annotation);
+    return reflected_type;
+}
+
+void Registry::validate_generated_annotations() const {
+    for (const auto& [_, reflected_type] : m_types) {
+        for (const auto& annotation : reflected_type.m_annotations) {
+            const auto schema = m_annotation_schemas.find(annotation.name);
+            if (schema == m_annotation_schemas.end()) {
+                fatal(
+                    "Annotation '{}' on type '{}' has no registered schema",
+                    annotation.name,
+                    reflected_type.name()
+                );
+            }
+            if (annotation.schema_type != schema->second.type ||
+                !annotation.payload) {
+                fatal(
+                    "Annotation '{}' on type '{}' is not bound to its schema",
+                    annotation.name,
+                    reflected_type.name()
+                );
+            }
+        }
+    }
+}
+
+void Registry::bind_generated_annotation(Type& type, Annotation& annotation) {
+    const auto schema = m_annotation_schemas.find(annotation.name);
+    if (schema == m_annotation_schemas.end()) {
+        return;
+    }
+
+    for (const auto& field : annotation.fields) {
+        if (!std::ranges::binary_search(schema->second.fields, field.name)) {
+            fatal(
+                "Unknown field '{}' for annotation '{}' on type '{}'",
+                field.name,
+                annotation.name,
+                type.name()
+            );
+        }
+    }
+
+    try {
+        type.set_annotation_payload(
+            annotation.name,
+            schema->second.type,
+            schema->second.factory(
+                AnnotationView {annotation.name, annotation.fields}
+            )
+        );
+    } catch (const std::exception& error) {
+        fatal(
+            "Invalid annotation '{}' on type '{}': {}",
+            annotation.name,
+            type.name(),
+            error.what()
+        );
+    }
 }
 
 std::vector<TypeId>
@@ -422,9 +499,9 @@ void Registry::clear_generated_metadata() {
     ++m_class_epoch;
     m_classes.clear();
     m_enums.clear();
-    m_tag_names.clear();
+    m_annotation_schemas.clear();
     for (auto& [_, reflected_type] : m_types) {
-        reflected_type.clear_tags();
+        reflected_type.clear_annotations();
     }
 
     for (const auto& [id, adapter] : m_container_adapters) {

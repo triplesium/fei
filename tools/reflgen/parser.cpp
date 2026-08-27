@@ -16,7 +16,12 @@ namespace {
 
 struct ReflectionMarker {
     std::size_t end_offset {0};
-    std::vector<ReflectionTag> tags;
+    std::vector<ReflectionAnnotation> annotations;
+};
+
+struct AnnotationMarker {
+    std::size_t end_offset {0};
+    std::string name;
 };
 
 struct TranslationUnitContext {
@@ -25,6 +30,8 @@ struct TranslationUnitContext {
     std::string comparable_header_path;
     std::string source;
     std::vector<ReflectionMarker> reflection_markers;
+    std::vector<AnnotationMarker> annotation_markers;
+    std::vector<AnnotationSchemaInfo> annotation_schemas;
 };
 
 [[nodiscard]] bool
@@ -97,60 +104,57 @@ void visit_children(CXCursor cursor, Visitor visitor) {
     return static_cast<std::size_t>(offset);
 }
 
-[[nodiscard]] bool valid_tag_key(std::string_view key) {
+[[nodiscard]] bool valid_annotation_identifier(std::string_view key) {
     return !key.empty() && std::ranges::all_of(key, [](unsigned char ch) {
         return std::isalnum(ch) || ch == '_' || ch == ':' || ch == '.';
     });
 }
 
-[[nodiscard]] bool valid_tag_value(std::string_view value) {
+[[nodiscard]] bool valid_annotation_value(std::string_view value) {
     return !value.empty() && std::ranges::all_of(value, [](unsigned char ch) {
         return std::isalnum(ch) || ch == '_' || ch == ':' || ch == '.' ||
                ch == '-' || ch == '/';
     });
 }
 
-[[nodiscard]] ReflectionTag
-parse_group_field(std::string_view group, std::string_view text) {
+[[nodiscard]] AnnotationArgument
+parse_annotation_argument(std::string_view annotation, std::string_view text) {
     const auto separator = text.find('=');
     if (separator == std::string_view::npos) {
         const auto key = trim(text);
-        if (!valid_tag_key(key)) {
+        if (!valid_annotation_identifier(key)) {
             throw std::runtime_error(
-                "Invalid ETS_REFLECT group field key '" + key + "'"
+                "Invalid ETS_REFLECT annotation field '" + key + "'"
             );
         }
-        return ReflectionTag {
-            .key = std::string(group) + "." + key,
+        return AnnotationArgument {
+            .name = key,
             .value = "true",
-            .group = std::string(group),
-            .field = key,
         };
     }
     if (text.find('=', separator + 1) != std::string_view::npos) {
         throw std::runtime_error(
-            "ETS_REFLECT group field '" + std::string(text) +
+            "ETS_REFLECT annotation field '" + std::string(text) +
             "' must use at most one '='"
         );
     }
 
     const auto key = trim(text.substr(0, separator));
-    if (!valid_tag_key(key)) {
+    if (!valid_annotation_identifier(key)) {
         throw std::runtime_error(
-            "Invalid ETS_REFLECT group field key '" + key + "'"
+            "Invalid ETS_REFLECT annotation field '" + key + "'"
         );
     }
     auto value = trim(text.substr(separator + 1));
-    if (!valid_tag_value(value)) {
+    if (!valid_annotation_value(value)) {
         throw std::runtime_error(
-            "Invalid value '" + value + "' for ETS_REFLECT tag '" + key + "'"
+            "Invalid value '" + value + "' for ETS_REFLECT annotation '" +
+            std::string(annotation) + "." + key + "'"
         );
     }
-    return ReflectionTag {
-        .key = std::string(group) + "." + key,
+    return AnnotationArgument {
+        .name = key,
         .value = std::move(value),
-        .group = std::string(group),
-        .field = key,
     };
 }
 
@@ -183,7 +187,9 @@ void for_each_top_level_item(std::string_view text, Callback callback) {
         if (!item.empty()) {
             callback(std::move(item));
         } else if (!trim(text).empty()) {
-            throw std::runtime_error("ETS_REFLECT contains an empty tag");
+            throw std::runtime_error(
+                "ETS_REFLECT contains an empty annotation"
+            );
         }
         start = index + 1;
     }
@@ -192,63 +198,85 @@ void for_each_top_level_item(std::string_view text, Callback callback) {
     }
 }
 
-void parse_reflection_item(
-    std::string_view text,
-    std::vector<ReflectionTag>& tags
-) {
+[[nodiscard]] ReflectionAnnotation
+parse_reflection_annotation(std::string_view text) {
     const auto group_begin = text.find('(');
     if (group_begin == std::string_view::npos) {
-        if (text.find('=') != std::string_view::npos || !valid_tag_key(text)) {
+        if (text.find('=') != std::string_view::npos ||
+            !valid_annotation_identifier(text)) {
             throw std::runtime_error(
-                "Invalid ETS_REFLECT tag '" + std::string(text) + "'"
+                "Invalid ETS_REFLECT annotation '" + std::string(text) + "'"
             );
         }
-        tags.push_back(ReflectionTag {.key = std::string(text)});
-        return;
+        return ReflectionAnnotation {.name = std::string(text)};
     }
 
     const auto group = trim(text.substr(0, group_begin));
-    if (!valid_tag_key(group) || text.back() != ')') {
+    if (!valid_annotation_identifier(group) || text.back() != ')') {
         throw std::runtime_error(
-            "Invalid ETS_REFLECT group '" + std::string(text) + "'"
+            "Invalid ETS_REFLECT annotation '" + std::string(text) + "'"
         );
     }
 
-    tags.push_back(ReflectionTag {.key = group});
+    ReflectionAnnotation annotation {.name = group};
     const auto fields =
         text.substr(group_begin + 1, text.size() - group_begin - 2);
     if (trim(fields).empty()) {
         throw std::runtime_error(
-            "ETS_REFLECT group '" + group + "' must contain at least one field"
+            "ETS_REFLECT annotation '" + group +
+            "' must contain at least one field"
         );
     }
     for_each_top_level_item(fields, [&](std::string field) {
-        tags.push_back(parse_group_field(group, field));
+        annotation.arguments.push_back(parse_annotation_argument(group, field));
     });
+    return annotation;
 }
 
-[[nodiscard]] std::vector<ReflectionTag>
-parse_reflection_tags(std::string_view arguments) {
-    std::vector<ReflectionTag> tags;
+[[nodiscard]] std::vector<ReflectionAnnotation>
+parse_reflection_annotations(std::string_view arguments) {
+    std::vector<ReflectionAnnotation> annotations;
     for_each_top_level_item(arguments, [&](std::string item) {
-        parse_reflection_item(item, tags);
+        annotations.push_back(parse_reflection_annotation(item));
     });
 
-    std::ranges::sort(tags, {}, &ReflectionTag::key);
-    std::vector<ReflectionTag> unique_tags;
-    for (auto& tag : tags) {
-        if (unique_tags.empty() || unique_tags.back().key != tag.key) {
-            unique_tags.push_back(std::move(tag));
-            continue;
-        }
-        if (unique_tags.back().value != tag.value) {
-            throw std::runtime_error(
-                "ETS_REFLECT tag '" + tag.key +
-                "' is declared with conflicting values"
+    std::ranges::sort(annotations, {}, &ReflectionAnnotation::name);
+    std::vector<ReflectionAnnotation> unique_annotations;
+    for (auto& annotation : annotations) {
+        if (unique_annotations.empty() ||
+            unique_annotations.back().name != annotation.name) {
+            unique_annotations.push_back(std::move(annotation));
+        } else {
+            auto& arguments = unique_annotations.back().arguments;
+            arguments.insert(
+                arguments.end(),
+                std::make_move_iterator(annotation.arguments.begin()),
+                std::make_move_iterator(annotation.arguments.end())
             );
         }
     }
-    return unique_tags;
+    for (auto& annotation : unique_annotations) {
+        std::ranges::sort(annotation.arguments, {}, &AnnotationArgument::name);
+        auto unique_end = annotation.arguments.begin();
+        for (auto argument = annotation.arguments.begin();
+             argument != annotation.arguments.end();
+             ++argument) {
+            if (unique_end == annotation.arguments.begin() ||
+                std::prev(unique_end)->name != argument->name) {
+                if (unique_end != argument) {
+                    *unique_end = std::move(*argument);
+                }
+                ++unique_end;
+            } else if (std::prev(unique_end)->value != argument->value) {
+                throw std::runtime_error(
+                    "ETS_REFLECT annotation '" + annotation.name + "." +
+                    argument->name + "' is declared with conflicting values"
+                );
+            }
+        }
+        annotation.arguments.erase(unique_end, annotation.arguments.end());
+    }
+    return unique_annotations;
 }
 
 [[nodiscard]] ReflectionMarker
@@ -282,9 +310,39 @@ parse_reflection_marker(std::string_view source, std::size_t marker_offset) {
     const std::size_t arguments_end = position - 1;
     return ReflectionMarker {
         .end_offset = position,
-        .tags = parse_reflection_tags(
+        .annotations = parse_reflection_annotations(
             source.substr(arguments_begin, arguments_end - arguments_begin)
         ),
+    };
+}
+
+[[nodiscard]] AnnotationMarker
+parse_annotation_marker(std::string_view source, std::size_t marker_offset) {
+    constexpr std::string_view c_marker_name = "ETS_ANNOTATION";
+    std::size_t position = marker_offset + c_marker_name.size();
+    while (position < source.size() &&
+           std::isspace(static_cast<unsigned char>(source[position]))) {
+        ++position;
+    }
+    if (position >= source.size() || source[position] != '(') {
+        throw std::runtime_error(
+            "ETS_ANNOTATION must be invoked with parentheses"
+        );
+    }
+
+    const auto name_begin = ++position;
+    const auto name_end = source.find(')', name_begin);
+    if (name_end == std::string_view::npos) {
+        throw std::runtime_error("Unterminated ETS_ANNOTATION invocation");
+    }
+    auto name = trim(source.substr(name_begin, name_end - name_begin));
+    if (!valid_annotation_identifier(name) || name.contains('.') ||
+        name.contains("::")) {
+        throw std::runtime_error("Invalid ETS_ANNOTATION name '" + name + "'");
+    }
+    return AnnotationMarker {
+        .end_offset = name_end + 1,
+        .name = std::move(name),
     };
 }
 
@@ -328,11 +386,18 @@ void collect_reflection_markers(
 ) {
     visit_children(cursor, [&](CXCursor child, CXCursor) {
         if (clang_getCursorKind(child) == CXCursor_MacroExpansion &&
-            cursor_spelling(child) == "ETS_REFLECT" &&
             cursor_is_from_header(child, context)) {
             if (const auto offset = cursor_offset(child)) {
-                auto marker = parse_reflection_marker(context.source, *offset);
-                context.reflection_markers.push_back(std::move(marker));
+                const auto macro = cursor_spelling(child);
+                if (macro == "ETS_REFLECT") {
+                    auto marker =
+                        parse_reflection_marker(context.source, *offset);
+                    context.reflection_markers.push_back(std::move(marker));
+                } else if (macro == "ETS_ANNOTATION") {
+                    auto marker =
+                        parse_annotation_marker(context.source, *offset);
+                    context.annotation_markers.push_back(std::move(marker));
+                }
             }
         }
         collect_reflection_markers(child, context);
@@ -340,8 +405,11 @@ void collect_reflection_markers(
     });
 }
 
-[[nodiscard]] std::optional<std::vector<ReflectionTag>>
-reflection_tags_for(CXCursor cursor, const TranslationUnitContext& context) {
+[[nodiscard]] std::optional<std::vector<ReflectionAnnotation>>
+reflection_annotations_for(
+    CXCursor cursor,
+    const TranslationUnitContext& context
+) {
     const auto declaration_offset = cursor_offset(cursor);
     if (!declaration_offset) {
         return std::nullopt;
@@ -358,7 +426,33 @@ reflection_tags_for(CXCursor cursor, const TranslationUnitContext& context) {
                 marker->end_offset,
                 *declaration_offset
             )) {
-            return marker->tags;
+            return marker->annotations;
+        }
+        break;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::optional<std::string> annotation_schema_name_for(
+    CXCursor cursor,
+    const TranslationUnitContext& context
+) {
+    const auto declaration_offset = cursor_offset(cursor);
+    if (!declaration_offset) {
+        return std::nullopt;
+    }
+    for (auto marker = context.annotation_markers.rbegin();
+         marker != context.annotation_markers.rend();
+         ++marker) {
+        if (marker->end_offset > *declaration_offset) {
+            continue;
+        }
+        if (only_trivia_between(
+                context.source,
+                marker->end_offset,
+                *declaration_offset
+            )) {
+            return marker->name;
         }
         break;
     }
@@ -778,10 +872,79 @@ cursor_access(CXCursor cursor, std::string_view fallback) {
     return params;
 }
 
+[[nodiscard]] std::optional<AnnotationSchemaInfo> parse_annotation_schema(
+    CXCursor cursor,
+    const TranslationUnitContext& context
+) {
+    if (!clang_isCursorDefinition(cursor)) {
+        return std::nullopt;
+    }
+    const auto reflected_name = annotation_schema_name_for(cursor, context);
+    if (!reflected_name) {
+        return std::nullopt;
+    }
+    const auto source_file = cursor_file_path(cursor);
+    if (!source_file) {
+        return std::nullopt;
+    }
+
+    AnnotationSchemaInfo schema {
+        .reflected_name = *reflected_name,
+        .type_name = qualified_name(cursor),
+        .source_file = *source_file,
+    };
+    std::string current_access(
+        clang_getCursorKind(cursor) == CXCursor_ClassDecl ? "private" : "public"
+    );
+    visit_children(cursor, [&](CXCursor child, CXCursor) {
+        const auto kind = clang_getCursorKind(child);
+        if (kind == CXCursor_CXXAccessSpecifier) {
+            current_access =
+                access_name(clang_getCXXAccessSpecifier(child), current_access);
+        } else if (kind == CXCursor_FieldDecl) {
+            schema.fields.push_back({
+                .name = cursor_spelling(child),
+                .type_name = fully_qualified_type(clang_getCursorType(child)),
+                .access = cursor_access(child, current_access),
+            });
+        }
+        return CXChildVisit_Continue;
+    });
+    return schema;
+}
+
+void collect_annotation_schemas(
+    CXCursor cursor,
+    TranslationUnitContext& context
+) {
+    if (!cursor_is_from_header(cursor, context)) {
+        return;
+    }
+    const auto kind = clang_getCursorKind(cursor);
+    if (kind == CXCursor_ClassDecl || kind == CXCursor_StructDecl) {
+        if (auto schema = parse_annotation_schema(cursor, context)) {
+            const auto duplicate = std::ranges::find_if(
+                context.annotation_schemas,
+                [&](const AnnotationSchemaInfo& existing) {
+                    return existing.reflected_name == schema->reflected_name &&
+                           existing.type_name == schema->type_name;
+                }
+            );
+            if (duplicate == context.annotation_schemas.end()) {
+                context.annotation_schemas.push_back(std::move(*schema));
+            }
+        }
+    }
+    visit_children(cursor, [&](CXCursor child, CXCursor) {
+        collect_annotation_schemas(child, context);
+        return CXChildVisit_Continue;
+    });
+}
+
 [[nodiscard]] std::optional<EnumInfo>
 parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
-    auto tags = reflection_tags_for(cursor, context);
-    if (!clang_isCursorDefinition(cursor) || !tags) {
+    auto annotations = reflection_annotations_for(cursor, context);
+    if (!clang_isCursorDefinition(cursor) || !annotations) {
         return std::nullopt;
     }
 
@@ -795,7 +958,7 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
         .namespace_path = namespace_path(cursor),
         .local_name = enum_name,
         .source_file = context.header_path,
-        .tags = std::move(*tags),
+        .annotations = std::move(*annotations),
         .underlying_type =
             fully_qualified_type(clang_getEnumDeclIntegerType(cursor)),
         .is_scoped = clang_EnumDecl_isScoped(cursor) != 0,
@@ -828,8 +991,8 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
     }
 
     auto class_name = cursor_spelling(cursor);
-    auto tags = reflection_tags_for(cursor, context);
-    if (class_name.empty() || !tags) {
+    auto annotations = reflection_annotations_for(cursor, context);
+    if (class_name.empty() || !annotations) {
         return std::nullopt;
     }
 
@@ -855,7 +1018,7 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
         .namespace_path = namespace_path(cursor),
         .local_name = display_name.empty() ? class_name : display_name,
         .source_file = context.header_path,
-        .tags = std::move(*tags),
+        .annotations = std::move(*annotations),
     };
 
     std::string current_access(default_access);
@@ -1089,6 +1252,15 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
         context
     );
     std::ranges::sort(
+        context.annotation_markers,
+        {},
+        &AnnotationMarker::end_offset
+    );
+    collect_annotation_schemas(
+        clang_getTranslationUnitCursor(translation_unit),
+        context
+    );
+    std::ranges::sort(
         context.reflection_markers,
         {},
         &ReflectionMarker::end_offset
@@ -1101,6 +1273,12 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
 
     output.result =
         parse_cursor(clang_getTranslationUnitCursor(translation_unit), context);
+    for (const auto& schema : context.annotation_schemas) {
+        if (comparable_path(schema.source_file) ==
+            context.comparable_header_path) {
+            output.result.annotation_schemas.push_back(schema);
+        }
+    }
     std::ranges::sort(output.dependencies);
 
     clang_disposeTranslationUnit(translation_unit);
@@ -1122,6 +1300,15 @@ HeaderParseOutput HeaderParser::parse() {
     HeaderParseOutput output;
     for (const auto& header : m_headers) {
         auto header_result = parse_header(header, m_include_paths, m_verbose);
+        output.result.annotation_schemas.insert(
+            output.result.annotation_schemas.end(),
+            std::make_move_iterator(
+                header_result.result.annotation_schemas.begin()
+            ),
+            std::make_move_iterator(
+                header_result.result.annotation_schemas.end()
+            )
+        );
         output.result.classes.insert(
             output.result.classes.end(),
             std::make_move_iterator(header_result.result.classes.begin()),

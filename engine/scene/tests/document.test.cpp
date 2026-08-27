@@ -1,7 +1,9 @@
 #include "scene/document.hpp"
 
+#include "ecs/annotations.hpp"
 #include "ecs/world.hpp"
 #include "refl/cls.hpp"
+#include "refl/generated.hpp"
 #include "refl/registry.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -16,11 +18,14 @@ struct DocumentTestComponent {
 };
 
 void register_document_test_component() {
+    register_generated_reflection();
     Registry::instance().register_cls<DocumentTestComponent>().add_property(
         "value",
         &DocumentTestComponent::value
     );
-    Registry::instance().add_generated_tag<DocumentTestComponent>("Component");
+    Registry::instance().add_annotation<DocumentTestComponent>(
+        annotations::Component {}
+    );
 }
 
 constexpr std::string_view scene_source = R"(

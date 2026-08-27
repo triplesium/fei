@@ -49,28 +49,6 @@ class TypeId {
     operator bool() const { return m_id != 0; }
 };
 
-class TypeTagId {
-  private:
-    std::uint64_t m_id;
-
-  public:
-    constexpr TypeTagId() : m_id(0) {}
-    constexpr explicit TypeTagId(std::uint64_t id) : m_id(id) {}
-    constexpr explicit TypeTagId(std::string_view name) :
-        m_id(stable_name_hash(name)) {}
-
-    constexpr std::uint64_t id() const { return m_id; }
-
-    constexpr auto operator<=>(const TypeTagId& other) const {
-        return m_id <=> other.m_id;
-    }
-    constexpr bool operator==(const TypeTagId& other) const {
-        return m_id == other.m_id;
-    }
-
-    constexpr explicit operator bool() const { return m_id != 0; }
-};
-
 template<typename T>
 inline TypeId type_id() {
     return TypeId(type_name<std::remove_cvref_t<T>>());
@@ -127,9 +105,13 @@ class AnnotationView {
     std::span<const AnnotationField> fields() const { return m_fields; }
 
     Optional<std::string_view> value(std::string_view field) const {
-        const auto found =
-            std::ranges::find(m_fields, field, &AnnotationField::name);
-        if (found == m_fields.end()) {
+        const auto found = std::ranges::lower_bound(
+            m_fields,
+            field,
+            {},
+            &AnnotationField::name
+        );
+        if (found == m_fields.end() || found->name != field) {
             return nullopt;
         }
         return std::string_view {found->value};
@@ -139,6 +121,8 @@ class AnnotationView {
 struct Annotation {
     std::string name;
     std::vector<AnnotationField> fields;
+    TypeId schema_type;
+    std::shared_ptr<const void> payload;
 };
 
 class Type {
@@ -162,30 +146,7 @@ class Type {
     std::size_t m_size;
     std::size_t m_align;
     TypeOps m_ops;
-    std::vector<TypeTagId> m_tags;
-    std::vector<std::pair<TypeTagId, std::string>> m_tag_values;
     std::vector<Annotation> m_annotations;
-
-    void add_tag(TypeTagId tag) {
-        auto position = std::ranges::lower_bound(m_tags, tag);
-        if (position == m_tags.end() || *position != tag) {
-            m_tags.insert(position, tag);
-        }
-    }
-
-    void set_tag_value(TypeTagId tag, std::string value) {
-        auto position = std::ranges::lower_bound(
-            m_tag_values,
-            tag,
-            {},
-            &std::pair<TypeTagId, std::string>::first
-        );
-        if (position == m_tag_values.end() || position->first != tag) {
-            m_tag_values.insert(position, {tag, std::move(value)});
-        } else {
-            position->second = std::move(value);
-        }
-    }
 
     Annotation& add_annotation(std::string name) {
         auto position = std::ranges::lower_bound(
@@ -224,11 +185,17 @@ class Type {
         }
     }
 
-    void clear_tags() {
-        m_tags.clear();
-        m_tag_values.clear();
-        m_annotations.clear();
+    void set_annotation_payload(
+        std::string_view annotation,
+        TypeId schema_type,
+        std::shared_ptr<const void> payload
+    ) {
+        auto& stored = add_annotation(std::string {annotation});
+        stored.schema_type = schema_type;
+        stored.payload = std::move(payload);
     }
+
+    void clear_annotations() { m_annotations.clear(); }
 
     friend class Registry;
 
@@ -343,25 +310,13 @@ class Type {
     bool equality_comparable() const { return m_ops.equal != nullptr; }
     bool hashable() const { return m_ops.hash_value != nullptr; }
 
-    bool has_tag(TypeTagId tag) const {
-        return std::ranges::binary_search(m_tags, tag);
-    }
-    Optional<std::string_view> tag_value(TypeTagId tag) const {
-        auto value = std::ranges::lower_bound(
-            m_tag_values,
-            tag,
-            {},
-            &std::pair<TypeTagId, std::string>::first
-        );
-        if (value == m_tag_values.end() || value->first != tag) {
-            return nullopt;
-        }
-        return std::string_view {value->second};
-    }
-    std::span<const TypeTagId> tags() const { return m_tags; }
-
     bool has_annotation(std::string_view name) const {
         return annotation(name).has_value();
+    }
+
+    template<typename A>
+    bool has_annotation() const {
+        return annotation<A>().has_value();
     }
 
     Optional<AnnotationView> annotation(std::string_view name) const {
@@ -375,6 +330,21 @@ class Type {
             return nullopt;
         }
         return AnnotationView {found->name, found->fields};
+    }
+
+    template<typename A>
+    Optional<const std::remove_cvref_t<A>&> annotation() const {
+        using U = std::remove_cvref_t<A>;
+        const auto found = std::ranges::find_if(
+            m_annotations,
+            [](const Annotation& candidate) {
+                return candidate.schema_type == type_id<U>();
+            }
+        );
+        if (found == m_annotations.end() || !found->payload) {
+            return nullopt;
+        }
+        return *static_cast<const U*>(found->payload.get());
     }
 
     std::span<const Annotation> annotations() const { return m_annotations; }
@@ -394,13 +364,6 @@ template<>
 struct hash<ets::Type> { // NOLINT(readability-identifier-naming)
     size_t operator()(const ets::Type& type) const {
         return static_cast<size_t>(type.hash().id());
-    }
-};
-
-template<>
-struct hash<ets::TypeTagId> { // NOLINT(readability-identifier-naming)
-    size_t operator()(const ets::TypeTagId& id) const {
-        return static_cast<size_t>(id.id());
     }
 };
 

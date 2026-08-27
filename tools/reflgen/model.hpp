@@ -7,11 +7,14 @@
 
 namespace ets::reflgen {
 
-struct ReflectionTag {
-    std::string key;
-    std::optional<std::string> value;
-    std::optional<std::string> group;
-    std::optional<std::string> field;
+struct AnnotationArgument {
+    std::string name;
+    std::string value;
+};
+
+struct ReflectionAnnotation {
+    std::string name;
+    std::vector<AnnotationArgument> arguments;
 };
 
 struct ParamInfo {
@@ -23,6 +26,13 @@ struct MemberInfo {
     std::string name;
     std::string type_name;
     std::string access;
+};
+
+struct AnnotationSchemaInfo {
+    std::string reflected_name;
+    std::string type_name;
+    std::string source_file;
+    std::vector<MemberInfo> fields;
 };
 
 struct MethodInfo : MemberInfo {
@@ -40,7 +50,7 @@ struct ClassInfo {
     std::vector<std::string> namespace_path;
     std::string local_name;
     std::string source_file;
-    std::vector<ReflectionTag> tags;
+    std::vector<ReflectionAnnotation> annotations;
     std::vector<MemberInfo> properties;
     std::vector<MethodInfo> methods;
     std::vector<MethodInfo> constructors;
@@ -58,13 +68,14 @@ struct EnumInfo {
     std::vector<std::string> namespace_path;
     std::string local_name;
     std::string source_file;
-    std::vector<ReflectionTag> tags;
+    std::vector<ReflectionAnnotation> annotations;
     std::string underlying_type;
     bool is_scoped = false;
     std::vector<EnumValueInfo> values;
 };
 
 struct ParseResult {
+    std::vector<AnnotationSchemaInfo> annotation_schemas;
     std::vector<ClassInfo> classes;
     std::vector<EnumInfo> enums;
 };

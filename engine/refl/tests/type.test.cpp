@@ -23,9 +23,13 @@ struct NoEquality {
     int value;
 };
 
-struct TaggedType {
-    int value;
+struct LateAnnotation {
+    bool enabled {false};
 };
+
+struct LateAnnotatedType {};
+
+struct TypedAnnotatedType {};
 
 struct ThrowingMove {
     ThrowingMove() = default;
@@ -127,33 +131,51 @@ TEST_CASE("Registry records type metadata and capabilities", "[refl][type]") {
     REQUIRE_FALSE(vector_type.hashable());
 }
 
-TEST_CASE("Reflection types expose registered tags", "[refl][type][tag]") {
-    Registry& registry = Registry::instance();
-    Type& tagged_type = registry.register_type<TaggedType>();
+TEST_CASE(
+    "Annotation schemas bind instances registered before the schema",
+    "[refl][type][annotation]"
+) {
+    auto& registry = Registry::instance();
+    registry.register_type<LateAnnotatedType>();
+    auto& reflected_type =
+        refl::generated::AnnotationWriter::add_field<LateAnnotatedType>(
+            registry,
+            "Late",
+            "enabled",
+            "true"
+        );
 
-    constexpr TypeTagId component_tag {"Component"};
-    constexpr TypeTagId resource_tag {"Resource"};
-    REQUIRE_FALSE(tagged_type.has_tag(component_tag));
+    REQUIRE_FALSE(reflected_type.annotation<LateAnnotation>());
 
-    registry.add_generated_tag<TaggedType>("Component");
-    registry.add_generated_tag<TaggedType>("Resource");
-    registry.add_generated_tag<TaggedType>("Component");
-
-    REQUIRE(tagged_type.has_tag(component_tag));
-    REQUIRE(tagged_type.has_tag(resource_tag));
-    REQUIRE(tagged_type.tags().size() == 2);
-    const auto component_tag_name = registry.tag_name(component_tag);
-    REQUIRE(component_tag_name.has_value());
-    REQUIRE(*component_tag_name == "Component");
-
-    const auto component_types = registry.types_with_tag(component_tag);
-    REQUIRE(
-        std::ranges::find(component_types, type_id<TaggedType>()) !=
-        component_types.end()
+    refl::generated::AnnotationWriter::register_schema<LateAnnotation>(
+        registry,
+        "Late",
+        {"enabled"},
+        [](AnnotationView annotation) {
+            LateAnnotation result;
+            if (const auto enabled = annotation.value("enabled")) {
+                result.enabled =
+                    parse_generated_annotation_value<bool>(*enabled);
+            }
+            return result;
+        },
+        [](const LateAnnotation& annotation) {
+            return std::vector<AnnotationField> {
+                {"enabled",
+                 format_generated_annotation_value(annotation.enabled)},
+            };
+        }
     );
+
+    const auto annotation = reflected_type.annotation<LateAnnotation>();
+    REQUIRE(annotation);
+    CHECK(annotation->enabled);
 }
 
-TEST_CASE("Generated reflection tags preserve values", "[refl][type][tag]") {
+TEST_CASE(
+    "Generated reflection annotations preserve values",
+    "[refl][type][annotation]"
+) {
     Registry& registry = Registry::instance();
     register_generated_reflection();
 
@@ -163,11 +185,6 @@ TEST_CASE("Generated reflection tags preserve values", "[refl][type][tag]") {
     CHECK(reflected_type.namespace_path()[0] == "ets");
     CHECK(reflected_type.namespace_path()[1] == "refl_test");
     CHECK(reflected_type.local_name() == "ReflectedTaggedType");
-    constexpr TypeTagId plugin_tag {"Example"};
-    constexpr TypeTagId plugin_enabled_tag {"Example.enabled"};
-    constexpr TypeTagId plugin_name_tag {"Example.name"};
-    constexpr TypeTagId plugin_phase_tag {"Example.phase"};
-
     const auto plugin = reflected_type.annotation("Example");
     REQUIRE(plugin);
     CHECK(plugin->name() == "Example");
@@ -179,18 +196,11 @@ TEST_CASE("Generated reflection tags preserve values", "[refl][type][tag]") {
     CHECK(*plugin->value("phase") == "runtime");
     CHECK_FALSE(plugin->value("missing"));
 
-    // The flattened tag API remains available as a compatibility index.
-    REQUIRE(reflected_type.has_tag(plugin_tag));
-    REQUIRE_FALSE(reflected_type.tag_value(plugin_tag));
-    REQUIRE(reflected_type.has_tag(plugin_enabled_tag));
-    REQUIRE(reflected_type.tag_value(plugin_enabled_tag));
-    CHECK(*reflected_type.tag_value(plugin_enabled_tag) == "true");
-    REQUIRE(reflected_type.has_tag(plugin_name_tag));
-    REQUIRE(reflected_type.tag_value(plugin_name_tag));
-    CHECK(*reflected_type.tag_value(plugin_name_tag) == "rendering");
-    REQUIRE(reflected_type.has_tag(plugin_phase_tag));
-    REQUIRE(reflected_type.tag_value(plugin_phase_tag));
-    CHECK(*reflected_type.tag_value(plugin_phase_tag) == "runtime");
+    const auto typed_example = reflected_type.annotation<ExampleAnnotation>();
+    REQUIRE(typed_example);
+    CHECK(typed_example->enabled);
+    CHECK(typed_example->name == "rendering");
+    CHECK(typed_example->phase == "runtime");
 
     auto& reflected_enum = registry.get_type(type_id<ReflectedTaggedEnum>());
     REQUIRE(reflected_enum.has_structured_name());
@@ -198,21 +208,47 @@ TEST_CASE("Generated reflection tags preserve values", "[refl][type][tag]") {
     CHECK(reflected_enum.namespace_path()[0] == "ets");
     CHECK(reflected_enum.namespace_path()[1] == "refl_test");
     CHECK(reflected_enum.local_name() == "ReflectedTaggedEnum");
-    constexpr TypeTagId category_tag {"Category"};
-    constexpr TypeTagId category_name_tag {"Category.name"};
     const auto category = reflected_enum.annotation("Category");
     REQUIRE(category);
     REQUIRE(category->value("name"));
     CHECK(*category->value("name") == "example");
-    REQUIRE(reflected_enum.has_tag(category_tag));
-    REQUIRE_FALSE(reflected_enum.tag_value(category_tag));
-    REQUIRE(reflected_enum.has_tag(category_name_tag));
-    REQUIRE(reflected_enum.tag_value(category_name_tag));
-    CHECK(*reflected_enum.tag_value(category_name_tag) == "example");
-
+    const auto typed_category = reflected_enum.annotation<CategoryAnnotation>();
+    REQUIRE(typed_category);
+    CHECK(typed_category->name == "example");
     const auto plugin_types = registry.types_with_annotation("Example");
     CHECK(
         std::ranges::find(plugin_types, type_id<ReflectedTaggedType>()) !=
         plugin_types.end()
     );
+    const auto typed_example_types =
+        registry.types_with_annotation<ExampleAnnotation>();
+    CHECK(
+        std::ranges::find(
+            typed_example_types,
+            type_id<ReflectedTaggedType>()
+        ) != typed_example_types.end()
+    );
+
+    auto& typed_type =
+        registry.add_annotation<TypedAnnotatedType>(ExampleAnnotation {
+            .enabled = true,
+            .name = "typed",
+            .phase = "test",
+        });
+    const auto typed = typed_type.annotation<ExampleAnnotation>();
+    REQUIRE(typed);
+    CHECK(typed->enabled);
+    CHECK(typed->name == "typed");
+    CHECK(typed->phase == "test");
+    const auto dynamic = typed_type.annotation("Example");
+    REQUIRE(dynamic);
+    const auto enabled = dynamic->value("enabled");
+    const auto name = dynamic->value("name");
+    const auto phase = dynamic->value("phase");
+    REQUIRE(enabled);
+    REQUIRE(name);
+    REQUIRE(phase);
+    CHECK(*enabled == "true");
+    CHECK(*name == "typed");
+    CHECK(*phase == "test");
 }

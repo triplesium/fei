@@ -270,12 +270,16 @@ int main(int argc, char** argv) {
         ets::reflgen::dedupe_reflected_types(result);
         ets::reflgen::filter_codegen_unsupported_members(result);
 
-        std::cout << "\nParsing complete! Found " << result.classes.size()
-                  << " classes and " << result.enums.size() << " enums in "
+        std::cout << "\nParsing complete! Found "
+                  << result.annotation_schemas.size() << " annotation schemas, "
+                  << result.classes.size() << " classes and "
+                  << result.enums.size() << " enums in "
                   << options.headers.size() << " files.\n";
 
-        if (result.classes.empty() && result.enums.empty()) {
-            std::cout << "No classes or enums found in the header files.\n";
+        if (result.annotation_schemas.empty() && result.classes.empty() &&
+            result.enums.empty()) {
+            std::cout << "No annotation schemas, classes or enums found in the "
+                         "header files.\n";
         }
 
         if (!options.output_file.empty()) {

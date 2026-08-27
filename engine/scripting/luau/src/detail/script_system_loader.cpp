@@ -3,6 +3,7 @@
 #include "ecs/dynamic/state.hpp"
 #include "ecs/dynamic/system.hpp"
 #include "refl/registry.hpp"
+#include "scripting/annotations.hpp"
 #include "scripting/module_install.hpp"
 #include "scripting/reflection_bridge.hpp"
 
@@ -44,13 +45,13 @@ Status<ScriptError> bind_type_ref(
             return {};
         }
         if (!is_script_prelude(*type)) {
-            const auto annotation = type->annotation("ScriptModule");
-            const auto owner = annotation ? annotation->value("name") : nullopt;
+            const auto annotation =
+                type->annotation<annotations::ScriptModule>();
             std::string message =
                 "Type '" + type->name() + "' is not in ScriptPrelude";
-            if (owner) {
+            if (annotation) {
                 message += "; require(\"@entisium/";
-                message += *owner;
+                message += annotation->name;
                 message += "\") and qualify the type through that local";
             }
             return failure(ScriptError {std::move(message)});

@@ -6,6 +6,7 @@
 #include "ecs/fwd.hpp"
 #include "refl/enum.hpp"
 #include "refl/registry.hpp"
+#include "scripting/annotations.hpp"
 #include "scripting/reflection_bridge.hpp"
 #include "scripting/state.hpp"
 
@@ -1774,15 +1775,15 @@ ImportedTypeBindings imported_type_namespaces(
             const std::string_view module_name =
                 std::string_view {specifier}.substr(native_prefix.size());
             for (const TypeId id :
-                 Registry::instance().types_with_annotation("ScriptModule")) {
+                 Registry::instance()
+                     .types_with_annotation<annotations::ScriptModule>()) {
                 auto type = Registry::instance().try_get_type(id);
                 if (!type || !is_script_visible(*type)) {
                     continue;
                 }
-                const auto annotation = type->annotation("ScriptModule");
-                const auto owner =
-                    annotation ? annotation->value("name") : nullopt;
-                if (!owner || *owner != module_name) {
+                const auto annotation =
+                    type->annotation<annotations::ScriptModule>();
+                if (!annotation || annotation->name != module_name) {
                     continue;
                 }
                 result.emplace(

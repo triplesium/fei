@@ -1,6 +1,6 @@
 #include "scene/document.hpp"
 
-#include "ecs/type_tags.hpp"
+#include "ecs/annotations.hpp"
 #include "ecs/world.hpp"
 #include "refl/registry.hpp"
 
@@ -514,7 +514,7 @@ Result<SceneDocument, SceneDocumentError> capture_scene_document(
             world.archetypes().get(location->archetype_id).components();
         for (const auto type_id : component_types) {
             auto type = Registry::instance().try_get_type(type_id);
-            if (!type || !type->has_tag(ComponentTypeTag)) {
+            if (!type || !type->has_annotation<annotations::Component>()) {
                 continue;
             }
             auto properties = serialization::serialize(
@@ -595,7 +595,7 @@ Result<SceneInstantiationResult, SceneDocumentError> instantiate_scene_document(
                 );
                 continue;
             }
-            if (!type->has_tag(ComponentTypeTag)) {
+            if (!type->has_annotation<annotations::Component>()) {
                 return failure(scene_error(
                     SceneDocumentErrorKind::DeserializeComponent,
                     "$.entities[" + std::to_string(entity_index) +

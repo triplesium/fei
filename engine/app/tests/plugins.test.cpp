@@ -35,7 +35,10 @@ TEST_CASE(
     App app;
 
     REQUIRE(registry.try_get_cls(type_id<AppTestPlugin>()));
-    CHECK(registry.get_type(type_id<AppTestPlugin>()).has_annotation("Plugin"));
+    const auto annotation = registry.get_type(type_id<AppTestPlugin>())
+                                .annotation<annotations::Plugin>();
+    REQUIRE(annotation);
+    CHECK(annotation->name == "app_test::AppTest");
 }
 
 TEST_CASE("App adds reflected plugins by name", "[app][plugin][reflection]") {

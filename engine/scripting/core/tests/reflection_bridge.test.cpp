@@ -1,7 +1,9 @@
 #include "scripting/reflection_bridge.hpp"
 
 #include "refl/cls.hpp"
+#include "refl/generated.hpp"
 #include "refl/registry.hpp"
+#include "scripting/annotations.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -46,11 +48,14 @@ TEST_CASE(
     "[scripting][reflection]"
 ) {
     auto& registry = Registry::instance();
+    register_generated_reflection();
     auto& type = registry.register_type<scripting_test::HiddenType>(
         {"ets", "scripting_test"},
         "HiddenType"
     );
-    registry.add_generated_annotation<scripting_test::HiddenType>("NoScript");
+    registry.add_annotation<scripting_test::HiddenType>(
+        annotations::NoScript {}
+    );
 
     CHECK_FALSE(is_script_visible(type));
 }
@@ -60,12 +65,13 @@ TEST_CASE(
     "[scripting][reflection]"
 ) {
     auto& registry = Registry::instance();
+    register_generated_reflection();
     registry.register_cls<scripting_test::PreludeType>(
         {"ets", "scripting_test"},
         "PreludeType"
     );
-    registry.add_generated_annotation<scripting_test::PreludeType>(
-        "ScriptPrelude"
+    registry.add_annotation<scripting_test::PreludeType>(
+        annotations::ScriptPrelude {}
     );
 
     const auto& type = registry.get_type<scripting_test::PreludeType>();
@@ -76,11 +82,11 @@ TEST_CASE(
         {"ets", "scripting_test"},
         "HiddenPreludeType"
     );
-    registry.add_generated_annotation<scripting_test::HiddenPreludeType>(
-        "ScriptPrelude"
+    registry.add_annotation<scripting_test::HiddenPreludeType>(
+        annotations::ScriptPrelude {}
     );
-    registry.add_generated_annotation<scripting_test::HiddenPreludeType>(
-        "NoScript"
+    registry.add_annotation<scripting_test::HiddenPreludeType>(
+        annotations::NoScript {}
     );
     const auto& hidden = registry.get_type<scripting_test::HiddenPreludeType>();
     CHECK_FALSE(is_script_visible(hidden));

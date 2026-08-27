@@ -5,6 +5,7 @@
 #include "refl/cls.hpp"  // IWYU pragma: keep
 #include "refl/enum.hpp" // IWYU pragma: keep
 #include "refl/registry.hpp"
+#include "scripting/annotations.hpp"
 #include "scripting/reflection_bridge.hpp"
 #include "scripting_lua/runtime.hpp"
 #include "scripting_lua/script_system_registry.hpp"
@@ -20,7 +21,7 @@ void LuaScriptingPlugin::setup(App& app) {
     auto& registry = Registry::instance();
     for (const auto& [id, cls] : registry.clses()) {
         auto& type = registry.get_type(id);
-        if (type.has_annotation("NoScript")) {
+        if (type.has_annotation<annotations::NoScript>()) {
             continue;
         }
         if (!type.has_structured_name()) {
@@ -34,7 +35,7 @@ void LuaScriptingPlugin::setup(App& app) {
     }
     for (const auto& [id, enm] : registry.enums()) {
         auto& type = registry.get_type(id);
-        if (type.has_annotation("NoScript")) {
+        if (type.has_annotation<annotations::NoScript>()) {
             continue;
         }
         if (!type.has_structured_name()) {

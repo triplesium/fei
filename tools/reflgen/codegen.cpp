@@ -40,6 +40,13 @@ sorted_classes(const std::vector<ClassInfo>& classes) {
     return sorted;
 }
 
+[[nodiscard]] std::vector<AnnotationSchemaInfo>
+sorted_annotation_schemas(const std::vector<AnnotationSchemaInfo>& schemas) {
+    auto sorted = schemas;
+    std::ranges::sort(sorted, {}, &AnnotationSchemaInfo::reflected_name);
+    return sorted;
+}
+
 [[nodiscard]] std::vector<EnumInfo>
 sorted_enums(const std::vector<EnumInfo>& enums) {
     auto sorted = enums;
@@ -74,26 +81,66 @@ void write_structured_type_name(
     out << "}, \"" << local_name << "\")";
 }
 
-[[nodiscard]] bool
-has_annotation(const std::vector<ReflectionTag>& tags, std::string_view name) {
-    return std::ranges::any_of(tags, [name](const ReflectionTag& tag) {
-        return tag.key == name && !tag.value;
-    });
+[[nodiscard]] bool has_annotation(
+    const std::vector<ReflectionAnnotation>& annotations,
+    std::string_view name
+) {
+    return std::ranges::any_of(
+        annotations,
+        [name](const ReflectionAnnotation& annotation) {
+            return annotation.name == name;
+        }
+    );
+}
+
+[[nodiscard]] const ReflectionAnnotation* find_annotation(
+    const std::vector<ReflectionAnnotation>& annotations,
+    std::string_view name
+) {
+    const auto found = std::ranges::find_if(
+        annotations,
+        [name](const ReflectionAnnotation& annotation) {
+            return annotation.name == name;
+        }
+    );
+    return found == annotations.end() ? nullptr : &*found;
 }
 
 [[nodiscard]] std::optional<std::string> annotation_value(
-    const std::vector<ReflectionTag>& tags,
-    std::string_view annotation,
+    const std::vector<ReflectionAnnotation>& annotations,
+    std::string_view annotation_name,
     std::string_view field
 ) {
-    const auto found =
-        std::ranges::find_if(tags, [&](const ReflectionTag& tag) {
-            return tag.group == annotation && tag.field == field && tag.value;
-        });
-    if (found == tags.end()) {
+    const auto* annotation = find_annotation(annotations, annotation_name);
+    if (!annotation) {
+        return std::nullopt;
+    }
+    const auto found = std::ranges::find_if(
+        annotation->arguments,
+        [field](const AnnotationArgument& argument) {
+            return argument.name == field;
+        }
+    );
+    if (found == annotation->arguments.end()) {
         return std::nullopt;
     }
     return found->value;
+}
+
+void write_annotations(
+    std::ostream& out,
+    std::string_view type_name,
+    const std::vector<ReflectionAnnotation>& annotations
+) {
+    for (const auto& annotation : annotations) {
+        out << "AnnotationWriter::add<" << type_name << ">(registry, \""
+            << annotation.name << "\");\n";
+        for (const auto& argument : annotation.arguments) {
+            out << "AnnotationWriter::add_field<" << type_name
+                << ">(registry, \"" << annotation.name << "\", \""
+                << argument.name << "\", \"" << argument.value << "\");\n";
+        }
+    }
 }
 
 [[nodiscard]] std::string default_plugin_name(std::string_view type_name) {
@@ -115,18 +162,20 @@ has_annotation(const std::vector<ReflectionTag>& tags, std::string_view name) {
 }
 
 [[nodiscard]] std::optional<std::string> plugin_name(const ClassInfo& cls) {
-    if (!has_annotation(cls.tags, "Plugin")) {
+    if (!has_annotation(cls.annotations, "Plugin")) {
         return std::nullopt;
     }
-    for (const auto& tag : cls.tags) {
-        if (tag.group == "Plugin" && tag.field != "name") {
+    const auto* plugin = find_annotation(cls.annotations, "Plugin");
+    for (const auto& argument : plugin->arguments) {
+        if (argument.name != "name") {
             throw std::runtime_error(
-                "Unknown Plugin annotation field '" + *tag.field +
+                "Unknown Plugin annotation field '" + argument.name +
                 "' on class " + cls.name
             );
         }
     }
-    if (auto explicit_name = annotation_value(cls.tags, "Plugin", "name")) {
+    if (auto explicit_name =
+            annotation_value(cls.annotations, "Plugin", "name")) {
         return explicit_name;
     }
     return default_plugin_name(cls.name);
@@ -162,7 +211,7 @@ void generate_cpp_file(
     out << "#include \"refl/cls.hpp\"\n";
     out << "#include \"refl/enum.hpp\"\n";
     if (std::ranges::any_of(result.classes, [](const ClassInfo& cls) {
-            return has_annotation(cls.tags, "Plugin");
+            return has_annotation(cls.annotations, "Plugin");
         })) {
         out << "#include \"app/plugin_registry.hpp\"\n";
     }
@@ -173,6 +222,9 @@ void generate_cpp_file(
     for (const auto& cls : result.classes) {
         includes.insert(include_path_for(cls.source_file, root_dir));
     }
+    for (const auto& schema : result.annotation_schemas) {
+        includes.insert(include_path_for(schema.source_file, root_dir));
+    }
     for (const auto& enum_info : result.enums) {
         includes.insert(include_path_for(enum_info.source_file, root_dir));
     }
@@ -182,6 +234,60 @@ void generate_cpp_file(
 
     out << "\nnamespace ets::refl::generated {\n";
     out << "void " << function_name << "(Registry& registry) {\n\n";
+
+    for (const auto& schema :
+         sorted_annotation_schemas(result.annotation_schemas)) {
+        out << "registry.register_cls<" << schema.type_name << ">()\n";
+        for (const auto& field : schema.fields) {
+            if (field.access != "public") {
+                throw std::runtime_error(
+                    "Annotation schema field '" + schema.type_name + "." +
+                    field.name + "' must be public"
+                );
+            }
+            out << "    .add_property(\"" << field.name << "\", &"
+                << schema.type_name << "::" << field.name << ")\n";
+        }
+        out << "    ;\n";
+        out << "AnnotationWriter::register_schema<" << schema.type_name
+            << ">(\n";
+        out << "    registry,\n";
+        out << "    \"" << schema.reflected_name << "\",\n";
+        out << "    {";
+        for (std::size_t index = 0; index < schema.fields.size(); ++index) {
+            if (index != 0) {
+                out << ", ";
+            }
+            out << "\"" << schema.fields[index].name << "\"";
+        }
+        out << "},\n";
+        out << "    [](AnnotationView annotation) {\n";
+        out << "        " << schema.type_name << " value {};\n";
+        for (const auto& field : schema.fields) {
+            out << "        if (const auto field = annotation.value(\""
+                << field.name << "\")) {\n";
+            out << "            value." << field.name
+                << " = parse_generated_annotation_value<decltype(value."
+                << field.name << ")>(*field);\n";
+            out << "        }\n";
+        }
+        out << "        return value;\n";
+        out << "    },\n";
+        out << "    [](const " << schema.type_name << "& value) {\n";
+        out << "        return std::vector<AnnotationField> {\n";
+        for (const auto& field : schema.fields) {
+            out << "            {\"" << field.name
+                << "\", format_generated_annotation_value(value." << field.name
+                << ")},\n";
+        }
+        out << "        };\n";
+        out << "    }\n";
+        out << ");\n";
+    }
+
+    if (!result.annotation_schemas.empty()) {
+        out << "\n";
+    }
 
     for (const auto& cls : sorted_classes(result.classes)) {
         if (cls.name == "ets::Registry") {
@@ -222,22 +328,16 @@ void generate_cpp_file(
             }
         }
         out << "    ;\n";
-        for (const auto& tag : cls.tags) {
-            if (tag.group && tag.field && tag.value) {
-                out << "registry.add_generated_annotation_field<" << cls.name
-                    << ">(\"" << *tag.group << "\", \"" << *tag.field
-                    << "\", \"" << *tag.value << "\");\n";
-            } else {
-                out << "registry.add_generated_annotation<" << cls.name
-                    << ">(\"" << tag.key << "\");\n";
-            }
-        }
+        write_annotations(out, cls.name, cls.annotations);
         if (!script_module.empty()) {
-            out << "registry.add_generated_annotation_field<" << cls.name
-                << R"(>("ScriptModule", "name", ")" << script_module
+            out << "AnnotationWriter::add_field<" << cls.name
+                << R"(>(registry, "ScriptModule", "name", ")" << script_module
                 << "\");\n";
         }
         if (generated_plugin_name) {
+            out << "AnnotationWriter::add_field<" << cls.name
+                << ">(registry, \"Plugin\", \"name\", \""
+                << *generated_plugin_name << "\");\n";
             out << "register_generated_plugin<" << cls.name << ">(\""
                 << *generated_plugin_name << "\");\n";
         }
@@ -246,7 +346,7 @@ void generate_cpp_file(
     out << "\n";
 
     for (const auto& enum_info : sorted_enums(result.enums)) {
-        if (has_annotation(enum_info.tags, "Plugin")) {
+        if (has_annotation(enum_info.annotations, "Plugin")) {
             throw std::runtime_error(
                 "Plugin annotation can only be applied to classes: " +
                 enum_info.name
@@ -265,19 +365,10 @@ void generate_cpp_file(
                 << "::" << enum_value.name << "))\n";
         }
         out << "    ;\n";
-        for (const auto& tag : enum_info.tags) {
-            if (tag.group && tag.field && tag.value) {
-                out << "registry.add_generated_annotation_field<"
-                    << enum_info.name << ">(\"" << *tag.group << "\", \""
-                    << *tag.field << "\", \"" << *tag.value << "\");\n";
-            } else {
-                out << "registry.add_generated_annotation<" << enum_info.name
-                    << ">(\"" << tag.key << "\");\n";
-            }
-        }
+        write_annotations(out, enum_info.name, enum_info.annotations);
         if (!script_module.empty()) {
-            out << "registry.add_generated_annotation_field<" << enum_info.name
-                << R"(>("ScriptModule", "name", ")" << script_module
+            out << "AnnotationWriter::add_field<" << enum_info.name
+                << R"(>(registry, "ScriptModule", "name", ")" << script_module
                 << "\");\n";
         }
     }
@@ -303,6 +394,8 @@ void generate_aggregate_cpp_file(
 
     out << "// This file is generated by entisium-reflgen\n\n";
     out << "#include \"refl/generated.hpp\"\n";
+    out << "#include \"refl/annotations.hpp\"\n";
+    out << "#include \"refl/cls.hpp\"\n";
     out << "#include \"refl/registry.hpp\"\n\n";
 
     out << "namespace ets::refl::generated {\n";
@@ -314,9 +407,44 @@ void generate_aggregate_cpp_file(
     out << "namespace ets {\n\n";
     out << "void register_generated_reflection() {\n";
     out << "    auto& registry = Registry::instance();\n";
+    out << "    registry.register_cls<annotations::ScriptPrelude>();\n";
+    out << "    refl::generated::AnnotationWriter::register_schema<\n";
+    out << "        annotations::ScriptPrelude>(\n";
+    out << "        registry,\n";
+    out << "        \"ScriptPrelude\",\n";
+    out << "        {},\n";
+    out << "        [](AnnotationView) {\n";
+    out << "            return annotations::ScriptPrelude {};\n";
+    out << "        },\n";
+    out << "        [](const annotations::ScriptPrelude&) {\n";
+    out << "            return std::vector<AnnotationField> {};\n";
+    out << "        }\n";
+    out << "    );\n";
+    out << "    registry.register_cls<annotations::ScriptModule>()\n";
+    out << "        .add_property(\"name\", "
+           "&annotations::ScriptModule::name);\n";
+    out << "    refl::generated::AnnotationWriter::register_schema<\n";
+    out << "        annotations::ScriptModule>(\n";
+    out << "        registry,\n";
+    out << "        \"ScriptModule\",\n";
+    out << "        {\"name\"},\n";
+    out << "        [](AnnotationView annotation) {\n";
+    out << "            annotations::ScriptModule value {};\n";
+    out << "            if (const auto name = annotation.value(\"name\")) {\n";
+    out << "                value.name = *name;\n";
+    out << "            }\n";
+    out << "            return value;\n";
+    out << "        },\n";
+    out << "        [](const annotations::ScriptModule& value) {\n";
+    out << "            return std::vector<AnnotationField> {\n";
+    out << "                {\"name\", value.name},\n";
+    out << "            };\n";
+    out << "        }\n";
+    out << "    );\n";
     for (const auto& function_name : function_names) {
         out << "    refl::generated::" << function_name << "(registry);\n";
     }
+    out << "    refl::generated::AnnotationWriter::validate(registry);\n";
     out << "}\n\n";
     out << "} // namespace ets\n";
 }

@@ -11,6 +11,7 @@
 #include "ecs/world.hpp"
 #include "refl/cls.hpp"
 #include "refl/registry.hpp"
+#include "scripting/annotations.hpp"
 #include "scripting/module_install.hpp"
 #include "scripting_luau/compiler.hpp"
 #include "scripting_luau/detail/script_system_loader.hpp"
@@ -251,8 +252,8 @@ TEST_CASE(
             "Config"
         )
         .add_property("value", &luau_system_test::Config::value);
-    registry.add_generated_annotation<luau_system_test::Config>(
-        "ScriptPrelude"
+    registry.add_annotation<luau_system_test::Config>(
+        annotations::ScriptPrelude {}
     );
     const ScriptSource source {
         .name = "structured_name.luau",
@@ -299,10 +300,8 @@ TEST_CASE(
             "ModuleOnlyConfig"
         )
         .add_property("value", &luau_system_test::ModuleOnlyConfig::value);
-    registry.add_generated_annotation_field<luau_system_test::ModuleOnlyConfig>(
-        "ScriptModule",
-        "name",
-        "test"
+    registry.add_annotation<luau_system_test::ModuleOnlyConfig>(
+        annotations::ScriptModule {.name = "test"}
     );
 
     const ScriptSource source {

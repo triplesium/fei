@@ -3,6 +3,7 @@
 #include "refl/cls.hpp"
 #include "refl/enum.hpp"
 #include "refl/registry.hpp"
+#include "scripting/annotations.hpp"
 #include "scripting_luau/compiler.hpp"
 #include "scripting_luau/runtime.hpp"
 
@@ -296,12 +297,9 @@ TEST_CASE(
         {"ets", "luau_runtime_test", "nested"},
         "NativeValue"
     );
-    registry
-        .add_generated_annotation_field<luau_runtime_test::nested::NativeValue>(
-            "ScriptModule",
-            "name",
-            "runtime-test"
-        );
+    registry.add_annotation<luau_runtime_test::nested::NativeValue>(
+        annotations::ScriptModule {.name = "runtime-test"}
+    );
 
     const ScriptSource source {
         .name = "native_module.luau",

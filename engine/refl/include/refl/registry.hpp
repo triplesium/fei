@@ -10,6 +10,7 @@
 #include "refl/utils.hpp"
 
 #include <array>
+#include <charconv>
 #include <concepts>
 #include <cstdint>
 #include <cstring>
@@ -18,6 +19,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -29,9 +31,68 @@
 
 namespace ets {
 
+template<typename T>
+std::remove_cvref_t<T> parse_generated_annotation_value(std::string_view text) {
+    using U = std::remove_cvref_t<T>;
+    if constexpr (std::same_as<U, std::string>) {
+        return std::string {text};
+    } else if constexpr (std::same_as<U, bool>) {
+        if (text == "true") {
+            return true;
+        }
+        if (text == "false") {
+            return false;
+        }
+        throw std::invalid_argument(
+            "Invalid boolean annotation value '" + std::string {text} + "'"
+        );
+    } else if constexpr (std::integral<U> || std::floating_point<U>) {
+        U value {};
+        const auto [end, error] =
+            std::from_chars(text.data(), text.data() + text.size(), value);
+        if (error != std::errc {} || end != text.data() + text.size()) {
+            throw std::invalid_argument(
+                "Invalid numeric annotation value '" + std::string {text} + "'"
+            );
+        }
+        return value;
+    } else {
+        static_assert(
+            std::same_as<U, void>,
+            "Unsupported generated annotation field type"
+        );
+    }
+}
+
+template<typename T>
+std::string format_generated_annotation_value(const T& value) {
+    using U = std::remove_cvref_t<T>;
+    if constexpr (std::same_as<U, std::string>) {
+        return value;
+    } else if constexpr (std::same_as<U, bool>) {
+        return value ? "true" : "false";
+    } else if constexpr (std::integral<U> || std::floating_point<U>) {
+        std::array<char, 64> buffer {};
+        const auto [end, error] =
+            std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
+        if (error != std::errc {}) {
+            throw std::invalid_argument("Cannot format annotation value");
+        }
+        return std::string(buffer.data(), end);
+    } else {
+        static_assert(
+            std::same_as<U, void>,
+            "Unsupported generated annotation field type"
+        );
+    }
+}
+
 class Cls;
 struct DynamicStructDesc;
 struct DynamicStructLayout;
+namespace refl::generated {
+class AnnotationWriter;
+}
 struct DynamicTypeError;
 
 struct RegistryError {
@@ -341,17 +402,6 @@ class Registry {
     ContainerAdapter& get_container_adapter(TypeId id);
     Result<ContainerAdapter&, RegistryError>
     try_get_container_adapter(TypeId id);
-    Type& add_generated_tag(TypeId type_id, std::string tag);
-    Type& add_generated_tag(TypeId type_id, std::string tag, std::string value);
-    Type& add_generated_annotation(TypeId type_id, std::string annotation);
-    Type& add_generated_annotation_field(
-        TypeId type_id,
-        std::string annotation,
-        std::string field,
-        std::string value
-    );
-    Optional<std::string_view> tag_name(TypeTagId tag) const;
-    std::vector<TypeId> types_with_tag(TypeTagId tag) const;
     std::vector<TypeId>
     types_with_annotation(std::string_view annotation) const;
     bool has_enum(TypeId id) const;
@@ -378,40 +428,31 @@ class Registry {
         return add_cls(type_id<T>());
     }
 
-    template<typename T>
-    Type& add_generated_tag(std::string tag) {
-        auto& registered = register_type<T>();
-        return add_generated_tag(registered.id(), std::move(tag));
+    template<typename A>
+    std::vector<TypeId> types_with_annotation() const {
+        std::vector<TypeId> result;
+        for (const auto& [id, reflected_type] : m_types) {
+            if (reflected_type.has_annotation<A>()) {
+                result.push_back(id);
+            }
+        }
+        std::ranges::sort(result);
+        return result;
     }
 
-    template<typename T>
-    Type& add_generated_tag(std::string tag, std::string value) {
+    template<typename T, typename A>
+    Type& add_annotation(A&& annotation) {
         auto& registered = register_type<T>();
-        return add_generated_tag(
-            registered.id(),
-            std::move(tag),
-            std::move(value)
-        );
+        return add_annotation(registered.id(), std::forward<A>(annotation));
     }
 
-    template<typename T>
-    Type& add_generated_annotation(std::string annotation) {
-        auto& registered = register_type<T>();
-        return add_generated_annotation(registered.id(), std::move(annotation));
-    }
-
-    template<typename T>
-    Type& add_generated_annotation_field(
-        std::string annotation,
-        std::string field,
-        std::string value
-    ) {
-        auto& registered = register_type<T>();
-        return add_generated_annotation_field(
-            registered.id(),
-            std::move(annotation),
-            std::move(field),
-            std::move(value)
+    template<typename A>
+    Type& add_annotation(TypeId type, A&& annotation) {
+        using U = std::remove_cvref_t<A>;
+        return add_typed_annotation(
+            type,
+            type_id<U>(),
+            std::make_shared<const U>(std::forward<A>(annotation))
         );
     }
 
@@ -654,7 +695,42 @@ class Registry {
     Registry() = default;
     static Registry* s_instance;
 
+    friend class refl::generated::AnnotationWriter;
+
+    using GeneratedAnnotationFactory =
+        std::function<std::shared_ptr<const void>(AnnotationView)>;
+    using GeneratedAnnotationEncoder =
+        std::function<std::vector<AnnotationField>(const void*)>;
+
     Optional<std::string> registered_type_name(TypeId id) const;
+    Type& add_generated_annotation(TypeId type_id, std::string annotation);
+    Type& add_generated_annotation_field(
+        TypeId type_id,
+        std::string annotation,
+        std::string field,
+        std::string value
+    );
+    Type& add_typed_annotation(
+        TypeId type_id,
+        TypeId schema_type,
+        std::shared_ptr<const void> payload
+    );
+    void register_generated_annotation_schema(
+        std::string name,
+        TypeId schema_type,
+        std::vector<std::string> fields,
+        GeneratedAnnotationFactory factory,
+        GeneratedAnnotationEncoder encoder
+    );
+    void validate_generated_annotations() const;
+    void bind_generated_annotation(Type& type, Annotation& annotation);
+
+    struct GeneratedAnnotationSchema {
+        TypeId type;
+        std::vector<std::string> fields;
+        GeneratedAnnotationFactory factory;
+        GeneratedAnnotationEncoder encoder;
+    };
 
     template<class... Dependencies>
     void register_generic_type_dependencies(std::tuple<Dependencies...>*) {
@@ -707,7 +783,8 @@ class Registry {
     std::unordered_map<TypeId, Type> m_types;
     std::uint64_t m_class_epoch {0};
     std::unordered_map<std::string, TypeId> m_type_ids_by_name;
-    std::unordered_map<TypeTagId, std::string> m_tag_names;
+    std::unordered_map<std::string, GeneratedAnnotationSchema>
+        m_annotation_schemas;
     std::unordered_map<TypeId, Cls> m_classes;
     std::unordered_map<TypeId, Enum> m_enums;
     std::unordered_map<TypeId, GenericType> m_generic_types;
@@ -716,6 +793,68 @@ class Registry {
     std::unordered_map<TypeId, std::shared_ptr<const DynamicStructLayout>>
         m_dynamic_structs;
 };
+
+namespace refl::generated {
+
+class AnnotationWriter {
+  public:
+    template<typename T>
+    static Type& add(Registry& registry, std::string annotation) {
+        auto& registered = registry.register_type<T>();
+        return registry.add_generated_annotation(
+            registered.id(),
+            std::move(annotation)
+        );
+    }
+
+    template<typename T>
+    static Type& add_field(
+        Registry& registry,
+        std::string annotation,
+        std::string field,
+        std::string value
+    ) {
+        auto& registered = registry.register_type<T>();
+        return registry.add_generated_annotation_field(
+            registered.id(),
+            std::move(annotation),
+            std::move(field),
+            std::move(value)
+        );
+    }
+
+    template<typename A, typename Factory, typename Encoder>
+    static void register_schema(
+        Registry& registry,
+        std::string name,
+        std::vector<std::string> fields,
+        Factory&& factory,
+        Encoder&& encoder
+    ) {
+        using U = std::remove_cvref_t<A>;
+        registry.register_type<U>();
+        registry.register_generated_annotation_schema(
+            std::move(name),
+            type_id<U>(),
+            std::move(fields),
+            [factory = std::forward<Factory>(factory)](
+                AnnotationView annotation
+            ) -> std::shared_ptr<const void> {
+                return std::make_shared<const U>(factory(annotation));
+            },
+            [encoder = std::forward<Encoder>(encoder)](const void* value)
+                -> std::vector<AnnotationField> {
+                return encoder(*static_cast<const U*>(value));
+            }
+        );
+    }
+
+    static void validate(const Registry& registry) {
+        registry.validate_generated_annotations();
+    }
+};
+
+} // namespace refl::generated
 
 Type& type(TypeId id);
 

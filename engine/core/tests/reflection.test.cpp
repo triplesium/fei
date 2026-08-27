@@ -1,6 +1,6 @@
 #include "core/time.hpp"
 #include "core/transform.hpp"
-#include "ecs/type_tags.hpp"
+#include "ecs/annotations.hpp"
 #include "refl/generated.hpp"
 #include "refl/registry.hpp"
 
@@ -21,14 +21,18 @@ TEST_CASE(
     const auto& time = registry.get_type<Time>();
     const auto& fixed_time = registry.get_type<FixedTime>();
 
-    REQUIRE(transform_2d.has_tag(ComponentTypeTag));
-    REQUIRE(transform_3d.has_tag(ComponentTypeTag));
-    REQUIRE_FALSE(transform_2d.has_tag(ResourceTypeTag));
-    REQUIRE(time.has_tag(ResourceTypeTag));
-    REQUIRE(fixed_time.has_tag(ResourceTypeTag));
-    REQUIRE_FALSE(time.has_tag(ComponentTypeTag));
+    REQUIRE(transform_2d.has_annotation<annotations::Component>());
+    REQUIRE(transform_3d.has_annotation<annotations::Component>());
+    REQUIRE_FALSE(transform_2d.has_annotation<annotations::Resource>());
+    REQUIRE(time.has_annotation<annotations::Resource>());
+    REQUIRE(fixed_time.has_annotation<annotations::Resource>());
+    REQUIRE_FALSE(time.has_annotation<annotations::Component>());
+    const auto time_resource = time.annotation<annotations::Resource>();
+    REQUIRE(time_resource);
+    REQUIRE_FALSE(time_resource->main_thread_only);
 
-    const auto component_types = registry.types_with_tag(ComponentTypeTag);
+    const auto component_types =
+        registry.types_with_annotation<annotations::Component>();
     REQUIRE(
         std::ranges::find(component_types, type_id<Transform2d>()) !=
         component_types.end()

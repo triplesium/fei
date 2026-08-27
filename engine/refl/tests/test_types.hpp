@@ -8,6 +8,18 @@
 
 namespace ets::refl_test {
 
+ETS_ANNOTATION(Example)
+struct ExampleAnnotation {
+    bool enabled {false};
+    std::string name;
+    std::string phase;
+};
+
+ETS_ANNOTATION(Category)
+struct CategoryAnnotation {
+    std::string name;
+};
+
 ETS_REFLECT(Example(enabled, name = rendering, phase = runtime))
 struct ReflectedTaggedType {
     int value;

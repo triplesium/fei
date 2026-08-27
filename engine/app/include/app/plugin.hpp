@@ -13,6 +13,15 @@
 
 namespace ets {
 
+namespace annotations {
+
+ETS_ANNOTATION(Plugin)
+struct Plugin {
+    std::string name;
+};
+
+} // namespace annotations
+
 class App;
 class PluginDependencies;
 
