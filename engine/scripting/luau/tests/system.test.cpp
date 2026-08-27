@@ -10,6 +10,7 @@
 #include "ecs/state.hpp"
 #include "ecs/world.hpp"
 #include "refl/cls.hpp"
+#include "refl/generated.hpp"
 #include "refl/registry.hpp"
 #include "scripting/annotations.hpp"
 #include "scripting/module_install.hpp"
@@ -293,6 +294,7 @@ TEST_CASE(
     "Luau system loader only exposes ScriptPrelude types as globals",
     "[scripting_luau][system][prelude]"
 ) {
+    register_generated_reflection();
     auto& registry = Registry::instance();
     registry
         .register_cls<luau_system_test::ModuleOnlyConfig>(

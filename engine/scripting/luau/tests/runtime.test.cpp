@@ -2,6 +2,7 @@
 
 #include "refl/cls.hpp"
 #include "refl/enum.hpp"
+#include "refl/generated.hpp"
 #include "refl/registry.hpp"
 #include "scripting/annotations.hpp"
 #include "scripting_luau/compiler.hpp"
@@ -292,6 +293,7 @@ TEST_CASE(
     "Luau runtime requires cached readonly native reflection modules",
     "[scripting_luau][runtime][module][native]"
 ) {
+    register_generated_reflection();
     auto& registry = Registry::instance();
     registry.register_cls<luau_runtime_test::nested::NativeValue>(
         {"ets", "luau_runtime_test", "nested"},
