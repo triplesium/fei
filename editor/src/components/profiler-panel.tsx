@@ -16,6 +16,10 @@ import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
 import type { RuntimeState } from "@/runtime/types";
 import {
+    resolveProfileFrameDetails,
+    resolveProfileSummary,
+} from "@/services/profile-symbols";
+import {
     controlProfiling,
     inspectGpuProfileSummary,
     inspectProfileFrameDetails,
@@ -427,7 +431,9 @@ export function ProfilerPanel({ runtimeState, sessionId, inspect }: ProfilerPane
                     : recentMissing;
                 if (detailFrames.length > 0) {
                     try {
-                        const response = await inspectProfileFrameDetails(inspect, detailFrames);
+                        const response = await resolveProfileFrameDetails(
+                            await inspectProfileFrameDetails(inspect, detailFrames),
+                        );
                         for (const detail of response.details) {
                             nextFrameDetails.set(detail.frame, detail);
                         }
@@ -439,7 +445,10 @@ export function ProfilerPanel({ runtimeState, sessionId, inspect }: ProfilerPane
             polling = false;
             if (cancelled) return;
 
-            if (summaryResult.status === "fulfilled") setSummary(summaryResult.value);
+            if (summaryResult.status === "fulfilled") {
+                const resolvedSummary = await resolveProfileSummary(summaryResult.value);
+                if (!cancelled) setSummary(resolvedSummary);
+            }
             if (historyResult.status === "fulfilled") {
                 setHistory(historyResult.value);
                 frameDetailsRef.current = nextFrameDetails;

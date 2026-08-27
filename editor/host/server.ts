@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { access, stat } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -249,6 +249,35 @@ export function createEditorHost(options: HostOptions): {
 
             if (bearerToken(request) !== token && url.pathname.startsWith("/api/")) {
                 json(response, 401, { error: "Invalid Editor Host token." });
+                return;
+            }
+
+            if (request.method === "GET" && url.pathname === "/api/v1/profile-symbols") {
+                const moduleId = url.searchParams.get("module") ?? "";
+                const match = /^wasm:([0-9a-f]{64})$/.exec(moduleId);
+                if (!match) {
+                    json(response, 400, { error: "Invalid profiling module identifier." });
+                    return;
+                }
+                const file = resolve(
+                    options.runtimeDirectory,
+                    "profile-symbols",
+                    `${match[1]}.json`,
+                );
+                try {
+                    json(response, 200, JSON.parse(await readFile(file, "utf8")));
+                } catch (error) {
+                    if (
+                        error &&
+                        typeof error === "object" &&
+                        "code" in error &&
+                        error.code === "ENOENT"
+                    ) {
+                        json(response, 404, { error: "Profiling symbols are unavailable." });
+                        return;
+                    }
+                    throw error;
+                }
                 return;
             }
 

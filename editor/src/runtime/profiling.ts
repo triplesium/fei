@@ -8,7 +8,9 @@ export interface ProfileFrameStats {
 
 export interface ProfileEntry {
     scheduleId: number;
+    systemId: number;
     scheduleName: string;
+    symbol: ProfileSymbolReference | null;
     name: string;
     file: string;
     functionName: string;
@@ -20,6 +22,12 @@ export interface ProfileEntry {
     selfMeanMs: number;
     minMs: number;
     maxMs: number;
+}
+
+export interface ProfileSymbolReference {
+    kind: "pe-rva" | "wasm-function-index";
+    moduleId: string;
+    id: number;
 }
 
 export interface ProfileSummary {
@@ -123,9 +131,32 @@ function arrayValue(value: unknown, context: string): unknown[] {
 
 function profileEntry(value: unknown, context: string): ProfileEntry {
     const entry = objectValue(value, context);
+    const symbolKind =
+        entry.symbol_kind === undefined
+            ? "none"
+            : stringValue(entry.symbol_kind, `${context}.symbol_kind`);
+    if (
+        symbolKind !== "none" &&
+        symbolKind !== "pe-rva" &&
+        symbolKind !== "wasm-function-index"
+    ) {
+        throw new TypeError(`${context}.symbol_kind is not supported.`);
+    }
     return {
         scheduleId: numberValue(entry.schedule_id, `${context}.schedule_id`),
+        systemId:
+            entry.system_id === undefined
+                ? 0
+                : numberValue(entry.system_id, `${context}.system_id`),
         scheduleName: stringValue(entry.schedule_name, `${context}.schedule_name`),
+        symbol:
+            symbolKind === "none"
+                ? null
+                : {
+                      kind: symbolKind,
+                      moduleId: stringValue(entry.symbol_module, `${context}.symbol_module`),
+                      id: numberValue(entry.symbol_id, `${context}.symbol_id`),
+                  },
         name: stringValue(entry.name, `${context}.name`),
         file: stringValue(entry.file, `${context}.file`),
         functionName: stringValue(entry.function, `${context}.function`),

@@ -106,6 +106,18 @@ describe("Editor Host", () => {
             "<p>Entisium Runtime</p>",
             "utf8",
         );
+        const digest = "a".repeat(64);
+        await mkdir(join(runtimeDirectory, "profile-symbols"));
+        await writeFile(
+            join(runtimeDirectory, "profile-symbols", `${digest}.json`),
+            JSON.stringify({
+                schema: "entisium.profile-symbols.v1",
+                module_id: `wasm:${digest}`,
+                kind: "wasm-function-index",
+                symbols: { "42": { function: "ets::update()" } },
+            }),
+            "utf8",
+        );
         const host = createEditorHost({
             credentials: new EncryptedCredentialStore(
                 join(directory, "credentials.json"),
@@ -126,6 +138,23 @@ describe("Editor Host", () => {
 
             const unknown = await fetch(`${baseUrl}/runtime/entisium-editor-runtime.map`);
             expect(unknown.status).toBe(404);
+
+            const bootstrap = await fetch(`${baseUrl}/api/v1/bootstrap`).then((response) =>
+                response.json(),
+            );
+            const unauthenticatedSymbols = await fetch(
+                `${baseUrl}/api/v1/profile-symbols?module=wasm:${digest}`,
+            );
+            expect(unauthenticatedSymbols.status).toBe(401);
+            const symbols = await fetch(
+                `${baseUrl}/api/v1/profile-symbols?module=wasm:${digest}`,
+                { headers: { Authorization: `Bearer ${bootstrap.token}` } },
+            );
+            expect(symbols.status).toBe(200);
+            expect(await symbols.json()).toMatchObject({
+                module_id: `wasm:${digest}`,
+                symbols: { "42": { function: "ets::update()" } },
+            });
         } finally {
             await new Promise<void>((resolveClose) => host.server.close(() => resolveClose()));
         }

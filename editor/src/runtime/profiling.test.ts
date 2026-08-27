@@ -33,7 +33,11 @@ describe("runtime profiling protocol", () => {
                 systems: [
                     {
                         schedule_id: 7,
+                        system_id: 19,
                         schedule_name: "Update",
+                        symbol_kind: "wasm-function-index",
+                        symbol_module: "wasm:abc",
+                        symbol_id: 42,
                         name: "scripts/player.luau::update",
                         file: "scripts/player.luau",
                         function: "update",
@@ -55,6 +59,12 @@ describe("runtime profiling protocol", () => {
             systems: [
                 {
                     scheduleId: 7,
+                    systemId: 19,
+                    symbol: {
+                        kind: "wasm-function-index",
+                        moduleId: "wasm:abc",
+                        id: 42,
+                    },
                     name: "scripts/player.luau::update",
                     functionName: "update",
                     selfMs: 6,
