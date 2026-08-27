@@ -1,3 +1,4 @@
+#include "ecs/execution_lane.hpp"
 #include "ecs/schedule.hpp"
 #include "test_types.hpp"
 
@@ -5,6 +6,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <type_traits>
@@ -366,6 +368,118 @@ TEST_CASE(
 
     REQUIRE(world.worker_threads() == 2);
     REQUIRE(overlapped == 2);
+}
+
+TEST_CASE(
+    "ECS conditions and systems share stable worker execution lanes",
+    "[ecs][schedule][execution_lane]"
+) {
+    World world;
+    world.set_worker_threads(2);
+    world.add_resource(CommandsQueue {});
+
+    std::mutex mutex;
+    std::condition_variable ready;
+    int entered = 0;
+    bool first_saw_peer = false;
+    bool second_saw_peer = false;
+    Optional<SystemExecutionLane> first_condition_lane;
+    Optional<SystemExecutionLane> first_system_lane;
+    Optional<SystemExecutionLane> second_condition_lane;
+    Optional<SystemExecutionLane> second_system_lane;
+
+    auto wait_for_peer = [&]() {
+        std::unique_lock lock(mutex);
+        ++entered;
+        ready.notify_all();
+        return ready.wait_for(lock, std::chrono::seconds {1}, [&]() {
+            return entered == 2;
+        });
+    };
+    auto first_condition = [&]() {
+        first_condition_lane = current_system_execution_lane();
+        first_saw_peer = wait_for_peer();
+        return true;
+    };
+    auto second_condition = [&]() {
+        second_condition_lane = current_system_execution_lane();
+        second_saw_peer = wait_for_peer();
+        return true;
+    };
+
+    world.add_systems(
+        TestSchedule,
+        [&](Query<const Position>) {
+            first_system_lane = current_system_execution_lane();
+        } | run_if(first_condition),
+        [&](Query<const Velocity>) {
+            second_system_lane = current_system_execution_lane();
+        } | run_if(second_condition)
+    );
+    world.sort_systems();
+    world.run_schedule(TestSchedule);
+
+    REQUIRE(first_saw_peer);
+    REQUIRE(second_saw_peer);
+    REQUIRE(first_condition_lane);
+    REQUIRE(first_system_lane);
+    REQUIRE(second_condition_lane);
+    REQUIRE(second_system_lane);
+    REQUIRE(*first_condition_lane == *first_system_lane);
+    REQUIRE(*second_condition_lane == *second_system_lane);
+    REQUIRE_FALSE(first_condition_lane->caller);
+    REQUIRE_FALSE(second_condition_lane->caller);
+    REQUIRE(first_condition_lane->count == 3);
+    REQUIRE(second_condition_lane->count == 3);
+    REQUIRE(first_condition_lane->index != second_condition_lane->index);
+    REQUIRE_FALSE(current_system_execution_lane());
+}
+
+TEST_CASE(
+    "ECS singleton batches use the caller execution lane",
+    "[ecs][schedule][execution_lane]"
+) {
+    World world;
+    world.set_worker_threads(2);
+    world.add_resource(CommandsQueue {});
+
+    Optional<SystemExecutionLane> condition_lane;
+    Optional<SystemExecutionLane> system_lane;
+    world.add_systems(TestSchedule, [&]() {
+        system_lane = current_system_execution_lane();
+    } | run_if([&]() {
+                                        condition_lane =
+                                            current_system_execution_lane();
+                                        return true;
+                                    }));
+    world.sort_systems();
+    world.run_schedule(TestSchedule);
+
+    REQUIRE(condition_lane);
+    REQUIRE(system_lane);
+    REQUIRE(*condition_lane == *system_lane);
+    REQUIRE(system_lane->caller);
+    REQUIRE(system_lane->index == 2);
+    REQUIRE(system_lane->count == 3);
+    REQUIRE_FALSE(current_system_execution_lane());
+}
+
+TEST_CASE(
+    "ECS execution lane context clears after system exceptions",
+    "[ecs][schedule][execution_lane]"
+) {
+    World world;
+    world.set_worker_threads(2);
+    world.add_resource(CommandsQueue {});
+    world.add_systems(TestSchedule, []() {
+        if (!current_system_execution_lane()) {
+            throw std::logic_error("missing execution lane");
+        }
+        throw std::runtime_error("system failure");
+    });
+
+    REQUIRE_THROWS_AS(world.run_schedule(TestSchedule), std::runtime_error);
+    REQUIRE_FALSE(current_system_execution_lane());
 }
 
 TEST_CASE(

@@ -1,6 +1,7 @@
 #include "ecs/schedule.hpp"
 
 #include "ecs/commands.hpp"
+#include "ecs/execution_lane.hpp"
 #include "ecs/fwd.hpp"
 #include "ecs/system.hpp"
 #include "ecs/world.hpp"
@@ -495,13 +496,20 @@ void Schedule::run_systems(World& world) {
 void Schedule::run_systems(ScheduleId schedule, World& world) {
     ensure_execution_plan();
 
+    auto run_one = [this, schedule, &world](SystemId system_id) {
+        const detail::SystemExecutionLaneScope lane_scope {
+            SystemExecutionLane {.index = 0, .count = 1, .caller = true}
+        };
+        auto it = m_systems.find(system_id);
+        if (it != m_systems.end() && should_run(it->second, world)) {
+            run_profiled_system(schedule, it->second, world);
+        }
+    };
+
     for (const auto& batch : m_execution_batches) {
         try {
             for (auto system_id : batch) {
-                auto it = m_systems.find(system_id);
-                if (it != m_systems.end() && should_run(it->second, world)) {
-                    run_profiled_system(schedule, it->second, world);
-                }
+                run_one(system_id);
             }
         } catch (...) {
             CommandsQueue discarded;
@@ -530,12 +538,28 @@ void Schedule::run_systems(
 ) {
     ensure_execution_plan();
 
-    auto run_one = [this, schedule, &world](SystemId system_id) {
-        auto it = m_systems.find(system_id);
-        if (it != m_systems.end() && should_run(it->second, world)) {
-            run_profiled_system(schedule, it->second, world);
-        }
-    };
+    const auto lane_count = thread_pool.thread_count() + 1;
+    auto run_one =
+        [this, schedule, &world, &thread_pool, lane_count](SystemId system_id) {
+            const auto worker = thread_pool.current_worker_index();
+            const detail::SystemExecutionLaneScope lane_scope {
+                worker ?
+                    SystemExecutionLane {
+                        .index = *worker,
+                        .count = lane_count,
+                        .caller = false,
+                    } :
+                    SystemExecutionLane {
+                        .index = lane_count - 1,
+                        .count = lane_count,
+                        .caller = true,
+                    }
+            };
+            auto it = m_systems.find(system_id);
+            if (it != m_systems.end() && should_run(it->second, world)) {
+                run_profiled_system(schedule, it->second, world);
+            }
+        };
 
     for (const auto& batch : m_execution_batches) {
         std::exception_ptr exception;
