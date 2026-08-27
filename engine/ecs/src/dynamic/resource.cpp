@@ -1,5 +1,6 @@
 #include "ecs/dynamic/resource.hpp"
 
+#include "ecs/annotations.hpp"
 #include "ecs/world.hpp"
 #include "refl/registry.hpp"
 
@@ -22,6 +23,11 @@ SystemAccess DynamicResourceParam::access() const {
         result.write_resources.insert(type);
     } else {
         result.read_resources.insert(type);
+    }
+    if (auto reflected_type = Registry::instance().try_get_type(type)) {
+        const auto resource =
+            reflected_type->annotation<annotations::Resource>();
+        result.main_thread_only = resource && resource->main_thread_only;
     }
     return result;
 }

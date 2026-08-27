@@ -1,3 +1,4 @@
+#include "ecs/annotations.hpp"
 #include "ecs/dynamic/commands.hpp"
 #include "ecs/dynamic/events.hpp"
 #include "ecs/dynamic/query.hpp"
@@ -6,6 +7,7 @@
 #include "ecs/dynamic/system.hpp"
 #include "ecs/dynamic/system_decl.hpp"
 #include "ecs/world.hpp"
+#include "refl/generated.hpp"
 #include "refl/registry.hpp"
 #include "test_types.hpp"
 
@@ -56,6 +58,8 @@ struct CustomResourceAliasParamDecl final
     : DynamicSystemParamDeclBase<CustomResourceAliasParamDecl> {
     DynamicTypeRef type;
 };
+
+struct DynamicMainThreadResource {};
 
 } // namespace
 
@@ -254,6 +258,40 @@ TEST_CASE(
         missing_ref.error().message.find("missing resource") !=
         std::string::npos
     );
+}
+
+TEST_CASE(
+    "ECS dynamic resource params preserve reflected thread affinity",
+    "[ecs][dynamic][access]"
+) {
+    register_generated_reflection();
+    Registry::instance().add_annotation<DynamicMainThreadResource>(
+        annotations::Resource {.main_thread_only = true}
+    );
+
+    DynamicResourceParam read_param(
+        "main_thread_resource",
+        type_id<DynamicMainThreadResource>(),
+        DynamicParamAccess::Read
+    );
+    const auto read_access = read_param.access();
+    REQUIRE(read_access.read_resources.contains(
+        type_id<DynamicMainThreadResource>()
+    ));
+    REQUIRE(read_access.main_thread_only);
+    REQUIRE(read_access.is_barrier());
+
+    DynamicResourceParam write_param(
+        "main_thread_resource",
+        type_id<DynamicMainThreadResource>(),
+        DynamicParamAccess::Write
+    );
+    const auto write_access = write_param.access();
+    REQUIRE(write_access.write_resources.contains(
+        type_id<DynamicMainThreadResource>()
+    ));
+    REQUIRE(write_access.main_thread_only);
+    REQUIRE(write_access.is_barrier());
 }
 
 TEST_CASE(
