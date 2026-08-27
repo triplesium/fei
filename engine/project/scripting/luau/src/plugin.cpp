@@ -76,6 +76,7 @@ void LuauScriptsPlugin::setup(App& app) {
     }
     registry.apply_queued_requests(
         app.resource<LuauRuntime>(),
+        app.resource<LuauExecutionPool>(),
         app.world(),
         assets,
         &app.resource<AssetServer>()

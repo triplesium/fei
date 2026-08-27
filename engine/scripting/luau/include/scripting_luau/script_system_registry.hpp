@@ -6,10 +6,12 @@
 #include "base/result.hpp"
 #include "ecs/fwd.hpp"
 #include "scripting_luau/asset.hpp"
+#include "scripting_luau/execution_pool.hpp"
 #include "scripting_luau/runtime.hpp"
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
@@ -47,6 +49,7 @@ enum class LuauScriptSystemRequestKind {
 
 struct LoadedLuauScriptSystemModule {
     LuauScriptModuleId module {invalid_luau_script_module_id};
+    std::shared_ptr<const LuauExecutionModule> execution_module;
     std::vector<SystemHandle> systems;
     std::vector<AssetId> dependencies;
     LuauScriptSystemModuleSourceKind source_kind {
@@ -67,8 +70,13 @@ struct LuauScriptSystemRequestError {
 
 class LuauScriptSystemRegistry {
   private:
-    struct LoadedLibrary {
+    struct LoadedModuleSet {
         LuauScriptModuleId module {invalid_luau_script_module_id};
+        std::shared_ptr<const LuauExecutionModule> execution_module;
+    };
+
+    struct LoadedLibrary {
+        LoadedModuleSet modules;
         Handle<LuauScriptAsset> asset;
         std::vector<AssetId> dependencies;
     };
@@ -98,11 +106,13 @@ class LuauScriptSystemRegistry {
 
     Result<LuauScriptSystemModuleId, LuauScriptError> load_source(
         LuauRuntime& runtime,
+        LuauExecutionPool& execution_pool,
         World& world,
         const LuauScriptSource& source
     );
     Result<LuauScriptSystemModuleId, LuauScriptError> load_asset(
         LuauRuntime& runtime,
+        LuauExecutionPool& execution_pool,
         World& world,
         const Assets<LuauScriptAsset>& assets,
         AssetServer* asset_server,
@@ -111,20 +121,26 @@ class LuauScriptSystemRegistry {
     );
     Status<LuauScriptError> reload_asset(
         LuauRuntime& runtime,
+        LuauExecutionPool& execution_pool,
         World& world,
         const Assets<LuauScriptAsset>& assets,
         AssetServer* asset_server,
         LuauScriptSystemModuleId module
     );
-    Result<LuauScriptModuleId, LuauScriptError> load_library_asset(
+    Result<LoadedModuleSet, LuauScriptError> load_library_asset(
         LuauRuntime& runtime,
+        LuauExecutionPool& execution_pool,
         const Assets<LuauScriptAsset>& assets,
         AssetServer& asset_server,
         Handle<LuauScriptAsset> asset,
         std::vector<AssetId>& loading_stack
     );
-    Status<LuauScriptError>
-    unload(LuauRuntime& runtime, World& world, LuauScriptSystemModuleId module);
+    Status<LuauScriptError> unload(
+        LuauRuntime& runtime,
+        LuauExecutionPool& execution_pool,
+        World& world,
+        LuauScriptSystemModuleId module
+    );
 
   public:
     void queue_source(LuauScriptSource source);
@@ -134,6 +150,7 @@ class LuauScriptSystemRegistry {
     void queue_unload(LuauScriptSystemModuleId module);
     void apply_queued_requests(
         LuauRuntime& runtime,
+        LuauExecutionPool& execution_pool,
         World& world,
         const Assets<LuauScriptAsset>& assets,
         AssetServer* asset_server = nullptr
@@ -168,6 +185,7 @@ class LuauScriptSystemRegistry {
 void apply_luau_script_system_queue(
     WorldRef world,
     ResRW<LuauRuntime> runtime,
+    ResRW<LuauExecutionPool> execution_pool,
     ResRW<LuauScriptSystemRegistry> scripts,
     ResRO<Assets<LuauScriptAsset>> assets,
     ResRW<AssetServer> asset_server

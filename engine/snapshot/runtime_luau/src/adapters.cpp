@@ -5,6 +5,7 @@
 #include "ecs/world.hpp"
 #include "refl/val.hpp"
 #include "scripting_luau/asset.hpp"
+#include "scripting_luau/execution_pool.hpp"
 #include "scripting_luau/runtime.hpp"
 #include "scripting_luau/script_system_registry.hpp"
 #include "scripting_luau/snapshot_state.hpp"
@@ -53,6 +54,7 @@ serialization::ValueCodec snapshot_state_codec() {
 Status<snapshot::SnapshotError>
 configure_luau_adapters(World& world, snapshot::SnapshotRegistry& registry) {
     if (!world.has_resource<LuauRuntime>() ||
+        !world.has_resource<LuauExecutionPool>() ||
         !world.has_resource<LuauScriptSystemRegistry>() ||
         !world.has_resource<LuauSnapshotState>()) {
         return failure(
@@ -65,6 +67,7 @@ configure_luau_adapters(World& world, snapshot::SnapshotRegistry& registry) {
     }
 
     registry.resource<LuauRuntime>(snapshot::ResourcePolicy::Ignore);
+    registry.resource<LuauExecutionPool>(snapshot::ResourcePolicy::Ignore);
     registry.resource<LuauScriptSystemRegistry>(
         snapshot::ResourcePolicy::Ignore
     );

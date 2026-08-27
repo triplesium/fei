@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <memory>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -261,8 +262,7 @@ Status<ScriptError> bind_declared_types(
 
 } // namespace
 
-Result<std::vector<SystemHandle>, ScriptError> install_luau_script_systems(
-    World& world,
+Status<ScriptError> prepare_luau_script_system_module(
     LuauRuntime& runtime,
     LuauScriptModuleId module,
     const ScriptModuleDecl& declaration
@@ -271,13 +271,34 @@ Result<std::vector<SystemHandle>, ScriptError> install_luau_script_systems(
     if (!declared_types) {
         return failure(std::move(declared_types.error()));
     }
-    auto bind_type = [&](const ScriptTypeBinding& binding) {
-        return runtime.bind_module_exported_type(
+    auto bindings = ensure_script_module_types(declaration);
+    if (!bindings) {
+        return failure(std::move(bindings.error()));
+    }
+    for (const auto& binding : *bindings) {
+        auto bound = runtime.bind_module_exported_type(
             module,
             binding.local_name,
             *binding.type
         );
-    };
+        if (!bound) {
+            return failure(std::move(bound.error()));
+        }
+    }
+    return {};
+}
+
+Result<std::vector<SystemHandle>, ScriptError> install_luau_script_systems(
+    World& world,
+    LuauRuntime& runtime,
+    LuauScriptModuleId module,
+    const ScriptModuleDecl& declaration
+) {
+    auto prepared =
+        prepare_luau_script_system_module(runtime, module, declaration);
+    if (!prepared) {
+        return failure(std::move(prepared.error()));
+    }
     auto create_executor = [&](const DynamicSystemDecl& system)
         -> Result<std::unique_ptr<DynamicSystemExecutor>, ScriptError> {
         return make_script_system_executor(
@@ -349,10 +370,104 @@ Result<std::vector<SystemHandle>, ScriptError> install_luau_script_systems(
     return install_script_module(
         world,
         declaration,
-        bind_type,
+        [](const ScriptTypeBinding&) -> Status<ScriptError> {
+            return {};
+        },
         create_executor,
         ScriptSystemInstallOptions {
             .main_thread_only = true,
+            .create_condition_executor = create_condition_executor,
+        }
+    );
+}
+
+Result<std::vector<SystemHandle>, ScriptError> install_luau_script_systems(
+    World& world,
+    LuauExecutionPool& execution_pool,
+    std::shared_ptr<const LuauExecutionModule> module,
+    const ScriptModuleDecl& declaration
+) {
+    if (!module) {
+        return failure(ScriptError {"Luau execution module is null"});
+    }
+    auto create_executor = [&](const DynamicSystemDecl& system)
+        -> Result<std::unique_ptr<DynamicSystemExecutor>, ScriptError> {
+        return make_script_system_executor(
+            [&execution_pool,
+             module,
+             name = system.name](const std::vector<Ref>& args) {
+                return execution_pool.call_module_function(*module, name, args);
+            },
+            true
+        );
+    };
+    auto create_condition_executor = [&](const DynamicConditionDecl& condition)
+        -> Result<std::unique_ptr<DynamicConditionExecutor>, ScriptError> {
+        if (condition.kind == DynamicConditionDeclKind::InState) {
+            if (!condition.state_value) {
+                return failure(
+                    ScriptError {"in_state condition is missing its value"}
+                );
+            }
+            Val expected = *condition.state_value;
+            return make_script_condition_executor(
+                [expected = std::move(expected)](const std::vector<Ref>& args)
+                    -> Result<bool, ScriptError> {
+                    if (args.size() != 1) {
+                        return failure(
+                            ScriptError {"in_state condition expected one "
+                                         "State parameter"}
+                        );
+                    }
+                    const auto* state =
+                        args[0].try_get_const<DynamicStateRef>();
+                    if (state == nullptr) {
+                        return failure(
+                            ScriptError {
+                                "in_state condition received an invalid State "
+                                "parameter"
+                            }
+                        );
+                    }
+                    Ref current = state->get();
+                    if (!current || current.type_id() != expected.type_id()) {
+                        return false;
+                    }
+                    auto equal = expected.type()->equals(
+                        current.const_ptr(),
+                        expected.ref().const_ptr()
+                    );
+                    if (!equal) {
+                        return failure(
+                            ScriptError {
+                                "State type is not equality comparable"
+                            }
+                        );
+                    }
+                    return *equal;
+                },
+                true
+            );
+        }
+        return make_script_condition_executor(
+            [&execution_pool,
+             module,
+             name = condition.name](const std::vector<Ref>& args) {
+                return execution_pool
+                    .call_module_condition(*module, name, args);
+            },
+            true
+        );
+    };
+    return install_script_module(
+        world,
+        declaration,
+        [](const ScriptTypeBinding&) -> Status<ScriptError> {
+            return {};
+        },
+        create_executor,
+        ScriptSystemInstallOptions {
+            .main_thread_only = false,
             .create_condition_executor = create_condition_executor,
         }
     );
