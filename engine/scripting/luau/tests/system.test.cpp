@@ -44,6 +44,8 @@ struct LuauTestPosition {
     float x {0.0F};
 
     void advance(float amount) { x += amount; }
+
+    bool operator==(const LuauTestPosition&) const = default;
 };
 
 struct LuauTestVelocity {
@@ -77,6 +79,14 @@ enum class LuauTestMode {
 struct LuauTestNested {
     LuauTestPosition position;
     LuauTestMode mode {LuauTestMode::Idle};
+};
+
+struct LuauChangeDetectionTarget {
+    int operation {0};
+    int value {0};
+    LuauTestPosition position;
+
+    bool operator==(const LuauChangeDetectionTarget&) const = default;
 };
 
 struct LuauTestConstructionState {
@@ -201,6 +211,10 @@ void register_luau_system_test_types() {
     registry.register_cls<LuauTestNested>()
         .add_property("position", &LuauTestNested::position)
         .add_property("mode", &LuauTestNested::mode);
+    registry.register_cls<LuauChangeDetectionTarget>()
+        .add_property("operation", &LuauChangeDetectionTarget::operation)
+        .add_property("value", &LuauChangeDetectionTarget::value)
+        .add_property("position", &LuauChangeDetectionTarget::position);
     registry.register_cls<LuauTestConstructionState>()
         .add_property("positional_x", &LuauTestConstructionState::positional_x)
         .add_property(
@@ -1081,6 +1095,134 @@ TEST_CASE(
         world_without_optional_config,
         *optional_systems
     ));
+    REQUIRE(runtime.unload_module(*module));
+}
+
+TEST_CASE(
+    "Luau write queries mark only components whose values change",
+    "[scripting_luau][system][query][change_detection]"
+) {
+    register_luau_system_test_types();
+    const ScriptSource source {
+        .name = "change_detection_system.luau",
+        .content = R"(
+            local function update(
+                targets: Query<Write<LuauChangeDetectionTarget>>
+            )
+                for target in targets do
+                    if target.operation == 0 then
+                        local _value = target.value
+                    elseif target.operation == 1 then
+                        target.value = target.value
+                    elseif target.operation == 2 then
+                        target.value += 1
+                    elseif target.operation == 3 then
+                        target.position.x = target.position.x
+                    elseif target.operation == 4 then
+                        target.position.x += 1
+                    elseif target.operation == 5 then
+                        target.position:advance(0)
+                    elseif target.operation == 6 then
+                        target.position:advance(1)
+                    end
+                end
+            end
+
+            local function update_world(world: World)
+                local targets = world:query {
+                    Write(LuauChangeDetectionTarget),
+                }
+                for target in targets do
+                    if target.operation == 7 then
+                        target.value = target.value
+                    elseif target.operation == 8 then
+                        target.position.x += 1
+                    end
+                end
+            end
+
+            export local ChangeDetectionPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_systems(
+                        MainSchedules.Update,
+                        update,
+                        update_world
+                    )
+                end,
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact.has_value());
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module.has_value());
+
+    World world;
+    world.add_resource(CommandsQueue {});
+    std::array<Entity, 9> entities;
+    for (std::size_t index = 0; index < entities.size(); ++index) {
+        entities[index] = world.entity();
+        world.add_component(
+            entities[index],
+            LuauChangeDetectionTarget {
+                .operation = static_cast<int>(index),
+                .value = 10,
+                .position = LuauTestPosition {.x = 20.0F},
+            }
+        );
+    }
+
+    auto systems = detail::install_luau_script_systems(
+        world,
+        runtime,
+        *module,
+        artifact->declaration
+    );
+    REQUIRE(systems.has_value());
+
+    const auto changed_tick = [&world](Entity entity) {
+        const auto location = world.entity_location(entity);
+        REQUIRE(location.has_value());
+        return world.archetypes()
+            .get(location->archetype_id)
+            .component_ticks(
+                type_id<LuauChangeDetectionTarget>(),
+                location->row
+            )
+            .changed;
+    };
+    std::array<Tick, 9> before;
+    for (std::size_t index = 0; index < entities.size(); ++index) {
+        before[index] = changed_tick(entities[index]);
+    }
+
+    world.run_schedule(Update);
+
+    for (const std::size_t index : {0U, 1U, 3U, 5U, 7U}) {
+        CHECK(changed_tick(entities[index]) == before[index]);
+    }
+    for (const std::size_t index : {2U, 4U, 6U, 8U}) {
+        CHECK(changed_tick(entities[index]) > before[index]);
+    }
+    CHECK(
+        world.get_component<LuauChangeDetectionTarget>(entities[2]).value == 11
+    );
+    CHECK(
+        world.get_component<LuauChangeDetectionTarget>(entities[4])
+            .position.x == 21.0F
+    );
+    CHECK(
+        world.get_component<LuauChangeDetectionTarget>(entities[6])
+            .position.x == 21.0F
+    );
+    CHECK(
+        world.get_component<LuauChangeDetectionTarget>(entities[8])
+            .position.x == 21.0F
+    );
+
+    CHECK(remove_script_module_systems(world, *systems));
     REQUIRE(runtime.unload_module(*module));
 }
 

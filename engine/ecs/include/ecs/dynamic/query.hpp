@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ecs/change_detection.hpp"
 #include "ecs/dynamic/access.hpp"
 #include "ecs/dynamic/system_param.hpp"
 #include "ecs/fwd.hpp"
@@ -51,6 +52,12 @@ struct DynamicQueryRow {
     std::size_t row {0};
 };
 
+struct DynamicQueryFieldBorrow {
+    Ref value;
+    ComponentTicks* ticks {nullptr};
+    Tick change_tick {0};
+};
+
 class DynamicQuery final : public DynamicSystemParam {
   public:
     std::string name;
@@ -77,6 +84,8 @@ class DynamicQuery final : public DynamicSystemParam {
 
     bool next(DynamicQueryCursor& cursor, DynamicQueryRow& row) const;
     Ref field(const DynamicQueryRow& row, std::size_t field_index) const;
+    DynamicQueryFieldBorrow
+    field_untracked(const DynamicQueryRow& row, std::size_t field_index) const;
 
     const std::vector<DynamicQueryField>& fields() const { return m_fields; }
     std::size_t size() const;

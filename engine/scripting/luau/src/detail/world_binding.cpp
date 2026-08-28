@@ -521,18 +521,22 @@ int push_query_row(
 ) {
     const auto& fields = query.query.fields();
     for (std::size_t index = 0; index < fields.size(); ++index) {
+        const auto field = query.query.field_untracked(row, index);
         if (fields[index].kind == DynamicQueryFieldKind::Entity) {
-            const Ref entity = query.query.field(row, index);
             lua_pushinteger(
                 state,
-                static_cast<lua_Integer>(entity.get_const<Entity>().value)
+                static_cast<lua_Integer>(field.value.get_const<Entity>().value)
             );
         } else {
             push_luau_borrowed_ref(
                 state,
-                query.query.field(row, index),
+                field.value,
                 *query.scope,
-                query.token
+                query.token,
+                LuauMutationContext {
+                    .ticks = field.ticks,
+                    .tick = field.change_tick,
+                }
             );
         }
     }

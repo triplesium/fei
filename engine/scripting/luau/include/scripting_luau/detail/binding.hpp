@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/result.hpp"
+#include "ecs/change_detection.hpp"
 #include "refl/ref.hpp"
 #include "refl/val.hpp"
 #include "scripting/borrow_scope.hpp"
@@ -12,10 +13,24 @@ struct lua_State;
 
 namespace ets::detail {
 
+struct LuauMutationContext {
+    ComponentTicks* ticks {nullptr};
+    Tick tick {0};
+
+    explicit operator bool() const { return ticks != nullptr; }
+
+    void mark_changed() const {
+        if (ticks != nullptr) {
+            ticks->mark_changed(tick);
+        }
+    }
+};
+
 struct LuauBorrowedRef {
     Ref ref;
     ScriptBorrowScope* scope {nullptr};
     ScriptBorrowToken token;
+    LuauMutationContext mutation;
 };
 
 void install_luau_borrowed_object_metatable(lua_State* state);
@@ -33,7 +48,8 @@ void push_luau_borrowed_ref(
     lua_State* state,
     Ref ref,
     ScriptBorrowScope& scope,
-    ScriptBorrowToken token
+    ScriptBorrowToken token,
+    LuauMutationContext mutation = {}
 );
 
 } // namespace ets::detail

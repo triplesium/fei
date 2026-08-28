@@ -39,6 +39,7 @@ struct LuauObject {
     std::shared_ptr<Val> owner;
     ScriptBorrowScope* scope {nullptr};
     ScriptBorrowToken token;
+    LuauMutationContext mutation;
 };
 
 struct LuauQueryIterator {
@@ -283,7 +284,8 @@ void push_object(
     Ref ref,
     std::shared_ptr<Val> owner,
     ScriptBorrowScope* scope,
-    ScriptBorrowToken token
+    ScriptBorrowToken token,
+    LuauMutationContext mutation = {}
 ) {
     auto* object =
         new (lua_newuserdatadtor(state, sizeof(LuauObject), destroy_object))
@@ -292,6 +294,7 @@ void push_object(
                 .owner = std::move(owner),
                 .scope = scope,
                 .token = token,
+                .mutation = mutation,
             };
     static_cast<void>(object);
     luaL_getmetatable(state, c_borrowed_metatable);
@@ -327,7 +330,14 @@ void push_ref(lua_State* state, Ref ref, const LuauObject& parent) {
         push_ref(state, *value, parent);
         return;
     }
-    push_object(state, ref, parent.owner, parent.scope, parent.token);
+    push_object(
+        state,
+        ref,
+        parent.owner,
+        parent.scope,
+        parent.token,
+        parent.mutation
+    );
 }
 
 void push_property_ref(
@@ -402,23 +412,88 @@ void push_property_ref(
     }
 }
 
-template<typename T>
+struct PropertyAssignment {
+    bool handled {false};
+    bool changed {false};
+};
+
+bool reflected_values_equal(Ref lhs, Ref rhs) {
+    if (!lhs || !rhs || lhs.type_id() != rhs.type_id()) {
+        return false;
+    }
+    auto type = Registry::instance().try_get_type(lhs.type_id());
+    return type &&
+           type->equals(lhs.const_ptr(), rhs.const_ptr()).value_or(false);
+}
+
+struct MutationSnapshot {
+    Ref current;
+    LuauMutationContext mutation;
+    Optional<Val> previous;
+};
+
+void capture_mutation_snapshot(
+    const LuauObject& object,
+    std::vector<MutationSnapshot>& snapshots
+) {
+    if (!object.mutation) {
+        return;
+    }
+    MutationSnapshot snapshot {
+        .current = object.ref,
+        .mutation = object.mutation,
+    };
+    if (auto copied = Val::copy(object.ref)) {
+        snapshot.previous = std::move(*copied);
+    }
+    snapshots.push_back(std::move(snapshot));
+}
+
+void apply_mutation_snapshots(const std::vector<MutationSnapshot>& snapshots) {
+    for (const auto& snapshot : snapshots) {
+        if (!snapshot.previous || !reflected_values_equal(
+                                      snapshot.previous->ref(),
+                                      snapshot.current
+                                  )) {
+            snapshot.mutation.mark_changed();
+        }
+    }
+}
+
 Result<bool, InvokeFailure>
-set_property_value(Property& property, Ref object, T value) {
-    auto assigned = property.set(object, Ref(value));
+set_property_if_changed(Property& property, Ref object, Ref value) {
+    auto current = property.get(object);
+    if (!current) {
+        return failure(std::move(current.error()));
+    }
+    if (reflected_values_equal(*current, value)) {
+        return false;
+    }
+    auto assigned = property.set(object, value);
     if (!assigned) {
         return failure(std::move(assigned.error()));
     }
     return true;
 }
 
-Result<bool, InvokeFailure> try_set_primitive_property(
+template<typename T>
+Result<PropertyAssignment, InvokeFailure>
+set_property_value(Property& property, Ref object, T value) {
+    auto changed = set_property_if_changed(property, object, Ref(value));
+    if (!changed) {
+        return failure(std::move(changed.error()));
+    }
+    return PropertyAssignment {.handled = true, .changed = *changed};
+}
+
+Result<PropertyAssignment, InvokeFailure> try_set_primitive_property(
     lua_State* state,
     int index,
     Ref object,
     const LuauPropertyBinding& binding
 ) {
-    const auto incompatible = [&]() -> Result<bool, InvokeFailure> {
+    const auto incompatible =
+        [&]() -> Result<PropertyAssignment, InvokeFailure> {
         return failure(
             InvokeFailure::invalid_call(
                 "value is incompatible with reflected type '" +
@@ -504,9 +579,9 @@ Result<bool, InvokeFailure> try_set_primitive_property(
         case LuauPrimitiveKind::UnsignedLong:
         case LuauPrimitiveKind::LongLong:
         case LuauPrimitiveKind::UnsignedLongLong:
-            return false;
+            return PropertyAssignment {};
     }
-    return false;
+    return PropertyAssignment {};
 }
 
 void push_owned_value(lua_State* state, Val value) {
@@ -814,9 +889,12 @@ int invoke_static_method(lua_State* state) {
     owned_arguments.reserve(static_cast<std::size_t>(lua_gettop(state)));
     std::vector<Ref> refs;
     refs.reserve(static_cast<std::size_t>(lua_gettop(state)));
+    std::vector<MutationSnapshot> mutation_snapshots;
     for (int index = 1; index <= lua_gettop(state); ++index) {
         if (lua_isuserdata(state, index)) {
-            refs.push_back(check_object(state, index).ref);
+            auto& object = check_object(state, index);
+            refs.push_back(object.ref);
+            capture_mutation_snapshot(object, mutation_snapshots);
             continue;
         }
         auto argument = argument_value(state, index);
@@ -827,16 +905,16 @@ int invoke_static_method(lua_State* state) {
         refs.push_back(owned_arguments.back().ref());
     }
 
-    return push_invoke_result(
-        state,
-        script_invoke_static_method(type, name, refs),
-        LuauObject {}
-    );
+    auto result = script_invoke_static_method(type, name, refs);
+    apply_mutation_snapshots(mutation_snapshots);
+    return push_invoke_result(state, std::move(result), LuauObject {});
 }
 
 int invoke_method(lua_State* state) {
     const char* name = lua_tostring(state, lua_upvalueindex(1));
     auto& instance = check_object(state, 1);
+    std::vector<MutationSnapshot> mutation_snapshots;
+    capture_mutation_snapshot(instance, mutation_snapshots);
     const int argument_count = lua_gettop(state) - 1;
     std::vector<Val> owned_arguments;
     owned_arguments.reserve(static_cast<std::size_t>(argument_count));
@@ -844,7 +922,9 @@ int invoke_method(lua_State* state) {
     refs.reserve(static_cast<std::size_t>(argument_count));
     for (int index = 2; index <= lua_gettop(state); ++index) {
         if (lua_isuserdata(state, index)) {
-            refs.push_back(check_object(state, index).ref);
+            auto& object = check_object(state, index);
+            refs.push_back(object.ref);
+            capture_mutation_snapshot(object, mutation_snapshots);
             continue;
         }
         auto argument = argument_value(state, index);
@@ -855,11 +935,9 @@ int invoke_method(lua_State* state) {
         refs.push_back(owned_arguments.back().ref());
     }
 
-    return push_invoke_result(
-        state,
-        script_invoke_method(instance.ref, name, refs),
-        instance
-    );
+    auto result = script_invoke_method(instance.ref, name, refs);
+    apply_mutation_snapshots(mutation_snapshots);
+    return push_invoke_result(state, std::move(result), instance);
 }
 
 int dynamic_state_get(lua_State* state) {
@@ -1111,16 +1189,23 @@ int borrowed_newindex(lua_State* state) {
     if (!primitive_assignment) {
         return raise_message(state, primitive_assignment.error().message);
     }
-    if (*primitive_assignment) {
+    if (primitive_assignment->handled) {
+        if (primitive_assignment->changed) {
+            object.mutation.mark_changed();
+        }
         return 0;
     }
     auto value = value_for_type(state, 3, property->property->type_id());
     if (!value) {
         return raise_message(state, value.error());
     }
-    auto assigned = property->property->set(object.ref, value->ref());
-    if (!assigned) {
-        return raise_message(state, assigned.error().message);
+    auto changed =
+        set_property_if_changed(*property->property, object.ref, value->ref());
+    if (!changed) {
+        return raise_message(state, changed.error().message);
+    }
+    if (*changed) {
+        object.mutation.mark_changed();
     }
     return 0;
 }
@@ -1164,11 +1249,16 @@ int query_next(lua_State* state) {
     }
     const auto& fields = iterator->query->fields();
     for (std::size_t index = 0; index < fields.size(); ++index) {
+        const auto field = iterator->query->field_untracked(row, index);
         push_luau_borrowed_ref(
             state,
-            iterator->query->field(row, index),
+            field.value,
             *iterator->scope,
-            iterator->token
+            iterator->token,
+            LuauMutationContext {
+                .ticks = field.ticks,
+                .tick = field.change_tick,
+            }
         );
     }
     return static_cast<int>(fields.size());
@@ -1304,6 +1394,7 @@ LuauBorrowedRef check_luau_borrowed_ref(lua_State* state, int index) {
         .ref = object.ref,
         .scope = object.scope,
         .token = object.token,
+        .mutation = object.mutation,
     };
 }
 
@@ -1362,7 +1453,8 @@ void push_luau_borrowed_ref(
     lua_State* state,
     Ref ref,
     ScriptBorrowScope& scope,
-    ScriptBorrowToken token
+    ScriptBorrowToken token,
+    LuauMutationContext mutation
 ) {
     if (!ref) {
         lua_pushnil(state);
@@ -1372,7 +1464,7 @@ void push_luau_borrowed_ref(
         return;
     }
 
-    push_object(state, ref, {}, &scope, token);
+    push_object(state, ref, {}, &scope, token, mutation);
 }
 
 } // namespace ets::detail

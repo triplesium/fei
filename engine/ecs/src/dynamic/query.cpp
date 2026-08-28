@@ -102,6 +102,17 @@ Ref DynamicQuery::field(
     const DynamicQueryRow& row,
     std::size_t field_index
 ) const {
+    auto field = field_untracked(row, field_index);
+    if (field.ticks != nullptr) {
+        field.ticks->mark_changed(field.change_tick);
+    }
+    return field.value;
+}
+
+DynamicQueryFieldBorrow DynamicQuery::field_untracked(
+    const DynamicQueryRow& row,
+    std::size_t field_index
+) const {
     if (!m_world) {
         return {};
     }
@@ -109,19 +120,23 @@ Ref DynamicQuery::field(
     const auto& field = m_fields[field_index];
     if (field.kind == DynamicQueryFieldKind::Entity) {
         const auto& archetype = m_world->archetypes().get(row.archetype);
-        return Ref(&archetype.entities()[row.row], type_id<Entity>());
+        return {
+            .value = Ref(&archetype.entities()[row.row], type_id<Entity>()),
+        };
     }
 
     if (field.access == DynamicParamAccess::Write) {
         auto& archetype = m_world->archetypes().get(row.archetype);
-        archetype.component_ticks(field.type, row.row)
-            .mark_changed(m_system_ticks.this_run);
-        return archetype.get_component(field.type, row.row);
+        return {
+            .value = archetype.get_component(field.type, row.row),
+            .ticks = &archetype.component_ticks(field.type, row.row),
+            .change_tick = m_system_ticks.this_run,
+        };
     }
 
     const auto& archetype =
         static_cast<const World*>(m_world)->archetypes().get(row.archetype);
-    return archetype.get_component(field.type, row.row);
+    return {.value = archetype.get_component(field.type, row.row)};
 }
 
 std::size_t DynamicQuery::size() const {
