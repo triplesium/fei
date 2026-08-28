@@ -37,6 +37,16 @@ export interface ProfileSummary {
     zones: ProfileEntry[];
 }
 
+interface ProfileSummaryCatalogEntry {
+    system: boolean;
+    entry: ProfileEntry;
+}
+
+export interface ProfileSummaryCatalog {
+    revision: number;
+    entries: Map<number, ProfileSummaryCatalogEntry>;
+}
+
 export interface ProfileFrameSample {
     frame: number;
     durationMs: number;
@@ -92,10 +102,42 @@ export function startsNewProfileSession(
     return sessionId !== null && sessionId !== previousSessionId;
 }
 
+export function profileFrameDetailsToRequest(
+    selectedFrame: number | null,
+    retainedFrames: { has(frame: number): boolean },
+    cachedFrames: { has(frame: number): boolean },
+): number[] {
+    if (
+        selectedFrame === null ||
+        !retainedFrames.has(selectedFrame) ||
+        cachedFrames.has(selectedFrame)
+    ) {
+        return [];
+    }
+    return [selectedFrame];
+}
+
+export function mergeProfileFrameHistory(
+    current: ProfileFrameSample[],
+    update: readonly ProfileFrameSample[],
+    capacity = 600,
+): ProfileFrameSample[] {
+    if (update.length === 0) return current;
+    const currentLast = current.at(-1)?.frame;
+    const updateFirst = update[0]!.frame;
+    const merged =
+        currentLast !== undefined && updateFirst === currentLast + 1
+            ? [...current, ...update]
+            : [...update];
+    return merged.slice(-capacity);
+}
+
 const providers = {
     summary: ["profiling.summary", "profiling.summary.v1"],
+    summaryCompact: ["profiling.summary_compact", "profiling.summary_compact.v1"],
     frames: ["profiling.frame_history", "profiling.frame_history.v1"],
     frameDetails: ["profiling.frame_detail", "profiling.frame_detail.v1"],
+    frameArchive: ["profiling.frame_archive", "profiling.frame_archive.v1"],
     gpu: ["profiling.gpu_summary", "profiling.gpu_summary.v1"],
     control: ["profiling.control", "profiling.control.v1"],
 } as const;
@@ -117,6 +159,14 @@ function numberValue(value: unknown, context: string): number {
         throw new TypeError(`${context} must be a finite number.`);
     }
     return value;
+}
+
+function nonNegativeIntegerValue(value: unknown, context: string): number {
+    const result = numberValue(value, context);
+    if (!Number.isSafeInteger(result) || result < 0) {
+        throw new TypeError(`${context} must be a non-negative integer.`);
+    }
+    return result;
 }
 
 function stringValue(value: unknown, context: string): string {
@@ -198,6 +248,117 @@ export function parseProfileSummary(value: unknown): ProfileSummary {
     };
 }
 
+export function createProfileSummaryCatalog(): ProfileSummaryCatalog {
+    return { revision: 0, entries: new Map() };
+}
+
+function compactSummaryCatalogEntry(
+    value: unknown,
+    context: string,
+): [number, ProfileSummaryCatalogEntry] {
+    const fields = arrayValue(value, context);
+    if (fields.length !== 12) throw new TypeError(`${context} must contain 12 fields.`);
+    const index = nonNegativeIntegerValue(fields[0], `${context}[0]`);
+    const metadata = profileArchiveEntry(fields.slice(1), context);
+    return [index, metadata];
+}
+
+export function parseCompactProfileSummary(
+    value: unknown,
+    catalog: ProfileSummaryCatalog,
+): ProfileSummary {
+    const summary = objectValue(value, "Compact profiling summary");
+    const revision = nonNegativeIntegerValue(
+        summary.catalog_revision,
+        "Compact profiling summary.catalog_revision",
+    );
+    if (revision === 0) {
+        throw new TypeError("Compact profiling summary.catalog_revision must be positive.");
+    }
+
+    const metadata = arrayValue(summary.entries, "Compact profiling summary.entries");
+    let activeEntries = catalog.entries;
+    if (revision !== catalog.revision || metadata.length > 0) {
+        activeEntries = new Map();
+        for (const [metadataIndex, value] of metadata.entries()) {
+            const [index, entry] = compactSummaryCatalogEntry(
+                value,
+                `Compact profiling summary.entries[${metadataIndex}]`,
+            );
+            if (activeEntries.has(index)) {
+                throw new TypeError(
+                    `Compact profiling summary.entries[${metadataIndex}][0] is duplicated.`,
+                );
+            }
+            activeEntries.set(index, entry);
+        }
+    }
+
+    const systems: ProfileEntry[] = [];
+    const zones: ProfileEntry[] = [];
+    for (const [valueIndex, value] of arrayValue(
+        summary.values,
+        "Compact profiling summary.values",
+    ).entries()) {
+        const context = `Compact profiling summary.values[${valueIndex}]`;
+        const fields = arrayValue(value, context);
+        if (fields.length !== 6) throw new TypeError(`${context} must contain 6 fields.`);
+        const entryIndex = nonNegativeIntegerValue(fields[0], `${context}[0]`);
+        const metadataEntry = activeEntries.get(entryIndex);
+        if (!metadataEntry) {
+            throw new TypeError(`${context}[0] does not reference a catalog entry.`);
+        }
+        const count = numberValue(fields[1], `${context}[1]`);
+        const totalMs = numberValue(fields[2], `${context}[2]`);
+        const selfMs = numberValue(fields[3], `${context}[3]`);
+        const entry: ProfileEntry = {
+            ...metadataEntry.entry,
+            count,
+            totalMs,
+            selfMs,
+            meanMs: count > 0 ? totalMs / count : 0,
+            selfMeanMs: count > 0 ? selfMs / count : 0,
+            minMs: numberValue(fields[4], `${context}[4]`),
+            maxMs: numberValue(fields[5], `${context}[5]`),
+        };
+        (metadataEntry.system ? systems : zones).push(entry);
+    }
+
+    const frameStats = arrayValue(summary.frame_stats, "Compact profiling summary.frame_stats");
+    if (frameStats.length !== 4) {
+        throw new TypeError("Compact profiling summary.frame_stats must contain 4 fields.");
+    }
+    const frameCount = nonNegativeIntegerValue(
+        frameStats[0],
+        "Compact profiling summary.frame_stats[0]",
+    );
+    const byTotal = (left: ProfileEntry, right: ProfileEntry) =>
+        right.totalMs - left.totalMs || left.name.localeCompare(right.name);
+    systems.sort(byTotal);
+    zones.sort(byTotal);
+
+    catalog.revision = revision;
+    catalog.entries = activeEntries;
+    return {
+        available: booleanValue(summary.available, "Compact profiling summary.available"),
+        frameStats: {
+            available: frameCount > 0,
+            frameCount,
+            fps: numberValue(frameStats[1], "Compact profiling summary.frame_stats[1]"),
+            latestFrameMs: numberValue(
+                frameStats[2],
+                "Compact profiling summary.frame_stats[2]",
+            ),
+            averageFrameMs: numberValue(
+                frameStats[3],
+                "Compact profiling summary.frame_stats[3]",
+            ),
+        },
+        systems,
+        zones,
+    };
+}
+
 export function parseProfileFrameHistory(value: unknown): ProfileFrameHistory {
     const history = objectValue(value, "Profiling frame history");
     return {
@@ -249,6 +410,117 @@ export function parseProfileFrameDetails(value: unknown): ProfileFrameDetails {
                             `Profiling frame details.details[${index}].zones[${entryIndex}]`,
                         ),
                     ),
+                };
+            },
+        ),
+    };
+}
+
+interface ProfileArchiveEntry {
+    system: boolean;
+    entry: ProfileEntry;
+}
+
+function profileArchiveEntry(value: unknown, context: string): ProfileArchiveEntry {
+    const fields = arrayValue(value, context);
+    if (fields.length !== 11) throw new TypeError(`${context} must contain 11 fields.`);
+    const kind = numberValue(fields[0], `${context}[0]`);
+    if (kind !== 0 && kind !== 1) throw new TypeError(`${context}[0] must be 0 or 1.`);
+    const symbolKind = stringValue(fields[4], `${context}[4]`);
+    if (
+        symbolKind !== "none" &&
+        symbolKind !== "pe-rva" &&
+        symbolKind !== "wasm-function-index"
+    ) {
+        throw new TypeError(`${context}[4] is not supported.`);
+    }
+    return {
+        system: kind === 1,
+        entry: {
+            scheduleId: numberValue(fields[1], `${context}[1]`),
+            systemId: numberValue(fields[2], `${context}[2]`),
+            scheduleName: stringValue(fields[3], `${context}[3]`),
+            symbol:
+                symbolKind === "none"
+                    ? null
+                    : {
+                          kind: symbolKind,
+                          moduleId: stringValue(fields[5], `${context}[5]`),
+                          id: numberValue(fields[6], `${context}[6]`),
+                      },
+            name: stringValue(fields[7], `${context}[7]`),
+            file: stringValue(fields[8], `${context}[8]`),
+            functionName: stringValue(fields[9], `${context}[9]`),
+            line: numberValue(fields[10], `${context}[10]`),
+            count: 0,
+            totalMs: 0,
+            selfMs: 0,
+            meanMs: 0,
+            selfMeanMs: 0,
+            minMs: 0,
+            maxMs: 0,
+        },
+    };
+}
+
+export function parseProfileFrameArchive(value: unknown): ProfileFrameDetails {
+    const response = objectValue(value, "Profiling frame archive");
+    const entries = arrayValue(response.entries, "Profiling frame archive.entries").map(
+        (entry, index) => profileArchiveEntry(entry, `Profiling frame archive.entries[${index}]`),
+    );
+    return {
+        available: booleanValue(response.available, "Profiling frame archive.available"),
+        details: arrayValue(response.frames, "Profiling frame archive.frames").map(
+            (value, frameIndex) => {
+                const frame = arrayValue(value, `Profiling frame archive.frames[${frameIndex}]`);
+                if (frame.length !== 3) {
+                    throw new TypeError(
+                        `Profiling frame archive.frames[${frameIndex}] must contain 3 fields.`,
+                    );
+                }
+                const systems: ProfileEntry[] = [];
+                const zones: ProfileEntry[] = [];
+                for (const [recordIndex, value] of arrayValue(
+                    frame[2],
+                    `Profiling frame archive.frames[${frameIndex}][2]`,
+                ).entries()) {
+                    const context = `Profiling frame archive.frames[${frameIndex}][2][${recordIndex}]`;
+                    const fields = arrayValue(value, context);
+                    if (fields.length !== 6) {
+                        throw new TypeError(`${context} must contain 6 fields.`);
+                    }
+                    const entryIndex = numberValue(fields[0], `${context}[0]`);
+                    const metadata = entries[entryIndex];
+                    if (!Number.isInteger(entryIndex) || !metadata) {
+                        throw new TypeError(`${context}[0] does not reference an archive entry.`);
+                    }
+                    const count = numberValue(fields[1], `${context}[1]`);
+                    const totalMs = numberValue(fields[2], `${context}[2]`);
+                    const selfMs = numberValue(fields[3], `${context}[3]`);
+                    const entry: ProfileEntry = {
+                        ...metadata.entry,
+                        count,
+                        totalMs,
+                        selfMs,
+                        meanMs: count > 0 ? totalMs / count : 0,
+                        selfMeanMs: count > 0 ? selfMs / count : 0,
+                        minMs: numberValue(fields[4], `${context}[4]`),
+                        maxMs: numberValue(fields[5], `${context}[5]`),
+                    };
+                    (metadata.system ? systems : zones).push(entry);
+                }
+                const byTotal = (left: ProfileEntry, right: ProfileEntry) =>
+                    right.totalMs - left.totalMs || left.name.localeCompare(right.name);
+                systems.sort(byTotal);
+                zones.sort(byTotal);
+                return {
+                    frame: numberValue(frame[0], `Profiling frame archive.frames[${frameIndex}][0]`),
+                    durationMs: numberValue(
+                        frame[1],
+                        `Profiling frame archive.frames[${frameIndex}][1]`,
+                    ),
+                    systems,
+                    zones,
                 };
             },
         ),
@@ -309,10 +581,26 @@ export async function inspectProfileSummary(inspect: RuntimeInspect): Promise<Pr
     return parseProfileSummary(await inspect(...providers.summary, {}));
 }
 
+export async function inspectCompactProfileSummary(
+    inspect: RuntimeInspect,
+    catalog: ProfileSummaryCatalog,
+): Promise<ProfileSummary> {
+    return parseCompactProfileSummary(
+        await inspect(...providers.summaryCompact, { catalog_revision: catalog.revision }),
+        catalog,
+    );
+}
+
 export async function inspectProfileFrameHistory(
     inspect: RuntimeInspect,
+    afterFrame: number | null = null,
 ): Promise<ProfileFrameHistory> {
-    return parseProfileFrameHistory(await inspect(...providers.frames, {}));
+    return parseProfileFrameHistory(
+        await inspect(
+            ...providers.frames,
+            afterFrame === null ? {} : { after_frame: afterFrame },
+        ),
+    );
 }
 
 export async function inspectProfileFrameDetails(
@@ -320,6 +608,13 @@ export async function inspectProfileFrameDetails(
     frames: number[],
 ): Promise<ProfileFrameDetails> {
     return parseProfileFrameDetails(await inspect(...providers.frameDetails, { frames }));
+}
+
+export async function inspectProfileFrameArchive(
+    inspect: RuntimeInspect,
+    frames: number[],
+): Promise<ProfileFrameDetails> {
+    return parseProfileFrameArchive(await inspect(...providers.frameArchive, { frames }));
 }
 
 export async function inspectGpuProfileSummary(

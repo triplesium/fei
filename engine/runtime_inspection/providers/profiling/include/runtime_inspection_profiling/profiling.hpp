@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -21,11 +22,25 @@ inline constexpr std::size_t c_max_profiling_response_bytes =
     std::size_t {4} * 1024 * 1024;
 inline constexpr std::uint64_t c_max_profile_capture_frames = 60'000;
 inline constexpr std::size_t c_max_profile_detail_frames = 60;
+inline constexpr std::size_t c_max_profile_archive_frames = 600;
 
 struct EmptyRequest {};
 
+struct CompactSummaryRequest {
+    std::uint64_t catalog_revision {0};
+};
+
+struct FrameHistoryRequest {
+    std::optional<std::uint64_t> after_frame;
+};
+
 struct SummaryResponse {
     ProfileSummarySnapshot snapshot;
+};
+
+struct CompactSummaryResponse {
+    ProfileSummarySnapshot snapshot;
+    std::uint64_t catalog_revision {0};
 };
 
 struct FrameHistoryResponse {
@@ -39,6 +54,10 @@ struct FrameDetailsRequest {
 
 struct FrameDetailsResponse {
     ProfileFrameDetailsSnapshot snapshot;
+};
+
+struct FrameArchiveResponse {
+    ProfileFrameArchiveSnapshot snapshot;
 };
 
 struct GpuSummaryResponse {
@@ -85,9 +104,42 @@ class SummaryProvider {
     inspect(World& world, const Request& request) const;
 };
 
+class CompactSummaryProvider {
+  public:
+    using Request = CompactSummaryRequest;
+    using Response = CompactSummaryResponse;
+
+    static constexpr std::string_view id {"profiling.summary_compact"};
+    static constexpr std::string_view label {"Compact Profiling Summary"};
+    static constexpr std::string_view description {
+        "Return aggregate CPU timings with cached dictionary metadata."
+    };
+    static constexpr std::string_view schema {"profiling.summary_compact.v1"};
+    static constexpr bool read_only {true};
+    static constexpr InspectionCost cost {InspectionCost::Low};
+    static constexpr std::string_view request_schema_json {R"json({
+        "type":"object","additionalProperties":false,
+        "properties":{"catalog_revision":{"type":"integer","minimum":0}}
+    })json"};
+    static constexpr std::string_view response_schema_json {R"json({
+        "type":"object","additionalProperties":false,
+        "required":["available","frame_stats","catalog_revision","entries","values"],
+        "properties":{
+            "available":{"type":"boolean"},
+            "frame_stats":{"type":"array","minItems":4,"maxItems":4},
+            "catalog_revision":{"type":"integer","minimum":1},
+            "entries":{"type":"array"},
+            "values":{"type":"array"}
+        }
+    })json"};
+
+    [[nodiscard]] Result<Response, InspectionError>
+    inspect(World& world, const Request& request) const;
+};
+
 class FrameHistoryProvider {
   public:
-    using Request = EmptyRequest;
+    using Request = FrameHistoryRequest;
     using Response = FrameHistoryResponse;
 
     static constexpr std::string_view id {"profiling.frame_history"};
@@ -99,7 +151,10 @@ class FrameHistoryProvider {
     static constexpr bool read_only {true};
     static constexpr InspectionCost cost {InspectionCost::Low};
     static constexpr std::string_view request_schema_json {
-        R"json({"type":"object","additionalProperties":false})json"
+        R"json({
+        "type":"object","additionalProperties":false,
+        "properties":{"after_frame":{"type":"integer","minimum":0}}
+    })json"
     };
     static constexpr std::string_view response_schema_json {R"json({
         "type":"object","additionalProperties":false,
@@ -176,6 +231,40 @@ class FrameDetailsProvider {
     inspect(World& world, const Request& request) const;
 };
 
+class FrameArchiveProvider {
+  public:
+    using Request = FrameDetailsRequest;
+    using Response = FrameArchiveResponse;
+
+    static constexpr std::string_view id {"profiling.frame_archive"};
+    static constexpr std::string_view label {"Profiling Frame Archive"};
+    static constexpr std::string_view description {
+        "Return compact dictionary-encoded CPU samples for captured frames."
+    };
+    static constexpr std::string_view schema {"profiling.frame_archive.v1"};
+    static constexpr bool read_only {true};
+    static constexpr InspectionCost cost {InspectionCost::Moderate};
+    static constexpr std::string_view request_schema_json {R"json({
+        "type":"object","additionalProperties":false,"required":["frames"],
+        "properties":{
+            "frames":{"type":"array","minItems":1,"maxItems":600,
+                "items":{"type":"integer","minimum":0}}
+        }
+    })json"};
+    static constexpr std::string_view response_schema_json {R"json({
+        "type":"object","additionalProperties":false,
+        "required":["available","entries","frames"],
+        "properties":{
+            "available":{"type":"boolean"},
+            "entries":{"type":"array"},
+            "frames":{"type":"array","maxItems":600}
+        }
+    })json"};
+
+    [[nodiscard]] Result<Response, InspectionError>
+    inspect(World& world, const Request& request) const;
+};
+
 class ControlProvider {
   public:
     using Request = ControlRequest;
@@ -213,8 +302,10 @@ class ControlProvider {
 };
 
 static_assert(InspectionProvider<SummaryProvider>);
+static_assert(InspectionProvider<CompactSummaryProvider>);
 static_assert(InspectionProvider<FrameHistoryProvider>);
 static_assert(InspectionProvider<FrameDetailsProvider>);
+static_assert(InspectionProvider<FrameArchiveProvider>);
 static_assert(InspectionProvider<GpuSummaryProvider>);
 static_assert(InspectionProvider<ControlProvider>);
 
@@ -222,10 +313,16 @@ static_assert(InspectionProvider<ControlProvider>);
 profiling_summary_json(World& world, std::string_view request_json);
 
 [[nodiscard]] Result<std::string, InspectionError>
+profiling_compact_summary_json(World& world, std::string_view request_json);
+
+[[nodiscard]] Result<std::string, InspectionError>
 profiling_frame_history_json(World& world, std::string_view request_json);
 
 [[nodiscard]] Result<std::string, InspectionError>
 profiling_frame_details_json(World& world, std::string_view request_json);
+
+[[nodiscard]] Result<std::string, InspectionError>
+profiling_frame_archive_json(World& world, std::string_view request_json);
 
 [[nodiscard]] Result<std::string, InspectionError>
 profiling_gpu_summary_json(World& world, std::string_view request_json);
