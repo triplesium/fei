@@ -88,6 +88,17 @@ target("entisium-editor")
         }).run(target)
     end)
 
+target("entisium-editor-dev")
+    set_kind("phony")
+    set_default(false)
+    add_deps("entisium-editor-dependencies", "entisium-editor-runtime")
+    on_run(function(target)
+        local option = import("core.base.option")
+        import("editor_build", {
+            rootdir = path.join(os.projectdir(), "editor", "runtime"),
+        }).dev(target, option.get("arguments"))
+    end)
+
 target("entisium-editor-demo")
     set_kind("phony")
     set_default(false)

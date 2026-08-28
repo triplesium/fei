@@ -99,6 +99,19 @@ xmake run entisium-editor -- --project=samples/browser_project/project
 
 `xmake run` builds changed inputs before starting the Host and passes arguments after `--` to it. The Host receives the exact output directory of the configured `entisium-editor-runtime` target, so build mode, architecture, and a custom `buildir` are matched automatically. Direct npm scripts remain available for the watch-based development server described below.
 
+To develop the Editor frontend or Host with Vite hot module replacement and
+Host restart-on-change, run:
+
+```bash
+xmake run entisium-editor-dev -- --project=samples/browser_project/project
+```
+
+This builds the npm dependencies and the matching `entisium-editor-runtime`
+output before starting the existing npm development servers. C++ and other
+WebAssembly runtime changes still require rebuilding `entisium-editor-runtime`
+and restarting the runtime from the Editor; frontend and Host changes are
+watched automatically.
+
 The host serves the Editor and runtime from `http://127.0.0.1:3100` by default. Use `ETS_EDITOR_HOST_PORT` to select another port. When launching the Host directly rather than through xmake, use `ETS_EDITOR_RUNTIME_DIR` to point at a staged WASM directory. Use `npm run dev -- --project <directory>` when working on the Editor frontend.
 
 The `entisium-editor-demo` output is fully static and self-contained. Serve the configured output root and open `editor-demo/index.html`; its runtime is packaged under `editor-demo/runtime/`. Use HTTPS outside localhost because WebGPU and the File System Access API require a secure context.

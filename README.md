@@ -59,6 +59,13 @@ xmake run entisium-editor -- --project=samples/browser_project/project
 
 Open the local URL printed by the Editor host.
 
+For frontend hot module replacement and automatic Host restarts during Editor
+development, use:
+
+```bash
+xmake run entisium-editor-dev -- --project=samples/browser_project/project
+```
+
 ## Examples
 
 A minimal ECS application can spawn entities with deferred commands and update

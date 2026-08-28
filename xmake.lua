@@ -437,11 +437,22 @@ rule("entisium.asset_bundles")
         end
 
         import("core.project.depend")
+        local bundles = target_asset_bundles(target)
+        if #bundles == 0 then
+            return
+        end
+
         local asset_files = {}
-        for _, bundle in ipairs(target_asset_bundles(target)) do
+        local bundle_values = {}
+        for _, bundle in ipairs(bundles) do
             table.join2(asset_files, os.files(path.join(bundle.root, "**")))
+            table.insert(
+                bundle_values,
+                bundle.prefix .. "=" .. bundle.root
+            )
         end
         table.sort(asset_files)
+        table.sort(bundle_values)
 
         depend.on_changed(function()
             os.rm(target:targetfile())
@@ -450,7 +461,7 @@ rule("entisium.asset_bundles")
                 path.join(target:autogendir(), "asset_bundles")
             ),
             files = asset_files,
-            values = asset_files,
+            values = bundle_values,
         })
     end)
 rule_end()

@@ -184,3 +184,30 @@ function run(target)
         setenvs = {ETS_EDITOR_RUNTIME_DIR = runtime_directory},
     })
 end
+
+function dev(target, editor_options)
+    local find_tool = import("lib.detect.find_tool")
+    local npm_name = os.host() == "windows" and "npm.cmd" or "npm"
+    local npm = assert(
+        find_tool(npm_name),
+        "npm is required to develop the Web Editor"
+    )
+    local runtime = assert(target:dep("entisium-editor-runtime"))
+    local runtime_directory = path.absolute(runtime:targetdir(), os.projectdir())
+    assert(
+        os.isfile(path.join(runtime_directory, "runtime", "index.html")),
+        "WebAssembly Editor runtime has not been built: " .. runtime_directory
+    )
+
+    local editor_args = editor_arguments(table.wrap(editor_options))
+    local arguments = {"run", "dev"}
+    if #editor_args > 0 then
+        table.insert(arguments, "--")
+        table.join2(arguments, editor_args)
+    end
+    print("Web Editor runtime: %s", runtime_directory)
+    os.execv(npm.program, arguments, {
+        curdir = editor_root,
+        setenvs = {ETS_EDITOR_RUNTIME_DIR = runtime_directory},
+    })
+end
