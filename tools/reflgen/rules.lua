@@ -105,6 +105,20 @@ local function reflected_target_enabled(target)
     return target:values("entisium.reflect") == true
 end
 
+local function reflection_autogendir(target)
+    -- Keep generated sources and their dependency caches in Xmake's
+    -- configuration-specific directory. target:autogendir() includes the
+    -- platform, architecture and mode, and also respects a custom buildir.
+    return normalize_path(path.join(target:autogendir(), "reflection"))
+end
+
+local function reflection_dependfile(target, filepath, owner)
+    -- Build commands and the explicit `xmake reflgen` task use different
+    -- dependency runners. Give each runner its own Xmake-managed cache entry
+    -- so that they cannot overwrite each other's dependency state.
+    return project_absolute_path(target:dependfile(filepath .. "." .. owner))
+end
+
 local function reflect_link_owner(kind)
     return kind == "binary" or kind == "shared"
 end
@@ -196,7 +210,7 @@ local function file_entries(target)
 
     local autogendir = target:values("entisium.reflect.dir")
     if not autogendir then
-        autogendir = path.join(os.projectdir(), "build/.gens", target:name(), "reflection")
+        autogendir = reflection_autogendir(target)
     end
 
     local entries = {}
@@ -746,7 +760,7 @@ local function entry_for_marker(target, sourcefile)
 end
 
 function configure_target(target)
-    local autogendir = path.join(os.projectdir(), "build/.gens", target:name(), "reflection")
+    local autogendir = reflection_autogendir(target)
     target:set("values", "entisium.reflect", true)
     target:set("values", "entisium.reflect.dir", autogendir)
     target:set("values", "entisium.reflect.module_file", path.join(autogendir, "reflection.cpp"))
@@ -778,7 +792,7 @@ function clean(target)
         return
     end
 
-    local target_gens_dir = project_absolute_path(path.join(os.projectdir(), "build/.gens", target:name()))
+    local target_gens_dir = project_absolute_path(target:autogendir({root = true}))
     local function remove_reflection_dir(directory)
         local absolute = project_absolute_path(directory)
         if absolute == target_gens_dir or absolute:sub(1, #target_gens_dir + 1) ~= target_gens_dir .. "/" then
@@ -791,15 +805,6 @@ function clean(target)
     if autogendir and os.isdir(autogendir) then
         remove_reflection_dir(autogendir)
     end
-
-    if os.isdir(target_gens_dir) then
-        for _, directory in ipairs(os.dirs(path.join(target_gens_dir, "**", "reflection"))) do
-            remove_reflection_dir(directory)
-        end
-        if #os.files(path.join(target_gens_dir, "**")) == 0 then
-            os.rm(target_gens_dir)
-        end
-    end
 end
 
 local function generate_files(target)
@@ -811,7 +816,11 @@ local function generate_files(target)
     validate_reflect_dependencies(target, inputs)
     cleanup_legacy_runner_files(target)
     for _, entry in ipairs(inputs.entries) do
-        local dependfile = project_absolute_path(entry.output_file .. ".d")
+        local dependfile = reflection_dependfile(
+            target,
+            entry.output_file,
+            "reflgen-task"
+        )
         local header_depfile = reflgen_depfile(entry)
         local depfiles = depfiles_with_reflgen(
             parse_reflgen_depfile(header_depfile, {entry.header})
@@ -872,7 +881,11 @@ local function generate_module(target)
     end
     insert_unique(depfiles, path.join(os.projectdir(), "tools/reflgen/rules.lua"))
 
-    local dependfile = project_absolute_path(inputs.module_file .. ".d")
+    local dependfile = reflection_dependfile(
+        target,
+        inputs.module_file,
+        "reflgen-task"
+    )
     ensure_directory(path.directory(dependfile))
 
     depend.on_changed(function ()
@@ -898,7 +911,11 @@ local function generate_aggregate(target)
 
     local _, functions, files, metadata_files = aggregate_inputs(target)
 
-    local dependfile = project_absolute_path(output_file .. ".d")
+    local dependfile = reflection_dependfile(
+        target,
+        output_file,
+        "reflgen-task"
+    )
     ensure_directory(path.directory(dependfile))
 
     depend.on_changed(function ()
@@ -971,7 +988,9 @@ function buildcmd_file(target, batchcmds, sourcefile, opt)
         inputs.script_module
     )
     batchcmds:set_depmtime(os.mtime(objectfile))
-    batchcmds:set_depcache(project_absolute_path(entry.output_file .. ".d"))
+    batchcmds:set_depcache(
+        reflection_dependfile(target, entry.output_file, "buildcmd")
+    )
 end
 
 function buildcmd_module(target, batchcmds, opt)
@@ -1016,7 +1035,9 @@ function buildcmd_module(target, batchcmds, opt)
         table.concat(functions, ";")
     )
     batchcmds:set_depmtime(os.mtime(objectfile))
-    batchcmds:set_depcache(project_absolute_path(inputs.module_file .. ".d"))
+    batchcmds:set_depcache(
+        reflection_dependfile(target, inputs.module_file, "buildcmd")
+    )
 end
 
 function buildcmd_aggregate(target, batchcmds, opt)
@@ -1044,7 +1065,9 @@ function buildcmd_aggregate(target, batchcmds, opt)
         table.concat(functions, ";")
     )
     batchcmds:set_depmtime(os.mtime(objectfile))
-    batchcmds:set_depcache(project_absolute_path(output_file .. ".d"))
+    batchcmds:set_depcache(
+        reflection_dependfile(target, output_file, "buildcmd")
+    )
 end
 
 function validate_aggregate(target)
