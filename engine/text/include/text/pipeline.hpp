@@ -30,11 +30,12 @@ class TextPipeline {
     struct AtlasGlyph {
         Rect uv;
         Handle<Image> atlas;
+        Vector2 offset;
+        Vector2 size;
     };
 
     struct Atlas {
         Handle<Image> image;
-        std::vector<uint8> pixels;
         uint32 cursor_x {1};
         uint32 cursor_y {1};
         uint32 row_height {0};

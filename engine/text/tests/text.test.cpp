@@ -70,6 +70,7 @@ TEST_CASE("Text pipeline measures and caches glyph atlas entries", "[text]") {
     CHECK(
         atlas->texture_description().texture_format == PixelFormat::Rgba8Unorm
     );
+    const auto* atlas_data = atlas->data();
     bool has_coverage = false;
     for (std::size_t index = 0;
          index < static_cast<std::size_t>(atlas->width()) * atlas->height();
@@ -85,6 +86,38 @@ TEST_CASE("Text pipeline measures and caches glyph atlas entries", "[text]") {
         break;
     }
     CHECK(has_coverage);
+
+    const auto first_layout = layout;
+    pipeline.layout(
+        font_handle.id(),
+        *loaded_font,
+        measure,
+        32.0f,
+        text::TextLayout {},
+        measured,
+        app.resource<Assets<Image>>(),
+        layout
+    );
+    CHECK(layout == first_layout);
+    CHECK(
+        app.resource<Assets<Image>>()
+            .get(layout.glyphs.front().atlas)
+            ->data() == atlas_data
+    );
+
+    const auto spaced_measure =
+        pipeline.create_measure(*loaded_font, "A A", 32.0f);
+    pipeline.layout(
+        font_handle.id(),
+        *loaded_font,
+        spaced_measure,
+        32.0f,
+        text::TextLayout {},
+        spaced_measure.max,
+        app.resource<Assets<Image>>(),
+        layout
+    );
+    CHECK(layout.glyphs.size() == 2);
 }
 
 TEST_CASE(

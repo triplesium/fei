@@ -4,8 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
-#include <memory>
 
 namespace ets::text {
 
@@ -277,7 +275,19 @@ TextPipeline::AtlasGlyph TextPipeline::cache_glyph(
     if (glyph.width == 0 || glyph.height == 0 ||
         glyph.width + atlas_padding * 2 > atlas_size ||
         glyph.height + atlas_padding * 2 > atlas_size) {
-        return {};
+        const AtlasGlyph cached {
+            .offset =
+                {
+                    static_cast<float>(glyph.offset_x),
+                    static_cast<float>(glyph.offset_y),
+                },
+            .size = {
+                static_cast<float>(glyph.width),
+                static_cast<float>(glyph.height),
+            },
+        };
+        m_glyphs.emplace(key, cached);
+        return cached;
     }
 
     Atlas* selected = nullptr;
@@ -310,9 +320,6 @@ TextPipeline::AtlasGlyph TextPipeline::cache_glyph(
         m_atlases.push_back(
             Atlas {
                 .image = handle,
-                .pixels = std::vector<uint8>(
-                    static_cast<std::size_t>(atlas_size) * atlas_size
-                ),
             }
         );
         selected = &m_atlases.back();
@@ -326,33 +333,31 @@ TextPipeline::AtlasGlyph TextPipeline::cache_glyph(
         selected->row_height = 0;
         selected_y = selected->cursor_y;
     }
+    auto image = images.modify(selected->image);
+    if (!image || !image->data_mut()) {
+        return {};
+    }
+    constexpr std::size_t channels = 4;
+    auto* pixels = image->data_mut();
     for (uint32 row = 0; row < glyph.height; ++row) {
-        const auto source =
-            glyph.pixels.data() + static_cast<std::size_t>(row) * glyph.width;
-        auto* destination =
-            selected->pixels.data() +
-            static_cast<std::size_t>(selected_y + row) * atlas_size +
-            selected_x;
-        std::memcpy(destination, source, glyph.width);
+        for (uint32 column = 0; column < glyph.width; ++column) {
+            const auto source =
+                static_cast<std::size_t>(row) * glyph.width + column;
+            const auto destination =
+                (static_cast<std::size_t>(selected_y + row) * atlas_size +
+                 selected_x + column) *
+                channels;
+            const auto coverage = glyph.pixels[source];
+            pixels[destination] = coverage;
+            pixels[destination + 1] = coverage;
+            pixels[destination + 2] = coverage;
+            pixels[destination + 3] = 255;
+        }
     }
     selected->cursor_x = selected_x + glyph.width + atlas_padding;
     selected->row_height =
         std::max(selected->row_height, glyph.height + atlas_padding);
 
-    if (auto image = images.modify(selected->image)) {
-        constexpr std::size_t channels = 4;
-        auto pixels = std::make_unique<unsigned char[]>(
-            selected->pixels.size() * channels
-        );
-        for (std::size_t index = 0; index < selected->pixels.size(); ++index) {
-            const auto coverage = selected->pixels[index];
-            pixels[index * channels] = coverage;
-            pixels[index * channels + 1] = coverage;
-            pixels[index * channels + 2] = coverage;
-            pixels[index * channels + 3] = 255;
-        }
-        image->set_data(std::move(pixels));
-    }
     const AtlasGlyph cached {
         .uv =
             {
@@ -370,6 +375,15 @@ TextPipeline::AtlasGlyph TextPipeline::cache_glyph(
                     },
             },
         .atlas = selected->image,
+        .offset =
+            {
+                static_cast<float>(glyph.offset_x),
+                static_cast<float>(glyph.offset_y),
+            },
+        .size = {
+            static_cast<float>(glyph.width),
+            static_cast<float>(glyph.height),
+        },
     };
     m_glyphs.emplace(key, cached);
     return cached;
@@ -413,34 +427,17 @@ void TextPipeline::layout(
             if (index > line.begin) {
                 pen.x += glyph.kerning;
             }
-            const auto rasterized = font.rasterize(glyph.glyph_id, font_size);
-            if (rasterized.width > 0 && rasterized.height > 0) {
-                const auto atlas = cache_glyph(
-                    font_id,
-                    font,
-                    glyph.glyph_id,
-                    font_size,
-                    images
+            const auto atlas =
+                cache_glyph(font_id, font, glyph.glyph_id, font_size, images);
+            if (atlas.atlas) {
+                output.glyphs.push_back(
+                    PositionedGlyph {
+                        .position = pen + atlas.offset,
+                        .size = atlas.size,
+                        .uv = atlas.uv,
+                        .atlas = atlas.atlas,
+                    }
                 );
-                if (atlas.atlas) {
-                    output.glyphs.push_back(
-                        PositionedGlyph {
-                            .position =
-                                pen +
-                                Vector2 {
-                                    static_cast<float>(rasterized.offset_x),
-                                    static_cast<float>(rasterized.offset_y),
-                                },
-                            .size =
-                                {
-                                    static_cast<float>(rasterized.width),
-                                    static_cast<float>(rasterized.height),
-                                },
-                            .uv = atlas.uv,
-                            .atlas = atlas.atlas,
-                        }
-                    );
-                }
             }
             pen.x += glyph.advance;
         }

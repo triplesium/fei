@@ -49,6 +49,7 @@ class Image {
     std::uint32_t channels() const { return m_channels; }
     std::uint32_t depth() const { return m_texture_description.depth; }
     const unsigned char* data() const { return m_data.get(); }
+    unsigned char* data_mut() { return m_data.get(); }
     void set_data(std::unique_ptr<unsigned char[]> data) {
         m_data = std::move(data);
     }
