@@ -18,7 +18,15 @@ export interface ProfileSymbolManifest {
     symbols: Record<string, ProfileSymbolManifestEntry>;
 }
 
-const manifests = new Map<string, Promise<ProfileSymbolManifest | null>>();
+interface ProfileSymbolCache {
+    manifest: ProfileSymbolManifest | null;
+    knownIds: Set<string>;
+    queue: Promise<void>;
+    unavailable: boolean;
+}
+
+const manifests = new Map<string, ProfileSymbolCache>();
+const maximumSymbolsPerRequest = 512;
 
 function isManifest(value: unknown, moduleId: string): value is ProfileSymbolManifest {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -33,16 +41,45 @@ function isManifest(value: unknown, moduleId: string): value is ProfileSymbolMan
     );
 }
 
-async function loadManifest(moduleId: string): Promise<ProfileSymbolManifest | null> {
-    let pending = manifests.get(moduleId);
-    if (!pending) {
-        pending = editorHost
-            .json<unknown>(`/api/v1/profile-symbols?module=${encodeURIComponent(moduleId)}`)
-            .then((value) => (isManifest(value, moduleId) ? value : null))
-            .catch(() => null);
-        manifests.set(moduleId, pending);
+async function loadManifest(
+    moduleId: string,
+    symbolIds: readonly string[],
+): Promise<ProfileSymbolManifest | null> {
+    let cache = manifests.get(moduleId);
+    if (!cache) {
+        cache = {
+            manifest: null,
+            knownIds: new Set(),
+            queue: Promise.resolve(),
+            unavailable: false,
+        };
+        manifests.set(moduleId, cache);
     }
-    return pending;
+
+    cache.queue = cache.queue
+        .then(async () => {
+            if (cache!.unavailable) return;
+            const missingIds = symbolIds.filter((id) => !cache!.knownIds.has(id));
+            for (let offset = 0; offset < missingIds.length; offset += maximumSymbolsPerRequest) {
+                const ids = missingIds.slice(offset, offset + maximumSymbolsPerRequest);
+                const value = await editorHost.json<unknown>(
+                    `/api/v1/profile-symbols?module=${encodeURIComponent(moduleId)}&ids=${ids.join(",")}`,
+                );
+                if (!isManifest(value, moduleId)) {
+                    throw new Error("Invalid profiling symbol manifest.");
+                }
+                if (!cache!.manifest) {
+                    cache!.manifest = { ...value, symbols: {} };
+                }
+                Object.assign(cache!.manifest.symbols, value.symbols);
+                ids.forEach((id) => cache!.knownIds.add(id));
+            }
+        })
+        .catch(() => {
+            cache!.unavailable = true;
+        });
+    await cache.queue;
+    return cache.unavailable ? null : cache.manifest;
 }
 
 function leafFunctionName(functionName: string): string {
@@ -84,15 +121,21 @@ export function applyProfileSymbolManifest(
 }
 
 async function resolveEntries(entries: ProfileEntry[]): Promise<ProfileEntry[]> {
-    const moduleIds = [
-        ...new Set(
-            entries
-                .filter((entry) => entry.symbol?.kind === "wasm-function-index")
-                .map((entry) => entry.symbol!.moduleId),
-        ),
-    ];
+    const symbolIdsByModule = new Map<string, Set<string>>();
+    for (const entry of entries) {
+        if (entry.symbol?.kind !== "wasm-function-index") continue;
+        let ids = symbolIdsByModule.get(entry.symbol.moduleId);
+        if (!ids) {
+            ids = new Set();
+            symbolIdsByModule.set(entry.symbol.moduleId, ids);
+        }
+        ids.add(String(entry.symbol.id));
+    }
     const loaded = await Promise.all(
-        moduleIds.map(async (moduleId) => [moduleId, await loadManifest(moduleId)] as const),
+        [...symbolIdsByModule].map(
+            async ([moduleId, ids]) =>
+                [moduleId, await loadManifest(moduleId, [...ids])] as const,
+        ),
     );
     const byModule = new Map(loaded);
     return entries.map((entry) => {
@@ -113,16 +156,25 @@ export async function resolveProfileSummary(summary: ProfileSummary): Promise<Pr
 export async function resolveProfileFrameDetails(
     response: ProfileFrameDetails,
 ): Promise<ProfileFrameDetails> {
+    const systemEntries = response.details.flatMap((detail) => detail.systems);
+    const zoneEntries = response.details.flatMap((detail) => detail.zones);
+    const [resolvedSystems, resolvedZones] = await Promise.all([
+        resolveEntries(systemEntries),
+        resolveEntries(zoneEntries),
+    ]);
+    let systemOffset = 0;
+    let zoneOffset = 0;
     return {
         ...response,
-        details: await Promise.all(
-            response.details.map(async (detail) => {
-                const [systems, zones] = await Promise.all([
-                    resolveEntries(detail.systems),
-                    resolveEntries(detail.zones),
-                ]);
-                return { ...detail, systems, zones };
-            }),
-        ),
+        details: response.details.map((detail) => {
+            const systems = resolvedSystems.slice(
+                systemOffset,
+                systemOffset + detail.systems.length,
+            );
+            const zones = resolvedZones.slice(zoneOffset, zoneOffset + detail.zones.length);
+            systemOffset += detail.systems.length;
+            zoneOffset += detail.zones.length;
+            return { ...detail, systems, zones };
+        }),
     };
 }

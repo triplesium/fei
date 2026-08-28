@@ -114,7 +114,10 @@ describe("Editor Host", () => {
                 schema: "entisium.profile-symbols.v1",
                 module_id: `wasm:${digest}`,
                 kind: "wasm-function-index",
-                symbols: { "42": { function: "ets::update()" } },
+                symbols: {
+                    "42": { function: "ets::update()" },
+                    "99": { function: "ets::render()" },
+                },
             }),
             "utf8",
         );
@@ -153,7 +156,22 @@ describe("Editor Host", () => {
             expect(symbols.status).toBe(200);
             expect(await symbols.json()).toMatchObject({
                 module_id: `wasm:${digest}`,
-                symbols: { "42": { function: "ets::update()" } },
+                symbols: {
+                    "42": { function: "ets::update()" },
+                    "99": { function: "ets::render()" },
+                },
+            });
+            const selectedSymbols = await fetch(
+                `${baseUrl}/api/v1/profile-symbols?module=wasm:${digest}&ids=42`,
+                { headers: { Authorization: `Bearer ${bootstrap.token}` } },
+            );
+            expect(selectedSymbols.status).toBe(200);
+            const selectedSymbolBody = await selectedSymbols.json();
+            expect(selectedSymbolBody).toMatchObject({
+                module_id: `wasm:${digest}`,
+            });
+            expect(selectedSymbolBody.symbols).toEqual({
+                "42": { function: "ets::update()" },
             });
         } finally {
             await new Promise<void>((resolveClose) => host.server.close(() => resolveClose()));

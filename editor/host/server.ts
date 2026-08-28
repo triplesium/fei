@@ -59,6 +59,13 @@ interface ProxyRequest {
     options?: unknown;
 }
 
+interface ProfileSymbolManifest {
+    schema: string;
+    module_id: string;
+    kind: string;
+    symbols: Record<string, unknown>;
+}
+
 const contentTypes: Record<string, string> = {
     ".css": "text/css; charset=utf-8",
     ".html": "text/html; charset=utf-8",
@@ -184,6 +191,33 @@ export function createEditorHost(options: HostOptions): {
         "http://localhost:5173",
         ...(options.allowedOrigins ?? []),
     ]);
+    const profileSymbolManifests = new Map<
+        string,
+        Promise<ProfileSymbolManifest>
+    >();
+
+    const loadProfileSymbolManifest = async (
+        digest: string,
+    ): Promise<ProfileSymbolManifest> => {
+        let pending = profileSymbolManifests.get(digest);
+        if (!pending) {
+            const file = resolve(
+                options.runtimeDirectory,
+                "profile-symbols",
+                `${digest}.json`,
+            );
+            pending = readFile(file, "utf8").then(
+                (source) => JSON.parse(source) as ProfileSymbolManifest,
+            );
+            profileSymbolManifests.set(digest, pending);
+        }
+        try {
+            return await pending;
+        } catch (error) {
+            profileSymbolManifests.delete(digest);
+            throw error;
+        }
+    };
     const modelRegistry = new HostModelRegistry(
         options.credentials,
         options.modelSettingsStore ?? new MemoryEditorModelSettingsStore(),
@@ -259,13 +293,29 @@ export function createEditorHost(options: HostOptions): {
                     json(response, 400, { error: "Invalid profiling module identifier." });
                     return;
                 }
-                const file = resolve(
-                    options.runtimeDirectory,
-                    "profile-symbols",
-                    `${match[1]}.json`,
-                );
                 try {
-                    json(response, 200, JSON.parse(await readFile(file, "utf8")));
+                    const manifest = await loadProfileSymbolManifest(match[1]);
+                    const requestedIds = url.searchParams.get("ids");
+                    if (requestedIds === null) {
+                        json(response, 200, manifest);
+                        return;
+                    }
+                    const ids = [...new Set(requestedIds.split(","))];
+                    if (
+                        ids.length === 0 ||
+                        ids.length > 512 ||
+                        ids.some((id) => !/^\d+$/.test(id))
+                    ) {
+                        json(response, 400, { error: "Invalid profiling symbol identifiers." });
+                        return;
+                    }
+                    const symbols: Record<string, unknown> = {};
+                    for (const id of ids) {
+                        if (Object.hasOwn(manifest.symbols, id)) {
+                            symbols[id] = manifest.symbols[id];
+                        }
+                    }
+                    json(response, 200, { ...manifest, symbols });
                 } catch (error) {
                     if (
                         error &&
