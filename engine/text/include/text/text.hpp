@@ -31,7 +31,7 @@ struct TextColor {
     Color4F color {1.0f, 1.0f, 1.0f, 1.0f};
 };
 
-ETS_REFLECT()
+ETS_REFLECT(ScriptPrelude)
 enum class LineBreak {
     WordBoundary,
     AnyCharacter,
@@ -46,7 +46,7 @@ enum class Justify {
     Right,
 };
 
-ETS_REFLECT(Component)
+ETS_REFLECT(Component, ScriptPrelude)
 struct TextLayout {
     Justify justify {Justify::Left};
     LineBreak line_break {LineBreak::WordOrCharacter};

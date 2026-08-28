@@ -126,6 +126,8 @@ void sync_text_nodes(
         missing_text_layouts,
     Query<Entity, const Text>::Filter<Without<text::TextLayoutInfo>>
         missing_layouts,
+    Query<Entity, const Text>::Filter<Without<ComputedTextBlock>>
+        missing_computed_blocks,
     Query<Entity, const Text>::Filter<Without<TextNodeFlags>> missing_flags,
     Commands commands
 ) {
@@ -152,6 +154,10 @@ void sync_text_nodes(
     for (const auto& [entity, value] : missing_layouts) {
         (void)value;
         commands.entity(entity).add(text::TextLayoutInfo {});
+    }
+    for (const auto& [entity, value] : missing_computed_blocks) {
+        (void)value;
+        commands.entity(entity).add(ComputedTextBlock {});
     }
     for (const auto& [entity, value] : missing_flags) {
         (void)value;
@@ -192,28 +198,50 @@ void update_text_content_sizes(
         const text::TextFont,
         const text::TextLayout,
         ContentSize,
+        ComputedTextBlock,
         TextNodeFlags>::Filter<Changed<TextNodeFlags>> texts,
     ResRO<Assets<text::Font>> fonts,
     ResRO<text::TextPipeline> pipeline
 ) {
-    for (auto [entity, value, text_font, text_layout, content_size, flags] :
-         texts) {
+    for (auto
+         [entity,
+          value,
+          text_font,
+          text_layout,
+          content_size,
+          computed_text,
+          flags] : texts) {
         (void)entity;
         if (!flags.read().needs_measure) {
             continue;
         }
-        auto measure = TextMeasure {};
-        measure.layout = text_layout;
+        auto info = text::TextMeasureInfo {};
+        bool has_measure = false;
         if (const auto font = fonts->get(text_font.font)) {
-            measure.info = pipeline->create_measure(
+            info = pipeline->create_measure(
                 *font,
                 value.value,
                 text_font.font_size
             );
+            has_measure = true;
         }
-        const ContentSize next {.measure = std::move(measure)};
+        auto next = ContentSize {};
+        auto next_computed = ComputedTextBlock {};
+        if (text_layout.line_break == text::LineBreak::NoWrap) {
+            next.measure = FixedMeasure {.size = info.max};
+            next_computed.measure = std::move(info);
+            next_computed.has_measure = has_measure;
+        } else {
+            next.measure = TextMeasure {
+                .info = std::move(info),
+                .layout = text_layout,
+            };
+        }
         if (content_size.read() != next) {
-            content_size = next;
+            content_size = std::move(next);
+        }
+        if (computed_text.read() != next_computed) {
+            computed_text = std::move(next_computed);
         }
         auto next_flags = flags.read();
         next_flags.needs_measure = false;
@@ -253,6 +281,7 @@ void update_text_layouts(
         const text::TextFont,
         const text::TextLayout,
         const ContentSize,
+        const ComputedTextBlock,
         const ComputedNode,
         text::TextLayoutInfo,
         TextNodeFlags>::Filter<Changed<TextNodeFlags>> texts,
@@ -266,6 +295,7 @@ void update_text_layouts(
           text_font,
           text_layout,
           content_size,
+          computed_text,
           computed,
           layout,
           flags] : texts) {
@@ -275,12 +305,22 @@ void update_text_layouts(
             continue;
         }
         auto next = text::TextLayoutInfo {};
-        const auto* measure = std::get_if<TextMeasure>(&content_size.measure);
+        const text::TextMeasureInfo* measure = nullptr;
+        if (text_layout.line_break == text::LineBreak::NoWrap) {
+            if (computed_text.has_measure) {
+                measure = &computed_text.measure;
+            }
+        } else if (
+            const auto* text_measure =
+                std::get_if<TextMeasure>(&content_size.measure)
+        ) {
+            measure = &text_measure->info;
+        }
         if (const auto font = fonts->get(text_font.font); font && measure) {
             pipeline->layout(
                 text_font.font.id(),
                 *font,
-                measure->info,
+                *measure,
                 text_font.font_size,
                 text_layout,
                 computed.content_size,

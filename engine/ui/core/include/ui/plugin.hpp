@@ -91,6 +91,8 @@ void sync_text_nodes(
         missing_text_layouts,
     Query<Entity, const Text>::Filter<Without<text::TextLayoutInfo>>
         missing_layouts,
+    Query<Entity, const Text>::Filter<Without<ComputedTextBlock>>
+        missing_computed_blocks,
     Query<Entity, const Text>::Filter<Without<TextNodeFlags>> missing_flags,
     Commands commands
 );
@@ -110,6 +112,7 @@ void update_text_content_sizes(
         const text::TextFont,
         const text::TextLayout,
         ContentSize,
+        ComputedTextBlock,
         TextNodeFlags>::Filter<Changed<TextNodeFlags>> texts,
     ResRO<Assets<text::Font>> fonts,
     ResRO<text::TextPipeline> pipeline
@@ -128,6 +131,7 @@ void update_text_layouts(
         const text::TextFont,
         const text::TextLayout,
         const ContentSize,
+        const ComputedTextBlock,
         const ComputedNode,
         text::TextLayoutInfo,
         TextNodeFlags>::Filter<Changed<TextNodeFlags>> texts,

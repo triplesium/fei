@@ -48,7 +48,8 @@ local function spawn_label(
         },
         text.Text.new {value = value},
         text.TextColor.new {color = color},
-        text.TextFont.new {font = font, font_size = font_size}
+        text.TextFont.new {font = font, font_size = font_size},
+        text.TextLayout.new {line_break = text.LineBreak.NoWrap}
     ):set_parent(parent:id())
 end
 

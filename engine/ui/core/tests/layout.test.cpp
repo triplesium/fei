@@ -321,6 +321,7 @@ TEST_CASE("UI text inserts its required layout components", "[ui][text]") {
     CHECK(app.world().has_component<text::TextColor>(entity));
     CHECK(app.world().has_component<text::TextLayout>(entity));
     CHECK(app.world().has_component<text::TextLayoutInfo>(entity));
+    CHECK(app.world().has_component<ui::ComputedTextBlock>(entity));
     CHECK(app.world().has_component<ui::TextNodeFlags>(entity));
 }
 
@@ -382,6 +383,26 @@ TEST_CASE("UI text and layout stay cached until inputs change", "[ui][text]") {
         app.world().get_component<ui::TextNodeFlags>(entity);
     CHECK_FALSE(updated_flags.needs_measure);
     CHECK_FALSE(updated_flags.needs_layout);
+}
+
+TEST_CASE("UI no-wrap text uses fixed content measurement", "[ui][text]") {
+    App app;
+    app.add_resource(Window {.width = 320, .height = 180});
+    app.add_plugin<ui::UiPlugin>();
+    app.finish();
+
+    const auto entity = app.world().entity();
+    app.world().add_component(entity, ui::Text {.value = "HUD"});
+    app.world().add_component(
+        entity,
+        text::TextLayout {.line_break = text::LineBreak::NoWrap}
+    );
+
+    app.world().sort_systems();
+    app.run_schedule(PostUpdate);
+
+    const auto& content = app.world().get_component<ui::ContentSize>(entity);
+    CHECK(std::holds_alternative<ui::FixedMeasure>(content.measure));
 }
 
 TEST_CASE("UI text measure changes Flex sibling placement", "[ui][text]") {

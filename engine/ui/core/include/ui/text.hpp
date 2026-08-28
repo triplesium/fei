@@ -7,6 +7,13 @@ namespace ets::ui {
 
 using Text = text::Text;
 
+struct ComputedTextBlock {
+    text::TextMeasureInfo measure;
+    bool has_measure {false};
+
+    bool operator==(const ComputedTextBlock&) const = default;
+};
+
 struct TextNodeFlags {
     bool needs_measure {true};
     bool needs_layout {true};
