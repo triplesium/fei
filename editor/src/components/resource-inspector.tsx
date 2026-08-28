@@ -111,11 +111,11 @@ export function ResourceInspector({
                     )}
                     {inspection.kind !== "directory" && (
                         <Button variant="ghost" size="sm" type="button" onClick={onRename}>
-                            <Pencil /> Rename
+                            <Pencil className="size-3.5" strokeWidth={1.7} /> Rename
                         </Button>
                     )}
                     <Button variant="ghost" size="sm" type="button" className="text-destructive" onClick={onDelete}>
-                        <Trash2 /> Delete
+                        <Trash2 className="size-3.5" strokeWidth={1.7} /> Delete
                     </Button>
                 </div>
             </PanelSection>
