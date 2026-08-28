@@ -50,11 +50,11 @@ xmake f -p wasm -m debug --shader_targets=webgpu -y
 xmake build -y entisium-editor
 ```
 
-Then start the local Editor host:
+Then start the local Editor host. Xmake selects the matching WebAssembly output
+directory from the configured build automatically:
 
 ```bash
-cd editor
-npm start -- --project ../samples/browser_project/project
+xmake run entisium-editor -- --project=samples/browser_project/project
 ```
 
 Open the local URL printed by the Editor host.

@@ -15,6 +15,21 @@ target("entisium-editor-runtime-clock-tests")
 end
 
 if is_plat("wasm") then
+local editor_root = path.join(os.projectdir(), "editor")
+
+target("entisium-editor-dependencies")
+    set_kind("phony")
+    set_default(false)
+    add_extrafiles(
+        path.join(editor_root, "package.json"),
+        path.join(editor_root, "package-lock.json")
+    )
+    on_build(function(target)
+        import("editor_build", {
+            rootdir = path.join(os.projectdir(), "editor", "runtime"),
+        }).install(target)
+    end)
+
 target("entisium-editor-runtime")
     set_kind("binary")
     add_rules("entisium.reflect")
@@ -49,7 +64,7 @@ target("entisium-editor-runtime")
 target("entisium-editor")
     set_kind("phony")
     set_default(false)
-    add_deps("entisium-editor-runtime")
+    add_deps("entisium-editor-dependencies", "entisium-editor-runtime")
     add_extrafiles(
         path.join(os.projectdir(), "editor/index.html"),
         path.join(os.projectdir(), "editor/package.json"),
@@ -60,30 +75,23 @@ target("entisium-editor")
         path.join(os.projectdir(), "editor/src/**")
     )
     on_build(function(target)
-        local find_tool = import("lib.detect.find_tool")
-        local editor_root = path.join(os.projectdir(), "editor")
-        local npm_name = is_host("windows") and "npm.cmd" or "npm"
-        local npm = assert(
-            find_tool(npm_name),
-            "npm is required to build the Web Editor"
-        )
-        if not os.isdir(path.join(editor_root, "node_modules")) then
-            os.vrunv(npm.program, {"ci"}, {curdir = editor_root})
-        end
-        os.vrunv(npm.program, {"run", "build"}, {curdir = editor_root})
-
-        local runtime = assert(target:dep("entisium-editor-runtime"))
-        local output_root = runtime:targetdir()
-        local editor_output = path.join(output_root, "editor")
-        os.rm(editor_output)
-        os.mkdir(editor_output)
-        os.cp(path.join(editor_root, "dist", "host", "*"), editor_output)
+        import("editor_build", {
+            rootdir = path.join(os.projectdir(), "editor", "runtime"),
+        }).build(target, {
+            platform = "host",
+            host = true,
+        })
+    end)
+    on_run(function(target)
+        import("editor_build", {
+            rootdir = path.join(os.projectdir(), "editor", "runtime"),
+        }).run(target)
     end)
 
 target("entisium-editor-demo")
     set_kind("phony")
     set_default(false)
-    add_deps("entisium-editor-runtime")
+    add_deps("entisium-editor-dependencies", "entisium-editor-runtime")
     add_values(
         "entisium.editor_demo_project",
         path.absolute(get_config("editor_demo_project"), os.projectdir())
@@ -103,32 +111,28 @@ target("entisium-editor-demo")
     )
     on_build(function(target)
         local find_tool = import("lib.detect.find_tool")
-        local editor_root = path.join(os.projectdir(), "editor")
-        local npm_name = is_host("windows") and "npm.cmd" or "npm"
-        local npm = assert(
-            find_tool(npm_name),
-            "npm is required to build the Web Editor"
-        )
         local node = assert(
             find_tool("node"),
             "Node.js is required to bundle the Web Editor demo project"
         )
-        if not os.isdir(path.join(editor_root, "node_modules")) then
-            os.vrunv(npm.program, {"ci"}, {curdir = editor_root})
-        end
-        os.vrunv(npm.program, {"run", "build:demo"}, {curdir = editor_root})
-
         local runtime = assert(target:dep("entisium-editor-runtime"))
         local output_root = runtime:targetdir()
-        local editor_output = path.join(output_root, "editor-demo")
-        os.rm(editor_output)
-        os.mkdir(editor_output)
-        os.cp(path.join(editor_root, "dist", "demo", "*"), editor_output)
+        local project_directory = table.wrap(
+            target:values("entisium.editor_demo_project")
+        )[1]
+        local project_files = os.files(path.join(project_directory, "**"))
+        local editor_output = import("editor_build", {
+            rootdir = path.join(os.projectdir(), "editor", "runtime"),
+        }).build(target, {
+            platform = "demo",
+            files = project_files,
+            values = {"demo", project_directory},
+        })
         os.vrunv(
             node.program,
             {
                 path.join(editor_root, "tools", "bundle-demo-project.mjs"),
-                table.wrap(target:values("entisium.editor_demo_project"))[1],
+                project_directory,
                 path.join(editor_output, "demo-project"),
             },
             {curdir = os.projectdir()}

@@ -89,17 +89,17 @@ Compiled shader variants are cached at `/entisium/cache/shaders`. The current ca
 
 ## Run the local Editor
 
-The Editor is a Vite, React, and TypeScript application under `editor/`. The `entisium-editor` and `entisium-editor-demo` targets compile the same application against Host and browser platform implementations respectively, then stage their output beside the shared WASM runtime. Runtime artifacts use the stable `runtime/` path rather than exposing target output names to the Editor.
+The Editor is a Vite, React, and TypeScript application under `editor/`. Xmake owns dependency installation, TypeScript compilation, Vite bundling, Host compilation, and output staging. The `entisium-editor` and `entisium-editor-demo` targets compile the same application against Host and browser platform implementations respectively, then stage their output beside the shared WASM runtime. Runtime artifacts use the stable `runtime/` path rather than exposing target output names to the Editor. Editor inputs are tracked incrementally, and `npm ci` runs when `node_modules` is missing or `package-lock.json` changes.
 
-For local development, first build `entisium-editor`, then start the Editor host:
+For local development, build and start `entisium-editor` from the repository root:
 
 ```bash
-cd editor
-npm ci
-npm start -- --project ../samples/browser_project/project
+xmake run entisium-editor -- --project=samples/browser_project/project
 ```
 
-The host serves the Editor and runtime from `http://127.0.0.1:3100` by default. Use `ETS_EDITOR_HOST_PORT` to select another port and `ETS_EDITOR_RUNTIME_DIR` to point at a different staged WASM directory. Use `npm run dev -- --project <directory>` when working on the Editor frontend.
+`xmake run` builds changed inputs before starting the Host and passes arguments after `--` to it. The Host receives the exact output directory of the configured `entisium-editor-runtime` target, so build mode, architecture, and a custom `buildir` are matched automatically. Direct npm scripts remain available for the watch-based development server described below.
+
+The host serves the Editor and runtime from `http://127.0.0.1:3100` by default. Use `ETS_EDITOR_HOST_PORT` to select another port. When launching the Host directly rather than through xmake, use `ETS_EDITOR_RUNTIME_DIR` to point at a staged WASM directory. Use `npm run dev -- --project <directory>` when working on the Editor frontend.
 
 The `entisium-editor-demo` output is fully static and self-contained. Serve the configured output root and open `editor-demo/index.html`; its runtime is packaged under `editor-demo/runtime/`. Use HTTPS outside localhost because WebGPU and the File System Access API require a secure context.
 
