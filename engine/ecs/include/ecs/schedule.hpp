@@ -67,6 +67,8 @@ class Schedule {
     std::vector<std::vector<SystemId>> m_execution_batches;
     bool m_apply_deferred {true};
     bool m_dirty {true};
+    ScheduleId m_profile_schedule_id {0};
+    bool m_profile_records_ready {false};
 
   public:
     Schedule() = default;
@@ -141,6 +143,7 @@ class Schedule {
     void ensure_execution_plan();
     void rebuild_execution_plan();
     void resolve_system_profiles();
+    void prepare_system_profile_records(ScheduleId schedule);
     void build_execution_batches();
 
     void resolve_dependencies() {

@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <deque>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -44,6 +45,33 @@ struct ProfileStats {
         min_ns = std::min(min_ns, total);
         max_ns = std::max(max_ns, total);
     }
+
+    void merge(const ProfileStats& other) {
+        if (other.count == 0) {
+            return;
+        }
+        count += other.count;
+        total_ns += other.total_ns;
+        self_ns += other.self_ns;
+        min_ns = std::min(min_ns, other.min_ns);
+        max_ns = std::max(max_ns, other.max_ns);
+    }
+};
+
+struct SystemRecordKey {
+    std::uint64_t schedule_id {0};
+    std::uint64_t system_id {0};
+
+    bool operator==(const SystemRecordKey&) const = default;
+};
+
+struct SystemRecordKeyHash {
+    std::size_t operator()(const SystemRecordKey& key) const {
+        const auto schedule = std::hash<std::uint64_t> {}(key.schedule_id);
+        const auto system = std::hash<std::uint64_t> {}(key.system_id);
+        return schedule ^
+               (system + 0x9e3779b9U + (schedule << 6U) + (schedule >> 2U));
+    }
 };
 
 struct ProfileRecord {
@@ -60,6 +88,7 @@ struct ProfileRecord {
 };
 
 struct FrameProfileRecord {
+    ProfileRecordId system_record_id {invalid_profile_record_id};
     std::string key;
     ProfileStats stats;
 };
@@ -68,6 +97,20 @@ struct FrameProfileDetail {
     std::uint64_t frame {0};
     std::int64_t duration_ns {0};
     std::vector<FrameProfileRecord> records;
+};
+
+struct PendingSystemProfileSample {
+    ProfileRecordId record_id {invalid_profile_record_id};
+    std::uint64_t generation {0};
+    std::int64_t total_ns {0};
+    std::int64_t self_ns {0};
+};
+
+struct ProfileThreadBuffer {
+    std::mutex mutex;
+    std::vector<PendingSystemProfileSample> system_samples;
+
+    ProfileThreadBuffer() { system_samples.reserve(1'024); }
 };
 
 #endif
@@ -89,9 +132,16 @@ struct ProfileState {
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     std::unordered_map<std::string, ProfileRecord> records;
     std::unordered_map<std::string, ProfileStats> current_frame_records;
+    std::unordered_map<SystemRecordKey, ProfileRecordId, SystemRecordKeyHash>
+        system_record_ids;
+    std::vector<ProfileRecord> system_records;
+    std::vector<ProfileStats> current_system_records;
+    std::vector<ProfileRecordId> current_system_touched;
+    std::vector<std::shared_ptr<ProfileThreadBuffer>> thread_buffers;
     profiling_detail::FrameProfileHistory frame_history;
     std::deque<FrameProfileDetail> frame_details;
     std::atomic<bool> capture_recording {true};
+    std::atomic<std::uint64_t> capture_generation {1};
     std::uint64_t capture_frame_limit {0};
     std::uint64_t capture_frames_remaining {0};
 #    if defined(ETS_PROFILE_OUTPUT_PATH)
@@ -116,6 +166,65 @@ struct ActiveProfileScope {
 };
 
 thread_local std::vector<ActiveProfileScope> active_scopes;
+
+std::shared_ptr<ProfileThreadBuffer> current_profile_thread_buffer() {
+    thread_local auto buffer = []() {
+        auto created = std::make_shared<ProfileThreadBuffer>();
+        auto& state = profile_state();
+        std::scoped_lock lock(state.mutex);
+        state.thread_buffers.push_back(created);
+        return created;
+    }();
+    return buffer;
+}
+
+void clear_thread_buffers_locked(ProfileState& state) {
+    for (const auto& buffer : state.thread_buffers) {
+        std::scoped_lock buffer_lock(buffer->mutex);
+        buffer->system_samples.clear();
+    }
+}
+
+void merge_thread_buffers_locked(ProfileState& state) {
+    const auto generation =
+        state.capture_generation.load(std::memory_order_relaxed);
+    for (const auto& buffer : state.thread_buffers) {
+        std::scoped_lock buffer_lock(buffer->mutex);
+        for (const auto& sample : buffer->system_samples) {
+            if (sample.generation != generation ||
+                sample.record_id >= state.system_records.size()) {
+                continue;
+            }
+
+            auto& record = state.system_records[sample.record_id];
+            record.stats.add(sample.total_ns, sample.self_ns);
+            auto& frame_stats = state.current_system_records[sample.record_id];
+            if (frame_stats.count == 0) {
+                state.current_system_touched.push_back(sample.record_id);
+            }
+            frame_stats.add(sample.total_ns, sample.self_ns);
+        }
+        buffer->system_samples.clear();
+    }
+}
+
+void record_system_profile_scope(
+    ProfileRecordId record_id,
+    std::uint64_t generation,
+    std::int64_t total_ns,
+    std::int64_t self_ns
+) {
+    auto buffer = current_profile_thread_buffer();
+    std::scoped_lock lock(buffer->mutex);
+    buffer->system_samples.push_back(
+        PendingSystemProfileSample {
+            .record_id = record_id,
+            .generation = generation,
+            .total_ns = total_ns,
+            .self_ns = self_ns,
+        }
+    );
+}
 
 std::string profile_record_key(
     ProfileZoneKind kind,
@@ -193,8 +302,16 @@ RawProfileSummary copy_profile_summary() {
     auto& state = profile_state();
     {
         std::scoped_lock lock(state.mutex);
+        merge_thread_buffers_locked(state);
         result.frame_stats = state.frame_stats.stats();
-        result.records.reserve(state.records.size());
+        result.records.reserve(
+            state.records.size() + state.system_records.size()
+        );
+        for (const auto& record : state.system_records) {
+            if (record.stats.count > 0) {
+                result.records.push_back(record);
+            }
+        }
         for (const auto& [_, record] : state.records) {
             if (record.stats.count > 0) {
                 result.records.push_back(record);
@@ -336,7 +453,19 @@ FrameProfileDetail take_frame_detail(
         .frame = frame,
         .duration_ns = duration_ns,
     };
-    detail.records.reserve(state.current_frame_records.size());
+    detail.records.reserve(
+        state.current_frame_records.size() + state.current_system_touched.size()
+    );
+    for (const auto record_id : state.current_system_touched) {
+        detail.records.push_back(
+            FrameProfileRecord {
+                .system_record_id = record_id,
+                .stats = state.current_system_records[record_id],
+            }
+        );
+        state.current_system_records[record_id] = {};
+    }
+    state.current_system_touched.clear();
     for (auto& [key, stats] : state.current_frame_records) {
         detail.records.push_back(
             FrameProfileRecord {
@@ -390,6 +519,69 @@ std::string profile_schedule_name(std::uint64_t schedule_id) {
     return fallback_it->second;
 }
 
+ProfileRecordId register_system_profile_record(
+    std::uint64_t schedule_id,
+    std::uint64_t system_id,
+    const ProfileSymbolRef* symbol,
+    std::string_view name,
+    std::string_view file,
+    std::string_view function,
+    std::uint32_t line
+) {
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    auto& state = profile_state();
+    std::scoped_lock lock(state.mutex);
+    const SystemRecordKey key {
+        .schedule_id = schedule_id,
+        .system_id = system_id,
+    };
+    if (const auto existing = state.system_record_ids.find(key);
+        existing != state.system_record_ids.end()) {
+        auto& record = state.system_records[existing->second];
+        record.symbol = symbol ? *symbol : ProfileSymbolRef {};
+        record.name = std::string(name);
+        record.file = std::string(file);
+        record.function = std::string(function);
+        record.line = line;
+        return existing->second;
+    }
+
+    const auto record_id =
+        static_cast<ProfileRecordId>(state.system_records.size());
+    if (record_id == invalid_profile_record_id) {
+        return invalid_profile_record_id;
+    }
+    auto schedule_it = state.schedule_names.find(schedule_id);
+    state.system_records.push_back(
+        ProfileRecord {
+            .kind = ProfileZoneKind::System,
+            .schedule_id = schedule_id,
+            .system_id = system_id,
+            .schedule_name = schedule_it != state.schedule_names.end() ?
+                                 schedule_it->second :
+                                 "schedule#" + std::to_string(schedule_id),
+            .symbol = symbol ? *symbol : ProfileSymbolRef {},
+            .name = std::string(name),
+            .file = std::string(file),
+            .function = std::string(function),
+            .line = line,
+        }
+    );
+    state.current_system_records.emplace_back();
+    state.system_record_ids.emplace(key, record_id);
+    return record_id;
+#else
+    (void)schedule_id;
+    (void)system_id;
+    (void)symbol;
+    (void)name;
+    (void)file;
+    (void)function;
+    (void)line;
+    return invalid_profile_record_id;
+#endif
+}
+
 void profile_frame_mark() {
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     ensure_profile_summary_atexit();
@@ -398,9 +590,14 @@ void profile_frame_mark() {
     auto& state = profile_state();
     std::scoped_lock lock(state.mutex);
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    merge_thread_buffers_locked(state);
     auto duration = state.frame_stats.mark(profile_now_ns());
     if (!duration) {
         state.current_frame_records.clear();
+        for (const auto record_id : state.current_system_touched) {
+            state.current_system_records[record_id] = {};
+        }
+        state.current_system_touched.clear();
         return;
     }
     if (state.capture_recording.load(std::memory_order_relaxed)) {
@@ -428,6 +625,31 @@ FrameProfileStats profile_frame_stats() {
     auto& state = profile_state();
     std::scoped_lock lock(state.mutex);
     return state.frame_stats.stats();
+}
+
+ProfileFrameHistorySnapshot
+profile_frame_history_snapshot(std::optional<std::uint64_t> after_frame) {
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    ProfileFrameHistorySnapshot snapshot {.available = true};
+    auto& state = profile_state();
+    std::scoped_lock lock(state.mutex);
+    const auto frames = after_frame ?
+                            state.frame_history.samples_after(*after_frame) :
+                            state.frame_history.samples();
+    snapshot.frames.reserve(frames.size());
+    for (const auto& frame : frames) {
+        snapshot.frames.push_back(
+            ProfileFrameSample {
+                .frame = frame.frame,
+                .duration_ms = ns_to_ms(frame.duration_ns),
+            }
+        );
+    }
+    return snapshot;
+#else
+    (void)after_frame;
+    return {};
+#endif
 }
 
 ProfileSummarySnapshot profile_summary_snapshot() {
@@ -491,11 +713,20 @@ profile_frame_details_snapshot(const std::vector<std::uint64_t>& frames) {
         detail.systems.reserve(detail_it->records.size());
         detail.zones.reserve(detail_it->records.size());
         for (const auto& frame_record : detail_it->records) {
-            const auto record_it = state.records.find(frame_record.key);
-            if (record_it == state.records.end()) {
-                continue;
+            ProfileRecord record;
+            if (frame_record.system_record_id != invalid_profile_record_id) {
+                if (frame_record.system_record_id >=
+                    state.system_records.size()) {
+                    continue;
+                }
+                record = state.system_records[frame_record.system_record_id];
+            } else {
+                const auto record_it = state.records.find(frame_record.key);
+                if (record_it == state.records.end()) {
+                    continue;
+                }
+                record = record_it->second;
             }
-            auto record = record_it->second;
             record.stats = frame_record.stats;
             auto entry = make_profile_entry(record);
             if (record.kind == ProfileZoneKind::System) {
@@ -507,6 +738,77 @@ profile_frame_details_snapshot(const std::vector<std::uint64_t>& frames) {
         sort_profile_entries(detail.systems);
         sort_profile_entries(detail.zones);
         snapshot.details.push_back(std::move(detail));
+    }
+    return snapshot;
+#else
+    (void)frames;
+    return {};
+#endif
+}
+
+ProfileFrameArchiveSnapshot
+profile_frame_archive_snapshot(const std::vector<std::uint64_t>& frames) {
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    ProfileFrameArchiveSnapshot snapshot {.available = true};
+    std::unordered_map<std::string, std::uint32_t> entry_indices;
+    auto& state = profile_state();
+    std::scoped_lock lock(state.mutex);
+    snapshot.frames.reserve(frames.size());
+    for (const auto frame : frames) {
+        const auto detail_it = std::ranges::find(
+            state.frame_details,
+            frame,
+            &FrameProfileDetail::frame
+        );
+        if (detail_it == state.frame_details.end()) {
+            continue;
+        }
+
+        ProfileFrameArchiveFrameSnapshot archived_frame {
+            .frame = detail_it->frame,
+            .duration_ms = ns_to_ms(detail_it->duration_ns),
+        };
+        archived_frame.records.reserve(detail_it->records.size());
+        for (const auto& frame_record : detail_it->records) {
+            const ProfileRecord* record = nullptr;
+            std::string dictionary_key;
+            if (frame_record.system_record_id != invalid_profile_record_id) {
+                if (frame_record.system_record_id >=
+                    state.system_records.size()) {
+                    continue;
+                }
+                record = &state.system_records[frame_record.system_record_id];
+                dictionary_key =
+                    "system|" + std::to_string(frame_record.system_record_id);
+            } else {
+                const auto record_it = state.records.find(frame_record.key);
+                if (record_it == state.records.end()) {
+                    continue;
+                }
+                record = &record_it->second;
+                dictionary_key = "zone|" + frame_record.key;
+            }
+
+            auto [entry_it, inserted] = entry_indices.try_emplace(
+                std::move(dictionary_key),
+                static_cast<std::uint32_t>(snapshot.entries.size())
+            );
+            if (inserted) {
+                snapshot.entries.push_back(make_profile_entry(*record));
+            }
+            const auto& stats = frame_record.stats;
+            archived_frame.records.push_back(
+                ProfileFrameArchiveRecordSnapshot {
+                    .entry_index = entry_it->second,
+                    .count = stats.count,
+                    .total_ms = ns_to_ms(stats.total_ns),
+                    .self_ms = ns_to_ms(stats.self_ns),
+                    .min_ms = ns_to_ms(stats.min_ns),
+                    .max_ms = ns_to_ms(stats.max_ns),
+                }
+            );
+        }
+        snapshot.frames.push_back(std::move(archived_frame));
     }
     return snapshot;
 #else
@@ -535,10 +837,20 @@ void start_profile_capture(std::uint64_t frame_limit) {
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     ensure_profile_summary_atexit();
     auto& state = profile_state();
+    state.capture_recording.store(false, std::memory_order_relaxed);
     std::scoped_lock lock(state.mutex);
+    state.capture_generation.fetch_add(1, std::memory_order_relaxed);
+    clear_thread_buffers_locked(state);
     state.frame_stats.clear();
     state.records.clear();
     state.current_frame_records.clear();
+    for (auto& record : state.system_records) {
+        record.stats = {};
+    }
+    for (auto& stats : state.current_system_records) {
+        stats = {};
+    }
+    state.current_system_touched.clear();
     state.frame_history.clear();
     state.frame_details.clear();
     state.capture_frame_limit = frame_limit;
@@ -583,8 +895,17 @@ void clear_profile_summary() {
     std::scoped_lock lock(state.mutex);
     state.frame_stats.clear();
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    state.capture_generation.fetch_add(1, std::memory_order_relaxed);
+    clear_thread_buffers_locked(state);
     state.records.clear();
     state.current_frame_records.clear();
+    for (auto& record : state.system_records) {
+        record.stats = {};
+    }
+    for (auto& stats : state.current_system_records) {
+        stats = {};
+    }
+    state.current_system_touched.clear();
     state.frame_history.clear();
     state.frame_details.clear();
 #endif
@@ -677,7 +998,6 @@ SummaryProfileScope::SummaryProfileScope(
     if (!profile_state().capture_recording.load(std::memory_order_relaxed)) {
         return;
     }
-    ensure_profile_summary_atexit();
     m_active = true;
     active_scopes.push_back(
         ActiveProfileScope {
@@ -714,6 +1034,63 @@ SummaryProfileScope::~SummaryProfileScope() {
         total_ns,
         self_ns
     );
+}
+
+SystemSummaryProfileScope::SystemSummaryProfileScope(
+    ProfileRecordId record_id,
+    std::uint64_t schedule_id,
+    std::uint64_t system_id,
+    const ProfileSymbolRef* symbol,
+    std::string_view name,
+    std::string_view file,
+    std::string_view function,
+    std::uint32_t line
+) {
+    auto& state = profile_state();
+    if (!state.capture_recording.load(std::memory_order_relaxed)) {
+        return;
+    }
+    if (record_id == invalid_profile_record_id) {
+        record_id = register_system_profile_record(
+            schedule_id,
+            system_id,
+            symbol,
+            name,
+            file,
+            function,
+            line
+        );
+    }
+    if (record_id == invalid_profile_record_id) {
+        return;
+    }
+
+    m_record_id = record_id;
+    m_generation = state.capture_generation.load(std::memory_order_relaxed);
+    m_active = true;
+    active_scopes.push_back(
+        ActiveProfileScope {
+            .start_ns = profile_now_ns(),
+            .child_ns = 0,
+        }
+    );
+}
+
+SystemSummaryProfileScope::~SystemSummaryProfileScope() {
+    if (!m_active || active_scopes.empty()) {
+        return;
+    }
+
+    const auto now = profile_now_ns();
+    auto active = active_scopes.back();
+    active_scopes.pop_back();
+
+    const auto total_ns = now - active.start_ns;
+    const auto self_ns = std::max<std::int64_t>(0, total_ns - active.child_ns);
+    if (!active_scopes.empty()) {
+        active_scopes.back().child_ns += total_ns;
+    }
+    record_system_profile_scope(m_record_id, m_generation, total_ns, self_ns);
 }
 
 #endif

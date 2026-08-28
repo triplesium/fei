@@ -18,6 +18,8 @@ class FrameProfileHistory {
 
     std::uint64_t push(std::int64_t duration_ns);
     [[nodiscard]] std::vector<FrameProfileHistorySample> samples() const;
+    [[nodiscard]] std::vector<FrameProfileHistorySample>
+    samples_after(std::uint64_t frame) const;
     void clear();
 
   private:

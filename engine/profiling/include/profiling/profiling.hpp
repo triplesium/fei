@@ -3,6 +3,8 @@
 #include "profiling/profile_symbol.hpp"
 
 #include <cstdint>
+#include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -17,6 +19,10 @@ enum class ProfileZoneKind : std::uint8_t {
     Generic,
     System,
 };
+
+using ProfileRecordId = std::uint32_t;
+inline constexpr ProfileRecordId invalid_profile_record_id =
+    std::numeric_limits<ProfileRecordId>::max();
 
 struct FrameProfileStats {
     std::uint64_t frame_count {0};
@@ -49,6 +55,11 @@ struct ProfileFrameSample {
     double duration_ms {0.0};
 };
 
+struct ProfileFrameHistorySnapshot {
+    bool available {false};
+    std::vector<ProfileFrameSample> frames;
+};
+
 struct ProfileSummarySnapshot {
     bool available {false};
     FrameProfileStats frame_stats;
@@ -67,6 +78,27 @@ struct ProfileFrameDetailSnapshot {
 struct ProfileFrameDetailsSnapshot {
     bool available {false};
     std::vector<ProfileFrameDetailSnapshot> details;
+};
+
+struct ProfileFrameArchiveRecordSnapshot {
+    std::uint32_t entry_index {0};
+    std::uint64_t count {0};
+    double total_ms {0.0};
+    double self_ms {0.0};
+    double min_ms {0.0};
+    double max_ms {0.0};
+};
+
+struct ProfileFrameArchiveFrameSnapshot {
+    std::uint64_t frame {0};
+    double duration_ms {0.0};
+    std::vector<ProfileFrameArchiveRecordSnapshot> records;
+};
+
+struct ProfileFrameArchiveSnapshot {
+    bool available {false};
+    std::vector<ProfileEntrySnapshot> entries;
+    std::vector<ProfileFrameArchiveFrameSnapshot> frames;
 };
 
 struct ProfileCaptureStatus {
@@ -99,11 +131,26 @@ void register_profile_schedule_name(
 void clear_profile_schedule_names();
 std::string profile_schedule_name(std::uint64_t schedule_id);
 
+ProfileRecordId register_system_profile_record(
+    std::uint64_t schedule_id,
+    std::uint64_t system_id,
+    const ProfileSymbolRef* symbol,
+    std::string_view name,
+    std::string_view file,
+    std::string_view function,
+    std::uint32_t line
+);
+
 void profile_frame_mark();
 FrameProfileStats profile_frame_stats();
+ProfileFrameHistorySnapshot profile_frame_history_snapshot(
+    std::optional<std::uint64_t> after_frame = std::nullopt
+);
 ProfileSummarySnapshot profile_summary_snapshot();
 ProfileFrameDetailsSnapshot
 profile_frame_details_snapshot(const std::vector<std::uint64_t>& frames);
+ProfileFrameArchiveSnapshot
+profile_frame_archive_snapshot(const std::vector<std::uint64_t>& frames);
 ProfileCaptureStatus profile_capture_status();
 void start_profile_capture(std::uint64_t frame_limit = 0);
 void stop_profile_capture();
@@ -179,6 +226,56 @@ class SummaryProfileScope {
     SummaryProfileScope& operator=(SummaryProfileScope&&) = delete;
 };
 
+class SystemSummaryProfileScope {
+  private:
+    ProfileRecordId m_record_id {invalid_profile_record_id};
+    std::uint64_t m_generation {0};
+    bool m_active {false};
+
+  public:
+    SystemSummaryProfileScope(
+        ProfileRecordId record_id,
+        std::uint64_t schedule_id,
+        std::uint64_t system_id,
+        const ProfileSymbolRef* symbol,
+        std::string_view name,
+        std::string_view file,
+        std::string_view function,
+        std::uint32_t line
+    );
+    ~SystemSummaryProfileScope();
+
+    SystemSummaryProfileScope(const SystemSummaryProfileScope&) = delete;
+    SystemSummaryProfileScope&
+    operator=(const SystemSummaryProfileScope&) = delete;
+    SystemSummaryProfileScope(SystemSummaryProfileScope&&) = delete;
+    SystemSummaryProfileScope& operator=(SystemSummaryProfileScope&&) = delete;
+};
+
+#endif
+
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+#    define ETS_PROFILE_SYSTEM_SUMMARY_SCOPE(                     \
+        schedule_id,                                              \
+        system_id,                                                \
+        profile_info                                              \
+    )                                                             \
+        ::ets::SystemSummaryProfileScope ETS_PROFILE_UNIQUE_NAME( \
+            ets_system_summary_profile_scope_                     \
+        ) {(profile_info).record_id,                              \
+           schedule_id,                                           \
+           system_id,                                             \
+           &(profile_info).symbol,                                \
+           (profile_info).name,                                   \
+           (profile_info).file,                                   \
+           (profile_info).function,                               \
+           (profile_info).line};
+#else
+#    define ETS_PROFILE_SYSTEM_SUMMARY_SCOPE( \
+        schedule_id,                          \
+        system_id,                            \
+        profile_info                          \
+    )
 #endif
 
 } // namespace ets
@@ -279,13 +376,4 @@ class SummaryProfileScope {
         (profile_info).function,                                       \
         (profile_info).line                                            \
     )                                                                  \
-    ETS_PROFILE_SUMMARY_SCOPE(                                         \
-        ::ets::ProfileZoneKind::System,                                \
-        schedule_id,                                                   \
-        system_id,                                                     \
-        &(profile_info).symbol,                                        \
-        (profile_info).name,                                           \
-        (profile_info).file,                                           \
-        (profile_info).function,                                       \
-        (profile_info).line                                            \
-    )
+    ETS_PROFILE_SYSTEM_SUMMARY_SCOPE(schedule_id, system_id, profile_info)

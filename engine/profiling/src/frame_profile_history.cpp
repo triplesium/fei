@@ -20,6 +20,15 @@ std::vector<FrameProfileHistorySample> FrameProfileHistory::samples() const {
     return {m_samples.begin(), m_samples.end()};
 }
 
+std::vector<FrameProfileHistorySample>
+FrameProfileHistory::samples_after(std::uint64_t frame) const {
+    auto first = m_samples.begin();
+    while (first != m_samples.end() && first->frame <= frame) {
+        ++first;
+    }
+    return {first, m_samples.end()};
+}
+
 void FrameProfileHistory::clear() {
     m_samples.clear();
     m_next_frame = 0;

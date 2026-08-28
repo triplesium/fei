@@ -62,7 +62,6 @@ void run_profiled_system(
     World& world
 ) {
 #if defined(ETS_ENABLE_TRACY) || defined(ETS_ENABLE_PROFILE_SUMMARY)
-    resolve_system_profile(config);
     ETS_PROFILE_SYSTEM_SCOPE(schedule, config.id, config.profile);
 #endif
     config.system->run(world);
@@ -449,6 +448,7 @@ void Schedule::rebuild_execution_plan() {
     build_graph();
     m_graph.sort();
     build_execution_batches();
+    m_profile_records_ready = false;
     m_dirty = false;
 }
 
@@ -503,6 +503,7 @@ void Schedule::run_systems(World& world) {
 
 void Schedule::run_systems(ScheduleId schedule, World& world) {
     ensure_execution_plan();
+    prepare_system_profile_records(schedule);
 
     auto run_one = [this, schedule, &world](SystemId system_id) {
         const detail::SystemExecutionLaneScope lane_scope {
@@ -545,6 +546,7 @@ void Schedule::run_systems(
     ThreadPool& thread_pool
 ) {
     ensure_execution_plan();
+    prepare_system_profile_records(schedule);
 
     const auto lane_count = thread_pool.thread_count() + 1;
     auto run_one =
@@ -620,6 +622,29 @@ void Schedule::resolve_system_profiles() {
         resolve_system_profile(config);
     }
 #endif
+}
+
+void Schedule::prepare_system_profile_records(ScheduleId schedule) {
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    if (m_profile_records_ready && m_profile_schedule_id == schedule) {
+        return;
+    }
+    for (auto& [_, config] : m_systems) {
+        config.profile.record_id = register_system_profile_record(
+            schedule,
+            config.id,
+            &config.profile.symbol,
+            config.profile.name,
+            config.profile.file,
+            config.profile.function,
+            config.profile.line
+        );
+    }
+#else
+    (void)schedule;
+#endif
+    m_profile_schedule_id = schedule;
+    m_profile_records_ready = true;
 }
 
 void Schedule::build_execution_batches() {

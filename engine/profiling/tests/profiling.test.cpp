@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 TEST_CASE(
     "frame profile accumulator reports deterministic rolling statistics",
@@ -108,6 +109,11 @@ TEST_CASE(
         FrameProfileHistory::Capacity + extra_samples - 1
     );
     REQUIRE(std::cmp_equal(samples.front().duration_ns, extra_samples + 1));
+    const auto recent = history.samples_after(samples.back().frame - 2);
+    REQUIRE(recent.size() == 2);
+    CHECK(recent.front().frame == samples.back().frame - 1);
+    CHECK(recent.back().frame == samples.back().frame);
+    CHECK(history.samples_after(samples.back().frame).empty());
 
     history.clear();
     REQUIRE(history.samples().empty());
@@ -125,6 +131,7 @@ TEST_CASE(
 ) {
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     struct TestProfileInfo {
+        ets::ProfileRecordId record_id {ets::invalid_profile_record_id};
         ets::ProfileSymbolRef symbol;
         std::string name;
         std::string file;
@@ -177,6 +184,7 @@ TEST_CASE(
 ) {
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     struct TestProfileInfo {
+        ets::ProfileRecordId record_id {ets::invalid_profile_record_id};
         ets::ProfileSymbolRef symbol;
         std::string name;
         std::string file;
@@ -203,6 +211,12 @@ TEST_CASE(
     ets::profile_frame_mark();
     ets::stop_profile_capture();
 
+    const auto history = ets::profile_frame_history_snapshot();
+    REQUIRE(history.available);
+    REQUIRE(history.frames.size() == 1);
+    CHECK(history.frames.front().frame == 0);
+    CHECK(history.frames.front().duration_ms > 0.0);
+
     const auto details =
         ets::profile_frame_details_snapshot(std::vector<std::uint64_t> {0, 99});
     REQUIRE(details.available);
@@ -219,15 +233,78 @@ TEST_CASE(
     ets::clear_profile_summary();
     CHECK(ets::profile_frame_details_snapshot({0}).details.empty());
 #else
+    const auto history = ets::profile_frame_history_snapshot();
+    CHECK_FALSE(history.available);
+    CHECK(history.frames.empty());
     const auto details = ets::profile_frame_details_snapshot({0});
     CHECK_FALSE(details.available);
     CHECK(details.details.empty());
 #endif
 }
 
+TEST_CASE(
+    "system profile buffers preserve concurrent samples",
+    "[base][profiling][concurrency]"
+) {
+#if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    constexpr std::size_t thread_count = 4;
+    constexpr std::size_t scopes_per_thread = 1'000;
+    std::vector<ets::ProfileRecordId> record_ids;
+    record_ids.reserve(thread_count);
+    for (std::size_t thread = 0; thread < thread_count; ++thread) {
+        record_ids.push_back(
+            ets::register_system_profile_record(
+                17,
+                thread,
+                nullptr,
+                "concurrent_system",
+                "concurrent.cpp",
+                "concurrent_system()",
+                1
+            )
+        );
+    }
+
+    ets::start_profile_capture();
+    std::vector<std::thread> workers;
+    workers.reserve(thread_count);
+    for (std::size_t thread = 0; thread < thread_count; ++thread) {
+        workers.emplace_back([&, thread]() {
+            for (std::size_t scope = 0; scope < scopes_per_thread; ++scope) {
+                ets::SystemSummaryProfileScope profile_scope {
+                    record_ids[thread],
+                    17,
+                    thread,
+                    nullptr,
+                    "concurrent_system",
+                    "concurrent.cpp",
+                    "concurrent_system()",
+                    1,
+                };
+            }
+        });
+    }
+    for (auto& worker : workers) {
+        worker.join();
+    }
+
+    const auto snapshot = ets::profile_summary_snapshot();
+    REQUIRE(snapshot.systems.size() == thread_count);
+    std::uint64_t samples = 0;
+    for (const auto& system : snapshot.systems) {
+        samples += system.count;
+    }
+    CHECK(samples == thread_count * scopes_per_thread);
+    ets::stop_profile_capture();
+#else
+    SUCCEED("Profile summary output is disabled");
+#endif
+}
+
 TEST_CASE("profile system scopes can write summary csv", "[base][profiling]") {
 #if defined(ETS_ENABLE_PROFILE_SUMMARY)
     struct TestProfileInfo {
+        ets::ProfileRecordId record_id {ets::invalid_profile_record_id};
         ets::ProfileSymbolRef symbol;
         std::string name;
         std::string file;

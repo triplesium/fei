@@ -177,8 +177,9 @@ TEST_CASE(
     REQUIRE(symbol.valid());
     CHECK(symbol.kind == ProfileSymbolKind::PeRva);
     INFO("profile module: " << symbol.module_id);
-    CHECK(symbol.module_id.starts_with("pdb:"));
     CHECK(symbol.value > 0);
+#    if defined(ETS_ENABLE_PROFILE_SUMMARY)
+    CHECK(symbol.module_id.starts_with("pdb:"));
     auto profile = SystemProfileRegistry::instance().symbolize(
         system_profile_key(named_profile_system)
     );
@@ -232,6 +233,12 @@ TEST_CASE(
         std::string::npos
     );
     REQUIRE(template_static_profile_value.name == "static_profile_system");
+#    else
+    CHECK(
+        (symbol.module_id.starts_with("pdb:") ||
+         symbol.module_id.starts_with("pe:"))
+    );
+#    endif
 #else
     SUCCEED("Function pointer symbolization is only implemented on Windows");
 #endif

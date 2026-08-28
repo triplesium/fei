@@ -33,3 +33,11 @@ target("entisium-profiling-tests")
     add_files("tests/*.cpp")
     add_includedirs("src")
     add_deps("entisium-profiling")
+
+if has_config("profile_summary") then
+    target("entisium-profiling-benchmark")
+        set_kind("binary")
+        set_default(false)
+        add_files("profiling_benchmark.cpp")
+        add_deps("entisium-profiling")
+end

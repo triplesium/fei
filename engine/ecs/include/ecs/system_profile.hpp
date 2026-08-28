@@ -1,6 +1,6 @@
 #pragma once
 
-#include "profiling/profile_symbol.hpp"
+#include "profiling/profiling.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -15,6 +15,7 @@
 namespace ets {
 
 struct SystemProfileInfo {
+    ProfileRecordId record_id {invalid_profile_record_id};
     ProfileSymbolRef symbol;
     std::string name;
     std::string file;
