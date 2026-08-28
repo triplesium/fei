@@ -83,6 +83,8 @@ export interface AgentRequest {
     y?: number;
     button?: string;
     limit?: number;
+    afterFrame?: number;
+    frame?: number;
     provider?: string;
     schema?: string;
     payload?: unknown;

@@ -94,6 +94,12 @@ import {
     type ProfileCaptureArchive,
     type ProfileCaptureProgress,
 } from "./runtime/profile-capture-archive";
+import {
+    readProfilerFrame,
+    readProfilerFrames,
+    readProfilerSummary,
+    type ProfilerAgentSource,
+} from "./services/profiler-agent";
 import { cn } from "./lib/utils";
 import { editorCapabilities } from "@editor-platform/capabilities";
 import { ProjectStorage } from "@editor-platform/project-storage";
@@ -640,6 +646,12 @@ export function App() {
     const dockviewLayoutListenerRef = useRef<{ dispose(): void } | null>(null);
     const runtimeFocusedGameRef = useRef(false);
     const runtimeStopRef = useRef<Promise<void> | null>(null);
+    const profileArchiveRef = useRef<ProfileCaptureArchive | null>(null);
+
+    const storeProfileArchive = useCallback((archive: ProfileCaptureArchive | null) => {
+        profileArchiveRef.current = archive;
+        setProfileArchive(archive);
+    }, []);
 
     const dirty = storage.isOpen && activePath.length > 0 && content !== savedContent;
 
@@ -816,7 +828,7 @@ export function App() {
                         snapshot.session.channelId,
                         { onProgress: setProfileFinalizeProgress },
                     );
-                    setProfileArchive(archive);
+                    storeProfileArchive(archive);
                     const retained = archive.details.size;
                     const expected = archive.history?.frames.length ?? 0;
                     appendConsole(
@@ -860,7 +872,7 @@ export function App() {
         if (runtimeState !== "stopped") {
             await stopRuntime("project settings changed", true, false);
         }
-        setProfileArchive(null);
+        storeProfileArchive(null);
         return next;
     };
 
@@ -892,7 +904,7 @@ export function App() {
         if (dirty) await saveActiveFile();
         const name = await storage.open();
         await stopRuntime("project folder changed", true, false);
-        setProfileArchive(null);
+        storeProfileArchive(null);
         await loadOpenedProject();
         appendConsole("info", "project", `opened local folder ${name}`);
     };
@@ -1057,14 +1069,14 @@ export function App() {
         if (!force && (runtimeState === "starting" || runtimeState === "running")) return;
         if (runtimeStopRef.current) await runtimeStopRef.current;
         const snapshot = await projectSnapshot();
-        setProfileArchive(null);
+        storeProfileArchive(null);
         await runtimeController.start(snapshot, force);
     };
 
     const restartRuntime = async (): Promise<void> => {
         if (runtimeStopRef.current) await runtimeStopRef.current;
         const snapshot = await projectSnapshot();
-        setProfileArchive(null);
+        storeProfileArchive(null);
         await runtimeController.restart(snapshot);
     };
 
@@ -1214,6 +1226,23 @@ export function App() {
         return () => window.removeEventListener("keydown", onKeyDown);
     });
 
+    const profilerAgentSource = async (): Promise<ProfilerAgentSource> => {
+        if (runtimeStopRef.current) await runtimeStopRef.current;
+        const snapshot = runtimeController.getSnapshot();
+        if (snapshot.state === "running" && snapshot.session) {
+            return {
+                kind: "runtime",
+                sessionId: snapshot.session.channelId,
+                inspect: (provider, schema, payload) =>
+                    runtimeController.inspect(provider, schema, payload),
+            };
+        }
+        if (profileArchiveRef.current) {
+            return { kind: "archive", archive: profileArchiveRef.current };
+        }
+        throw new Error("No live or retained profiler capture is available.");
+    };
+
     handlersRef.current = {
         "project.list": async () => {
             storage.assertOpen();
@@ -1301,6 +1330,12 @@ export function App() {
         "runtime.clear_input": async () => runtimeController.clearInput(),
         "runtime.inspect": async ({ provider, schema, payload }) =>
             runtimeController.inspect(provider ?? "", schema ?? "", payload ?? {}),
+        "profiler.summary": async () =>
+            readProfilerSummary(await profilerAgentSource()),
+        "profiler.frames": async ({ afterFrame, limit }) =>
+            readProfilerFrames(await profilerAgentSource(), afterFrame, limit),
+        "profiler.frame": async ({ frame }) =>
+            readProfilerFrame(await profilerAgentSource(), frame ?? Number.NaN),
         "runtime.logs": async ({ limit }) => {
             const count = Math.max(1, Math.min(100, Math.floor(limit ?? 20)));
             return {
@@ -1852,7 +1887,7 @@ export function App() {
                 archive={profileArchive}
                 finalizing={profileFinalizing}
                 finalizeProgress={profileFinalizeProgress}
-                onClearArchive={() => setProfileArchive(null)}
+                onClearArchive={() => storeProfileArchive(null)}
             />
         ),
         ...(editorCapabilities.agent

@@ -268,6 +268,72 @@ export const editorToolDefinitions: readonly EditorToolDefinition[] = Object.fre
         },
     },
     {
+        command: "profiler.summary",
+        name: "profiler_summary",
+        label: "Read Profiler Summary",
+        description:
+            "Read capture-wide CPU and GPU statistics and hotspots. Use this first during performance investigations. Reads the retained capture after the runtime stops.",
+        inputSchema: emptyInput,
+        readOnly: true,
+        request: () => ({ type: "profiler.summary" }),
+    },
+    {
+        command: "profiler.frames",
+        name: "profiler_frames",
+        label: "Read Profiler Frames",
+        description:
+            "Read recent frame times to locate spikes and periodic patterns. Reads the retained capture after the runtime stops.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                afterFrame: {
+                    type: "integer",
+                    minimum: 0,
+                    description: "Return only frames newer than this frame number",
+                },
+                limit: {
+                    type: "integer",
+                    minimum: 1,
+                    maximum: 600,
+                    description: "Maximum frames to return; defaults to 300",
+                },
+            },
+            additionalProperties: false,
+        },
+        readOnly: true,
+        request: (parameters) => {
+            const { afterFrame, limit } = parameters as {
+                afterFrame?: number;
+                limit?: number;
+            };
+            return { type: "profiler.frames", afterFrame, limit };
+        },
+    },
+    {
+        command: "profiler.frame",
+        name: "profiler_frame",
+        label: "Inspect Profiler Frame",
+        description:
+            "Inspect CPU systems and zones for one frame selected from profiler_frames, including symbolized function and source information.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                frame: {
+                    type: "integer",
+                    minimum: 0,
+                    description: "Frame number returned by profiler_frames",
+                },
+            },
+            required: ["frame"],
+            additionalProperties: false,
+        },
+        readOnly: true,
+        request: (parameters) => {
+            const { frame } = parameters as { frame: number };
+            return { type: "profiler.frame", frame };
+        },
+    },
+    {
         command: "runtime.inspect",
         name: "play_interfaces",
         label: "List Play Interfaces",

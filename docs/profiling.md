@@ -13,8 +13,10 @@ The Editor runtime registers versioned profiling inspection providers over its
 existing `runtime.inspect` bridge:
 
 - `profiling.summary` / `profiling.summary.v1`
+- `profiling.summary_compact` / `profiling.summary_compact.v1`
 - `profiling.frame_history` / `profiling.frame_history.v1`
 - `profiling.frame_detail` / `profiling.frame_detail.v1`
+- `profiling.frame_archive` / `profiling.frame_archive.v1`
 - `profiling.gpu_summary` / `profiling.gpu_summary.v1`
 - `profiling.control` / `profiling.control.v1`
 
@@ -68,6 +70,24 @@ the runtime data has been retained, so symbol lookup does not extend the runtime
 shutdown deadline. The Editor keeps the resulting per-frame capture until a new
 runtime session starts or Clear is selected. A timeout or runtime failure still
 stops the game and preserves any details that were exported successfully.
+
+### Agent and MCP tools
+
+The built-in Editor agent and the local `entisium-editor` MCP server expose the
+same read-only profiling tools:
+
+- `profiler_summary` returns capture-wide CPU frame statistics and CPU/GPU
+  hotspots. Start performance investigations with this tool.
+- `profiler_frames` returns up to 600 recent frame-time samples and accepts an
+  optional `afterFrame` cursor and `limit`. Use it to locate spikes and periodic
+  patterns without transferring per-frame CPU metadata.
+- `profiler_frame` returns symbolized CPU systems and zones for one frame number
+  selected from `profiler_frames`.
+
+While the runtime is running, these tools query its profiling inspection
+providers. After a normal Stop, they automatically read the retained Editor
+capture, including any finalization warnings, so an agent can continue the
+investigation after the Wasm runtime has been destroyed.
 
 ## Enable profiling
 

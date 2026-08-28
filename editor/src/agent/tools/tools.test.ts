@@ -24,6 +24,7 @@ describe("Editor agent tools", () => {
         });
 
         expect(editor.capabilities).toContain("runtime.status");
+        expect(editor.capabilities).toContain("profiler.summary");
         const tool = createEditorTools(editor).find(
             (candidate) => candidate.name === "runtime_status",
         );
@@ -153,6 +154,31 @@ describe("Editor agent tools", () => {
             schema: "play.step_status.v1",
             payload: { request_id: "step-response" },
         });
+    });
+
+    it("exposes profiler overview, frame history, and frame detail tools", async () => {
+        const requests: unknown[] = [];
+        const editor = createEditor(async (request) => {
+            requests.push(request);
+            return { requestId: "response", ok: true, value: { available: true } };
+        });
+        const tools = createEditorTools(editor);
+
+        await tools
+            .find((candidate) => candidate.name === "profiler_summary")
+            ?.execute("summary-call", {});
+        await tools
+            .find((candidate) => candidate.name === "profiler_frames")
+            ?.execute("frames-call", { afterFrame: 120, limit: 60 });
+        await tools
+            .find((candidate) => candidate.name === "profiler_frame")
+            ?.execute("frame-call", { frame: 144 });
+
+        expect(requests).toEqual([
+            { type: "profiler.summary" },
+            { type: "profiler.frames", afterFrame: 120, limit: 60 },
+            { type: "profiler.frame", frame: 144 },
+        ]);
     });
 
     it("surfaces command bus failures as tool errors", async () => {

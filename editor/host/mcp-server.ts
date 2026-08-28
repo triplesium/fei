@@ -24,7 +24,7 @@ function createMcpServer(relay: EditorCommandRelay): McpServer {
         { name: "entisium-editor", version: "0.1.0" },
         {
             instructions:
-                "Call play_interfaces first. Prefer play_observe and play_step for structured game interaction, polling play_step_status until completed. Fall back to runtime_observe and input tools when no structured interface is available. The Editor page must remain open.",
+                "Call play_interfaces first. Prefer play_observe and play_step for structured game interaction, polling play_step_status until completed. Fall back to runtime_observe and input tools when no structured interface is available. For performance investigations, call profiler_summary first, use profiler_frames to locate spikes, and inspect relevant frames with profiler_frame. Profiler tools can read retained captures after runtime stop. The Editor page must remain open.",
         },
     );
     for (const definition of editorToolDefinitions) {
