@@ -89,6 +89,11 @@ import {
 } from "./components/project-operation-dialog";
 import { ProjectSettingsDialog } from "./components/project-settings-dialog";
 import { WasmRuntimeController } from "./runtime/wasm-runtime-controller";
+import {
+    finalizeProfileCapture,
+    type ProfileCaptureArchive,
+    type ProfileCaptureProgress,
+} from "./runtime/profile-capture-archive";
 import { cn } from "./lib/utils";
 import { editorCapabilities } from "@editor-platform/capabilities";
 import { ProjectStorage } from "@editor-platform/project-storage";
@@ -625,11 +630,16 @@ export function App() {
     });
     const [agentStreaming, setAgentStreaming] = useState(false);
     const [runtimeSnapshot, setRuntimeSnapshot] = useState(() => runtimeController.getSnapshot());
+    const [profileArchive, setProfileArchive] = useState<ProfileCaptureArchive | null>(null);
+    const [profileFinalizing, setProfileFinalizing] = useState(false);
+    const [profileFinalizeProgress, setProfileFinalizeProgress] =
+        useState<ProfileCaptureProgress | null>(null);
     const consoleRef = useRef<HTMLDivElement>(null);
     const handlersRef = useRef<Record<string, EditorCommandHandler>>({});
     const dockviewApiRef = useRef<DockviewApi | null>(null);
     const dockviewLayoutListenerRef = useRef<{ dispose(): void } | null>(null);
     const runtimeFocusedGameRef = useRef(false);
+    const runtimeStopRef = useRef<Promise<void> | null>(null);
 
     const dirty = storage.isOpen && activePath.length > 0 && content !== savedContent;
 
@@ -788,8 +798,54 @@ export function App() {
         setSavedContent(next);
     };
 
-    const stopRuntime = (reason = "runtime stopped", log = true): void => {
-        runtimeController.stop(reason, log);
+    const stopRuntime = async (
+        reason = "runtime stopped",
+        log = true,
+        retainProfile = true,
+    ): Promise<void> => {
+        if (runtimeStopRef.current) return runtimeStopRef.current;
+        const operation = (async () => {
+            const snapshot = runtimeController.getSnapshot();
+            if (retainProfile && snapshot.state === "running" && snapshot.session) {
+                setProfileFinalizing(true);
+                setProfileFinalizeProgress(null);
+                try {
+                    const archive = await finalizeProfileCapture(
+                        (provider, schema, payload) =>
+                            runtimeController.inspect(provider, schema, payload),
+                        snapshot.session.channelId,
+                        { onProgress: setProfileFinalizeProgress },
+                    );
+                    setProfileArchive(archive);
+                    const retained = archive.details.size;
+                    const expected = archive.history?.frames.length ?? 0;
+                    appendConsole(
+                        archive.complete ? "info" : "error",
+                        "profiler",
+                        `retained CPU details for ${retained} / ${expected} frames`,
+                    );
+                    for (const warning of archive.warnings) {
+                        appendConsole("error", "profiler", warning);
+                    }
+                } catch (error) {
+                    appendConsole(
+                        "error",
+                        "profiler",
+                        `could not finalize capture: ${errorMessage(error)}`,
+                    );
+                } finally {
+                    setProfileFinalizing(false);
+                    setProfileFinalizeProgress(null);
+                }
+            }
+            runtimeController.stop(reason, log);
+        })();
+        runtimeStopRef.current = operation;
+        try {
+            await operation;
+        } finally {
+            if (runtimeStopRef.current === operation) runtimeStopRef.current = null;
+        }
     };
 
     const writeProjectSettings = async (settings: ProjectSettings): Promise<ProjectSettings> => {
@@ -801,7 +857,10 @@ export function App() {
             throw new Error("Changing the asset directory is not supported by this development editor yet.");
         }
         await storage.write("project.yaml", updateProjectSettingsSource(source, next));
-        if (runtimeState !== "stopped") stopRuntime("project settings changed");
+        if (runtimeState !== "stopped") {
+            await stopRuntime("project settings changed", true, false);
+        }
+        setProfileArchive(null);
         return next;
     };
 
@@ -832,7 +891,8 @@ export function App() {
     const openProjectFolder = async (): Promise<void> => {
         if (dirty) await saveActiveFile();
         const name = await storage.open();
-        stopRuntime("project folder changed");
+        await stopRuntime("project folder changed", true, false);
+        setProfileArchive(null);
         await loadOpenedProject();
         appendConsole("info", "project", `opened local folder ${name}`);
     };
@@ -995,12 +1055,16 @@ export function App() {
 
     const playRuntime = async (force = false): Promise<void> => {
         if (!force && (runtimeState === "starting" || runtimeState === "running")) return;
+        if (runtimeStopRef.current) await runtimeStopRef.current;
         const snapshot = await projectSnapshot();
+        setProfileArchive(null);
         await runtimeController.start(snapshot, force);
     };
 
     const restartRuntime = async (): Promise<void> => {
+        if (runtimeStopRef.current) await runtimeStopRef.current;
         const snapshot = await projectSnapshot();
+        setProfileArchive(null);
         await runtimeController.restart(snapshot);
     };
 
@@ -1197,7 +1261,7 @@ export function App() {
             return { state: "starting" };
         },
         "runtime.stop": async () => {
-            stopRuntime("stopped by command");
+            await stopRuntime("stopped by command");
             return { state: "stopped" };
         },
         "runtime.restart": async () => {
@@ -1785,6 +1849,10 @@ export function App() {
                 runtimeState={runtimeState}
                 sessionId={runtimeSession?.channelId ?? null}
                 inspect={inspectRuntime}
+                archive={profileArchive}
+                finalizing={profileFinalizing}
+                finalizeProgress={profileFinalizeProgress}
+                onClearArchive={() => setProfileArchive(null)}
             />
         ),
         ...(editorCapabilities.agent
@@ -1829,6 +1897,7 @@ export function App() {
                     projectOpen={storage.isOpen}
                     canSave={canEdit}
                     runtimeState={runtimeState}
+                    runtimeBusy={profileFinalizing}
                     onOpenProject={() => {
                         void openProjectFolder().catch((error) => {
                             if (!(error instanceof DOMException) || error.name !== "AbortError") {
@@ -1854,7 +1923,11 @@ export function App() {
                             appendConsole("error", "runtime", errorMessage(error)),
                         );
                     }}
-                    onStop={() => stopRuntime()}
+                    onStop={() => {
+                        void stopRuntime().catch((error) =>
+                            appendConsole("error", "runtime", errorMessage(error)),
+                        );
+                    }}
                     onRestart={() => {
                         void restartRuntime().catch((error) =>
                             appendConsole("error", "runtime", errorMessage(error)),

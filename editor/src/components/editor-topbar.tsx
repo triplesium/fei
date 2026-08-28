@@ -15,6 +15,7 @@ interface EditorTopbarProps {
     projectOpen: boolean;
     canSave: boolean;
     runtimeState: RuntimeState;
+    runtimeBusy?: boolean;
     settingsAvailable?: boolean;
     onOpenProject(): void;
     onSave(): void;
@@ -30,6 +31,7 @@ export function EditorTopbar({
     projectOpen,
     canSave,
     runtimeState,
+    runtimeBusy = false,
     settingsAvailable = true,
     onOpenProject,
     onSave,
@@ -82,17 +84,17 @@ export function EditorTopbar({
                     id="play"
                     label="Play"
                     accent="play"
-                    disabled={!projectOpen || runtimeState === "starting" || runtimeState === "running"}
+                    disabled={runtimeBusy || !projectOpen || runtimeState === "starting" || runtimeState === "running"}
                     onClick={onPlay}
                 >
                     <Play size={14} fill="currentColor" />
                 </IconButton>
-                <IconButton label="Stop" danger disabled={runtimeState === "stopped"} onClick={onStop}>
+                <IconButton label="Stop" danger disabled={runtimeBusy || runtimeState === "stopped"} onClick={onStop}>
                     <CircleStop size={15} />
                 </IconButton>
                 <IconButton
                     label="Restart"
-                    disabled={runtimeState !== "running" && runtimeState !== "failed"}
+                    disabled={runtimeBusy || (runtimeState !== "running" && runtimeState !== "failed")}
                     onClick={onRestart}
                 >
                     <RotateCcw size={14} />

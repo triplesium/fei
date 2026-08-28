@@ -15,6 +15,10 @@ import { PanelEmptyState, PanelStatus, PanelToolbar, ToolPanel } from "@/compone
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
 import type { RuntimeState } from "@/runtime/types";
+import type {
+    ProfileCaptureArchive,
+    ProfileCaptureProgress,
+} from "@/runtime/profile-capture-archive";
 import {
     resolveProfileFrameDetails,
     resolveProfileSummary,
@@ -43,6 +47,10 @@ interface ProfilerPanelProps {
     runtimeState: RuntimeState;
     sessionId: string | null;
     inspect: RuntimeInspect;
+    archive: ProfileCaptureArchive | null;
+    finalizing: boolean;
+    finalizeProgress: ProfileCaptureProgress | null;
+    onClearArchive(): void;
 }
 
 type ProfilerTab = "overview" | "systems" | "zones" | "gpu";
@@ -349,7 +357,15 @@ function captureLabel(status: ProfileCaptureStatus | null): string {
     return `Capturing ${formatCount(status.frameLimit - status.framesRemaining)} / ${formatCount(status.frameLimit)}`;
 }
 
-export function ProfilerPanel({ runtimeState, sessionId, inspect }: ProfilerPanelProps) {
+export function ProfilerPanel({
+    runtimeState,
+    sessionId,
+    inspect,
+    archive,
+    finalizing,
+    finalizeProgress,
+    onClearArchive,
+}: ProfilerPanelProps) {
     const [summary, setSummary] = useState<ProfileSummary | null>(null);
     const [history, setHistory] = useState<ProfileFrameHistory | null>(null);
     const [frameDetails, setFrameDetails] = useState<Map<number, ProfileFrameDetail>>(
@@ -367,6 +383,8 @@ export function ProfilerPanel({ runtimeState, sessionId, inspect }: ProfilerPane
     const [lastUpdated, setLastUpdated] = useState("");
     const [refreshToken, setRefreshToken] = useState(0);
     const retainedSessionId = useRef<string | null>(null);
+    const historyRef = useRef<ProfileFrameHistory | null>(null);
+    const retainedFrameNumbersRef = useRef<Set<number>>(new Set());
     const frameDetailsRef = useRef<Map<number, ProfileFrameDetail>>(new Map());
 
     const clearLocalData = useCallback(() => {
@@ -388,7 +406,59 @@ export function ProfilerPanel({ runtimeState, sessionId, inspect }: ProfilerPane
     }, [clearLocalData, sessionId]);
 
     useEffect(() => {
-        if (runtimeState !== "running" || !sessionId) return;
+        if (!archive) return;
+        let cancelled = false;
+        retainedSessionId.current = archive.sessionId;
+        if (archive.summary) setSummary(archive.summary);
+        if (archive.history) {
+            historyRef.current = archive.history;
+            retainedFrameNumbersRef.current = new Set(
+                archive.history.frames.map((frame) => frame.frame),
+            );
+            setHistory(archive.history);
+        }
+        const retainedDetails = new Map(frameDetailsRef.current);
+        for (const [frame, detail] of archive.details) {
+            retainedDetails.set(frame, detail);
+        }
+        frameDetailsRef.current = retainedDetails;
+        setFrameDetails(retainedDetails);
+        if (archive.gpuSummary) setGpuSummary(archive.gpuSummary);
+        setCaptureStatus((current) =>
+            current ? { ...current, recording: false, framesRemaining: 0 } : current,
+        );
+        setError(archive.warnings[0] ?? "");
+        setLastUpdated(
+            new Date(archive.finalizedAt).toLocaleTimeString([], {
+                hour12: false,
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+            }),
+        );
+        void Promise.all([
+            archive.summary ? resolveProfileSummary(archive.summary) : Promise.resolve(null),
+            resolveProfileFrameDetails({
+                available: archive.history?.available ?? archive.details.size > 0,
+                details: [...archive.details.values()],
+            }),
+        ]).then(([resolvedSummary, resolvedDetails]) => {
+            if (cancelled) return;
+            if (resolvedSummary) setSummary(resolvedSummary);
+            const resolvedByFrame = new Map(frameDetailsRef.current);
+            for (const detail of resolvedDetails.details) {
+                resolvedByFrame.set(detail.frame, detail);
+            }
+            frameDetailsRef.current = resolvedByFrame;
+            setFrameDetails(resolvedByFrame);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [archive]);
+
+    useEffect(() => {
+        if (runtimeState !== "running" || !sessionId || finalizing) return;
         let cancelled = false;
         let polling = false;
 
@@ -484,12 +554,13 @@ export function ProfilerPanel({ runtimeState, sessionId, inspect }: ProfilerPane
             cancelled = true;
             globalThis.clearInterval(timer);
         };
-    }, [inspect, refreshToken, runtimeState, selectedFrame, sessionId]);
+    }, [finalizing, inspect, refreshToken, runtimeState, selectedFrame, sessionId]);
 
     const runControl = async (action: ProfileControlAction): Promise<void> => {
-        if (controlBusy) return;
+        if (controlBusy || finalizing) return;
         if (action === "clear" && (runtimeState !== "running" || !sessionId)) {
             clearLocalData();
+            onClearArchive();
             return;
         }
         if (runtimeState !== "running" || !sessionId) return;
@@ -504,6 +575,7 @@ export function ProfilerPanel({ runtimeState, sessionId, inspect }: ProfilerPane
             if (action === "start" || action === "capture" || action === "clear") {
                 clearLocalData();
             }
+            if (action === "clear") onClearArchive();
             setCaptureStatus(status);
             setRefreshToken((current) => current + 1);
         } catch (caught) {
@@ -521,7 +593,8 @@ export function ProfilerPanel({ runtimeState, sessionId, inspect }: ProfilerPane
     const cpuSystems = selectedDetail?.systems ?? [];
     const cpuZones = selectedDetail?.zones ?? [];
     const dataAvailable = summary !== null || history !== null || gpuSummary !== null;
-    const controlsDisabled = runtimeState !== "running" || !sessionId || controlBusy;
+    const controlsDisabled =
+        runtimeState !== "running" || !sessionId || controlBusy || finalizing;
     const tabs: readonly { id: ProfilerTab; label: string; count?: number }[] = [
         { id: "overview", label: "Overview" },
         { id: "systems", label: "CPU Systems", count: cpuSystems.length },
@@ -555,10 +628,10 @@ export function ProfilerPanel({ runtimeState, sessionId, inspect }: ProfilerPane
                 <Button variant="ghost" size="sm" className="h-6 px-2" disabled={controlsDisabled || captureStatus?.available === false} onClick={() => void runControl("capture")}>
                     <Timer size={12} /> Capture
                 </Button>
-                <Button variant="ghost" size="icon" className="size-6" aria-label="Clear profiling capture" disabled={controlBusy || (!dataAvailable && runtimeState !== "running")} onClick={() => void runControl("clear")}>
+                <Button variant="ghost" size="icon" className="size-6" aria-label="Clear profiling capture" disabled={controlBusy || finalizing || (!dataAvailable && runtimeState !== "running")} onClick={() => void runControl("clear")}>
                     <Trash2 size={12} />
                 </Button>
-                <Button variant="ghost" size="icon" className="size-6" aria-label="Refresh profiler" disabled={runtimeState !== "running" || !sessionId} onClick={() => setRefreshToken((current) => current + 1)}>
+                <Button variant="ghost" size="icon" className="size-6" aria-label="Refresh profiler" disabled={runtimeState !== "running" || !sessionId || finalizing} onClick={() => setRefreshToken((current) => current + 1)}>
                     <RefreshCw size={12} className={controlBusy ? "animate-spin" : ""} />
                 </Button>
                 <span className="h-4 border-l border-[#4a4a4a]" />
@@ -669,7 +742,7 @@ export function ProfilerPanel({ runtimeState, sessionId, inspect }: ProfilerPane
                                 <div className="mt-2 rounded border border-[#3d5368] bg-[#22313f]/45 px-3 py-2 text-[11px] text-[#9fc8e8]">
                                     {runtimeState === "running"
                                         ? "Loading CPU details for this frame…"
-                                        : "CPU details for this frame were not cached before the runtime stopped."}
+                                        : "CPU details for this frame were not retained when the capture was finalized."}
                                 </div>
                             )}
                             {summary?.available === false && (
@@ -694,7 +767,18 @@ export function ProfilerPanel({ runtimeState, sessionId, inspect }: ProfilerPane
 
             <PanelStatus>
                 <span className={cn("truncate", error && "text-[#ff9aaa]")} title={error || undefined}>
-                    {error || (runtimeState === "running" ? captureLabel(captureStatus) : "Runtime stopped · capture frozen")}
+                    {finalizing
+                        ? finalizeProgress
+                            ? `Finalizing profiler capture… ${finalizeProgress.retained} / ${finalizeProgress.total} frames`
+                            : "Finalizing profiler capture…"
+                        : error ||
+                          (runtimeState === "running"
+                              ? captureLabel(captureStatus)
+                              : archive
+                                ? archive.complete
+                                    ? "Runtime stopped · capture retained"
+                                    : `Runtime stopped · ${frameDetails.size} / ${archive.history?.frames.length ?? 0} frame details retained`
+                                : "Runtime stopped · capture frozen")}
                 </span>
                 <span className="shrink-0 font-mono">
                     {analysisFrame !== null
