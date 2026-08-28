@@ -37,28 +37,37 @@ The control provider accepts these requests:
 `status` returns the current capture state without changing it. `start` begins
 an unbounded capture after clearing prior CPU summary data.
 `capture` stops automatically after the requested number of completed frames.
+Profiling builds begin with unbounded capture enabled; use `stop` when a paused
+runtime is required.
 The frame history remains bounded to its most recent 600 samples.
+`profiling.frame_history` accepts an optional `after_frame` cursor so live
+clients receive only newer samples after the initial snapshot.
 `profiling.frame_detail` accepts up to 60 frame numbers per request and returns
 the CPU system and zone timings captured in each frame still present in that
 rolling history.
 
 The Editor exposes these providers through the dockable `Profiler` tab beside
 the Console. Its overview shows the rolling frame history and current frame
-statistics. Live mode follows the newest frame; clicking a frame pins the
-selection and updates the CPU Systems, CPU Zones, and overview hotspots to that
-frame's samples. Use the previous and next controls to step through neighboring
-frames. The Editor backfills frame details into a local cache while the runtime
-is running, so the retained 600-frame window remains inspectable after the game
-stops. Use Live to resume following the newest frame.
+statistics. Live mode follows the newest frame and uses capture-wide CPU
+aggregates. Clicking a frame pins the selection and loads only that frame's CPU
+Systems, CPU Zones, and overview hotspots on demand. Use the previous and next
+controls to step through neighboring frames. Details already inspected remain
+in a small local cache while the runtime is running. Use Live to resume
+following the newest frame without continuously transferring per-frame detail.
 
 GPU timestamps remain a sortable, filterable capture-wide aggregate. Graphics
 backends currently report resolved durations without the originating frame
 number, so the Editor does not attribute delayed GPU query results to a selected
 frame. Recording controls operate on the runtime capture, while the target FPS
-selector only changes the Editor's frame-budget guide. Stopping the game freezes
-the most recently received data in the Editor. The next runtime session starts
-with an empty view, and Clear remains available for discarding frozen data while
-the game is stopped.
+selector only changes the Editor's frame-budget guide. A normal game stop first
+freezes CPU recording and exports the rolling history through a compact archive
+that stores repeated system and zone metadata once per batch. Up to 600 frames
+are requested together; responses that exceed the inspection size limit are
+divided into smaller batches automatically. Offline symbols are resolved after
+the runtime data has been retained, so symbol lookup does not extend the runtime
+shutdown deadline. The Editor keeps the resulting per-frame capture until a new
+runtime session starts or Clear is selected. A timeout or runtime failure still
+stops the game and preserves any details that were exported successfully.
 
 ## Enable profiling
 
@@ -179,9 +188,10 @@ build/wasm/wasm32/release/profile-symbols/<wasm-sha256>.json
 ```
 
 Runtime records use `wasm:<sha256>` plus the final Wasm function index. The
-Editor loads the matching manifest through the authenticated Editor Host API
-and caches it by build ID. Symbol manifests are deliberately not copied into
-the public `runtime/` asset directory.
+Editor requests only referenced function indices through the authenticated
+Editor Host API. The host caches the full manifest by build ID, while the
+browser incrementally caches returned subsets. Symbol manifests are
+deliberately not copied into the public `runtime/` asset directory.
 
 Archive the manifest with profiling captures. A manifest from a different Wasm
 binary is rejected because its `module_id` does not match.
@@ -205,6 +215,29 @@ addresses are never persisted.
 The existing in-process DbgHelp lookup remains a display fallback on Windows,
 so a local run can still show names immediately. The raw GUID/Age and RVA stay
 in the inspection response and `systems.csv` for later symbolization.
+
+## Measure profiling overhead
+
+Build the dedicated release benchmark with summary profiling enabled:
+
+```powershell
+xmake f -p windows -a x64 -m release --profile_summary=y -y
+xmake build -y entisium-profiling-benchmark
+xmake run entisium-profiling-benchmark --threads 1 --scopes 250000
+xmake run entisium-profiling-benchmark --threads 8 --scopes 100000
+```
+
+The benchmark prints `idle` and `recording` rows as CSV. `idle` measures the
+compiled-in fast path with capture paused. `recording` measures continuously
+captured system scopes with records pre-registered, matching the ECS hot path.
+Use `wall_ns_per_scope` for same-machine before/after comparisons. Always test
+both one thread and the representative worker count: a global profiler lock can
+look inexpensive in a single-thread run while causing severe parallel frame
+jitter.
+
+For end-to-end validation, compare the same release sample with the Profiler
+panel open and closed. Record at least p50, p95, and p99 frame duration; do not
+rely on average FPS alone.
 
 ## System names
 
