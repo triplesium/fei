@@ -1,6 +1,7 @@
 #include "ecs/dynamic/query.hpp"
 #include "ecs/world.hpp"
 #include "refl/cls.hpp"
+#include "refl/property.hpp"
 #include "refl/registry.hpp"
 #include "scripting/source.hpp"
 #include "scripting_luau/compiler.hpp"
@@ -51,6 +52,11 @@ struct Measurement {
     std::size_t rows_per_call {0};
     std::size_t calls_per_sample {0};
     double nanoseconds_per_call {0.0};
+};
+
+struct ComparisonBaselines {
+    const Measurement* direct {nullptr};
+    const Measurement* reflection {nullptr};
 };
 
 void consume(std::uint64_t value) {
@@ -176,9 +182,45 @@ Measurement measure(
     };
 }
 
+const Measurement* find_measurement(
+    const std::vector<Measurement>& results,
+    const std::string& name
+) {
+    const auto found = std::ranges::find(results, name, &Measurement::name);
+    return found == results.end() ? nullptr : &*found;
+}
+
+ComparisonBaselines comparison_baselines(
+    const std::vector<Measurement>& results,
+    const Measurement& result
+) {
+    constexpr std::string_view luau_prefix = "luau/";
+    constexpr std::string_view reflection_prefix = "cpp/reflection ";
+    std::string_view suffix;
+    const bool is_luau = result.name.starts_with(luau_prefix);
+    if (is_luau) {
+        suffix = std::string_view {result.name}.substr(luau_prefix.size());
+    } else if (result.name.starts_with(reflection_prefix)) {
+        suffix =
+            std::string_view {result.name}.substr(reflection_prefix.size());
+    } else {
+        return {};
+    }
+
+    ComparisonBaselines baselines;
+    baselines.direct =
+        find_measurement(results, "cpp/direct " + std::string {suffix});
+    if (is_luau) {
+        baselines.reflection =
+            find_measurement(results, "cpp/reflection " + std::string {suffix});
+    }
+    return baselines;
+}
+
 std::string benchmark_source(std::size_t entities) {
     return R"(
         local sink = 0
+        local write_value = 1
         local entity_count = )" +
            std::to_string(entities) + R"(
 
@@ -238,9 +280,10 @@ std::string benchmark_source(std::size_t entities) {
         local function write_property_once(
             components: Query<Write<QueryBenchmarkComponent>>
         )
+            write_value = 3 - write_value
             local total = 0
             for component in components do
-                component.x = 1
+                component.x = write_value
                 total += 1
             end
             sink = total
@@ -286,9 +329,10 @@ std::string benchmark_source(std::size_t entities) {
         local function write_nested_property_once(
             components: Query<Write<QueryBenchmarkComponent>>
         )
+            write_value = 3 - write_value
             local total = 0
             for component in components do
-                component.position.x = 1
+                component.position.x = write_value
                 total += 1
             end
             sink = total
@@ -359,6 +403,53 @@ Ref prepare_query(DynamicQuery& query, World& world, SystemTicks system_ticks) {
     return *prepared;
 }
 
+Property& required_property(TypeId type, std::string_view name) {
+    auto cls = Registry::instance().try_get_cls(type);
+    if (!cls) {
+        throw std::runtime_error(
+            "benchmark reflected class lookup failed: " + cls.error().message
+        );
+    }
+    auto property = cls->try_get_property(std::string {name});
+    if (!property) {
+        throw std::runtime_error(
+            "benchmark reflected property lookup failed: " +
+            property.error().message
+        );
+    }
+    return *property;
+}
+
+Ref get_property(Property& property, Ref object) {
+    auto value = property.get(object);
+    if (!value) {
+        throw std::runtime_error(
+            "benchmark reflected property get failed: " + value.error().message
+        );
+    }
+    return *value;
+}
+
+bool set_double_property(Property& property, Ref object, double value) {
+    auto current = get_property(property, object);
+    if (current.get_const<double>() == value) {
+        return false;
+    }
+    auto status = property.set(object, Ref(value));
+    if (!status) {
+        throw std::runtime_error(
+            "benchmark reflected property set failed: " + status.error().message
+        );
+    }
+    return true;
+}
+
+void mark_changed(const DynamicQueryFieldBorrow& field) {
+    if (field.ticks != nullptr) {
+        field.ticks->mark_changed(field.change_tick);
+    }
+}
+
 void call_module(
     LuauRuntime& runtime,
     LuauScriptModuleId module,
@@ -383,6 +474,11 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
         .register_cls<QueryBenchmarkComponent>()
         .add_property("position", &QueryBenchmarkComponent::position)
         .add_property("x", &QueryBenchmarkComponent::x);
+    auto& component_position =
+        required_property(type_id<QueryBenchmarkComponent>(), "position");
+    auto& component_x =
+        required_property(type_id<QueryBenchmarkComponent>(), "x");
+    auto& vector_x = required_property(type_id<QueryBenchmarkVector>(), "x");
 
     World world;
     for (std::size_t index = 0; index < options.entities; ++index) {
@@ -452,7 +548,7 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
         load_benchmark_module(runtime, options.entities);
 
     std::vector<Measurement> results;
-    results.reserve(14);
+    results.reserve(29);
     results.push_back(measure("runtime/empty call", 0, options, [&] {
         call_module(runtime, module, "empty");
         return std::uint64_t {1};
@@ -461,30 +557,325 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
         prepare_query(prepare_only_query, world, ticks);
         return std::uint64_t {1};
     }));
+    results.push_back(measure("cpp/query rows", options.entities, options, [&] {
+        DynamicQueryCursor cursor;
+        DynamicQueryRow row;
+        std::uint64_t total = 0;
+        while (read_query.next(cursor, row)) {
+            total += row.row + 1;
+        }
+        return total;
+    }));
     results.push_back(
-        measure("native/iterate rows", options.entities, options, [&] {
-            DynamicQueryCursor cursor;
-            DynamicQueryRow row;
+        measure("cpp/direct pure numeric loop", options.entities, options, [&] {
             std::uint64_t total = 0;
-            while (read_query.next(cursor, row)) {
-                total += row.row + 1;
+            for (std::size_t index = 1; index <= options.entities; ++index) {
+                total += index;
             }
             return total;
         })
     );
     results.push_back(
-        measure("native/field + read x", options.entities, options, [&] {
+        measure("cpp/direct query Entity", options.entities, options, [&] {
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            std::uint64_t total = 0;
+            while (entity_query.next(cursor, row)) {
+                total += entity_query.field_untracked(row, 0)
+                             .value.get_const<Entity>()
+                             .value;
+            }
+            return total;
+        })
+    );
+    results.push_back(
+        measure("cpp/direct read property x1", options.entities, options, [&] {
             DynamicQueryCursor cursor;
             DynamicQueryRow row;
             double total = 0.0;
             while (read_query.next(cursor, row)) {
-                total += read_query.field(row, 0)
-                             .get_const<QueryBenchmarkComponent>()
+                total += read_query.field_untracked(row, 0)
+                             .value.get_const<QueryBenchmarkComponent>()
                              .x;
             }
             return static_cast<std::uint64_t>(total);
         })
     );
+    results.push_back(
+        measure("cpp/direct read property x4", options.entities, options, [&] {
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            double total = 0.0;
+            while (read_query.next(cursor, row)) {
+                const auto& component =
+                    read_query.field_untracked(row, 0)
+                        .value.get_const<QueryBenchmarkComponent>();
+                total += component.x;
+                total += component.x;
+                total += component.x;
+                total += component.x;
+            }
+            return static_cast<std::uint64_t>(total);
+        })
+    );
+    double direct_write_value = 1.0;
+    results.push_back(
+        measure("cpp/direct write property x1", options.entities, options, [&] {
+            direct_write_value = 3.0 - direct_write_value;
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            std::uint64_t total = 0;
+            while (write_query.next(cursor, row)) {
+                const auto field = write_query.field_untracked(row, 0);
+                auto& component = field.value.get<QueryBenchmarkComponent>();
+                if (component.x != direct_write_value) {
+                    component.x = direct_write_value;
+                    mark_changed(field);
+                }
+                ++total;
+            }
+            return total;
+        })
+    );
+    results.push_back(measure(
+        "cpp/direct read nested property x1",
+        options.entities,
+        options,
+        [&] {
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            double total = 0.0;
+            while (read_query.next(cursor, row)) {
+                total += read_query.field_untracked(row, 0)
+                             .value.get_const<QueryBenchmarkComponent>()
+                             .position.x;
+            }
+            return static_cast<std::uint64_t>(total);
+        }
+    ));
+    results.push_back(measure(
+        "cpp/direct read nested property x4",
+        options.entities,
+        options,
+        [&] {
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            double total = 0.0;
+            while (read_query.next(cursor, row)) {
+                const auto& component =
+                    read_query.field_untracked(row, 0)
+                        .value.get_const<QueryBenchmarkComponent>();
+                total += component.position.x;
+                total += component.position.x;
+                total += component.position.x;
+                total += component.position.x;
+            }
+            return static_cast<std::uint64_t>(total);
+        }
+    ));
+    results.push_back(measure(
+        "cpp/direct read cached nested x4",
+        options.entities,
+        options,
+        [&] {
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            double total = 0.0;
+            while (read_query.next(cursor, row)) {
+                const auto& position =
+                    read_query.field_untracked(row, 0)
+                        .value.get_const<QueryBenchmarkComponent>()
+                        .position;
+                total += position.x;
+                total += position.x;
+                total += position.x;
+                total += position.x;
+            }
+            return static_cast<std::uint64_t>(total);
+        }
+    ));
+    double direct_nested_write_value = 1.0;
+    results.push_back(measure(
+        "cpp/direct write nested property x1",
+        options.entities,
+        options,
+        [&] {
+            direct_nested_write_value = 3.0 - direct_nested_write_value;
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            std::uint64_t total = 0;
+            while (write_query.next(cursor, row)) {
+                const auto field = write_query.field_untracked(row, 0);
+                auto& position =
+                    field.value.get<QueryBenchmarkComponent>().position;
+                if (position.x != direct_nested_write_value) {
+                    position.x = direct_nested_write_value;
+                    mark_changed(field);
+                }
+                ++total;
+            }
+            return total;
+        }
+    ));
+    results.push_back(measure(
+        "cpp/reflection read property x1",
+        options.entities,
+        options,
+        [&] {
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            double total = 0.0;
+            while (read_query.next(cursor, row)) {
+                const Ref component = read_query.field_untracked(row, 0).value;
+                total +=
+                    get_property(component_x, component).get_const<double>();
+            }
+            return static_cast<std::uint64_t>(total);
+        }
+    ));
+    results.push_back(measure(
+        "cpp/reflection read property x4",
+        options.entities,
+        options,
+        [&] {
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            double total = 0.0;
+            while (read_query.next(cursor, row)) {
+                const Ref component = read_query.field_untracked(row, 0).value;
+                total +=
+                    get_property(component_x, component).get_const<double>();
+                total +=
+                    get_property(component_x, component).get_const<double>();
+                total +=
+                    get_property(component_x, component).get_const<double>();
+                total +=
+                    get_property(component_x, component).get_const<double>();
+            }
+            return static_cast<std::uint64_t>(total);
+        }
+    ));
+    double reflected_write_value = 1.0;
+    results.push_back(measure(
+        "cpp/reflection write property x1",
+        options.entities,
+        options,
+        [&] {
+            reflected_write_value = 3.0 - reflected_write_value;
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            std::uint64_t total = 0;
+            while (write_query.next(cursor, row)) {
+                const auto field = write_query.field_untracked(row, 0);
+                if (set_double_property(
+                        component_x,
+                        field.value,
+                        reflected_write_value
+                    )) {
+                    mark_changed(field);
+                }
+                ++total;
+            }
+            return total;
+        }
+    ));
+    results.push_back(measure(
+        "cpp/reflection read nested property x1",
+        options.entities,
+        options,
+        [&] {
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            double total = 0.0;
+            while (read_query.next(cursor, row)) {
+                const Ref component = read_query.field_untracked(row, 0).value;
+                const Ref position =
+                    get_property(component_position, component);
+                total += get_property(vector_x, position).get_const<double>();
+            }
+            return static_cast<std::uint64_t>(total);
+        }
+    ));
+    results.push_back(measure(
+        "cpp/reflection read nested property x4",
+        options.entities,
+        options,
+        [&] {
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            double total = 0.0;
+            while (read_query.next(cursor, row)) {
+                const Ref component = read_query.field_untracked(row, 0).value;
+                total += get_property(
+                             vector_x,
+                             get_property(component_position, component)
+                )
+                             .get_const<double>();
+                total += get_property(
+                             vector_x,
+                             get_property(component_position, component)
+                )
+                             .get_const<double>();
+                total += get_property(
+                             vector_x,
+                             get_property(component_position, component)
+                )
+                             .get_const<double>();
+                total += get_property(
+                             vector_x,
+                             get_property(component_position, component)
+                )
+                             .get_const<double>();
+            }
+            return static_cast<std::uint64_t>(total);
+        }
+    ));
+    results.push_back(measure(
+        "cpp/reflection read cached nested x4",
+        options.entities,
+        options,
+        [&] {
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            double total = 0.0;
+            while (read_query.next(cursor, row)) {
+                const Ref component = read_query.field_untracked(row, 0).value;
+                const Ref position =
+                    get_property(component_position, component);
+                total += get_property(vector_x, position).get_const<double>();
+                total += get_property(vector_x, position).get_const<double>();
+                total += get_property(vector_x, position).get_const<double>();
+                total += get_property(vector_x, position).get_const<double>();
+            }
+            return static_cast<std::uint64_t>(total);
+        }
+    ));
+    double reflected_nested_write_value = 1.0;
+    results.push_back(measure(
+        "cpp/reflection write nested property x1",
+        options.entities,
+        options,
+        [&] {
+            reflected_nested_write_value = 3.0 - reflected_nested_write_value;
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            std::uint64_t total = 0;
+            while (write_query.next(cursor, row)) {
+                const auto field = write_query.field_untracked(row, 0);
+                const Ref position =
+                    get_property(component_position, field.value);
+                if (set_double_property(
+                        vector_x,
+                        position,
+                        reflected_nested_write_value
+                    )) {
+                    mark_changed(field);
+                }
+                ++total;
+            }
+            return total;
+        }
+    ));
     results.push_back(
         measure("luau/pure numeric loop", options.entities, options, [&] {
             call_module(runtime, module, "pure_loop");
@@ -587,8 +978,9 @@ void print_results(
 ) {
     if (options.csv) {
         std::cout << "name,entities,calls_per_sample,median_ns_per_call,median_"
-                     "ns_per_row\n";
+                     "ns_per_row,vs_cpp_direct,vs_cpp_reflection\n";
         for (const auto& result : results) {
+            const auto baselines = comparison_baselines(results, result);
             std::cout << result.name << ',' << options.entities << ','
                       << result.calls_per_sample << ',' << std::fixed
                       << std::setprecision(2) << result.nanoseconds_per_call
@@ -597,6 +989,16 @@ void print_results(
                 std::cout << result.nanoseconds_per_call /
                                  static_cast<double>(result.rows_per_call);
             }
+            std::cout << ',';
+            if (baselines.direct != nullptr) {
+                std::cout << result.nanoseconds_per_call /
+                                 baselines.direct->nanoseconds_per_call;
+            }
+            std::cout << ',';
+            if (baselines.reflection != nullptr) {
+                std::cout << result.nanoseconds_per_call /
+                                 baselines.reflection->nanoseconds_per_call;
+            }
             std::cout << '\n';
         }
         return;
@@ -604,12 +1006,14 @@ void print_results(
 
     std::cout << "Luau ECS query benchmark (" << options.entities
               << " rows, median of " << options.samples << " samples)\n\n";
-    std::cout << std::left << std::setw(36) << "case" << std::right
+    std::cout << std::left << std::setw(44) << "case" << std::right
               << std::setw(16) << "ns/call" << std::setw(16) << "ns/row"
-              << std::setw(12) << "calls" << '\n';
-    std::cout << std::string(80, '-') << '\n';
+              << std::setw(12) << "vs direct" << std::setw(16)
+              << "vs reflection" << std::setw(12) << "calls" << '\n';
+    std::cout << std::string(116, '-') << '\n';
     for (const auto& result : results) {
-        std::cout << std::left << std::setw(36) << result.name << std::right
+        const auto baselines = comparison_baselines(results, result);
+        std::cout << std::left << std::setw(44) << result.name << std::right
                   << std::setw(16) << std::fixed << std::setprecision(2)
                   << result.nanoseconds_per_call;
         if (result.rows_per_call == 0) {
@@ -619,14 +1023,32 @@ void print_results(
                       << result.nanoseconds_per_call /
                              static_cast<double>(result.rows_per_call);
         }
+        if (baselines.direct == nullptr) {
+            std::cout << std::setw(12) << '-';
+        } else {
+            std::cout << std::setw(11) << std::setprecision(2)
+                      << result.nanoseconds_per_call /
+                             baselines.direct->nanoseconds_per_call
+                      << 'x';
+        }
+        if (baselines.reflection == nullptr) {
+            std::cout << std::setw(16) << '-';
+        } else {
+            std::cout << std::setw(15) << std::setprecision(2)
+                      << result.nanoseconds_per_call /
+                             baselines.reflection->nanoseconds_per_call
+                      << 'x';
+        }
         std::cout << std::setw(12) << result.calls_per_sample << '\n';
     }
     std::cout
         << "\nQueries are prepared once for row cases. query/prepare isolates "
-           "the per-system\nprepare cost. component bridge isolates borrowed "
-           "userdata creation; property\ncases add reflected "
-           "__index/__newindex "
-           "access on top.\n";
+           "the per-system\nprepare cost. Matching cpp/direct, "
+           "cpp/reflection, and luau suffixes perform\nthe same work at each "
+           "layer. Write cases alternate values to include mutation "
+           "and\nchange-"
+           "tick tracking. component bridge isolates borrowed userdata "
+           "creation.\n";
 }
 
 } // namespace

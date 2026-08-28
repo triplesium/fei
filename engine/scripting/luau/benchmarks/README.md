@@ -4,6 +4,10 @@ This benchmark separates the main costs paid by Luau systems that iterate ECS
 queries:
 
 - native `DynamicQuery` iteration and field access;
+- direct C++ implementations of the same numeric, property, and nested-property
+  workloads used by the Luau cases;
+- C++ implementations of those workloads through pre-resolved reflection
+  `Property` objects, separating reflection cost from the Luau binding cost;
 - the Luau VM loop and native function-call baseline;
 - pushing each queried component into Luau as borrowed userdata;
 - reflected component property reads and writes;
@@ -29,5 +33,10 @@ The per-row cases reuse an already prepared query. `query/prepare` measures the
 additional archetype refresh performed when a dynamic system parameter is
 prepared for a system invocation.
 
-Compare the direct and locally cached nested cases to isolate the cost of
-creating borrowed userdata for intermediate reflected objects.
+Compare `cpp/direct`, `cpp/reflection`, and `luau` cases with the same suffix to
+measure equivalent work at each layer. Compare the direct and locally cached
+nested cases to isolate repeated traversal and the cost of creating borrowed
+userdata for intermediate reflected objects. Write cases alternate between two
+values on every invocation so that they measure real mutation and change-tick
+tracking rather than the unchanged-value fast path. Human-readable and CSV
+output report matched `vs_cpp_direct` and `vs_cpp_reflection` ratios.
