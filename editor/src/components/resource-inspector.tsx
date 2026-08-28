@@ -91,7 +91,7 @@ export function ResourceInspector({
     const name = inspection.path.split("/").at(-1) ?? inspection.path;
     const settings = Object.entries(inspection.metadata?.settings ?? {});
     return (
-        <div className="min-h-full">
+        <div className="min-h-full" aria-busy={loading}>
             <PanelSection className="pb-3">
                 <div className="flex min-w-0 items-start gap-2.5">
                     <div className="grid size-9 shrink-0 place-items-center rounded-md border border-border/60 bg-muted/40 text-primary">
@@ -107,14 +107,35 @@ export function ResourceInspector({
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                     {inspection.kind === "text" && !inspection.readonly && (
-                        <Button variant="secondary" size="sm" type="button" onClick={onOpen}>Open</Button>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            type="button"
+                            disabled={loading}
+                            onClick={onOpen}
+                        >
+                            Open
+                        </Button>
                     )}
                     {inspection.kind !== "directory" && (
-                        <Button variant="ghost" size="sm" type="button" onClick={onRename}>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            type="button"
+                            disabled={loading}
+                            onClick={onRename}
+                        >
                             <Pencil className="size-3.5" strokeWidth={1.7} /> Rename
                         </Button>
                     )}
-                    <Button variant="ghost" size="sm" type="button" className="text-destructive" onClick={onDelete}>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        className="text-destructive"
+                        disabled={loading}
+                        onClick={onDelete}
+                    >
                         <Trash2 className="size-3.5" strokeWidth={1.7} /> Delete
                     </Button>
                 </div>

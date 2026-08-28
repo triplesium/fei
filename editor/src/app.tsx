@@ -659,13 +659,12 @@ export function App() {
         let cancelled = false;
         let previewUrl = "";
         setAssetInspectionError("");
-        setAssetPreviewUrl("");
         if (!selectedAssetPath) {
             setAssetInspection(null);
+            setAssetPreviewUrl("");
             setAssetInspectionLoading(false);
             return;
         }
-        setAssetInspection(null);
         setAssetInspectionLoading(true);
         void storage
             .inspect(selectedAssetPath)
@@ -684,16 +683,23 @@ export function App() {
                 setAssetPreviewUrl(previewUrl);
             })
             .catch((error) => {
-                if (!cancelled) setAssetInspectionError(errorMessage(error));
+                if (!cancelled) {
+                    setAssetInspection(null);
+                    setAssetPreviewUrl("");
+                    setAssetInspectionError(errorMessage(error));
+                }
             })
             .finally(() => {
                 if (!cancelled) setAssetInspectionLoading(false);
             });
         return () => {
             cancelled = true;
-            if (previewUrl) URL.revokeObjectURL(previewUrl);
         };
     }, [selectedAssetPath, files]);
+
+    useEffect(() => () => {
+        if (assetPreviewUrl) URL.revokeObjectURL(assetPreviewUrl);
+    }, [assetPreviewUrl]);
 
     const appendConsole = useCallback(
         (level: ConsoleLevel, source: string, message: unknown) => {
