@@ -193,6 +193,18 @@ No `add_systems(...)` call-site changes are required.
 
 ### WebAssembly
 
+The Editor development server and production Host send
+`Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: require-corp`. When the Editor is opened as a
+top-level page in a compatible browser, `crossOriginIsolated` is therefore
+`true` and the browser can expose its finer high-resolution timer, targeting
+roughly 5 microsecond rather than 100 microsecond granularity. Embedded browser
+containers must also permit cross-origin isolation; check
+`crossOriginIsolated` in that container before treating 0.01 ms values as
+significant. The profiler still stores CPU durations as integer nanoseconds,
+but browser clock resolution and instrumentation overhead determine their
+effective accuracy.
+
 Configure and build a profiling runtime normally, including release builds:
 
 ```powershell

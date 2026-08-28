@@ -240,6 +240,8 @@ export function createEditorHost(options: HostOptions): {
         }
         response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
         response.setHeader("Access-Control-Allow-Methods", "GET, PUT, DELETE, POST, OPTIONS");
+        response.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+        response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
         response.setHeader("X-Content-Type-Options", "nosniff");
         if (request.method === "OPTIONS") {
             response.writeHead(204);

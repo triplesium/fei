@@ -134,9 +134,16 @@ describe("Editor Host", () => {
         const baseUrl = `http://${address.host}:${address.port}`;
 
         try {
+            const editor = await fetch(baseUrl);
+            expect(editor.status).toBe(200);
+            expect(editor.headers.get("cross-origin-opener-policy")).toBe("same-origin");
+            expect(editor.headers.get("cross-origin-embedder-policy")).toBe("require-corp");
+
             const runtime = await fetch(`${baseUrl}/runtime/index.html`);
             expect(runtime.status).toBe(200);
             expect(runtime.headers.get("content-type")).toBe("text/html; charset=utf-8");
+            expect(runtime.headers.get("cross-origin-opener-policy")).toBe("same-origin");
+            expect(runtime.headers.get("cross-origin-embedder-policy")).toBe("require-corp");
             expect(await runtime.text()).toContain("Entisium Runtime");
 
             const unknown = await fetch(`${baseUrl}/runtime/entisium-editor-runtime.map`);

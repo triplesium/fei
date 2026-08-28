@@ -15,6 +15,10 @@ export default defineConfig(({ mode }) => {
             },
         },
         server: {
+            headers: {
+                "Cross-Origin-Embedder-Policy": "require-corp",
+                "Cross-Origin-Opener-Policy": "same-origin",
+            },
             proxy: {
                 "/api": "http://127.0.0.1:3100",
                 "/runtime": "http://127.0.0.1:3100",
