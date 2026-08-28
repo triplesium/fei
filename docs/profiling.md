@@ -49,13 +49,17 @@ the CPU system and zone timings captured in each frame still present in that
 rolling history.
 
 The Editor exposes these providers through the dockable `Profiler` tab beside
-the Console. Its overview shows the rolling frame history and current frame
-statistics. Live mode follows the newest frame and uses capture-wide CPU
-aggregates. Clicking a frame pins the selection and loads only that frame's CPU
-Systems, CPU Zones, and overview hotspots on demand. Use the previous and next
-controls to step through neighboring frames. Details already inspected remain
-in a small local cache while the runtime is running. Use Live to resume
-following the newest frame without continuously transferring per-frame detail.
+the Console. Its compact workspace uses a side-by-side layout: CPU Systems,
+CPU Zones, or GPU measurements on the left and the rolling frame-time graph on
+the right. Live mode follows the newest frame and uses capture-wide CPU
+aggregates. Clicking a frame pins the selection and updates the CPU tables with
+only that frame's details on demand. Hover a frame to inspect its exact
+duration, use the arrow keys or previous and next controls to step through
+neighboring frames, and use Live to resume following the newest frame. Scroll
+over the graph to zoom around the pointer, drag with the middle or right mouse
+button to pan, and double-click to reset the visible range. Details already
+inspected remain in a small local cache while the runtime is running, avoiding
+continuous transfer of per-frame detail.
 
 GPU timestamps remain a sortable, filterable capture-wide aggregate. Graphics
 backends currently report resolved durations without the originating frame
