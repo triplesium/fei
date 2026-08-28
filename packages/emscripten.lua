@@ -26,6 +26,11 @@ toolchain("entisium-emcc")
     end)
 
     on_load(function(toolchain)
+        -- Xmake's cached preprocessing passes both -c and -E to recent Clang,
+        -- producing a harmless warning. Keep -c for real compilation.
+        -- See https://github.com/xmake-io/xmake/issues/6460.
+        toolchain:add("cxflags", "-Wno-unused-command-line-argument")
+
         if is_host("windows") then
             for _, package in ipairs(toolchain:packages()) do
                 local installdir = package:installdir()
