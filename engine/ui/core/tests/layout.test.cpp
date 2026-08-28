@@ -343,6 +343,8 @@ TEST_CASE("UI text and layout stay cached until inputs change", "[ui][text]") {
         app.world()
             .get_component_rw<text::TextLayoutInfo>(entity)
             .changed_tick();
+    const auto text_flags_tick =
+        app.world().get_component_rw<ui::TextNodeFlags>(entity).changed_tick();
     const auto generation = app.resource<ui::LayoutState>().generation;
     const auto& initial_flags =
         app.world().get_component<ui::TextNodeFlags>(entity);
@@ -359,6 +361,11 @@ TEST_CASE("UI text and layout stay cached until inputs change", "[ui][text]") {
         app.world()
             .get_component_rw<text::TextLayoutInfo>(entity)
             .changed_tick() == text_layout_tick
+    );
+    CHECK(
+        app.world()
+            .get_component_rw<ui::TextNodeFlags>(entity)
+            .changed_tick() == text_flags_tick
     );
     CHECK(app.resource<ui::LayoutState>().generation == generation);
 

@@ -164,9 +164,13 @@ void invalidate_text_nodes(
         Or<Changed<Text>, Changed<text::TextFont>, Changed<text::TextLayout>>>
         changed_texts,
     Query<Entity, TextNodeFlags> flags,
-    ResRO<Assets<text::Font>> fonts
+    EventReaderRO<AssetEvent<text::Font>> font_events
 ) {
-    if (fonts.is_changed()) {
+    bool fonts_changed = false;
+    while (font_events.next()) {
+        fonts_changed = true;
+    }
+    if (fonts_changed) {
         for (auto [entity, node_flags] : flags) {
             (void)entity;
             require_text_measure(node_flags);
@@ -188,7 +192,7 @@ void update_text_content_sizes(
         const text::TextFont,
         const text::TextLayout,
         ContentSize,
-        TextNodeFlags> texts,
+        TextNodeFlags>::Filter<Changed<TextNodeFlags>> texts,
     ResRO<Assets<text::Font>> fonts,
     ResRO<text::TextPipeline> pipeline
 ) {
@@ -251,7 +255,7 @@ void update_text_layouts(
         const ContentSize,
         const ComputedNode,
         text::TextLayoutInfo,
-        TextNodeFlags> texts,
+        TextNodeFlags>::Filter<Changed<TextNodeFlags>> texts,
     ResRO<Assets<text::Font>> fonts,
     ResRW<Assets<Image>> images,
     ResRW<text::TextPipeline> pipeline

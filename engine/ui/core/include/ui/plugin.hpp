@@ -1,7 +1,9 @@
 #pragma once
 
 #include "app/plugin.hpp"
+#include "asset/event.hpp"
 #include "ecs/commands.hpp"
+#include "ecs/event.hpp"
 #include "ecs/hierarchy.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_set.hpp"
@@ -98,7 +100,7 @@ void invalidate_text_nodes(
         Or<Changed<Text>, Changed<text::TextFont>, Changed<text::TextLayout>>>
         changed_texts,
     Query<Entity, TextNodeFlags> flags,
-    ResRO<Assets<text::Font>> fonts
+    EventReaderRO<AssetEvent<text::Font>> font_events
 );
 
 void update_text_content_sizes(
@@ -108,7 +110,7 @@ void update_text_content_sizes(
         const text::TextFont,
         const text::TextLayout,
         ContentSize,
-        TextNodeFlags> texts,
+        TextNodeFlags>::Filter<Changed<TextNodeFlags>> texts,
     ResRO<Assets<text::Font>> fonts,
     ResRO<text::TextPipeline> pipeline
 );
@@ -128,7 +130,7 @@ void update_text_layouts(
         const ContentSize,
         const ComputedNode,
         text::TextLayoutInfo,
-        TextNodeFlags> texts,
+        TextNodeFlags>::Filter<Changed<TextNodeFlags>> texts,
     ResRO<Assets<text::Font>> fonts,
     ResRW<Assets<Image>> images,
     ResRW<text::TextPipeline> pipeline
