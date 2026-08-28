@@ -10,7 +10,7 @@ import {
     Timer,
     Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PanelEmptyState, PanelStatus, PanelToolbar, ToolPanel } from "@/components/panel";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -25,10 +25,13 @@ import {
 } from "@/services/profile-symbols";
 import {
     controlProfiling,
+    createProfileSummaryCatalog,
+    inspectCompactProfileSummary,
     inspectGpuProfileSummary,
     inspectProfileFrameDetails,
     inspectProfileFrameHistory,
-    inspectProfileSummary,
+    mergeProfileFrameHistory,
+    profileFrameDetailsToRequest,
     startsNewProfileSession,
     type GpuProfileEntry,
     type GpuProfileSummary,
@@ -58,8 +61,8 @@ type CpuSortKey = "name" | "totalMs" | "selfMs" | "count" | "meanMs" | "maxMs";
 type GpuSortKey = "name" | "latestMs" | "totalMs" | "count" | "meanMs" | "maxMs";
 type SortDirection = "asc" | "desc";
 
-const pollMilliseconds = 250;
-const frameDetailBatchSize = 60;
+const pollMilliseconds = 500;
+const aggregatePollInterval = 2;
 const captureFrameOptions = [120, 300, 600] as const;
 const countFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
 
@@ -78,7 +81,7 @@ function formatCount(value: number): string {
     return countFormatter.format(value);
 }
 
-function FrameChart({
+const FrameChart = memo(function FrameChart({
     frames,
     targetFps,
     selectedFrame,
@@ -89,6 +92,7 @@ function FrameChart({
     selectedFrame: number | null;
     onSelect(frame: number): void;
 }) {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
     const budgetMs = 1_000 / targetFps;
     const maximumMs = Math.max(
         budgetMs * 1.25,
@@ -96,6 +100,66 @@ function FrameChart({
         1,
     );
     const budgetBottom = Math.min(100, (budgetMs / maximumMs) * 100);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const draw = (): void => {
+            const bounds = canvas.getBoundingClientRect();
+            const width = Math.max(1, Math.round(bounds.width));
+            const height = Math.max(1, Math.round(bounds.height));
+            const scale = Math.max(1, globalThis.devicePixelRatio || 1);
+            const pixelWidth = Math.round(width * scale);
+            const pixelHeight = Math.round(height * scale);
+            if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+                canvas.width = pixelWidth;
+                canvas.height = pixelHeight;
+            }
+
+            const context = canvas.getContext("2d");
+            if (!context) return;
+            context.setTransform(scale, 0, 0, scale, 0, 0);
+            context.clearRect(0, 0, width, height);
+            if (frames.length === 0) return;
+
+            const barWidth = width / frames.length;
+            const gap = barWidth >= 2 ? 1 : 0;
+            for (const [index, frame] of frames.entries()) {
+                const ratio = Math.max(0.02, Math.min(1, frame.durationMs / maximumMs));
+                const selected = selectedFrame === frame.frame;
+                context.fillStyle = selected
+                    ? "#ffffff"
+                    : frame.durationMs > budgetMs * 1.5
+                      ? "#fb7185"
+                      : frame.durationMs > budgetMs
+                        ? "#fbbf24"
+                        : "#4aa8ff";
+                context.globalAlpha = selected ? 1 : 0.85;
+                const barHeight = Math.max(1, height * ratio);
+                context.fillRect(
+                    index * barWidth,
+                    height - barHeight,
+                    Math.max(1, barWidth - gap),
+                    barHeight,
+                );
+            }
+            context.globalAlpha = 1;
+        };
+
+        draw();
+        const observer = new ResizeObserver(draw);
+        observer.observe(canvas);
+        return () => observer.disconnect();
+    }, [budgetMs, frames, maximumMs, selectedFrame]);
+
+    const frameAt = (clientX: number, canvas: HTMLCanvasElement): ProfileFrameSample | null => {
+        if (frames.length === 0) return null;
+        const bounds = canvas.getBoundingClientRect();
+        if (bounds.width <= 0) return null;
+        const ratio = Math.max(0, Math.min(0.999_999, (clientX - bounds.left) / bounds.width));
+        return frames[Math.floor(ratio * frames.length)] ?? null;
+    };
 
     return (
         <div className="relative h-[132px] overflow-hidden border-b border-[#171717] bg-[#191919] px-2.5 pt-5 pb-4">
@@ -110,33 +174,23 @@ function FrameChart({
                     {budgetMs.toFixed(2)} ms
                 </span>
             </div>
-            <div className="flex size-full items-end gap-px" aria-label="Captured frame times">
-                {frames.map((frame) => {
-                    const ratio = Math.max(0.02, Math.min(1, frame.durationMs / maximumMs));
-                    const overBudget = frame.durationMs > budgetMs;
-                    const severe = frame.durationMs > budgetMs * 1.5;
-                    return (
-                        <button
-                            key={frame.frame}
-                            type="button"
-                            className={cn(
-                                "min-w-px flex-1 border-0 p-0 opacity-85 outline-none transition-[opacity,filter] hover:opacity-100 focus-visible:ring-1 focus-visible:ring-white",
-                                severe
-                                    ? "bg-[#fb7185]"
-                                    : overBudget
-                                      ? "bg-[#fbbf24]"
-                                      : "bg-[#4aa8ff]",
-                                selectedFrame === frame.frame &&
-                                    "z-20 opacity-100 ring-1 ring-white brightness-125",
-                            )}
-                            style={{ height: `${ratio * 100}%` }}
-                            aria-label={`Frame ${frame.frame}, ${formatMilliseconds(frame.durationMs)}`}
-                            title={`Frame ${frame.frame} · ${formatMilliseconds(frame.durationMs)}`}
-                            onClick={() => onSelect(frame.frame)}
-                        />
-                    );
-                })}
-            </div>
+            <canvas
+                ref={canvasRef}
+                className="size-full cursor-crosshair outline-none focus-visible:ring-1 focus-visible:ring-white"
+                aria-label={`Captured frame times, ${frames.length} frames`}
+                role="img"
+                tabIndex={0}
+                onClick={(event) => {
+                    const frame = frameAt(event.clientX, event.currentTarget);
+                    if (frame) onSelect(frame.frame);
+                }}
+                onPointerMove={(event) => {
+                    const frame = frameAt(event.clientX, event.currentTarget);
+                    event.currentTarget.title = frame
+                        ? `Frame ${frame.frame} · ${formatMilliseconds(frame.durationMs)}`
+                        : "";
+                }}
+            />
             <span className="absolute bottom-0.5 left-2.5 font-mono text-[9px] text-[#606060]">
                 {frames.length > 0 ? `Frame ${frames[0]?.frame}` : "No frames"}
             </span>
@@ -145,7 +199,7 @@ function FrameChart({
             </span>
         </div>
     );
-}
+});
 
 function MetricCard({ label, value, detail }: { label: string; value: string; detail?: string }) {
     return (
@@ -386,9 +440,13 @@ export function ProfilerPanel({
     const historyRef = useRef<ProfileFrameHistory | null>(null);
     const retainedFrameNumbersRef = useRef<Set<number>>(new Set());
     const frameDetailsRef = useRef<Map<number, ProfileFrameDetail>>(new Map());
+    const summaryCatalogRef = useRef(createProfileSummaryCatalog());
 
     const clearLocalData = useCallback(() => {
         setSummary(null);
+        summaryCatalogRef.current = createProfileSummaryCatalog();
+        historyRef.current = null;
+        retainedFrameNumbersRef.current.clear();
         setHistory(null);
         frameDetailsRef.current.clear();
         setFrameDetails(new Map());
@@ -461,47 +519,81 @@ export function ProfilerPanel({
         if (runtimeState !== "running" || !sessionId || finalizing) return;
         let cancelled = false;
         let polling = false;
+        let pollIteration = 0;
 
         const poll = async (): Promise<void> => {
-            if (polling) return;
+            if (polling || document.visibilityState === "hidden") return;
             polling = true;
             try {
+                const refreshAggregates = pollIteration % aggregatePollInterval === 0;
+                pollIteration += 1;
                 const results = await Promise.allSettled([
-                    inspectProfileSummary(inspect),
-                    inspectProfileFrameHistory(inspect),
-                    inspectGpuProfileSummary(inspect),
+                    refreshAggregates
+                        ? inspectCompactProfileSummary(inspect, summaryCatalogRef.current)
+                        : Promise.resolve(null),
+                    inspectProfileFrameHistory(
+                        inspect,
+                        historyRef.current?.frames.at(-1)?.frame ?? null,
+                    ),
+                    refreshAggregates
+                        ? inspectGpuProfileSummary(inspect)
+                        : Promise.resolve(null),
                     controlProfiling(inspect, "status"),
                 ]);
                 if (cancelled) return;
 
                 const [summaryResult, historyResult, gpuResult, statusResult] = results;
                 let detailFailure = "";
+                let nextHistory = historyRef.current;
                 let nextFrameDetails = frameDetailsRef.current;
                 if (historyResult.status === "fulfilled") {
-                    const retainedFrames = new Set(
-                        historyResult.value.frames.map((frame) => frame.frame),
+                    const previousFrames = historyRef.current?.frames ?? [];
+                    const mergedFrames = historyResult.value.available
+                        ? mergeProfileFrameHistory(
+                              previousFrames,
+                              historyResult.value.frames,
+                          )
+                        : previousFrames.length > 0
+                          ? []
+                          : previousFrames;
+                    const historyFramesChanged = mergedFrames !== previousFrames;
+                    if (
+                        !nextHistory ||
+                        nextHistory.available !== historyResult.value.available ||
+                        nextHistory.frames !== mergedFrames
+                    ) {
+                        nextHistory = {
+                            available: historyResult.value.available,
+                            frames: mergedFrames,
+                        };
+                    }
+                    if (historyFramesChanged) {
+                        retainedFrameNumbersRef.current = new Set(
+                            mergedFrames.map((frame) => frame.frame),
+                        );
+                        const staleDetailFrames = [...nextFrameDetails.keys()].filter(
+                            (frame) =>
+                                !retainedFrameNumbersRef.current.has(frame) &&
+                                frame !== selectedFrame,
+                        );
+                        if (staleDetailFrames.length > 0) {
+                            nextFrameDetails = new Map(nextFrameDetails);
+                            staleDetailFrames.forEach((frame) =>
+                                nextFrameDetails.delete(frame),
+                            );
+                        }
+                    }
+                    const detailFrames = profileFrameDetailsToRequest(
+                        selectedFrame,
+                        retainedFrameNumbersRef.current,
+                        nextFrameDetails,
                     );
-                    nextFrameDetails = new Map(
-                        [...frameDetailsRef.current].filter(
-                            ([frame]) => retainedFrames.has(frame) || frame === selectedFrame,
-                        ),
-                    );
-                    const missingFrames = historyResult.value.frames
-                        .map((frame) => frame.frame)
-                        .filter((frame) => !nextFrameDetails.has(frame));
-                    const selectedIsMissing =
-                        selectedFrame !== null && missingFrames.includes(selectedFrame);
-                    const recentMissing = missingFrames
-                        .filter((frame) => frame !== selectedFrame)
-                        .slice(-(frameDetailBatchSize - (selectedIsMissing ? 1 : 0)));
-                    const detailFrames = selectedIsMissing
-                        ? [selectedFrame, ...recentMissing]
-                        : recentMissing;
                     if (detailFrames.length > 0) {
                         try {
                             const response = await resolveProfileFrameDetails(
                                 await inspectProfileFrameDetails(inspect, detailFrames),
                             );
+                            nextFrameDetails = new Map(nextFrameDetails);
                             for (const detail of response.details) {
                                 nextFrameDetails.set(detail.frame, detail);
                             }
@@ -512,18 +604,25 @@ export function ProfilerPanel({
                 }
 
                 const resolvedSummary =
-                    summaryResult.status === "fulfilled"
+                    summaryResult.status === "fulfilled" && summaryResult.value
                         ? await resolveProfileSummary(summaryResult.value)
                         : null;
                 if (cancelled) return;
 
                 if (resolvedSummary) setSummary(resolvedSummary);
                 if (historyResult.status === "fulfilled") {
-                    setHistory(historyResult.value);
-                    frameDetailsRef.current = nextFrameDetails;
-                    setFrameDetails(new Map(nextFrameDetails));
+                    if (nextHistory !== historyRef.current) {
+                        historyRef.current = nextHistory;
+                        setHistory(nextHistory);
+                    }
+                    if (nextFrameDetails !== frameDetailsRef.current) {
+                        frameDetailsRef.current = nextFrameDetails;
+                        setFrameDetails(nextFrameDetails);
+                    }
                 }
-                if (gpuResult.status === "fulfilled") setGpuSummary(gpuResult.value);
+                if (gpuResult.status === "fulfilled" && gpuResult.value) {
+                    setGpuSummary(gpuResult.value);
+                }
                 if (statusResult.status === "fulfilled") setCaptureStatus(statusResult.value);
 
                 const failures = results
@@ -588,10 +687,13 @@ export function ProfilerPanel({
     const frames = history?.frames ?? [];
     const analysisFrame = selectedFrame ?? frames.at(-1)?.frame ?? null;
     const selectedSample = frames.find((frame) => frame.frame === analysisFrame);
-    const selectedDetail = analysisFrame === null ? undefined : frameDetails.get(analysisFrame);
+    const selectedDetail =
+        selectedFrame === null ? undefined : frameDetails.get(selectedFrame);
     const selectedFrameIndex = frames.findIndex((frame) => frame.frame === analysisFrame);
-    const cpuSystems = selectedDetail?.systems ?? [];
-    const cpuZones = selectedDetail?.zones ?? [];
+    const cpuSystems =
+        selectedFrame === null ? (summary?.systems ?? []) : (selectedDetail?.systems ?? []);
+    const cpuZones =
+        selectedFrame === null ? (summary?.zones ?? []) : (selectedDetail?.zones ?? []);
     const dataAvailable = summary !== null || history !== null || gpuSummary !== null;
     const controlsDisabled =
         runtimeState !== "running" || !sessionId || controlBusy || finalizing;
@@ -735,10 +837,10 @@ export function ProfilerPanel({
                                 <MetricCard label="Captured" value={formatCount(frames.length)} detail="600-frame rolling history" />
                             </div>
                             <div className="mt-2 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
-                                <HotspotList title="Frame CPU system hotspots · self" entries={cpuSystems} />
-                                <HotspotList title="Frame CPU zone hotspots · self" entries={cpuZones} />
+                                <HotspotList title={`${selectedFrame === null ? "Capture" : "Frame"} CPU system hotspots · self`} entries={cpuSystems} />
+                                <HotspotList title={`${selectedFrame === null ? "Capture" : "Frame"} CPU zone hotspots · self`} entries={cpuZones} />
                             </div>
-                            {analysisFrame !== null && !selectedDetail && summary?.available !== false && (
+                            {selectedFrame !== null && !selectedDetail && summary?.available !== false && (
                                 <div className="mt-2 rounded border border-[#3d5368] bg-[#22313f]/45 px-3 py-2 text-[11px] text-[#9fc8e8]">
                                     {runtimeState === "running"
                                         ? "Loading CPU details for this frame…"
