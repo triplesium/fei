@@ -1,5 +1,9 @@
 #include "ecs/dynamic/query.hpp"
 #include "ecs/world.hpp"
+#include "lua.h"
+#include "lualib.h"
+#include "Luau/Common.h"
+#include "Luau/Compiler.h"
 #include "refl/cls.hpp"
 #include "refl/property.hpp"
 #include "refl/registry.hpp"
@@ -20,10 +24,13 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 using namespace ets;
+
+LUAU_FASTFLAG(LuauDirectFieldGet)
 
 namespace {
 
@@ -37,6 +44,25 @@ struct QueryBenchmarkVector {
 struct QueryBenchmarkComponent {
     QueryBenchmarkVector position;
     double x {0.0};
+};
+
+constexpr std::size_t c_flat_position_x_offset =
+    offsetof(QueryBenchmarkComponent, position) +
+    offsetof(QueryBenchmarkVector, x);
+
+constexpr int c_raw_object_tag = 16;
+constexpr int c_raw_vector_tag = 17;
+constexpr int c_raw_direct_access_tag = 18;
+constexpr int c_raw_direct_field_tag = 19;
+constexpr int c_raw_dense_direct_field_tag = 20;
+constexpr int16_t c_raw_flat_atom = 1;
+
+struct RawObject {
+    QueryBenchmarkComponent* component {nullptr};
+};
+
+struct RawVector {
+    QueryBenchmarkVector* vector {nullptr};
 };
 
 struct Options {
@@ -217,6 +243,528 @@ ComparisonBaselines comparison_baselines(
     return baselines;
 }
 
+int raw_vector_index(lua_State* state) {
+    auto* object = static_cast<RawVector*>(
+        luaL_checkudatatagged(state, 1, c_raw_vector_tag)
+    );
+    const std::string_view key {luaL_checkstring(state, 2)};
+    if (key == "x") {
+        lua_pushnumber(state, object->vector->x);
+        return 1;
+    }
+    luaL_error(
+        state,
+        "unknown raw vector field '%.*s'",
+        static_cast<int>(key.size()),
+        key.data()
+    );
+}
+
+int raw_vector_newindex(lua_State* state) {
+    auto* object = static_cast<RawVector*>(
+        luaL_checkudatatagged(state, 1, c_raw_vector_tag)
+    );
+    const std::string_view key {luaL_checkstring(state, 2)};
+    if (key == "x") {
+        object->vector->x = luaL_checknumber(state, 3);
+        return 0;
+    }
+    luaL_error(
+        state,
+        "unknown raw vector field '%.*s'",
+        static_cast<int>(key.size()),
+        key.data()
+    );
+}
+
+int raw_object_index(lua_State* state) {
+    auto* object = static_cast<RawObject*>(
+        luaL_checkudatatagged(state, 1, c_raw_object_tag)
+    );
+    const std::string_view key {luaL_checkstring(state, 2)};
+    if (key == "position") {
+        new (lua_newuserdatataggedwithmetatable(
+            state,
+            sizeof(RawVector),
+            c_raw_vector_tag
+        )) RawVector {&object->component->position};
+        return 1;
+    }
+    if (key == "__f0") {
+        lua_pushnumber(state, object->component->position.x);
+        return 1;
+    }
+    luaL_error(
+        state,
+        "unknown raw object field '%.*s'",
+        static_cast<int>(key.size()),
+        key.data()
+    );
+}
+
+int raw_object_newindex(lua_State* state) {
+    auto* object = static_cast<RawObject*>(
+        luaL_checkudatatagged(state, 1, c_raw_object_tag)
+    );
+    const std::string_view key {luaL_checkstring(state, 2)};
+    if (key == "__f0") {
+        object->component->position.x = luaL_checknumber(state, 3);
+        return 0;
+    }
+    luaL_error(
+        state,
+        "unknown raw object field '%.*s'",
+        static_cast<int>(key.size()),
+        key.data()
+    );
+}
+
+int raw_direct_fallback(lua_State* state) {
+    luaL_error(
+        state,
+        "raw direct userdata unexpectedly used its metamethod fallback"
+    );
+}
+
+void raw_direct_access_get(
+    lua_State* state,
+    void* data,
+    int atom,
+    uint16_t* cachedslot,
+    int
+) {
+    if (*cachedslot == 0 && atom == c_raw_flat_atom) {
+        *cachedslot = 1;
+    }
+    if (*cachedslot != 1) {
+        luaL_error(state, "unknown raw direct-access atom %d", atom);
+    }
+    const auto* object = static_cast<const RawObject*>(data);
+    lua_pushnumber(state, object->component->position.x);
+}
+
+void raw_direct_access_set(
+    lua_State* state,
+    void* data,
+    int atom,
+    uint16_t* cachedslot,
+    int
+) {
+    if (*cachedslot == 0 && atom == c_raw_flat_atom) {
+        *cachedslot = 1;
+    }
+    if (*cachedslot != 1) {
+        luaL_error(state, "unknown raw direct-access atom %d", atom);
+    }
+    auto* object = static_cast<RawObject*>(data);
+    object->component->position.x = luaL_checknumber(state, 3);
+}
+
+void raw_direct_field_get(void* data, void* result) {
+    const auto* object = static_cast<const RawObject*>(data);
+    lua_userdatadirectfield_setnumber(result, object->component->position.x);
+}
+
+int raw_path_get(lua_State* state) {
+    const auto* object = static_cast<const RawObject*>(
+        luaL_checkudatatagged(state, 1, c_raw_object_tag)
+    );
+    lua_pushnumber(state, object->component->position.x);
+    return 1;
+}
+
+int raw_path_set(lua_State* state) {
+    auto* object = static_cast<RawObject*>(
+        luaL_checkudatatagged(state, 1, c_raw_object_tag)
+    );
+    object->component->position.x = luaL_checknumber(state, 2);
+    return 0;
+}
+
+void install_raw_metatable(
+    lua_State* state,
+    int tag,
+    lua_CFunction index,
+    lua_CFunction newindex = nullptr
+) {
+    lua_newtable(state);
+    lua_pushcfunction(state, index, "raw.__index");
+    lua_setfield(state, -2, "__index");
+    if (newindex != nullptr) {
+        lua_pushcfunction(state, newindex, "raw.__newindex");
+        lua_setfield(state, -2, "__newindex");
+    }
+    lua_setuserdatametatable(state, tag);
+}
+
+class RawLuauDispatchBenchmark {
+  private:
+    lua_State* m_state {nullptr};
+    QueryBenchmarkComponent m_component {
+        .position = QueryBenchmarkVector {.x = 1.0, .y = 2.0},
+        .x = 1.0,
+    };
+    std::unordered_map<std::string, int> m_functions;
+
+    void push_object_global(int tag, const char* name) {
+        new (
+            lua_newuserdatataggedwithmetatable(m_state, sizeof(RawObject), tag)
+        ) RawObject {&m_component};
+        lua_setglobal(m_state, name);
+    }
+
+    void load(std::size_t iterations) {
+        const std::string source = R"(
+            local iterations = )" + std::to_string(iterations) +
+                                   R"(
+            local nested = raw_nested_object
+            local flat_index = raw_flat_index_object
+            local direct_access = raw_direct_access_object
+            local direct_field = raw_direct_field_object
+            local dense_direct_field = raw_dense_direct_field_object
+            local get_path = __ets_get_path
+            local set_path = __ets_set_path
+            local native_table = { value = 1 }
+            local write_value = 1
+
+            return {
+                native_table_x1 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        total += native_table.value
+                    end
+                    return total
+                end,
+                native_table_x4 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        total += native_table.value
+                        total += native_table.value
+                        total += native_table.value
+                        total += native_table.value
+                    end
+                    return total
+                end,
+                nested_x1 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        total += nested.position.x
+                    end
+                    return total
+                end,
+                nested_x4 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        total += nested.position.x
+                        total += nested.position.x
+                        total += nested.position.x
+                        total += nested.position.x
+                    end
+                    return total
+                end,
+                cached_nested_x4 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        local position = nested.position
+                        total += position.x
+                        total += position.x
+                        total += position.x
+                        total += position.x
+                    end
+                    return total
+                end,
+                nested_write_x1 = function()
+                    write_value = 3 - write_value
+                    for _ = 1, iterations do
+                        nested.position.x = write_value
+                    end
+                    return nested.position.x
+                end,
+                flat_index_x1 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        total += flat_index.__f0
+                    end
+                    return total
+                end,
+                flat_index_x4 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        total += flat_index.__f0
+                        total += flat_index.__f0
+                        total += flat_index.__f0
+                        total += flat_index.__f0
+                    end
+                    return total
+                end,
+                flat_index_write_x1 = function()
+                    write_value = 3 - write_value
+                    for _ = 1, iterations do
+                        flat_index.__f0 = write_value
+                    end
+                    return flat_index.__f0
+                end,
+                path_function_x1 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        total += get_path(flat_index)
+                    end
+                    return total
+                end,
+                path_function_x4 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        total += get_path(flat_index)
+                        total += get_path(flat_index)
+                        total += get_path(flat_index)
+                        total += get_path(flat_index)
+                    end
+                    return total
+                end,
+                path_function_write_x1 = function()
+                    write_value = 3 - write_value
+                    for _ = 1, iterations do
+                        set_path(flat_index, write_value)
+                    end
+                    return get_path(flat_index)
+                end,
+                direct_access_x1 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        total += direct_access.__fa
+                    end
+                    return total
+                end,
+                direct_access_x4 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        total += direct_access.__fa
+                        total += direct_access.__fa
+                        total += direct_access.__fa
+                        total += direct_access.__fa
+                    end
+                    return total
+                end,
+                direct_access_write_x1 = function()
+                    write_value = 3 - write_value
+                    for _ = 1, iterations do
+                        direct_access.__fa = write_value
+                    end
+                    return direct_access.__fa
+                end,
+                direct_field_x1 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        total += direct_field.__ff
+                    end
+                    return total
+                end,
+                direct_field_x4 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        total += direct_field.__ff
+                        total += direct_field.__ff
+                        total += direct_field.__ff
+                        total += direct_field.__ff
+                    end
+                    return total
+                end,
+                dense_direct_field_x1 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        total += dense_direct_field.__ffd
+                    end
+                    return total
+                end,
+                dense_direct_field_x4 = function()
+                    local total = 0
+                    for _ = 1, iterations do
+                        total += dense_direct_field.__ffd
+                        total += dense_direct_field.__ffd
+                        total += dense_direct_field.__ffd
+                        total += dense_direct_field.__ffd
+                    end
+                    return total
+                end,
+            }
+        )";
+        const std::string bytecode = Luau::compile(source);
+        if (luau_load(
+                m_state,
+                "raw_dispatch_benchmark",
+                bytecode.data(),
+                bytecode.size(),
+                0
+            ) != LUA_OK) {
+            throw std::runtime_error(
+                "failed to load raw dispatch benchmark: " +
+                std::string {lua_tostring(m_state, -1)}
+            );
+        }
+        if (lua_pcall(m_state, 0, 1, 0) != LUA_OK) {
+            throw std::runtime_error(
+                "failed to initialize raw dispatch benchmark: " +
+                std::string {lua_tostring(m_state, -1)}
+            );
+        }
+
+        constexpr std::array names {
+            "native_table_x1",
+            "native_table_x4",
+            "nested_x1",
+            "nested_x4",
+            "cached_nested_x4",
+            "nested_write_x1",
+            "flat_index_x1",
+            "flat_index_x4",
+            "flat_index_write_x1",
+            "path_function_x1",
+            "path_function_x4",
+            "path_function_write_x1",
+            "direct_access_x1",
+            "direct_access_x4",
+            "direct_access_write_x1",
+            "direct_field_x1",
+            "direct_field_x4",
+            "dense_direct_field_x1",
+            "dense_direct_field_x4",
+        };
+        for (const char* name : names) {
+            lua_getfield(m_state, -1, name);
+            if (!lua_isfunction(m_state, -1)) {
+                throw std::runtime_error(
+                    "raw dispatch benchmark is missing function '" +
+                    std::string {name} + "'"
+                );
+            }
+            m_functions.emplace(name, lua_ref(m_state, -1));
+            lua_pop(m_state, 1);
+        }
+        lua_pop(m_state, 1);
+    }
+
+  public:
+    explicit RawLuauDispatchBenchmark(std::size_t iterations) :
+        m_state(luaL_newstate()) {
+        if (m_state == nullptr) {
+            throw std::runtime_error("failed to create raw Luau benchmark VM");
+        }
+        FFlag::LuauDirectFieldGet.value = true;
+        luaL_openlibs(m_state);
+
+        install_raw_metatable(
+            m_state,
+            c_raw_object_tag,
+            raw_object_index,
+            raw_object_newindex
+        );
+        install_raw_metatable(
+            m_state,
+            c_raw_vector_tag,
+            raw_vector_index,
+            raw_vector_newindex
+        );
+        install_raw_metatable(
+            m_state,
+            c_raw_direct_access_tag,
+            raw_direct_fallback,
+            raw_direct_fallback
+        );
+        install_raw_metatable(
+            m_state,
+            c_raw_direct_field_tag,
+            raw_direct_fallback
+        );
+        install_raw_metatable(
+            m_state,
+            c_raw_dense_direct_field_tag,
+            raw_direct_fallback
+        );
+
+        if (lua_registeruserdatadirectaccess(
+                m_state,
+                c_raw_direct_access_tag,
+                raw_direct_access_get,
+                raw_direct_access_set,
+                nullptr
+            ) == 0) {
+            throw std::runtime_error(
+                "failed to register raw direct-access benchmark"
+            );
+        }
+        lua_registeruserdatadirectfieldget(
+            m_state,
+            c_raw_direct_field_tag,
+            "__ff",
+            raw_direct_field_get
+        );
+        for (std::size_t index = 0; index < 1024; ++index) {
+            const std::string name = "__unused_" + std::to_string(index);
+            lua_registeruserdatadirectfieldget(
+                m_state,
+                c_raw_dense_direct_field_tag,
+                name.c_str(),
+                raw_direct_field_get
+            );
+        }
+        lua_registeruserdatadirectfieldget(
+            m_state,
+            c_raw_dense_direct_field_tag,
+            "__ffd",
+            raw_direct_field_get
+        );
+
+        push_object_global(c_raw_object_tag, "raw_nested_object");
+        push_object_global(c_raw_object_tag, "raw_flat_index_object");
+        push_object_global(c_raw_direct_access_tag, "raw_direct_access_object");
+        push_object_global(c_raw_direct_field_tag, "raw_direct_field_object");
+        push_object_global(
+            c_raw_dense_direct_field_tag,
+            "raw_dense_direct_field_object"
+        );
+        lua_pushcfunction(m_state, raw_path_get, "__ets_get_path");
+        lua_setglobal(m_state, "__ets_get_path");
+        lua_pushcfunction(m_state, raw_path_set, "__ets_set_path");
+        lua_setglobal(m_state, "__ets_set_path");
+
+        lua_callbacks(m_state)->useratom =
+            [](lua_State*, const char* text, std::size_t length) -> int16_t {
+            return std::string_view {text, length} == "__fa" ? c_raw_flat_atom :
+                                                               -1;
+        };
+        load(iterations);
+    }
+
+    ~RawLuauDispatchBenchmark() {
+        if (m_state != nullptr) {
+            lua_close(m_state);
+        }
+    }
+
+    RawLuauDispatchBenchmark(const RawLuauDispatchBenchmark&) = delete;
+    RawLuauDispatchBenchmark&
+    operator=(const RawLuauDispatchBenchmark&) = delete;
+
+    int function(std::string_view name) const {
+        return m_functions.at(std::string {name});
+    }
+
+    std::uint64_t call(int function_ref) {
+        lua_getref(m_state, function_ref);
+        if (lua_pcall(m_state, 0, 1, 0) != LUA_OK) {
+            const std::string error {lua_tostring(m_state, -1)};
+            lua_pop(m_state, 1);
+            throw std::runtime_error(
+                "raw dispatch benchmark call failed: " + error
+            );
+        }
+        const auto result =
+            static_cast<std::uint64_t>(lua_tonumber(m_state, -1));
+        lua_pop(m_state, 1);
+        return result;
+    }
+};
+
 std::string benchmark_source(std::size_t entities) {
     return R"(
         local sink = 0
@@ -326,6 +874,29 @@ std::string benchmark_source(std::size_t entities) {
             sink = total
         end
 
+        local function read_flattened_offset_once(
+            components: Query<Read<QueryBenchmarkComponent>>
+        )
+            local total = 0
+            for component in components do
+                total += component.__ets_f0
+            end
+            sink = total
+        end
+
+        local function read_flattened_offset_four_times(
+            components: Query<Read<QueryBenchmarkComponent>>
+        )
+            local total = 0
+            for component in components do
+                total += component.__ets_f0
+                total += component.__ets_f0
+                total += component.__ets_f0
+                total += component.__ets_f0
+            end
+            sink = total
+        end
+
         local function write_nested_property_once(
             components: Query<Write<QueryBenchmarkComponent>>
         )
@@ -333,6 +904,19 @@ std::string benchmark_source(std::size_t entities) {
             local total = 0
             for component in components do
                 component.position.x = write_value
+                total += 1
+            end
+            sink = total
+        end
+
+
+        local function write_flattened_offset_once(
+            components: Query<Write<QueryBenchmarkComponent>>
+        )
+            write_value = 3 - write_value
+            local total = 0
+            for component in components do
+                component.__ets_f0 = write_value
                 total += 1
             end
             sink = total
@@ -352,7 +936,10 @@ std::string benchmark_source(std::size_t entities) {
                     read_nested_property_once,
                     read_nested_property_four_times,
                     read_cached_nested_property_four_times,
-                    write_nested_property_once
+                    write_nested_property_once,
+                    read_flattened_offset_once,
+                    read_flattened_offset_four_times,
+                    write_flattened_offset_once
                 )
             end,
         }
@@ -473,12 +1060,19 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
     Registry::instance()
         .register_cls<QueryBenchmarkComponent>()
         .add_property("position", &QueryBenchmarkComponent::position)
-        .add_property("x", &QueryBenchmarkComponent::x);
+        .add_property("x", &QueryBenchmarkComponent::x)
+        .add_offset_property(
+            "__ets_f0",
+            type_id<double>(),
+            c_flat_position_x_offset
+        );
     auto& component_position =
         required_property(type_id<QueryBenchmarkComponent>(), "position");
     auto& component_x =
         required_property(type_id<QueryBenchmarkComponent>(), "x");
     auto& vector_x = required_property(type_id<QueryBenchmarkVector>(), "x");
+    auto& flat_position_x =
+        required_property(type_id<QueryBenchmarkComponent>(), "__ets_f0");
 
     World world;
     for (std::size_t index = 0; index < options.entities; ++index) {
@@ -546,9 +1140,8 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
     LuauRuntime runtime;
     const LuauScriptModuleId module =
         load_benchmark_module(runtime, options.entities);
-
     std::vector<Measurement> results;
-    results.reserve(29);
+    results.reserve(56);
     results.push_back(measure("runtime/empty call", 0, options, [&] {
         call_module(runtime, module, "empty");
         return std::uint64_t {1};
@@ -876,6 +1469,68 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
             return total;
         }
     ));
+    results.push_back(measure(
+        "cpp/reflection read flattened offset x1",
+        options.entities,
+        options,
+        [&] {
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            double total = 0.0;
+            while (read_query.next(cursor, row)) {
+                const Ref component = read_query.field_untracked(row, 0).value;
+                total += get_property(flat_position_x, component)
+                             .get_const<double>();
+            }
+            return static_cast<std::uint64_t>(total);
+        }
+    ));
+    results.push_back(measure(
+        "cpp/reflection read flattened offset x4",
+        options.entities,
+        options,
+        [&] {
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            double total = 0.0;
+            while (read_query.next(cursor, row)) {
+                const Ref component = read_query.field_untracked(row, 0).value;
+                total += get_property(flat_position_x, component)
+                             .get_const<double>();
+                total += get_property(flat_position_x, component)
+                             .get_const<double>();
+                total += get_property(flat_position_x, component)
+                             .get_const<double>();
+                total += get_property(flat_position_x, component)
+                             .get_const<double>();
+            }
+            return static_cast<std::uint64_t>(total);
+        }
+    ));
+    double reflected_flat_write_value = 1.0;
+    results.push_back(measure(
+        "cpp/reflection write flattened offset x1",
+        options.entities,
+        options,
+        [&] {
+            reflected_flat_write_value = 3.0 - reflected_flat_write_value;
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            std::uint64_t total = 0;
+            while (write_query.next(cursor, row)) {
+                const auto field = write_query.field_untracked(row, 0);
+                if (set_double_property(
+                        flat_position_x,
+                        field.value,
+                        reflected_flat_write_value
+                    )) {
+                    mark_changed(field);
+                }
+                ++total;
+            }
+            return total;
+        }
+    ));
     results.push_back(
         measure("luau/pure numeric loop", options.entities, options, [&] {
             call_module(runtime, module, "pure_loop");
@@ -969,6 +1624,119 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
             return std::uint64_t {1};
         }
     ));
+    results.push_back(measure(
+        "luau/read flattened offset x1",
+        options.entities,
+        options,
+        [&] {
+            call_module(
+                runtime,
+                module,
+                "read_flattened_offset_once",
+                read_arguments
+            );
+            return std::uint64_t {1};
+        }
+    ));
+    results.push_back(measure(
+        "luau/read flattened offset x4",
+        options.entities,
+        options,
+        [&] {
+            call_module(
+                runtime,
+                module,
+                "read_flattened_offset_four_times",
+                read_arguments
+            );
+            return std::uint64_t {1};
+        }
+    ));
+    results.push_back(measure(
+        "luau/write flattened offset x1",
+        options.entities,
+        options,
+        [&] {
+            call_module(
+                runtime,
+                module,
+                "write_flattened_offset_once",
+                write_arguments
+            );
+            return std::uint64_t {1};
+        }
+    ));
+
+    RawLuauDispatchBenchmark raw_dispatch(options.entities);
+    const int raw_native_table_x1 = raw_dispatch.function("native_table_x1");
+    const int raw_native_table_x4 = raw_dispatch.function("native_table_x4");
+    const int raw_nested_x1 = raw_dispatch.function("nested_x1");
+    const int raw_nested_x4 = raw_dispatch.function("nested_x4");
+    const int raw_cached_nested_x4 = raw_dispatch.function("cached_nested_x4");
+    const int raw_nested_write_x1 = raw_dispatch.function("nested_write_x1");
+    const int raw_flat_index_x1 = raw_dispatch.function("flat_index_x1");
+    const int raw_flat_index_x4 = raw_dispatch.function("flat_index_x4");
+    const int raw_flat_index_write_x1 =
+        raw_dispatch.function("flat_index_write_x1");
+    const int raw_path_function_x1 = raw_dispatch.function("path_function_x1");
+    const int raw_path_function_x4 = raw_dispatch.function("path_function_x4");
+    const int raw_path_function_write_x1 =
+        raw_dispatch.function("path_function_write_x1");
+    const int raw_direct_access_x1 = raw_dispatch.function("direct_access_x1");
+    const int raw_direct_access_x4 = raw_dispatch.function("direct_access_x4");
+    const int raw_direct_access_write_x1 =
+        raw_dispatch.function("direct_access_write_x1");
+    const int raw_direct_field_x1 = raw_dispatch.function("direct_field_x1");
+    const int raw_direct_field_x4 = raw_dispatch.function("direct_field_x4");
+    const int raw_dense_direct_field_x1 =
+        raw_dispatch.function("dense_direct_field_x1");
+    const int raw_dense_direct_field_x4 =
+        raw_dispatch.function("dense_direct_field_x4");
+
+    const auto add_raw_dispatch = [&](std::string name, int function_ref) {
+        results.push_back(measure(
+            std::move(name),
+            options.entities,
+            options,
+            [&raw_dispatch, function_ref] {
+                return raw_dispatch.call(function_ref);
+            }
+        ));
+    };
+    add_raw_dispatch("raw-vm/native table x1", raw_native_table_x1);
+    add_raw_dispatch("raw-vm/native table x4", raw_native_table_x4);
+    add_raw_dispatch("raw-vm/nested userdata x1", raw_nested_x1);
+    add_raw_dispatch("raw-vm/nested userdata x4", raw_nested_x4);
+    add_raw_dispatch("raw-vm/cached nested userdata x4", raw_cached_nested_x4);
+    add_raw_dispatch("raw-vm/nested userdata write x1", raw_nested_write_x1);
+    add_raw_dispatch("raw-vm/flat __index offset x1", raw_flat_index_x1);
+    add_raw_dispatch("raw-vm/flat __index offset x4", raw_flat_index_x4);
+    add_raw_dispatch(
+        "raw-vm/flat __newindex offset x1",
+        raw_flat_index_write_x1
+    );
+    add_raw_dispatch("raw-vm/path C function x1", raw_path_function_x1);
+    add_raw_dispatch("raw-vm/path C function x4", raw_path_function_x4);
+    add_raw_dispatch(
+        "raw-vm/path C function write x1",
+        raw_path_function_write_x1
+    );
+    add_raw_dispatch("raw-vm/directaccess offset x1", raw_direct_access_x1);
+    add_raw_dispatch("raw-vm/directaccess offset x4", raw_direct_access_x4);
+    add_raw_dispatch(
+        "raw-vm/directaccess offset write x1",
+        raw_direct_access_write_x1
+    );
+    add_raw_dispatch("raw-vm/directfield offset x1", raw_direct_field_x1);
+    add_raw_dispatch("raw-vm/directfield offset x4", raw_direct_field_x4);
+    add_raw_dispatch(
+        "raw-vm/directfield 1025 fields x1",
+        raw_dense_direct_field_x1
+    );
+    add_raw_dispatch(
+        "raw-vm/directfield 1025 fields x4",
+        raw_dense_direct_field_x4
+    );
     return results;
 }
 
