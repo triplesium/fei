@@ -2,8 +2,8 @@
 
 #include "app/app.hpp"
 #include "runtime_protocol/playtest.hpp"
-#include "scripting_luau/runtime.hpp"
-#include "scripting_luau/script_system_registry.hpp"
+#include "scripting/runtime.hpp"
+#include "scripting/script_system_registry.hpp"
 
 #include <stdexcept>
 #include <string>

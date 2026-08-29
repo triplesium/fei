@@ -5,9 +5,9 @@
 #include "base/optional.hpp"
 #include "project/plugin.hpp"
 #include "project_scripting/script.hpp"
-#include "scripting_luau/asset.hpp"
-#include "scripting_luau/plugin.hpp"
-#include "scripting_luau/script_system_registry.hpp"
+#include "scripting/asset.hpp"
+#include "scripting/plugin.hpp"
+#include "scripting/script_system_registry.hpp"
 
 #include <string>
 #include <string_view>
@@ -49,6 +49,7 @@ class LuauScriptsPlugin : public Plugin {
     }
 
     void setup(App& app) override;
+    void finish(App& app) override;
 };
 
 } // namespace ets::project_runtime

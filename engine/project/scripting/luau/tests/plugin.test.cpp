@@ -108,6 +108,33 @@ void apply_script_queues(App& app) {
 } // namespace
 
 TEST_CASE(
+    "Project Luau scripts have no implicit entry Plugin",
+    "[project-runtime][luau][plugin][entry]"
+) {
+    TemporaryMixedScriptProject directory(
+        {},
+        {
+            ScriptFile {
+                .path = "scripts/dormant.luau",
+                .content = std::string_view {R"(
+                    export local DormantPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, function()
+                                error("dormant Plugin must not run")
+                            end)
+                        end,
+                    }
+                )"},
+            },
+        }
+    );
+    auto app = load_app(directory);
+
+    CHECK(app.resource<project_runtime::LuauScriptsState>().scripts.empty());
+    CHECK(app.resource<LuauScriptSystemRegistry>().size() == 0);
+}
+
+TEST_CASE(
     "Project Luau scripts require native engine modules",
     "[project-runtime][luau][script][require][native]"
 ) {
@@ -149,7 +176,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Project Luau scripts require cached library modules",
+    "Project Luau scripts require cached dependency modules",
     "[project-runtime][luau][script][require]"
 ) {
     TemporaryMixedScriptProject directory(
@@ -184,6 +211,12 @@ TEST_CASE(
                     export function next(value: number)
                         return value + 1
                     end
+
+                    export local DormantPlugin = Plugin.new {
+                        build = function(_app: App)
+                            error("dependency Plugin must not be activated")
+                        end,
+                    }
                 )"},
             },
         }
@@ -195,7 +228,6 @@ TEST_CASE(
     REQUIRE(
         scripts.scripts[0].status == project_runtime::LuauScriptStatus::Loaded
     );
-
     app.run_schedule(Update);
     auto state_type = Registry::instance().try_get_type(
         "project.scripts.require_test.RequireState"
@@ -211,7 +243,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Project Luau scripts reject circular library imports",
+    "Project Luau scripts reject circular module imports",
     "[project-runtime][luau][script][require][cycle]"
 ) {
     TemporaryMixedScriptProject directory(
@@ -257,10 +289,10 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Project Luau scripts report invalid library imports",
+    "Project Luau scripts report invalid module imports",
     "[project-runtime][luau][script][require][error]"
 ) {
-    SECTION("missing library") {
+    SECTION("missing module") {
         TemporaryMixedScriptProject directory({
             ScriptFile {
                 .path = "scripts/gameplay.luau",
@@ -512,10 +544,20 @@ TEST_CASE(
                         counter.value += 3
                     end
 
+                    local function unused(counter: ResRW<Counter>)
+                        counter.value += 100
+                    end
+
                     export local GamePlugin = Plugin.new {
                         build = function(app: App)
                             app:insert_resource(Counter { value = 2 })
                             app:add_system(Update, tick)
+                        end,
+                    }
+
+                    export local UnusedPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_system(Update, unused)
                         end,
                     }
                 )"},
@@ -611,6 +653,21 @@ TEST_CASE(
     REQUIRE(
         scripts.scripts[0].status == project_runtime::LuauScriptStatus::Loaded
     );
+    CHECK(app.has_plugin(
+        PluginId {
+            "project://scripts/game.luau#GamePlugin",
+        }
+    ));
+    CHECK(app.has_plugin(
+        PluginId {
+            "project://scripts/player.luau#PlayerPlugin",
+        }
+    ));
+    CHECK(app.has_plugin(
+        PluginId {
+            "project://scripts/player.luau#BonusPlugin",
+        }
+    ));
 
     app.run_schedule(Update);
 

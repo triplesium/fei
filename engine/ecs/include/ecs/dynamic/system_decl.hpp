@@ -57,6 +57,7 @@ class DynamicSystemParamDecl {
     virtual ~DynamicSystemParamDecl() = default;
     virtual TypeId decl_type_id() const = 0;
     virtual std::string_view decl_type_name() const = 0;
+    virtual std::unique_ptr<DynamicSystemParamDecl> clone() const = 0;
 };
 
 using DynamicSystemParamDeclPtr = std::unique_ptr<DynamicSystemParamDecl>;
@@ -70,6 +71,9 @@ class DynamicSystemParamDeclBase : public DynamicSystemParamDecl {
   public:
     TypeId decl_type_id() const override { return type_id<T>(); }
     std::string_view decl_type_name() const override { return type_name<T>(); }
+    std::unique_ptr<DynamicSystemParamDecl> clone() const override {
+        return std::make_unique<T>(static_cast<const T&>(*this));
+    }
 };
 
 struct DynamicResourceParamDecl final

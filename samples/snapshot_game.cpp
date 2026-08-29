@@ -2,8 +2,8 @@
 #include "ecs/world.hpp"
 #include "refl/cls.hpp"
 #include "refl/registry.hpp"
-#include "scripting_luau/plugin.hpp"
-#include "scripting_luau/script_system_registry.hpp"
+#include "scripting/plugin.hpp"
+#include "scripting/script_system_registry.hpp"
 #include "snapshot/world_snapshot.hpp"
 #include "snapshot_runtime_luau/adapters.hpp"
 

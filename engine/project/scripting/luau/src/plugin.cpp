@@ -1,6 +1,7 @@
 #include "project_scripting_luau/plugin.hpp"
 
 #include "app/app.hpp"
+#include "scripting/script_plugin.hpp"
 
 #include <algorithm>
 #include <string>
@@ -69,18 +70,20 @@ void LuauScriptsPlugin::setup(App& app) {
                         detail::LuauProjectScriptBackend::asset_load_failure;
                 }
             } else {
-                registry.queue_asset(script.asset, plugin->export_name);
+                LuauPluginLoader loader {asset_server, assets};
+                auto loaded =
+                    loader.load(*path, script.asset, plugin->export_name);
+                if (!loaded) {
+                    script.status = LuauScriptStatus::Failed;
+                    script.error = std::move(loaded.error().message);
+                } else {
+                    const PluginId id = loaded->id();
+                    app.add_plugin(id, std::move(*loaded));
+                }
             }
         }
         scripts.scripts.push_back(std::move(script));
     }
-    registry.apply_queued_requests(
-        app.resource<LuauRuntime>(),
-        app.resource<LuauExecutionPool>(),
-        app.world(),
-        assets,
-        &app.resource<AssetServer>()
-    );
     project_scripting::refresh_project_script_states<
         detail::LuauProjectScriptBackend>(scripts, registry, assets);
     app.add_resource(std::move(scripts))
@@ -89,6 +92,15 @@ void LuauScriptsPlugin::setup(App& app) {
             project_scripting::update_project_script_states<
                 detail::LuauProjectScriptBackend>
         );
+}
+
+void LuauScriptsPlugin::finish(App& app) {
+    project_scripting::refresh_project_script_states<
+        detail::LuauProjectScriptBackend>(
+        app.resource<LuauScriptsState>(),
+        app.resource<LuauScriptSystemRegistry>(),
+        app.resource<Assets<LuauScriptAsset>>()
+    );
 }
 
 } // namespace ets::project_runtime

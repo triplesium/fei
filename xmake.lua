@@ -86,7 +86,7 @@ if is_plat("wasm") then
         }
     )
 else
-    add_requires("stb", "glad", "lua", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "fastgltf v0.9.0")
+    add_requires("stb", "glad", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "fastgltf v0.9.0")
     add_requires("box2d v3.1.1", {configs = {shared = false}})
     add_requires("luau 0.734", {configs = {shared = false, extern_c = false}})
     add_requires("yaml-cpp")

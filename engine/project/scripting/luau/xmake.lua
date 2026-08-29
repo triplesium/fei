@@ -9,7 +9,7 @@ target("entisium-project-scripting-luau")
         "entisium-asset",
         "entisium-project",
         "entisium-project-scripting",
-        "entisium-scripting-luau",
+        "entisium-scripting",
         "entisium-playtest"
     )
     add_packages("luau")

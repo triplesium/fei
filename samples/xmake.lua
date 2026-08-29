@@ -4,7 +4,7 @@ function add_sample(name, source)
         add_rules("entisium.reflect")
         add_headerfiles("common.hpp")
         add_files((source or name) .. ".cpp")
-        add_deps("entisium-refl", "entisium-ecs", "entisium-app", "entisium-window-glfw", "entisium-input", "entisium-core", "entisium-asset", "entisium-graphics-opengl", "entisium-graphics-opengl-glfw", "entisium-graphics", "entisium-rendering", "entisium-imgui", "entisium-pbr", "entisium-scene", "entisium-scripting-lua")
+        add_deps("entisium-refl", "entisium-ecs", "entisium-app", "entisium-window-glfw", "entisium-input", "entisium-core", "entisium-asset", "entisium-graphics-opengl", "entisium-graphics-opengl-glfw", "entisium-graphics", "entisium-rendering", "entisium-imgui", "entisium-pbr", "entisium-scene")
         add_packages("glfw", "glad", "imgui", "stb")
 end
 
@@ -19,7 +19,6 @@ target("sample-scene")
         "entisium-devtools-profiling",
         "entisium-devtools-reflection",
         "entisium-devtools-rendering",
-        "entisium-devtools-scripting-lua",
         "entisium-gltf",
         "entisium-graphics-opengl",
         "entisium-graphics-opengl-glfw",

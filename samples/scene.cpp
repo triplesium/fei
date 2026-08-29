@@ -15,7 +15,6 @@
 #include "devtools_profiling/plugin.hpp"
 #include "devtools_reflection/plugin.hpp"
 #include "devtools_rendering/plugin.hpp"
-#include "devtools_scripting_lua/plugin.hpp"
 #include "ecs/commands.hpp"
 #include "ecs/query.hpp"
 #include "ecs/system_params.hpp"
@@ -37,9 +36,6 @@
 #include "profiling/profiling.hpp"
 #include "rendering/plugin.hpp"
 #include "scene/plugin.hpp"
-#include "scripting_lua/asset.hpp"
-#include "scripting_lua/plugin.hpp"
-#include "scripting_lua/script_system_registry.hpp"
 #include "shader/shader.hpp"
 #include "window_glfw/input.hpp"
 
@@ -406,11 +402,7 @@ class ColorOnlyMaterial : public StandardMaterial {
     std::size_t hash() const override { return type_id<ColorOnlyMaterial>(); }
 };
 
-void setup(
-    ResRW<AssetServer> asset_server,
-    ResRW<LuaScriptSystemRegistry> lua_scripts,
-    Commands commands
-) {
+void setup(ResRW<AssetServer> asset_server, Commands commands) {
     commands.spawn().add(
         PendingGltfScene {
             .gltf = asset_server->load<Gltf>("sponza-gltf/glTF/Sponza.gltf"),
@@ -457,9 +449,6 @@ void setup(
             .rotation = {-83.14f, 7.30f, 0.0f},
         }
     );
-    auto camera_script =
-        asset_server->load<LuaScriptAsset>("camera_control.lua");
-    lua_scripts->queue_asset(camera_script);
 }
 
 void spawn_default_gltf_scene(
@@ -618,7 +607,6 @@ int main(int argc, char** argv) {
         .add_plugin<EnvironmentMapPlugin>()
         .add_plugin<ScenePlugin>()
         .add_plugin<GltfPlugin>()
-        .add_plugin<LuaScriptingPlugin>()
         .add_systems(PreStartUp, configure_vxgi)
         .add_systems(PreStartUp, setup)
         .add_systems(Update, spawn_default_gltf_scene)
@@ -645,7 +633,6 @@ int main(int argc, char** argv) {
     app.add_plugin(devtools::profiling::ProviderPlugin {});
     app.add_plugin(devtools::reflection::ProviderPlugin {});
     app.add_plugin(devtools::input::ProviderPlugin {});
-    app.add_plugin(devtools::scripting_lua::ProviderPlugin {});
 
     app.run();
 

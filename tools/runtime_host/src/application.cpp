@@ -26,7 +26,7 @@
 #include "runtime_inspection_snapshot/checkpoint.hpp"
 #include "runtime_protocol/playtest.hpp"
 #include "runtime_protocol/probe.hpp"
-#include "scripting_luau/runtime.hpp"
+#include "scripting/runtime.hpp"
 #include "snapshot_runtime/adapters.hpp"
 #include "snapshot_runtime_asset/adapters.hpp"
 #include "snapshot_runtime_luau/adapters.hpp"

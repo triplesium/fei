@@ -4,9 +4,9 @@
 #include "ecs/dynamic/events.hpp"
 #include "refl/cls.hpp"
 #include "refl/registry.hpp"
-#include "scripting_luau/plugin.hpp"
-#include "scripting_luau/script_system_registry.hpp"
-#include "scripting_luau/snapshot_state.hpp"
+#include "scripting/plugin.hpp"
+#include "scripting/script_system_registry.hpp"
+#include "scripting/snapshot_state.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <string_view>
