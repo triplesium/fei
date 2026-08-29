@@ -909,6 +909,18 @@ std::string benchmark_source(std::size_t entities) {
             sink = total
         end
 
+        local function write_cached_nested_property_once(
+            components: Query<Write<QueryBenchmarkComponent>>
+        )
+            write_value = 3 - write_value
+            local total = 0
+            for component in components do
+                local position = component.position
+                position.x = write_value
+                total += 1
+            end
+            sink = total
+        end
 
         local function write_flattened_offset_once(
             components: Query<Write<QueryBenchmarkComponent>>
@@ -937,6 +949,7 @@ std::string benchmark_source(std::size_t entities) {
                     read_nested_property_four_times,
                     read_cached_nested_property_four_times,
                     write_nested_property_once,
+                    write_cached_nested_property_once,
                     read_flattened_offset_once,
                     read_flattened_offset_four_times,
                     write_flattened_offset_once
@@ -1624,6 +1637,17 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
             return std::uint64_t {1};
         }
     ));
+    results.push_back(
+        measure("luau/write cached nested x1", options.entities, options, [&] {
+            call_module(
+                runtime,
+                module,
+                "write_cached_nested_property_once",
+                write_arguments
+            );
+            return std::uint64_t {1};
+        })
+    );
     results.push_back(measure(
         "luau/read flattened offset x1",
         options.entities,
