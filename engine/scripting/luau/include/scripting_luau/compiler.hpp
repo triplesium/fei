@@ -40,12 +40,20 @@ struct LuauPluginDependency {
     std::string plugin_name;
 };
 
+struct LuauPropertyPathDecl {
+    std::string atom_name;
+    TypeId root_type;
+    TypeId leaf_type;
+    std::vector<std::string> properties;
+};
+
 struct LuauScriptModuleArtifact {
     ScriptModuleDecl declaration;
     std::string bytecode;
     std::string plugin_name;
     std::vector<LuauPluginDependency> plugin_dependencies;
     std::vector<TypeId> required_runtime_types;
+    std::vector<LuauPropertyPathDecl> property_paths;
 };
 
 struct LuauScriptLibraryArtifact {

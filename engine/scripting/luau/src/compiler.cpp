@@ -4,6 +4,7 @@
 #include "ecs/dynamic/state.hpp"
 #include "ecs/dynamic/system_decl.hpp"
 #include "ecs/fwd.hpp"
+#include "refl/cls.hpp"
 #include "refl/enum.hpp"
 #include "refl/registry.hpp"
 #include "scripting/annotations.hpp"
@@ -61,6 +62,7 @@ using Luau::AstStat;
 using Luau::AstStatAssign;
 using Luau::AstStatCompoundAssign;
 using Luau::AstStatExpr;
+using Luau::AstStatForIn;
 using Luau::AstStatFunction;
 using Luau::AstStatLocal;
 using Luau::AstStatLocalFunction;
@@ -2098,6 +2100,269 @@ struct PluginRuntimeEntries {
     std::vector<const AstExpr*> playtests;
 };
 
+struct LuauSourcePatch {
+    Luau::Location location;
+    std::string replacement;
+};
+
+struct KnownReflectedLocal {
+    TypeId type;
+    bool writable {false};
+};
+
+struct ResolvedPropertyChain {
+    const AstExprLocal* root {nullptr};
+    KnownReflectedLocal root_value;
+    TypeId leaf_type;
+    std::vector<std::string> properties;
+};
+
+bool is_direct_luau_leaf(TypeId type) {
+    return type == type_id<Entity>() || type == type_id<bool>() ||
+           type == type_id<float>() || type == type_id<double>() ||
+           type == type_id<signed char>() || type == type_id<unsigned char>() ||
+           type == type_id<short>() || type == type_id<unsigned short>() ||
+           type == type_id<int>() || type == type_id<unsigned int>() ||
+           type == type_id<long>() || type == type_id<unsigned long>() ||
+           type == type_id<long long>() ||
+           type == type_id<unsigned long long>() ||
+           type == type_id<std::string>();
+}
+
+Optional<KnownReflectedLocal>
+known_reflected_value(const DynamicTypeRef& type, DynamicParamAccess access) {
+    auto resolved = resolve_dynamic_type_ref(type);
+    if (!resolved || !Registry::instance().try_get_cls(*resolved)) {
+        return nullopt;
+    }
+    return KnownReflectedLocal {
+        .type = *resolved,
+        .writable = access == DynamicParamAccess::Write,
+    };
+}
+
+class LuauDirectPropertyVisitor final : public Luau::AstVisitor {
+  public:
+    LuauDirectPropertyVisitor(
+        const AstExprFunction& function,
+        const std::vector<DynamicSystemParamDeclPtr>& params,
+        std::vector<LuauPropertyPathDecl>& paths,
+        std::vector<LuauSourcePatch>& patches
+    ) : m_paths(paths), m_patches(patches) {
+        const std::size_t count = std::min(function.args.size, params.size());
+        for (std::size_t index = 0; index < count; ++index) {
+            const AstLocal* argument = function.args.data[index];
+            const auto& param = *params[index];
+            if (param.decl_type_id() == type_id<DynamicResourceParamDecl>()) {
+                const auto& resource =
+                    static_cast<const DynamicResourceParamDecl&>(param);
+                if (auto value =
+                        known_reflected_value(resource.type, resource.access)) {
+                    m_known.emplace(argument, *value);
+                }
+                continue;
+            }
+            if (param.decl_type_id() != type_id<DynamicQueryParamDecl>()) {
+                continue;
+            }
+            const auto& query =
+                static_cast<const DynamicQueryParamDecl&>(param);
+            std::vector<Optional<KnownReflectedLocal>> fields;
+            fields.reserve(query.fields.size());
+            for (const auto& field : query.fields) {
+                if (field.kind == DynamicQueryFieldDeclKind::Entity) {
+                    fields.push_back(nullopt);
+                } else {
+                    fields.push_back(
+                        known_reflected_value(field.type, field.access)
+                    );
+                }
+            }
+            m_queries.emplace(argument, std::move(fields));
+        }
+    }
+
+    bool visit(AstStatForIn* statement) override {
+        if (statement->values.size != 1) {
+            return true;
+        }
+        const auto* source = statement->values.data[0]->as<AstExprLocal>();
+        const auto query =
+            source != nullptr ? m_queries.find(source->local) : m_queries.end();
+        if (query == m_queries.end()) {
+            return true;
+        }
+        const std::size_t count =
+            std::min(statement->vars.size, query->second.size());
+        for (std::size_t index = 0; index < count; ++index) {
+            if (query->second[index]) {
+                m_known[statement->vars.data[index]] = *query->second[index];
+            }
+        }
+        return true;
+    }
+
+    bool visit(AstStatLocal* statement) override {
+        const std::size_t count =
+            std::min(statement->vars.size, statement->values.size);
+        for (std::size_t index = 0; index < count; ++index) {
+            const AstExpr& value = *statement->values.data[index];
+            if (const auto* local = value.as<AstExprLocal>()) {
+                if (const auto known = m_known.find(local->local);
+                    known != m_known.end()) {
+                    m_known[statement->vars.data[index]] = known->second;
+                }
+                continue;
+            }
+            if (auto constructed = constructed_value(value)) {
+                m_known[statement->vars.data[index]] = *constructed;
+                continue;
+            }
+            auto chain = resolve_chain(value);
+            if (chain) {
+                m_known[statement->vars.data[index]] = KnownReflectedLocal {
+                    .type = chain->leaf_type,
+                    .writable = chain->root_value.writable,
+                };
+            }
+        }
+        return true;
+    }
+
+    bool visit(AstExprIndexName* expression) override {
+        auto chain = resolve_chain(*expression);
+        if (!chain || !is_direct_luau_leaf(chain->leaf_type)) {
+            return true;
+        }
+
+        std::string signature = std::to_string(chain->root_value.type.id());
+        for (const auto& property : chain->properties) {
+            signature.push_back('\0');
+            signature.append(property);
+        }
+        std::string reversed(signature.rbegin(), signature.rend());
+        const std::string atom_name =
+            "__ets_p" + std::to_string(stable_name_hash(signature)) + "_" +
+            std::to_string(stable_name_hash(reversed));
+
+        const auto existing = std::ranges::find(
+            m_paths,
+            atom_name,
+            &LuauPropertyPathDecl::atom_name
+        );
+        if (existing == m_paths.end()) {
+            m_paths.push_back(
+                LuauPropertyPathDecl {
+                    .atom_name = atom_name,
+                    .root_type = chain->root_value.type,
+                    .leaf_type = chain->leaf_type,
+                    .properties = chain->properties,
+                }
+            );
+        } else if (
+            existing->root_type != chain->root_value.type ||
+            existing->leaf_type != chain->leaf_type ||
+            existing->properties != chain->properties
+        ) {
+            return true;
+        }
+
+        m_patches.push_back(
+            LuauSourcePatch {
+                .location = expression->location,
+                .replacement =
+                    std::string(name_view(chain->root->local->name)) + "." +
+                    atom_name,
+            }
+        );
+        return false;
+    }
+
+  private:
+    std::unordered_map<const AstLocal*, KnownReflectedLocal> m_known;
+    std::unordered_map<
+        const AstLocal*,
+        std::vector<Optional<KnownReflectedLocal>>>
+        m_queries;
+    std::vector<LuauPropertyPathDecl>& m_paths;
+    std::vector<LuauSourcePatch>& m_patches;
+
+    static bool
+    append_type_token_name(const AstExpr& expression, std::string& name) {
+        if (const auto* global = expression.as<AstExprGlobal>()) {
+            name.append(name_view(global->name));
+            return true;
+        }
+        if (const auto* member = expression.as<AstExprIndexName>()) {
+            if (!append_type_token_name(*member->expr, name)) {
+                return false;
+            }
+            name.append("::");
+            name.append(name_view(member->index));
+            return true;
+        }
+        return false;
+    }
+
+    static Optional<KnownReflectedLocal>
+    constructed_value(const AstExpr& expression) {
+        const auto* call = expression.as<AstExprCall>();
+        const auto* constructor =
+            call != nullptr ? call->func->as<AstExprIndexName>() : nullptr;
+        if (constructor == nullptr || call->self ||
+            name_view(constructor->index) != "new") {
+            return nullopt;
+        }
+        std::string type_name;
+        if (!append_type_token_name(*constructor->expr, type_name)) {
+            return nullopt;
+        }
+        auto type = Registry::instance().try_get_type(type_name);
+        if (!type || !Registry::instance().try_get_cls(type->id())) {
+            return nullopt;
+        }
+        return KnownReflectedLocal {.type = type->id(), .writable = true};
+    }
+
+    Optional<ResolvedPropertyChain>
+    resolve_chain(const AstExpr& expression) const {
+        const AstExpr* current = &expression;
+        std::vector<std::string> reversed;
+        while (const auto* member = current->as<AstExprIndexName>()) {
+            reversed.emplace_back(name_view(member->index));
+            current = member->expr;
+        }
+        const auto* root = current->as<AstExprLocal>();
+        if (root == nullptr || reversed.empty()) {
+            return nullopt;
+        }
+        const auto known = m_known.find(root->local);
+        if (known == m_known.end()) {
+            return nullopt;
+        }
+
+        std::ranges::reverse(reversed);
+        TypeId current_type = known->second.type;
+        for (const auto& name : reversed) {
+            auto cls = Registry::instance().try_get_cls(current_type);
+            if (!cls) {
+                return nullopt;
+            }
+            auto property = cls->try_get_property(name);
+            if (!property) {
+                return nullopt;
+            }
+            current_type = property->type_id();
+        }
+        return ResolvedPropertyChain {
+            .root = root,
+            .root_value = known->second,
+            .leaf_type = current_type,
+            .properties = std::move(reversed),
+        };
+    }
+};
+
 bool append_event_type_path(
     const AstExpr& expression,
     std::vector<std::string_view>& path
@@ -2349,11 +2614,49 @@ expression_source(const ScriptSource& source, const Luau::Location& location) {
     return std::string_view {source.content}.substr(begin, end - begin);
 }
 
+std::size_t
+source_offset(const ScriptSource& source, const Luau::Position& position) {
+    std::size_t offset = 0;
+    for (unsigned int line = 0; line < position.line; ++line) {
+        const auto newline = source.content.find('\n', offset);
+        if (newline == std::string::npos) {
+            return source.content.size();
+        }
+        offset = newline + 1;
+    }
+    return std::min(
+        offset + static_cast<std::size_t>(position.column),
+        source.content.size()
+    );
+}
+
+std::string apply_source_patches(
+    const ScriptSource& source,
+    std::vector<LuauSourcePatch> patches
+) {
+    std::ranges::sort(patches, [](const auto& lhs, const auto& rhs) {
+        if (lhs.location.begin.line != rhs.location.begin.line) {
+            return lhs.location.begin.line > rhs.location.begin.line;
+        }
+        return lhs.location.begin.column > rhs.location.begin.column;
+    });
+    std::string result {source.content};
+    for (const auto& patch : patches) {
+        const std::size_t begin = source_offset(source, patch.location.begin);
+        const std::size_t end = source_offset(source, patch.location.end);
+        if (begin <= end && end <= result.size()) {
+            result.replace(begin, end - begin, patch.replacement);
+        }
+    }
+    return result;
+}
+
 std::string plugin_runtime_source(
     const ScriptSource& source,
-    const PluginRuntimeEntries& entries
+    const PluginRuntimeEntries& entries,
+    std::vector<LuauSourcePatch> patches = {}
 ) {
-    std::string generated {source.content};
+    std::string generated = apply_source_patches(source, std::move(patches));
     generated.append("\nexport const __ets_systems = {\n");
     for (const AstExpr* system : entries.systems) {
         generated.append("    ");
@@ -2369,6 +2672,51 @@ std::string plugin_runtime_source(
     }
     generated.append("}\n");
     return generated;
+}
+
+void collect_direct_property_paths(
+    const TopLevelFunctions& functions,
+    const ScriptModuleDecl& declaration,
+    std::vector<LuauPropertyPathDecl>& paths,
+    std::vector<LuauSourcePatch>& patches
+) {
+    const auto params_for = [&](
+                                std::string_view name
+                            ) -> const std::vector<DynamicSystemParamDeclPtr>* {
+        const auto system = std::ranges::find(
+            declaration.systems,
+            name,
+            &DynamicSystemDecl::name
+        );
+        if (system != declaration.systems.end()) {
+            return &system->params;
+        }
+        for (const auto& owner : declaration.systems) {
+            const auto condition = std::ranges::find(
+                owner.conditions,
+                name,
+                &DynamicConditionDecl::name
+            );
+            if (condition != owner.conditions.end()) {
+                return &condition->params;
+            }
+        }
+        return nullptr;
+    };
+
+    for (const auto& [local, function] : functions) {
+        const auto* params = params_for(name_view(local->name));
+        if (params == nullptr) {
+            continue;
+        }
+        LuauDirectPropertyVisitor visitor {
+            *function,
+            *params,
+            paths,
+            patches,
+        };
+        function->body->visit(&visitor);
+    }
 }
 
 } // namespace
@@ -2688,14 +3036,26 @@ Result<LuauScriptModuleArtifact, ScriptError> compile_luau_script_module(
         std::ranges::sort(required_types, {}, [](TypeId type) {
             return type.id();
         });
-        const std::string generated =
-            plugin_runtime_source(source, *runtime_entries);
+        std::vector<LuauPropertyPathDecl> property_paths;
+        std::vector<LuauSourcePatch> source_patches;
+        collect_direct_property_paths(
+            functions,
+            declaration,
+            property_paths,
+            source_patches
+        );
+        const std::string generated = plugin_runtime_source(
+            source,
+            *runtime_entries,
+            std::move(source_patches)
+        );
         return LuauScriptModuleArtifact {
             .declaration = std::move(declaration),
             .bytecode = Luau::compile(generated),
             .plugin_name = exported_plugin->name,
             .plugin_dependencies = std::move(*plugin_dependencies),
             .required_runtime_types = std::move(required_types),
+            .property_paths = std::move(property_paths),
         };
     }
     if (!options.plugin_name.empty()) {

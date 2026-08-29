@@ -1129,6 +1129,13 @@ Result<LuauScriptModuleId, LuauScriptError> LuauRuntime::load_module(
         lua_settop(root, root_top);
         return failure(std::move(error));
     };
+    auto registered_paths =
+        detail::register_luau_property_paths(thread, artifact.property_paths);
+    if (!registered_paths) {
+        return fail_loading(
+            LuauScriptError {std::move(registered_paths.error())}
+        );
+    }
     for (TypeId required_type : artifact.required_runtime_types) {
         auto type = Registry::instance().try_get_type(required_type);
         if (!type) {
@@ -1621,6 +1628,10 @@ Status<LuauScriptError> LuauRuntime::call_module_function(
     }
 
     lua_State* thread = found->second.thread;
+    auto refreshed_paths = detail::refresh_luau_property_paths(thread);
+    if (!refreshed_paths) {
+        return failure(LuauScriptError {std::move(refreshed_paths.error())});
+    }
     auto& scope = m_impl->borrow_scope;
     const auto token = scope.begin();
     lua_getref(thread, function->second);
@@ -1656,6 +1667,10 @@ Result<bool, LuauScriptError> LuauRuntime::call_module_condition(
     }
 
     lua_State* thread = found->second.thread;
+    auto refreshed_paths = detail::refresh_luau_property_paths(thread);
+    if (!refreshed_paths) {
+        return failure(LuauScriptError {std::move(refreshed_paths.error())});
+    }
     auto& scope = m_impl->borrow_scope;
     const auto token = scope.begin();
     lua_getref(thread, function->second);

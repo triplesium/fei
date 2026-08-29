@@ -473,6 +473,13 @@ TEST_CASE(
                     position = initialized,
                     mode = LuauTestMode.Active,
                 }
+                local retained_position = LuauTestNested.new {
+                    position = LuauTestPosition.new { x = 7.25 },
+                    mode = LuauTestMode.Active,
+                }.position
+                for _ = 1, 10000 do
+                    LuauTestPosition.new { x = 1.0 }
+                end
 
                 local writable = pcall(function()
                     LuauTestMode.Active = LuauTestMode.Idle
@@ -480,7 +487,7 @@ TEST_CASE(
                 assert(not writable)
 
                 state.positional_x = positional.x
-                state.initialized_x = nested.position.x
+                state.initialized_x = retained_position.x
                 state:set_mode(nested.mode)
                 state.spawned = world:spawn(nested):id()
             end
@@ -1035,6 +1042,17 @@ TEST_CASE(
 
     auto artifact = compile_luau_script_module(source);
     REQUIRE(artifact.has_value());
+    const auto has_direct_path = [&](TypeId root, std::string_view property) {
+        return std::ranges::any_of(
+            artifact->property_paths,
+            [&](const LuauPropertyPathDecl& path) {
+                return path.root_type == root && path.properties.size() == 1 &&
+                       path.properties.front() == property;
+            }
+        );
+    };
+    CHECK(has_direct_path(type_id<LuauTestVelocity>(), "x"));
+    CHECK(has_direct_path(type_id<LuauTestConfig>(), "obstacle_total"));
     LuauRuntime runtime;
     auto module = runtime.load_module(*artifact);
     REQUIRE(module.has_value());
@@ -1155,6 +1173,16 @@ TEST_CASE(
 
     auto artifact = compile_luau_script_module(source);
     REQUIRE(artifact.has_value());
+    CHECK(
+        std::ranges::any_of(
+            artifact->property_paths,
+            [](const LuauPropertyPathDecl& path) {
+                return path.root_type == type_id<LuauChangeDetectionTarget>() &&
+                       path.properties ==
+                           std::vector<std::string> {"position", "x"};
+            }
+        )
+    );
     LuauRuntime runtime;
     auto module = runtime.load_module(*artifact);
     REQUIRE(module.has_value());

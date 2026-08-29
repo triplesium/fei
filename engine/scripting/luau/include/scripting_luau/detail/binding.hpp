@@ -6,12 +6,17 @@
 #include "refl/val.hpp"
 #include "scripting/borrow_scope.hpp"
 
+#include <span>
 #include <string>
 #include <string_view>
 
 struct lua_State;
 
-namespace ets::detail {
+namespace ets {
+
+struct LuauPropertyPathDecl;
+
+namespace detail {
 
 struct LuauMutationContext {
     ComponentTicks* ticks {nullptr};
@@ -34,6 +39,11 @@ struct LuauBorrowedRef {
 };
 
 void install_luau_borrowed_object_metatable(lua_State* state);
+Status<std::string> register_luau_property_paths(
+    lua_State* state,
+    std::span<const LuauPropertyPathDecl> paths
+);
+Status<std::string> refresh_luau_property_paths(lua_State* state);
 LuauBorrowedRef check_luau_borrowed_ref(lua_State* state, int index);
 Result<Val, std::string> copy_luau_reflected_value(
     lua_State* state,
@@ -52,4 +62,5 @@ void push_luau_borrowed_ref(
     LuauMutationContext mutation = {}
 );
 
-} // namespace ets::detail
+} // namespace detail
+} // namespace ets

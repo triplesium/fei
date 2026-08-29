@@ -11,6 +11,7 @@
 #include "refl/val.hpp"
 #include "scripting/reflection_bridge.hpp"
 #include "scripting/state.hpp"
+#include "scripting_luau/compiler.hpp"
 #include "scripting_luau/detail/asset_server_binding.hpp"
 #include "scripting_luau/detail/commands_binding.hpp"
 #include "scripting_luau/detail/world_binding.hpp"
@@ -24,6 +25,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -34,13 +36,40 @@ namespace {
 constexpr const char* c_borrowed_metatable = "ets.borrowed";
 constexpr const char* c_type_token_metatable = "ets.type";
 
-struct LuauObject {
+enum class LuauObjectTag : int {
+    BorrowedRead = 1,
+    BorrowedWrite = 2,
+    Owned = 3,
+};
+
+struct LuauBorrowedObject {
     Ref ref;
-    std::shared_ptr<Val> owner;
+    ScriptBorrowScope* scope {nullptr};
+    ScriptBorrowToken token;
+};
+
+struct LuauMutableBorrowedObject {
+    Ref ref;
     ScriptBorrowScope* scope {nullptr};
     ScriptBorrowToken token;
     LuauMutationContext mutation;
 };
+
+struct LuauOwnedObject {
+    Ref ref;
+    std::shared_ptr<Val> owner;
+};
+
+struct LuauObjectView {
+    Ref ref;
+    ScriptBorrowScope* scope {nullptr};
+    ScriptBorrowToken token;
+    LuauMutationContext mutation;
+    const std::shared_ptr<Val>* owner {nullptr};
+};
+
+static_assert(std::is_trivially_destructible_v<LuauBorrowedObject>);
+static_assert(std::is_trivially_destructible_v<LuauMutableBorrowedObject>);
 
 struct LuauQueryIterator {
     DynamicQuery* query {nullptr};
@@ -109,32 +138,94 @@ struct LuauClassBinding {
     LuauPropertyMap properties;
 };
 
+struct LuauDirectPropertyPath {
+    std::string atom_name;
+    TypeId root_type;
+    TypeId leaf_type;
+    LuauPrimitiveKind primitive_kind {LuauPrimitiveKind::None};
+    std::vector<std::string> property_names;
+    std::vector<Property*> properties;
+    std::vector<Cls*> property_owners;
+    std::vector<std::uint64_t> property_revisions;
+    Optional<std::size_t> offset;
+};
+
 struct LuauBindingCache {
     std::uint64_t class_epoch {0};
     std::unordered_map<TypeId, LuauClassBinding> classes;
+    std::unordered_map<std::string, std::int16_t> direct_atoms;
+    std::vector<LuauDirectPropertyPath> direct_paths =
+        std::vector<LuauDirectPropertyPath>(1);
 };
 
 bool borrow_is_valid(const ScriptBorrowScope* scope, ScriptBorrowToken token) {
     return scope != nullptr && scope->valid(token);
 }
 
-void destroy_object(void* userdata) {
-    static_cast<LuauObject*>(userdata)->~LuauObject();
+void destroy_owned_object(lua_State*, void* userdata) {
+    static_cast<LuauOwnedObject*>(userdata)->~LuauOwnedObject();
 }
 
 void destroy_binding_cache(void* userdata) {
     static_cast<LuauBindingCache*>(userdata)->~LuauBindingCache();
 }
 
-LuauObject& check_object(lua_State* state, int index) {
-    auto* object = static_cast<LuauObject*>(
-        luaL_checkudata(state, index, c_borrowed_metatable)
-    );
-    if (object->scope != nullptr &&
-        !borrow_is_valid(object->scope, object->token)) {
-        luaL_error(state, "attempt to access an expired ECS borrow");
+LuauBindingCache& direct_binding_cache(lua_State* state) {
+    auto* cache =
+        static_cast<LuauBindingCache*>(lua_callbacks(state)->userdata);
+    if (cache == nullptr) {
+        luaL_error(state, "Luau direct property cache is unavailable");
     }
-    return *object;
+    return *cache;
+}
+
+std::int16_t
+direct_property_atom(lua_State* state, const char* text, std::size_t length) {
+    auto* cache =
+        static_cast<LuauBindingCache*>(lua_callbacks(state)->userdata);
+    if (cache == nullptr) {
+        return -1;
+    }
+    const auto atom = cache->direct_atoms.find(std::string {text, length});
+    return atom != cache->direct_atoms.end() ? atom->second : -1;
+}
+
+LuauObjectView check_object(lua_State* state, int index) {
+    const auto tag = static_cast<LuauObjectTag>(lua_userdatatag(state, index));
+    void* userdata = lua_touserdata(state, index);
+    switch (tag) {
+        case LuauObjectTag::BorrowedRead: {
+            auto* object = static_cast<LuauBorrowedObject*>(userdata);
+            if (!borrow_is_valid(object->scope, object->token)) {
+                luaL_error(state, "attempt to access an expired ECS borrow");
+            }
+            return {
+                .ref = object->ref,
+                .scope = object->scope,
+                .token = object->token,
+            };
+        }
+        case LuauObjectTag::BorrowedWrite: {
+            auto* object = static_cast<LuauMutableBorrowedObject*>(userdata);
+            if (!borrow_is_valid(object->scope, object->token)) {
+                luaL_error(state, "attempt to access an expired ECS borrow");
+            }
+            return {
+                .ref = object->ref,
+                .scope = object->scope,
+                .token = object->token,
+                .mutation = object->mutation,
+            };
+        }
+        case LuauObjectTag::Owned: {
+            auto* object = static_cast<LuauOwnedObject*>(userdata);
+            return {
+                .ref = object->ref,
+                .owner = &object->owner,
+            };
+        }
+    }
+    luaL_typeerror(state, index, "reflected value");
 }
 
 int raise_message(lua_State* state, const std::string& message) {
@@ -279,29 +370,52 @@ bool push_primitive(lua_State* state, Ref ref) {
     return true;
 }
 
-void push_object(
+void push_borrowed_object(
     lua_State* state,
     Ref ref,
-    std::shared_ptr<Val> owner,
-    ScriptBorrowScope* scope,
+    ScriptBorrowScope& scope,
     ScriptBorrowToken token,
     LuauMutationContext mutation = {}
 ) {
-    auto* object =
-        new (lua_newuserdatadtor(state, sizeof(LuauObject), destroy_object))
-            LuauObject {
-                .ref = ref,
-                .owner = std::move(owner),
-                .scope = scope,
-                .token = token,
-                .mutation = mutation,
-            };
-    static_cast<void>(object);
-    luaL_getmetatable(state, c_borrowed_metatable);
-    lua_setmetatable(state, -2);
+    if (!ref.is_const()) {
+        auto* object = new (lua_newuserdatataggedwithmetatable(
+            state,
+            sizeof(LuauMutableBorrowedObject),
+            static_cast<int>(LuauObjectTag::BorrowedWrite)
+        )) LuauMutableBorrowedObject {
+            .ref = ref,
+            .scope = &scope,
+            .token = token,
+            .mutation = mutation,
+        };
+        static_cast<void>(object);
+    } else {
+        auto* object = new (lua_newuserdatataggedwithmetatable(
+            state,
+            sizeof(LuauBorrowedObject),
+            static_cast<int>(LuauObjectTag::BorrowedRead)
+        )) LuauBorrowedObject {
+            .ref = ref,
+            .scope = &scope,
+            .token = token,
+        };
+        static_cast<void>(object);
+    }
 }
 
-void push_ref(lua_State* state, Ref ref, const LuauObject& parent) {
+void push_owned_object(lua_State* state, Ref ref, std::shared_ptr<Val> owner) {
+    auto* object = new (lua_newuserdatataggedwithmetatable(
+        state,
+        sizeof(LuauOwnedObject),
+        static_cast<int>(LuauObjectTag::Owned)
+    )) LuauOwnedObject {
+        .ref = ref,
+        .owner = std::move(owner),
+    };
+    static_cast<void>(object);
+}
+
+void push_ref(lua_State* state, Ref ref, const LuauObjectView& parent) {
     if (!ref) {
         lua_pushnil(state);
         return;
@@ -330,20 +444,25 @@ void push_ref(lua_State* state, Ref ref, const LuauObject& parent) {
         push_ref(state, *value, parent);
         return;
     }
-    push_object(
-        state,
-        ref,
-        parent.owner,
-        parent.scope,
-        parent.token,
-        parent.mutation
-    );
+    if (parent.owner != nullptr) {
+        push_owned_object(state, ref, *parent.owner);
+    } else if (parent.scope != nullptr) {
+        push_borrowed_object(
+            state,
+            ref,
+            *parent.scope,
+            parent.token,
+            parent.mutation
+        );
+    } else {
+        push_owned_object(state, ref, {});
+    }
 }
 
 void push_property_ref(
     lua_State* state,
     Ref ref,
-    const LuauObject& parent,
+    const LuauObjectView& parent,
     LuauPrimitiveKind kind
 ) {
     switch (kind) {
@@ -433,7 +552,7 @@ struct MutationSnapshot {
 };
 
 void capture_mutation_snapshot(
-    const LuauObject& object,
+    const LuauObjectView& object,
     std::vector<MutationSnapshot>& snapshots
 ) {
     if (!object.mutation) {
@@ -593,9 +712,9 @@ void push_owned_value(lua_State* state, Val value) {
         return;
     }
     auto owner = std::make_shared<Val>(std::move(value));
-    LuauObject parent {
+    LuauObjectView parent {
         .ref = owner->ref(),
-        .owner = owner,
+        .owner = &owner,
     };
     push_ref(state, parent.ref, parent);
 }
@@ -774,7 +893,7 @@ value_for_type(lua_State* state, int index, TypeId expected) {
         return make_val<std::string>(text, size);
     }
     if (lua_isuserdata(state, index)) {
-        auto& object = check_object(state, index);
+        auto object = check_object(state, index);
         if (object.ref.type_id() == expected) {
             auto copied = Val::copy(object.ref);
             if (copied) {
@@ -786,6 +905,327 @@ value_for_type(lua_State* state, int index, TypeId expected) {
     return failure(
         "value is incompatible with reflected type '" + type_name(expected) +
         "'"
+    );
+}
+
+LuauDirectPropertyPath&
+direct_property_path(lua_State* state, int atom, std::uint16_t* cached_slot) {
+    auto& cache = direct_binding_cache(state);
+    std::size_t slot = *cached_slot;
+    if (slot == 0) {
+        if (atom <= 0 ||
+            static_cast<std::size_t>(atom) >= cache.direct_paths.size()) {
+            luaL_error(state, "unknown Luau direct property atom %d", atom);
+        }
+        slot = static_cast<std::size_t>(atom);
+        *cached_slot = static_cast<std::uint16_t>(slot);
+    }
+    if (slot >= cache.direct_paths.size()) {
+        luaL_error(state, "invalid Luau direct property cache slot");
+    }
+    return cache.direct_paths[slot];
+}
+
+Result<Ref, std::string>
+direct_property_ref(LuauDirectPropertyPath& path, Ref root) {
+    if (!root || root.type_id() != path.root_type) {
+        return failure(
+            std::string {
+                "direct property root type does not match compiled path"
+            }
+        );
+    }
+    if (!path.offset) {
+        Ref leaf = root;
+        for (Property* property : path.properties) {
+            auto value = property->get(leaf);
+            if (!value) {
+                return failure(std::move(value.error().message));
+            }
+            leaf = *value;
+        }
+        if (!leaf || leaf.type_id() != path.leaf_type) {
+            return failure(
+                std::string {
+                    "direct property leaf type does not match compiled path"
+                }
+            );
+        }
+        auto root_type = Registry::instance().try_get_type(path.root_type);
+        auto leaf_type = Registry::instance().try_get_type(path.leaf_type);
+        if (!root_type || !leaf_type) {
+            return failure(
+                std::string {"direct property reflected type is unavailable"}
+            );
+        }
+        const auto root_address =
+            reinterpret_cast<std::uintptr_t>(root.const_ptr());
+        const auto leaf_address =
+            reinterpret_cast<std::uintptr_t>(leaf.const_ptr());
+        const std::size_t root_size = root_type->size();
+        const std::size_t leaf_size = leaf_type->size();
+        if (leaf_address < root_address ||
+            leaf_address - root_address > root_size ||
+            leaf_size > root_size - (leaf_address - root_address)) {
+            return failure(
+                std::string {
+                    "direct property does not refer to storage inside its root "
+                    "object"
+                }
+            );
+        }
+        path.offset = static_cast<std::size_t>(leaf_address - root_address);
+    }
+
+    if (root.is_const()) {
+        const auto* base = static_cast<const std::byte*>(root.const_ptr());
+        return Ref(base + *path.offset, path.leaf_type);
+    }
+    auto* base = static_cast<std::byte*>(root.ptr());
+    return Ref(base + *path.offset, path.leaf_type);
+}
+
+void direct_property_get(
+    lua_State* state,
+    const LuauObjectView& object,
+    int atom,
+    std::uint16_t* cached_slot
+) {
+    auto& path = direct_property_path(state, atom, cached_slot);
+    auto value = direct_property_ref(path, object.ref);
+    if (!value) {
+        raise_message(state, value.error());
+        return;
+    }
+    push_property_ref(state, *value, object, path.primitive_kind);
+}
+
+template<typename T>
+bool assign_direct_number(lua_State* state, Ref target) {
+    if (!lua_isnumber(state, 3)) {
+        luaL_typeerror(state, 3, "number");
+    }
+    T value;
+    if constexpr (std::is_floating_point_v<T>) {
+        value = static_cast<T>(lua_tonumber(state, 3));
+    } else if constexpr (std::is_unsigned_v<T>) {
+        value = static_cast<T>(lua_tounsigned(state, 3));
+    } else {
+        value = static_cast<T>(lua_tointeger(state, 3));
+    }
+    auto& current = target.get<T>();
+    if (current == value) {
+        return false;
+    }
+    current = value;
+    return true;
+}
+
+bool assign_direct_primitive(
+    lua_State* state,
+    Ref target,
+    LuauPrimitiveKind kind
+) {
+    switch (kind) {
+        case LuauPrimitiveKind::Entity: {
+            if (!lua_isnumber(state, 3)) {
+                luaL_typeerror(state, 3, "number");
+            }
+            const Entity value {
+                static_cast<std::uint32_t>(lua_tounsigned(state, 3)),
+            };
+            auto& current = target.get<Entity>();
+            if (current == value) {
+                return false;
+            }
+            current = value;
+            return true;
+        }
+        case LuauPrimitiveKind::Boolean: {
+            if (!lua_isboolean(state, 3)) {
+                luaL_typeerror(state, 3, "boolean");
+            }
+            const bool value = lua_toboolean(state, 3) != 0;
+            auto& current = target.get<bool>();
+            if (current == value) {
+                return false;
+            }
+            current = value;
+            return true;
+        }
+        case LuauPrimitiveKind::Float:
+            return assign_direct_number<float>(state, target);
+        case LuauPrimitiveKind::Double:
+            return assign_direct_number<double>(state, target);
+        case LuauPrimitiveKind::SignedChar:
+            return assign_direct_number<signed char>(state, target);
+        case LuauPrimitiveKind::UnsignedChar:
+            return assign_direct_number<unsigned char>(state, target);
+        case LuauPrimitiveKind::Short:
+            return assign_direct_number<short>(state, target);
+        case LuauPrimitiveKind::UnsignedShort:
+            return assign_direct_number<unsigned short>(state, target);
+        case LuauPrimitiveKind::Int:
+            return assign_direct_number<int>(state, target);
+        case LuauPrimitiveKind::UnsignedInt:
+            return assign_direct_number<unsigned int>(state, target);
+        case LuauPrimitiveKind::Long:
+            return assign_direct_number<long>(state, target);
+        case LuauPrimitiveKind::UnsignedLong:
+            return assign_direct_number<unsigned long>(state, target);
+        case LuauPrimitiveKind::LongLong:
+            return assign_direct_number<long long>(state, target);
+        case LuauPrimitiveKind::UnsignedLongLong:
+            return assign_direct_number<unsigned long long>(state, target);
+        case LuauPrimitiveKind::String: {
+            if (!lua_isstring(state, 3)) {
+                luaL_typeerror(state, 3, "string");
+            }
+            std::size_t size = 0;
+            const char* text = lua_tolstring(state, 3, &size);
+            auto& current = target.get<std::string>();
+            if (std::string_view {current} == std::string_view {text, size}) {
+                return false;
+            }
+            current.assign(text, size);
+            return true;
+        }
+        case LuauPrimitiveKind::None:
+            luaL_error(state, "unsupported Luau direct property type");
+    }
+    return false;
+}
+
+void direct_property_set(
+    lua_State* state,
+    const LuauObjectView& object,
+    int atom,
+    std::uint16_t* cached_slot
+) {
+    if (object.ref.is_const()) {
+        luaL_error(state, "attempt to mutate a read-only ECS borrow");
+    }
+    auto& path = direct_property_path(state, atom, cached_slot);
+    auto target = direct_property_ref(path, object.ref);
+    if (!target) {
+        raise_message(state, target.error());
+        return;
+    }
+    if (assign_direct_primitive(state, *target, path.primitive_kind)) {
+        object.mutation.mark_changed();
+    }
+}
+
+void borrowed_read_direct_get(
+    lua_State* state,
+    void* data,
+    int atom,
+    std::uint16_t* cached_slot,
+    int
+) {
+    auto* object = static_cast<LuauBorrowedObject*>(data);
+    if (!borrow_is_valid(object->scope, object->token)) {
+        luaL_error(state, "attempt to access an expired ECS borrow");
+    }
+    direct_property_get(
+        state,
+        LuauObjectView {
+            .ref = object->ref,
+            .scope = object->scope,
+            .token = object->token,
+        },
+        atom,
+        cached_slot
+    );
+}
+
+void borrowed_read_direct_set(
+    lua_State* state,
+    void*,
+    int,
+    std::uint16_t*,
+    int
+) {
+    luaL_error(state, "attempt to mutate a read-only ECS borrow");
+}
+
+void borrowed_write_direct_get(
+    lua_State* state,
+    void* data,
+    int atom,
+    std::uint16_t* cached_slot,
+    int
+) {
+    auto* object = static_cast<LuauMutableBorrowedObject*>(data);
+    if (!borrow_is_valid(object->scope, object->token)) {
+        luaL_error(state, "attempt to access an expired ECS borrow");
+    }
+    direct_property_get(
+        state,
+        LuauObjectView {
+            .ref = object->ref,
+            .scope = object->scope,
+            .token = object->token,
+            .mutation = object->mutation,
+        },
+        atom,
+        cached_slot
+    );
+}
+
+void borrowed_write_direct_set(
+    lua_State* state,
+    void* data,
+    int atom,
+    std::uint16_t* cached_slot,
+    int
+) {
+    auto* object = static_cast<LuauMutableBorrowedObject*>(data);
+    if (!borrow_is_valid(object->scope, object->token)) {
+        luaL_error(state, "attempt to access an expired ECS borrow");
+    }
+    direct_property_set(
+        state,
+        LuauObjectView {
+            .ref = object->ref,
+            .scope = object->scope,
+            .token = object->token,
+            .mutation = object->mutation,
+        },
+        atom,
+        cached_slot
+    );
+}
+
+void owned_direct_get(
+    lua_State* state,
+    void* data,
+    int atom,
+    std::uint16_t* cached_slot,
+    int
+) {
+    auto* object = static_cast<LuauOwnedObject*>(data);
+    direct_property_get(
+        state,
+        LuauObjectView {.ref = object->ref, .owner = &object->owner},
+        atom,
+        cached_slot
+    );
+}
+
+void owned_direct_set(
+    lua_State* state,
+    void* data,
+    int atom,
+    std::uint16_t* cached_slot,
+    int
+) {
+    auto* object = static_cast<LuauOwnedObject*>(data);
+    direct_property_set(
+        state,
+        LuauObjectView {.ref = object->ref, .owner = &object->owner},
+        atom,
+        cached_slot
     );
 }
 
@@ -820,7 +1260,7 @@ Result<Val, std::string> argument_value(lua_State* state, int index) {
 int push_return_item(
     lua_State* state,
     ReturnItem& item,
-    const LuauObject& instance
+    const LuauObjectView& instance
 ) {
     if (item.is_ref()) {
         push_ref(state, item.ref(), instance);
@@ -833,7 +1273,7 @@ int push_return_item(
 int push_return_item(
     lua_State* state,
     const ReturnItem& item,
-    const LuauObject& instance
+    const LuauObjectView& instance
 ) {
     if (item.is_ref()) {
         push_ref(state, item.ref(), instance);
@@ -846,7 +1286,7 @@ int push_return_item(
 int push_invoke_result(
     lua_State* state,
     InvokeResult result,
-    const LuauObject& instance
+    const LuauObjectView& instance
 ) {
     if (!result) {
         auto& error = result.error();
@@ -892,7 +1332,7 @@ int invoke_static_method(lua_State* state) {
     std::vector<MutationSnapshot> mutation_snapshots;
     for (int index = 1; index <= lua_gettop(state); ++index) {
         if (lua_isuserdata(state, index)) {
-            auto& object = check_object(state, index);
+            auto object = check_object(state, index);
             refs.push_back(object.ref);
             capture_mutation_snapshot(object, mutation_snapshots);
             continue;
@@ -907,12 +1347,12 @@ int invoke_static_method(lua_State* state) {
 
     auto result = script_invoke_static_method(type, name, refs);
     apply_mutation_snapshots(mutation_snapshots);
-    return push_invoke_result(state, std::move(result), LuauObject {});
+    return push_invoke_result(state, std::move(result), LuauObjectView {});
 }
 
 int invoke_method(lua_State* state) {
     const char* name = lua_tostring(state, lua_upvalueindex(1));
-    auto& instance = check_object(state, 1);
+    auto instance = check_object(state, 1);
     std::vector<MutationSnapshot> mutation_snapshots;
     capture_mutation_snapshot(instance, mutation_snapshots);
     const int argument_count = lua_gettop(state) - 1;
@@ -922,7 +1362,7 @@ int invoke_method(lua_State* state) {
     refs.reserve(static_cast<std::size_t>(argument_count));
     for (int index = 2; index <= lua_gettop(state); ++index) {
         if (lua_isuserdata(state, index)) {
-            auto& object = check_object(state, index);
+            auto object = check_object(state, index);
             refs.push_back(object.ref);
             capture_mutation_snapshot(object, mutation_snapshots);
             continue;
@@ -1128,7 +1568,7 @@ bool push_dynamic_event_member(
 }
 
 int borrowed_index(lua_State* state) {
-    auto& object = check_object(state, 1);
+    auto object = check_object(state, 1);
     const char* key = luaL_checkstring(state, 2);
     if (push_dynamic_state_member(state, object.ref.type_id(), key)) {
         return 1;
@@ -1171,7 +1611,7 @@ int borrowed_index(lua_State* state) {
 }
 
 int borrowed_newindex(lua_State* state) {
-    auto& object = check_object(state, 1);
+    auto object = check_object(state, 1);
     if (is_script_state_type(object.ref.type_id())) {
         return raise_message(state, "script state values are immutable");
     }
@@ -1211,8 +1651,8 @@ int borrowed_newindex(lua_State* state) {
 }
 
 int borrowed_equal(lua_State* state) {
-    auto& lhs = check_object(state, 1);
-    auto& rhs = check_object(state, 2);
+    auto lhs = check_object(state, 1);
+    auto rhs = check_object(state, 2);
     if (lhs.ref.type_id() != rhs.ref.type_id()) {
         lua_pushboolean(state, false);
         return 1;
@@ -1226,7 +1666,7 @@ int borrowed_equal(lua_State* state) {
 }
 
 int borrowed_call(lua_State* state) {
-    auto& object = check_object(state, 1);
+    auto object = check_object(state, 1);
     auto* event = object.ref.try_get<DynamicEventParam>();
     if (event != nullptr && event->kind() == DynamicEventParamKind::Writer) {
         return dynamic_event_send(state);
@@ -1297,7 +1737,7 @@ int dynamic_event_iterator_next(lua_State* state) {
 }
 
 int borrowed_iter(lua_State* state) {
-    auto& object = check_object(state, 1);
+    auto object = check_object(state, 1);
     auto* query = object.ref.try_get<DynamicQuery>();
     if (query != nullptr) {
         auto* iterator = new (lua_newuserdata(state, sizeof(LuauQueryIterator)))
@@ -1360,7 +1800,8 @@ void install_luau_borrowed_object_metatable(lua_State* state) {
             sizeof(LuauBindingCache),
             destroy_binding_cache
         )) LuauBindingCache {};
-        static_cast<void>(cache);
+        lua_callbacks(state)->userdata = cache;
+        lua_callbacks(state)->useratom = direct_property_atom;
         lua_pushvalue(state, -1);
         lua_pushcclosure(state, borrowed_index, "borrowed.__index", 1);
         lua_setfield(state, metatable, "__index");
@@ -1374,6 +1815,46 @@ void install_luau_borrowed_object_metatable(lua_State* state) {
         lua_setfield(state, -2, "__call");
         lua_pushcfunction(state, borrowed_iter, "borrowed.__iter");
         lua_setfield(state, -2, "__iter");
+
+        constexpr std::array object_tags {
+            LuauObjectTag::BorrowedRead,
+            LuauObjectTag::BorrowedWrite,
+            LuauObjectTag::Owned,
+        };
+        for (const auto tag : object_tags) {
+            lua_pushvalue(state, metatable);
+            lua_setuserdatametatable(state, static_cast<int>(tag));
+        }
+        lua_setuserdatadtor(
+            state,
+            static_cast<int>(LuauObjectTag::Owned),
+            destroy_owned_object
+        );
+        const bool direct_access_registered =
+            lua_registeruserdatadirectaccess(
+                state,
+                static_cast<int>(LuauObjectTag::BorrowedRead),
+                borrowed_read_direct_get,
+                borrowed_read_direct_set,
+                nullptr
+            ) != 0 &&
+            lua_registeruserdatadirectaccess(
+                state,
+                static_cast<int>(LuauObjectTag::BorrowedWrite),
+                borrowed_write_direct_get,
+                borrowed_write_direct_set,
+                nullptr
+            ) != 0 &&
+            lua_registeruserdatadirectaccess(
+                state,
+                static_cast<int>(LuauObjectTag::Owned),
+                owned_direct_get,
+                owned_direct_set,
+                nullptr
+            ) != 0;
+        if (!direct_access_registered) {
+            luaL_error(state, "failed to register Luau direct property access");
+        }
     }
     lua_pop(state, 1);
 
@@ -1388,8 +1869,140 @@ void install_luau_borrowed_object_metatable(lua_State* state) {
     install_luau_world_metatables(state);
 }
 
+Status<std::string> register_luau_property_paths(
+    lua_State* state,
+    std::span<const LuauPropertyPathDecl> paths
+) {
+    auto& cache = direct_binding_cache(state);
+    for (const auto& declaration : paths) {
+        if (const auto existing =
+                cache.direct_atoms.find(declaration.atom_name);
+            existing != cache.direct_atoms.end()) {
+            const auto& path = cache.direct_paths[existing->second];
+            if (path.root_type != declaration.root_type ||
+                path.leaf_type != declaration.leaf_type ||
+                path.properties.size() != declaration.properties.size()) {
+                return failure(
+                    "Luau direct property atom collision for '" +
+                    declaration.atom_name + "'"
+                );
+            }
+            continue;
+        }
+        if (cache.direct_paths.size() >=
+            static_cast<std::size_t>(
+                std::numeric_limits<std::int16_t>::max()
+            )) {
+            return failure(
+                std::string {"Luau direct property atom limit exceeded"}
+            );
+        }
+
+        TypeId current_type = declaration.root_type;
+        std::vector<Property*> properties;
+        std::vector<Cls*> property_owners;
+        std::vector<std::uint64_t> property_revisions;
+        properties.reserve(declaration.properties.size());
+        property_owners.reserve(declaration.properties.size());
+        property_revisions.reserve(declaration.properties.size());
+        for (const auto& name : declaration.properties) {
+            auto cls = Registry::instance().try_get_cls(current_type);
+            if (!cls) {
+                return failure(std::move(cls.error().message));
+            }
+            auto property = cls->try_get_property(name);
+            if (!property) {
+                return failure(std::move(property.error().message));
+            }
+            properties.push_back(&*property);
+            property_owners.push_back(&*cls);
+            property_revisions.push_back(cls->property_revision());
+            current_type = property->type_id();
+        }
+        if (current_type != declaration.leaf_type) {
+            return failure(
+                std::string {
+                    "Luau direct property leaf type changed before module load"
+                }
+            );
+        }
+        const auto kind = primitive_kind(current_type);
+        if (kind == LuauPrimitiveKind::None) {
+            return failure(
+                std::string {
+                    "Luau direct property leaf is not a supported primitive"
+                }
+            );
+        }
+
+        const auto atom = static_cast<std::int16_t>(cache.direct_paths.size());
+        cache.direct_paths.push_back(
+            LuauDirectPropertyPath {
+                .atom_name = declaration.atom_name,
+                .root_type = declaration.root_type,
+                .leaf_type = declaration.leaf_type,
+                .primitive_kind = kind,
+                .property_names = declaration.properties,
+                .properties = std::move(properties),
+                .property_owners = std::move(property_owners),
+                .property_revisions = std::move(property_revisions),
+            }
+        );
+        cache.direct_atoms.emplace(declaration.atom_name, atom);
+    }
+    return {};
+}
+
+Status<std::string> refresh_luau_property_paths(lua_State* state) {
+    auto& cache = direct_binding_cache(state);
+    for (std::size_t index = 1; index < cache.direct_paths.size(); ++index) {
+        auto& path = cache.direct_paths[index];
+        bool stale = path.property_owners.size() != path.property_names.size();
+        for (std::size_t property = 0;
+             !stale && property < path.property_owners.size();
+             ++property) {
+            stale = path.property_owners[property]->property_revision() !=
+                    path.property_revisions[property];
+        }
+        if (!stale) {
+            continue;
+        }
+
+        TypeId current_type = path.root_type;
+        std::vector<Property*> properties;
+        std::vector<Cls*> owners;
+        std::vector<std::uint64_t> revisions;
+        for (const auto& name : path.property_names) {
+            auto cls = Registry::instance().try_get_cls(current_type);
+            if (!cls) {
+                return failure(std::move(cls.error().message));
+            }
+            auto property = cls->try_get_property(name);
+            if (!property) {
+                return failure(std::move(property.error().message));
+            }
+            properties.push_back(&*property);
+            owners.push_back(&*cls);
+            revisions.push_back(cls->property_revision());
+            current_type = property->type_id();
+        }
+        if (current_type != path.leaf_type) {
+            return failure(
+                std::string {
+                    "Luau direct property leaf type changed during execution"
+                }
+            );
+        }
+        path.properties = std::move(properties);
+        path.property_owners = std::move(owners);
+        path.property_revisions = std::move(revisions);
+        path.offset.reset();
+    }
+    return {};
+}
+
 LuauBorrowedRef check_luau_borrowed_ref(lua_State* state, int index) {
-    auto& object = check_object(state, index);
+    auto object = check_object(state, index);
     return {
         .ref = object.ref,
         .scope = object.scope,
@@ -1464,7 +2077,7 @@ void push_luau_borrowed_ref(
         return;
     }
 
-    push_object(state, ref, {}, &scope, token, mutation);
+    push_borrowed_object(state, ref, scope, token, mutation);
 }
 
 } // namespace ets::detail
