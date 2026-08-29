@@ -154,6 +154,7 @@ App& App::add_plugin(const PluginId& id) {
         throw std::runtime_error(unknown_plugin_message(registry, id));
     }
     return add_boxed_plugin(
+        PluginKey {descriptor->type},
         descriptor->type,
         descriptor->id.qualified_name(),
         descriptor->create()

@@ -21,9 +21,13 @@ PluginId::PluginId(std::string qualified_name) :
         if (m_qualified_name[index] != ':') {
             continue;
         }
-        if (index == 0 || index + 1 >= m_qualified_name.size() ||
-            m_qualified_name[index + 1] != ':' ||
-            m_qualified_name[index - 1] == ':') {
+        if (index + 1 >= m_qualified_name.size() ||
+            m_qualified_name[index + 1] != ':') {
+            continue;
+        }
+        if (index == 0 || index + 2 >= m_qualified_name.size() ||
+            m_qualified_name[index - 1] == ':' ||
+            m_qualified_name[index + 2] == ':') {
             throw std::runtime_error(
                 "Invalid qualified plugin id '" + m_qualified_name + "'"
             );

@@ -15,6 +15,8 @@ class PluginId {
     [[nodiscard]] std::string_view qualified_name() const;
     [[nodiscard]] std::string_view namespace_name() const;
     [[nodiscard]] std::string_view local_name() const;
+
+    bool operator==(const PluginId& other) const = default;
 };
 
 } // namespace ets

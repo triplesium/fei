@@ -120,110 +120,148 @@ void App::finish() {
         return;
     }
 
-    m_plugin_registry_frozen = true;
-
     std::size_t resolved_count = 0;
-    while (resolved_count < m_plugins.size()) {
-        const auto wave_end = m_plugins.size();
-        std::vector<PluginRequirement> missing;
-        for (; resolved_count < wave_end; ++resolved_count) {
-            PluginDependencies dependencies;
-            m_plugins[resolved_count].plugin->dependencies(dependencies);
-            m_plugins[resolved_count].requirements =
-                dependencies.requirements();
+    const auto resolve_dependencies = [&] {
+        while (resolved_count < m_plugins.size()) {
+            const auto wave_end = m_plugins.size();
+            std::vector<PluginRequirement> missing;
+            for (; resolved_count < wave_end; ++resolved_count) {
+                PluginDependencies dependencies;
+                m_plugins[resolved_count].plugin->dependencies(dependencies);
+                m_plugins[resolved_count].requirements =
+                    dependencies.requirements();
 
-            for (const auto& requirement :
-                 m_plugins[resolved_count].requirements) {
-                if (m_plugin_indices.contains(requirement.type)) {
+                for (const auto& requirement :
+                     m_plugins[resolved_count].requirements) {
+                    if (m_plugin_indices.contains(requirement.key)) {
+                        continue;
+                    }
+                    auto existing = std::ranges::find_if(
+                        missing,
+                        [&](const PluginRequirement& candidate) {
+                            return candidate.key == requirement.key;
+                        }
+                    );
+                    if (existing == missing.end()) {
+                        auto missing_requirement = requirement;
+                        missing_requirement.required_by =
+                            m_plugins[resolved_count].name;
+                        missing.push_back(std::move(missing_requirement));
+                    } else if (
+                        requirement.configured && !existing->configured
+                    ) {
+                        *existing = requirement;
+                        existing->required_by = m_plugins[resolved_count].name;
+                    }
+                }
+            }
+
+            for (auto& requirement : missing) {
+                if (m_plugin_indices.contains(requirement.key)) {
                     continue;
                 }
-                auto existing = std::ranges::find_if(
-                    missing,
-                    [&](const PluginRequirement& candidate) {
-                        return candidate.type == requirement.type;
+                if (!requirement.create_default) {
+                    throw std::runtime_error(
+                        "Plugin " + requirement.required_by + " requires " +
+                        requirement.name +
+                        ", which must be registered explicitly because it is "
+                        "not default constructible"
+                    );
+                }
+                const auto dependency_index = m_plugins.size();
+                m_plugin_indices.emplace(requirement.key, dependency_index);
+                m_plugins.push_back(
+                    PluginEntry {
+                        .key = requirement.key,
+                        .implementation_type = requirement.implementation_type,
+                        .name = requirement.name,
+                        .plugin = requirement.create_default(),
                     }
                 );
-                if (existing == missing.end()) {
-                    auto missing_requirement = requirement;
-                    missing_requirement.required_by =
-                        m_plugins[resolved_count].name;
-                    missing.push_back(std::move(missing_requirement));
-                } else if (requirement.configured && !existing->configured) {
-                    *existing = requirement;
-                    existing->required_by = m_plugins[resolved_count].name;
-                }
             }
         }
-
-        for (auto& requirement : missing) {
-            if (m_plugin_indices.contains(requirement.type)) {
-                continue;
-            }
-            if (!requirement.create_default) {
-                throw std::runtime_error(
-                    "Plugin " + requirement.required_by + " requires " +
-                    requirement.name +
-                    ", which must be registered explicitly because it is "
-                    "not default constructible"
-                );
-            }
-            const auto dependency_index = m_plugins.size();
-            m_plugin_indices.emplace(requirement.type, dependency_index);
-            m_plugins.push_back(
-                PluginEntry {
-                    .type = requirement.type,
-                    .name = requirement.name,
-                    .plugin = requirement.create_default(),
-                }
-            );
-        }
-    }
-
-    enum class VisitState : std::uint8_t { Unvisited, Visiting, Visited };
-    std::vector states(m_plugins.size(), VisitState::Unvisited);
-    std::vector<std::size_t> stack;
-    m_plugin_order.clear();
-    m_plugin_order.reserve(m_plugins.size());
-
-    std::function<void(std::size_t)> visit = [&](std::size_t index) {
-        if (states[index] == VisitState::Visited) {
-            return;
-        }
-        if (states[index] == VisitState::Visiting) {
-            auto cycle_start = std::ranges::find(stack, index);
-            std::string cycle;
-            for (auto it = cycle_start; it != stack.end(); ++it) {
-                if (!cycle.empty()) {
-                    cycle += " -> ";
-                }
-                cycle += m_plugins[*it].name;
-            }
-            cycle += " -> " + m_plugins[index].name;
-            throw std::runtime_error("Plugin dependency cycle: " + cycle);
-        }
-
-        states[index] = VisitState::Visiting;
-        stack.push_back(index);
-        for (const auto& requirement : m_plugins[index].requirements) {
-            visit(m_plugin_indices.at(requirement.type));
-        }
-        stack.pop_back();
-        states[index] = VisitState::Visited;
-        m_plugin_order.push_back(index);
     };
 
-    for (std::size_t index = 0; index < m_plugins.size(); ++index) {
-        visit(index);
-    }
+    const auto rebuild_plugin_order = [&] {
+        enum class VisitState : std::uint8_t { Unvisited, Visiting, Visited };
+        std::vector states(m_plugins.size(), VisitState::Unvisited);
+        std::vector<std::size_t> stack;
+        m_plugin_order.clear();
+        m_plugin_order.reserve(m_plugins.size());
+
+        std::function<void(std::size_t)> visit = [&](std::size_t index) {
+            if (states[index] == VisitState::Visited) {
+                return;
+            }
+            if (states[index] == VisitState::Visiting) {
+                auto cycle_start = std::ranges::find(stack, index);
+                std::string cycle;
+                for (auto it = cycle_start; it != stack.end(); ++it) {
+                    if (!cycle.empty()) {
+                        cycle += " -> ";
+                    }
+                    cycle += m_plugins[*it].name;
+                }
+                cycle += " -> " + m_plugins[index].name;
+                throw std::runtime_error("Plugin dependency cycle: " + cycle);
+            }
+
+            states[index] = VisitState::Visiting;
+            stack.push_back(index);
+            for (const auto& requirement : m_plugins[index].requirements) {
+                visit(m_plugin_indices.at(requirement.key));
+            }
+            stack.pop_back();
+            states[index] = VisitState::Visited;
+            m_plugin_order.push_back(index);
+        };
+
+        for (std::size_t index = 0; index < m_plugins.size(); ++index) {
+            visit(index);
+        }
+    };
 
     try {
-        for (auto index : m_plugin_order) {
-            auto& entry = m_plugins[index];
-            entry.state = PluginState::SettingUp;
-            entry.plugin->setup(*this);
-            entry.state = PluginState::Setup;
+        std::size_t priority_start = 0;
+        while (true) {
+            m_plugin_registry_frozen = true;
+            resolve_dependencies();
+            rebuild_plugin_order();
+            const auto registered_count = m_plugins.size();
+
+            m_plugin_registry_frozen = false;
+            bool added_plugins = false;
+            const auto setup_plugins = [&](bool priority_only) {
+                for (auto index : m_plugin_order) {
+                    if (priority_only && index < priority_start) {
+                        continue;
+                    }
+                    if (m_plugins[index].state != PluginState::Registered) {
+                        continue;
+                    }
+                    m_plugins[index].state = PluginState::SettingUp;
+                    auto* plugin = m_plugins[index].plugin.get();
+                    plugin->setup(*this);
+                    m_plugins[index].state = PluginState::Setup;
+                    if (m_plugins.size() != registered_count) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            if (priority_start != 0) {
+                added_plugins = setup_plugins(true);
+            }
+            if (!added_plugins) {
+                added_plugins = setup_plugins(false);
+            }
+            if (!added_plugins) {
+                break;
+            }
+            priority_start = registered_count;
         }
 
+        m_plugin_registry_frozen = true;
         register_main_schedule_profile_names();
         for (auto index : m_plugin_order) {
             auto& entry = m_plugins[index];

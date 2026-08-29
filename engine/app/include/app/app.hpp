@@ -92,7 +92,8 @@ class App {
     };
 
     struct PluginEntry {
-        TypeId type;
+        PluginKey key;
+        TypeId implementation_type;
         std::string name;
         std::unique_ptr<Plugin> plugin;
         std::vector<PluginRequirement> requirements;
@@ -109,7 +110,7 @@ class App {
     // resources may hold explicit read-only references to Main World services.
     World m_world;
     std::vector<PluginEntry> m_plugins;
-    std::unordered_map<TypeId, std::size_t> m_plugin_indices;
+    std::unordered_map<PluginKey, std::size_t, PluginKeyHash> m_plugin_indices;
     std::vector<std::size_t> m_plugin_order;
     bool m_plugin_registry_frozen {false};
     std::unordered_set<TypeId> m_events;
@@ -118,7 +119,8 @@ class App {
     std::vector<MoveOnlyFunction<void(App&)>> m_relocation_handlers;
 
     App& add_boxed_plugin(
-        TypeId plugin_type,
+        PluginKey plugin_key,
+        TypeId implementation_type,
         std::string_view plugin_name,
         std::unique_ptr<Plugin> plugin
     ) {
@@ -132,14 +134,15 @@ class App {
         if (!plugin) {
             fatal("Cannot add null plugin {}", plugin_name);
         }
-        if (m_plugin_indices.contains(plugin_type)) {
+        if (m_plugin_indices.contains(plugin_key)) {
             fatal("Plugin {} has already been added", plugin_name);
         }
 
-        m_plugin_indices.emplace(plugin_type, m_plugins.size());
+        m_plugin_indices.emplace(plugin_key, m_plugins.size());
         m_plugins.push_back(
             PluginEntry {
-                .type = plugin_type,
+                .key = std::move(plugin_key),
+                .implementation_type = implementation_type,
                 .name = std::string(plugin_name),
                 .plugin = std::move(plugin),
             }
@@ -251,6 +254,7 @@ class App {
     template<std::derived_from<Plugin> P>
     App& add_plugin() {
         return add_boxed_plugin(
+            PluginKey {type_id<P>()},
             type_id<P>(),
             type_name<P>(),
             std::make_unique<P>()
@@ -262,6 +266,7 @@ class App {
     App& add_plugin(P&& plugin) {
         using PluginT = std::remove_cvref_t<P>;
         return add_boxed_plugin(
+            PluginKey {type_id<PluginT>()},
             type_id<PluginT>(),
             type_name<PluginT>(),
             std::make_unique<PluginT>(std::forward<P>(plugin))
@@ -270,6 +275,18 @@ class App {
 
     App& add_plugin(std::string_view name);
     App& add_plugin(const PluginId& id);
+
+    template<typename P>
+        requires std::derived_from<std::remove_cvref_t<P>, Plugin>
+    App& add_plugin(const PluginId& id, P&& plugin) {
+        using PluginT = std::remove_cvref_t<P>;
+        return add_boxed_plugin(
+            PluginKey {id},
+            type_id<PluginT>(),
+            id.qualified_name(),
+            std::make_unique<PluginT>(std::forward<P>(plugin))
+        );
+    }
 
     App& add_plugins(PluginGroupBuilder builder);
 
@@ -291,7 +308,11 @@ class App {
 
     template<std::derived_from<Plugin> P>
     bool has_plugin() const {
-        return m_plugin_indices.contains(type_id<P>());
+        return m_plugin_indices.contains(PluginKey {type_id<P>()});
+    }
+
+    [[nodiscard]] bool has_plugin(const PluginId& id) const {
+        return m_plugin_indices.contains(PluginKey {id});
     }
 
     template<typename R>

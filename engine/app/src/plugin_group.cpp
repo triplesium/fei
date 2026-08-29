@@ -144,7 +144,12 @@ void PluginGroupBuilder::finish(App& app) {
         if (!entry.enabled) {
             continue;
         }
-        app.add_boxed_plugin(entry.type, entry.name, std::move(entry.plugin));
+        app.add_boxed_plugin(
+            PluginKey {entry.type},
+            entry.type,
+            entry.name,
+            std::move(entry.plugin)
+        );
     }
 }
 

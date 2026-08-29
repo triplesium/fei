@@ -9,6 +9,56 @@
 using namespace ets;
 using namespace ets::app_test;
 
+namespace {
+
+struct RuntimePluginSpec {
+    std::string id;
+    int value {};
+};
+
+class RuntimeIdentityPlugin final : public Plugin {
+  private:
+    int m_value;
+    std::vector<RuntimePluginSpec> m_dependencies;
+
+  public:
+    explicit RuntimeIdentityPlugin(
+        int value,
+        std::vector<RuntimePluginSpec> dependencies = {}
+    ) : m_value(value), m_dependencies(std::move(dependencies)) {}
+
+    void dependencies(PluginDependencies& dependencies) const override {
+        for (const auto& dependency : m_dependencies) {
+            dependencies.require(
+                PluginId {dependency.id},
+                RuntimeIdentityPlugin {dependency.value}
+            );
+        }
+    }
+
+    void setup(App& /*app*/) override {
+        PluginTrace::setup_order.push_back(m_value);
+    }
+};
+
+class RuntimePluginInstaller final : public Plugin {
+  public:
+    void setup(App& app) override {
+        PluginTrace::setup_order.push_back(0);
+        app.add_plugin(
+            PluginId {"test::runtime::installed"},
+            RuntimeIdentityPlugin {1}
+        );
+    }
+};
+
+class RuntimePluginObserver final : public Plugin {
+  public:
+    void setup(App& /*app*/) override { PluginTrace::setup_order.push_back(2); }
+};
+
+} // namespace
+
 TEST_CASE("App reports added plugin types", "[app][plugin]") {
     AppTestPlugin::setup_count = 0;
 
@@ -22,6 +72,60 @@ TEST_CASE("App reports added plugin types", "[app][plugin]") {
 
     app.finish();
     REQUIRE(AppTestPlugin::setup_count == 1);
+}
+
+TEST_CASE(
+    "App distinguishes runtime plugin instances sharing an implementation",
+    "[app][plugin][identity]"
+) {
+    PluginTrace::reset();
+    const PluginId root_id {"test::runtime::root"};
+    const PluginId sibling_id {"test::runtime::sibling"};
+    const PluginId first_id {"test::runtime::first"};
+    const PluginId second_id {"test::runtime::second"};
+
+    App app;
+    app.add_plugin(
+           root_id,
+           RuntimeIdentityPlugin {
+               3,
+               {
+                   RuntimePluginSpec {
+                       .id = std::string(first_id.qualified_name()),
+                       .value = 1,
+                   },
+                   RuntimePluginSpec {
+                       .id = std::string(second_id.qualified_name()),
+                       .value = 2,
+                   },
+               },
+           }
+    )
+        .add_plugin(sibling_id, RuntimeIdentityPlugin {4});
+
+    CHECK(app.has_plugin(root_id));
+    CHECK(app.has_plugin(sibling_id));
+    CHECK_FALSE(app.has_plugin(first_id));
+
+    app.finish();
+
+    CHECK(app.has_plugin(first_id));
+    CHECK(app.has_plugin(second_id));
+    CHECK(PluginTrace::setup_order == std::vector<int> {1, 2, 3, 4});
+}
+
+TEST_CASE(
+    "App resolves plugins added during setup before pending plugins",
+    "[app][plugin][identity][lifecycle]"
+) {
+    PluginTrace::reset();
+    App app;
+    app.add_plugins(RuntimePluginInstaller {}, RuntimePluginObserver {});
+
+    app.finish();
+
+    CHECK(app.has_plugin(PluginId {"test::runtime::installed"}));
+    CHECK(PluginTrace::setup_order == std::vector<int> {0, 1, 2});
 }
 
 TEST_CASE(
@@ -79,6 +183,11 @@ TEST_CASE("Plugin ids expose qualified name parts", "[app][plugin]") {
     CHECK(nested_id.qualified_name() == "devtools::ecs::Provider");
     CHECK(nested_id.namespace_name() == "devtools::ecs");
     CHECK(nested_id.local_name() == "Provider");
+
+    const PluginId asset_id {"project://scripts/main.luau#GamePlugin"};
+    CHECK(
+        asset_id.qualified_name() == "project://scripts/main.luau#GamePlugin"
+    );
 
     REQUIRE_THROWS_AS(PluginId {""}, std::runtime_error);
     REQUIRE_THROWS_AS(PluginId {"devtools::"}, std::runtime_error);
