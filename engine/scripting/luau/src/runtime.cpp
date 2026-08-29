@@ -989,6 +989,8 @@ int plugin_new_helper(lua_State* state) {
 }
 
 void install_module_helpers(lua_State* state) {
+    lua_pushcfunction(state, detail::luau_reusable_query, "__ets_reuse_query");
+    lua_setglobal(state, "__ets_reuse_query");
     lua_pushcfunction(state, system_helper, "system");
     lua_setglobal(state, "system");
     lua_pushcfunction(state, chain_helper, "chain");

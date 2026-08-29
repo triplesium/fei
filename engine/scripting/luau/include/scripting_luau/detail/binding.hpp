@@ -44,6 +44,7 @@ Status<std::string> register_luau_property_paths(
     std::span<const LuauPropertyPathDecl> paths
 );
 Status<std::string> refresh_luau_property_paths(lua_State* state);
+int luau_reusable_query(lua_State* state);
 LuauBorrowedRef check_luau_borrowed_ref(lua_State* state, int index);
 Result<Val, std::string> copy_luau_reflected_value(
     lua_State* state,

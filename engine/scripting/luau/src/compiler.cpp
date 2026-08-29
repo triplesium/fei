@@ -2115,6 +2115,30 @@ struct ResolvedPropertyChain {
     KnownReflectedLocal root_value;
     TypeId leaf_type;
     std::vector<std::string> properties;
+    std::vector<std::string> local_properties;
+    const AstLocal* scalar_alias {nullptr};
+};
+
+struct ReusableQueryLoop {
+    AstStatForIn* statement {nullptr};
+    std::vector<std::pair<const AstLocal*, std::size_t>> fields;
+};
+
+struct ScalarizedPropertyAlias {
+    const AstLocal* root {nullptr};
+    KnownReflectedLocal root_value;
+    TypeId value_type;
+    std::vector<std::string> properties;
+    Luau::Location initializer;
+    bool safe {true};
+};
+
+struct PendingAliasPropertyAccess {
+    Luau::Location location;
+    const AstLocal* alias {nullptr};
+    TypeId leaf_type;
+    std::vector<std::string> properties;
+    std::vector<std::string> local_properties;
 };
 
 bool is_direct_luau_leaf(TypeId type) {
@@ -2171,7 +2195,7 @@ class LuauDirectPropertyVisitor final : public Luau::AstVisitor {
             fields.reserve(query.fields.size());
             for (const auto& field : query.fields) {
                 if (field.kind == DynamicQueryFieldDeclKind::Entity) {
-                    fields.push_back(nullopt);
+                    fields.emplace_back(nullopt);
                 } else {
                     fields.push_back(
                         known_reflected_value(field.type, field.access)
@@ -2194,10 +2218,33 @@ class LuauDirectPropertyVisitor final : public Luau::AstVisitor {
         }
         const std::size_t count =
             std::min(statement->vars.size, query->second.size());
+        ReusableQueryLoop reusable {.statement = statement};
         for (std::size_t index = 0; index < count; ++index) {
             if (query->second[index]) {
                 m_known[statement->vars.data[index]] = *query->second[index];
+                if (index < 32) {
+                    m_reusable.emplace(statement->vars.data[index], true);
+                    reusable.fields.emplace_back(
+                        statement->vars.data[index],
+                        index
+                    );
+                }
             }
+        }
+        if (!reusable.fields.empty()) {
+            m_reusable_loops.push_back(std::move(reusable));
+        }
+        return true;
+    }
+
+    bool visit(AstExprLocal* expression) override {
+        if (const auto reusable = m_reusable.find(expression->local);
+            reusable != m_reusable.end()) {
+            reusable->second = false;
+        }
+        if (const auto alias = m_scalar_aliases.find(expression->local);
+            alias != m_scalar_aliases.end()) {
+            alias->second.safe = false;
         }
         return true;
     }
@@ -2224,19 +2271,152 @@ class LuauDirectPropertyVisitor final : public Luau::AstVisitor {
                     .type = chain->leaf_type,
                     .writable = chain->root_value.writable,
                 };
+                if (!is_direct_luau_leaf(chain->leaf_type) &&
+                    Registry::instance().try_get_cls(chain->leaf_type)) {
+                    const AstLocal* root = chain->root->local;
+                    if (chain->scalar_alias != nullptr) {
+                        root = m_scalar_aliases.at(chain->scalar_alias).root;
+                    }
+                    if (m_reusable.contains(root)) {
+                        const AstLocal* alias = statement->vars.data[index];
+                        m_scalar_aliases.emplace(
+                            alias,
+                            ScalarizedPropertyAlias {
+                                .root = root,
+                                .root_value = chain->root_value,
+                                .value_type = chain->leaf_type,
+                                .properties = chain->properties,
+                                .initializer = value.location,
+                            }
+                        );
+                        m_scalar_alias_order.push_back(alias);
+                        m_scalar_alias_initializers.insert(
+                            value.as<AstExprIndexName>()
+                        );
+                    }
+                }
             }
         }
         return true;
     }
 
     bool visit(AstExprIndexName* expression) override {
+        if (m_scalar_alias_initializers.contains(expression)) {
+            return false;
+        }
         auto chain = resolve_chain(*expression);
         if (!chain || !is_direct_luau_leaf(chain->leaf_type)) {
             return true;
         }
+        if (chain->scalar_alias != nullptr) {
+            if (chain->root->upvalue) {
+                m_scalar_aliases.at(chain->scalar_alias).safe = false;
+            }
+            m_pending_alias_accesses.push_back(
+                PendingAliasPropertyAccess {
+                    .location = expression->location,
+                    .alias = chain->scalar_alias,
+                    .leaf_type = chain->leaf_type,
+                    .properties = std::move(chain->properties),
+                    .local_properties = std::move(chain->local_properties),
+                }
+            );
+            return false;
+        }
+        if (chain->root->upvalue) {
+            if (const auto reusable = m_reusable.find(chain->root->local);
+                reusable != m_reusable.end()) {
+                reusable->second = false;
+            }
+        }
+        return add_property_patch(
+            expression->location,
+            chain->root->local,
+            chain->root_value.type,
+            chain->leaf_type,
+            chain->properties
+        );
+    }
 
-        std::string signature = std::to_string(chain->root_value.type.id());
-        for (const auto& property : chain->properties) {
+    void finish() {
+        for (const AstLocal* local : m_scalar_alias_order) {
+            auto& alias = m_scalar_aliases.at(local);
+            std::string replacement {name_view(alias.root->name)};
+            if (!alias.safe) {
+                if (const auto reusable = m_reusable.find(alias.root);
+                    reusable != m_reusable.end()) {
+                    reusable->second = false;
+                }
+                for (const auto& property : alias.properties) {
+                    replacement.push_back('.');
+                    replacement.append(property);
+                }
+            }
+            m_patches.push_back(
+                LuauSourcePatch {
+                    .location = alias.initializer,
+                    .replacement = std::move(replacement),
+                }
+            );
+        }
+        for (const auto& access : m_pending_alias_accesses) {
+            const auto& alias = m_scalar_aliases.at(access.alias);
+            add_property_patch(
+                access.location,
+                access.alias,
+                alias.safe ? alias.root_value.type : alias.value_type,
+                access.leaf_type,
+                alias.safe ? access.properties : access.local_properties
+            );
+        }
+        for (const auto& loop : m_reusable_loops) {
+            std::uint32_t mask = 0;
+            for (const auto& [local, index] : loop.fields) {
+                if (m_reusable.at(local)) {
+                    mask |= std::uint32_t {1} << index;
+                }
+            }
+            if (mask == 0) {
+                continue;
+            }
+            const auto* source =
+                loop.statement->values.data[0]->as<AstExprLocal>();
+            m_patches.push_back(
+                LuauSourcePatch {
+                    .location = loop.statement->values.data[0]->location,
+                    .replacement = "__ets_reuse_query(" +
+                                   std::string(name_view(source->local->name)) +
+                                   ", " + std::to_string(mask) + ")",
+                }
+            );
+        }
+    }
+
+  private:
+    std::unordered_map<const AstLocal*, KnownReflectedLocal> m_known;
+    std::unordered_map<
+        const AstLocal*,
+        std::vector<Optional<KnownReflectedLocal>>>
+        m_queries;
+    std::unordered_map<const AstLocal*, bool> m_reusable;
+    std::vector<ReusableQueryLoop> m_reusable_loops;
+    std::unordered_map<const AstLocal*, ScalarizedPropertyAlias>
+        m_scalar_aliases;
+    std::vector<const AstLocal*> m_scalar_alias_order;
+    std::unordered_set<const AstExprIndexName*> m_scalar_alias_initializers;
+    std::vector<PendingAliasPropertyAccess> m_pending_alias_accesses;
+    std::vector<LuauPropertyPathDecl>& m_paths;
+    std::vector<LuauSourcePatch>& m_patches;
+
+    bool add_property_patch(
+        Luau::Location location,
+        const AstLocal* local,
+        TypeId root_type,
+        TypeId leaf_type,
+        const std::vector<std::string>& properties
+    ) {
+        std::string signature = std::to_string(root_type.id());
+        for (const auto& property : properties) {
             signature.push_back('\0');
             signature.append(property);
         }
@@ -2254,38 +2434,28 @@ class LuauDirectPropertyVisitor final : public Luau::AstVisitor {
             m_paths.push_back(
                 LuauPropertyPathDecl {
                     .atom_name = atom_name,
-                    .root_type = chain->root_value.type,
-                    .leaf_type = chain->leaf_type,
-                    .properties = chain->properties,
+                    .root_type = root_type,
+                    .leaf_type = leaf_type,
+                    .properties = properties,
                 }
             );
         } else if (
-            existing->root_type != chain->root_value.type ||
-            existing->leaf_type != chain->leaf_type ||
-            existing->properties != chain->properties
+            existing->root_type != root_type ||
+            existing->leaf_type != leaf_type ||
+            existing->properties != properties
         ) {
             return true;
         }
 
         m_patches.push_back(
             LuauSourcePatch {
-                .location = expression->location,
+                .location = location,
                 .replacement =
-                    std::string(name_view(chain->root->local->name)) + "." +
-                    atom_name,
+                    std::string(name_view(local->name)) + "." + atom_name,
             }
         );
         return false;
     }
-
-  private:
-    std::unordered_map<const AstLocal*, KnownReflectedLocal> m_known;
-    std::unordered_map<
-        const AstLocal*,
-        std::vector<Optional<KnownReflectedLocal>>>
-        m_queries;
-    std::vector<LuauPropertyPathDecl>& m_paths;
-    std::vector<LuauSourcePatch>& m_patches;
 
     static bool
     append_type_token_name(const AstExpr& expression, std::string& name) {
@@ -2342,7 +2512,14 @@ class LuauDirectPropertyVisitor final : public Luau::AstVisitor {
         }
 
         std::ranges::reverse(reversed);
-        TypeId current_type = known->second.type;
+        const auto scalar_alias = m_scalar_aliases.find(root->local);
+        const KnownReflectedLocal root_value =
+            scalar_alias != m_scalar_aliases.end() ?
+                scalar_alias->second.root_value :
+                known->second;
+        TypeId current_type = scalar_alias != m_scalar_aliases.end() ?
+                                  scalar_alias->second.value_type :
+                                  known->second.type;
         for (const auto& name : reversed) {
             auto cls = Registry::instance().try_get_cls(current_type);
             if (!cls) {
@@ -2354,11 +2531,19 @@ class LuauDirectPropertyVisitor final : public Luau::AstVisitor {
             }
             current_type = property->type_id();
         }
+        std::vector<std::string> properties;
+        if (scalar_alias != m_scalar_aliases.end()) {
+            properties = scalar_alias->second.properties;
+        }
+        properties.insert(properties.end(), reversed.begin(), reversed.end());
         return ResolvedPropertyChain {
             .root = root,
-            .root_value = known->second,
+            .root_value = root_value,
             .leaf_type = current_type,
-            .properties = std::move(reversed),
+            .properties = std::move(properties),
+            .local_properties = std::move(reversed),
+            .scalar_alias =
+                scalar_alias != m_scalar_aliases.end() ? root->local : nullptr,
         };
     }
 };
@@ -2716,6 +2901,7 @@ void collect_direct_property_paths(
             patches,
         };
         function->body->visit(&visitor);
+        visitor.finish();
     }
 }
 

@@ -76,6 +76,7 @@ struct LuauQueryIterator {
     DynamicQueryCursor cursor;
     ScriptBorrowScope* scope {nullptr};
     ScriptBorrowToken token;
+    std::uint32_t reusable_fields {0};
 };
 
 struct LuauRemovedComponentsIterator {
@@ -1674,6 +1675,88 @@ int borrowed_call(lua_State* state) {
     luaL_error(state, "value is not callable");
 }
 
+void update_reusable_query_field(
+    lua_State* state,
+    int index,
+    const DynamicQueryFieldBorrow& field,
+    ScriptBorrowScope& scope,
+    ScriptBorrowToken token
+) {
+    const auto tag = static_cast<LuauObjectTag>(lua_userdatatag(state, index));
+    if (tag == LuauObjectTag::BorrowedRead && field.value.is_const()) {
+        auto* object =
+            static_cast<LuauBorrowedObject*>(lua_touserdata(state, index));
+        object->ref = field.value;
+        object->scope = &scope;
+        object->token = token;
+        return;
+    }
+    if (tag == LuauObjectTag::BorrowedWrite && !field.value.is_const()) {
+        auto* object = static_cast<LuauMutableBorrowedObject*>(
+            lua_touserdata(state, index)
+        );
+        object->ref = field.value;
+        object->scope = &scope;
+        object->token = token;
+        object->mutation = LuauMutationContext {
+            .ticks = field.ticks,
+            .tick = field.change_tick,
+        };
+        return;
+    }
+    luaL_error(state, "reusable Query field changed access category");
+}
+
+void push_query_field(
+    lua_State* state,
+    LuauQueryIterator& iterator,
+    const DynamicQueryFieldBorrow& field,
+    std::size_t index
+) {
+    const bool reusable = index < 32 && (iterator.reusable_fields &
+                                         (std::uint32_t {1} << index)) != 0;
+    if (!reusable) {
+        push_luau_borrowed_ref(
+            state,
+            field.value,
+            *iterator.scope,
+            iterator.token,
+            LuauMutationContext {
+                .ticks = field.ticks,
+                .tick = field.change_tick,
+            }
+        );
+        return;
+    }
+
+    lua_rawgeti(state, lua_upvalueindex(2), static_cast<int>(index + 1));
+    if (!lua_isnil(state, -1)) {
+        update_reusable_query_field(
+            state,
+            -1,
+            field,
+            *iterator.scope,
+            iterator.token
+        );
+        return;
+    }
+    lua_pop(state, 1);
+    push_luau_borrowed_ref(
+        state,
+        field.value,
+        *iterator.scope,
+        iterator.token,
+        LuauMutationContext {
+            .ticks = field.ticks,
+            .tick = field.change_tick,
+        }
+    );
+    if (lua_isuserdata(state, -1)) {
+        lua_pushvalue(state, -1);
+        lua_rawseti(state, lua_upvalueindex(2), static_cast<int>(index + 1));
+    }
+}
+
 int query_next(lua_State* state) {
     auto* iterator = static_cast<LuauQueryIterator*>(
         lua_touserdata(state, lua_upvalueindex(1))
@@ -1690,16 +1773,7 @@ int query_next(lua_State* state) {
     const auto& fields = iterator->query->fields();
     for (std::size_t index = 0; index < fields.size(); ++index) {
         const auto field = iterator->query->field_untracked(row, index);
-        push_luau_borrowed_ref(
-            state,
-            field.value,
-            *iterator->scope,
-            iterator->token,
-            LuauMutationContext {
-                .ticks = field.ticks,
-                .tick = field.change_tick,
-            }
-        );
+        push_query_field(state, *iterator, field, index);
     }
     return static_cast<int>(fields.size());
 }
@@ -1745,6 +1819,7 @@ int borrowed_iter(lua_State* state) {
                 .query = query,
                 .scope = object.scope,
                 .token = object.token,
+                .reusable_fields = 0,
             };
         static_cast<void>(iterator);
         lua_pushcclosure(state, query_next, "DynamicQuery.next", 1);
@@ -1791,6 +1866,28 @@ int borrowed_iter(lua_State* state) {
 }
 
 } // namespace
+
+int luau_reusable_query(lua_State* state) {
+    auto object = check_object(state, 1);
+    auto* query = object.ref.try_get<DynamicQuery>();
+    if (query == nullptr || object.scope == nullptr) {
+        luaL_typeerror(state, 1, "borrowed Query");
+        return 0;
+    }
+    const auto reusable_fields =
+        static_cast<std::uint32_t>(luaL_checkunsigned(state, 2));
+    auto* iterator = new (lua_newuserdata(state, sizeof(LuauQueryIterator)))
+        LuauQueryIterator {
+            .query = query,
+            .scope = object.scope,
+            .token = object.token,
+            .reusable_fields = reusable_fields,
+        };
+    static_cast<void>(iterator);
+    lua_newtable(state);
+    lua_pushcclosure(state, query_next, "DynamicQuery.reusable_next", 2);
+    return 1;
+}
 
 void install_luau_borrowed_object_metatable(lua_State* state) {
     if (luaL_newmetatable(state, c_borrowed_metatable)) {

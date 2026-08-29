@@ -1142,6 +1142,12 @@ TEST_CASE(
                         target.position:advance(0)
                     elseif target.operation == 6 then
                         target.position:advance(1)
+                    elseif target.operation == 9 then
+                        local position = target.position
+                        position.x = position.x
+                    elseif target.operation == 10 then
+                        local position = target.position
+                        position.x += 1
                     end
                 end
             end
@@ -1189,7 +1195,7 @@ TEST_CASE(
 
     World world;
     world.add_resource(CommandsQueue {});
-    std::array<Entity, 9> entities;
+    std::array<Entity, 11> entities;
     for (std::size_t index = 0; index < entities.size(); ++index) {
         entities[index] = world.entity();
         world.add_component(
@@ -1221,17 +1227,17 @@ TEST_CASE(
             )
             .changed;
     };
-    std::array<Tick, 9> before;
+    std::array<Tick, 11> before;
     for (std::size_t index = 0; index < entities.size(); ++index) {
         before[index] = changed_tick(entities[index]);
     }
 
     world.run_schedule(Update);
 
-    for (const std::size_t index : {0U, 1U, 3U, 5U, 7U}) {
+    for (const std::size_t index : {0U, 1U, 3U, 5U, 7U, 9U}) {
         CHECK(changed_tick(entities[index]) == before[index]);
     }
-    for (const std::size_t index : {2U, 4U, 6U, 8U}) {
+    for (const std::size_t index : {2U, 4U, 6U, 8U, 10U}) {
         CHECK(changed_tick(entities[index]) > before[index]);
     }
     CHECK(
@@ -1247,6 +1253,10 @@ TEST_CASE(
     );
     CHECK(
         world.get_component<LuauChangeDetectionTarget>(entities[8])
+            .position.x == 21.0F
+    );
+    CHECK(
+        world.get_component<LuauChangeDetectionTarget>(entities[10])
             .position.x == 21.0F
     );
 
@@ -1297,6 +1307,56 @@ TEST_CASE(
                 end
             end
 
+            local function retain_query(
+                velocities: Query<Read<LuauTestVelocity>>
+            )
+                local retained = {}
+                for velocity in velocities do
+                    table.insert(retained, velocity)
+                end
+                assert(#retained == 2)
+                assert(retained[1].x ~= retained[2].x)
+            end
+
+            local function capture_query(
+                velocities: Query<Read<LuauTestVelocity>>
+            )
+                local readers = {}
+                for velocity in velocities do
+                    table.insert(readers, function()
+                        return velocity.x
+                    end)
+                end
+                assert(#readers == 2)
+                assert(readers[1]() ~= readers[2]())
+            end
+
+            local function retain_nested_query(
+                targets: Query<Read<LuauChangeDetectionTarget>>
+            )
+                local retained = {}
+                for target in targets do
+                    local position = target.position
+                    table.insert(retained, position)
+                end
+                assert(#retained == 2)
+                assert(retained[1].x ~= retained[2].x)
+            end
+
+            local function capture_nested_query(
+                targets: Query<Read<LuauChangeDetectionTarget>>
+            )
+                local readers = {}
+                for target in targets do
+                    local position = target.position
+                    table.insert(readers, function()
+                        return position.x
+                    end)
+                end
+                assert(#readers == 2)
+                assert(readers[1]() ~= readers[2]())
+            end
+
             export local BorrowPlugin = Plugin.new {
                 build = function(app: App)
                     app:add_systems(
@@ -1307,7 +1367,11 @@ TEST_CASE(
                         use_escaped,
                         capture_entity,
                         use_escaped_entity,
-                        mutate_query
+                        mutate_query,
+                        retain_query,
+                        capture_query,
+                        retain_nested_query,
+                        capture_nested_query
                     )
                 end,
             }
@@ -1391,6 +1455,55 @@ TEST_CASE(
     CHECK(
         query_mutation.error().message.find("read-only") != std::string::npos
     );
+
+    Entity other = world.entity();
+    world.add_component(other, LuauTestVelocity {.x = 7.0F});
+    query_ref = velocities.prepare(world);
+    REQUIRE(query_ref.has_value());
+    REQUIRE(runtime.call_module_function(
+        *module,
+        "retain_query",
+        std::span<const Ref> {&*query_ref, 1}
+    ));
+    REQUIRE(runtime.call_module_function(
+        *module,
+        "capture_query",
+        std::span<const Ref> {&*query_ref, 1}
+    ));
+
+    world.add_component(
+        entity,
+        LuauChangeDetectionTarget {
+            .position = LuauTestPosition {.x = 3.0F},
+        }
+    );
+    world.add_component(
+        other,
+        LuauChangeDetectionTarget {
+            .position = LuauTestPosition {.x = 9.0F},
+        }
+    );
+    DynamicQuery targets(
+        "targets",
+        {DynamicQueryField {
+            .name = "target",
+            .type = type_id<LuauChangeDetectionTarget>(),
+            .access = DynamicParamAccess::Read,
+        }},
+        {}
+    );
+    auto target_ref = targets.prepare(world);
+    REQUIRE(target_ref.has_value());
+    REQUIRE(runtime.call_module_function(
+        *module,
+        "retain_nested_query",
+        std::span<const Ref> {&*target_ref, 1}
+    ));
+    REQUIRE(runtime.call_module_function(
+        *module,
+        "capture_nested_query",
+        std::span<const Ref> {&*target_ref, 1}
+    ));
 }
 
 TEST_CASE(
