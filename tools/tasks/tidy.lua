@@ -6,16 +6,160 @@ local tooling = import("tasks.tooling", {
     rootdir = path.join(os.projectdir(), "tools")
 })
 
+local function compiler_program_name(compiler_instance)
+    local program = path.filename(compiler_instance:program()):lower()
+    program = program:gsub("%.exe$", "")
+    program = program:gsub("%.bat$", "")
+    program = program:gsub("%.cmd$", "")
+    return program
+end
+
+local function compiler_driver_mode(compiler_instance, sourcekind)
+    local program = compiler_program_name(compiler_instance)
+    if program == "cl" or program == "clang-cl" then
+        return "cl"
+    end
+    return sourcekind == "cc" and "gcc" or "g++"
+end
+
+local function is_emscripten_compiler(compiler_instance)
+    local program = compiler_program_name(compiler_instance)
+    return program == "emcc" or program == "em++"
+end
+
+local emscripten_port_include_cache = {}
+
+local function emscripten_port_includes(compiler_instance, port_name)
+    local emscripten_dir = path.directory(compiler_instance:program())
+    local cache_key = emscripten_dir .. ":" .. port_name
+    local cached = emscripten_port_include_cache[cache_key]
+    if cached then
+        return cached
+    end
+
+    local port_dir = path.join(emscripten_dir, "cache", "ports", port_name)
+    local includes = os.dirs(path.join(port_dir, "**", "include"))
+    table.sort(includes)
+    emscripten_port_include_cache[cache_key] = includes
+    return includes
+end
+
+local function insert_unique(arguments, seen, argument)
+    if not seen[argument] then
+        seen[argument] = true
+        table.insert(arguments, argument)
+    end
+end
+
+local function insert_system_include(arguments, seen, directory)
+    if os.isdir(directory) then
+        insert_unique(arguments, seen, "-isystem" .. directory)
+    end
+end
+
+local function clang_frontend_argument(argument)
+    -- These options are consumed by the emcc/em++ wrapper and are not Clang
+    -- frontend arguments. Compilation-affecting options such as --target,
+    --sysroot, defines, and include paths must remain intact.
+    local emscripten_setting = argument == "-s" or
+        argument:match("^%-s[A-Z0-9_]+=") ~= nil
+    return not argument:startswith("--use-port=") and
+        not argument:startswith("--preload-file=") and
+        not argument:startswith("--shell-file=") and
+        not emscripten_setting
+end
+
 local function make_compile_args(context)
     local compiler_instance = context.target:compiler(context.sourcekind)
     local args = compiler_instance:compflags({
         sourcefile = context.file,
         target = context.target,
     })
-    for index, argument in ipairs(args) do
-        args[index] = tostring(argument)
+    local result = {}
+    local seen = {}
+    insert_unique(
+        result,
+        seen,
+        "--driver-mode=" ..
+            compiler_driver_mode(compiler_instance, context.sourcekind)
+    )
+    if is_emscripten_compiler(compiler_instance) then
+        local arch = context.target:arch() == "wasm64" and "wasm64" or "wasm32"
+        local emscripten_dir = path.directory(compiler_instance:program())
+        local sysroot = path.join(emscripten_dir, "cache", "sysroot")
+        local target_include = path.join(
+            sysroot,
+            "include",
+            arch .. "-emscripten"
+        )
+        insert_unique(
+            result,
+            seen,
+            "--target=" .. arch .. "-unknown-emscripten"
+        )
+        insert_unique(
+            result,
+            seen,
+            "--sysroot=" .. sysroot
+        )
+        -- clang-tidy runs its own Clang binary, so it does not inherit the
+        -- Emscripten driver's target-specific system include search paths.
+        insert_system_include(
+            result,
+            seen,
+            path.join(target_include, "noeh", "c++", "v1")
+        )
+        insert_system_include(
+            result,
+            seen,
+            path.join(target_include, "c++", "v1")
+        )
+        insert_system_include(
+            result,
+            seen,
+            path.join(sysroot, "include", "c++", "v1")
+        )
+        insert_system_include(result, seen, target_include)
+        insert_system_include(result, seen, path.join(sysroot, "include"))
+        insert_system_include(
+            result,
+            seen,
+            path.join(sysroot, "include", "fakesdl")
+        )
+        insert_system_include(
+            result,
+            seen,
+            path.join(sysroot, "include", "compat")
+        )
+        for _, argument in ipairs(args) do
+            local port_name = tostring(argument):match(
+                "^%-%-use%-port=([%w_%-]+)"
+            )
+            if port_name then
+                for _, include_dir in ipairs(
+                    emscripten_port_includes(compiler_instance, port_name)
+                ) do
+                    insert_system_include(result, seen, include_dir)
+                end
+            end
+        end
     end
-    return args
+    local grouped_include_option
+    for _, argument in ipairs(args) do
+        argument = tostring(argument)
+        if argument == "-isystem" or argument == "-iquote" or
+            argument == "-idirafter" then
+            grouped_include_option = argument
+        elseif grouped_include_option and not argument:startswith("-") then
+            insert_unique(result, seen, grouped_include_option .. argument)
+        else
+            grouped_include_option = nil
+        end
+        if not grouped_include_option and clang_frontend_argument(argument) then
+            insert_unique(result, seen, argument)
+        end
+    end
+    return result
 end
 
 local function count_diagnostics(output)

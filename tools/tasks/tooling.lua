@@ -92,14 +92,20 @@ local function collect_targets(target_names)
     target_names = table.wrap(target_names)
     if #target_names > 0 then
         for _, target_name in ipairs(target_names) do
-            table.insert(
-                targets,
-                assert(project.target(target_name), "unknown target(%s)", target_name)
+            local target = assert(
+                project.target(target_name),
+                "unknown target(%s)",
+                target_name
             )
+            if target:is_enabled() then
+                table.insert(targets, target)
+            end
         end
     else
         for _, target in ipairs(project.ordertargets()) do
-            table.insert(targets, target)
+            if target:is_enabled() then
+                table.insert(targets, target)
+            end
         end
     end
     return targets
