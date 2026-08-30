@@ -7,9 +7,9 @@
 #include "refl/cls.hpp"
 #include "refl/property.hpp"
 #include "refl/registry.hpp"
-#include "scripting/source.hpp"
 #include "scripting/compiler.hpp"
 #include "scripting/runtime.hpp"
+#include "scripting/source.hpp"
 
 #include <algorithm>
 #include <array>
@@ -63,6 +63,11 @@ struct RawObject {
 
 struct RawVector {
     QueryBenchmarkVector* vector {nullptr};
+};
+
+struct RawCIteratorState {
+    std::size_t index {0};
+    std::size_t iterations {0};
 };
 
 struct Options {
@@ -381,6 +386,36 @@ int raw_path_set(lua_State* state) {
     return 0;
 }
 
+RawCIteratorState& raw_c_iterator_state(lua_State* state) {
+    return *static_cast<RawCIteratorState*>(
+        lua_touserdata(state, lua_upvalueindex(1))
+    );
+}
+
+int raw_c_iterator_reset(lua_State* state) {
+    raw_c_iterator_state(state).index = 0;
+    return 0;
+}
+
+int raw_c_iterator_number(lua_State* state) {
+    auto& iterator = raw_c_iterator_state(state);
+    if (iterator.index >= iterator.iterations) {
+        return 0;
+    }
+    lua_pushunsigned(state, static_cast<unsigned>(++iterator.index));
+    return 1;
+}
+
+int raw_c_iterator_userdata(lua_State* state) {
+    auto& iterator = raw_c_iterator_state(state);
+    if (iterator.index >= iterator.iterations) {
+        return 0;
+    }
+    ++iterator.index;
+    lua_pushvalue(state, lua_upvalueindex(2));
+    return 1;
+}
+
 void install_raw_metatable(
     lua_State* state,
     int tag,
@@ -413,6 +448,44 @@ class RawLuauDispatchBenchmark {
         lua_setglobal(m_state, name);
     }
 
+    void install_c_iterators(std::size_t iterations) {
+        new (lua_newuserdata(m_state, sizeof(RawCIteratorState)))
+            RawCIteratorState {.iterations = iterations};
+
+        lua_pushvalue(m_state, -1);
+        lua_pushcclosure(
+            m_state,
+            raw_c_iterator_reset,
+            "raw_c_iterator_reset",
+            1
+        );
+        lua_setglobal(m_state, "raw_c_iterator_reset");
+
+        lua_pushvalue(m_state, -1);
+        lua_pushcclosure(
+            m_state,
+            raw_c_iterator_number,
+            "raw_c_iterator_number",
+            1
+        );
+        lua_setglobal(m_state, "raw_c_iterator_number");
+
+        lua_pushvalue(m_state, -1);
+        new (lua_newuserdatataggedwithmetatable(
+            m_state,
+            sizeof(RawObject),
+            c_raw_object_tag
+        )) RawObject {&m_component};
+        lua_pushcclosure(
+            m_state,
+            raw_c_iterator_userdata,
+            "raw_c_iterator_userdata",
+            2
+        );
+        lua_setglobal(m_state, "raw_c_iterator_userdata");
+        lua_pop(m_state, 1);
+    }
+
     void load(std::size_t iterations) {
         const std::string source = R"(
             local iterations = )" + std::to_string(iterations) +
@@ -424,10 +497,29 @@ class RawLuauDispatchBenchmark {
             local dense_direct_field = raw_dense_direct_field_object
             local get_path = __ets_get_path
             local set_path = __ets_set_path
+            local reset_c_iterator = raw_c_iterator_reset
+            local c_iterator_number = raw_c_iterator_number
+            local c_iterator_userdata = raw_c_iterator_userdata
             local native_table = { value = 1 }
             local write_value = 1
 
             return {
+                c_iterator_number = function()
+                    reset_c_iterator()
+                    local total = 0
+                    for value in c_iterator_number do
+                        total += value
+                    end
+                    return total
+                end,
+                c_iterator_userdata = function()
+                    reset_c_iterator()
+                    local total = 0
+                    for _object in c_iterator_userdata do
+                        total += 1
+                    end
+                    return total
+                end,
                 native_table_x1 = function()
                     local total = 0
                     for _ = 1, iterations do
@@ -609,6 +701,8 @@ class RawLuauDispatchBenchmark {
         }
 
         constexpr std::array names {
+            "c_iterator_number",
+            "c_iterator_userdata",
             "native_table_x1",
             "native_table_x4",
             "nested_x1",
@@ -732,6 +826,7 @@ class RawLuauDispatchBenchmark {
             return std::string_view {text, length} == "__fa" ? c_raw_flat_atom :
                                                                -1;
         };
+        install_c_iterators(iterations);
         load(iterations);
     }
 
@@ -874,6 +969,34 @@ std::string benchmark_source(std::size_t entities) {
             sink = total
         end
 
+        local function bridge_components_row_fallback(
+            components: Query<Read<QueryBenchmarkComponent>>
+        )
+            local total = 0
+            for _component in components do
+                total += 1
+                if false then
+                    break
+                end
+            end
+            sink = total
+        end
+
+        local function bridge_escaping_components(
+            components: Query<Read<QueryBenchmarkComponent>>
+        )
+            local total = 0
+            local retained = nil
+            for component in components do
+                retained = component
+                total += 1
+            end
+            if retained ~= nil then
+                total += 1
+            end
+            sink = total
+        end
+
         local function read_flattened_offset_once(
             components: Query<Read<QueryBenchmarkComponent>>
         )
@@ -942,6 +1065,8 @@ std::string benchmark_source(std::size_t entities) {
                     pure_loop,
                     iterate_entities,
                     bridge_components,
+                    bridge_components_row_fallback,
+                    bridge_escaping_components,
                     read_property_once,
                     read_property_four_times,
                     write_property_once,
@@ -1154,7 +1279,7 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
     const LuauScriptModuleId module =
         load_benchmark_module(runtime, options.entities);
     std::vector<Measurement> results;
-    results.reserve(56);
+    results.reserve(59);
     results.push_back(measure("runtime/empty call", 0, options, [&] {
         call_module(runtime, module, "empty");
         return std::uint64_t {1};
@@ -1172,6 +1297,18 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
         }
         return total;
     }));
+    results.push_back(
+        measure("cpp/query field_untracked", options.entities, options, [&] {
+            DynamicQueryCursor cursor;
+            DynamicQueryRow row;
+            std::uint64_t total = 0;
+            while (read_query.next(cursor, row)) {
+                const auto field = read_query.field_untracked(row, 0);
+                total += field.value.const_ptr() != nullptr ? 1 : 0;
+            }
+            return total;
+        })
+    );
     results.push_back(
         measure("cpp/direct pure numeric loop", options.entities, options, [&] {
             std::uint64_t total = 0;
@@ -1562,6 +1699,34 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
             return std::uint64_t {1};
         })
     );
+    results.push_back(measure(
+        "luau/query component bridge row fallback",
+        options.entities,
+        options,
+        [&] {
+            call_module(
+                runtime,
+                module,
+                "bridge_components_row_fallback",
+                read_arguments
+            );
+            return std::uint64_t {1};
+        }
+    ));
+    results.push_back(measure(
+        "luau/query escaping component bridge",
+        options.entities,
+        options,
+        [&] {
+            call_module(
+                runtime,
+                module,
+                "bridge_escaping_components",
+                read_arguments
+            );
+            return std::uint64_t {1};
+        }
+    ));
     results.push_back(
         measure("luau/read property x1", options.entities, options, [&] {
             call_module(runtime, module, "read_property_once", read_arguments);
@@ -1692,6 +1857,10 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
     ));
 
     RawLuauDispatchBenchmark raw_dispatch(options.entities);
+    const int raw_c_iterator_number =
+        raw_dispatch.function("c_iterator_number");
+    const int raw_c_iterator_userdata =
+        raw_dispatch.function("c_iterator_userdata");
     const int raw_native_table_x1 = raw_dispatch.function("native_table_x1");
     const int raw_native_table_x4 = raw_dispatch.function("native_table_x4");
     const int raw_nested_x1 = raw_dispatch.function("nested_x1");
@@ -1727,6 +1896,11 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
             }
         ));
     };
+    add_raw_dispatch("raw-vm/C iterator number", raw_c_iterator_number);
+    add_raw_dispatch(
+        "raw-vm/C iterator reused userdata",
+        raw_c_iterator_userdata
+    );
     add_raw_dispatch("raw-vm/native table x1", raw_native_table_x1);
     add_raw_dispatch("raw-vm/native table x4", raw_native_table_x4);
     add_raw_dispatch("raw-vm/nested userdata x1", raw_nested_x1);
