@@ -16,7 +16,7 @@ import "@codingame/monaco-vscode-standalone-languages/yaml/yaml.contribution.js"
 import "@codingame/monaco-vscode-standalone-json-language-features";
 import editorWorker from "@codingame/monaco-vscode-editor-api/esm/vs/editor/editor.worker?worker";
 import jsonWorker from "@codingame/monaco-vscode-standalone-json-language-features/worker?worker";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { editorCapabilities } from "@editor-platform/capabilities";
 import {
     prepareLuauLanguageClient,
@@ -139,6 +139,15 @@ export function CodeEditor({
 }: CodeEditorProps) {
     const modelAttachment = useRef<VscodeModelAttachment | undefined>(undefined);
     const modelGeneration = useRef(0);
+    const [overflowWidgetsDomNode, setOverflowWidgetsDomNode] = useState<HTMLDivElement>();
+
+    useEffect(() => {
+        const node = document.createElement("div");
+        node.className = "monaco-editor vs-dark editor-overflow-widgets";
+        document.body.append(node);
+        setOverflowWidgetsDomNode(node);
+        return () => node.remove();
+    }, []);
 
     useEffect(
         () => subscribeLuauLanguageClient(onLanguageClientStatus),
@@ -201,34 +210,41 @@ export function CodeEditor({
 
     return (
         <div id="source-editor" className="min-h-0 flex-1 bg-[#0c1016]" data-disabled={String(readOnly)}>
-            <Editor
-                language={languageForPath(path)}
-                value={value}
-                theme={luauEditorTheme}
-                onChange={(next) => onChange(next ?? "")}
-                onMount={onMount}
-                keepCurrentModel
-                options={{
-                    readOnly,
-                    automaticLayout: true,
-                    bracketPairColorization: { enabled: false },
-                    fontFamily: '"Cascadia Code", "SFMono-Regular", Consolas, monospace',
-                    fontSize: 14,
-                    guides: {
-                        bracketPairs: false,
-                        bracketPairsHorizontal: false,
-                        highlightActiveBracketPair: false,
-                    },
-                    lineHeight: 22,
-                    minimap: { enabled: false },
-                    padding: { top: 10, bottom: 10 },
-                    renderLineHighlight: "line",
-                    scrollBeyondLastLine: false,
-                    smoothScrolling: true,
-                    tabSize: 4,
-                    wordWrap: "off",
-                }}
-            />
+            {overflowWidgetsDomNode ? (
+                <Editor
+                    language={languageForPath(path)}
+                    value={value}
+                    theme={luauEditorTheme}
+                    onChange={(next) => onChange(next ?? "")}
+                    onMount={onMount}
+                    keepCurrentModel
+                    options={{
+                        readOnly,
+                        automaticLayout: true,
+                        bracketPairColorization: { enabled: false },
+                        // Dockview clips each panel at its bounds. Keep Monaco's overflow
+                        // widgets in the document layer so hovers can extend across panels.
+                        fixedOverflowWidgets: true,
+                        fontFamily:
+                            '"Cascadia Code", "SFMono-Regular", Consolas, monospace',
+                        fontSize: 14,
+                        guides: {
+                            bracketPairs: false,
+                            bracketPairsHorizontal: false,
+                            highlightActiveBracketPair: false,
+                        },
+                        lineHeight: 22,
+                        minimap: { enabled: false },
+                        overflowWidgetsDomNode,
+                        padding: { top: 10, bottom: 10 },
+                        renderLineHighlight: "line",
+                        scrollBeyondLastLine: false,
+                        smoothScrolling: true,
+                        tabSize: 4,
+                        wordWrap: "off",
+                    }}
+                />
+            ) : null}
         </div>
     );
 }

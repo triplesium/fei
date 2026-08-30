@@ -1941,7 +1941,7 @@ export function App() {
 
     return (
         <TooltipProvider delayDuration={450}>
-            <div className="flex size-full flex-col overflow-hidden bg-background">
+            <div className="flex size-full flex-col overflow-clip bg-background">
                 <EditorTopbar
                     projectOpen={storage.isOpen}
                     canSave={canEdit}
