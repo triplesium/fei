@@ -300,6 +300,12 @@ void apply_source_completion_details(
     const Luau::Position& position,
     std::vector<::lsp::CompletionItem>& items
 ) {
+    std::erase_if(items, [](const auto& item) {
+        const std::string_view label {item.label};
+        return label.starts_with("__ets_") || label == "__type_id" ||
+               label == "__type_name";
+    });
+
     const auto bindings = visible_bindings(source_module, position);
     for (auto& item : items) {
         if (item.kind != ::lsp::CompletionItemKind::Function || !item.detail) {

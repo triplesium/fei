@@ -1,5 +1,6 @@
 #pragma once
 
+#include "internal_type_hover.hpp"
 #include "Platform/LSPPlatform.hpp"
 #include "script_type_registry.hpp"
 
@@ -19,6 +20,12 @@ class EntisiumPlatform final : public LSPPlatform {
         const Luau::SourceModule& source_module,
         Luau::Position position,
         std::vector<::lsp::CompletionItem>& items
+    ) override;
+
+    [[nodiscard]] std::optional<::lsp::Hover> handleHover(
+        const TextDocument& document,
+        const Luau::SourceModule& source_module,
+        Luau::Position position
     ) override;
 
     void augmentDiagnostics(
@@ -52,6 +59,14 @@ class EntisiumPlatform final : public LSPPlatform {
     ) const override;
 
   private:
+    [[nodiscard]] std::string publicFunctionReturnType(
+        const TextDocument& document,
+        const Luau::SourceModule& source_module,
+        Luau::Position position,
+        std::string_view inferred_return_type
+    ) const;
+
+    InternalTypeAliases m_internal_type_aliases;
     mutable ScriptTypeRegistry m_script_types;
 };
 

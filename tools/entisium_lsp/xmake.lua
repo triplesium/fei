@@ -18,6 +18,7 @@ if has_config("tests") then
             "src/definition_index.cpp",
             "src/diagnostics.cpp",
             "src/hover_signature.cpp",
+            "src/internal_type_hover.cpp",
             "src/public_type_names.cpp",
             "src/script_type_registry.cpp",
             "src/script_type_values.cpp",

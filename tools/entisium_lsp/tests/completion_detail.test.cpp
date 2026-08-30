@@ -111,6 +111,38 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "completion hides Entisium internal fields",
+    "[lsp][completion][internal]"
+) {
+    const std::string source = "local value = Transform2d\n";
+    auto source_module = parse(source);
+    TextDocument document {
+        Uri::parse("file:///completion.luau"),
+        "luau",
+        1,
+        source,
+    };
+    std::vector<::lsp::CompletionItem> items {
+        {.label = "__ets_type"},
+        {.label = "__ets_type_id"},
+        {.label = "__ets_type_name"},
+        {.label = "__type_id"},
+        {.label = "__type_name"},
+        {.label = "new"},
+    };
+
+    ets::lsp::apply_source_completion_details(
+        document,
+        source_module,
+        document.convertPosition(document.positionAt(source.size() - 1)),
+        items
+    );
+
+    REQUIRE(items.size() == 1);
+    CHECK(items.front().label == "new");
+}
+
+TEST_CASE(
     "completion detail resolves the nearest local function",
     "[lsp][completion][scope]"
 ) {
