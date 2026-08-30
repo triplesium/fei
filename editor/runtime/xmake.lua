@@ -72,6 +72,7 @@ target("entisium-editor")
         path.join(os.projectdir(), "editor/package-lock.json"),
         path.join(os.projectdir(), "editor/tsconfig*.json"),
         path.join(os.projectdir(), "editor/vite.config.ts"),
+        path.join(os.projectdir(), "editor/public/**"),
         path.join(os.projectdir(), "editor/host/**"),
         path.join(os.projectdir(), "editor/src/**")
     )
@@ -103,7 +104,11 @@ target("entisium-editor-dev")
 target("entisium-editor-demo")
     set_kind("phony")
     set_default(false)
-    add_deps("entisium-editor-dependencies", "entisium-editor-runtime")
+    add_deps(
+        "entisium-editor-dependencies",
+        "entisium-editor-runtime",
+        "entisium-lsp-wasm"
+    )
     add_values(
         "entisium.editor_demo_project",
         path.absolute(get_config("editor_demo_project"), os.projectdir())
@@ -114,6 +119,7 @@ target("entisium-editor-demo")
         path.join(os.projectdir(), "editor/package-lock.json"),
         path.join(os.projectdir(), "editor/tsconfig.json"),
         path.join(os.projectdir(), "editor/vite.config.ts"),
+        path.join(os.projectdir(), "editor/public/**"),
         path.join(os.projectdir(), "editor/tools/bundle-demo-project.mjs"),
         path.join(
             path.absolute(get_config("editor_demo_project"), os.projectdir()),
@@ -153,5 +159,16 @@ target("entisium-editor-demo")
             path.join(output_root, "runtime"),
             path.join(editor_output, "runtime")
         )
+        local lsp = assert(target:dep("entisium-lsp-wasm"))
+        local lsp_output = path.join(editor_output, "lsp")
+        os.rm(lsp_output)
+        os.mkdir(lsp_output)
+        local lsp_artifacts = os.files(
+            path.join(lsp:targetdir(), "entisium-lsp*")
+        )
+        assert(#lsp_artifacts > 0, "WebAssembly Luau LSP artifacts are missing")
+        for _, artifact in ipairs(lsp_artifacts) do
+            os.cp(artifact, lsp_output)
+        end
     end)
 end

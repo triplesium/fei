@@ -51,7 +51,7 @@ export class ProjectStorage {
     }
 
     get rootUri(): string {
-        return "entisium-project:///";
+        return "file:///workspace/";
     }
 
     async initialize(): Promise<RememberedProject | null> {

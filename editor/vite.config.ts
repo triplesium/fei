@@ -27,6 +27,12 @@ export default defineConfig(({ mode }) => {
                 "/runtime": "http://127.0.0.1:3100",
             },
         },
+        preview: {
+            headers: {
+                "Cross-Origin-Embedder-Policy": "require-corp",
+                "Cross-Origin-Opener-Policy": "same-origin",
+            },
+        },
         build: {
             outDir: path.resolve(import.meta.dirname, "dist", platform),
             emptyOutDir: true,

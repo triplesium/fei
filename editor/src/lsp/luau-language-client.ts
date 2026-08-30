@@ -9,6 +9,11 @@ export type LuauLanguageClientStatus =
     | "ready"
     | "unavailable";
 
+export interface LuauProjectFile {
+    path: string;
+    content: string;
+}
+
 const listeners = new Set<(status: LuauLanguageClientStatus) => void>();
 let status: LuauLanguageClientStatus = "stopped";
 let apiPromise: Promise<void> | undefined;
@@ -51,6 +56,12 @@ function initializeVscodeApi(): Promise<void> {
 
 export function prepareLuauLanguageClient(): Promise<void> {
     return initializeVscodeApi();
+}
+
+export async function synchronizeLuauLanguageClientProject(
+    _files: readonly LuauProjectFile[],
+): Promise<void> {
+    // The host-side language server reads directly from the project directory.
 }
 
 function websocketUrl(token: string): string {

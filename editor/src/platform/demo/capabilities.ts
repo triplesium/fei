@@ -1,4 +1,5 @@
 export const editorCapabilities = {
     agent: false,
-    luauLsp: false,
+    luauLsp: true,
+    luauLspProjectSync: true,
 } as const;

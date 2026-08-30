@@ -102,7 +102,11 @@ import {
 } from "./services/profiler-agent";
 import { cn } from "./lib/utils";
 import { editorCapabilities } from "@editor-platform/capabilities";
-import type { LuauLanguageClientStatus } from "@editor-platform/luau-language-client";
+import {
+    synchronizeLuauLanguageClientProject,
+    type LuauLanguageClientStatus,
+    type LuauProjectFile,
+} from "@editor-platform/luau-language-client";
 import { ProjectStorage } from "@editor-platform/project-storage";
 import type {
     AgentRequest,
@@ -767,6 +771,25 @@ export function App() {
         return assetEntries;
     };
 
+    const synchronizeProjectLanguageFiles = async (
+        entries: readonly ProjectFileEntry[],
+    ): Promise<void> => {
+        if (!editorCapabilities.luauLspProjectSync) return;
+        const files = await Promise.all(
+            entries
+                .filter(
+                    (entry) =>
+                        entry.kind === "text" &&
+                        /\.(?:lua|luau)$/i.test(entry.path),
+                )
+                .map(async (entry): Promise<LuauProjectFile> => ({
+                    path: entry.path,
+                    content: (await storage.read(entry.path)) ?? "",
+                })),
+        );
+        await synchronizeLuauLanguageClientProject(files);
+    };
+
     const readProjectSettings = async (): Promise<ProjectSettings> => {
         storage.assertOpen();
         const source = await storage.read("project.yaml");
@@ -802,6 +825,7 @@ export function App() {
             appendConsole("error", "project", `invalid project settings: ${errorMessage(error)}`);
         }
         const entries = await refreshFiles();
+        await synchronizeProjectLanguageFiles(entries);
         setOpenPaths([]);
         setSelectedAssetPath("");
         setActivePath("");
@@ -923,6 +947,7 @@ export function App() {
         const previous = activePath;
         const previousSelection = selectedAssetPath;
         const entries = await refreshFiles();
+        await synchronizeProjectLanguageFiles(entries);
         const next =
             entries.find(
                 (entry) =>
@@ -1192,7 +1217,8 @@ export function App() {
             if (refreshTimer) clearTimeout(refreshTimer);
             refreshTimer = setTimeout(() => {
                 void refreshFiles()
-                    .then(async () => {
+                    .then(async (entries) => {
+                        await synchronizeProjectLanguageFiles(entries);
                         if (!dirty && activePath && event.path === activePath) {
                             const nextContent = await storage.read(activePath);
                             if (nextContent !== null) {

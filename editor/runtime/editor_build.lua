@@ -71,6 +71,7 @@ function build(target, options)
         "index.html",
         "package.json",
         "package-lock.json",
+        "public/**",
         "tsconfig.json",
         "vite.config.ts",
     })
