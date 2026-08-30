@@ -1,6 +1,7 @@
 #include "scripting/detail/asset_server_binding.hpp"
 
 #include "asset/server.hpp"
+#include "refl/reflected_conversion.hpp"
 #include "scripting/detail/binding.hpp"
 
 #include <array>
@@ -36,9 +37,24 @@ check_asset_server_mut(lua_State* state, int index, std::string_view context) {
 }
 
 AssetPath check_asset_path(lua_State* state, int index) {
-    std::size_t size = 0;
-    const char* path = luaL_checklstring(state, index, &size);
-    return AssetPath(std::string(path, size));
+    Val source;
+    if (lua_isstring(state, index)) {
+        std::size_t size = 0;
+        const char* path = lua_tolstring(state, index, &size);
+        source = make_val<std::string>(path, size);
+    } else {
+        auto value = copy_luau_reflected_value(state, index, "asset path");
+        if (!value) {
+            luaL_typeerror(state, index, "AssetPath or string");
+        }
+        source = std::move(*value);
+    }
+
+    auto converted = reflected_convert(type_id<AssetPath>(), source.ref());
+    if (!converted) {
+        luaL_typeerror(state, index, "AssetPath or string");
+    }
+    return std::move(converted->get<AssetPath>());
 }
 
 int push_loaded_handle(

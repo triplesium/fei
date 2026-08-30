@@ -62,7 +62,9 @@ luau_borrow_is_valid(const LuauBorrowScope* scope, LuauBorrowToken token) {
 
 inline bool push_luau_primitive(lua_State* state, Ref ref) {
     const TypeId id = ref.type_id();
-    if (id == type_id<Entity>()) {
+    if (id == type_id<TypeId>()) {
+        push_luau_type_token(state, ref.get_const<TypeId>());
+    } else if (id == type_id<Entity>()) {
         lua_pushunsigned(state, ref.get_const<Entity>().value);
     } else if (id == type_id<bool>()) {
         lua_pushboolean(state, ref.get_const<bool>());

@@ -118,6 +118,12 @@ struct LuauTestConfig {
         }
         return failure(LuauTestError {.code = 9});
     }
+
+    bool matches_type(TypeId type) const {
+        return type == type_id<LuauTestPosition>();
+    }
+
+    TypeId position_type() const { return type_id<LuauTestPosition>(); }
 };
 
 struct LuauTestCommandState {
@@ -233,7 +239,9 @@ void register_luau_system_test_types() {
         .add_property("state_order", &LuauTestConfig::state_order)
         .add_method("add_execution", &LuauTestConfig::add_execution)
         .add_method("make_position", &LuauTestConfig::make_position)
-        .add_method("result", &LuauTestConfig::result);
+        .add_method("result", &LuauTestConfig::result)
+        .add_method("matches_type", &LuauTestConfig::matches_type)
+        .add_method("position_type", &LuauTestConfig::position_type);
     registry.register_cls<LuauTestCommandState>()
         .add_property("target", &LuauTestCommandState::target)
         .add_property("parent", &LuauTestCommandState::parent)
@@ -396,6 +404,15 @@ TEST_CASE(
                 assert(
                     load_error.path:as_string() == "memory://missing.bin"
                 )
+                assert(
+                    load_error.path:resolve("child.bin"):as_string() ==
+                    "memory://missing.bin/child.bin"
+                )
+                local missing_again = assets:load_async(
+                    LuauTestAsset,
+                    load_error.path
+                )
+                assert(not assets:is_loaded(missing_again))
                 assert(string.find(
                     load_error.message,
                     "Asset not found",
@@ -1041,6 +1058,8 @@ TEST_CASE(
                     config.generated_x = generated.x
                     local value, err = config:result(false)
                     assert(value == nil and err.code == 9)
+                    assert(config:matches_type(LuauTestPosition))
+                    assert(config:matches_type(config:position_type()))
                 end
             end
 

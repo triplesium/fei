@@ -20,6 +20,20 @@
 
 namespace ets::detail {
 
+namespace {
+
+[[nodiscard]] bool is_luau_type_token(lua_State* state, const int index) {
+    if (!lua_isuserdata(state, index) || lua_getmetatable(state, index) == 0) {
+        return false;
+    }
+    luaL_getmetatable(state, c_luau_type_token_metatable);
+    const bool matches = lua_rawequal(state, -1, -2) != 0;
+    lua_pop(state, 2);
+    return matches;
+}
+
+} // namespace
+
 bool luau_reflected_values_equal(Ref lhs, Ref rhs) {
     if (!lhs || !rhs || lhs.type_id() != rhs.type_id()) {
         return false;
@@ -205,6 +219,15 @@ int invoke_static_method(lua_State* state) {
     refs.reserve(static_cast<std::size_t>(lua_gettop(state)));
     std::vector<MutationSnapshot> mutation_snapshots;
     for (int index = 1; index <= lua_gettop(state); ++index) {
+        if (is_luau_type_token(state, index)) {
+            owned_arguments.push_back(
+                make_val<TypeId>(
+                    check_luau_type_token(state, index, "reflected method")
+                )
+            );
+            refs.push_back(owned_arguments.back().ref());
+            continue;
+        }
         if (lua_isuserdata(state, index)) {
             auto object = check_luau_object(state, index);
             refs.push_back(object.ref);
@@ -269,6 +292,15 @@ int construct_type(lua_State* state, TypeId type, int first_argument) {
     std::vector<Ref> arguments;
     arguments.reserve(static_cast<std::size_t>(argument_count));
     for (int index = first_argument; index <= lua_gettop(state); ++index) {
+        if (is_luau_type_token(state, index)) {
+            owned_arguments.push_back(
+                make_val<TypeId>(
+                    check_luau_type_token(state, index, "reflected constructor")
+                )
+            );
+            arguments.push_back(owned_arguments.back().ref());
+            continue;
+        }
         if (lua_isuserdata(state, index)) {
             arguments.push_back(check_luau_object(state, index).ref);
             continue;
@@ -360,6 +392,11 @@ luau_value_for_type(lua_State* state, int index, TypeId expected) {
         const char* text = lua_tolstring(state, index, &size);
         return make_val<std::string>(text, size);
     }
+    if (expected == type_id<TypeId>() && is_luau_type_token(state, index)) {
+        return make_val<TypeId>(
+            check_luau_type_token(state, index, "reflected value")
+        );
+    }
     if (lua_isuserdata(state, index)) {
         auto object = check_luau_object(state, index);
         if (object.ref.type_id() == expected) {
@@ -385,11 +422,11 @@ int luau_type_token_index(lua_State* state) {
         lua_pushcclosure(state, type_new, "type.new", 1);
         return 1;
     }
-    if (std::string_view {key} == "__type_id") {
+    if (std::string_view {key} == "__ets_type_id") {
         lua_pushinteger(state, static_cast<lua_Integer>(type.id()));
         return 1;
     }
-    if (std::string_view {key} == "__type_name") {
+    if (std::string_view {key} == "__ets_type_name") {
         const auto reflected_type = Registry::instance().try_get_type(type);
         if (!reflected_type) {
             return raise_message(state, reflected_type.error().message);
@@ -431,6 +468,15 @@ int luau_invoke_method(lua_State* state) {
     std::vector<Ref> refs;
     refs.reserve(static_cast<std::size_t>(argument_count));
     for (int index = 2; index <= lua_gettop(state); ++index) {
+        if (is_luau_type_token(state, index)) {
+            owned_arguments.push_back(
+                make_val<TypeId>(
+                    check_luau_type_token(state, index, "reflected method")
+                )
+            );
+            refs.push_back(owned_arguments.back().ref());
+            continue;
+        }
         if (lua_isuserdata(state, index)) {
             auto object = check_luau_object(state, index);
             refs.push_back(object.ref);
