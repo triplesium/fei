@@ -14,11 +14,18 @@ class TypeMapper {
     explicit TypeMapper(const Database& database);
 
     [[nodiscard]] std::string map(std::string_view cpp_type);
+    [[nodiscard]] std::string map_parameter(std::string_view cpp_type);
+    [[nodiscard]] std::string map_dependent_return(
+        std::string_view cpp_type,
+        std::string_view type_parameter = "T"
+    );
     [[nodiscard]] const std::set<std::string>& unsupported_types() const;
 
   private:
     std::unordered_map<std::string, std::string> m_reflected_types;
     std::unordered_map<std::string, std::string> m_unqualified_reflected_types;
+    std::unordered_map<std::string, std::vector<std::string>>
+        m_parameter_coercions;
     std::set<std::string> m_unsupported_types;
 };
 

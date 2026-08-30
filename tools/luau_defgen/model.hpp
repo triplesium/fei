@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -24,12 +25,14 @@ struct Method {
     std::string name;
     std::string return_cpp_type;
     std::vector<Parameter> parameters;
+    std::optional<std::string> dependent_return_parameter;
     bool is_static {false};
     bool is_const {false};
 };
 
 struct Constructor {
     std::vector<Parameter> parameters;
+    bool converting {false};
 };
 
 struct Class {

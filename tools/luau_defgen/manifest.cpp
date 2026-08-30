@@ -60,6 +60,13 @@ using Json = nlohmann::json;
                 .return_cpp_type =
                     method.at("returnCppType").get<std::string>(),
                 .parameters = parameters_from(method.at("parameters")),
+                .dependent_return_parameter =
+                    method.contains("dependentReturnParameter") ?
+                        std::optional<std::string> {
+                            method.at("dependentReturnParameter")
+                                .get<std::string>(),
+                        } :
+                        std::nullopt,
                 .is_static = method.at("static").get<bool>(),
                 .is_const = method.at("const").get<bool>(),
             }
@@ -69,6 +76,7 @@ using Json = nlohmann::json;
         result.constructors.push_back(
             Constructor {
                 .parameters = parameters_from(constructor.at("parameters")),
+                .converting = constructor.value("converting", false),
             }
         );
     }

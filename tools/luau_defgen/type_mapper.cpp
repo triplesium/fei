@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <functional>
 #include <optional>
 #include <regex>
+#include <stdexcept>
 #include <unordered_set>
 
 namespace ets::luau_defgen {
@@ -63,7 +65,6 @@ namespace {
         "std::int64_t",  "std::uint8_t",
         "std::uint16_t", "std::uint32_t",
         "std::uint64_t", "ets::Entity",
-        "ets::TypeId",
     };
     return std::ranges::find(numeric_types, type) != numeric_types.end();
 }
@@ -96,6 +97,59 @@ optional_argument(const std::string_view type) {
     return std::nullopt;
 }
 
+struct TemplateType {
+    std::string name;
+    std::vector<std::string> arguments;
+};
+
+[[nodiscard]] std::optional<TemplateType>
+parse_template_type(const std::string_view type) {
+    const auto opening = type.find('<');
+    if (opening == std::string_view::npos || !type.ends_with('>')) {
+        return std::nullopt;
+    }
+
+    TemplateType result {.name = trim(std::string {type.substr(0, opening)})};
+    const auto arguments = type.substr(opening + 1, type.size() - opening - 2);
+    std::size_t argument_begin = 0;
+    int depth = 0;
+    for (std::size_t position = 0; position <= arguments.size(); ++position) {
+        const bool at_end = position == arguments.size();
+        const char character = at_end ? ',' : arguments[position];
+        if (!at_end) {
+            if (character == '<') {
+                ++depth;
+            } else if (character == '>') {
+                --depth;
+                if (depth < 0) {
+                    return std::nullopt;
+                }
+            }
+        }
+        if (character == ',' && depth == 0) {
+            auto argument = trim(
+                std::string {
+                    arguments.substr(argument_begin, position - argument_begin),
+                }
+            );
+            if (argument.empty()) {
+                return std::nullopt;
+            }
+            result.arguments.push_back(std::move(argument));
+            argument_begin = position + 1;
+        }
+    }
+    return depth == 0 && !result.arguments.empty() ?
+               std::optional<TemplateType> {std::move(result)} :
+               std::nullopt;
+}
+
+[[nodiscard]] std::string_view unqualified_name(std::string_view name) {
+    const auto separator = name.rfind("::");
+    return separator == std::string_view::npos ? name :
+                                                 name.substr(separator + 2);
+}
+
 } // namespace
 
 TypeMapper::TypeMapper(const Database& database) {
@@ -125,6 +179,35 @@ TypeMapper::TypeMapper(const Database& database) {
     }
     for (const auto& enm : database.enums) {
         add_reflected_type(enm.cpp_name, enm.name);
+    }
+    for (const auto& cls : database.classes) {
+        std::vector<std::string> coercions;
+        for (const auto& constructor : cls.constructors) {
+            if (constructor.converting && constructor.parameters.size() == 1) {
+                const auto& source = constructor.parameters.front().cpp_type;
+                if (std::ranges::find(coercions, source) == coercions.end()) {
+                    coercions.push_back(source);
+                }
+            }
+        }
+        if (coercions.empty()) {
+            continue;
+        }
+        m_parameter_coercions.emplace(cls.cpp_name, coercions);
+
+        const auto separator = cls.cpp_name.rfind("::");
+        const auto unqualified = cls.cpp_name.substr(
+            separator == std::string::npos ? 0 : separator + 2
+        );
+        if (const auto reflected =
+                m_unqualified_reflected_types.find(unqualified);
+            reflected != m_unqualified_reflected_types.end() &&
+            reflected->second == cls.name) {
+            m_parameter_coercions.emplace(
+                std::move(unqualified),
+                std::move(coercions)
+            );
+        }
     }
 }
 
@@ -169,6 +252,9 @@ std::string TypeMapper::map(const std::string_view cpp_type) {
     if (base == "bool") {
         return "boolean";
     }
+    if (base == "TypeId" || base == "ets::TypeId") {
+        return "TypeToken<any>";
+    }
     if (is_number_type(base)) {
         return "number";
     }
@@ -181,6 +267,93 @@ std::string TypeMapper::map(const std::string_view cpp_type) {
     }
     m_unsupported_types.insert(original);
     return "any";
+}
+
+std::string TypeMapper::map_parameter(const std::string_view cpp_type) {
+    const auto original = trim(std::string {cpp_type});
+    const auto base = normalized_base_type(original);
+    auto mapped = map(original);
+    const auto coercions = m_parameter_coercions.find(base);
+    if (coercions == m_parameter_coercions.end()) {
+        return mapped;
+    }
+    for (const auto& cpp_coercion : coercions->second) {
+        const auto coercion = map(cpp_coercion);
+        if (coercion != mapped && coercion != "any") {
+            mapped += " | ";
+            mapped += coercion;
+        }
+    }
+    return mapped;
+}
+
+std::string TypeMapper::map_dependent_return(
+    const std::string_view cpp_type,
+    const std::string_view type_parameter
+) {
+    struct Projection {
+        std::string type;
+        std::size_t slots {0};
+    };
+    std::function<Projection(std::string_view)> project;
+    project = [&](const std::string_view type) -> Projection {
+        const auto base = normalized_base_type(std::string {type});
+        const auto local_name = unqualified_name(base);
+        if (local_name == "UntypedHandle") {
+            return {
+                .type = "Handle<" + std::string {type_parameter} + ">",
+                .slots = 1,
+            };
+        }
+
+        const auto generic = parse_template_type(base);
+        if (!generic) {
+            return {.type = map(base)};
+        }
+        const auto generic_name = unqualified_name(generic->name);
+        if (generic_name == "Result") {
+            if (generic->arguments.size() != 2) {
+                throw std::runtime_error(
+                    "Dependent return Result must have two type arguments"
+                );
+            }
+            return project(generic->arguments.front());
+        }
+        if (generic_name == "Optional" || generic_name == "optional") {
+            if (generic->arguments.size() != 1) {
+                throw std::runtime_error(
+                    "Dependent return Optional must have one type argument"
+                );
+            }
+            auto result = project(generic->arguments.front());
+            if (!result.type.ends_with('?')) {
+                result.type += '?';
+            }
+            return result;
+        }
+
+        bool contains_slot = false;
+        for (const auto& argument : generic->arguments) {
+            const auto projected = project(argument);
+            contains_slot = contains_slot || projected.slots != 0;
+        }
+        if (contains_slot) {
+            throw std::runtime_error(
+                "Unsupported dependent return wrapper '" + generic->name + "'"
+            );
+        }
+        return {.type = map(base)};
+    };
+
+    auto result = project(cpp_type);
+    if (result.slots != 1) {
+        throw std::runtime_error(
+            "Dependent return type '" + std::string {cpp_type} +
+            "' must project to exactly one untyped handle slot; found " +
+            std::to_string(result.slots)
+        );
+    }
+    return result.type;
 }
 
 const std::set<std::string>& TypeMapper::unsupported_types() const {

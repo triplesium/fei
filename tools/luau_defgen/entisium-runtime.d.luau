@@ -20,6 +20,11 @@ export type TypeToken<T> = {
     __ets_type: T?,
 }
 
+-- Asset handles retain the asset type selected by a TypeToken<T> argument.
+export type Handle<T> = {
+    __ets_asset_type: T?,
+}
+
 -- System parameter wrappers expose the wrapped value to Luau's type checker.
 export type Read<T> = T
 export type Write<T> = T

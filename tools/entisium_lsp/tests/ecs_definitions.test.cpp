@@ -13,6 +13,7 @@
 #include <iterator>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -48,7 +49,8 @@ std::string runtime_definitions() {
     };
 }
 
-std::vector<unsigned int> error_lines(std::string source) {
+std::vector<unsigned int>
+error_lines(std::string source, const std::string_view extra_definitions = {}) {
     for (auto* flag = Luau::FValue<bool>::list; flag != nullptr;
          flag = flag->next) {
         if (std::strncmp(flag->name, "Luau", 4) == 0 &&
@@ -78,6 +80,7 @@ std::vector<unsigned int> error_lines(std::string source) {
             __ets_type: TestTransform?,
         }
     )";
+    definitions += extra_definitions;
     const auto loaded = frontend.loadDefinitionFile(
         frontend.globals,
         frontend.globals.globalScope,
@@ -186,4 +189,31 @@ TEST_CASE(
     )");
 
     CHECK(errors == std::vector<unsigned int> {5, 7, 13, 19, 27, 28});
+}
+
+TEST_CASE(
+    "runtime definitions infer dependent asset handle types",
+    "[lsp][definitions][asset]"
+) {
+    const auto errors = error_lines(
+        R"(
+        local function load_transform(assets: TestAssetServer)
+            local handle: Handle<TestTransform> = assets:load(
+                TestTransform,
+                "transform.asset"
+            )
+        end
+    )",
+        R"(
+        declare extern type TestAssetServer with
+            load: <T>(
+                self: TestAssetServer,
+                type_token: TypeToken<T>,
+                path: string
+            ) -> Handle<T>
+        end
+    )"
+    );
+
+    CHECK(errors == std::vector<unsigned int> {});
 }

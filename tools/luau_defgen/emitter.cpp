@@ -43,25 +43,72 @@ parameter_name(const std::string& name, const std::size_t index) {
     return "arg" + std::to_string(index + 1);
 }
 
-[[nodiscard]] std::string
-parameters(TypeMapper& mapper, const std::vector<Parameter>& values) {
+[[nodiscard]] std::string parameter_type(
+    TypeMapper& mapper,
+    const Parameter& parameter,
+    const std::optional<std::string_view> dependent_parameter = std::nullopt
+) {
+    if (dependent_parameter && parameter.name == *dependent_parameter) {
+        if (mapper.map(parameter.cpp_type) != "TypeToken<any>") {
+            throw std::runtime_error(
+                "Dependent return source parameter '" + parameter.name +
+                "' must have type ets::TypeId"
+            );
+        }
+        return "TypeToken<T>";
+    }
+    return mapper.map_parameter(parameter.cpp_type);
+}
+
+[[nodiscard]] std::string parameters(
+    TypeMapper& mapper,
+    const std::vector<Parameter>& values,
+    const std::optional<std::string_view> dependent_parameter = std::nullopt
+) {
     std::ostringstream output;
     for (std::size_t index = 0; index < values.size(); ++index) {
         if (index != 0) {
             output << ", ";
         }
         output << parameter_name(values[index].name, index) << ": "
-               << mapper.map(values[index].cpp_type);
+               << parameter_type(mapper, values[index], dependent_parameter);
     }
     return output.str();
 }
 
-[[nodiscard]] std::string function_type(
-    TypeMapper& mapper,
-    const std::vector<Parameter>& values,
-    const std::string& return_type
-) {
-    return "(" + parameters(mapper, values) + ") -> " + mapper.map(return_type);
+[[nodiscard]] std::optional<std::string_view>
+dependent_parameter(const Method& method) {
+    if (!method.dependent_return_parameter) {
+        return std::nullopt;
+    }
+    const auto parameter = std::ranges::find(
+        method.parameters,
+        *method.dependent_return_parameter,
+        &Parameter::name
+    );
+    if (parameter == method.parameters.end()) {
+        throw std::runtime_error(
+            "Dependent return method '" + method.name +
+            "' names missing parameter '" + *method.dependent_return_parameter +
+            "'"
+        );
+    }
+    return *method.dependent_return_parameter;
+}
+
+[[nodiscard]] std::string
+method_return_type(TypeMapper& mapper, const Method& method) {
+    return method.dependent_return_parameter ?
+               mapper.map_dependent_return(method.return_cpp_type) :
+               mapper.map(method.return_cpp_type);
+}
+
+[[nodiscard]] std::string
+function_type(TypeMapper& mapper, const Method& method) {
+    const auto source = dependent_parameter(method);
+    return std::string(source ? "<T>" : "") + "(" +
+           parameters(mapper, method.parameters, source) + ") -> " +
+           method_return_type(mapper, method);
 }
 
 [[nodiscard]] std::string parameter_signature_key(
@@ -70,7 +117,7 @@ parameters(TypeMapper& mapper, const std::vector<Parameter>& values) {
 ) {
     std::string result;
     for (const auto& parameter : values) {
-        const auto type = mapper.map(parameter.cpp_type);
+        const auto type = mapper.map_parameter(parameter.cpp_type);
         result += ':';
         result += std::to_string(type.size());
         result += ':';
@@ -82,8 +129,15 @@ parameters(TypeMapper& mapper, const std::vector<Parameter>& values) {
 [[nodiscard]] std::string
 method_signature_key(TypeMapper& mapper, const Method& method) {
     std::string result = method.name;
-    result += parameter_signature_key(mapper, method.parameters);
-    const auto return_type = mapper.map(method.return_cpp_type);
+    const auto source = dependent_parameter(method);
+    for (const auto& parameter : method.parameters) {
+        const auto type = parameter_type(mapper, parameter, source);
+        result += ':';
+        result += std::to_string(type.size());
+        result += ':';
+        result += type;
+    }
+    const auto return_type = method_return_type(mapper, method);
     result += "->";
     result += std::to_string(return_type.size());
     result += ':';
@@ -174,11 +228,17 @@ void emit_class_declaration(
                  .second) {
             continue;
         }
-        output << "    function " << method.name << "(self";
-        if (!method.parameters.empty()) {
-            output << ", " << parameters(mapper, method.parameters);
+        const auto source = dependent_parameter(method);
+        if (source) {
+            output << "    " << method.name << ": <T>(self: " << internal_type;
+        } else {
+            output << "    function " << method.name << "(self";
         }
-        output << "): " << mapper.map(method.return_cpp_type) << "\n";
+        if (!method.parameters.empty()) {
+            output << ", " << parameters(mapper, method.parameters, source);
+        }
+        output << (source ? ") -> " : "): ")
+               << method_return_type(mapper, method) << "\n";
     }
     output << "end\n";
     output << "export type " << cls.name << " = " << internal_type << "\n";
@@ -229,8 +289,6 @@ void emit_class_declaration(
             output << ",\n";
         }
     }
-    output << "    __type_id: number,\n";
-    output << "    __type_name: string,\n";
     output << "    __ets_type: " << cls.name << "?,\n";
     std::map<std::string, std::vector<const Method*>> static_methods;
     for (const auto& method : cls.methods) {
@@ -253,13 +311,7 @@ void emit_class_declaration(
             if (!first) {
                 output << " & ";
             }
-            output << '('
-                   << function_type(
-                          mapper,
-                          overload->parameters,
-                          overload->return_cpp_type
-                      )
-                   << ')';
+            output << '(' << function_type(mapper, *overload) << ')';
             first = false;
         }
         output << ",\n";
