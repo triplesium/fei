@@ -53,12 +53,31 @@ DynamicQuery::prepare(World& world, SystemTicks system_ticks) {
 
 void DynamicQuery::refresh(World& world) {
     m_world = &world;
-    m_matching_archetypes.clear();
-    for (const auto& [archetype_id, archetype] : m_world->archetypes()) {
-        (void)archetype;
-        if (matches(archetype_id)) {
-            m_matching_archetypes.push_back(archetype_id);
+    m_prepared_archetypes.clear();
+    for (const auto& [archetype_id, archetype] : world.archetypes()) {
+        if (!matches(archetype)) {
+            continue;
         }
+
+        auto& mutable_archetype = world.archetypes().get(archetype_id);
+        PreparedArchetype prepared {
+            .id = archetype_id,
+            .archetype = &mutable_archetype,
+        };
+        prepared.fields.reserve(m_fields.size());
+        for (const auto& field : m_fields) {
+            PreparedField prepared_field;
+            if (field.kind == DynamicQueryFieldKind::Component) {
+                if (field.access == DynamicParamAccess::Write) {
+                    prepared_field.write_column =
+                        &mutable_archetype.column(field.type);
+                } else {
+                    prepared_field.read_column = &archetype.column(field.type);
+                }
+            }
+            prepared.fields.push_back(prepared_field);
+        }
+        m_prepared_archetypes.push_back(std::move(prepared));
     }
 }
 
@@ -70,22 +89,24 @@ bool DynamicQuery::next(
         return false;
     }
 
-    while (cursor.archetype_index < m_matching_archetypes.size()) {
-        auto archetype_id = m_matching_archetypes[cursor.archetype_index];
-        const auto& archetype = m_world->archetypes().get(archetype_id);
+    while (cursor.archetype_index < m_prepared_archetypes.size()) {
+        const auto prepared_archetype_index = cursor.archetype_index;
+        const auto& prepared = m_prepared_archetypes[prepared_archetype_index];
+        const auto& archetype = *prepared.archetype;
         while (cursor.row < archetype.size()) {
             const auto candidate = cursor.row++;
             const bool row_matches = std::ranges::all_of(
                 m_filters,
                 [&](const DynamicQueryFilter& filter) {
-                    return matches_row(filter, archetype_id, candidate);
+                    return matches_row(filter, archetype, candidate);
                 }
             );
             if (!row_matches) {
                 continue;
             }
             row = DynamicQueryRow {
-                .archetype = archetype_id,
+                .archetype = prepared.id,
+                .prepared_archetype_index = prepared_archetype_index,
                 .row = candidate,
             };
             return true;
@@ -117,26 +138,34 @@ DynamicQueryFieldBorrow DynamicQuery::field_untracked(
         return {};
     }
 
+    const auto& prepared = m_prepared_archetypes[row.prepared_archetype_index];
     const auto& field = m_fields[field_index];
+    const auto& prepared_field = prepared.fields[field_index];
     if (field.kind == DynamicQueryFieldKind::Entity) {
-        const auto& archetype = m_world->archetypes().get(row.archetype);
         return {
-            .value = Ref(&archetype.entities()[row.row], type_id<Entity>()),
+            .value =
+                Ref(&prepared.archetype->entities()[row.row],
+                    type_id<Entity>()),
         };
     }
 
     if (field.access == DynamicParamAccess::Write) {
-        auto& archetype = m_world->archetypes().get(row.archetype);
         return {
-            .value = archetype.get_component(field.type, row.row),
-            .ticks = &archetype.component_ticks(field.type, row.row),
+            .value = prepared_field.write_column->get(
+                static_cast<std::uint32_t>(row.row)
+            ),
+            .ticks = &prepared_field.write_column->ticks(
+                static_cast<std::uint32_t>(row.row)
+            ),
             .change_tick = m_system_ticks.this_run,
         };
     }
 
-    const auto& archetype =
-        static_cast<const World*>(m_world)->archetypes().get(row.archetype);
-    return {.value = archetype.get_component(field.type, row.row)};
+    return {
+        .value = prepared_field.read_column->get(
+            static_cast<std::uint32_t>(row.row)
+        ),
+    };
 }
 
 std::size_t DynamicQuery::size() const {
@@ -153,8 +182,7 @@ std::size_t DynamicQuery::size() const {
     return count;
 }
 
-bool DynamicQuery::matches(ArchetypeId archetype_id) const {
-    const auto& archetype = m_world->archetypes().get(archetype_id);
+bool DynamicQuery::matches(const Archetype& archetype) const {
     for (const auto& field : m_fields) {
         if (field.kind == DynamicQueryFieldKind::Entity) {
             continue;
@@ -164,7 +192,7 @@ bool DynamicQuery::matches(ArchetypeId archetype_id) const {
         }
     }
     for (const auto& filter : m_filters) {
-        if (!matches_archetype(filter, archetype_id)) {
+        if (!matches_archetype(filter, archetype)) {
             return false;
         }
     }
@@ -199,9 +227,8 @@ std::uint64_t DynamicQuery::runtime_state_type() const {
 
 bool DynamicQuery::matches_archetype(
     const DynamicQueryFilter& filter,
-    ArchetypeId archetype_id
+    const Archetype& archetype
 ) const {
-    const auto& archetype = m_world->archetypes().get(archetype_id);
     switch (filter.kind) {
         case DynamicQueryFilter::Kind::With:
             return archetype.has_component(filter.type) == filter.required;
@@ -214,7 +241,7 @@ bool DynamicQuery::matches_archetype(
             return std::ranges::any_of(
                 filter.filters,
                 [&](const DynamicQueryFilter& child) {
-                    return matches_archetype(child, archetype_id);
+                    return matches_archetype(child, archetype);
                 }
             );
     }
@@ -223,10 +250,9 @@ bool DynamicQuery::matches_archetype(
 
 bool DynamicQuery::matches_row(
     const DynamicQueryFilter& filter,
-    ArchetypeId archetype_id,
+    const Archetype& archetype,
     std::size_t row
 ) const {
-    const auto& archetype = m_world->archetypes().get(archetype_id);
     switch (filter.kind) {
         case DynamicQueryFilter::Kind::With:
             return archetype.has_component(filter.type) == filter.required;
@@ -244,7 +270,7 @@ bool DynamicQuery::matches_row(
             return std::ranges::any_of(
                 filter.filters,
                 [&](const DynamicQueryFilter& child) {
-                    return matches_row(child, archetype_id, row);
+                    return matches_row(child, archetype, row);
                 }
             );
     }

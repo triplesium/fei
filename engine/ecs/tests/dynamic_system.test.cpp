@@ -382,6 +382,69 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "ECS dynamic query refreshes prepared columns across archetypes",
+    "[ecs][dynamic][query]"
+) {
+    register_components();
+
+    World world;
+    const auto plain = world.entity();
+    world.add_component(plain, Position(1.0F, 0.0F));
+    world.add_component(plain, Velocity(1.0F, 0.0F));
+
+    const auto named = world.entity();
+    world.add_component(named, Position(2.0F, 0.0F));
+    world.add_component(named, Velocity(2.0F, 0.0F));
+    world.add_component(named, Name("named"));
+
+    DynamicQuery query(
+        "movers",
+        {
+            DynamicQueryField {
+                .name = "position",
+                .type = type_id<Position>(),
+                .access = DynamicParamAccess::Read,
+            },
+            DynamicQueryField {
+                .name = "velocity",
+                .type = type_id<Velocity>(),
+                .access = DynamicParamAccess::Write,
+            },
+        },
+        {}
+    );
+
+    const auto update = [&] {
+        std::size_t count = 0;
+        DynamicQueryCursor cursor;
+        DynamicQueryRow row;
+        while (query.next(cursor, row)) {
+            const auto position = query.field(row, 0);
+            auto velocity = query.field(row, 1);
+            REQUIRE(position.is_const());
+            REQUIRE_FALSE(velocity.is_const());
+            velocity.get<Velocity>().dx += position.get_const<Position>().x;
+            ++count;
+        }
+        return count;
+    };
+
+    REQUIRE(query.prepare(world));
+    REQUIRE(update() == 2);
+
+    const auto armored = world.entity();
+    world.add_component(armored, Position(3.0F, 0.0F));
+    world.add_component(armored, Velocity(3.0F, 0.0F));
+    world.add_component(armored, Health(100));
+
+    REQUIRE(query.prepare(world));
+    REQUIRE(update() == 3);
+    REQUIRE(world.get_component<Velocity>(plain).dx == 3.0F);
+    REQUIRE(world.get_component<Velocity>(named).dx == 6.0F);
+    REQUIRE(world.get_component<Velocity>(armored).dx == 6.0F);
+}
+
+TEST_CASE(
     "ECS dynamic commands params expose access and prepare commands",
     "[ecs][dynamic]"
 ) {

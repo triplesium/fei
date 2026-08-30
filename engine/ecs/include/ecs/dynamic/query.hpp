@@ -13,6 +13,8 @@
 
 namespace ets {
 
+class Archetype;
+class Column;
 class World;
 
 enum class DynamicQueryFieldKind {
@@ -49,6 +51,7 @@ struct DynamicQueryCursor {
 
 struct DynamicQueryRow {
     ArchetypeId archetype {};
+    std::size_t prepared_archetype_index {0};
     std::size_t row {0};
 };
 
@@ -63,10 +66,21 @@ class DynamicQuery final : public DynamicSystemParam {
     std::string name;
 
   private:
+    struct PreparedField {
+        const Column* read_column {nullptr};
+        Column* write_column {nullptr};
+    };
+
+    struct PreparedArchetype {
+        ArchetypeId id {};
+        Archetype* archetype {nullptr};
+        std::vector<PreparedField> fields;
+    };
+
     World* m_world {nullptr};
     std::vector<DynamicQueryField> m_fields;
     std::vector<DynamicQueryFilter> m_filters;
-    std::vector<ArchetypeId> m_matching_archetypes;
+    std::vector<PreparedArchetype> m_prepared_archetypes;
     SystemTicks m_system_ticks;
 
   public:
@@ -93,14 +107,14 @@ class DynamicQuery final : public DynamicSystemParam {
 
   private:
     void refresh(World& world);
-    bool matches(ArchetypeId archetype_id) const;
+    bool matches(const Archetype& archetype) const;
     bool matches_archetype(
         const DynamicQueryFilter& filter,
-        ArchetypeId archetype_id
+        const Archetype& archetype
     ) const;
     bool matches_row(
         const DynamicQueryFilter& filter,
-        ArchetypeId archetype_id,
+        const Archetype& archetype,
         std::size_t row
     ) const;
 };
