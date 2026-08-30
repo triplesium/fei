@@ -23,7 +23,12 @@ struct StringUnionTypeIR {
     std::vector<std::string> values;
 };
 
-using TypeExprIR = std::variant<RecordTypeIR, StringUnionTypeIR>;
+struct UnsupportedTypeIR {
+    std::string runtime_error;
+};
+
+using TypeExprIR =
+    std::variant<RecordTypeIR, StringUnionTypeIR, UnsupportedTypeIR>;
 
 struct TypeDeclIR {
     std::string name;
@@ -100,12 +105,11 @@ class ModuleMetadataPass final {
   public:
     static constexpr std::string_view name = "module-metadata";
 
-    Result<LuauModuleMetadata, LuauScriptError> run(
-        const LuauScriptSource& source,
+    Result<LuauModuleMetadata, LuauScriptError>
+    run(const LuauScriptSource& source,
         const Luau::AstStatBlock& root,
         const ModuleIR& module,
-        LuauModuleSchema schema
-    ) const;
+        LuauModuleSchema schema) const;
 };
 
 } // namespace ets::detail::luau_compiler

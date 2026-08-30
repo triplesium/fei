@@ -31,12 +31,19 @@ struct LuauPluginMetadata {
     std::vector<LuauPluginDependency> dependencies;
 };
 
+struct LuauExportedTypeMetadata {
+    std::string name;
+    bool runtime_compatible {false};
+    std::string runtime_error;
+};
+
 struct LuauModuleMetadata {
     std::uint64_t source_hash {};
     LuauModuleSchema schema;
     std::vector<std::string> imports;
     std::vector<LuauFunctionMetadata> functions;
     std::vector<LuauPluginMetadata> plugins;
+    std::vector<LuauExportedTypeMetadata> exported_types;
 
     [[nodiscard]] const LuauFunctionMetadata*
     find_function(std::string_view name) const {
@@ -53,6 +60,16 @@ struct LuauModuleMetadata {
         for (const auto& plugin : plugins) {
             if (plugin.name == name) {
                 return &plugin;
+            }
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] const LuauExportedTypeMetadata*
+    find_exported_type(std::string_view name) const {
+        for (const auto& type : exported_types) {
+            if (type.name == name) {
+                return &type;
             }
         }
         return nullptr;

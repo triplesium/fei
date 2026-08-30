@@ -48,6 +48,9 @@ ModuleSchemaLoweringPass::run(const ModuleIR& module) const {
         .source_name = module.source_name(),
     };
     for (const auto& type : module.types()) {
+        if (std::holds_alternative<UnsupportedTypeIR>(type.value)) {
+            continue;
+        }
         if (const auto* record = std::get_if<RecordTypeIR>(&type.value)) {
             result.types.push_back(
                 LuauTypeDecl {

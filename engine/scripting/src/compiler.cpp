@@ -10,6 +10,7 @@
 #include "ecs/dynamic/system_decl.hpp"
 #include "ecs/fwd.hpp"
 #include "refl/enum.hpp"
+#include "scripting/detail/exported_type.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -38,6 +39,7 @@ using detail::luau_compiler::PluginIR;
 using detail::luau_compiler::RecordTypeIR;
 using detail::luau_compiler::StringUnionTypeIR;
 using detail::luau_compiler::TypeDeclIR;
+using detail::luau_compiler::UnsupportedTypeIR;
 
 bool enable_luau_language_features() {
     bool found = false;
@@ -1278,13 +1280,13 @@ Result<LuauTypeRef, LuauScriptError> compile_exported_field_type(
                 reference = candidate;
             } else {
                 return failure(declaration_error(
-                    "exported ECS fields must use a named type or T?"
+                    "Entisium runtime fields must use a named type or T?"
                 ));
             }
         }
         if (!has_nil || reference == nullptr) {
             return failure(declaration_error(
-                "exported ECS fields must use a named type or T?"
+                "Entisium runtime fields must use a named type or T?"
             ));
         }
         value = reference;
@@ -1294,7 +1296,7 @@ Result<LuauTypeRef, LuauScriptError> compile_exported_field_type(
     const auto* reference = value->as<AstTypeReference>();
     if (reference == nullptr || reference->hasParameterList) {
         return failure(declaration_error(
-            "exported ECS fields must use non-generic named types"
+            "Entisium runtime fields must use non-generic named types"
         ));
     }
     std::string type_name;
@@ -1312,7 +1314,8 @@ Result<LuauTypeRef, LuauScriptError> compile_exported_field_type(
     const bool entity_type = type_name == "entity";
     if (optional && !entity_type) {
         return failure(declaration_error(
-            "optional exported ECS fields currently support only entity values"
+            "optional Entisium runtime fields currently support only entity "
+            "values"
         ));
     }
     return LuauTypeRef {
@@ -1323,37 +1326,11 @@ Result<LuauTypeRef, LuauScriptError> compile_exported_field_type(
     };
 }
 
-Optional<std::vector<std::string>> exported_state_values(const AstType& type) {
-    const auto append = [](const AstType& member,
-                           std::vector<std::string>& values) {
-        const auto* value = member.as<AstTypeSingletonString>();
-        if (value == nullptr) {
-            return false;
-        }
-        values.emplace_back(value->value.data, value->value.size);
-        return true;
-    };
-
-    std::vector<std::string> values;
-    if (const auto* union_type = type.as<AstTypeUnion>()) {
-        values.reserve(union_type->types.size);
-        for (const AstType* member : union_type->types) {
-            if (!append(*member, values)) {
-                return nullopt;
-            }
-        }
-        return values;
-    }
-    if (!append(type, values)) {
-        return nullopt;
-    }
-    return values;
-}
-
 Result<std::vector<TypeDeclIR>, LuauScriptError> compile_exported_types(
     const Luau::AstStatBlock& root,
     const std::string& module_name
 ) {
+    std::unordered_map<std::string, std::size_t> name_counts;
     std::unordered_set<std::string> names;
     for (const AstStat* statement : root.body) {
         const auto* alias = statement->as<AstStatTypeAlias>();
@@ -1361,69 +1338,83 @@ Result<std::vector<TypeDeclIR>, LuauScriptError> compile_exported_types(
             continue;
         }
         const std::string name {name_view(alias->name)};
-        if (!names.insert(name).second) {
-            return failure(
-                declaration_error("duplicate exported ECS type '" + name + "'")
-            );
-        }
+        ++name_counts[name];
+        names.insert(name);
     }
 
     std::vector<TypeDeclIR> result;
+    std::unordered_set<std::string> emitted;
     for (const AstStat* statement : root.body) {
         const auto* alias = statement->as<AstStatTypeAlias>();
         if (alias == nullptr || !alias->exported) {
             continue;
         }
         const std::string name {name_view(alias->name)};
-        if (alias->generics.size != 0 || alias->genericPacks.size != 0) {
-            return failure(declaration_error(
-                "exported ECS type '" + name + "' cannot be generic"
-            ));
+        if (!emitted.insert(name).second) {
+            continue;
         }
         std::string qualified_name {module_name};
         qualified_name.push_back('.');
         qualified_name.append(name);
-        auto string_union = exported_state_values(*alias->type);
-        if (string_union) {
+        if (name_counts[name] != 1) {
+            std::string runtime_error {"duplicate type alias '"};
+            runtime_error.append(name);
+            runtime_error.append(
+                "' cannot be used as an Entisium runtime type"
+            );
+            result.push_back(
+                TypeDeclIR {
+                    .name = name,
+                    .qualified_name = std::move(qualified_name),
+                    .value = UnsupportedTypeIR {
+                        .runtime_error = std::move(runtime_error),
+                    },
+                }
+            );
+            continue;
+        }
+
+        auto analysis = detail::luau_schema::analyze_exported_type(*alias);
+        if (!analysis.runtime_compatible()) {
+            result.push_back(
+                TypeDeclIR {
+                    .name = name,
+                    .qualified_name = std::move(qualified_name),
+                    .value = UnsupportedTypeIR {
+                        .runtime_error = std::move(analysis.runtime_error),
+                    },
+                }
+            );
+            continue;
+        }
+        auto& shape = analysis.shape;
+        if (shape.kind == detail::luau_schema::ExportedTypeKind::StringUnion) {
             result.push_back(
                 TypeDeclIR {
                     .name = name,
                     .qualified_name = std::move(qualified_name),
                     .value = StringUnionTypeIR {
-                        .values = std::move(*string_union),
+                        .values = std::move(shape.string_values),
                     },
                 }
             );
             continue;
         }
         const auto* table = alias->type->as<AstTypeTable>();
-        if (table == nullptr || table->indexer != nullptr) {
-            return failure(declaration_error(
-                "exported ECS type '" + name +
-                "' must be a table type with named fields"
-            ));
-        }
         TypeDeclIR type {
             .name = name,
             .qualified_name = std::move(qualified_name),
             .value = RecordTypeIR {},
         };
         auto& record = std::get<RecordTypeIR>(type.value);
-        std::unordered_set<std::string> fields;
+        std::string runtime_error;
         for (const auto& property : table->props) {
             const std::string field_name {name_view(property.name)};
-            if (!fields.insert(field_name).second) {
-                std::string message {"duplicate field '"};
-                message.append(field_name);
-                message.append("' in type '");
-                message.append(name);
-                message.push_back('\'');
-                return failure(declaration_error(std::move(message)));
-            }
             auto field_type =
                 compile_exported_field_type(*property.type, module_name, names);
             if (!field_type) {
-                return failure(std::move(field_type.error()));
+                runtime_error = std::move(field_type.error().message);
+                break;
             }
             record.fields.push_back(
                 LuauFieldDecl {
@@ -1432,11 +1423,247 @@ Result<std::vector<TypeDeclIR>, LuauScriptError> compile_exported_types(
                 }
             );
         }
-        std::ranges::sort(record.fields, {}, &LuauFieldDecl::name);
+        if (runtime_error.empty()) {
+            std::ranges::sort(record.fields, {}, &LuauFieldDecl::name);
+        } else {
+            type.value = UnsupportedTypeIR {
+                .runtime_error = std::move(runtime_error),
+            };
+        }
         result.push_back(std::move(type));
     }
     std::ranges::sort(result, {}, &TypeDeclIR::name);
     return result;
+}
+
+[[nodiscard]] bool is_runtime_value_method(std::string_view name) {
+    static constexpr std::string_view names[] {
+        "add_resource",
+        "insert_resource",
+        "init_state",
+        "insert_state",
+        "set_resource",
+    };
+    return std::ranges::find(names, name) != std::ranges::end(names);
+}
+
+[[nodiscard]] bool is_runtime_type_method(std::string_view name) {
+    static constexpr std::string_view names[] {
+        "add_event",
+        "has_resource",
+        "resource",
+    };
+    return std::ranges::find(names, name) != std::ranges::end(names);
+}
+
+[[nodiscard]] bool is_runtime_type_function(std::string_view name) {
+    static constexpr std::string_view names[] {
+        "Added",
+        "Changed",
+        "Read",
+        "With",
+        "Without",
+        "Write",
+        "field",
+        "optional",
+    };
+    return std::ranges::find(names, name) != std::ranges::end(names);
+}
+
+[[nodiscard]] const AstExpr*
+runtime_value_type_reference(const AstExpr& expression) {
+    if (const auto* call = expression.as<AstExprCall>()) {
+        const AstExpr* callee = call->func;
+        if (const auto* member = callee->as<AstExprIndexName>();
+            member != nullptr && name_view(member->index) == "new") {
+            callee = member->expr;
+        }
+        return callee;
+    }
+    if (const auto* member = expression.as<AstExprIndexName>()) {
+        return member->expr;
+    }
+    return nullptr;
+}
+
+template<typename Visitor>
+bool visit_runtime_type_references(
+    const AstExprCall& expression,
+    Visitor&& visitor
+) {
+    if (expression.self) {
+        const auto* method = expression.func->as<AstExprIndexName>();
+        if (method == nullptr) {
+            return true;
+        }
+        const std::string_view name = name_view(method->index);
+        if (is_runtime_value_method(name)) {
+            for (const AstExpr* argument : expression.args) {
+                const AstExpr* reference =
+                    runtime_value_type_reference(*argument);
+                if (reference != nullptr && !visitor(*reference)) {
+                    return false;
+                }
+            }
+        } else if (
+            is_runtime_type_method(name) && expression.args.size != 0 &&
+            !visitor(*expression.args.data[0])
+        ) {
+            return false;
+        }
+        return true;
+    }
+
+    const auto* function = expression.func->as<AstExprGlobal>();
+    if (function != nullptr &&
+        is_runtime_type_function(name_view(function->name)) &&
+        expression.args.size != 0) {
+        return visitor(*expression.args.data[0]);
+    }
+    return true;
+}
+
+class LocalRuntimeTypeUseValidator final : public Luau::AstVisitor {
+  public:
+    explicit LocalRuntimeTypeUseValidator(
+        const std::vector<TypeDeclIR>& types
+    ) {
+        for (const auto& type : types) {
+            if (const auto* unsupported =
+                    std::get_if<UnsupportedTypeIR>(&type.value)) {
+                m_unsupported.emplace(type.name, unsupported->runtime_error);
+            }
+        }
+    }
+
+    bool visit(AstExprCall* expression) override {
+        if (m_error) {
+            return false;
+        }
+        return visit_runtime_type_references(
+            *expression,
+            [&](const AstExpr& reference) {
+                const auto* global = reference.as<AstExprGlobal>();
+                if (global == nullptr) {
+                    return true;
+                }
+                const auto found =
+                    m_unsupported.find(std::string {name_view(global->name)});
+                if (found == m_unsupported.end()) {
+                    return true;
+                }
+                m_error = declaration_error(
+                    "exported type '" + found->first +
+                    "' cannot be used by an Entisium runtime API: " +
+                    found->second
+                );
+                return false;
+            }
+        );
+    }
+
+    [[nodiscard]] const Optional<LuauScriptError>& error() const {
+        return m_error;
+    }
+
+  private:
+    std::unordered_map<std::string, std::string> m_unsupported;
+    Optional<LuauScriptError> m_error;
+};
+
+Status<LuauScriptError> validate_local_runtime_type_uses(
+    Luau::AstStatBlock& root,
+    const std::vector<TypeDeclIR>& types
+) {
+    LocalRuntimeTypeUseValidator validator {types};
+    root.visit(&validator);
+    if (validator.error()) {
+        return failure(*validator.error());
+    }
+    return {};
+}
+
+class ImportedRuntimeTypeUseValidator final : public Luau::AstVisitor {
+  public:
+    ImportedRuntimeTypeUseValidator(
+        const ModuleIR& module,
+        const LuauModuleMetadataResolver& resolver
+    ) : m_module(&module), m_resolver(&resolver) {}
+
+    bool visit(AstExprCall* expression) override {
+        if (m_error || !*m_resolver) {
+            return !m_error;
+        }
+        return visit_runtime_type_references(
+            *expression,
+            [&](const AstExpr& reference) {
+                return validate(reference);
+            }
+        );
+    }
+
+    [[nodiscard]] Optional<LuauScriptError>& error() { return m_error; }
+
+  private:
+    bool validate(const AstExpr& reference) {
+        const auto* member = reference.as<AstExprIndexName>();
+        const auto* module =
+            member != nullptr ? member->expr->as<AstExprLocal>() : nullptr;
+        const auto imported = module != nullptr ?
+                                  m_module->imports().find(module->local) :
+                                  m_module->imports().end();
+        if (imported == m_module->imports().end()) {
+            return true;
+        }
+
+        const auto cached = m_metadata.find(imported->second);
+        std::shared_ptr<const LuauModuleMetadata> metadata;
+        if (cached != m_metadata.end()) {
+            metadata = cached->second;
+        } else {
+            auto resolved = (*m_resolver)(imported->second);
+            if (!resolved) {
+                m_error = std::move(resolved.error());
+                return false;
+            }
+            metadata = std::move(*resolved);
+            m_metadata.emplace(imported->second, metadata);
+        }
+
+        const std::string_view name = name_view(member->index);
+        const auto* type = metadata->find_exported_type(name);
+        if (type == nullptr || type->runtime_compatible) {
+            return true;
+        }
+        m_error = declaration_error(
+            "exported type '" + type->name + "' from module '" +
+            metadata->schema.source_name +
+            "' cannot be used by an Entisium runtime API: " +
+            type->runtime_error
+        );
+        return false;
+    }
+    const ModuleIR* m_module;
+    const LuauModuleMetadataResolver* m_resolver;
+    std::unordered_map<std::string, std::shared_ptr<const LuauModuleMetadata>>
+        m_metadata;
+    Optional<LuauScriptError> m_error;
+};
+
+Status<LuauScriptError> validate_imported_runtime_type_uses(
+    Luau::AstStatBlock& root,
+    const ModuleIR& module,
+    const LuauModuleMetadataResolver& resolver
+) {
+    if (!resolver) {
+        return {};
+    }
+    ImportedRuntimeTypeUseValidator validator {module, resolver};
+    root.visit(&validator);
+    if (validator.error()) {
+        return failure(std::move(*validator.error()));
+    }
+    return {};
 }
 
 ModuleImportBindings collect_import_locals(const Luau::AstStatBlock& root) {
@@ -1782,6 +2009,20 @@ detail::luau_compiler::ModuleMetadataPass::run(
         .schema = std::move(schema),
     };
 
+    result.exported_types.reserve(module.types().size());
+    for (const auto& type : module.types()) {
+        const auto* unsupported = std::get_if<UnsupportedTypeIR>(&type.value);
+        result.exported_types.push_back(
+            LuauExportedTypeMetadata {
+                .name = type.name,
+                .runtime_compatible = unsupported == nullptr,
+                .runtime_error = unsupported != nullptr ?
+                                     unsupported->runtime_error :
+                                     std::string {},
+            }
+        );
+    }
+
     std::unordered_set<std::string> imports;
     for (const auto& [local, specifier] : module.imports()) {
         (void)local;
@@ -1892,6 +2133,11 @@ Result<LuauModuleMetadata, LuauScriptError> compile_luau_module_metadata(
     if (!module_ir) {
         return failure(std::move(module_ir.error()));
     }
+    auto runtime_type_uses =
+        validate_local_runtime_type_uses(root, module_ir->types());
+    if (!runtime_type_uses) {
+        return failure(std::move(runtime_type_uses.error()));
+    }
     auto lowered_module =
         detail::luau_compiler::ModuleSchemaLoweringPass {}.run(*module_ir);
     if (!lowered_module) {
@@ -1957,6 +2203,19 @@ Result<LuauScriptModuleArtifact, LuauScriptError> compile_luau_script_module(
     auto module_ir = detail::luau_compiler::ModuleFrontendPass {}.run(*parsed);
     if (!module_ir) {
         return failure(std::move(module_ir.error()));
+    }
+    auto runtime_type_uses =
+        validate_local_runtime_type_uses(root, module_ir->types());
+    if (!runtime_type_uses) {
+        return failure(std::move(runtime_type_uses.error()));
+    }
+    auto imported_runtime_type_uses = validate_imported_runtime_type_uses(
+        root,
+        *module_ir,
+        compile_options.module_metadata_resolver
+    );
+    if (!imported_runtime_type_uses) {
+        return failure(std::move(imported_runtime_type_uses.error()));
     }
     std::shared_ptr<const LuauModuleMetadata> metadata =
         compile_options.metadata;

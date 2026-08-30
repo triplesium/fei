@@ -1362,7 +1362,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-    "Luau compiler rejects unsupported exported field annotations",
+    "Luau compiler keeps unused unsupported exports as ordinary Luau types",
     "[scripting_luau][compiler][types]"
 ) {
     const LuauScriptSource source {
@@ -1380,11 +1380,163 @@ TEST_CASE(
     };
 
     auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact.has_value());
+    CHECK(artifact->metadata->schema.types.empty());
+    const auto* exported = artifact->metadata->find_exported_type("Health");
+    REQUIRE(exported != nullptr);
+    CHECK_FALSE(exported->runtime_compatible);
+    CHECK(
+        exported->runtime_error.find("non-generic named types") !=
+        std::string::npos
+    );
+}
+
+TEST_CASE(
+    "Luau compiler validates unsupported types when used as runtime values",
+    "[scripting_luau][compiler][types][usage]"
+) {
+    const LuauScriptSource source {
+        .name = "invalid_runtime_type.luau",
+        .content = R"(
+            export type Health = {
+                current: {number},
+            }
+
+            export local InvalidPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_resource(Health { current = {1} })
+                end,
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
     REQUIRE_FALSE(artifact.has_value());
+    CHECK(
+        artifact.error().message.find(
+            "cannot be used by an Entisium runtime"
+        ) != std::string::npos
+    );
     CHECK(
         artifact.error().message.find("non-generic named types") !=
         std::string::npos
     );
+}
+
+TEST_CASE(
+    "Luau compiler does not restrict ordinary exported aliases",
+    "[scripting_luau][compiler][types][ordinary]"
+) {
+    const LuauScriptSource source {
+        .name = "ordinary_types.luau",
+        .content = R"(
+            export type Result<T, E> = {
+                value: T?,
+                error: E?,
+            }
+            export type Callback = (number) -> string
+            export type Nested = { values: {number} }
+
+            export local OrdinaryPlugin = Plugin.new {
+                build = function(app: App)
+                end,
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact.has_value());
+    CHECK(artifact->metadata->schema.types.empty());
+    REQUIRE(artifact->metadata->exported_types.size() == 3);
+    CHECK(
+        std::ranges::none_of(
+            artifact->metadata->exported_types,
+            [](const LuauExportedTypeMetadata& type) {
+                return type.runtime_compatible;
+            }
+        )
+    );
+}
+
+TEST_CASE(
+    "Luau compiler limits unsupported type checks to runtime APIs",
+    "[scripting_luau][compiler][types][usage]"
+) {
+    const LuauScriptSource source {
+        .name = "ordinary_type_value.luau",
+        .content = R"(
+            export type Health = {
+                current: {number},
+            }
+
+            local ordinary_value = Health
+
+            export local OrdinaryPlugin = Plugin.new {
+                build = function(app: App)
+                end,
+            }
+        )",
+    };
+
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact.has_value());
+    CHECK(artifact->metadata->schema.types.empty());
+}
+
+TEST_CASE(
+    "Luau compiler validates imported types at runtime API boundaries",
+    "[scripting_luau][compiler][types][usage][import]"
+) {
+    const LuauScriptSource types {
+        .name = "project://scripts/types.luau",
+        .content = R"(
+            export type Health = {
+                current: {number},
+            }
+        )",
+    };
+    const LuauScriptSource game {
+        .name = "project://scripts/game.luau",
+        .content = R"(
+            local Types = require("./types")
+
+            export local GamePlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_resource(Types.Health { current = {1} })
+                end,
+            }
+        )",
+    };
+
+    auto metadata = compile_luau_module_metadata(types);
+    REQUIRE(metadata.has_value());
+    const auto shared_metadata =
+        std::make_shared<const LuauModuleMetadata>(std::move(*metadata));
+    auto artifact = compile_luau_script_module(
+        game,
+        LuauCompileOptions {
+            .module_metadata_resolver =
+                [shared_metadata](std::string_view specifier)
+                -> Result<
+                    std::shared_ptr<const LuauModuleMetadata>,
+                    LuauScriptError> {
+                if (specifier != "./types") {
+                    return failure(
+                        LuauScriptError {"unexpected module specifier"}
+                    );
+                }
+                return shared_metadata;
+            },
+        }
+    );
+
+    REQUIRE_FALSE(artifact.has_value());
+    CHECK(
+        artifact.error().message.find(
+            "cannot be used by an Entisium runtime"
+        ) != std::string::npos
+    );
+    CHECK(artifact.error().message.find("Health") != std::string::npos);
 }
 
 TEST_CASE(
