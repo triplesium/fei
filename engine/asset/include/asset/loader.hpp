@@ -17,6 +17,7 @@ class AssetLoadRequestSender;
 template<typename T>
 class Handle;
 
+ETS_REFLECT()
 struct AssetLoadError {
     AssetPath path;
     std::string message;

@@ -2,6 +2,7 @@
 #include "app/app.hpp"
 #include "asset/assets.hpp"
 #include "asset/database.hpp"
+#include "asset/handle_reflection.hpp"
 #include "asset/loader.hpp"
 #include "asset/path.hpp"
 #include "asset/reference.hpp"
@@ -916,6 +917,7 @@ class AssetServer {
     template<typename T>
     void register_asset_type_access() {
         auto app = m_app_binding;
+        register_asset_handle_converter<T>();
         m_asset_handle_types[type_id<Handle<T>>()] = type_id<T>();
         m_asset_types[type_id<T>()] = AssetTypeAccess {
             .registration =

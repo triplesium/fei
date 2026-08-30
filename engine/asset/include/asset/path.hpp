@@ -1,5 +1,6 @@
 #pragma once
 #include "base/optional.hpp"
+#include "refl/reflect.hpp"
 
 #include <filesystem>
 #include <string>
@@ -8,6 +9,7 @@
 
 namespace ets {
 
+ETS_REFLECT()
 class AssetPath {
   private:
     std::filesystem::path m_path;

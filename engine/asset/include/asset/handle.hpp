@@ -1,6 +1,7 @@
 #pragma once
 #include "asset/id.hpp"
 #include "base/optional.hpp"
+#include "refl/ref.hpp"
 
 #include <memory>
 #include <utility>
@@ -12,6 +13,9 @@ class Assets;
 
 template<typename T>
 class Handle;
+
+class UntypedHandle;
+using AssetHandleConverter = UntypedHandle (*)(Ref);
 
 struct AssetHandleState {
     AssetId id {invalid_asset_id};
@@ -79,6 +83,20 @@ Optional<Handle<T>> UntypedHandle::try_typed() const {
         return nullopt;
     }
     return Handle<T>(m_state);
+}
+
+void register_asset_handle_converter(
+    TypeId handle_type,
+    AssetHandleConverter converter
+);
+
+[[nodiscard]] Optional<UntypedHandle> convert_to_untyped_handle(Ref handle);
+
+template<typename T>
+void register_asset_handle_converter() {
+    register_asset_handle_converter(type_id<Handle<T>>(), [](Ref handle) {
+        return handle.get_const<Handle<T>>().untyped();
+    });
 }
 
 } // namespace ets
