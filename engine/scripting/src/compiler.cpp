@@ -1910,6 +1910,26 @@ Result<LuauScriptModuleArtifact, LuauScriptError> compile_luau_script_module(
             LuauScriptError {"Luau value export feature flag is unavailable"}
         );
     }
+    auto optimization_diagnostics =
+        diagnose_luau_optimization_passes(options.optimization_passes);
+    if (const auto invalid = std::ranges::find(
+            optimization_diagnostics,
+            LuauOptimizationDependencyKind::Required,
+            &LuauOptimizationDiagnostic::kind
+        );
+        invalid != optimization_diagnostics.end()) {
+        return failure(
+            LuauScriptError {
+                "Luau optimization pass '" +
+                    std::string(luau_optimization_pass_name(invalid->pass)) +
+                    "' requires '" +
+                    std::string(
+                        luau_optimization_pass_name(invalid->dependency)
+                    ) +
+                    "'",
+            }
+        );
+    }
     detail::luau_compiler::CompilationSession session {
         source,
         std::move(options),
@@ -2036,8 +2056,11 @@ Result<LuauScriptModuleArtifact, LuauScriptError> compile_luau_script_module(
     std::ranges::sort(required_types, {}, [](TypeId type) {
         return type.id();
     });
-    auto lowered =
-        detail::luau_compiler::PropertyLoweringPass {}.run(root, functions);
+    auto lowered = detail::luau_compiler::PropertyLoweringPass {}.run(
+        root,
+        functions,
+        compile_options.optimization_passes
+    );
     auto generated = detail::luau_compiler::RuntimeSourceEmissionPass {}.run(
         source,
         runtime_expressions,
@@ -2054,6 +2077,8 @@ Result<LuauScriptModuleArtifact, LuauScriptError> compile_luau_script_module(
         .bytecode = Luau::compile(*generated),
         .required_runtime_types = std::move(required_types),
         .property_paths = std::move(lowered.property_paths),
+        .optimization_report = std::move(lowered.optimization_report),
+        .optimization_diagnostics = std::move(optimization_diagnostics),
     };
 }
 

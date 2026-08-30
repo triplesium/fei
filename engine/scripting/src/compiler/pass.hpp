@@ -51,6 +51,7 @@ class TypeQualificationPass {
 struct PropertyLoweringResult {
     std::vector<LuauPropertyPathDecl> property_paths;
     SourcePatchSet source_patches;
+    std::vector<LuauOptimizationPassReport> optimization_report;
 };
 
 class PropertyLoweringPass {
@@ -59,7 +60,8 @@ class PropertyLoweringPass {
 
     PropertyLoweringResult
     run(const Luau::AstStatBlock& root,
-        const std::vector<LuauFunctionDecl>& functions) const;
+        const std::vector<LuauFunctionDecl>& functions,
+        LuauOptimizationPasses optimization_passes = {}) const;
 };
 
 class RuntimeSourceEmissionPass {

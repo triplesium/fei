@@ -10,6 +10,7 @@
 #include "scripting/detail/plugin_install.hpp"
 #include "scripting/runtime.hpp"
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
@@ -18,16 +19,28 @@ namespace ets::test {
 
 namespace {
 
-struct ChunkLoweringComponent {
+struct ChunkLoweringVector {
     float x {0.0F};
 };
 
-Result<std::string, LuauScriptError>
-lower_chunk_query_source(const LuauScriptSource& source) {
-    Registry::instance().register_cls<ChunkLoweringComponent>().add_property(
+struct ChunkLoweringComponent {
+    ChunkLoweringVector position;
+    float x {0.0F};
+};
+
+Result<std::string, LuauScriptError> lower_chunk_query_source(
+    const LuauScriptSource& source,
+    LuauOptimizationPasses optimization_passes = {},
+    std::vector<LuauOptimizationPassReport>* report = nullptr
+) {
+    Registry::instance().register_cls<ChunkLoweringVector>().add_property(
         "x",
-        &ChunkLoweringComponent::x
+        &ChunkLoweringVector::x
     );
+    Registry::instance()
+        .register_cls<ChunkLoweringComponent>()
+        .add_property("position", &ChunkLoweringComponent::position)
+        .add_property("x", &ChunkLoweringComponent::x);
     detail::luau_compiler::CompilationSession session {source};
     auto parsed = session.parse();
     if (!parsed) {
@@ -48,11 +61,40 @@ lower_chunk_query_source(const LuauScriptSource& source) {
     functions.push_back(LuauFunctionDecl {.name = "run"});
     functions.back().params.push_back(std::move(query));
 
-    auto lowered = detail::luau_compiler::PropertyLoweringPass {}.run(
-        parsed->root(),
-        functions
-    );
+    auto lowered = detail::luau_compiler::PropertyLoweringPass {}
+                       .run(parsed->root(), functions, optimization_passes);
+    if (report != nullptr) {
+        *report = lowered.optimization_report;
+    }
     return lowered.source_patches.apply(source);
+}
+
+LuauOptimizationPasses only(LuauOptimizationPass pass) {
+    auto result = LuauOptimizationPasses::none();
+    result.set(pass);
+    return result;
+}
+
+const LuauOptimizationPassReport& report_for(
+    const std::vector<LuauOptimizationPassReport>& reports,
+    LuauOptimizationPass pass
+) {
+    const auto found =
+        std::ranges::find(reports, pass, &LuauOptimizationPassReport::pass);
+    REQUIRE(found != reports.end());
+    return *found;
+}
+
+const LuauOptimizationPassDescriptor&
+descriptor_for(LuauOptimizationPass pass) {
+    const auto descriptors = luau_optimization_pass_descriptors();
+    const auto found = std::ranges::find(
+        descriptors,
+        pass,
+        &LuauOptimizationPassDescriptor::pass
+    );
+    REQUIRE(found != descriptors.end());
+    return *found;
 }
 
 } // namespace
@@ -261,6 +303,213 @@ TEST_CASE(
     CHECK(lowered->find("while true do") != std::string::npos);
     CHECK(lowered->find("continue") != std::string::npos);
     CHECK(lowered->find("for value in query do") == std::string::npos);
+}
+
+TEST_CASE(
+    "Luau optimization pipelines preserve independent pass selection",
+    "[scripting_luau][compiler][pass][pipeline]"
+) {
+    const auto defaults =
+        luau_optimization_pipeline_passes(LuauOptimizationPipeline::Default);
+    CHECK(defaults == LuauOptimizationPasses::all());
+    CHECK(
+        luau_optimization_pipeline_passes(LuauOptimizationPipeline::None) ==
+        LuauOptimizationPasses::none()
+    );
+
+    const auto property =
+        luau_optimization_pipeline_passes(LuauOptimizationPipeline::Property);
+    const auto property_order =
+        luau_optimization_pipeline_order(LuauOptimizationPipeline::Property);
+    REQUIRE(property_order.size() == 2);
+    CHECK(property_order[0] == LuauOptimizationPass::ElidePropertyAliases);
+    CHECK(property_order[1] == LuauOptimizationPass::FlattenPropertyPaths);
+    CHECK(property.contains(LuauOptimizationPass::FlattenPropertyPaths));
+    CHECK(property.contains(LuauOptimizationPass::ElidePropertyAliases));
+    CHECK_FALSE(property.contains(LuauOptimizationPass::ReuseQueryUserdata));
+    CHECK_FALSE(property.contains(LuauOptimizationPass::ChunkQueryIteration));
+
+    const auto query =
+        luau_optimization_pipeline_passes(LuauOptimizationPipeline::Query);
+    CHECK_FALSE(query.contains(LuauOptimizationPass::FlattenPropertyPaths));
+    CHECK_FALSE(query.contains(LuauOptimizationPass::ElidePropertyAliases));
+    CHECK(query.contains(LuauOptimizationPass::ReuseQueryUserdata));
+    CHECK(query.contains(LuauOptimizationPass::ChunkQueryIteration));
+}
+
+TEST_CASE(
+    "Luau optimization metadata diagnoses profitability dependencies",
+    "[scripting_luau][compiler][pass][dependency]"
+) {
+    const auto& alias =
+        descriptor_for(LuauOptimizationPass::ElidePropertyAliases);
+    CHECK(alias.required_passes == LuauOptimizationPasses::none());
+    CHECK(
+        alias.benefits_from.contains(LuauOptimizationPass::FlattenPropertyPaths)
+    );
+
+    const auto& chunk =
+        descriptor_for(LuauOptimizationPass::ChunkQueryIteration);
+    CHECK(chunk.required_passes == LuauOptimizationPasses::none());
+    CHECK(
+        chunk.benefits_from.contains(LuauOptimizationPass::ReuseQueryUserdata)
+    );
+
+    auto diagnostics = diagnose_luau_optimization_passes(
+        only(LuauOptimizationPass::ElidePropertyAliases)
+    );
+    REQUIRE(diagnostics.size() == 1);
+    CHECK(
+        diagnostics.front().pass == LuauOptimizationPass::ElidePropertyAliases
+    );
+    CHECK(
+        diagnostics.front().dependency ==
+        LuauOptimizationPass::FlattenPropertyPaths
+    );
+    CHECK(
+        diagnostics.front().kind == LuauOptimizationDependencyKind::BenefitsFrom
+    );
+
+    CHECK(
+        diagnose_luau_optimization_passes(luau_optimization_pipeline_passes(
+                                              LuauOptimizationPipeline::Property
+                                          ))
+            .empty()
+    );
+    CHECK(diagnose_luau_optimization_passes(
+              luau_optimization_pipeline_passes(LuauOptimizationPipeline::Query)
+    )
+              .empty());
+}
+
+TEST_CASE(
+    "Luau optimization passes can be enabled independently",
+    "[scripting_luau][compiler][pass][options]"
+) {
+    const LuauScriptSource source {
+        .name = "independent_query_passes.luau",
+        .content = R"(
+            local function run(query)
+                for value in query do
+                    value.x += 1
+                end
+            end
+        )",
+    };
+
+    auto none =
+        lower_chunk_query_source(source, LuauOptimizationPasses::none());
+    REQUIRE(none);
+    CHECK(none->find("for value in query do") != std::string::npos);
+    CHECK(none->find("__ets_p") == std::string::npos);
+    CHECK(none->find("__ets_reuse_query") == std::string::npos);
+    CHECK(none->find("__ets_chunk_query") == std::string::npos);
+
+    auto flattened = lower_chunk_query_source(
+        source,
+        only(LuauOptimizationPass::FlattenPropertyPaths)
+    );
+    REQUIRE(flattened);
+    CHECK(flattened->find("value.__ets_p") != std::string::npos);
+    CHECK(flattened->find("for value in query do") != std::string::npos);
+
+    auto reused = lower_chunk_query_source(
+        source,
+        only(LuauOptimizationPass::ReuseQueryUserdata)
+    );
+    REQUIRE(reused);
+    CHECK(
+        reused->find("for value in __ets_reuse_query(query, 1) do") !=
+        std::string::npos
+    );
+    CHECK(reused->find("value.x += 1") != std::string::npos);
+
+    auto chunked = lower_chunk_query_source(
+        source,
+        only(LuauOptimizationPass::ChunkQueryIteration)
+    );
+    REQUIRE(chunked);
+    CHECK(chunked->find("__ets_chunk_query(query, 0)") != std::string::npos);
+    CHECK(chunked->find("value.x += 1") != std::string::npos);
+}
+
+TEST_CASE(
+    "Luau optimization reports distinguish candidates from applications",
+    "[scripting_luau][compiler][pass][report]"
+) {
+    const LuauScriptSource source {
+        .name = "query_pass_report.luau",
+        .content = R"(
+            local function run(query)
+                for value in query do
+                    value.x += 1
+                end
+            end
+        )",
+    };
+    std::vector<LuauOptimizationPassReport> reports;
+    auto lowered = lower_chunk_query_source(
+        source,
+        only(LuauOptimizationPass::ChunkQueryIteration),
+        &reports
+    );
+    REQUIRE(lowered);
+    REQUIRE(
+        reports.size() == static_cast<std::size_t>(LuauOptimizationPass::Count)
+    );
+
+    const auto& flatten =
+        report_for(reports, LuauOptimizationPass::FlattenPropertyPaths);
+    CHECK_FALSE(flatten.enabled);
+    CHECK(flatten.candidates == 1);
+    CHECK(flatten.applied == 0);
+
+    const auto& reuse =
+        report_for(reports, LuauOptimizationPass::ReuseQueryUserdata);
+    CHECK_FALSE(reuse.enabled);
+    CHECK(reuse.candidates == 1);
+    CHECK(reuse.applied == 0);
+
+    const auto& chunk =
+        report_for(reports, LuauOptimizationPass::ChunkQueryIteration);
+    CHECK(chunk.enabled);
+    CHECK(chunk.candidates == 1);
+    CHECK(chunk.applied == 1);
+}
+
+TEST_CASE(
+    "Luau property alias elision is independent from path flattening",
+    "[scripting_luau][compiler][pass][property][alias]"
+) {
+    const LuauScriptSource source {
+        .name = "independent_property_passes.luau",
+        .content = R"(
+            local function run(query)
+                local total = 0
+                for value in query do
+                    local position = value.position
+                    total += position.x
+                end
+            end
+        )",
+    };
+
+    auto aliases = lower_chunk_query_source(
+        source,
+        only(LuauOptimizationPass::ElidePropertyAliases)
+    );
+    REQUIRE(aliases);
+    CHECK(aliases->find("local position = value") != std::string::npos);
+    CHECK(aliases->find("position.position.x") != std::string::npos);
+    CHECK(aliases->find("__ets_p") == std::string::npos);
+
+    auto paths = lower_chunk_query_source(
+        source,
+        only(LuauOptimizationPass::FlattenPropertyPaths)
+    );
+    REQUIRE(paths);
+    CHECK(paths->find("local position = value.position") != std::string::npos);
+    CHECK(paths->find("position.__ets_p") != std::string::npos);
 }
 
 TEST_CASE(

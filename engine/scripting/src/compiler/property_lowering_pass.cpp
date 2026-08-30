@@ -112,8 +112,12 @@ class BorrowAnalysis final : public Luau::AstVisitor {
         const AstExprFunction& function,
         const std::vector<DynamicSystemParamDeclPtr>& params,
         std::vector<LuauPropertyPathDecl>& paths,
-        SourcePatchSet& patches
-    ) : m_paths(paths), m_patches(patches) {
+        SourcePatchSet& patches,
+        std::vector<LuauOptimizationPassReport>& reports,
+        LuauOptimizationPasses optimization_passes
+    ) :
+        m_paths(paths), m_patches(patches), m_reports(reports),
+        m_optimization_passes(optimization_passes) {
         const std::size_t count = std::min(function.args.size, params.size());
         for (std::size_t index = 0; index < count; ++index) {
             const AstLocal* argument = function.args.data[index];
@@ -240,6 +244,8 @@ class BorrowAnalysis final : public Luau::AstVisitor {
                         m_scalar_alias_initializers.insert(
                             value.as<AstExprIndexName>()
                         );
+                        ++report(LuauOptimizationPass::ElidePropertyAliases)
+                              .candidates;
                     }
                 }
             }
@@ -255,6 +261,7 @@ class BorrowAnalysis final : public Luau::AstVisitor {
         if (!chain || !is_direct_luau_leaf(chain->leaf_type)) {
             return true;
         }
+        ++report(LuauOptimizationPass::FlattenPropertyPaths).candidates;
         const AstLocal* reusable_root = chain->root->local;
         if (chain->scalar_alias != nullptr) {
             reusable_root = m_scalar_aliases.at(chain->scalar_alias).root;
@@ -283,6 +290,9 @@ class BorrowAnalysis final : public Luau::AstVisitor {
                 reusable->second = false;
             }
         }
+        if (!enabled(LuauOptimizationPass::FlattenPropertyPaths)) {
+            return false;
+        }
         return add_property_patch(
             expression->location,
             chain->root->local,
@@ -293,10 +303,23 @@ class BorrowAnalysis final : public Luau::AstVisitor {
     }
 
     void finish() {
+        const bool elide_aliases =
+            enabled(LuauOptimizationPass::ElidePropertyAliases);
         for (const AstLocal* local : m_scalar_alias_order) {
             auto& alias = m_scalar_aliases.at(local);
             std::string replacement {name_view(alias.root->name)};
-            if (!alias.safe) {
+            if (elide_aliases && alias.safe) {
+                ++report(LuauOptimizationPass::ElidePropertyAliases).applied;
+                m_patches.add(
+                    alias.initializer,
+                    std::move(replacement),
+                    luau_optimization_pass_name(
+                        LuauOptimizationPass::ElidePropertyAliases
+                    )
+                );
+                continue;
+            }
+            if (elide_aliases) {
                 if (const auto reusable = m_reusable.find(alias.root);
                     reusable != m_reusable.end()) {
                     reusable->second = false;
@@ -305,33 +328,60 @@ class BorrowAnalysis final : public Luau::AstVisitor {
                     replacement.push_back('.');
                     replacement.append(property);
                 }
+                m_patches.add(
+                    alias.initializer,
+                    std::move(replacement),
+                    luau_optimization_pass_name(
+                        LuauOptimizationPass::ElidePropertyAliases
+                    )
+                );
             }
-            m_patches.add(
-                alias.initializer,
-                std::move(replacement),
-                PropertyLoweringPass::name
-            );
         }
         for (const auto& access : m_pending_alias_accesses) {
             const auto& alias = m_scalar_aliases.at(access.alias);
-            add_property_patch(
-                access.location,
-                access.alias,
-                alias.safe ? alias.root_value.type : alias.value_type,
-                access.leaf_type,
-                alias.safe ? access.properties : access.local_properties
-            );
+            const bool elided = elide_aliases && alias.safe;
+            if (enabled(LuauOptimizationPass::FlattenPropertyPaths)) {
+                add_property_patch(
+                    access.location,
+                    access.alias,
+                    elided ? alias.root_value.type : alias.value_type,
+                    access.leaf_type,
+                    elided ? access.properties : access.local_properties
+                );
+            } else if (elided) {
+                add_generic_property_patch(
+                    access.location,
+                    access.alias,
+                    access.properties,
+                    LuauOptimizationPass::ElidePropertyAliases
+                );
+            }
         }
         for (const auto& loop : m_reusable_loops) {
-            std::uint32_t mask = 0;
+            std::uint32_t reusable_mask = 0;
             for (const auto& [local, index] : loop.fields) {
                 if (m_reusable.at(local)) {
-                    mask |= std::uint32_t {1} << index;
+                    reusable_mask |= std::uint32_t {1} << index;
                 }
             }
-            if (mask == 0) {
+            if (reusable_mask == 0) {
                 continue;
             }
+            auto& reuse_report =
+                report(LuauOptimizationPass::ReuseQueryUserdata);
+            auto& chunk_report =
+                report(LuauOptimizationPass::ChunkQueryIteration);
+            ++reuse_report.candidates;
+            ++chunk_report.candidates;
+            const bool reuse_enabled =
+                enabled(LuauOptimizationPass::ReuseQueryUserdata);
+            const bool chunk_enabled =
+                enabled(LuauOptimizationPass::ChunkQueryIteration);
+            if (reuse_enabled) {
+                ++reuse_report.applied;
+            }
+            const std::uint32_t effective_mask =
+                reuse_enabled ? reusable_mask : 0;
             std::size_t property_accesses = 0;
             for (const auto& [local, index] : loop.fields) {
                 (void)index;
@@ -341,16 +391,19 @@ class BorrowAnalysis final : public Luau::AstVisitor {
             }
             const auto* source =
                 loop.statement->values.data[0]->as<AstExprLocal>();
-            if (loop.query_field_count <= 32 && loop.chunk_safe &&
-                property_accesses <= 2) {
-                add_chunk_loop_patches(loop, *source, mask);
-            } else {
+            if (chunk_enabled && loop.query_field_count <= 32 &&
+                loop.chunk_safe && property_accesses <= 2) {
+                ++chunk_report.applied;
+                add_chunk_loop_patches(loop, *source, effective_mask);
+            } else if (reuse_enabled) {
                 m_patches.add(
                     loop.statement->values.data[0]->location,
                     "__ets_reuse_query(" +
                         std::string(name_view(source->local->name)) + ", " +
-                        std::to_string(mask) + ")",
-                    PropertyLoweringPass::name
+                        std::to_string(effective_mask) + ")",
+                    luau_optimization_pass_name(
+                        LuauOptimizationPass::ReuseQueryUserdata
+                    )
                 );
             }
         }
@@ -373,6 +426,34 @@ class BorrowAnalysis final : public Luau::AstVisitor {
     std::vector<PendingAliasPropertyAccess> m_pending_alias_accesses;
     std::vector<LuauPropertyPathDecl>& m_paths;
     SourcePatchSet& m_patches;
+    std::vector<LuauOptimizationPassReport>& m_reports;
+    LuauOptimizationPasses m_optimization_passes;
+
+    [[nodiscard]] bool enabled(LuauOptimizationPass pass) const {
+        return m_optimization_passes.contains(pass);
+    }
+
+    LuauOptimizationPassReport& report(LuauOptimizationPass pass) {
+        return m_reports[static_cast<std::size_t>(pass)];
+    }
+
+    void add_generic_property_patch(
+        Luau::Location location,
+        const AstLocal* local,
+        const std::vector<std::string>& properties,
+        LuauOptimizationPass owner
+    ) {
+        std::string replacement {name_view(local->name)};
+        for (const auto& property : properties) {
+            replacement.push_back('.');
+            replacement.append(property);
+        }
+        m_patches.add(
+            location,
+            std::move(replacement),
+            luau_optimization_pass_name(owner)
+        );
+    }
 
     void add_chunk_loop_patches(
         const ReusableQueryLoop& loop,
@@ -445,13 +526,20 @@ class BorrowAnalysis final : public Luau::AstVisitor {
         m_patches.add(
             header_location,
             std::move(header),
-            PropertyLoweringPass::name
+            luau_optimization_pass_name(
+                LuauOptimizationPass::ChunkQueryIteration
+            )
         );
 
         auto suffix_location = statement->location;
         suffix_location.begin = statement->body->location.end;
-        m_patches
-            .add(suffix_location, "end\nend\nend", PropertyLoweringPass::name);
+        m_patches.add(
+            suffix_location,
+            "end\nend\nend",
+            luau_optimization_pass_name(
+                LuauOptimizationPass::ChunkQueryIteration
+            )
+        );
     }
 
     bool add_property_patch(
@@ -496,8 +584,11 @@ class BorrowAnalysis final : public Luau::AstVisitor {
         m_patches.add(
             location,
             std::string(name_view(local->name)) + "." + atom_name,
-            PropertyLoweringPass::name
+            luau_optimization_pass_name(
+                LuauOptimizationPass::FlattenPropertyPaths
+            )
         );
+        ++report(LuauOptimizationPass::FlattenPropertyPaths).applied;
         return false;
     }
 
@@ -605,9 +696,24 @@ const std::vector<DynamicSystemParamDeclPtr>* params_for(
 
 PropertyLoweringResult PropertyLoweringPass::run(
     const Luau::AstStatBlock& root,
-    const std::vector<LuauFunctionDecl>& functions
+    const std::vector<LuauFunctionDecl>& functions,
+    LuauOptimizationPasses optimization_passes
 ) const {
     PropertyLoweringResult result;
+    result.optimization_report.reserve(
+        static_cast<std::size_t>(LuauOptimizationPass::Count)
+    );
+    for (std::uint8_t index = 0;
+         index < static_cast<std::uint8_t>(LuauOptimizationPass::Count);
+         ++index) {
+        const auto pass = static_cast<LuauOptimizationPass>(index);
+        result.optimization_report.push_back(
+            LuauOptimizationPassReport {
+                .pass = pass,
+                .enabled = optimization_passes.contains(pass),
+            }
+        );
+    }
     for (Luau::AstStat* statement : root.body) {
         const auto* function = statement->as<AstStatLocalFunction>();
         if (function == nullptr) {
@@ -623,6 +729,8 @@ PropertyLoweringResult PropertyLoweringPass::run(
             *params,
             result.property_paths,
             result.source_patches,
+            result.optimization_report,
+            optimization_passes,
         };
         function->func->body->visit(&analysis);
         analysis.finish();
