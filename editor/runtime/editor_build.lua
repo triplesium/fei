@@ -26,14 +26,23 @@ end
 function install(target)
     local node_modules = path.join(editor_root, "node_modules")
     local extension = os.host() == "windows" and ".cmd" or ""
-    local install_required = not os.isfile(
+    local tools_available = os.isfile(
         path.join(node_modules, ".bin", "tsc" .. extension)
-    ) or not os.isfile(
+    ) and os.isfile(
         path.join(node_modules, ".bin", "vite" .. extension)
     )
+    local package_lock = path.join(editor_root, "package-lock.json")
+    local install_marker = path.join(
+        node_modules,
+        ".entisium-package-lock"
+    )
+    local package_lock_digest = hash.sha256(package_lock)
+    local installed_digest = os.isfile(install_marker) and
+        io.readfile(install_marker):trim() or nil
+    local install_required = not tools_available or
+        installed_digest ~= package_lock_digest
     local dependency_file = target:dependfile("editor-package-lock")
-    local adopt_existing = not install_required and
-        not os.isfile(dependency_file)
+    local adopt_existing = tools_available and not installed_digest
 
     depend.on_changed(function()
         if not adopt_existing then
@@ -45,11 +54,12 @@ function install(target)
             )
             os.vrunv(npm.program, {"ci"}, {curdir = editor_root})
         end
+        io.writefile(install_marker, package_lock_digest .. "\n")
     end, {
         changed = install_required,
         dependfile = dependency_file,
         files = {
-            path.join(editor_root, "package-lock.json"),
+            package_lock,
         },
     })
 end
