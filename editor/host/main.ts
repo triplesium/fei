@@ -16,22 +16,24 @@ function portFromEnvironment(): number {
     return value;
 }
 
+const runtimeDirectory = resolve(
+    process.env.ETS_EDITOR_RUNTIME_DIR ??
+        resolve(process.cwd(), "..", "build", "wasm", "wasm32", "debug"),
+);
 const host = createEditorHost({
     credentials: new EncryptedCredentialStore(),
     editorSettingsStore: new FileEditorSettingsStore(),
     modelSettingsStore: new FileEditorModelSettingsStore(),
     distDirectory: resolve(process.cwd(), "dist", "host"),
-    runtimeDirectory: resolve(
-        process.env.ETS_EDITOR_RUNTIME_DIR ??
-            resolve(process.cwd(), "..", "build", "wasm", "wasm32", "debug"),
-    ),
+    runtimeDirectory,
     host: "127.0.0.1",
     port: portFromEnvironment(),
     projectDirectory: projectDirectoryFromArguments(process.argv.slice(2)),
     pickProjectDirectory: chooseProjectDirectory,
     luauLspExecutable: process.env.ETS_ENTISIUM_LSP_PATH?.trim() || undefined,
     luauDefinitionsIndex:
-        process.env.ETS_ENTISIUM_LUAU_DEFINITIONS_INDEX?.trim() || undefined,
+        process.env.ETS_ENTISIUM_LUAU_DEFINITIONS_INDEX?.trim() ||
+        resolve(runtimeDirectory, "luau-definitions", "index.json"),
 });
 
 const address = await host.listen();
