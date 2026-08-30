@@ -75,7 +75,7 @@ if is_plat("wasm") then
         "yaml-cpp"
     )
     add_requires(
-        "luau 0.734",
+        "luau 0.735",
         {
             configs = {
                 shared = false,
@@ -88,7 +88,8 @@ if is_plat("wasm") then
 else
     add_requires("stb", "glad", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "fastgltf v0.9.0")
     add_requires("box2d v3.1.1", {configs = {shared = false}})
-    add_requires("luau 0.734", {configs = {shared = false, extern_c = false}})
+    add_requires("luau 0.735", {configs = {shared = false, extern_c = false}})
+    add_requires("luau-lsp 2026.8.25-entisium.5", {configs = {shared = false}})
     add_requires("yaml-cpp")
     add_requires("glfw", {configs = {shared = false}})
     add_requires("imgui v1.92.7-docking", {configs = {glfw = true, opengl3 = false}})
