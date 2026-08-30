@@ -48,7 +48,9 @@ struct ResolvedPropertyChain {
 
 struct ReusableQueryLoop {
     AstStatForIn* statement {nullptr};
+    std::size_t query_field_count {0};
     std::vector<std::pair<const AstLocal*, std::size_t>> fields;
+    bool chunk_safe {true};
 };
 
 struct ScalarizedPropertyAlias {
@@ -79,6 +81,18 @@ bool is_direct_luau_leaf(TypeId type) {
            type == type_id<unsigned long long>() ||
            type == type_id<std::string>();
 }
+
+class BreakFinder final : public Luau::AstVisitor {
+  public:
+    bool found {false};
+
+    bool visit(Luau::AstStatBreak* /*statement*/) override {
+        found = true;
+        return false;
+    }
+
+    bool visit(AstExprFunction* /*expression*/) override { return false; }
+};
 
 Optional<KnownReflectedLocal>
 known_reflected_value(const DynamicTypeRef& type, DynamicParamAccess access) {
@@ -145,7 +159,13 @@ class BorrowAnalysis final : public Luau::AstVisitor {
         }
         const std::size_t count =
             std::min(statement->vars.size, query->second.size());
-        ReusableQueryLoop reusable {.statement = statement};
+        ReusableQueryLoop reusable {
+            .statement = statement,
+            .query_field_count = query->second.size(),
+        };
+        BreakFinder breaks;
+        statement->body->visit(&breaks);
+        reusable.chunk_safe = !breaks.found;
         for (std::size_t index = 0; index < count; ++index) {
             if (query->second[index]) {
                 m_known[statement->vars.data[index]] = *query->second[index];
@@ -235,6 +255,13 @@ class BorrowAnalysis final : public Luau::AstVisitor {
         if (!chain || !is_direct_luau_leaf(chain->leaf_type)) {
             return true;
         }
+        const AstLocal* reusable_root = chain->root->local;
+        if (chain->scalar_alias != nullptr) {
+            reusable_root = m_scalar_aliases.at(chain->scalar_alias).root;
+        }
+        if (m_reusable.contains(reusable_root)) {
+            ++m_reusable_property_accesses[reusable_root];
+        }
         if (chain->scalar_alias != nullptr) {
             if (chain->root->upvalue) {
                 m_scalar_aliases.at(chain->scalar_alias).safe = false;
@@ -305,15 +332,27 @@ class BorrowAnalysis final : public Luau::AstVisitor {
             if (mask == 0) {
                 continue;
             }
+            std::size_t property_accesses = 0;
+            for (const auto& [local, index] : loop.fields) {
+                (void)index;
+                if (m_reusable.at(local)) {
+                    property_accesses += m_reusable_property_accesses[local];
+                }
+            }
             const auto* source =
                 loop.statement->values.data[0]->as<AstExprLocal>();
-            m_patches.add(
-                loop.statement->values.data[0]->location,
-                "__ets_reuse_query(" +
-                    std::string(name_view(source->local->name)) + ", " +
-                    std::to_string(mask) + ")",
-                PropertyLoweringPass::name
-            );
+            if (loop.query_field_count <= 32 && loop.chunk_safe &&
+                property_accesses <= 2) {
+                add_chunk_loop_patches(loop, *source, mask);
+            } else {
+                m_patches.add(
+                    loop.statement->values.data[0]->location,
+                    "__ets_reuse_query(" +
+                        std::string(name_view(source->local->name)) + ", " +
+                        std::to_string(mask) + ")",
+                    PropertyLoweringPass::name
+                );
+            }
         }
     }
 
@@ -324,6 +363,8 @@ class BorrowAnalysis final : public Luau::AstVisitor {
         std::vector<Optional<KnownReflectedLocal>>>
         m_queries;
     std::unordered_map<const AstLocal*, bool> m_reusable;
+    std::unordered_map<const AstLocal*, std::size_t>
+        m_reusable_property_accesses;
     std::vector<ReusableQueryLoop> m_reusable_loops;
     std::unordered_map<const AstLocal*, ScalarizedPropertyAlias>
         m_scalar_aliases;
@@ -332,6 +373,86 @@ class BorrowAnalysis final : public Luau::AstVisitor {
     std::vector<PendingAliasPropertyAccess> m_pending_alias_accesses;
     std::vector<LuauPropertyPathDecl>& m_paths;
     SourcePatchSet& m_patches;
+
+    void add_chunk_loop_patches(
+        const ReusableQueryLoop& loop,
+        const AstExprLocal& source,
+        std::uint32_t mask
+    ) {
+        // Keep the original body inside a numeric row loop. `continue` and
+        // `return` retain their meaning; loops with `break` are filtered out
+        // before this lowering because they need the original loop boundary.
+        const auto* statement = loop.statement;
+        const std::string id = std::to_string(statement->location.begin.line) +
+                               "_" +
+                               std::to_string(statement->location.begin.column);
+        const std::string prefix = "__ets_chunk_" + id;
+        const std::string refill = prefix + "_refill";
+        const std::string count = prefix + "_count";
+        const std::string index = prefix + "_index";
+
+        std::vector<std::string> field_tables;
+        field_tables.reserve(loop.query_field_count);
+        for (std::size_t field = 0; field < loop.query_field_count; ++field) {
+            field_tables.push_back(prefix + "_field_" + std::to_string(field));
+        }
+
+        std::string header = "do\nlocal " + refill;
+        for (const auto& field : field_tables) {
+            header.append(", ");
+            header.append(field);
+        }
+        header.append(" = __ets_chunk_query(");
+        header.append(name_view(source.local->name));
+        header.append(", ");
+        header.append(std::to_string(mask));
+        header.append(")\nwhile true do\nlocal ");
+        header.append(count);
+        header.append(" = ");
+        header.append(refill);
+        header.append("()\nif ");
+        header.append(count);
+        header.append(" == 0 then break end\nfor ");
+        header.append(index);
+        header.append(" = 1, ");
+        header.append(count);
+        header.append(" do\nlocal ");
+        for (std::size_t variable = 0; variable < statement->vars.size;
+             ++variable) {
+            if (variable != 0) {
+                header.append(", ");
+            }
+            header.append(name_view(statement->vars.data[variable]->name));
+        }
+        header.append(" = ");
+        for (std::size_t variable = 0; variable < statement->vars.size;
+             ++variable) {
+            if (variable != 0) {
+                header.append(", ");
+            }
+            if (variable < field_tables.size()) {
+                header.append(field_tables[variable]);
+                header.push_back('[');
+                header.append(index);
+                header.push_back(']');
+            } else {
+                header.append("nil");
+            }
+        }
+
+        auto header_location = statement->location;
+        header_location.end = statement->body->location.begin;
+        m_patches.add(
+            header_location,
+            std::move(header),
+            PropertyLoweringPass::name
+        );
+
+        auto suffix_location = statement->location;
+        suffix_location.begin = statement->body->location.end;
+        m_patches
+            .add(suffix_location, "end\nend\nend", PropertyLoweringPass::name);
+    }
 
     bool add_property_patch(
         Luau::Location location,

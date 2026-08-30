@@ -1417,6 +1417,8 @@ void push_plugin_build_context(
 }
 
 void install_module_helpers(lua_State* state) {
+    lua_pushcfunction(state, detail::luau_chunk_query, "__ets_chunk_query");
+    lua_setglobal(state, "__ets_chunk_query");
     lua_pushcfunction(state, detail::luau_reusable_query, "__ets_reuse_query");
     lua_setglobal(state, "__ets_reuse_query");
     lua_pushcfunction(state, system_helper, "system");

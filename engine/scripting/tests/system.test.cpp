@@ -1276,6 +1276,91 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Luau chunked queries handle tails, filters, and writes",
+    "[scripting_luau][query][chunk]"
+) {
+    register_luau_system_test_types();
+    const LuauScriptSource source {
+        .name = "chunk_query_system.luau",
+        .content = R"(
+            local function update(
+                config: ResRW<LuauTestConfig>,
+                velocities: Query<Write<LuauTestVelocity>>
+            )
+                local count = 0
+                local mutated = 0
+                for velocity in velocities do
+                    count += 1
+                    if velocity.x % 2 == 0 then
+                        continue
+                    end
+                    velocity.x += 100
+                    mutated += 1
+                end
+                config.executions = count
+                config.obstacle_total = mutated
+            end
+
+            export local ChunkQueryPlugin = Plugin.new {
+                build = function(app: App)
+                    app:add_system(Update, update)
+                end,
+            }
+        )",
+    };
+    auto artifact = compile_luau_script_module(source);
+    REQUIRE(artifact);
+    LuauRuntime runtime;
+    auto module = runtime.load_module(*artifact);
+    REQUIRE(module);
+
+    World world;
+    std::array<Entity, 65> entities;
+    for (std::size_t index = 0; index < entities.size(); ++index) {
+        entities[index] = world.entity();
+        world.add_component(
+            entities[index],
+            LuauTestVelocity {.x = static_cast<float>(index)}
+        );
+        if (index % 2 == 0) {
+            world.add_component(entities[index], LuauTestPosition {});
+        }
+    }
+    const auto excluded = world.entity();
+    world.add_component(excluded, LuauTestVelocity {.x = 501.0F});
+    world.add_component(excluded, LuauTestObstacle {});
+
+    DynamicQuery query(
+        "velocities",
+        {DynamicQueryField {
+            .name = "velocity",
+            .type = type_id<LuauTestVelocity>(),
+            .access = DynamicParamAccess::Write,
+        }},
+        {DynamicQueryFilter {
+            .kind = DynamicQueryFilter::Kind::Without,
+            .type = type_id<LuauTestObstacle>(),
+        }}
+    );
+    auto query_ref = query.prepare(world);
+    REQUIRE(query_ref);
+    LuauTestConfig config;
+    const std::array<Ref, 2> arguments {Ref(config), *query_ref};
+    REQUIRE(runtime.call_module_function(*module, "update", arguments));
+
+    CHECK(config.executions == 65);
+    CHECK(config.obstacle_total == 32);
+    for (std::size_t index = 0; index < entities.size(); ++index) {
+        const float expected =
+            static_cast<float>(index) + (index % 2 == 0 ? 0.0F : 100.0F);
+        CHECK(
+            world.get_component<LuauTestVelocity>(entities[index]).x == expected
+        );
+    }
+    CHECK(world.get_component<LuauTestVelocity>(excluded).x == 501.0F);
+}
+
+TEST_CASE(
     "Luau rejects read-only mutation and escaped ECS borrows",
     "[scripting_luau][borrow]"
 ) {

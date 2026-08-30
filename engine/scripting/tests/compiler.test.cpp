@@ -5,6 +5,8 @@
 #include "compiler/module_ir.hpp"
 #include "compiler/pass.hpp"
 #include "ecs/dynamic/system_decl.hpp"
+#include "refl/cls.hpp"
+#include "refl/registry.hpp"
 #include "scripting/detail/plugin_install.hpp"
 #include "scripting/runtime.hpp"
 
@@ -13,6 +15,47 @@
 #include <fstream>
 
 namespace ets::test {
+
+namespace {
+
+struct ChunkLoweringComponent {
+    float x {0.0F};
+};
+
+Result<std::string, LuauScriptError>
+lower_chunk_query_source(const LuauScriptSource& source) {
+    Registry::instance().register_cls<ChunkLoweringComponent>().add_property(
+        "x",
+        &ChunkLoweringComponent::x
+    );
+    detail::luau_compiler::CompilationSession session {source};
+    auto parsed = session.parse();
+    if (!parsed) {
+        return failure(std::move(parsed.error()));
+    }
+
+    auto query = std::make_unique<DynamicQueryParamDecl>();
+    query->name = "query";
+    query->fields.push_back(
+        DynamicQueryFieldDecl {
+            .name = "value",
+            .type =
+                DynamicTypeRef {.type_id = type_id<ChunkLoweringComponent>()},
+            .access = DynamicParamAccess::Write,
+        }
+    );
+    std::vector<LuauFunctionDecl> functions;
+    functions.push_back(LuauFunctionDecl {.name = "run"});
+    functions.back().params.push_back(std::move(query));
+
+    auto lowered = detail::luau_compiler::PropertyLoweringPass {}.run(
+        parsed->root(),
+        functions
+    );
+    return lowered.source_patches.apply(source);
+}
+
+} // namespace
 
 TEST_CASE(
     "Luau compilation session owns one reusable parsed module",
@@ -195,6 +238,81 @@ TEST_CASE(
     CHECK(rejected.error().message.find("overlaps") != std::string::npos);
     CHECK(rejected.error().message.find("analysis") != std::string::npos);
     CHECK(rejected.error().message.find("lowering") != std::string::npos);
+}
+
+TEST_CASE(
+    "Luau compiler transparently lowers reusable query loops to chunks",
+    "[scripting_luau][compiler][query][chunk]"
+) {
+    const LuauScriptSource source {
+        .name = "chunk_query.luau",
+        .content = R"(
+            local function run(query)
+                for value in query do
+                    value.x += 1
+                    continue
+                end
+            end
+        )",
+    };
+    auto lowered = lower_chunk_query_source(source);
+    REQUIRE(lowered);
+    CHECK(lowered->find("__ets_chunk_query(query, 1)") != std::string::npos);
+    CHECK(lowered->find("while true do") != std::string::npos);
+    CHECK(lowered->find("continue") != std::string::npos);
+    CHECK(lowered->find("for value in query do") == std::string::npos);
+}
+
+TEST_CASE(
+    "Luau compiler keeps query loops with break on the row iterator",
+    "[scripting_luau][compiler][query][chunk][fallback]"
+) {
+    const LuauScriptSource source {
+        .name = "break_query.luau",
+        .content = R"(
+            local function run(query)
+                for value in query do
+                    if value.x > 0 then
+                        break
+                    end
+                end
+            end
+        )",
+    };
+    auto lowered = lower_chunk_query_source(source);
+    REQUIRE(lowered);
+    CHECK(
+        lowered->find("for value in __ets_reuse_query(query, 1) do") !=
+        std::string::npos
+    );
+    CHECK(lowered->find("__ets_chunk_query") == std::string::npos);
+}
+
+TEST_CASE(
+    "Luau compiler keeps property-heavy query loops on the row iterator",
+    "[scripting_luau][compiler][query][chunk][cost]"
+) {
+    const LuauScriptSource source {
+        .name = "heavy_query.luau",
+        .content = R"(
+            local function run(query)
+                local total = 0
+                for value in query do
+                    total += value.x
+                    total += value.x
+                    total += value.x
+                    total += value.x
+                end
+            end
+        )",
+    };
+    auto lowered = lower_chunk_query_source(source);
+    REQUIRE(lowered);
+    CHECK(
+        lowered->find("for value in __ets_reuse_query(query, 1) do") !=
+        std::string::npos
+    );
+    CHECK(lowered->find("__ets_chunk_query") == std::string::npos);
 }
 
 TEST_CASE(
