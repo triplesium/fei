@@ -38,6 +38,58 @@ Use `--entities=N`, `--samples=N`, and `--sample-ms=N` to change the workload.
 xmake run entisium-scripting-query-benchmark --entities=100000 --csv
 ```
 
+Compiler optimizations can be selected independently with `--passes`. The
+supported pass names are:
+
+- `flatten-property-paths`;
+- `elide-property-aliases`;
+- `reuse-query-userdata`;
+- `chunk-query-iteration`.
+
+Use `all`, `none`, or a comma-separated list:
+
+```sh
+xmake run entisium-scripting-query-benchmark --passes=none
+xmake run entisium-scripting-query-benchmark \
+    --passes=reuse-query-userdata,chunk-query-iteration
+```
+
+Production-like combinations are also available as named pipelines:
+
+```sh
+xmake run entisium-scripting-query-benchmark --pipeline=default
+xmake run entisium-scripting-query-benchmark --pipeline=property
+xmake run entisium-scripting-query-benchmark --pipeline=query
+```
+
+`default` currently enables every stable pass. `property` combines property
+path flattening with alias elision, while `query` combines reusable query
+userdata with chunked iteration. `--passes` remains the low-level interface
+for arbitrary benchmark and bisection configurations. If both options are
+present, the last one wins. Named pipelines also expose their canonical pass
+order; raw pass sets use the compiler's canonical order while retaining
+independent enablement.
+
+Pass metadata distinguishes correctness requirements from profitability
+relationships. Missing correctness requirements are errors; missing
+profitability relationships are warnings and remain runnable. Alias elision
+benefits from path flattening, and chunked iteration benefits from reusable
+query userdata.
+
+`--pass-matrix` runs `none`, every isolated pass, the combined query passes,
+every `all-without-*` leave-one-out profile, and `all` in the same process.
+This provides both isolated measurements and ablation measurements for passes
+that interact. CSV output includes the profile, enabled passes, and passes that
+actually matched the compiled benchmark source:
+
+```sh
+xmake run entisium-scripting-query-benchmark --pass-matrix --csv
+```
+
+The matrix intentionally permits chunking with userdata reuse disabled. That
+profile uses a zero reusable-field mask, so it measures native refill batching
+without silently including userdata reuse.
+
 The per-row cases reuse an already prepared query. `query/prepare` measures the
 additional archetype refresh performed when a dynamic system parameter is
 prepared for a system invocation.

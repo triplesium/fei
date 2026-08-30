@@ -74,8 +74,16 @@ struct Options {
     std::size_t entities {10'000};
     std::size_t samples {7};
     std::chrono::milliseconds sample_time {20};
+    LuauOptimizationPasses optimization_passes;
+    std::string optimization_profile {"default"};
     bool csv {false};
+    bool pass_matrix {false};
     bool help {false};
+};
+
+struct OptimizationProfile {
+    std::string name;
+    LuauOptimizationPasses passes;
 };
 
 struct Measurement {
@@ -108,14 +116,134 @@ std::size_t parse_size(std::string_view value, std::string_view option) {
     return result;
 }
 
+std::string optimization_pass_names(LuauOptimizationPasses passes) {
+    std::string result;
+    for (const auto& descriptor : luau_optimization_pass_descriptors()) {
+        if (!passes.contains(descriptor.pass)) {
+            continue;
+        }
+        if (!result.empty()) {
+            result.push_back('+');
+        }
+        result.append(luau_optimization_pass_name(descriptor.pass));
+    }
+    return result.empty() ? "none" : result;
+}
+
+LuauOptimizationPasses parse_optimization_passes(std::string_view value) {
+    if (value == "all") {
+        return LuauOptimizationPasses::all();
+    }
+    if (value == "none") {
+        return LuauOptimizationPasses::none();
+    }
+
+    auto result = LuauOptimizationPasses::none();
+    while (!value.empty()) {
+        const std::size_t separator = value.find(',');
+        const std::string_view name = value.substr(0, separator);
+        const auto descriptors = luau_optimization_pass_descriptors();
+        const auto found = std::ranges::find_if(
+            descriptors,
+            [name](const LuauOptimizationPassDescriptor& descriptor) {
+                return luau_optimization_pass_name(descriptor.pass) == name;
+            }
+        );
+        if (found == descriptors.end()) {
+            throw std::runtime_error(
+                "unknown Luau optimization pass '" + std::string(name) + "'"
+            );
+        }
+        result.set(found->pass);
+        if (separator == std::string_view::npos) {
+            break;
+        }
+        value.remove_prefix(separator + 1);
+    }
+    return result;
+}
+
+LuauOptimizationPipeline parse_optimization_pipeline(std::string_view value) {
+    constexpr std::array pipelines {
+        LuauOptimizationPipeline::Default,
+        LuauOptimizationPipeline::None,
+        LuauOptimizationPipeline::Property,
+        LuauOptimizationPipeline::Query,
+        LuauOptimizationPipeline::All,
+    };
+    const auto found = std::ranges::find_if(
+        pipelines,
+        [value](LuauOptimizationPipeline pipeline) {
+            return luau_optimization_pipeline_name(pipeline) == value;
+        }
+    );
+    if (found == pipelines.end()) {
+        throw std::runtime_error(
+            "unknown Luau optimization pipeline '" + std::string(value) + "'"
+        );
+    }
+    return *found;
+}
+
+std::vector<OptimizationProfile> optimization_profiles(const Options& options) {
+    if (!options.pass_matrix) {
+        return {
+            {options.optimization_profile.empty() ?
+                 optimization_pass_names(options.optimization_passes) :
+                 options.optimization_profile,
+             options.optimization_passes}
+        };
+    }
+
+    std::vector<OptimizationProfile> profiles;
+    profiles.push_back({"none", LuauOptimizationPasses::none()});
+    for (const auto& descriptor : luau_optimization_pass_descriptors()) {
+        auto passes = LuauOptimizationPasses::none();
+        passes.set(descriptor.pass);
+        profiles.push_back(
+            {std::string(luau_optimization_pass_name(descriptor.pass)), passes}
+        );
+    }
+    auto query_passes = LuauOptimizationPasses::none();
+    query_passes.set(LuauOptimizationPass::ReuseQueryUserdata)
+        .set(LuauOptimizationPass::ChunkQueryIteration);
+    profiles.push_back({"query-reuse+chunk", query_passes});
+    for (const auto& descriptor : luau_optimization_pass_descriptors()) {
+        auto passes = LuauOptimizationPasses::all();
+        passes.set(descriptor.pass, false);
+        profiles.push_back(
+            {"all-without-" +
+                 std::string(luau_optimization_pass_name(descriptor.pass)),
+             passes}
+        );
+    }
+    profiles.push_back({"all", LuauOptimizationPasses::all()});
+    return profiles;
+}
+
 Options parse_options(int argc, char** argv) {
     Options options;
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument {argv[index]};
         if (argument == "--csv") {
             options.csv = true;
+        } else if (argument == "--pass-matrix") {
+            options.pass_matrix = true;
         } else if (argument == "--help" || argument == "-h") {
             options.help = true;
+        } else if (argument.starts_with("--passes=")) {
+            options.optimization_passes = parse_optimization_passes(
+                argument.substr(std::string_view("--passes=").size())
+            );
+            options.optimization_profile.clear();
+        } else if (argument.starts_with("--pipeline=")) {
+            const auto pipeline = parse_optimization_pipeline(
+                argument.substr(std::string_view("--pipeline=").size())
+            );
+            options.optimization_passes =
+                luau_optimization_pipeline_passes(pipeline);
+            options.optimization_profile =
+                luau_optimization_pipeline_name(pipeline);
         } else if (argument.starts_with("--entities=")) {
             options.entities = parse_size(
                 argument.substr(std::string_view("--entities=").size()),
@@ -148,6 +276,11 @@ void print_usage() {
            "10000)\n"
         << "  --samples=N     timed samples per case (default 7)\n"
         << "  --sample-ms=N   minimum duration per sample (default 20)\n"
+        << "  --passes=LIST   all, none, or comma-separated optimization "
+           "passes\n"
+        << "  --pipeline=NAME default, none, property, query, or all\n"
+        << "  --pass-matrix   run isolated, query-combined, leave-one-out, "
+           "and all profiles\n"
         << "  --csv            emit machine-readable results\n";
 }
 
@@ -1084,21 +1217,29 @@ std::string benchmark_source(std::size_t entities) {
     )";
 }
 
-LuauScriptModuleId
-load_benchmark_module(LuauRuntime& runtime, std::size_t entities) {
+LuauScriptModuleId load_benchmark_module(
+    LuauRuntime& runtime,
+    std::size_t entities,
+    LuauOptimizationPasses optimization_passes,
+    std::vector<LuauOptimizationPassReport>& optimization_report
+) {
     const LuauScriptSource source {
         .name = "query_benchmark.luau",
         .content = benchmark_source(entities),
     };
     auto artifact = compile_luau_script_module(
         source,
-        LuauCompileOptions {.snapshot_safe = false}
+        LuauCompileOptions {
+            .snapshot_safe = false,
+            .optimization_passes = optimization_passes,
+        }
     );
     if (!artifact) {
         throw std::runtime_error(
             "failed to compile benchmark module: " + artifact.error().message
         );
     }
+    optimization_report = artifact->optimization_report;
     auto module = runtime.load_module(*artifact);
     if (!module) {
         throw std::runtime_error(
@@ -1190,7 +1331,10 @@ void call_module(
     }
 }
 
-std::vector<Measurement> run_benchmarks(const Options& options) {
+std::vector<Measurement> run_benchmarks(
+    const Options& options,
+    std::vector<LuauOptimizationPassReport>& optimization_report
+) {
     Registry::instance()
         .register_cls<QueryBenchmarkVector>()
         .add_property("x", &QueryBenchmarkVector::x)
@@ -1276,8 +1420,12 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
     const std::array write_arguments {write_query_ref};
 
     LuauRuntime runtime;
-    const LuauScriptModuleId module =
-        load_benchmark_module(runtime, options.entities);
+    const LuauScriptModuleId module = load_benchmark_module(
+        runtime,
+        options.entities,
+        options.optimization_passes,
+        optimization_report
+    );
     std::vector<Measurement> results;
     results.reserve(59);
     results.push_back(measure("runtime/empty call", 0, options, [&] {
@@ -1938,19 +2086,46 @@ std::vector<Measurement> run_benchmarks(const Options& options) {
     return results;
 }
 
+std::string applied_optimization_pass_names(
+    const std::vector<LuauOptimizationPassReport>& report
+) {
+    std::string result;
+    for (const auto& entry : report) {
+        if (!entry.enabled || entry.applied == 0) {
+            continue;
+        }
+        if (!result.empty()) {
+            result.push_back('+');
+        }
+        result.append(luau_optimization_pass_name(entry.pass));
+    }
+    return result.empty() ? "none" : result;
+}
+
 void print_results(
     const Options& options,
-    const std::vector<Measurement>& results
+    const OptimizationProfile& profile,
+    const std::vector<LuauOptimizationPassReport>& optimization_report,
+    const std::vector<Measurement>& results,
+    bool print_csv_header
 ) {
+    const std::string enabled_passes = optimization_pass_names(profile.passes);
+    const std::string applied_passes =
+        applied_optimization_pass_names(optimization_report);
     if (options.csv) {
-        std::cout << "name,entities,calls_per_sample,median_ns_per_call,median_"
-                     "ns_per_row,vs_cpp_direct,vs_cpp_reflection\n";
+        if (print_csv_header) {
+            std::cout
+                << "profile,enabled_passes,applied_passes,name,entities,"
+                   "calls_per_sample,median_ns_per_call,median_ns_per_row,"
+                   "vs_cpp_direct,vs_cpp_reflection\n";
+        }
         for (const auto& result : results) {
             const auto baselines = comparison_baselines(results, result);
-            std::cout << result.name << ',' << options.entities << ','
-                      << result.calls_per_sample << ',' << std::fixed
-                      << std::setprecision(2) << result.nanoseconds_per_call
-                      << ',';
+            std::cout << profile.name << ',' << enabled_passes << ','
+                      << applied_passes << ',' << result.name << ','
+                      << options.entities << ',' << result.calls_per_sample
+                      << ',' << std::fixed << std::setprecision(2)
+                      << result.nanoseconds_per_call << ',';
             if (result.rows_per_call != 0) {
                 std::cout << result.nanoseconds_per_call /
                                  static_cast<double>(result.rows_per_call);
@@ -1972,6 +2147,29 @@ void print_results(
 
     std::cout << "Luau ECS query benchmark (" << options.entities
               << " rows, median of " << options.samples << " samples)\n\n";
+    std::cout << "Optimization profile: " << profile.name << '\n'
+              << "Enabled passes: " << enabled_passes << '\n'
+              << "Applied passes: " << applied_passes << "\n\n";
+    for (const auto& entry : optimization_report) {
+        std::cout << "  " << luau_optimization_pass_name(entry.pass) << ": "
+                  << entry.applied << '/' << entry.candidates << " applied"
+                  << (entry.enabled ? "" : " (disabled)") << '\n';
+    }
+    for (const auto& diagnostic :
+         diagnose_luau_optimization_passes(profile.passes)) {
+        std::cout << "  "
+                  << (diagnostic.kind ==
+                              LuauOptimizationDependencyKind::Required ?
+                          "error: " :
+                          "warning: ")
+                  << luau_optimization_pass_name(diagnostic.pass)
+                  << (diagnostic.kind ==
+                              LuauOptimizationDependencyKind::Required ?
+                          " requires " :
+                          " benefits from ")
+                  << luau_optimization_pass_name(diagnostic.dependency) << '\n';
+    }
+    std::cout << '\n';
     std::cout << std::left << std::setw(44) << "case" << std::right
               << std::setw(16) << "ns/call" << std::setw(16) << "ns/row"
               << std::setw(12) << "vs direct" << std::setw(16)
@@ -2026,8 +2224,24 @@ int main(int argc, char** argv) {
             print_usage();
             return 0;
         }
-        const auto results = run_benchmarks(options);
-        print_results(options, results);
+        const auto profiles = optimization_profiles(options);
+        bool first = true;
+        for (const auto& profile : profiles) {
+            Options profile_options = options;
+            profile_options.optimization_passes = profile.passes;
+            profile_options.pass_matrix = false;
+            std::vector<LuauOptimizationPassReport> optimization_report;
+            const auto results =
+                run_benchmarks(profile_options, optimization_report);
+            print_results(
+                profile_options,
+                profile,
+                optimization_report,
+                results,
+                first
+            );
+            first = false;
+        }
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "query benchmark failed: " << error.what() << '\n';
