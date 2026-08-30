@@ -20,7 +20,10 @@ export default defineConfig(({ mode }) => {
                 "Cross-Origin-Opener-Policy": "same-origin",
             },
             proxy: {
-                "/api": "http://127.0.0.1:3100",
+                "/api": {
+                    target: "http://127.0.0.1:3100",
+                    ws: true,
+                },
                 "/runtime": "http://127.0.0.1:3100",
             },
         },

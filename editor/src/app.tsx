@@ -102,6 +102,7 @@ import {
 } from "./services/profiler-agent";
 import { cn } from "./lib/utils";
 import { editorCapabilities } from "@editor-platform/capabilities";
+import type { LuauLanguageClientStatus } from "@editor-platform/luau-language-client";
 import { ProjectStorage } from "@editor-platform/project-storage";
 import type {
     AgentRequest,
@@ -611,6 +612,8 @@ export function App() {
     const [content, setContent] = useState("");
     const [savedContent, setSavedContent] = useState("");
     const [cursor, setCursor] = useState({ line: 1, column: 1 });
+    const [luauLspStatus, setLuauLspStatus] =
+        useState<LuauLanguageClientStatus>("stopped");
     const [logs, setLogs] = useState<ConsoleEntry[]>([]);
     const [operation, setOperation] = useState<ProjectOperation>(null);
     const [assetContextPath, setAssetContextPath] = useState("");
@@ -1825,10 +1828,12 @@ export function App() {
                     <CodeEditor
                         key={activePath}
                         path={activePath}
+                        projectRootUri={storage.rootUri}
                         value={content}
                         readOnly={!canEdit}
                         onChange={setContent}
                         onCursorChange={(line, column) => setCursor({ line, column })}
+                        onLanguageClientStatus={setLuauLspStatus}
                     />
                 ) : (
                     <PanelEmptyState>Select a file to edit.</PanelEmptyState>
@@ -1837,6 +1842,9 @@ export function App() {
                     <span>{dirty ? "● Unsaved" : "Saved"}</span>
                     <span>Ln {cursor.line}, Col {cursor.column}</span>
                     <span>{languageForPath(activePath)}</span>
+                    {editorCapabilities.luauLsp && activePath.endsWith(".luau") && (
+                        <span>Luau LSP: {luauLspStatus}</span>
+                    )}
                     <span>UTF-8</span>
                 </PanelStatus>
             </ToolPanel>

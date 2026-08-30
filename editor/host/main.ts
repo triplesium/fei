@@ -29,6 +29,9 @@ const host = createEditorHost({
     port: portFromEnvironment(),
     projectDirectory: projectDirectoryFromArguments(process.argv.slice(2)),
     pickProjectDirectory: chooseProjectDirectory,
+    luauLspExecutable: process.env.ETS_ENTISIUM_LSP_PATH?.trim() || undefined,
+    luauDefinitionsIndex:
+        process.env.ETS_ENTISIUM_LUAU_DEFINITIONS_INDEX?.trim() || undefined,
 });
 
 const address = await host.listen();

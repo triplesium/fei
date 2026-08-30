@@ -2,6 +2,7 @@ import { mkdir, readFile, rm, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { WebSocket } from "ws";
 import {
     EncryptedCredentialStore,
     type SecretProtector,
@@ -19,7 +20,12 @@ const testProtector: SecretProtector = {
 afterEach(async () => {
     await Promise.all(
         temporaryDirectories.splice(0).map((directory) =>
-            rm(directory, { recursive: true, force: true }),
+            rm(directory, {
+                recursive: true,
+                force: true,
+                maxRetries: 5,
+                retryDelay: 50,
+            }),
         ),
     );
 });
@@ -320,7 +326,11 @@ describe("Editor Host", () => {
 
         try {
             const bootstrap = await fetch(`${baseUrl}/api/v1/bootstrap`).then((response) => response.json());
-            expect(bootstrap.project).toMatchObject({ open: true, name: "project" });
+            expect(bootstrap.project).toMatchObject({
+                open: true,
+                name: "project",
+                rootUri: expect.stringMatching(/^file:\/\//),
+            });
             const headers = { Authorization: `Bearer ${bootstrap.token}` };
             const files = await fetch(`${baseUrl}/api/v1/project/files`, { headers });
             expect(files.status).toBe(200);
@@ -373,6 +383,85 @@ describe("Editor Host", () => {
             const unauthenticated = await fetch(`${baseUrl}/api/v1/project/files`);
             expect(unauthenticated.status).toBe(401);
         } finally {
+            await new Promise<void>((resolveClose) => host.server.close(() => resolveClose()));
+        }
+    });
+
+    it("bridges authenticated Luau LSP WebSockets to a stdio process", async () => {
+        const directory = await mkdtemp(join(tmpdir(), "entisium-editor-lsp-host-"));
+        temporaryDirectories.push(directory);
+        const distDirectory = join(directory, "dist");
+        const projectDirectory = join(directory, "project");
+        const fakeServer = join(directory, "fake-lsp.mjs");
+        const definitionsIndex = join(directory, "definitions-index.json");
+        await mkdir(distDirectory);
+        await mkdir(join(projectDirectory, "assets"), { recursive: true });
+        await writeFile(join(distDirectory, "index.html"), "<p>Entisium Editor</p>", "utf8");
+        await writeFile(join(projectDirectory, "project.yaml"), "name: LSP project\n", "utf8");
+        await writeFile(definitionsIndex, "{}\n", "utf8");
+        await writeFile(
+            fakeServer,
+            `if (!process.argv.includes("--definitions-index") || !process.argv.includes(${JSON.stringify(definitionsIndex)})) process.exit(3);
+let input = Buffer.alloc(0);
+process.stdin.on("data", (chunk) => {
+    input = Buffer.concat([input, chunk]);
+    while (true) {
+        const delimiter = input.indexOf("\\r\\n\\r\\n");
+        if (delimiter < 0) return;
+        const header = input.subarray(0, delimiter).toString("ascii");
+        const match = /Content-Length:\\s*(\\d+)/i.exec(header);
+        if (!match) process.exit(2);
+        const length = Number(match[1]);
+        if (input.length < delimiter + 4 + length) return;
+        const body = input.subarray(delimiter + 4, delimiter + 4 + length);
+        input = input.subarray(delimiter + 4 + length);
+        process.stdout.write("Content-Length: " + body.length + "\\r\\n\\r\\n");
+        process.stdout.write(body);
+    }
+});
+`,
+            "utf8",
+        );
+        const host = createEditorHost({
+            credentials: new EncryptedCredentialStore(
+                join(directory, "credentials.json"),
+                testProtector,
+            ),
+            distDirectory,
+            runtimeDirectory: distDirectory,
+            projectDirectory,
+            luauLspExecutable: process.execPath,
+            luauLspArguments: [fakeServer],
+            luauDefinitionsIndex: definitionsIndex,
+            port: 0,
+        });
+        const address = await host.listen();
+        const baseUrl = `http://${address.host}:${address.port}`;
+        const bootstrap = await fetch(`${baseUrl}/api/v1/bootstrap`).then((response) => response.json());
+        const socket = new WebSocket(
+            `ws://${address.host}:${address.port}/api/v1/lsp/luau?token=${encodeURIComponent(bootstrap.token)}`,
+        );
+
+        try {
+            await new Promise<void>((resolveOpen, reject) => {
+                socket.once("open", resolveOpen);
+                socket.once("error", reject);
+            });
+            const received = new Promise<string>((resolveMessage, reject) => {
+                socket.once("message", (data) => resolveMessage(data.toString()));
+                socket.once("error", reject);
+            });
+            const message = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize" });
+            socket.send(message);
+            expect(await received).toBe(message);
+        } finally {
+            if (socket.readyState !== WebSocket.CLOSED) {
+                const closed = new Promise<void>((resolveClose) =>
+                    socket.once("close", () => resolveClose()),
+                );
+                socket.close();
+                await closed;
+            }
             await new Promise<void>((resolveClose) => host.server.close(() => resolveClose()));
         }
     });

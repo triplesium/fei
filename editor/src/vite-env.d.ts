@@ -1,11 +1,11 @@
 /// <reference types="vite/client" />
 
-declare module "monaco-editor/editor/editor.worker?worker" {
+declare module "@codingame/monaco-vscode-editor-api/esm/vs/editor/editor.worker?worker" {
     const EditorWorker: new () => Worker;
     export default EditorWorker;
 }
 
-declare module "monaco-editor/language/json/json.worker?worker" {
+declare module "@codingame/monaco-vscode-standalone-json-language-features/worker?worker" {
     const JsonWorker: new () => Worker;
     export default JsonWorker;
 }

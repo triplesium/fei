@@ -50,6 +50,10 @@ export class ProjectStorage {
         return this.root !== null;
     }
 
+    get rootUri(): string {
+        return "entisium-project:///";
+    }
+
     async initialize(): Promise<RememberedProject | null> {
         try {
             const root = await this.loadRememberedRoot();

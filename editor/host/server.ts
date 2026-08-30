@@ -4,6 +4,7 @@ import { access, readFile, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import type { AddressInfo } from "node:net";
+import type { Duplex } from "node:stream";
 import {
     type Context,
     type CredentialStore,
@@ -36,6 +37,7 @@ import {
     type EditorCommandResponse,
 } from "./editor-command-relay.js";
 import { handleMcpRequest } from "./mcp-server.js";
+import { LuauLspGateway } from "./luau-lsp-session.js";
 
 const maximumJsonBodyBytes = 4 * 1024 * 1024;
 interface HostOptions {
@@ -51,6 +53,9 @@ interface HostOptions {
     pickProjectDirectory?: ProjectDirectoryPicker;
     projectService?: HostProjectService;
     commandRelay?: EditorCommandRelay;
+    luauLspExecutable?: string;
+    luauLspArguments?: readonly string[];
+    luauDefinitionsIndex?: string;
 }
 
 interface ProxyRequest {
@@ -227,6 +232,25 @@ export function createEditorHost(options: HostOptions): {
         options.projectService ??
         new HostProjectService(options.projectDirectory, options.pickProjectDirectory);
     const commands = options.commandRelay ?? new EditorCommandRelay();
+    const luauLspArguments = [...(options.luauLspArguments ?? ["--stdio"])];
+    if (options.luauDefinitionsIndex) {
+        luauLspArguments.push("--definitions-index", options.luauDefinitionsIndex);
+    }
+    const luauLsp = new LuauLspGateway({
+        executable:
+            options.luauLspExecutable ??
+            resolve(
+                process.cwd(),
+                "..",
+                "build",
+                "windows",
+                "x64",
+                "debug",
+                "entisium-lsp.exe",
+            ),
+        arguments: luauLspArguments,
+        workspaceRoot: () => projects.workspaceRoot(),
+    });
 
     const server = createServer(async (request, response) => {
         const origin = request.headers.origin;
@@ -612,7 +636,22 @@ export function createEditorHost(options: HostOptions): {
             }
         }
     });
+    server.on("upgrade", (request, socket: Duplex, head) => {
+        const url = new URL(request.url ?? "/", `http://${request.headers.host ?? `${host}:${port}`}`);
+        const origin = request.headers.origin;
+        if (
+            url.pathname !== "/api/v1/lsp/luau" ||
+            !isLoopbackRequest(request) ||
+            (origin !== undefined && !allowedOrigins.has(origin)) ||
+            url.searchParams.get("token") !== token
+        ) {
+            socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+            return;
+        }
+        void luauLsp.handleUpgrade(request, socket, head);
+    });
     server.once("close", () => {
+        luauLsp.dispose();
         commands.dispose();
         projects.dispose();
     });

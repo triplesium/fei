@@ -81,6 +81,7 @@ export interface EditorHostBootstrap {
     project: {
         open: boolean;
         name?: string;
+        rootUri?: string;
     };
     provider: {
         id: string;
@@ -117,6 +118,7 @@ function asBootstrap(value: unknown): EditorHostBootstrap {
         !project ||
         typeof project.open !== "boolean" ||
         (project.name !== undefined && typeof project.name !== "string") ||
+        (project.rootUri !== undefined && typeof project.rootUri !== "string") ||
         !provider ||
         typeof provider.id !== "string" ||
         typeof provider.name !== "string" ||

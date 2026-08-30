@@ -12,6 +12,7 @@ import {
     writeFile,
 } from "node:fs/promises";
 import { basename, dirname, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parse } from "yaml";
 
 const textFilePattern =
@@ -191,6 +192,7 @@ export interface HostProjectAssetInspection {
 export interface HostProjectSnapshot {
     open: boolean;
     name?: string;
+    rootUri?: string;
 }
 
 export interface HostProjectEvent {
@@ -223,7 +225,17 @@ export class HostProjectService {
 
     async snapshot(): Promise<HostProjectSnapshot> {
         await this.ensureInitialProject();
-        return this.root ? { open: true, name: basename(this.root) } : { open: false };
+        return this.root
+            ? {
+                  open: true,
+                  name: basename(this.root),
+                  rootUri: pathToFileURL(`${this.root}${sep}`).href,
+              }
+            : { open: false };
+    }
+
+    workspaceRoot(): Promise<string> {
+        return this.requireRoot();
     }
 
     async open(directory?: string): Promise<HostProjectSnapshot> {

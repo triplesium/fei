@@ -8,6 +8,7 @@ import { EditorHostRequestError, editorHost } from "./editor-host-client";
 interface ProjectSnapshot {
     open: boolean;
     name?: string;
+    rootUri?: string;
 }
 
 interface ProjectFilesResponse {
@@ -21,6 +22,7 @@ export interface ProjectStorageEvent {
 
 export class ProjectStorage {
     private openProject = false;
+    private projectRootUri = "";
     private stopEvents: (() => void) | undefined;
     private readonly listeners = new Set<(event: ProjectStorageEvent) => void>();
 
@@ -28,10 +30,15 @@ export class ProjectStorage {
         return this.openProject;
     }
 
+    get rootUri(): string {
+        return this.projectRootUri;
+    }
+
     async initialize(): Promise<RememberedProject | null> {
         const bootstrap = await editorHost.bootstrap();
         this.openProject = bootstrap.project.open;
-        if (!bootstrap.project.open || !bootstrap.project.name) return null;
+        this.projectRootUri = bootstrap.project.rootUri ?? "";
+        if (!bootstrap.project.open || !bootstrap.project.name || !this.projectRootUri) return null;
         this.startEvents();
         return { name: bootstrap.project.name, restored: true };
     }
@@ -41,10 +48,11 @@ export class ProjectStorage {
             const project = await editorHost.json<ProjectSnapshot>("/api/v1/project/open", {
                 method: "POST",
             });
-            if (!project.open || !project.name) {
+            if (!project.open || !project.name || !project.rootUri) {
                 throw new Error("Editor Host did not open a project folder.");
             }
             this.openProject = true;
+            this.projectRootUri = project.rootUri;
             this.startEvents();
             return project.name;
         } catch (error) {

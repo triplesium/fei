@@ -1,4 +1,4 @@
-import type * as Monaco from "monaco-editor/editor/editor.api";
+import type * as Monaco from "monaco-editor";
 import {
     createOnigScanner,
     createOnigString,
