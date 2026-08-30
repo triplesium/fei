@@ -416,6 +416,47 @@ Cls::get_constructor_for_args(const std::vector<Ref>& args) {
     );
 }
 
+Result<Constructor&, InvokeFailure>
+Cls::get_converting_constructor_for_arg(const Ref& arg) {
+    Constructor* best = nullptr;
+    int best_score = 0;
+    bool ambiguous = false;
+    const std::vector args {arg};
+
+    for (const auto& constructor : m_constructors) {
+        if (!constructor->is_converting()) {
+            continue;
+        }
+        const auto score = constructor->match_score(args);
+        if (!score) {
+            continue;
+        }
+        if (best == nullptr || *score < best_score) {
+            best = constructor.get();
+            best_score = *score;
+            ambiguous = false;
+        } else if (*score == best_score) {
+            ambiguous = true;
+        }
+    }
+    if (ambiguous) {
+        return failure(
+            InvokeFailure::invalid_call(
+                "Ambiguous converting constructor for " +
+                describe_type(m_type_id)
+            )
+        );
+    }
+    if (best != nullptr) {
+        return *best;
+    }
+    return failure(
+        InvokeFailure::invalid_call(
+            "No converting constructor found for " + describe_type(m_type_id)
+        )
+    );
+}
+
 std::vector<Constructor*> Cls::get_constructors() const {
     std::vector<Constructor*> constructors;
     constructors.reserve(m_constructors.size());

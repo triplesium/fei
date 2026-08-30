@@ -7,8 +7,10 @@
 #include "refl/type.hpp"
 #include "refl/val.hpp"
 
+#include <array>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -25,6 +27,7 @@ class Constructor : public Callable {
     virtual std::optional<int>
     match_score(const std::vector<Ref>& args) const = 0;
     virtual std::vector<TypeId> arg_types() const = 0;
+    virtual bool is_converting() const = 0;
 };
 
 template<typename T, typename... Args>
@@ -61,15 +64,33 @@ class ConstructorImpl : public Constructor {
         if (!invalid_arg.empty()) {
             return invalid_call(std::move(invalid_arg));
         }
+        auto adapted_args = args;
+        std::array<Val, sizeof...(Args)> converted_args;
+        auto conversion_error = prepare_arguments(
+            adapted_args,
+            converted_args,
+            std::make_index_sequence<sizeof...(Args)>()
+        );
+        if (conversion_error) {
+            return failure(std::move(*conversion_error));
+        }
         return [&]<size_t... ArgIdx>(std::index_sequence<ArgIdx...>) {
             return ReturnValue::value(
-                make_val<T>(ArgumentAdapter<Args>::get(args[ArgIdx])...)
+                make_val<T>(ArgumentAdapter<Args>::get(adapted_args[ArgIdx])...)
             );
         }(std::make_index_sequence<sizeof...(Args)>());
     }
 
     std::vector<TypeId> arg_types() const override {
         return {QualType::of<Args>().type_id()...};
+    }
+
+    bool is_converting() const override {
+        if constexpr (sizeof...(Args) == 1) {
+            using Source = std::tuple_element_t<0, std::tuple<Args...>>;
+            return std::is_convertible_v<Source, T>;
+        }
+        return false;
     }
 
   private:
@@ -95,6 +116,27 @@ class ConstructorImpl : public Constructor {
                 return 0;
         }
         return 0;
+    }
+
+    template<std::size_t... ArgIdx>
+    static std::optional<InvokeFailure> prepare_arguments(
+        std::vector<Ref>& args,
+        std::array<Val, sizeof...(Args)>& storage,
+        std::index_sequence<ArgIdx...>
+    ) {
+        std::optional<InvokeFailure> error;
+        (
+            [&] {
+                if (error) {
+                    return;
+                }
+                error = prepare_reflected_argument<Args>(
+                    args[ArgIdx],
+                    storage[ArgIdx]
+                );
+            }(),
+            ...);
+        return error;
     }
 
     template<std::size_t... ArgIdx>

@@ -221,8 +221,17 @@ class MethodImpl : public Method {
         if (auto invalid_call_message = validate_call(args)) {
             return invalid_call(std::move(*invalid_call_message));
         }
+        auto adapted_args = args;
+        std::array<Val, c_params_count> converted_args;
+        if (auto conversion_error = prepare_arguments(
+                adapted_args,
+                converted_args,
+                std::make_index_sequence<c_params_count>()
+            )) {
+            return failure(std::move(*conversion_error));
+        }
         return invoke_from_refs(
-            args,
+            adapted_args,
             std::make_index_sequence<c_params_count>()
         );
     }
@@ -310,6 +319,28 @@ class MethodImpl : public Method {
                ArgumentAdapter<TypeOfParam<ArgIdx>>::describe_mismatch(
                    args[ArgIdx + Offset]
                );
+    }
+
+    template<std::size_t... ArgIdx>
+    static std::optional<InvokeFailure> prepare_arguments(
+        std::vector<Ref>& args,
+        std::array<Val, c_params_count>& storage,
+        std::index_sequence<ArgIdx...>
+    ) {
+        constexpr std::size_t offset = c_is_static ? 0 : 1;
+        std::optional<InvokeFailure> error;
+        (
+            [&] {
+                if (error) {
+                    return;
+                }
+                error = prepare_reflected_argument<TypeOfParam<ArgIdx>>(
+                    args[ArgIdx + offset],
+                    storage[ArgIdx]
+                );
+            }(),
+            ...);
+        return error;
     }
 
     template<std::size_t Offset>

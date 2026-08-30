@@ -129,6 +129,8 @@ class Cls {
     try_get_constructor(std::vector<TypeId> arg_types);
     Result<Constructor&, InvokeFailure>
     get_constructor_for_args(const std::vector<Ref>& args);
+    Result<Constructor&, InvokeFailure>
+    get_converting_constructor_for_arg(const Ref& arg);
 
     std::vector<Constructor*> get_constructors() const;
 

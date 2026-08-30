@@ -1,7 +1,9 @@
 #pragma once
 
 #include "refl/conversion.hpp"
+#include "refl/reflected_conversion.hpp"
 
+#include <optional>
 #include <string>
 #include <type_traits>
 
@@ -42,7 +44,15 @@ constexpr bool can_bind_converted_value() {
 
 template<class T>
 struct ArgumentAdapter {
-    static ConversionRank match(const Ref& ref) {
+  private:
+    static constexpr bool supports_reflected_conversion() {
+        using Traits = detail::ArgumentAccessTraits<T>;
+        using NoRef = typename Traits::NoRef;
+        return !std::is_pointer_v<NoRef> &&
+               !(std::is_lvalue_reference_v<T> && !std::is_const_v<NoRef>);
+    }
+
+    static ConversionRank direct_match(const Ref& ref) {
         using Traits = detail::ArgumentAccessTraits<T>;
         using NoRef = typename Traits::NoRef;
         using NoPtr = typename Traits::NoPtr;
@@ -85,6 +95,29 @@ struct ArgumentAdapter {
                        ConversionRank::Exact :
                        ConversionRank::None;
         }
+    }
+
+  public:
+    static ConversionRank match(const Ref& ref) {
+        const auto direct = direct_match(ref);
+        if (direct != ConversionRank::None) {
+            return direct;
+        }
+        if constexpr (supports_reflected_conversion()) {
+            using Base = typename detail::ArgumentAccessTraits<T>::Base;
+            return reflected_conversion_rank(ets::type_id<Base>(), ref);
+        }
+        return ConversionRank::None;
+    }
+
+    static bool requires_reflected_conversion(const Ref& ref) {
+        if constexpr (supports_reflected_conversion()) {
+            using Base = typename detail::ArgumentAccessTraits<T>::Base;
+            return direct_match(ref) == ConversionRank::None &&
+                   reflected_conversion_rank(ets::type_id<Base>(), ref) !=
+                       ConversionRank::None;
+        }
+        return false;
     }
 
     static bool accepts(const Ref& ref) {
@@ -130,5 +163,26 @@ struct ArgumentAdapter {
         return "expected " + expected_type() + ", got " + actual_type(ref);
     }
 };
+
+template<class T>
+std::optional<InvokeFailure>
+prepare_reflected_argument(Ref& argument, Val& storage) {
+    if constexpr (requires {
+                      ArgumentAdapter<T>::requires_reflected_conversion(
+                          argument
+                      );
+                  }) {
+        if (ArgumentAdapter<T>::requires_reflected_conversion(argument)) {
+            using Base = typename detail::ArgumentAccessTraits<T>::Base;
+            auto converted = reflected_convert(ets::type_id<Base>(), argument);
+            if (!converted) {
+                return std::move(converted.error());
+            }
+            storage = std::move(*converted);
+            argument = storage.ref();
+        }
+    }
+    return std::nullopt;
+}
 
 } // namespace ets

@@ -116,6 +116,42 @@ struct NumericConstructorFixture {
     explicit NumericConstructorFixture(double) : selected(2) {}
 };
 
+struct ImplicitTextFixture {
+    std::string value;
+
+    ImplicitTextFixture(const std::string& value) : value(value) {}
+};
+
+struct ExplicitTextFixture {
+    std::string value;
+
+    explicit ExplicitTextFixture(const std::string& value) : value(value) {}
+};
+
+struct AmbiguousConversionFixture {
+    int selected {0};
+
+    AmbiguousConversionFixture(float) : selected(1) {}
+    AmbiguousConversionFixture(double) : selected(2) {}
+};
+
+struct ConvertingArgumentFixture {
+    std::size_t implicit_length(const ImplicitTextFixture& text) const {
+        return text.value.size();
+    }
+
+    std::size_t explicit_length(const ExplicitTextFixture& text) const {
+        return text.value.size();
+    }
+
+    int ambiguous_value(const AmbiguousConversionFixture& value) const {
+        return value.selected;
+    }
+
+    int choose(const std::string&) const { return 1; }
+    int choose(const ImplicitTextFixture&) const { return 2; }
+};
+
 struct LookupFixture {
     int value {0};
 
@@ -649,6 +685,94 @@ TEST_CASE(
         ambiguous.error().message.find("Ambiguous constructor") !=
         std::string::npos
     );
+}
+
+TEST_CASE(
+    "Reflected calls apply non-explicit converting constructors",
+    "[refl][constructor][conversion]"
+) {
+    auto& registry = Registry::instance();
+    auto& implicit_cls =
+        registry.register_cls<ImplicitTextFixture>()
+            .add_constructor<ImplicitTextFixture, const std::string&>();
+    auto& explicit_cls =
+        registry.register_cls<ExplicitTextFixture>()
+            .add_constructor<ExplicitTextFixture, const std::string&>();
+    registry.register_cls<AmbiguousConversionFixture>()
+        .add_constructor<AmbiguousConversionFixture, float>()
+        .add_constructor<AmbiguousConversionFixture, double>();
+
+    REQUIRE(
+        implicit_cls.get_constructor({type_id<std::string>()}).is_converting()
+    );
+    REQUIRE_FALSE(
+        explicit_cls.get_constructor({type_id<std::string>()}).is_converting()
+    );
+
+    auto& cls = registry.register_cls<ConvertingArgumentFixture>()
+                    .add_method(
+                        "implicit_length",
+                        &ConvertingArgumentFixture::implicit_length
+                    )
+                    .add_method(
+                        "explicit_length",
+                        &ConvertingArgumentFixture::explicit_length
+                    )
+                    .add_method(
+                        "ambiguous_value",
+                        &ConvertingArgumentFixture::ambiguous_value
+                    )
+                    .add_method(
+                        "choose",
+                        static_cast<int (ConvertingArgumentFixture::*)(
+                            const std::string&
+                        ) const>(&ConvertingArgumentFixture::choose)
+                    )
+                    .add_method(
+                        "choose",
+                        static_cast<int (ConvertingArgumentFixture::*)(
+                            const ImplicitTextFixture&
+                        ) const>(&ConvertingArgumentFixture::choose)
+                    );
+
+    const ConvertingArgumentFixture instance;
+    std::string text = "hello";
+
+    auto implicit = cls.get_method_for_args(
+        "implicit_length",
+        {make_ref(instance), make_ref(text)}
+    );
+    REQUIRE(implicit);
+    auto implicit_result = implicit->invoke(make_ref(instance), make_ref(text));
+    REQUIRE(implicit_result);
+    REQUIRE(implicit_result->value().get<std::size_t>() == text.size());
+
+    auto explicit_method = cls.get_method_for_args(
+        "explicit_length",
+        {make_ref(instance), make_ref(text)}
+    );
+    REQUIRE_FALSE(explicit_method);
+
+    float ambiguous_source = 1.0f;
+    auto ambiguous = cls.get_method_for_args(
+        "ambiguous_value",
+        {make_ref(instance), make_ref(ambiguous_source)}
+    );
+    REQUIRE(ambiguous);
+
+    int ambiguous_integer = 1;
+    ambiguous = cls.get_method_for_args(
+        "ambiguous_value",
+        {make_ref(instance), make_ref(ambiguous_integer)}
+    );
+    REQUIRE_FALSE(ambiguous);
+
+    auto exact =
+        cls.get_method_for_args("choose", {make_ref(instance), make_ref(text)});
+    REQUIRE(exact);
+    auto exact_result = exact->invoke(make_ref(instance), make_ref(text));
+    REQUIRE(exact_result);
+    REQUIRE(exact_result->value().get<int>() == 1);
 }
 
 TEST_CASE("Constructor validates argument types", "[refl][constructor]") {
