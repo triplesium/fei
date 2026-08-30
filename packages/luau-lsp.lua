@@ -24,6 +24,9 @@ package("luau-lsp")
             "-DLUAU_BUILD_CLI=OFF",
             "-DLUAU_BUILD_TESTS=OFF",
         }
+        if package:is_plat("wasm") then
+            table.insert(configs, "-DCMAKE_CXX_FLAGS=-pthread -fwasm-exceptions")
+        end
         import("package.tools.cmake").build(
             package,
             configs,

@@ -85,6 +85,17 @@ if is_plat("wasm") then
             }
         }
     )
+    add_requires(
+        "luau-lsp 2026.8.25-entisium.5",
+        {
+            configs = {
+                shared = false,
+                toolchains = "entisium-emcc@emscripten",
+                cxflags = "-pthread -fwasm-exceptions",
+                cxxflags = "-pthread -fwasm-exceptions",
+            }
+        }
+    )
 else
     add_requires("stb", "glad", "tinyobjloader", "mikktspace", "cpp-httplib", "nlohmann_json", "fastgltf v0.9.0")
     add_requires("box2d v3.1.1", {configs = {shared = false}})
@@ -330,6 +341,9 @@ end
 
 rule("entisium.shader_sources")
     after_load(function(target)
+        if target:values("entisium.skip_runtime_assets") then
+            return
+        end
         local sources = shader_sources_define_value(target)
         if sources and #sources > 0 then
             target:add("defines", "ETS_SHADER_SOURCES=\"" .. sources .. "\"")
@@ -347,6 +361,9 @@ rule("entisium.shader_sources")
         end
     end)
     before_build(function(target)
+        if target:values("entisium.skip_runtime_assets") then
+            return
+        end
         if not target:is_plat("wasm") or target:kind() ~= "binary" then
             return
         end
@@ -377,6 +394,9 @@ add_rules("entisium.shader_sources")
 
 rule("entisium.embedded_assets")
     after_load(function(target)
+        if target:values("entisium.skip_runtime_assets") then
+            return
+        end
         if not target:is_plat("wasm") or target:kind() ~= "binary" then
             return
         end
@@ -395,6 +415,9 @@ rule("entisium.embedded_assets")
         end
     end)
     before_build(function(target)
+        if target:values("entisium.skip_runtime_assets") then
+            return
+        end
         if not target:is_plat("wasm") or target:kind() ~= "binary" then
             return
         end
@@ -418,6 +441,9 @@ add_rules("entisium.embedded_assets")
 
 rule("entisium.asset_bundles")
     after_load(function(target)
+        if target:values("entisium.skip_runtime_assets") then
+            return
+        end
         if not target:is_plat("wasm") or target:kind() ~= "binary" then
             return
         end
@@ -433,6 +459,9 @@ rule("entisium.asset_bundles")
         end
     end)
     before_build(function(target)
+        if target:values("entisium.skip_runtime_assets") then
+            return
+        end
         if not target:is_plat("wasm") or target:kind() ~= "binary" then
             return
         end
@@ -503,6 +532,7 @@ add_cxxflags("cl::/Zc:preprocessor")
 
 if is_plat("wasm") then
     includes("tools/reflgen")
+    includes("tools/luau_defgen")
     includes("engine")
     includes("samples/browser")
     includes("samples/browser_project")
@@ -514,3 +544,7 @@ else
 end
 
 includes("editor/runtime")
+
+if is_plat("wasm") then
+    includes("tools/entisium_lsp")
+end

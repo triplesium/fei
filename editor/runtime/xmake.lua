@@ -32,7 +32,8 @@ target("entisium-editor-dependencies")
 
 target("entisium-editor-runtime")
     set_kind("binary")
-    add_rules("entisium.reflect")
+    set_policy("build.fence", true)
+    add_rules("entisium.reflect", "entisium.luau-definitions")
     add_files("main.cpp")
     add_deps(
         "entisium-core",

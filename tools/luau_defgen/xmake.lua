@@ -2,6 +2,17 @@ target("entisium-luau-defgen")
     set_kind("binary")
     set_default(false)
     set_policy("build.fence", true)
+    if is_plat("wasm") then
+        set_plat(os.host())
+        set_arch(os.arch())
+        if is_host("windows") then
+            set_toolchains("msvc")
+        elseif is_host("macosx") then
+            set_toolchains("clang")
+        else
+            set_toolchains("gcc")
+        end
+    end
     add_files("*.cpp")
     add_headerfiles("*.hpp")
     add_packages("cli11", "nlohmann_json")
