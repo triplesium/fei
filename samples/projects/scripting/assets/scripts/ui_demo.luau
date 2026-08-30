@@ -21,7 +21,8 @@ local function initialize(
     )
     assert(assets:is_loaded(image))
     if not assets:is_loaded(font) then
-        error(assets:load_error(font) or "font did not load")
+        local load_error = assets:load_error(font)
+        error(if load_error then load_error.message else "font did not load")
     end
 
     commands:spawn(

@@ -392,8 +392,12 @@ TEST_CASE(
                 )
                 assert(not assets:is_loaded(missing))
                 local load_error = assets:load_error(missing)
+                assert(load_error ~= nil)
+                assert(
+                    load_error.path:as_string() == "memory://missing.bin"
+                )
                 assert(string.find(
-                    load_error,
+                    load_error.message,
                     "Asset not found",
                     1,
                     true

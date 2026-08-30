@@ -64,6 +64,33 @@ parameters(TypeMapper& mapper, const std::vector<Parameter>& values) {
     return "(" + parameters(mapper, values) + ") -> " + mapper.map(return_type);
 }
 
+[[nodiscard]] std::string parameter_signature_key(
+    TypeMapper& mapper,
+    const std::vector<Parameter>& values
+) {
+    std::string result;
+    for (const auto& parameter : values) {
+        const auto type = mapper.map(parameter.cpp_type);
+        result += ':';
+        result += std::to_string(type.size());
+        result += ':';
+        result += type;
+    }
+    return result;
+}
+
+[[nodiscard]] std::string
+method_signature_key(TypeMapper& mapper, const Method& method) {
+    std::string result = method.name;
+    result += parameter_signature_key(mapper, method.parameters);
+    const auto return_type = mapper.map(method.return_cpp_type);
+    result += "->";
+    result += std::to_string(return_type.size());
+    result += ':';
+    result += return_type;
+    return result;
+}
+
 void write_if_changed(
     const std::filesystem::path& path,
     const std::string& content
@@ -136,9 +163,15 @@ void emit_class_declaration(
                    << mapper.map(property.cpp_type) << "\n";
         }
     }
+    std::unordered_set<std::string> emitted_method_signatures;
     for (const auto& method : cls.methods) {
         if (method.is_static || method.name.starts_with("operator") ||
             !valid_identifier(method.name)) {
+            continue;
+        }
+        if (!emitted_method_signatures
+                 .insert(method_signature_key(mapper, method))
+                 .second) {
             continue;
         }
         output << "    function " << method.name << "(self";
@@ -157,7 +190,15 @@ void emit_class_declaration(
     if (!cls.abstract) {
         std::vector<std::string> constructors;
         constructors.reserve(cls.constructors.size() + 2);
+        std::unordered_set<std::string> constructor_signatures;
         for (const auto& constructor : cls.constructors) {
+            if (!constructor_signatures
+                     .insert(
+                         parameter_signature_key(mapper, constructor.parameters)
+                     )
+                     .second) {
+                continue;
+            }
             constructors.push_back(
                 "(" + parameters(mapper, constructor.parameters) + ") -> " +
                 cls.name
@@ -201,17 +242,25 @@ void emit_class_declaration(
     }
     for (const auto& [name, overloads] : static_methods) {
         output << "    " << name << ": ";
-        for (std::size_t index = 0; index < overloads.size(); ++index) {
-            if (index != 0) {
+        std::unordered_set<std::string> emitted_signatures;
+        bool first = true;
+        for (const auto* overload : overloads) {
+            if (!emitted_signatures
+                     .insert(method_signature_key(mapper, *overload))
+                     .second) {
+                continue;
+            }
+            if (!first) {
                 output << " & ";
             }
             output << '('
                    << function_type(
                           mapper,
-                          overloads[index]->parameters,
-                          overloads[index]->return_cpp_type
+                          overload->parameters,
+                          overload->return_cpp_type
                       )
                    << ')';
+            first = false;
         }
         output << ",\n";
     }

@@ -17,15 +17,6 @@ int raise_message(lua_State* state, const std::string& message) {
     return 0;
 }
 
-const AssetServer& check_asset_server(lua_State* state, int index) {
-    auto borrowed = check_luau_borrowed_ref(state, index);
-    const auto* server = borrowed.ref.try_get_const<AssetServer>();
-    if (server == nullptr) {
-        luaL_error(state, "AssetServer method called with invalid receiver");
-    }
-    return *server;
-}
-
 AssetServer&
 check_asset_server_mut(lua_State* state, int index, std::string_view context) {
     auto borrowed = check_luau_borrowed_ref(state, index);
@@ -96,39 +87,6 @@ int asset_server_load_async(lua_State* state) {
     );
 }
 
-int asset_server_is_loaded(lua_State* state) {
-    if (lua_gettop(state) != 2) {
-        luaL_error(state, "AssetServer.is_loaded expects one asset handle");
-    }
-    const auto& server = check_asset_server(state, 1);
-    auto handle = check_luau_borrowed_ref(state, 2);
-    auto key = server.asset_key(handle.ref);
-    if (!key) {
-        return raise_message(state, key.error().message);
-    }
-    lua_pushboolean(state, server.is_loaded(*key));
-    return 1;
-}
-
-int asset_server_load_error(lua_State* state) {
-    if (lua_gettop(state) != 2) {
-        luaL_error(state, "AssetServer.load_error expects one asset handle");
-    }
-    const auto& server = check_asset_server(state, 1);
-    auto handle = check_luau_borrowed_ref(state, 2);
-    auto key = server.asset_key(handle.ref);
-    if (!key) {
-        return raise_message(state, key.error().message);
-    }
-    auto error = server.load_error(*key);
-    if (!error) {
-        lua_pushnil(state);
-        return 1;
-    }
-    lua_pushlstring(state, error->message.data(), error->message.size());
-    return 1;
-}
-
 } // namespace
 
 bool luau_is_asset_server(TypeId type) {
@@ -142,14 +100,6 @@ bool push_luau_asset_server_member(lua_State* state, const char* key) {
         std::pair<std::string_view, lua_CFunction> {
             "load_async",
             asset_server_load_async,
-        },
-        std::pair<std::string_view, lua_CFunction> {
-            "is_loaded",
-            asset_server_is_loaded,
-        },
-        std::pair<std::string_view, lua_CFunction> {
-            "load_error",
-            asset_server_load_error,
         },
     };
     for (const auto& [method_name, function] : methods) {

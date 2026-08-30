@@ -67,7 +67,8 @@ export type AssetKeeper = {}
 local function require_image(assets: ResRW<AssetServer>, path: string)
     local image = assets:load(Image, path)
     if not assets:is_loaded(image) then
-        error(assets:load_error(image) or (path .. " did not load"))
+        local load_error = assets:load_error(image)
+        error(if load_error then load_error.message else path .. " did not load")
     end
     return image
 end

@@ -18,6 +18,7 @@ class TypeMapper {
 
   private:
     std::unordered_map<std::string, std::string> m_reflected_types;
+    std::unordered_map<std::string, std::string> m_unqualified_reflected_types;
     std::set<std::string> m_unsupported_types;
 };
 

@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <optional>
 #include <regex>
+#include <unordered_set>
 
 namespace ets::luau_defgen {
 namespace {
@@ -79,25 +81,84 @@ namespace {
     return result;
 }
 
+[[nodiscard]] std::optional<std::string_view>
+optional_argument(const std::string_view type) {
+    constexpr std::array prefixes {
+        std::string_view {"ets::Optional<"},
+        std::string_view {"Optional<"},
+        std::string_view {"std::optional<"},
+    };
+    for (const auto prefix : prefixes) {
+        if (type.starts_with(prefix) && type.ends_with('>')) {
+            return type.substr(prefix.size(), type.size() - prefix.size() - 1);
+        }
+    }
+    return std::nullopt;
+}
+
 } // namespace
 
 TypeMapper::TypeMapper(const Database& database) {
+    std::unordered_set<std::string> ambiguous_names;
+    const auto add_reflected_type = [&](const std::string& cpp_name,
+                                        const std::string& luau_name) {
+        const auto qualified_inserted =
+            m_reflected_types.emplace(cpp_name, luau_name).second;
+        if (!qualified_inserted) {
+            return;
+        }
+        const auto separator = cpp_name.rfind("::");
+        const auto unqualified =
+            cpp_name.substr(separator == std::string::npos ? 0 : separator + 2);
+        if (ambiguous_names.contains(unqualified)) {
+            return;
+        }
+        const auto [existing, inserted] =
+            m_unqualified_reflected_types.emplace(unqualified, luau_name);
+        if (!inserted) {
+            m_unqualified_reflected_types.erase(existing);
+            ambiguous_names.insert(unqualified);
+        }
+    };
     for (const auto& cls : database.classes) {
-        m_reflected_types.emplace(cls.cpp_name, cls.name);
+        add_reflected_type(cls.cpp_name, cls.name);
     }
     for (const auto& enm : database.enums) {
-        m_reflected_types.emplace(enm.cpp_name, enm.name);
+        add_reflected_type(enm.cpp_name, enm.name);
     }
 }
 
 std::string TypeMapper::map(const std::string_view cpp_type) {
     const auto original = trim(std::string {cpp_type});
     const auto base = normalized_base_type(original);
+    const auto find_reflected =
+        [&](const std::string_view type) -> const std::string* {
+        if (const auto reflected = m_reflected_types.find(std::string {type});
+            reflected != m_reflected_types.end()) {
+            return &reflected->second;
+        }
+        if (const auto reflected =
+                m_unqualified_reflected_types.find(std::string {type});
+            reflected != m_unqualified_reflected_types.end()) {
+            return &reflected->second;
+        }
+        return nullptr;
+    };
+    if (const auto argument = optional_argument(base)) {
+        auto mapped = map(*argument);
+        if (mapped == "any") {
+            m_unsupported_types.insert(original);
+            return mapped;
+        }
+        if (!mapped.ends_with('?')) {
+            mapped += '?';
+        }
+        return mapped;
+    }
     const bool pointer = original.find('*') != std::string::npos;
     if (pointer) {
-        if (const auto reflected = m_reflected_types.find(base);
-            reflected != m_reflected_types.end()) {
-            return reflected->second + '?';
+        if (const auto* reflected = find_reflected(base)) {
+            return *reflected + '?';
         }
         m_unsupported_types.insert(original);
         return "any";
@@ -115,9 +176,8 @@ std::string TypeMapper::map(const std::string_view cpp_type) {
         base == "std::string_view" || base == "std::basic_string_view<char>") {
         return "string";
     }
-    if (const auto reflected = m_reflected_types.find(base);
-        reflected != m_reflected_types.end()) {
-        return reflected->second;
+    if (const auto* reflected = find_reflected(base)) {
+        return *reflected;
     }
     m_unsupported_types.insert(original);
     return "any";

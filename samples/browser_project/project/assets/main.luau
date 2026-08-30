@@ -6,7 +6,8 @@ local function initialize(
 )
     local image = assets:load(Image, "checker.ppm")
     if not assets:is_loaded(image) then
-        error(assets:load_error(image) or "checker.ppm did not load")
+        local load_error = assets:load_error(image)
+        error(if load_error then load_error.message else "checker.ppm did not load")
     end
 
     commands:spawn(

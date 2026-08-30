@@ -55,6 +55,9 @@ TEST_CASE(
 ) {
     ets::luau_defgen::Database database;
     database.classes.push_back({.cpp_name = "ets::Vector2", .name = "Vector2"});
+    database.classes.push_back(
+        {.cpp_name = "ets::AssetLoadError", .name = "AssetLoadError"}
+    );
     ets::luau_defgen::TypeMapper mapper {database};
 
     CHECK(mapper.map("bool") == "boolean");
@@ -62,6 +65,10 @@ TEST_CASE(
     CHECK(mapper.map("std::uint32_t") == "number");
     CHECK(mapper.map("const ets::Vector2&") == "Vector2");
     CHECK(mapper.map("const ets::Vector2*") == "Vector2?");
+    CHECK(
+        mapper.map("ets::Optional<AssetLoadError>") == "AssetLoadError?"
+    );
+    CHECK(mapper.map("std::optional<const ets::Vector2*>") == "Vector2?");
     CHECK(mapper.map("std::vector<float>") == "any");
     CHECK(mapper.unsupported_types().contains("std::vector<float>"));
 }
@@ -92,7 +99,10 @@ TEST_CASE(
     "annotations": [{"name": "ScriptPrelude", "arguments": []}],
     "properties": [{"name": "x", "cppType": "float"}],
     "methods": [{"name": "length", "returnCppType": "float", "parameters": [], "static": false, "const": true}],
-    "constructors": [{"parameters": [{"name": "x", "cppType": "float"}]}]
+    "constructors": [
+      {"parameters": [{"name": "x", "cppType": "float"}]},
+      {"parameters": [{"name": "value", "cppType": "double"}]}
+    ]
   }],
   "enums": []
 })"
@@ -115,6 +125,7 @@ TEST_CASE(
     );
     CHECK(globals.find("declare Vector2: {") != std::string::npos);
     CHECK(globals.find("new: ((x: number) -> Vector2)") != std::string::npos);
+    CHECK(globals.find("value: number") == std::string::npos);
     CHECK(globals.find("__ets_type: Vector2?") != std::string::npos);
     const auto module = read(output / "modules" / "math.luau");
     CHECK(
@@ -124,4 +135,67 @@ TEST_CASE(
     CHECK(module.find("Vector2 = Vector2") != std::string::npos);
     CHECK(read(output / ".luaurc").find("\"entisium\"") != std::string::npos);
     CHECK_FALSE(std::filesystem::exists(output / "modules" / "stale.luau"));
+}
+
+TEST_CASE(
+    "defgen removes overloads that collapse to the same Luau signature",
+    "[luau-defgen][emit][overload]"
+) {
+    TemporaryDirectory temporary;
+    const auto manifest = temporary.path() / "asset.refl.json";
+    const auto manual = temporary.path() / "runtime.d.luau";
+    const auto output = temporary.path() / "out";
+    write(manual, "");
+    write(
+        manifest,
+        R"({
+  "format": "entisium.reflection",
+  "version": 1,
+  "module": "asset",
+  "annotationSchemas": [],
+  "classes": [{
+    "cppName": "ets::AssetLoadError",
+    "name": "AssetLoadError",
+    "namespace": ["ets"],
+    "source": "engine/asset/loader.hpp",
+    "abstract": false,
+    "annotations": [],
+    "properties": [{"name": "message", "cppType": "std::string"}],
+    "methods": [],
+    "constructors": []
+  }, {
+    "cppName": "ets::AssetServer",
+    "name": "AssetServer",
+    "namespace": ["ets"],
+    "source": "engine/asset/asset_server.hpp",
+    "abstract": false,
+    "annotations": [],
+    "properties": [],
+    "methods": [
+      {"name": "load_error", "returnCppType": "ets::Optional<AssetLoadError>", "parameters": [{"name": "key", "cppType": "ets::AssetKey"}], "static": false, "const": true},
+      {"name": "load_error", "returnCppType": "ets::Optional<AssetLoadError>", "parameters": [{"name": "handle", "cppType": "const ets::UntypedHandle&"}], "static": false, "const": true}
+    ],
+    "constructors": []
+  }],
+  "enums": []
+})"
+    );
+
+    const std::vector manifests {manifest};
+    const auto database = ets::luau_defgen::load_manifests(manifests);
+    const auto summary =
+        ets::luau_defgen::emit_definitions(database, manual, output);
+
+    const auto globals = read(output / "globals.d.luau");
+    CHECK(summary.class_count == 2);
+    CHECK(
+        globals.find(
+            "function load_error(self, key: any): AssetLoadError?"
+        ) !=
+        std::string::npos
+    );
+    CHECK(
+        globals.find("function load_error(self, handle:") ==
+        std::string::npos
+    );
 }

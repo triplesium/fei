@@ -73,7 +73,8 @@ local function initialize_hud(
         "embedded://fonts/Cousine-Regular.ttf"
     )
     if not assets:is_loaded(font) then
-        error(assets:load_error(font) or "HUD font did not load")
+        local load_error = assets:load_error(font)
+        error(if load_error then load_error.message else "HUD font did not load")
     end
 
     local root = commands:spawn(
