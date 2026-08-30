@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -36,8 +37,10 @@ struct AnnotationSchemaInfo {
 
 struct MethodInfo : MemberInfo {
     std::vector<ParamInfo> parameters;
+    std::optional<std::string> dependent_return_parameter;
     bool is_static = false;
     bool is_const = false;
+    bool is_converting = false;
     std::string ref_qualifier;
     bool is_abstract = false;
 

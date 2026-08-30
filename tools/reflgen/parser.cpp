@@ -24,6 +24,11 @@ struct AnnotationMarker {
     std::string name;
 };
 
+struct DependentReturnMarker {
+    std::size_t end_offset {0};
+    std::string parameter;
+};
+
 struct TranslationUnitContext {
     CXTranslationUnit translation_unit = nullptr;
     std::string header_path;
@@ -31,6 +36,7 @@ struct TranslationUnitContext {
     std::string source;
     std::vector<ReflectionMarker> reflection_markers;
     std::vector<AnnotationMarker> annotation_markers;
+    std::vector<DependentReturnMarker> dependent_return_markers;
     std::vector<AnnotationSchemaInfo> annotation_schemas;
 };
 
@@ -87,6 +93,25 @@ void visit_children(CXCursor cursor, Visitor visitor) {
     }
     const auto last = text.find_last_not_of(" \t\r\n");
     return std::string(text.substr(first, last - first + 1));
+}
+
+[[nodiscard]] bool is_type_id_parameter(std::string_view type_name) {
+    auto type = trim(type_name);
+    if (type.starts_with("const ")) {
+        type.erase(0, 6);
+    }
+    while (type.ends_with('&')) {
+        type.pop_back();
+        type = trim(type);
+    }
+    if (type.ends_with('*')) {
+        return false;
+    }
+    if (type.ends_with(" const")) {
+        type.erase(type.size() - 6);
+        type = trim(type);
+    }
+    return type == "TypeId" || type == "ets::TypeId";
 }
 
 [[nodiscard]] std::optional<std::size_t> cursor_offset(CXCursor cursor) {
@@ -346,6 +371,49 @@ parse_annotation_marker(std::string_view source, std::size_t marker_offset) {
     };
 }
 
+[[nodiscard]] DependentReturnMarker parse_dependent_return_marker(
+    std::string_view source,
+    std::size_t marker_offset
+) {
+    constexpr std::string_view c_marker_name = "ETS_DEPENDENT_RETURN";
+    std::size_t position = marker_offset + c_marker_name.size();
+    while (position < source.size() &&
+           std::isspace(static_cast<unsigned char>(source[position]))) {
+        ++position;
+    }
+    if (position >= source.size() || source[position] != '(') {
+        throw std::runtime_error(
+            "ETS_DEPENDENT_RETURN must be invoked with parentheses"
+        );
+    }
+
+    const auto parameter_begin = ++position;
+    const auto parameter_end = source.find(')', parameter_begin);
+    if (parameter_end == std::string_view::npos) {
+        throw std::runtime_error(
+            "Unterminated ETS_DEPENDENT_RETURN invocation"
+        );
+    }
+    auto parameter =
+        trim(source.substr(parameter_begin, parameter_end - parameter_begin));
+    if (parameter.empty() ||
+        !std::ranges::all_of(
+            parameter,
+            [](const unsigned char character) {
+                return std::isalnum(character) != 0 || character == '_';
+            }
+        ) ||
+        std::isdigit(static_cast<unsigned char>(parameter.front())) != 0) {
+        throw std::runtime_error(
+            "Invalid ETS_DEPENDENT_RETURN parameter '" + parameter + "'"
+        );
+    }
+    return DependentReturnMarker {
+        .end_offset = parameter_end + 1,
+        .parameter = std::move(parameter),
+    };
+}
+
 [[nodiscard]] bool only_trivia_between(
     std::string_view source,
     std::size_t begin,
@@ -397,12 +465,44 @@ void collect_reflection_markers(
                     auto marker =
                         parse_annotation_marker(context.source, *offset);
                     context.annotation_markers.push_back(std::move(marker));
+                } else if (macro == "ETS_DEPENDENT_RETURN") {
+                    auto marker =
+                        parse_dependent_return_marker(context.source, *offset);
+                    context.dependent_return_markers.push_back(
+                        std::move(marker)
+                    );
                 }
             }
         }
         collect_reflection_markers(child, context);
         return CXChildVisit_Continue;
     });
+}
+
+[[nodiscard]] std::optional<std::string> dependent_return_parameter_for(
+    CXCursor cursor,
+    const TranslationUnitContext& context
+) {
+    const auto declaration_offset = cursor_offset(cursor);
+    if (!declaration_offset) {
+        return std::nullopt;
+    }
+    for (auto marker = context.dependent_return_markers.rbegin();
+         marker != context.dependent_return_markers.rend();
+         ++marker) {
+        if (marker->end_offset > *declaration_offset) {
+            continue;
+        }
+        if (only_trivia_between(
+                context.source,
+                marker->end_offset,
+                *declaration_offset
+            )) {
+            return marker->parameter;
+        }
+        break;
+    }
+    return std::nullopt;
 }
 
 [[nodiscard]] std::optional<std::vector<ReflectionAnnotation>>
@@ -1060,6 +1160,29 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
                 fully_qualified_type(clang_getCursorResultType(child));
             method.access = member_access;
             method.parameters = parameters_for(child);
+            method.dependent_return_parameter =
+                dependent_return_parameter_for(child, context);
+            if (method.dependent_return_parameter) {
+                const auto parameter = std::ranges::find(
+                    method.parameters,
+                    *method.dependent_return_parameter,
+                    &ParamInfo::name
+                );
+                if (parameter == method.parameters.end()) {
+                    throw std::runtime_error(
+                        "ETS_DEPENDENT_RETURN on method '" + method.name +
+                        "' names missing parameter '" +
+                        *method.dependent_return_parameter + "'"
+                    );
+                }
+                if (!is_type_id_parameter(parameter->type_name)) {
+                    throw std::runtime_error(
+                        "ETS_DEPENDENT_RETURN parameter '" +
+                        *method.dependent_return_parameter + "' on method '" +
+                        method.name + "' must have type ets::TypeId"
+                    );
+                }
+            }
             method.is_static = clang_CXXMethod_isStatic(child) != 0;
             method.is_const = clang_CXXMethod_isConst(child) != 0;
             method.ref_qualifier = std::move(qualifier);
@@ -1075,6 +1198,9 @@ parse_enum(CXCursor cursor, const TranslationUnitContext& context) {
             constructor.type_name = class_info.name;
             constructor.access = member_access;
             constructor.parameters = parameters_for(child);
+            constructor.is_converting =
+                constructor.parameters.size() == 1 &&
+                clang_CXXConstructor_isConvertingConstructor(child) != 0;
             class_info.constructors.push_back(std::move(constructor));
         }
 

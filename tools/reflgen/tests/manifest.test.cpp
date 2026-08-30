@@ -94,6 +94,7 @@ TEST_CASE(
     };
     auto run = method("run", "bool");
     run.parameters.push_back({.name = "count", .type_name = "std::int32_t"});
+    run.dependent_return_parameter = "count";
     run.is_const = true;
     plugin.methods.push_back(std::move(run));
     plugin.methods.push_back(method("run", "void"));
@@ -102,6 +103,7 @@ TEST_CASE(
 
     auto constructor = method("ets::ZedPlugin", "ets::ZedPlugin");
     constructor.parameters.push_back({.name = "value", .type_name = "float"});
+    constructor.is_converting = true;
     plugin.constructors.push_back(std::move(constructor));
     plugin.constructors.push_back(
         method("ets::ZedPlugin", "ets::ZedPlugin", "private")
@@ -171,7 +173,12 @@ TEST_CASE(
         plugin_json.at("methods").at(0).at("parameters").at(0).at("cppType") ==
         "std::int32_t"
     );
+    REQUIRE(
+        plugin_json.at("methods").at(0).at("dependentReturnParameter") ==
+        "count"
+    );
     REQUIRE(plugin_json.at("constructors").size() == 1);
+    REQUIRE(plugin_json.at("constructors").at(0).at("converting") == true);
     REQUIRE(
         plugin_json.at("annotations").at(1).at("arguments").at(0).at("value") ==
         "tools\"debug"

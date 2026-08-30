@@ -107,15 +107,18 @@ class_json(const ClassInfo& cls, const std::filesystem::path& root_dir) {
     auto methods = Json::array();
     for (const auto& method : cls.methods) {
         if (is_reflected_method(cls, method)) {
-            methods.push_back(
-                Json {
-                    {"name", method.name},
-                    {"returnCppType", method.type_name},
-                    {"parameters", parameters_json(method.parameters)},
-                    {"static", method.is_static},
-                    {"const", method.is_const},
-                }
-            );
+            Json method_json {
+                {"name", method.name},
+                {"returnCppType", method.type_name},
+                {"parameters", parameters_json(method.parameters)},
+                {"static", method.is_static},
+                {"const", method.is_const},
+            };
+            if (method.dependent_return_parameter) {
+                method_json["dependentReturnParameter"] =
+                    *method.dependent_return_parameter;
+            }
+            methods.push_back(std::move(method_json));
         }
     }
 
@@ -123,7 +126,10 @@ class_json(const ClassInfo& cls, const std::filesystem::path& root_dir) {
     for (const auto& constructor : cls.constructors) {
         if (is_reflected_constructor(cls, constructor)) {
             constructors.push_back(
-                Json {{"parameters", parameters_json(constructor.parameters)}}
+                Json {
+                    {"parameters", parameters_json(constructor.parameters)},
+                    {"converting", constructor.is_converting},
+                }
             );
         }
     }

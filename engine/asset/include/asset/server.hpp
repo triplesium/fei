@@ -268,6 +268,7 @@ class AssetServer {
         return registrations;
     }
 
+    ETS_DEPENDENT_RETURN(type)
     Result<UntypedHandle, AssetTypeError>
     load(TypeId type, const AssetPath& path) {
         auto access = m_asset_types.find(type);
@@ -283,6 +284,7 @@ class AssetServer {
         return access->second.load(*this, path);
     }
 
+    ETS_DEPENDENT_RETURN(type)
     Result<UntypedHandle, AssetTypeError>
     load_async(TypeId type, const AssetPath& path) {
         auto access = m_asset_types.find(type);
