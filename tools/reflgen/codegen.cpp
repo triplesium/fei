@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <optional>
 #include <set>
 #include <stdexcept>
 
@@ -79,18 +80,6 @@ void write_structured_type_name(
         out << "\"" << namespace_path[index] << "\"";
     }
     out << "}, \"" << local_name << "\")";
-}
-
-[[nodiscard]] bool has_annotation(
-    const std::vector<ReflectionAnnotation>& annotations,
-    std::string_view name
-) {
-    return std::ranges::any_of(
-        annotations,
-        [name](const ReflectionAnnotation& annotation) {
-            return annotation.name == name;
-        }
-    );
 }
 
 [[nodiscard]] const ReflectionAnnotation* find_annotation(
@@ -179,11 +168,6 @@ void write_annotations(
         return explicit_name;
     }
     return default_plugin_name(cls.name);
-}
-
-[[nodiscard]] bool is_plugin_lifecycle_method(std::string_view name) {
-    return name == "dependencies" || name == "setup" || name == "finish" ||
-           name == "cleanup";
 }
 
 } // namespace
@@ -290,7 +274,7 @@ void generate_cpp_file(
     }
 
     for (const auto& cls : sorted_classes(result.classes)) {
-        if (cls.name == "ets::Registry") {
+        if (!is_reflected_class(cls)) {
             continue;
         }
         const auto generated_plugin_name = plugin_name(cls);
@@ -299,32 +283,27 @@ void generate_cpp_file(
         write_structured_type_name(out, cls.namespace_path, cls.local_name);
         out << "\n";
         for (const auto& prop : cls.properties) {
-            if (prop.access == "public") {
+            if (is_reflected_property(prop)) {
                 out << "    .add_property(\"" << prop.name << "\", &"
                     << cls.name << "::" << prop.name << ")\n";
             }
         }
         for (const auto& method : cls.methods) {
-            if (method.access == "public" &&
-                !(generated_plugin_name &&
-                  is_plugin_lifecycle_method(method.name))) {
+            if (is_reflected_method(cls, method)) {
                 out << "    .add_method(\"" << method.name << "\", static_cast<"
                     << method.to_cpp_type(cls.name) << ">(&" << cls.name
                     << "::" << method.name << "))\n";
             }
         }
-        if (!cls.is_abstract()) {
-            for (const auto& constructor : cls.constructors) {
-                if (constructor.access != "public") {
-                    continue;
-                }
-                if (constructor.parameters.empty()) {
-                    out << "    .add_constructor<" << cls.name << ">()\n";
-                } else {
-                    out << "    .add_constructor<" << cls.name << ", "
-                        << joined_param_types(constructor.parameters)
-                        << ">()\n";
-                }
+        for (const auto& constructor : cls.constructors) {
+            if (!is_reflected_constructor(cls, constructor)) {
+                continue;
+            }
+            if (constructor.parameters.empty()) {
+                out << "    .add_constructor<" << cls.name << ">()\n";
+            } else {
+                out << "    .add_constructor<" << cls.name << ", "
+                    << joined_param_types(constructor.parameters) << ">()\n";
             }
         }
         out << "    ;\n";

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -79,6 +78,17 @@ struct ParseResult {
     std::vector<ClassInfo> classes;
     std::vector<EnumInfo> enums;
 };
+
+[[nodiscard]] bool has_annotation(
+    const std::vector<ReflectionAnnotation>& annotations,
+    std::string_view name
+);
+[[nodiscard]] bool is_reflected_class(const ClassInfo& cls);
+[[nodiscard]] bool is_reflected_property(const MemberInfo& property);
+[[nodiscard]] bool
+is_reflected_method(const ClassInfo& cls, const MethodInfo& method);
+[[nodiscard]] bool
+is_reflected_constructor(const ClassInfo& cls, const MethodInfo& constructor);
 
 void dedupe_reflected_types(ParseResult& result);
 void filter_codegen_unsupported_members(ParseResult& result);

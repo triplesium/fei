@@ -234,6 +234,7 @@ local function file_entries(target)
             marker = path.join(autogendir, "files", stable .. ".reflgen"),
             output_file = path.join(autogendir, "files", stable .. ".cpp"),
             metadata_file = path.join(autogendir, "files", stable .. ".reflmeta"),
+            manifest_file = path.join(autogendir, "files", stable .. ".refl.json"),
             function_name = "register_" .. target_name .. "_" .. stable .. "_reflection"
         })
     end
@@ -526,7 +527,8 @@ local function make_reflgen_args(
     depfile,
     dep_target,
     script_module,
-    metadata_file
+    metadata_file,
+    manifest_file
 )
     local args = {
         "--rootdir",
@@ -545,6 +547,10 @@ local function make_reflgen_args(
     if metadata_file then
         table.insert(args, "--metadata-output")
         table.insert(args, normalize_path(metadata_file))
+    end
+    if manifest_file then
+        table.insert(args, "--manifest-output")
+        table.insert(args, normalize_path(manifest_file))
     end
 
     if stamp_file then
@@ -612,13 +618,15 @@ local function aggregate_inputs(target)
         return cached.output_file,
             cached.functions,
             cached.files,
-            cached.metadata_files
+            cached.metadata_files,
+            cached.manifest_files
     end
 
     local output_file = target:values("entisium.reflect.aggregate_file")
     local functions = {}
     local files = {}
     local metadata_files = {}
+    local manifest_files = {}
     for _, reflected_target in ipairs(collect_reflected_targets(target)) do
         local function_name = reflected_target:values("entisium.reflect.module_function")
         local module_file = reflected_target:values("entisium.reflect.module_file")
@@ -630,6 +638,7 @@ local function aggregate_inputs(target)
         end
         for _, entry in ipairs(file_entries(reflected_target)) do
             insert_unique(metadata_files, entry.metadata_file)
+            insert_unique(manifest_files, entry.manifest_file)
             insert_unique(files, entry.metadata_file)
         end
     end
@@ -643,10 +652,16 @@ local function aggregate_inputs(target)
         output_file = output_file,
         functions = functions,
         files = files,
-        metadata_files = metadata_files
+        metadata_files = metadata_files,
+        manifest_files = manifest_files
     }
     aggregate_inputs_cache[target:name()] = inputs
-    return output_file, functions, files, metadata_files
+    return output_file, functions, files, metadata_files, manifest_files
+end
+
+function reflection_manifests(target)
+    local _, _, _, _, manifest_files = aggregate_inputs(target)
+    return manifest_files
 end
 
 local function metadata_validation_args(metadata_files)
@@ -826,6 +841,7 @@ local function generate_files(target)
             parse_reflgen_depfile(header_depfile, {entry.header})
         )
         insert_unique(depfiles, entry.metadata_file)
+        insert_unique(depfiles, entry.manifest_file)
         ensure_directory(path.directory(dependfile))
 
         depend.on_changed(function ()
@@ -840,15 +856,17 @@ local function generate_files(target)
                     header_depfile,
                     reflgen_dep_target(entry),
                     inputs.script_module,
-                    entry.metadata_file
+                    entry.metadata_file,
+                    entry.manifest_file
                 )
             )
         end, {
             files = depfiles,
             values = {
-                "entisium.reflect.file.v6",
+                "entisium.reflect.file.v7",
                 entry.output_file,
                 entry.metadata_file,
+                entry.manifest_file,
                 entry.function_name,
                 entry.header,
                 table.concat(inputs.include_dirs, ";"),
@@ -954,6 +972,7 @@ function buildcmd_file(target, batchcmds, sourcefile, opt)
         parse_reflgen_depfile(header_depfile, {entry.header})
     )
     insert_unique(depfiles, entry.metadata_file)
+    insert_unique(depfiles, entry.manifest_file)
     table.insert(target:objectfiles(), objectfile)
 
     batchcmds:show_progress(
@@ -973,15 +992,17 @@ function buildcmd_file(target, batchcmds, sourcefile, opt)
             header_depfile,
             reflgen_dep_target(entry),
             inputs.script_module,
-            entry.metadata_file
+            entry.metadata_file,
+            entry.manifest_file
         )
     )
     batchcmds:compile(entry.output_file, objectfile)
     batchcmds:add_depfiles(depfiles)
     batchcmds:add_depvalues(
-        "entisium.reflect.file.v6",
+        "entisium.reflect.file.v7",
         entry.output_file,
         entry.metadata_file,
+        entry.manifest_file,
         entry.function_name,
         entry.header,
         table.concat(inputs.include_dirs, ";"),

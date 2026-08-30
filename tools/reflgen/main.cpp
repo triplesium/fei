@@ -1,4 +1,5 @@
 #include "codegen.hpp"
+#include "manifest.hpp"
 #include "metadata.hpp"
 #include "model.hpp"
 #include "parser.hpp"
@@ -23,6 +24,7 @@ struct Options {
     std::vector<std::string> registrars;
     std::filesystem::path root_dir = std::filesystem::current_path();
     std::filesystem::path output_file;
+    std::filesystem::path manifest_output;
     std::filesystem::path metadata_output;
     std::filesystem::path stamp_file;
     std::filesystem::path depfile;
@@ -62,6 +64,11 @@ void configure_options(CLI::App& app, Options& options) {
         "Root directory for relative paths"
     );
     app.add_option("-o,--output", options.output_file, "Output C++ file");
+    app.add_option(
+        "--manifest-output",
+        options.manifest_output,
+        "Reflection manifest JSON file to write"
+    );
     app.add_option(
         "--metadata-output",
         options.metadata_output,
@@ -306,6 +313,12 @@ int main(int argc, char** argv) {
         ets::reflgen::write_reflection_metadata(
             result,
             options.metadata_output,
+            options.script_module
+        );
+        ets::reflgen::write_reflection_manifest(
+            result,
+            options.root_dir,
+            options.manifest_output,
             options.script_module
         );
 

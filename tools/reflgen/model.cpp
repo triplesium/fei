@@ -139,6 +139,44 @@ bool ClassInfo::is_abstract() const {
     });
 }
 
+bool has_annotation(
+    const std::vector<ReflectionAnnotation>& annotations,
+    std::string_view name
+) {
+    return std::ranges::any_of(
+        annotations,
+        [name](const ReflectionAnnotation& annotation) {
+            return annotation.name == name;
+        }
+    );
+}
+
+bool is_reflected_class(const ClassInfo& cls) {
+    return cls.name != "ets::Registry";
+}
+
+bool is_reflected_property(const MemberInfo& property) {
+    return property.access == "public";
+}
+
+bool is_reflected_method(const ClassInfo& cls, const MethodInfo& method) {
+    if (method.access != "public") {
+        return false;
+    }
+    if (!has_annotation(cls.annotations, "Plugin")) {
+        return true;
+    }
+    return method.name != "dependencies" && method.name != "setup" &&
+           method.name != "finish" && method.name != "cleanup";
+}
+
+bool is_reflected_constructor(
+    const ClassInfo& cls,
+    const MethodInfo& constructor
+) {
+    return !cls.is_abstract() && constructor.access == "public";
+}
+
 void dedupe_reflected_types(ParseResult& result) {
     std::unordered_set<std::string> seen_annotation_schemas;
     std::vector<AnnotationSchemaInfo> annotation_schemas;
