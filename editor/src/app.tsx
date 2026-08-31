@@ -25,7 +25,6 @@ import {
     Settings2,
     Terminal,
     Trash2,
-    X,
 } from "lucide-react";
 import {
     hotkeysCoreFeature,
@@ -74,12 +73,11 @@ import {
 import { IconButton } from "./components/ui/icon-button";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { ScrollArea } from "./components/ui/scroll-area";
-import { CodeEditor } from "./components/code-editor";
+import { VscodeEditorPart } from "./components/vscode-editor-part";
 import { RuntimeViewport } from "./components/runtime-viewport";
 import { ProfilerPanel } from "./components/profiler-panel";
 import {
     PanelEmptyState,
-    PanelStatus,
     PanelToolbar,
     ToolPanel,
 } from "./components/panel";
@@ -103,12 +101,28 @@ import {
 import { cn } from "./lib/utils";
 import { editorCapabilities } from "@editor-platform/capabilities";
 import {
+    startLuauLanguageClient,
+    subscribeLuauLanguageClient,
     synchronizeLuauLanguageClientProject,
-    type LuauLanguageClientStatus,
     type LuauProjectFile,
 } from "@editor-platform/luau-language-client";
 import { ProjectStorage } from "@editor-platform/project-storage";
 import { buildFileTree, type FileTreeNode } from "./file-tree";
+import {
+    closeAllVscodeProjectFiles,
+    closeVscodeProjectPaths,
+    openVscodeProjectFile,
+    openedVscodeProjectPathsUnder,
+    readVscodeProjectFile,
+    saveAllVscodeProjectFiles,
+    subscribeVscodeActiveProjectFile,
+    writeVscodeProjectFile,
+} from "./services/vscode-editor-host";
+import {
+    notifyVscodeProjectFileChanged,
+    resetVscodeProjectFiles,
+    synchronizeVscodeProjectFiles,
+} from "./services/vscode-project-files";
 import type {
     AgentRequest,
     ConsoleEntry,
@@ -144,14 +158,6 @@ function requestId(): string {
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
-}
-
-function languageForPath(path: string): string {
-    if (path.endsWith(".luau") || path.endsWith(".lua")) return "Luau";
-    if (path.endsWith(".yaml") || path.endsWith(".yml")) return "YAML";
-    if (path.endsWith(".json")) return "JSON";
-    if (/\.(?:c|cc|cpp|cxx|h|hh|hpp|hxx)$/.test(path)) return "C++";
-    return "Text";
 }
 
 function newFileContent(path: string): string {
@@ -378,62 +384,6 @@ function FileTree({
     );
 }
 
-function CodeFileTabs({
-    paths,
-    activePath,
-    dirty,
-    onSelect,
-    onClose,
-}: {
-    paths: string[];
-    activePath: string;
-    dirty: boolean;
-    onSelect(path: string): void;
-    onClose(path: string): void;
-}) {
-    if (paths.length === 0) return null;
-    return (
-        <div className="flex h-8 shrink-0 items-stretch overflow-x-auto bg-[#1d1d1d]">
-            {paths.map((path) => {
-                const active = path === activePath;
-                const label = assetRelativePath(path).split("/").at(-1) ?? path;
-                return (
-                    <div
-                        key={path}
-                        title={assetRelativePath(path)}
-                        className={cn(
-                            "group/file-tab flex min-w-0 max-w-52 shrink-0 items-center rounded-t bg-transparent text-[12px] text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground",
-                            active && "bg-[#191919] text-foreground hover:bg-[#191919]",
-                        )}
-                    >
-                        <button
-                            type="button"
-                            className="m-0 flex min-w-0 flex-1 items-center gap-1.5 self-stretch border-0 bg-transparent py-0 pr-1 pl-2.5 text-inherit outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring/50"
-                            aria-current={active ? "page" : undefined}
-                            onClick={() => onSelect(path)}
-                        >
-                            <FileCode2 className={cn("size-3.5 shrink-0", active && "text-primary")} />
-                            <span className="min-w-0 flex-1 truncate">{label}</span>
-                            {active && dirty && <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-label="Unsaved" />}
-                        </button>
-                        <button
-                            type="button"
-                            aria-label={`Close ${label}`}
-                            className="mr-1 grid size-5 shrink-0 place-items-center rounded border-0 bg-transparent p-0 text-muted-foreground opacity-0 outline-none transition-[opacity,color,background-color] hover:bg-white/10 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring/50 group-hover/file-tab:opacity-100"
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                onClose(path);
-                            }}
-                        >
-                            <X className="size-3" />
-                        </button>
-                    </div>
-                );
-            })}
-        </div>
-    );
-}
-
 const workbenchLayoutStorageKey = editorCapabilities.agent
     ? "entisium-editor-dockview-layout-v3"
     : "entisium-editor-dockview-layout-browser-v1";
@@ -487,6 +437,7 @@ function addDefaultWorkbenchPanels(api: DockviewApi): void {
         component: "panel",
         tabComponent: "engine",
         title: "Code",
+        renderer: "always",
         ...(editorCapabilities.agent
             ? { position: { referencePanel: "agent", direction: "right" as const } }
             : {}),
@@ -578,12 +529,6 @@ export function App() {
     const [assetInspectionError, setAssetInspectionError] = useState("");
     const [assetPreviewUrl, setAssetPreviewUrl] = useState("");
     const [activePath, setActivePath] = useState("");
-    const [openPaths, setOpenPaths] = useState<string[]>([]);
-    const [content, setContent] = useState("");
-    const [savedContent, setSavedContent] = useState("");
-    const [cursor, setCursor] = useState({ line: 1, column: 1 });
-    const [luauLspStatus, setLuauLspStatus] =
-        useState<LuauLanguageClientStatus>("stopped");
     const [logs, setLogs] = useState<ConsoleEntry[]>([]);
     const [operation, setOperation] = useState<ProjectOperation>(null);
     const [assetContextPath, setAssetContextPath] = useState("");
@@ -625,8 +570,6 @@ export function App() {
         profileArchiveRef.current = archive;
         setProfileArchive(archive);
     }, []);
-
-    const dirty = storage.isOpen && activePath.length > 0 && content !== savedContent;
 
     useEffect(() => {
         let cancelled = false;
@@ -729,9 +672,11 @@ export function App() {
         if (!storage.isOpen) {
             setFiles([]);
             setSelectedAssetPath("");
+            resetVscodeProjectFiles();
             return [];
         }
         const entries = await storage.list();
+        synchronizeVscodeProjectFiles(storage, entries);
         const assetEntries = entries.filter((entry) => entry.path.startsWith(assetPathPrefix));
         setFiles(assetEntries);
         return assetEntries;
@@ -763,24 +708,15 @@ export function App() {
         return parseProjectSettings(source);
     };
 
-    const saveActiveFile = async (): Promise<void> => {
-        if (!activePath) return;
-        await storage.write(activePath, content);
-        setSavedContent(content);
-        appendConsole("info", "editor", `saved ${activePath}`);
+    const saveProjectFiles = async (): Promise<void> => {
+        await saveAllVscodeProjectFiles();
+        appendConsole("info", "editor", "saved open files");
     };
 
     const selectFile = async (path: string): Promise<void> => {
         setSelectedAssetPath(path);
         dockviewApiRef.current?.getPanel("code")?.api.setActive();
-        if (path === activePath) return;
-        if (dirty) await saveActiveFile();
-        const next = (await storage.read(path)) ?? "";
-        setOpenPaths((current) => current.includes(path) ? current : [...current, path]);
-        setActivePath(path);
-        setContent(next);
-        setSavedContent(next);
-        setCursor({ line: 1, column: 1 });
+        await openVscodeProjectFile(path);
     };
 
     const loadOpenedProject = async (): Promise<void> => {
@@ -792,21 +728,13 @@ export function App() {
         }
         const entries = await refreshFiles();
         await synchronizeProjectLanguageFiles(entries);
-        setOpenPaths([]);
         setSelectedAssetPath("");
         setActivePath("");
-        setContent("");
-        setSavedContent("");
         const preferred =
             entries.find((entry) => entry.path === "assets/main.luau") ??
             entries.find((entry) => entry.kind !== "directory" && !entry.readonly);
         if (!preferred) return;
-        const next = (await storage.read(preferred.path)) ?? "";
-        setSelectedAssetPath(preferred.path);
-        setOpenPaths([preferred.path]);
-        setActivePath(preferred.path);
-        setContent(next);
-        setSavedContent(next);
+        await selectFile(preferred.path);
     };
 
     const stopRuntime = async (
@@ -876,7 +804,7 @@ export function App() {
     };
 
     const showProjectSettings = async (): Promise<void> => {
-        if (dirty) await saveActiveFile();
+        await saveAllVscodeProjectFiles();
         const settings = await readProjectSettings();
         setSettingsDraft(settings);
         setSettingsPlugins(settings.runtimePlugins.join("\n"));
@@ -900,8 +828,10 @@ export function App() {
     };
 
     const openProjectFolder = async (): Promise<void> => {
-        if (dirty) await saveActiveFile();
+        await saveAllVscodeProjectFiles();
         const name = await storage.open();
+        await closeAllVscodeProjectFiles();
+        resetVscodeProjectFiles();
         await stopRuntime("project folder changed", true, false);
         storeProfileArchive(null);
         await loadOpenedProject();
@@ -909,7 +839,7 @@ export function App() {
     };
 
     const refreshProjectFolder = async (): Promise<void> => {
-        if (dirty) await saveActiveFile();
+        await saveAllVscodeProjectFiles();
         const previous = activePath;
         const previousSelection = selectedAssetPath;
         const entries = await refreshFiles();
@@ -921,17 +851,7 @@ export function App() {
                     entry.kind !== "directory" &&
                     !entry.readonly,
             ) ?? entries.find((entry) => entry.kind !== "directory" && !entry.readonly);
-        if (next) {
-            const nextContent = (await storage.read(next.path)) ?? "";
-            setOpenPaths((current) => {
-                const available = new Set(entries.map((entry) => entry.path));
-                const retained = current.filter((path) => available.has(path));
-                return retained.includes(next.path) ? retained : [...retained, next.path];
-            });
-            setActivePath(next.path);
-            setContent(nextContent);
-            setSavedContent(nextContent);
-        }
+        if (next && next.path !== previous) await openVscodeProjectFile(next.path);
         setSelectedAssetPath(
             entries.some((entry) => entry.path === previousSelection)
                 ? previousSelection
@@ -956,13 +876,7 @@ export function App() {
         if (await storage.exists(path)) throw new Error(`Project file already exists: ${path}`);
         await storage.write(path, initialContent);
         await refreshFiles();
-        if (select) {
-            setSelectedAssetPath(path);
-            setOpenPaths((current) => current.includes(path) ? current : [...current, path]);
-            setActivePath(path);
-            setContent(initialContent);
-            setSavedContent(initialContent);
-        }
+        if (select) await selectFile(path);
         return { path, created: true };
     };
 
@@ -976,12 +890,15 @@ export function App() {
     const renameProjectFile = async (source: string, destination: string) => {
         assertMutablePath(source);
         assertMutablePath(destination);
-        if (source === activePath && dirty) await saveActiveFile();
+        await saveAllVscodeProjectFiles();
+        const openedPaths = await openedVscodeProjectPathsUnder(source);
+        await closeVscodeProjectPaths(openedPaths);
         await storage.rename(source, destination);
-        setOpenPaths((current) => current.map((path) => path === source ? destination : path));
-        if (source === activePath) setActivePath(destination);
         if (source === selectedAssetPath) setSelectedAssetPath(destination);
         await refreshFiles();
+        for (const path of openedPaths) {
+            await openVscodeProjectFile(`${destination}${path.slice(source.length)}`);
+        }
         return { source, destination, renamed: true };
     };
 
@@ -989,70 +906,21 @@ export function App() {
         assertMutablePath(path);
         const containsPath = (candidate: string): boolean =>
             candidate === path || candidate.startsWith(`${path}/`);
+        await saveAllVscodeProjectFiles();
+        const openedPaths = await openedVscodeProjectPathsUnder(path);
+        await closeVscodeProjectPaths(openedPaths);
         await storage.remove(path);
-        const wasActive = containsPath(activePath);
         const wasSelected = containsPath(selectedAssetPath);
         const entries = await refreshFiles();
-        const remainingOpenPaths = openPaths.filter((candidate) => !containsPath(candidate));
-        setOpenPaths(remainingOpenPaths);
-        if (wasActive) {
-            const next =
-                remainingOpenPaths
-                    .map((candidate) => entries.find((entry) => entry.path === candidate))
-                    .find(
-                        (entry) =>
-                            entry && entry.kind !== "directory" && !entry.readonly,
-                    ) ??
-                entries.find(
-                    (entry) => entry.kind !== "directory" && !entry.readonly,
-                );
-            if (next) {
-                const nextContent = (await storage.read(next.path)) ?? "";
-                setOpenPaths((current) => current.includes(next.path) ? current : [...current, next.path]);
-                setActivePath(next.path);
-                setContent(nextContent);
-                setSavedContent(nextContent);
-            } else {
-                setActivePath("");
-                setContent("");
-                setSavedContent("");
-            }
-        }
         if (wasSelected) {
-            const nextSelected =
-                remainingOpenPaths.find((candidate) =>
-                    entries.some((entry) => entry.path === candidate),
-                ) ?? entries[0]?.path ?? "";
+            const nextSelected = entries[0]?.path ?? "";
             setSelectedAssetPath(nextSelected);
         }
         return { path, removed: true };
     };
 
-    const closeCodeFile = async (path: string): Promise<void> => {
-        const index = openPaths.indexOf(path);
-        if (index < 0) return;
-        if (path === activePath && dirty) await saveActiveFile();
-        const remaining = openPaths.filter((candidate) => candidate !== path);
-        setOpenPaths(remaining);
-        if (path !== activePath) return;
-
-        const nextPath = remaining[Math.min(index, remaining.length - 1)];
-        if (!nextPath) {
-            setActivePath("");
-            setContent("");
-            setSavedContent("");
-            setCursor({ line: 1, column: 1 });
-            return;
-        }
-        const next = (await storage.read(nextPath)) ?? "";
-        setActivePath(nextPath);
-        setContent(next);
-        setSavedContent(next);
-        setCursor({ line: 1, column: 1 });
-    };
-
     const projectSnapshot = async () => {
-        if (dirty) await saveActiveFile();
+        await saveAllVscodeProjectFiles();
         const entries = await storage.list();
         return Promise.all(
             entries.filter((entry) => entry.kind !== "directory").map(async (entry) => ({
@@ -1159,6 +1027,14 @@ export function App() {
         document.documentElement.dataset.entisiumEditorRuntime = runtimeState;
     }, [runtimeState]);
 
+    useEffect(
+        () =>
+            subscribeLuauLanguageClient((status) => {
+                document.documentElement.dataset.entisiumEditorLsp = status;
+            }),
+        [],
+    );
+
     useEffect(() => {
         const api = dockviewApiRef.current;
         if (!api) return;
@@ -1185,13 +1061,7 @@ export function App() {
                 void refreshFiles()
                     .then(async (entries) => {
                         await synchronizeProjectLanguageFiles(entries);
-                        if (!dirty && activePath && event.path === activePath) {
-                            const nextContent = await storage.read(activePath);
-                            if (nextContent !== null) {
-                                setContent(nextContent);
-                                setSavedContent(nextContent);
-                            }
-                        }
+                        if (event.path) notifyVscodeProjectFileChanged(event.path);
                     })
                     .catch((error) => appendConsole("error", "project", errorMessage(error)));
             }, 120);
@@ -1200,7 +1070,34 @@ export function App() {
             if (refreshTimer) clearTimeout(refreshTimer);
             unsubscribe();
         };
-    }, [activePath, appendConsole, dirty]);
+    }, [appendConsole]);
+
+    useEffect(() => {
+        if (!storage.isOpen || files.length === 0) return;
+        let subscription: { dispose(): void } | undefined;
+        let cancelled = false;
+        void subscribeVscodeActiveProjectFile((path) => {
+            if (cancelled) return;
+            setActivePath(path);
+            if (path) setSelectedAssetPath(path);
+        })
+            .then((next) => {
+                if (cancelled) next.dispose();
+                else subscription = next;
+            })
+            .catch((error) => appendConsole("error", "editor", errorMessage(error)));
+        return () => {
+            cancelled = true;
+            subscription?.dispose();
+        };
+    }, [appendConsole, files.length]);
+
+    useEffect(() => {
+        if (!activePath.endsWith(".luau")) return;
+        void startLuauLanguageClient(storage.rootUri).catch((error) =>
+            appendConsole("error", "editor", errorMessage(error)),
+        );
+    }, [activePath, appendConsole]);
 
     useEffect(() => () => storage.dispose(), []);
 
@@ -1210,12 +1107,6 @@ export function App() {
 
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-                event.preventDefault();
-                void saveActiveFile().catch((error) =>
-                    appendConsole("error", "editor", errorMessage(error)),
-                );
-            }
             if ((event.ctrlKey || event.metaKey) && event.key === ",") {
                 event.preventDefault();
                 setAgentSettingsError("");
@@ -1266,18 +1157,15 @@ export function App() {
             const entry = files.find((candidate) => candidate.path === projectPath);
             if (!entry) throw new Error(`Unknown project file: ${projectPath}`);
             if (entry.readonly) throw new Error(`Binary project file cannot be read as text: ${projectPath}`);
-            return { path: projectPath, content: projectPath === activePath ? content : await storage.read(projectPath) };
+            return { path: projectPath, content: await readVscodeProjectFile(projectPath) };
         },
         "project.write": async ({ path, content: nextContent }) => {
             const projectPath = storage.validatePath(path ?? "");
             assertMutablePath(projectPath);
             if (typeof nextContent !== "string") throw new Error("project.write requires string content");
             const created = !(await storage.exists(projectPath));
-            await storage.write(projectPath, nextContent);
-            if (projectPath === activePath) {
-                setContent(nextContent);
-                setSavedContent(nextContent);
-            }
+            if (created) await storage.write(projectPath, nextContent);
+            else await writeVscodeProjectFile(projectPath, nextContent);
             await refreshFiles();
             return { path: projectPath, saved: true, created };
         },
@@ -1809,36 +1697,7 @@ export function App() {
         ),
         code: (
             <ToolPanel className="editor-panel">
-                <CodeFileTabs
-                    paths={openPaths}
-                    activePath={activePath}
-                    dirty={dirty}
-                    onSelect={(path) => void selectFile(path)}
-                    onClose={(path) => void closeCodeFile(path)}
-                />
-                {activePath ? (
-                    <CodeEditor
-                        key={activePath}
-                        path={activePath}
-                        projectRootUri={storage.rootUri}
-                        value={content}
-                        readOnly={!canEdit}
-                        onChange={setContent}
-                        onCursorChange={(line, column) => setCursor({ line, column })}
-                        onLanguageClientStatus={setLuauLspStatus}
-                    />
-                ) : (
-                    <PanelEmptyState>Select a file to edit.</PanelEmptyState>
-                )}
-                <PanelStatus className="justify-end">
-                    <span>{dirty ? "● Unsaved" : "Saved"}</span>
-                    <span>Ln {cursor.line}, Col {cursor.column}</span>
-                    <span>{languageForPath(activePath)}</span>
-                    {editorCapabilities.luauLsp && activePath.endsWith(".luau") && (
-                        <span>Luau LSP: {luauLspStatus}</span>
-                    )}
-                    <span>UTF-8</span>
-                </PanelStatus>
+                <VscodeEditorPart />
             </ToolPanel>
         ),
         console: (
@@ -1947,7 +1806,7 @@ export function App() {
                         });
                     }}
                     onSave={() => {
-                        void saveActiveFile().catch((error) =>
+                        void saveProjectFiles().catch((error) =>
                             appendConsole("error", "editor", errorMessage(error)),
                         );
                     }}

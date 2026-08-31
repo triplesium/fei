@@ -1,37 +1,51 @@
 import type * as Monaco from "monaco-editor";
 import {
-    createOnigScanner,
-    createOnigString,
-    loadWASM,
-} from "vscode-oniguruma";
-import onigasmWasmUrl from "vscode-oniguruma/release/onig.wasm?url";
-import {
-    INITIAL,
-    Registry,
-    type IRawGrammar,
-    type StateStack,
-} from "vscode-textmate";
-import luauGrammar from "./luau.tmLanguage.json";
+    ExtensionHostKind,
+    registerExtension,
+    type RegisterLocalExtensionResult,
+} from "@codingame/monaco-vscode-api/extensions";
+import luauGrammarUrl from "./luau.tmLanguage.json?url";
 
 const languageId = "luau";
 export const luauEditorTheme = "entisium-dark";
 const textmateScope = "source.luau";
-let textmateRegistration: Promise<void> | undefined;
+let luauExtension: RegisterLocalExtensionResult | undefined;
 
-class TextmateState implements Monaco.languages.IState {
-    public constructor(private readonly stack: StateStack) {}
+export function registerLuauExtension(): void {
+    if (luauExtension) return;
 
-    public get ruleStack(): StateStack {
-        return this.stack;
-    }
-
-    public clone(): TextmateState {
-        return new TextmateState(this.stack.clone());
-    }
-
-    public equals(other: Monaco.languages.IState): boolean {
-        return other instanceof TextmateState && this.stack.equals(other.stack);
-    }
+    luauExtension = registerExtension(
+        {
+            name: "entisium-luau",
+            displayName: "Entisium Luau",
+            publisher: "entisium",
+            version: "1.0.0",
+            engines: { vscode: "*" },
+            contributes: {
+                languages: [
+                    {
+                        id: languageId,
+                        aliases: ["Luau", "luau"],
+                        extensions: [".luau"],
+                        mimetypes: ["text/x-luau"],
+                    },
+                ],
+                grammars: [
+                    {
+                        language: languageId,
+                        scopeName: textmateScope,
+                        path: "./syntaxes/luau.tmLanguage.json",
+                    },
+                ],
+            },
+        },
+        ExtensionHostKind.LocalWebWorker,
+        { system: true },
+    );
+    luauExtension.registerFileUrl(
+        "./syntaxes/luau.tmLanguage.json",
+        luauGrammarUrl,
+    );
 }
 
 const configuration: Monaco.languages.LanguageConfiguration = {
@@ -315,7 +329,10 @@ const language: Monaco.languages.IMonarchLanguage = {
     },
 };
 
-export function registerLuauLanguage(monaco: typeof Monaco): void {
+export function registerLuauLanguage(
+    monaco: typeof Monaco,
+    options: { registerTheme?: boolean } = {},
+): void {
     if (!monaco.languages.getLanguages().some(({ id }) => id === languageId)) {
         monaco.languages.register({
             id: languageId,
@@ -326,7 +343,9 @@ export function registerLuauLanguage(monaco: typeof Monaco): void {
     }
 
     monaco.languages.setLanguageConfiguration(languageId, configuration);
+    if (options.registerTheme === false) return;
     monaco.languages.setMonarchTokensProvider(languageId, language);
+
     monaco.editor.defineTheme(luauEditorTheme, {
         base: "vs-dark",
         inherit: false,
@@ -389,44 +408,4 @@ export function registerLuauLanguage(monaco: typeof Monaco): void {
             "editorCursor.foreground": "#BCBEC8",
         },
     });
-}
-
-export function enableLuauTextmate(
-    monaco: typeof Monaco,
-): Promise<void> {
-    textmateRegistration ??= (async () => {
-        await loadWASM(await fetch(onigasmWasmUrl));
-
-        const registry = new Registry({
-            onigLib: Promise.resolve({
-                createOnigScanner,
-                createOnigString,
-            }),
-            async loadGrammar(scopeName) {
-                return scopeName === textmateScope
-                    ? (luauGrammar as unknown as IRawGrammar)
-                    : null;
-            },
-        });
-
-        const grammar = await registry.loadGrammar(textmateScope);
-        if (!grammar) throw new Error("Luau TextMate grammar could not be loaded");
-
-        monaco.languages.setTokensProvider(languageId, {
-            getInitialState: () => new TextmateState(INITIAL),
-            tokenize(line, state) {
-                const previous = state as TextmateState;
-                const result = grammar.tokenizeLine(line, previous.ruleStack);
-                return {
-                    endState: new TextmateState(result.ruleStack),
-                    tokens: result.tokens.map((token) => ({
-                        startIndex: token.startIndex,
-                        scopes: `luau.${token.scopes.at(-1) ?? textmateScope}`,
-                    })),
-                };
-            },
-        });
-    })();
-
-    return textmateRegistration;
 }

@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { LanguageClientWrapper } from "monaco-languageclient/lcwrapper";
-import { MonacoVscodeApiWrapper } from "monaco-languageclient/vscodeApiWrapper";
 import { editorHost } from "../services/editor-host-client";
+import { waitForVscodeEditorHost } from "../services/vscode-editor-host";
 
 export type LuauLanguageClientStatus =
     | "stopped"
@@ -16,7 +16,6 @@ export interface LuauProjectFile {
 
 const listeners = new Set<(status: LuauLanguageClientStatus) => void>();
 let status: LuauLanguageClientStatus = "stopped";
-let apiPromise: Promise<void> | undefined;
 let client: LanguageClientWrapper | undefined;
 let activeRootUri = "";
 let generation = 0;
@@ -27,35 +26,8 @@ function publish(next: LuauLanguageClientStatus): void {
     for (const listener of listeners) listener(next);
 }
 
-function initializeVscodeApi(): Promise<void> {
-    if (!apiPromise) {
-        const api = new MonacoVscodeApiWrapper({
-            $type: "classic",
-            viewsConfig: { $type: "EditorService" },
-            monacoWorkerFactory: () => undefined,
-            userConfiguration: {
-                json: JSON.stringify({
-                    "luau-lsp.platform.type": "standard",
-                    "luau-lsp.sourcemap.enabled": false,
-                    "luau-lsp.types.roblox": false,
-                    "luau-lsp.fflags.override": {
-                        LuauExportValueSyntax: "true",
-                    },
-                }),
-            },
-            advanced: {
-                enableExtHostWorker: false,
-                loadExtensionServices: false,
-                loadThemes: false,
-            },
-        });
-        apiPromise = api.start({ caller: "Entisium Editor" });
-    }
-    return apiPromise;
-}
-
 export function prepareLuauLanguageClient(): Promise<void> {
-    return initializeVscodeApi();
+    return waitForVscodeEditorHost();
 }
 
 export async function synchronizeLuauLanguageClientProject(
