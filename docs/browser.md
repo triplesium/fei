@@ -135,6 +135,11 @@ The `Deploy Editor Demo to GitHub Pages` workflow builds and deploys the static 
 
 In the repository's **Settings > Pages** page, select **GitHub Actions** as the publishing source. The workflow uploads the self-contained `editor-demo/` output directly, so the Editor opens at the Pages site URL with its same-origin `runtime/`; no Host service or API key is required. The deployed site URL is available from the `github-pages` environment after the deploy job completes.
 
+The Pages workflow enables `profile_summary` and publishes the matching Wasm
+symbol manifest, so the demo Profiler resolves system names without an Editor
+Host. GitHub Pages does not provide the cross-origin isolation headers used by
+the local preview, so CPU timings use the browser's coarser non-isolated clock.
+
 In the full Editor, the supported browser command registry is `window.entisiumEditor.commands`. `window.entisiumEditorAgent` remains a deprecated compatibility alias.
 
 ## Connect through MCP

@@ -50,6 +50,7 @@ jobs:
       - name: Configure release demo
         run: >-
           xmake f -p wasm -m release --tests=n --shader_targets=webgpu
+          --profile_summary=y
           --editor_demo_project="$env:EDITOR_DEMO_PROJECT" -y
 
       - name: Build release demo
