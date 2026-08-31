@@ -2,6 +2,7 @@
 
 #include "LSP/TextDocument.hpp"
 #include "Luau/Ast.h"
+#include "Luau/LinterConfig.h"
 #include "Luau/Module.h"
 #include "script_type_registry.hpp"
 #include "scripting/detail/exported_type.hpp"
@@ -31,21 +32,27 @@ bool is_runtime_function_method_error(const ::lsp::Diagnostic& diagnostic) {
     });
 }
 
-[[nodiscard]] std::unordered_set<std::string>
-exported_local_names(const Luau::AstStatBlock& root) {
-    std::unordered_set<std::string> result;
+[[nodiscard]] std::vector<::lsp::Range> exported_local_ranges(
+    const TextDocument& document,
+    const Luau::AstStatBlock& root
+) {
+    std::vector<::lsp::Range> result;
     for (const Luau::AstStat* statement : root.body) {
         if (const auto* local = statement->as<Luau::AstStatLocal>()) {
             for (const Luau::AstLocal* variable : local->vars) {
                 if (variable->isExported) {
-                    result.emplace(variable->name.value);
+                    result.push_back(
+                        document.convertLocation(variable->location)
+                    );
                 }
             }
         } else if (
             const auto* function = statement->as<Luau::AstStatLocalFunction>();
             function != nullptr && function->name->isExported
         ) {
-            result.emplace(function->name->name.value);
+            result.push_back(
+                document.convertLocation(function->name->location)
+            );
         }
     }
     return result;
@@ -53,17 +60,19 @@ exported_local_names(const Luau::AstStatBlock& root) {
 
 [[nodiscard]] bool is_exported_local_unused_error(
     const ::lsp::Diagnostic& diagnostic,
-    const std::unordered_set<std::string>& exported
+    const std::vector<::lsp::Range>& exported
 ) {
     if (!diagnostic.source || *diagnostic.source != "Luau" ||
-        diagnostic.message.find("LocalUnused: Variable '") ==
-            std::string::npos) {
+        !diagnostic.code || !std::holds_alternative<int>(*diagnostic.code)) {
         return false;
     }
-    return std::ranges::any_of(exported, [&](const std::string& name) {
-        return diagnostic.message.find("Variable '" + name + "'") !=
-               std::string::npos;
-    });
+    const int code = std::get<int>(*diagnostic.code);
+    if (code != Luau::LintWarning::Code_LocalUnused &&
+        code != Luau::LintWarning::Code_FunctionUnused &&
+        code != Luau::LintWarning::Code_ImportUnused) {
+        return false;
+    }
+    return std::ranges::find(exported, diagnostic.range) != exported.end();
 }
 
 using ScriptFields =
@@ -427,7 +436,7 @@ void add_entisium_diagnostics(
         return;
     }
 
-    const auto exported = exported_local_names(*source_module.root);
+    const auto exported = exported_local_ranges(document, *source_module.root);
     std::erase_if(diagnostics, [&](const ::lsp::Diagnostic& diagnostic) {
         return is_exported_local_unused_error(diagnostic, exported);
     });

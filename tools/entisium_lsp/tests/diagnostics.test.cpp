@@ -177,6 +177,8 @@ TEST_CASE(
         "export local GameplayPlugin = {}\n",
         {
             lsp::Diagnostic {
+                .range = {{0, 13}, {0, 27}},
+                .code = Luau::LintWarning::Code_LocalUnused,
                 .source = std::string {"Luau"},
                 .message = "LocalUnused: Variable 'GameplayPlugin' is never "
                            "used; prefix with '_' to silence",
@@ -185,6 +187,47 @@ TEST_CASE(
     );
 
     CHECK(diagnostics.empty());
+}
+
+TEST_CASE(
+    "exported functions do not produce unused lint diagnostics",
+    "[lsp][export]"
+) {
+    const auto diagnostics = diagnose(
+        "export function update() end\n",
+        {
+            lsp::Diagnostic {
+                .range = {{0, 16}, {0, 22}},
+                .code = Luau::LintWarning::Code_FunctionUnused,
+                .source = std::string {"Luau"},
+                .message = "FunctionUnused: Function 'update' is never used; "
+                           "prefix with '_' to silence",
+            },
+        }
+    );
+
+    CHECK(diagnostics.empty());
+}
+
+TEST_CASE(
+    "ordinary local functions retain unused lint diagnostics",
+    "[lsp][export]"
+) {
+    const auto diagnostics = diagnose(
+        "local function update() end\n",
+        {
+            lsp::Diagnostic {
+                .range = {{0, 15}, {0, 21}},
+                .code = Luau::LintWarning::Code_FunctionUnused,
+                .source = std::string {"Luau"},
+                .message = "FunctionUnused: Function 'update' is never used; "
+                           "prefix with '_' to silence",
+            },
+        }
+    );
+
+    REQUIRE(diagnostics.size() == 1);
+    CHECK(diagnostics.front().message.starts_with("FunctionUnused:"));
 }
 
 TEST_CASE(
