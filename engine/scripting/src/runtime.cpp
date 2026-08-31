@@ -1030,18 +1030,44 @@ Result<const LuauFunctionDecl*, LuauScriptError> function_declaration(
             LuauScriptError {std::string(context) + " must be a function"}
         );
     }
-    const auto found =
+    const auto pointer_match =
         module.function_indices.find(lua_topointer(state, index));
-    if (found == module.function_indices.end() ||
-        found->second >= module.function_declarations.size()) {
-        return failure(
-            LuauScriptError {
-                std::string(context) +
-                    " is not a compiled top-level or imported function",
-            }
-        );
+    if (pointer_match != module.function_indices.end() &&
+        pointer_match->second < module.function_declarations.size()) {
+        return &module.function_declarations[pointer_match->second];
     }
-    return &module.function_declarations[found->second];
+
+    index = lua_absindex(state, index);
+    for (std::size_t declaration_index = 0;
+         declaration_index < module.function_declarations.size();
+         ++declaration_index) {
+        const auto& declaration =
+            module.function_declarations[declaration_index];
+        const auto stored = module.functions.find(declaration.name);
+        if (stored == module.functions.end()) {
+            continue;
+        }
+        lua_getref(state, stored->second);
+        const bool matches = lua_rawequal(state, index, -1) != 0;
+        lua_pop(state, 1);
+        if (matches) {
+            module.function_indices.emplace(
+                lua_topointer(state, index),
+                declaration_index
+            );
+            return &declaration;
+        }
+    }
+    return failure(
+        LuauScriptError {
+            std::string(context) +
+                " is not a compiled top-level or imported function " +
+                "(compiled declarations: " +
+                std::to_string(module.function_declarations.size()) +
+                ", registered functions: " +
+                std::to_string(module.functions.size()) + ")",
+        }
+    );
 }
 
 template<typename Module>

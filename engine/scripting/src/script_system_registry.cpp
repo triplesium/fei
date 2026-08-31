@@ -18,6 +18,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 
 namespace ets {
@@ -35,6 +36,32 @@ LuauScriptSource script_source_for_asset(
                     "luau_script_asset_" + std::to_string(asset.id()) + ".luau",
         .content = script.content(),
     };
+}
+
+bool script_imports_loading(
+    const Assets<LuauScriptAsset>& assets,
+    AssetServer& asset_server,
+    Handle<LuauScriptAsset> asset,
+    std::unordered_set<AssetId>& visited
+) {
+    if (!asset || !visited.insert(asset.id()).second) {
+        return false;
+    }
+    const auto state = assets.load_state(asset);
+    if (!state || *state == AssetLoadState::Loading) {
+        return true;
+    }
+    const auto script = assets.get(asset);
+    if (!script) {
+        return false;
+    }
+    for (const auto& import : script->imports()) {
+        const auto dependency = asset_server.load<LuauScriptAsset>(import.path);
+        if (script_imports_loading(assets, asset_server, dependency, visited)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 Result<const LuauPluginDecl*, LuauScriptError> select_module_plugin(
@@ -320,6 +347,18 @@ void LuauScriptSystemRegistry::apply_queued_requests(
             case LuauScriptSystemRequestKind::LoadAsset: {
                 if (requeue_if_loading(request, request.asset)) {
                     break;
+                }
+                if (asset_server != nullptr) {
+                    std::unordered_set<AssetId> visited;
+                    if (script_imports_loading(
+                            assets,
+                            *asset_server,
+                            request.asset,
+                            visited
+                        )) {
+                        m_queued_requests.push_back(std::move(request));
+                        break;
+                    }
                 }
                 const auto module_count_before = m_modules.size();
                 auto loaded = request.prepared_artifact ?

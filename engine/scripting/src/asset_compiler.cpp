@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <string>
+#include <unordered_map>
 
 namespace ets {
 
@@ -87,14 +88,37 @@ LuauAssetCompiler::compile_module(Handle<LuauScriptAsset> asset) const {
     if (!metadata) {
         return failure(std::move(metadata.error()));
     }
+    std::unordered_map<std::string, std::shared_ptr<const LuauModuleMetadata>>
+        imported_metadata;
+    for (const auto& import : script->imports()) {
+        auto imported = resolve_imported_metadata(*script, import.specifier);
+        if (!imported) {
+            return failure(std::move(imported.error()));
+        }
+        imported_metadata.emplace(import.specifier, std::move(*imported));
+    }
     auto compiled = compile_luau_script_module(
         *script_source,
         LuauCompileOptions {
             .metadata = std::move(*metadata),
             .module_metadata_resolver =
-                [this, &importer = *script](std::string_view specifier) {
-                    return resolve_imported_metadata(importer, specifier);
-                },
+                [imported_metadata =
+                     std::move(imported_metadata)](std::string_view specifier)
+                -> Result<
+                    std::shared_ptr<const LuauModuleMetadata>,
+                    LuauScriptError> {
+                const auto found =
+                    imported_metadata.find(std::string(specifier));
+                if (found == imported_metadata.end()) {
+                    return failure(
+                        LuauScriptError {
+                            "Luau imported system module '" +
+                                std::string(specifier) + "' was not resolved",
+                        }
+                    );
+                }
+                return found->second;
+            },
         }
     );
     if (!compiled) {

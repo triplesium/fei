@@ -1949,6 +1949,37 @@ Result<RuntimeFunctionCatalog, LuauScriptError> compile_runtime_functions(
         result.expressions.push_back(function.name);
         collector.add_name(function.name);
     }
+
+#if defined(__EMSCRIPTEN__)
+    std::vector<std::pair<std::string, std::string>> imports;
+    imports.reserve(module.imports().size());
+    for (const auto& [local, specifier] : module.imports()) {
+        imports.emplace_back(std::string(name_view(local->name)), specifier);
+    }
+    std::ranges::sort(imports);
+    for (const auto& [local_name, specifier] : imports) {
+        if (!module_metadata_resolver) {
+            continue;
+        }
+        auto metadata = module_metadata_resolver(specifier);
+        if (!metadata) {
+            return failure(std::move(metadata.error()));
+        }
+        for (const auto& function : (*metadata)->functions) {
+            if (!function.is_system_compatible()) {
+                continue;
+            }
+            collector.add_name(function.qualified_name);
+            result.plugin.functions.push_back(
+                LuauFunctionDecl {
+                    .name = function.qualified_name,
+                    .params = clone_param_declarations(function.system_params),
+                }
+            );
+            result.expressions.push_back(local_name + "." + function.name);
+        }
+    }
+#endif
     plugin.build->body->visit(&collector);
     return result;
 }
