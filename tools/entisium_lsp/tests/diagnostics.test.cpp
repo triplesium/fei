@@ -303,6 +303,37 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "required module asset handle fields are accepted at runtime boundaries",
+    "[lsp][script_type][module][runtime][asset]"
+) {
+    constexpr std::string_view provider = R"(
+        export type GameAssets = {
+            background: Handle<Image>,
+            player: Handle<Image>,
+        }
+    )";
+    const std::string importer = R"(
+        local Gameplay = require("./gameplay")
+
+        local function build(app: App)
+            app:add_resource(Gameplay.GameAssets {})
+        end
+    )";
+    ets::lsp::ScriptTypeRegistry registry;
+    registry.update(
+        "file:///project/gameplay.luau",
+        "C:/project/gameplay.luau",
+        provider
+    );
+    registry
+        .update("file:///project/game.luau", "C:/project/game.luau", importer);
+
+    const auto diagnostics =
+        diagnose(importer, {}, &registry, "file:///project/game.luau");
+    CHECK(diagnostics.empty());
+}
+
+TEST_CASE(
     "required module record diagnostics remain module scoped",
     "[lsp][script_type][module][scope]"
 ) {

@@ -150,6 +150,8 @@ int invoke_luau_dynamic_param(lua_State* state);
 bool luau_reflected_values_equal(Ref lhs, Ref rhs);
 Result<Val, std::string>
 luau_value_for_type(lua_State* state, int index, TypeId expected);
+Result<Val, std::string>
+luau_value_for_property(lua_State* state, int index, TypeId expected);
 int luau_type_token_index(lua_State* state);
 int luau_invoke_method(lua_State* state);
 void install_luau_property_metatable(lua_State* state, int metatable);

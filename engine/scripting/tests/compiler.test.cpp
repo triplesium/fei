@@ -1,6 +1,7 @@
 #include "scripting/compiler.hpp"
 
 #include "app/app.hpp"
+#include "asset/handle.hpp"
 #include "compiler/compilation_session.hpp"
 #include "compiler/module_ir.hpp"
 #include "compiler/pass.hpp"
@@ -1180,6 +1181,45 @@ TEST_CASE(
             FAIL(artifact.error().message);
         }
         CHECK_FALSE(artifact->plugins.front().name.empty());
+    }
+}
+
+TEST_CASE(
+    "Skyline Strike stores generic asset fields as untyped handles",
+    "[scripting_luau][compiler][sample][asset]"
+) {
+    const auto repository =
+        std::filesystem::path {ETS_ASSETS_PATH}.parent_path();
+    const auto path =
+        repository / "samples/projects/skyline_strike/assets/gameplay.luau";
+    std::ifstream input(path, std::ios::binary);
+    REQUIRE(input);
+    const std::string content {
+        std::istreambuf_iterator<char>(input),
+        std::istreambuf_iterator<char>(),
+    };
+    auto artifact = compile_luau_script_module(
+        LuauScriptSource {
+            .name = "skyline_strike/gameplay.luau",
+            .content = content,
+        },
+        LuauCompileOptions {.snapshot_safe = false}
+    );
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+
+    const auto game_assets = std::ranges::find(
+        artifact->metadata->schema.types,
+        "GameAssets",
+        &LuauTypeDecl::name
+    );
+    REQUIRE(game_assets != artifact->metadata->schema.types.end());
+    REQUIRE(game_assets->fields.size() == 6);
+    for (const auto& field : game_assets->fields) {
+        CHECK(field.type.type_name == "UntypedHandle");
+        REQUIRE(field.type.type_id);
+        CHECK(*field.type.type_id == type_id<UntypedHandle>());
     }
 }
 

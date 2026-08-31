@@ -1,5 +1,6 @@
 #include "scripting/detail/plugin_install.hpp"
 
+#include "asset/handle.hpp"
 #include "ecs/dynamic/events.hpp"
 #include "ecs/dynamic/system_decl.hpp"
 #include "ecs/world.hpp"
@@ -80,6 +81,8 @@ Result<TypeId, LuauScriptError> resolve_luau_type_ref(
     if (type_ref.type_id) {
         if (*type_ref.type_id == type_id<Entity>()) {
             resolved = Registry::instance().register_type<Entity>().id();
+        } else if (*type_ref.type_id == type_id<UntypedHandle>()) {
+            resolved = Registry::instance().register_type<UntypedHandle>().id();
         } else {
             resolved = *type_ref.type_id;
         }

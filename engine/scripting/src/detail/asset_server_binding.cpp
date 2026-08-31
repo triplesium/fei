@@ -59,17 +59,12 @@ AssetPath check_asset_path(lua_State* state, int index) {
 
 int push_loaded_handle(
     lua_State* state,
-    AssetServer& server,
     Result<UntypedHandle, AssetTypeError> loaded
 ) {
     if (!loaded) {
         return raise_message(state, loaded.error().message);
     }
-    auto value = server.handle_value(*loaded);
-    if (!value) {
-        return raise_message(state, value.error().message);
-    }
-    push_luau_owned_value(state, std::move(*value));
+    push_luau_owned_value(state, make_val<UntypedHandle>(std::move(*loaded)));
     return 1;
 }
 
@@ -81,7 +76,6 @@ int asset_server_load(lua_State* state) {
     const TypeId type = check_luau_type_token(state, 2, "AssetServer.load");
     return push_loaded_handle(
         state,
-        server,
         server.load(type, check_asset_path(state, 3))
     );
 }
@@ -98,7 +92,6 @@ int asset_server_load_async(lua_State* state) {
         check_luau_type_token(state, 2, "AssetServer.load_async");
     return push_loaded_handle(
         state,
-        server,
         server.load_async(type, check_asset_path(state, 3))
     );
 }

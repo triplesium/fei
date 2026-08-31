@@ -72,6 +72,19 @@ classify_exported_type(const Luau::AstType& type) {
                                    std::string_view {};
 }
 
+[[nodiscard]] inline bool
+is_runtime_asset_handle(const Luau::AstTypeReference& reference) {
+    if (reference.prefix || name_view(reference.name) != "Handle" ||
+        reference.parameters.size != 1) {
+        return false;
+    }
+    const auto& parameter = reference.parameters.data[0];
+    const auto* asset_type = parameter.type != nullptr ?
+                                 parameter.type->as<Luau::AstTypeReference>() :
+                                 nullptr;
+    return asset_type != nullptr && !asset_type->hasParameterList;
+}
+
 [[nodiscard]] inline std::string
 validate_runtime_field_type(const Luau::AstType& annotation) {
     const Luau::AstType* value = &annotation;
@@ -99,7 +112,8 @@ validate_runtime_field_type(const Luau::AstType& annotation) {
     }
 
     const auto* reference = value->as<Luau::AstTypeReference>();
-    if (reference == nullptr || reference->hasParameterList) {
+    if (reference == nullptr ||
+        (reference->hasParameterList && !is_runtime_asset_handle(*reference))) {
         return "Entisium runtime fields must use non-generic named types";
     }
     if (optional &&

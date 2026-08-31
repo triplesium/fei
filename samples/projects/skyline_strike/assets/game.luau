@@ -4,6 +4,7 @@ local Hud = require("./hud")
 export local SkylineStrikePlugin = Plugin.new {
     build = function(app: App)
         app:add_resource(Gameplay.GameState {})
+        app:add_resource(Gameplay.GameAssets {})
         app:add_resource(Gameplay.ControlState {})
         app:add_resource(Hud.PresentationState {})
         app:add_resource(Hud.FpsState {})

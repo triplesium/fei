@@ -814,7 +814,8 @@ int borrowed_newindex(lua_State* state) {
         }
         return 0;
     }
-    auto value = luau_value_for_type(state, 3, property->property->type_id());
+    auto value =
+        luau_value_for_property(state, 3, property->property->type_id());
     if (!value) {
         return raise_message(state, value.error());
     }

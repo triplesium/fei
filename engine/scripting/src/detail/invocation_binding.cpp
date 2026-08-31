@@ -272,7 +272,7 @@ int construct_type(lua_State* state, TypeId type, int first_argument) {
                 return raise_message(state, property.error().message);
             }
             auto assigned_value =
-                luau_value_for_type(state, -1, property->type_id());
+                luau_value_for_property(state, -1, property->type_id());
             if (!assigned_value) {
                 return raise_message(state, assigned_value.error());
             }
@@ -335,6 +335,19 @@ int luau_type_token_call(lua_State* state) {
     const TypeId type =
         check_luau_type_token(state, 1, "reflected constructor");
     return construct_type(state, type, 2);
+}
+
+Result<Val, std::string>
+luau_value_for_property(lua_State* state, int index, TypeId expected) {
+    if (lua_isuserdata(state, index)) {
+        const auto object = check_luau_object(state, index);
+        auto copied = Val::copy(object.ref);
+        if (copied) {
+            return std::move(*copied);
+        }
+        return failure(std::move(copied.error().message));
+    }
+    return luau_value_for_type(state, index, expected);
 }
 
 Result<Val, std::string>

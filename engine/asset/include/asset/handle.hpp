@@ -1,9 +1,11 @@
 #pragma once
 #include "asset/id.hpp"
 #include "base/optional.hpp"
+#include "refl/argument_adapter.hpp"
 #include "refl/ref.hpp"
 
 #include <memory>
+#include <string>
 #include <utility>
 
 namespace ets {
@@ -91,6 +93,117 @@ void register_asset_handle_converter(
 );
 
 [[nodiscard]] Optional<UntypedHandle> convert_to_untyped_handle(Ref handle);
+
+template<typename T>
+struct Conversion<Handle<T>> {
+    static ConversionRank match(const Ref& ref) {
+        if (!ref) {
+            return ConversionRank::None;
+        }
+        if (ref.type_id() == type_id<Handle<T>>()) {
+            return ConversionRank::Exact;
+        }
+        const auto* handle = ref.try_get_const<UntypedHandle>();
+        return handle != nullptr && handle->template is<T>() ?
+                   ConversionRank::Weak :
+                   ConversionRank::None;
+    }
+
+    static Handle<T> get(const Ref& ref) {
+        if (ref.type_id() == type_id<Handle<T>>()) {
+            return ref.get_const<Handle<T>>();
+        }
+        return *ref.get_const<UntypedHandle>().template try_typed<T>();
+    }
+};
+
+template<typename T>
+struct Conversion<Optional<Handle<T>>> {
+    static ConversionRank match(const Ref& ref) {
+        if (!ref) {
+            return ConversionRank::None;
+        }
+        if (ref.type_id() == type_id<Optional<Handle<T>>>()) {
+            return ConversionRank::Exact;
+        }
+        return Conversion<Handle<T>>::match(ref) != ConversionRank::None ?
+                   ConversionRank::Weak :
+                   ConversionRank::None;
+    }
+
+    static Optional<Handle<T>> get(const Ref& ref) {
+        if (ref.type_id() == type_id<Optional<Handle<T>>>()) {
+            return ref.get_const<Optional<Handle<T>>>();
+        }
+        return Conversion<Handle<T>>::get(ref);
+    }
+};
+
+template<typename T>
+struct ArgumentAdapter<const Handle<T>&> {
+    static ConversionRank match(const Ref& ref) {
+        return Conversion<Handle<T>>::match(ref);
+    }
+
+    static bool accepts(const Ref& ref) {
+        return match(ref) != ConversionRank::None;
+    }
+
+    static Handle<T> get(const Ref& ref) {
+        return Conversion<Handle<T>>::get(ref);
+    }
+
+    static std::string expected_type() {
+        return std::string(type_name<Handle<T>>());
+    }
+
+    static std::string actual_type(const Ref& ref) {
+        return detail::describe_ref(ref);
+    }
+
+    static std::string describe_mismatch(const Ref& ref) {
+        return "expected " + expected_type() + ", got " + actual_type(ref);
+    }
+};
+
+template<>
+struct ArgumentAdapter<const UntypedHandle&> {
+    static ConversionRank match(const Ref& ref) {
+        if (!ref) {
+            return ConversionRank::None;
+        }
+        if (ref.type_id() == type_id<UntypedHandle>()) {
+            return ConversionRank::Exact;
+        }
+        return convert_to_untyped_handle(ref) ? ConversionRank::Weak :
+                                                ConversionRank::None;
+    }
+
+    static bool accepts(const Ref& ref) {
+        return match(ref) != ConversionRank::None;
+    }
+
+    static UntypedHandle get(const Ref& ref) {
+        if (ref.type_id() == type_id<UntypedHandle>()) {
+            return ref.get_const<UntypedHandle>();
+        }
+        auto converted = convert_to_untyped_handle(ref);
+        ETS_ASSERT(converted);
+        return std::move(*converted);
+    }
+
+    static std::string expected_type() {
+        return std::string(type_name<UntypedHandle>());
+    }
+
+    static std::string actual_type(const Ref& ref) {
+        return detail::describe_ref(ref);
+    }
+
+    static std::string describe_mismatch(const Ref& ref) {
+        return "expected " + expected_type() + ", got " + actual_type(ref);
+    }
+};
 
 template<typename T>
 void register_asset_handle_converter() {

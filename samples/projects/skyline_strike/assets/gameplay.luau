@@ -23,12 +23,19 @@ export type GameState = {
     shake: f32,
 }
 
+export type GameAssets = {
+    background: Handle<Image>,
+    player: Handle<Image>,
+    plasma: Handle<Image>,
+    enemy: Handle<Image>,
+    boss: Handle<Image>,
+    explosion: Handle<Image>,
+}
+
 export type Health = {
     current: f32,
     maximum: f32,
 }
-
-export type AssetKeeper = {}
 
 export type Projectile = {
     team: i32,
@@ -558,43 +565,26 @@ export function animate_effects(
 end
 
 
-local function keep_image_alive(commands, image, index)
-    commands:spawn(
-        Sprite.new {
-            image = image,
-            size = Vector2.new(0.01, 0.01),
-            color = Color4F.new(1.0, 1.0, 1.0, 0.0),
-            layer = -100,
-        },
-        core.Transform2d.new {
-            position = Vector2.new(100.0 + index, 100.0),
-        },
-        AssetKeeper.new()
-    )
-end
-
 export function initialize(
     commands: Commands,
     assets: ResRW<AssetServer>,
+    images: ResRW<GameAssets>,
     state: ResRW<GameState>
 )
     if state.initialized ~= 0 then
         return
     end
 
-    local background = require_image(assets, "images/cloudsea.png")
-    local player_image = require_image(assets, "images/player.png")
-    local plasma = require_image(assets, "images/plasma.png")
-    local enemy_image = require_image(assets, "images/enemy.png")
-    local boss_image = require_image(assets, "images/boss.png")
-    local explosion_image = require_image(assets, "images/explosion.png")
+    images.background = require_image(assets, "images/cloudsea.png")
+    images.player = require_image(assets, "images/player.png")
+    images.plasma = require_image(assets, "images/plasma.png")
+    images.enemy = require_image(assets, "images/enemy.png")
+    images.boss = require_image(assets, "images/boss.png")
+    images.explosion = require_image(assets, "images/explosion.png")
 
-    keep_image_alive(commands, background, 1)
-    keep_image_alive(commands, player_image, 2)
-    keep_image_alive(commands, plasma, 3)
-    keep_image_alive(commands, enemy_image, 4)
-    keep_image_alive(commands, boss_image, 5)
-    keep_image_alive(commands, explosion_image, 6)
+    local background = images.background
+    local player_image = images.player
+    local plasma = images.plasma
 
     commands:spawn(
         Camera2d.new {

@@ -149,6 +149,7 @@ struct LuauTestAsset {
 
 struct LuauTestAssetState {
     Handle<LuauTestAsset> handle;
+    Optional<Handle<LuauTestAsset>> optional_handle;
     bool loaded {false};
     bool readonly_rejected {false};
 };
@@ -254,6 +255,7 @@ void register_luau_system_test_types() {
     registry.register_type<LuauTestAsset>();
     registry.register_cls<LuauTestAssetState>()
         .add_property("handle", &LuauTestAssetState::handle)
+        .add_property("optional_handle", &LuauTestAssetState::optional_handle)
         .add_property("loaded", &LuauTestAssetState::loaded)
         .add_property(
             "readonly_rejected",
@@ -376,8 +378,13 @@ TEST_CASE(
     const LuauScriptSource source {
         .name = "asset_system.luau",
         .content = R"(
+            export type LuauTestAssets = {
+                primary: Handle<LuauTestAsset>,
+            }
+
             local function load_asset(
                 assets: ResRW<AssetServer>,
+                handles: ResRW<LuauTestAssets>,
                 state: ResRW<LuauTestAssetState>
             )
                 local handle = assets:load(
@@ -391,7 +398,9 @@ TEST_CASE(
                 )
                 assert(assets:is_loaded(cached))
                 assert(assets:load_error(cached) == nil)
-                state.handle = cached
+                handles.primary = cached
+                state.handle = handles.primary
+                state.optional_handle = handles.primary
                 state.loaded = true
 
                 local missing = assets:load(
@@ -435,6 +444,7 @@ TEST_CASE(
 
             export local AssetPlugin = Plugin.new {
                 build = function(app: App)
+                    app:add_resource(LuauTestAssets {})
                     app:add_systems(
                         Update,
                         load_asset,
@@ -447,6 +457,13 @@ TEST_CASE(
 
     auto artifact = compile_luau_script_module(source);
     REQUIRE(artifact);
+    REQUIRE(artifact->metadata->schema.types.size() == 1);
+    REQUIRE(artifact->metadata->schema.types.front().fields.size() == 1);
+    const auto& handle_type =
+        artifact->metadata->schema.types.front().fields.front().type;
+    CHECK(handle_type.type_name == "UntypedHandle");
+    REQUIRE(handle_type.type_id);
+    CHECK(*handle_type.type_id == type_id<UntypedHandle>());
     LuauRuntime runtime;
     auto module = runtime.load_module(*artifact);
     REQUIRE(module);
@@ -473,6 +490,8 @@ TEST_CASE(
     const auto& state = app.resource<LuauTestAssetState>();
     CHECK(state.loaded);
     CHECK(state.readonly_rejected);
+    REQUIRE(state.optional_handle);
+    CHECK(state.optional_handle->id() == state.handle.id());
     auto asset = app.resource<Assets<LuauTestAsset>>().get(state.handle);
     REQUIRE(asset);
     CHECK(asset->byte_count == 3);

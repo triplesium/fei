@@ -1,6 +1,7 @@
 #include "scripting/compiler.hpp"
 
 #include "app/app.hpp"
+#include "asset/handle.hpp"
 #include "compiler/compilation_session.hpp"
 #include "compiler/module_ir.hpp"
 #include "compiler/pass.hpp"
@@ -1294,10 +1295,18 @@ Result<LuauTypeRef, LuauScriptError> compile_exported_field_type(
     }
 
     const auto* reference = value->as<AstTypeReference>();
-    if (reference == nullptr || reference->hasParameterList) {
+    if (reference == nullptr ||
+        (reference->hasParameterList &&
+         !detail::luau_schema::is_runtime_asset_handle(*reference))) {
         return failure(declaration_error(
             "Entisium runtime fields must use non-generic named types"
         ));
+    }
+    if (reference->hasParameterList) {
+        return LuauTypeRef {
+            .type_name = "UntypedHandle",
+            .type_id = type_id<UntypedHandle>(),
+        };
     }
     std::string type_name;
     if (reference->prefix) {
