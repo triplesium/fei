@@ -64,7 +64,7 @@ local function spawn_pip(commands, parent, width, height, color)
     ):set_parent(parent:id())
 end
 
-local function initialize_hud(
+export function initialize_hud(
     commands: Commands,
     assets: ResRW<AssetServer>
 )
@@ -385,7 +385,7 @@ local function initialize_hud(
     )
 end
 
-local function update_fps(
+export function update_fps(
     time: ResRO<core.Time>,
     state: ResRW<FpsState>,
     labels: Query<
@@ -419,7 +419,7 @@ local function update_fps(
     end
 end
 
-local function update_hud(
+export function update_hud(
     time: ResRO<core.Time>,
     state: ResRO<Gameplay.GameState>,
     presentation: ResRW<PresentationState>,
@@ -557,14 +557,3 @@ local function update_hud(
             )
     end
 end
-
-export local PresentationPlugin = Plugin.new {
-    dependencies = {Gameplay.GameplayPlugin},
-    build = function(app: App)
-        app:add_resource(PresentationState {})
-        app:add_resource(FpsState {})
-        app:add_system(StartUp, initialize_hud)
-        app:add_system(Update, update_hud)
-        app:add_system(Update, update_fps)
-    end,
-}

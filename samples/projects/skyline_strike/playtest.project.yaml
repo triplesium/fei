@@ -1,0 +1,4 @@
+name: Skyline Strike Playtest
+asset_directory: assets
+
+plugin: project://playtest.luau#SkylineStrikePlaytestPlugin

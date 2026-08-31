@@ -1,4 +1,5 @@
 local core = require("@entisium/core")
+local Game = require("./game")
 local Gameplay = require("./gameplay")
 
 local function begin_step(ctx, action)
@@ -48,8 +49,8 @@ local function observe(ctx)
     }
 end
 
-export local PlaytestPlugin = Plugin.new {
-    dependencies = {Gameplay.GameplayPlugin},
+export local SkylineStrikePlaytestPlugin = Plugin.new {
+    dependencies = {Game.SkylineStrikePlugin},
     build = function(app: App)
         app:add_playtest {
             id = "skyline-strike.main",

@@ -1,5 +1,13 @@
 local core = require("@entisium/core")
 
+local function require_image(assets: ResRW<AssetServer>, path: string)
+    local image = assets:load(Image, path)
+    if not assets:is_loaded(image) then
+        error(assets:load_error(image) or (path .. " did not load"))
+    end
+    return image
+end
+
 export type GameState = {
     initialized: i32,
     phase: i32,
@@ -15,34 +23,12 @@ export type GameState = {
     shake: f32,
 }
 
-export type ControlState = {
-    keyboard_x: f32,
-    keyboard_y: f32,
-    keyboard_fire: i32,
-    agent_x: f32,
-    agent_y: f32,
-    agent_fire: i32,
-}
-
-export type Player = {
-    speed: f32,
-    fire_timer: f32,
-    invincible: f32,
-}
-
-export type Enemy = {
-    kind: i32,
-    speed: f32,
-    base_y: f32,
-    phase: f32,
-    fire_timer: f32,
-    active: i32,
-}
-
 export type Health = {
     current: f32,
     maximum: f32,
 }
+
+export type AssetKeeper = {}
 
 export type Projectile = {
     team: i32,
@@ -57,39 +43,47 @@ export type Effect = {
     duration: f32,
 }
 
+
 export type Star = {
     speed: f32,
 }
 
 export type GameCamera = {}
-export type AssetKeeper = {}
 
-local function require_image(assets: ResRW<AssetServer>, path: string)
-    local image = assets:load(Image, path)
-    if not assets:is_loaded(image) then
-        local load_error = assets:load_error(image)
-        error(if load_error then load_error.message else path .. " did not load")
+export function scroll_stars(
+    time: ResRO<core.FixedTime>,
+    stars: Query<Write<core.Transform2d>, Read<Star>>
+)
+    local delta = time:delta()
+    for transform, star in stars do
+        transform.position.x -= star.speed * delta
+        if transform.position.x < -9.1 then
+            transform.position.x += 18.2
+        end
     end
-    return image
 end
 
-local function keep_image_alive(commands, image, index)
-    commands:spawn(
-        Sprite.new {
-            image = image,
-            size = Vector2.new(0.01, 0.01),
-            color = Color4F.new(1.0, 1.0, 1.0, 0.0),
-            layer = -100,
-        },
-        core.Transform2d.new {
-            position = Vector2.new(100.0 + index, 100.0),
-        },
-        AssetKeeper.new()
-    )
+export function update_camera(
+    time: ResRO<core.FixedTime>,
+    state: ResRW<GameState>,
+    cameras: Query<Write<core.Transform2d>, With<GameCamera>>
+)
+    local delta = time:delta()
+    for transform in cameras do
+        if state.shake > 0.0 then
+            transform.position.x = math.sin(state.elapsed * 97.0) * state.shake
+            transform.position.y = math.cos(state.elapsed * 83.0) * state.shake
+            state.shake = math.max(0.0, state.shake - delta * 2.8)
+        else
+            transform.position.x = 0.0
+            transform.position.y = 0.0
+        end
+    end
 end
 
-local function spawn_explosion(commands, assets, position, size)
-    local image = require_image(assets, "textures/explosion.png")
+
+export function spawn_explosion(commands, assets, position, size)
+    local image = require_image(assets, "images/explosion.png")
     commands:spawn(
         Sprite.new {
             image = image,
@@ -104,7 +98,7 @@ local function spawn_explosion(commands, assets, position, size)
     )
 end
 
-local function spawn_projectile(
+export function spawn_projectile(
     commands,
     assets,
     position,
@@ -114,7 +108,7 @@ local function spawn_projectile(
     damage,
     size
 )
-    local image = require_image(assets, "textures/plasma.png")
+    local image = require_image(assets, "images/plasma.png")
     local enemy_shot = team ~= 0
     commands:spawn(
         Sprite.new {
@@ -139,135 +133,23 @@ local function spawn_projectile(
     )
 end
 
-local function spawn_enemy(commands, assets, index, y)
-    local image = require_image(assets, "textures/enemy.png")
-    commands:spawn(
-        Sprite.new {
-            image = image,
-            size = Vector2.new(1.45, 0.92),
-            layer = 3,
-        },
-        core.Transform2d.new {
-            position = Vector2.new(9.6 + (index % 3) * 0.65, y),
-        },
-        Enemy.new {
-            kind = 0,
-            speed = 1.55 + (index % 4) * 0.13,
-            base_y = y,
-            phase = index * 0.71,
-            fire_timer = 0.7 + (index % 3) * 0.38,
-            active = 1,
-        },
-        Health.new {current = 3.0, maximum = 3.0}
-    )
-end
 
-local function spawn_boss(commands, assets)
-    local image = require_image(assets, "textures/boss.png")
-    commands:spawn(
-        Sprite.new {
-            image = image,
-            size = Vector2.new(4.6, 3.05),
-            layer = 4,
-        },
-        core.Transform2d.new {
-            position = Vector2.new(10.8, 0.0),
-        },
-        Enemy.new {
-            kind = 1,
-            speed = 0.72,
-            base_y = 0.0,
-            phase = 0.0,
-            fire_timer = 1.1,
-            active = 1,
-        },
-        Health.new {current = 28.0, maximum = 28.0}
-    )
-end
+export type ControlState = {
+    keyboard_x: f32,
+    keyboard_y: f32,
+    keyboard_fire: i32,
+    agent_x: f32,
+    agent_y: f32,
+    agent_fire: i32,
+}
 
-local function initialize(
-    commands: Commands,
-    assets: ResRW<AssetServer>,
-    state: ResRW<GameState>
-)
-    if state.initialized ~= 0 then
-        return
-    end
+export type Player = {
+    speed: f32,
+    fire_timer: f32,
+    invincible: f32,
+}
 
-    local background = require_image(assets, "textures/cloudsea.png")
-    local player_image = require_image(assets, "textures/player.png")
-    local plasma = require_image(assets, "textures/plasma.png")
-    local enemy_image = require_image(assets, "textures/enemy.png")
-    local boss_image = require_image(assets, "textures/boss.png")
-    local explosion_image = require_image(assets, "textures/explosion.png")
-
-    keep_image_alive(commands, background, 1)
-    keep_image_alive(commands, player_image, 2)
-    keep_image_alive(commands, plasma, 3)
-    keep_image_alive(commands, enemy_image, 4)
-    keep_image_alive(commands, boss_image, 5)
-    keep_image_alive(commands, explosion_image, 6)
-
-    commands:spawn(
-        Camera2d.new {
-            vertical_size = 10.0,
-            clear_color = Color4F.new(0.012, 0.025, 0.055, 1.0),
-        },
-        core.Transform2d.new(),
-        GameCamera.new()
-    )
-
-    commands:spawn(
-        Sprite.new {
-            image = background,
-            size = Vector2.new(17.78, 10.0),
-            color = Color4F.new(0.72, 0.82, 1.0, 1.0),
-            layer = -20,
-        },
-        core.Transform2d.new()
-    )
-
-    for index = 1, 28 do
-        local row = index % 9
-        local column = math.floor(index / 9)
-        commands:spawn(
-            Sprite.new {
-                image = plasma,
-                size = Vector2.new(0.12 + (index % 4) * 0.035, 0.025),
-                color = Color4F.new(0.65, 0.9, 1.0, 0.42),
-                layer = -5,
-            },
-            core.Transform2d.new {
-                position = Vector2.new(
-                    -8.7 + ((index * 1.93) % 17.4),
-                    -4.35 + row * 1.03 + column * 0.11
-                ),
-            },
-            Star.new {speed = 0.35 + (index % 5) * 0.22}
-        )
-    end
-
-    local player = commands:spawn(
-        Sprite.new {
-            image = player_image,
-            size = Vector2.new(1.85, 0.93),
-            layer = 6,
-        },
-        core.Transform2d.new {
-            position = Vector2.new(-6.2, 0.0),
-        },
-        Player.new {speed = 5.7},
-        Health.new {current = 8.0, maximum = 8.0}
-    )
-
-    state.initialized = player:id()
-    state.phase = 0
-    state.player_health = 8
-    state.boss_health = 28
-    state.spawn_timer = 0.8
-end
-
-local function read_keyboard(
+export function read_keyboard(
     keys: ResRO<KeyInput>,
     control: ResRW<ControlState>
 )
@@ -292,7 +174,7 @@ local function read_keyboard(
     end
 end
 
-local function move_player(
+export function move_player(
     time: ResRO<core.FixedTime>,
     state: ResRW<GameState>,
     control: ResRO<ControlState>,
@@ -310,23 +192,24 @@ local function move_player(
         y /= length
     end
 
+    local delta = time:delta()
     for transform, player in players do
         transform.position.x = math.clamp(
-            transform.position.x + x * player.speed * time:delta(),
+            transform.position.x + x * player.speed * delta,
             -8.0,
             2.7
         )
         transform.position.y = math.clamp(
-            transform.position.y + y * player.speed * time:delta(),
+            transform.position.y + y * player.speed * delta,
             -4.25,
             4.25
         )
-        player.fire_timer = math.max(0.0, player.fire_timer - time:delta())
-        player.invincible = math.max(0.0, player.invincible - time:delta())
+        player.fire_timer = math.max(0.0, player.fire_timer - delta)
+        player.invincible = math.max(0.0, player.invincible - delta)
     end
 end
 
-local function fire_player(
+export function fire_player(
     commands: Commands,
     assets: ResRW<AssetServer>,
     state: ResRO<GameState>,
@@ -355,7 +238,63 @@ local function fire_player(
     end
 end
 
-local function spawn_wave(
+
+export type Enemy = {
+    kind: i32,
+    speed: f32,
+    base_y: f32,
+    phase: f32,
+    fire_timer: f32,
+    active: i32,
+}
+
+local function spawn_enemy(commands, assets, index, y)
+    local image = require_image(assets, "images/enemy.png")
+    commands:spawn(
+        Sprite.new {
+            image = image,
+            size = Vector2.new(1.45, 0.92),
+            layer = 3,
+        },
+        core.Transform2d.new {
+            position = Vector2.new(9.6 + (index % 3) * 0.65, y),
+        },
+        Enemy.new {
+            kind = 0,
+            speed = 1.55 + (index % 4) * 0.13,
+            base_y = y,
+            phase = index * 0.71,
+            fire_timer = 0.7 + (index % 3) * 0.38,
+            active = 1,
+        },
+        Health.new {current = 3.0, maximum = 3.0}
+    )
+end
+
+local function spawn_boss(commands, assets)
+    local image = require_image(assets, "images/boss.png")
+    commands:spawn(
+        Sprite.new {
+            image = image,
+            size = Vector2.new(4.6, 3.05),
+            layer = 4,
+        },
+        core.Transform2d.new {
+            position = Vector2.new(10.8, 0.0),
+        },
+        Enemy.new {
+            kind = 1,
+            speed = 0.72,
+            base_y = 0.0,
+            phase = 0.0,
+            fire_timer = 1.1,
+            active = 1,
+        },
+        Health.new {current = 28.0, maximum = 28.0}
+    )
+end
+
+export function spawn_wave(
     commands: Commands,
     assets: ResRW<AssetServer>,
     time: ResRO<core.FixedTime>,
@@ -387,7 +326,7 @@ local function spawn_wave(
     end
 end
 
-local function update_enemies(
+export function update_enemies(
     commands: Commands,
     assets: ResRW<AssetServer>,
     time: ResRO<core.FixedTime>,
@@ -468,10 +407,15 @@ local function update_enemies(
     end
 end
 
-local function move_projectiles(
+
+export function move_projectiles(
     commands: Commands,
     time: ResRO<core.FixedTime>,
-    projectiles: Query<Entity, Write<core.Transform2d>, Read<Projectile>>
+    projectiles: Query<
+        Entity,
+        Write<core.Transform2d>,
+        Read<Projectile>
+    >
 )
     local delta = time:delta()
     for entity, transform, projectile in projectiles do
@@ -484,7 +428,7 @@ local function move_projectiles(
     end
 end
 
-local function detect_hits(
+export function detect_hits(
     commands: Commands,
     assets: ResRW<AssetServer>,
     state: ResRW<GameState>,
@@ -499,7 +443,11 @@ local function detect_hits(
         Write<Enemy>,
         Write<Health>
     >,
-    players: Query<Read<core.Transform2d>, Write<Player>, Write<Health>>
+    players: Query<
+        Read<core.Transform2d>,
+        Write<Player>,
+        Write<Health>
+    >
 )
     if state.phase ~= 0 then
         return
@@ -585,7 +533,7 @@ local function detect_hits(
     end
 end
 
-local function animate_effects(
+export function animate_effects(
     commands: Commands,
     time: ResRO<core.FixedTime>,
     effects: Query<
@@ -595,12 +543,13 @@ local function animate_effects(
         Write<Effect>
     >
 )
+    local delta = time:delta()
     for entity, transform, sprite, effect in effects do
-        effect.age += time:delta()
+        effect.age += delta
         local progress = math.clamp(effect.age / effect.duration, 0.0, 1.0)
         local scale = 0.25 + math.sin(progress * math.pi) * 0.95
         transform.scale = Vector2.new(scale, scale)
-        transform.rotation += 150.0 * time:delta()
+        transform.rotation += 150.0 * delta
         sprite.color.a = 1.0 - progress
         if progress >= 1.0 then
             commands:entity(entity):despawn()
@@ -608,54 +557,100 @@ local function animate_effects(
     end
 end
 
-local function scroll_stars(
-    time: ResRO<core.FixedTime>,
-    stars: Query<Write<core.Transform2d>, Read<Star>>
-)
-    for transform, star in stars do
-        transform.position.x -= star.speed * time:delta()
-        if transform.position.x < -9.1 then
-            transform.position.x += 18.2
-        end
-    end
+
+local function keep_image_alive(commands, image, index)
+    commands:spawn(
+        Sprite.new {
+            image = image,
+            size = Vector2.new(0.01, 0.01),
+            color = Color4F.new(1.0, 1.0, 1.0, 0.0),
+            layer = -100,
+        },
+        core.Transform2d.new {
+            position = Vector2.new(100.0 + index, 100.0),
+        },
+        AssetKeeper.new()
+    )
 end
 
-local function update_camera(
-    time: ResRO<core.FixedTime>,
-    state: ResRW<GameState>,
-    cameras: Query<Write<core.Transform2d>, With<GameCamera>>
+export function initialize(
+    commands: Commands,
+    assets: ResRW<AssetServer>,
+    state: ResRW<GameState>
 )
-    for transform in cameras do
-        if state.shake > 0.0 then
-            transform.position.x = math.sin(state.elapsed * 97.0) * state.shake
-            transform.position.y = math.cos(state.elapsed * 83.0) * state.shake
-            state.shake = math.max(0.0, state.shake - time:delta() * 2.8)
-        else
-            transform.position.x = 0.0
-            transform.position.y = 0.0
-        end
+    if state.initialized ~= 0 then
+        return
     end
-end
 
-export local GameplayPlugin = Plugin.new {
-    build = function(app: App)
-        app:add_resource(GameState {})
-        app:add_resource(ControlState {})
-        app:add_system(StartUp, initialize)
-        app:add_system(FixedPreUpdate, read_keyboard)
-        app:add_systems(
-            FixedUpdate,
-            chain(
-                move_player,
-                fire_player,
-                spawn_wave,
-                update_enemies,
-                move_projectiles,
-                detect_hits
-            ),
-            animate_effects,
-            scroll_stars,
-            update_camera
+    local background = require_image(assets, "images/cloudsea.png")
+    local player_image = require_image(assets, "images/player.png")
+    local plasma = require_image(assets, "images/plasma.png")
+    local enemy_image = require_image(assets, "images/enemy.png")
+    local boss_image = require_image(assets, "images/boss.png")
+    local explosion_image = require_image(assets, "images/explosion.png")
+
+    keep_image_alive(commands, background, 1)
+    keep_image_alive(commands, player_image, 2)
+    keep_image_alive(commands, plasma, 3)
+    keep_image_alive(commands, enemy_image, 4)
+    keep_image_alive(commands, boss_image, 5)
+    keep_image_alive(commands, explosion_image, 6)
+
+    commands:spawn(
+        Camera2d.new {
+            vertical_size = 10.0,
+            clear_color = Color4F.new(0.012, 0.025, 0.055, 1.0),
+        },
+        core.Transform2d.new(),
+        GameCamera.new()
+    )
+
+    commands:spawn(
+        Sprite.new {
+            image = background,
+            size = Vector2.new(17.78, 10.0),
+            color = Color4F.new(0.72, 0.82, 1.0, 1.0),
+            layer = -20,
+        },
+        core.Transform2d.new()
+    )
+
+    for index = 1, 28 do
+        local row = index % 9
+        local column = math.floor(index / 9)
+        commands:spawn(
+            Sprite.new {
+                image = plasma,
+                size = Vector2.new(0.12 + (index % 4) * 0.035, 0.025),
+                color = Color4F.new(0.65, 0.9, 1.0, 0.42),
+                layer = -5,
+            },
+            core.Transform2d.new {
+                position = Vector2.new(
+                    -8.7 + ((index * 1.93) % 17.4),
+                    -4.35 + row * 1.03 + column * 0.11
+                ),
+            },
+            Star.new {speed = 0.35 + (index % 5) * 0.22}
         )
-    end,
-}
+    end
+
+    local player = commands:spawn(
+        Sprite.new {
+            image = player_image,
+            size = Vector2.new(1.85, 0.93),
+            layer = 6,
+        },
+        core.Transform2d.new {
+            position = Vector2.new(-6.2, 0.0),
+        },
+        Player.new {speed = 5.7},
+        Health.new {current = 8.0, maximum = 8.0}
+    )
+
+    state.initialized = player:id()
+    state.phase = 0
+    state.player_health = 8
+    state.boss_health = 28
+    state.spawn_timer = 0.8
+end
