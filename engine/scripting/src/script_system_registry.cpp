@@ -66,6 +66,42 @@ Result<const LuauPluginDecl*, LuauScriptError> select_module_plugin(
     return &artifact.plugins.front();
 }
 
+Status<LuauScriptError> prepare_luau_script_module_instances(
+    LuauRuntime& runtime,
+    LuauExecutionPool& execution_pool,
+    LuauScriptModuleId module,
+    const LuauExecutionModule& execution_module,
+    const LuauModuleSchema& schema,
+    const LuauPluginDecl& plugin
+) {
+    auto prepared = detail::prepare_luau_script_system_module(
+        runtime,
+        module,
+        schema,
+        plugin
+    );
+    if (!prepared) {
+        return failure(std::move(prepared.error()));
+    }
+    for (std::size_t lane_index = 0; lane_index < execution_pool.lane_count();
+         ++lane_index) {
+        auto lane_runtime = execution_pool.runtime(lane_index);
+        if (!lane_runtime) {
+            return failure(std::move(lane_runtime.error()));
+        }
+        prepared = detail::prepare_luau_script_system_module(
+            *lane_runtime,
+            execution_module.lanes[lane_index],
+            schema,
+            plugin
+        );
+        if (!prepared) {
+            return failure(std::move(prepared.error()));
+        }
+    }
+    return {};
+}
+
 Result<LoadedLuauScriptSystemModule, LuauScriptError>
 load_luau_script_system_module(
     LuauRuntime& runtime,
@@ -112,33 +148,17 @@ load_luau_script_system_module(
         execution_pool.unload_module(*execution_module);
         runtime.unload_module(*module);
     };
-    auto prepared = detail::prepare_luau_script_system_module(
+    auto prepared = prepare_luau_script_module_instances(
         runtime,
+        execution_pool,
         *module,
+        *execution_module,
         artifact.metadata->schema,
         plugin
     );
     if (!prepared) {
         rollback_modules();
         return failure(std::move(prepared.error()));
-    }
-    for (std::size_t lane_index = 0; lane_index < execution_pool.lane_count();
-         ++lane_index) {
-        auto lane_runtime = execution_pool.runtime(lane_index);
-        if (!lane_runtime) {
-            rollback_modules();
-            return failure(std::move(lane_runtime.error()));
-        }
-        prepared = detail::prepare_luau_script_system_module(
-            *lane_runtime,
-            execution_module->lanes[lane_index],
-            artifact.metadata->schema,
-            plugin
-        );
-        if (!prepared) {
-            rollback_modules();
-            return failure(std::move(prepared.error()));
-        }
     }
     auto shared_execution_module =
         std::make_shared<LuauExecutionModule>(std::move(*execution_module));
@@ -663,6 +683,23 @@ LuauScriptSystemRegistry::load_dependency_module(
     if (!execution_module) {
         runtime.unload_module(*module);
         return failure(std::move(execution_module.error()));
+    }
+    auto rollback_modules = [&] {
+        execution_pool.unload_module(*execution_module);
+        runtime.unload_module(*module);
+    };
+    const LuauPluginDecl empty_plugin;
+    auto prepared = prepare_luau_script_module_instances(
+        runtime,
+        execution_pool,
+        *module,
+        *execution_module,
+        (*artifact)->metadata->schema,
+        empty_plugin
+    );
+    if (!prepared) {
+        rollback_modules();
+        return failure(std::move(prepared.error()));
     }
     auto shared_execution_module =
         std::make_shared<LuauExecutionModule>(std::move(*execution_module));

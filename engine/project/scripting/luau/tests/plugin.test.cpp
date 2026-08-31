@@ -243,6 +243,64 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Project Luau scripts prepare imported dependency modules",
+    "[project-runtime][luau][script][require][types]"
+) {
+    TemporaryMixedScriptProject directory(
+        {
+            ScriptFile {
+                .path = "scripts/game.luau",
+                .content = std::string_view {R"(
+                    local Shared = require("./lib/shared")
+
+                    export local EntryPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:add_resource(Shared.SharedState { value = 1 })
+                            app:add_system(Update, Shared.tick)
+                        end,
+                    }
+                )"},
+            },
+        },
+        {
+            ScriptFile {
+                .path = "scripts/lib/shared.luau",
+                .content = std::string_view {R"(
+                    export type SharedState = {
+                        value: i32,
+                    }
+
+                    export function tick(state: ResRW<SharedState>)
+                        assert(Time ~= nil)
+                        state.value += 1
+                    end
+                )"},
+            },
+        }
+    );
+    auto app = load_app(directory);
+
+    const auto& scripts = app.resource<project_runtime::LuauScriptsState>();
+    REQUIRE(scripts.scripts.size() == 1);
+    REQUIRE(
+        scripts.scripts[0].status == project_runtime::LuauScriptStatus::Loaded
+    );
+    app.run_schedule(Update);
+
+    auto state_type = Registry::instance().try_get_type(
+        "project.scripts.lib.shared.SharedState"
+    );
+    REQUIRE(state_type);
+    Ref state = app.world().resource(state_type->id());
+    auto value = Registry::instance()
+                     .get_cls(state_type->id())
+                     .get_property("value")
+                     .get(state);
+    REQUIRE(value);
+    CHECK(value->get<int>() == 2);
+}
+
+TEST_CASE(
     "Project Luau scripts reject circular module imports",
     "[project-runtime][luau][script][require][cycle]"
 ) {
