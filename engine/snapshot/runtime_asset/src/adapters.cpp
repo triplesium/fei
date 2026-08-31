@@ -71,6 +71,12 @@ configure_asset_adapters(World& world, snapshot::SnapshotRegistry& registry) {
             ));
         }
     }
+    if (registry.codecs().find(type_id<UntypedHandle>()) == nullptr &&
+        !register_untyped_asset_handle_codec(registry.codecs(), server)) {
+        return failure(configuration_error(
+            "Failed to register the untyped asset handle snapshot codec"
+        ));
+    }
     return {};
 }
 

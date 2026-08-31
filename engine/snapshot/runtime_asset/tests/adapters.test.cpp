@@ -37,6 +37,10 @@ struct AssetHolder {
     Handle<TestAsset> asset;
 };
 
+struct UntypedAssetHolder {
+    UntypedHandle asset;
+};
+
 class MemorySource : public AssetSource {
   private:
     std::array<std::byte, 4> m_first {
@@ -118,6 +122,12 @@ void register_test_types() {
                 "AssetHolder"
             )
             .add_property("asset", &AssetHolder::asset);
+        Registry::instance()
+            .register_cls<UntypedAssetHolder>(
+                {"snapshot_runtime_asset_test"},
+                "UntypedAssetHolder"
+            )
+            .add_property("asset", &UntypedAssetHolder::asset);
         return true;
     }();
     (void)registered;
@@ -182,6 +192,10 @@ TEST_CASE(
     const auto first = server.load<TestAsset>("memory://first.bin");
     const auto entity = app.world().entity();
     app.world().add_component(entity, AssetHolder {.asset = first});
+    app.world().add_component(
+        entity,
+        UntypedAssetHolder {.asset = first.untyped()}
+    );
 
     snapshot::CheckpointStore checkpoints;
     configure_snapshots(app.world(), checkpoints.registry());
@@ -202,6 +216,10 @@ TEST_CASE(
         checkpoints.registry().codecs().find(type_id<Handle<TestAsset>>()) !=
         nullptr
     );
+    CHECK(
+        checkpoints.registry().codecs().find(type_id<UntypedHandle>()) !=
+        nullptr
+    );
     const auto coverage = snapshot::audit(app.world(), checkpoints.registry());
     REQUIRE(coverage.ready);
     REQUIRE(coverage.complete);
@@ -209,6 +227,8 @@ TEST_CASE(
 
     const auto second = server.load<TestAsset>("memory://second.bin");
     app.world().get_component_rw<AssetHolder>(entity).write().asset = second;
+    app.world().get_component_rw<UntypedAssetHolder>(entity).write().asset =
+        second.untyped();
     REQUIRE(TestLoader::load_count == 2);
 
     auto restored = checkpoints.restore("assets", app.world());
@@ -217,7 +237,11 @@ TEST_CASE(
     REQUIRE(app.world().has_entity(restored_entity));
     const auto& restored_holder =
         app.world().get_component<AssetHolder>(restored_entity);
+    const auto& restored_untyped =
+        app.world().get_component<UntypedAssetHolder>(restored_entity);
     CHECK(restored_holder.asset.id() == first.id());
+    CHECK(restored_untyped.asset.is<TestAsset>());
+    CHECK(restored_untyped.asset.id() == first.id());
     CHECK(TestLoader::load_count == 2);
     REQUIRE(app.resource<Assets<TestAsset>>().get(restored_holder.asset));
     REQUIRE(app.resource<Assets<TestAsset>>().get(second));

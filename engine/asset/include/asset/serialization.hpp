@@ -183,6 +183,133 @@ inline bool register_asset_handle_codec(
     );
 }
 
+inline bool register_untyped_asset_handle_codec(
+    serialization::ValueCodecRegistry& codecs,
+    AssetServer& server
+) {
+    using namespace serialization;
+
+    return codecs.register_codec<UntypedHandle>(ValueCodec {
+        .encode = [&codecs, &server](Ref value, std::string_view path)
+            -> Result<SerializedNode, SerializeError> {
+            const auto invalid_value = [&](std::string message) {
+                return failure(
+                    SerializeError {
+                        .kind = SerializeError::Kind::UnsupportedType,
+                        .type = type_id<UntypedHandle>(),
+                        .path = std::string(path),
+                        .message = std::move(message),
+                    }
+                );
+            };
+            const auto* handle = value.try_get_const<UntypedHandle>();
+            if (handle == nullptr) {
+                return invalid_value(
+                    "Untyped asset handle codec received the wrong type"
+                );
+            }
+            if (!*handle) {
+                return SerializedNode::null();
+            }
+
+            const auto registration =
+                server.asset_type_registration(handle->asset_type());
+            if (!registration) {
+                return invalid_value(
+                    "Untyped asset handle contains an unregistered asset type"
+                );
+            }
+            const auto* codec = codecs.find(registration->handle_type);
+            if (codec == nullptr || !codec->encode) {
+                return invalid_value(
+                    "Concrete asset handle codec is not registered"
+                );
+            }
+            auto typed = server.handle_value(*handle);
+            if (!typed) {
+                return invalid_value(std::move(typed.error().message));
+            }
+            auto encoded = codec->encode(typed->ref(), path);
+            if (!encoded) {
+                return failure(std::move(encoded.error()));
+            }
+            return SerializedNode::object({
+                SerializedField {
+                    .name = "$assetType",
+                    .value = SerializedNode::string(
+                        type_name(registration->asset_type)
+                    ),
+                },
+                SerializedField {
+                    .name = "$value",
+                    .value = std::move(*encoded),
+                },
+            });
+        },
+        .decode = [&codecs,
+                   &server](const SerializedNode& node, std::string_view path)
+            -> Result<Val, DeserializeError> {
+            const auto invalid_node = [&](std::string message) {
+                return failure(
+                    DeserializeError {
+                        .kind = DeserializeError::Kind::InvalidNode,
+                        .type = type_id<UntypedHandle>(),
+                        .path = std::string(path),
+                        .message = std::move(message),
+                    }
+                );
+            };
+            if (node.is_null()) {
+                return make_val<UntypedHandle>();
+            }
+
+            const auto* object = node.try_object();
+            const auto* type_field =
+                object ? find_field(*object, "$assetType") : nullptr;
+            const auto* value_field =
+                object ? find_field(*object, "$value") : nullptr;
+            const auto* type_name_value =
+                type_field ? type_field->value.try_string() : nullptr;
+            if (object == nullptr || object->size() != 2 ||
+                type_name_value == nullptr || value_field == nullptr) {
+                return invalid_node(
+                    "Expected '$assetType' string and '$value' fields"
+                );
+            }
+
+            auto asset_type =
+                Registry::instance().try_get_type_exact(*type_name_value);
+            if (!asset_type) {
+                return invalid_node(std::move(asset_type.error().message));
+            }
+            const auto registration =
+                server.asset_type_registration(asset_type->id());
+            if (!registration) {
+                return invalid_node(
+                    "Snapshot references an unregistered asset type"
+                );
+            }
+            const auto* codec = codecs.find(registration->handle_type);
+            if (codec == nullptr || !codec->decode) {
+                return invalid_node(
+                    "Concrete asset handle codec is not registered"
+                );
+            }
+            auto typed = codec->decode(value_field->value, path);
+            if (!typed) {
+                return failure(std::move(typed.error()));
+            }
+            auto untyped = convert_to_untyped_handle(typed->ref());
+            if (!untyped) {
+                return invalid_node(
+                    "Decoded value is not a registered asset handle"
+                );
+            }
+            return make_val<UntypedHandle>(std::move(*untyped));
+        },
+    });
+}
+
 template<class T>
 bool register_asset_handle_codec(
     serialization::ValueCodecRegistry& codecs,
