@@ -108,6 +108,7 @@ import {
     type LuauProjectFile,
 } from "@editor-platform/luau-language-client";
 import { ProjectStorage } from "@editor-platform/project-storage";
+import { buildFileTree, type FileTreeNode } from "./file-tree";
 import type {
     AgentRequest,
     ConsoleEntry,
@@ -245,41 +246,6 @@ function fileIcon(entry: ProjectFileEntry) {
         return <Code2 {...props} />;
     }
     return <File {...props} />;
-}
-
-interface FileTreeNode {
-    name: string;
-    path: string;
-    entry?: ProjectFileEntry;
-    children: FileTreeNode[];
-}
-
-function buildFileTree(files: ProjectFileEntry[]): FileTreeNode[] {
-    const root: FileTreeNode = { name: "", path: "", children: [] };
-    for (const entry of files) {
-        let parent = root;
-        const displayPath = assetRelativePath(entry.path);
-        const parts = displayPath.split("/");
-        parts.forEach((name, index) => {
-            const path = parts.slice(0, index + 1).join("/");
-            let node = parent.children.find((candidate) => candidate.name === name);
-            if (!node) {
-                node = { name, path, children: [] };
-                parent.children.push(node);
-            }
-            if (index === parts.length - 1) node.entry = entry;
-            parent = node;
-        });
-    }
-    const sort = (nodes: FileTreeNode[]) => {
-        nodes.sort((left, right) => {
-            if (Boolean(left.entry) !== Boolean(right.entry)) return left.entry ? 1 : -1;
-            return left.name.localeCompare(right.name);
-        });
-        nodes.forEach((node) => sort(node.children));
-    };
-    sort(root.children);
-    return root.children;
 }
 
 function FileTree({
