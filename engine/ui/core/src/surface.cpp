@@ -109,7 +109,13 @@ void Surface::upsert(
     upsert(
         entity,
         node,
-        ContentSize::fixed(content_size),
+        ContentSize {
+            .measure =
+                FixedMeasure {
+                    .size = content_size,
+                    .preserve_aspect_ratio = true,
+                },
+        },
         border_radius,
         scroll_position
     );
@@ -288,9 +294,9 @@ void Surface::layout_node(Entity entity, Vector2 position, Vector2 size) {
                 .available_height = AvailableSpace::definite(content_size.y),
             }
         );
-        if (std::holds_alternative<FixedMeasure>(
-                child_item->second.content_size.measure
-            )) {
+        const auto* fixed_measure =
+            std::get_if<FixedMeasure>(&child_item->second.content_size.measure);
+        if (fixed_measure != nullptr && fixed_measure->preserve_aspect_ratio) {
             if (!child.width.is_auto() && child.height.is_auto() &&
                 known_width && intrinsic.x > 0.0f) {
                 measured_size.y = *known_width * intrinsic.y / intrinsic.x;
@@ -483,9 +489,9 @@ void Surface::layout_node(Entity entity, Vector2 position, Vector2 size) {
                 .available_height = AvailableSpace::definite(content_size.y),
             }
         );
-        if (std::holds_alternative<FixedMeasure>(
-                child_entry.content_size.measure
-            )) {
+        const auto* fixed_measure =
+            std::get_if<FixedMeasure>(&child_entry.content_size.measure);
+        if (fixed_measure != nullptr && fixed_measure->preserve_aspect_ratio) {
             if (!child.width.is_auto() && child.height.is_auto() &&
                 known_width && intrinsic.x > 0.0f) {
                 measured_size.y = *known_width * intrinsic.y / intrinsic.x;

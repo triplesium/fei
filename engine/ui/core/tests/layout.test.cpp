@@ -237,6 +237,31 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "UI fixed-height text measurement keeps its intrinsic width",
+    "[ui][layout][text]"
+) {
+    ui::Surface surface;
+    surface.upsert(
+        test_entity(1),
+        ui::Node {.align_items = ui::AlignItems::End}
+    );
+    surface.upsert(
+        test_entity(2),
+        ui::Node {.height = ui::px(20.0f)},
+        ui::ContentSize::fixed({100.0f, 10.0f})
+    );
+    const std::array children {Entity {2}};
+    surface.set_children(test_entity(1), children);
+
+    surface.compute(test_entity(1), {200.0f, 50.0f});
+
+    const auto* text = surface.get(test_entity(2));
+    REQUIRE(text);
+    check_vector(text->position, 100.0f, 0.0f);
+    check_vector(text->size, 100.0f, 20.0f);
+}
+
+TEST_CASE(
     "UI plugin derives computed nodes from ECS hierarchy",
     "[ui][layout]"
 ) {

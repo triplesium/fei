@@ -108,6 +108,7 @@ void update_image_content_sizes(
             .measure = FixedMeasure {
                 .size = image_node.mode == NodeImageMode::Auto ? size :
                                                                  Vector2::Zero,
+                .preserve_aspect_ratio = image_node.mode == NodeImageMode::Auto,
             },
         };
         if (content_size.read() != new_content_size) {

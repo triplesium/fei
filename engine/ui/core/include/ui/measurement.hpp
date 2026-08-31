@@ -39,6 +39,7 @@ struct MeasureArgs {
 
 struct FixedMeasure {
     Vector2 size;
+    bool preserve_aspect_ratio {false};
 
     bool operator==(const FixedMeasure&) const = default;
 };
