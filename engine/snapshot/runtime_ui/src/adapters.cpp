@@ -3,11 +3,10 @@
 #include "asset/assets.hpp"
 #include "asset/handle.hpp"
 #include "core/image.hpp"
-#include "ecs/archetype.hpp"
 #include "ecs/event.hpp"
 #include "ecs/world.hpp"
 #include "input_focus/focus.hpp"
-#include "refl/cls.hpp"
+#include "refl/cls.hpp" // NOLINT(misc-include-cleaner)
 #include "refl/registry.hpp"
 #include "snapshot/events.hpp"
 #include "text/editable.hpp"
@@ -123,7 +122,8 @@ Status<snapshot::SnapshotError> validate_rebuild_sources(const World& world) {
                 "ImageNodeSize requires an authoritative ImageNode"
             ));
         }
-        if ((archetype.has_component(type_id<text::TextLayoutInfo>()) ||
+        if ((archetype.has_component(type_id<ui::ComputedTextBlock>()) ||
+             archetype.has_component(type_id<text::TextLayoutInfo>()) ||
              archetype.has_component(type_id<ui::TextNodeFlags>())) &&
             !has_text) {
             return failure(unsupported_rebuild_source(
@@ -290,6 +290,9 @@ configure_ui_adapters(World& world, snapshot::SnapshotRegistry& registry) {
     );
     registry.component<ui::ContentSize>(snapshot::ComponentPolicy::Rebuild);
     registry.component<ui::ImageNodeSize>(snapshot::ComponentPolicy::Rebuild);
+    registry.component<ui::ComputedTextBlock>(
+        snapshot::ComponentPolicy::Rebuild
+    );
     registry.component<text::TextLayoutInfo>(
         snapshot::ComponentPolicy::Rebuild
     );

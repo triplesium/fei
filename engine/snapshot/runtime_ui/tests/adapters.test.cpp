@@ -383,13 +383,17 @@ TEST_CASE(
     const auto* computed =
         component_audit(coverage, type_id<ui::ComputedNode>());
     const auto* content = component_audit(coverage, type_id<ui::ContentSize>());
+    const auto* computed_text =
+        component_audit(coverage, type_id<ui::ComputedTextBlock>());
     const auto* text_layout =
         component_audit(coverage, type_id<text::TextLayoutInfo>());
     REQUIRE(computed);
     REQUIRE(content);
+    REQUIRE(computed_text);
     REQUIRE(text_layout);
     CHECK(computed->disposition == snapshot::AuditDisposition::Rebuild);
     CHECK(content->disposition == snapshot::AuditDisposition::Rebuild);
+    CHECK(computed_text->disposition == snapshot::AuditDisposition::Rebuild);
     CHECK(text_layout->disposition == snapshot::AuditDisposition::Rebuild);
     REQUIRE(test.checkpoints.create("complex-ui", world, true));
 
