@@ -55,6 +55,7 @@ export class ProjectStorage {
     }
 
     async initialize(): Promise<RememberedProject | null> {
+        await this.removeLegacyBundledProjects();
         try {
             const root = await this.loadRememberedRoot();
             if (root?.kind === "directory") {
@@ -299,24 +300,51 @@ export class ProjectStorage {
         const projects = await storageRoot.getDirectoryHandle("entisium-editor-demo", {
             create: true,
         });
-        const project = await projects.getDirectoryHandle(`project-${manifest.id.slice(0, 16)}`, {
-            create: true,
-        });
+        const project = await projects.getDirectoryHandle("project", { create: true });
         const marker = await this.readFileFromRoot(project, ".entisium-demo-version");
         if (marker !== manifest.id) {
-            const filesRoot = new URL("files/", manifestUrl);
-            for (const path of manifest.files) {
-                const encodedPath = path.split("/").map(encodeURIComponent).join("/");
-                const fileResponse = await fetch(new URL(encodedPath, filesRoot));
-                if (!fileResponse.ok) {
-                    throw new Error(`Could not load demo project file '${path}'.`);
-                }
-                await this.writeFileToRoot(project, path, await fileResponse.arrayBuffer());
-            }
-            await this.writeFileToRoot(project, ".entisium-demo-version", manifest.id);
+            await this.clearDirectory(project);
+            await this.installBundledProject(project, manifest, manifestUrl);
         }
         await this.attach(project, false);
         return { name: manifest.name, restored: true, source: "bundled" };
+    }
+
+    private async removeLegacyBundledProjects(): Promise<void> {
+        const storageRoot = await navigator.storage.getDirectory();
+        try {
+            const projects = await storageRoot.getDirectoryHandle("entisium-editor-demo");
+            for await (const [name] of projects.entries()) {
+                if (name !== "project") {
+                    await projects.removeEntry(name, { recursive: true });
+                }
+            }
+        } catch (error) {
+            if (!(error instanceof DOMException) || error.name !== "NotFoundError") throw error;
+        }
+    }
+
+    private async clearDirectory(directory: FileSystemDirectoryHandle): Promise<void> {
+        for await (const [name] of directory.entries()) {
+            await directory.removeEntry(name, { recursive: true });
+        }
+    }
+
+    private async installBundledProject(
+        project: FileSystemDirectoryHandle,
+        manifest: BundledProjectManifest,
+        manifestUrl: URL,
+    ): Promise<void> {
+        const filesRoot = new URL("files/", manifestUrl);
+        for (const path of manifest.files) {
+            const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+            const fileResponse = await fetch(new URL(encodedPath, filesRoot));
+            if (!fileResponse.ok) {
+                throw new Error(`Could not load demo project file '${path}'.`);
+            }
+            await this.writeFileToRoot(project, path, await fileResponse.arrayBuffer());
+        }
+        await this.writeFileToRoot(project, ".entisium-demo-version", manifest.id);
     }
 
     private async readFileFromRoot(

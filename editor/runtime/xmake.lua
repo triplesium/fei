@@ -171,4 +171,9 @@ target("entisium-editor-demo")
             os.cp(artifact, lsp_output)
         end
     end)
+    on_run(function(target)
+        import("editor_build", {
+            rootdir = path.join(os.projectdir(), "editor", "runtime"),
+        }).run_demo(target)
+    end)
 end

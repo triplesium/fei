@@ -116,7 +116,18 @@ The host serves the Editor and runtime from `http://127.0.0.1:3100` by default. 
 
 The `entisium-editor-demo` output is fully static and self-contained. Serve the configured output root and open `editor-demo/index.html`; its runtime is packaged under `editor-demo/runtime/`. Use HTTPS outside localhost because WebGPU and the File System Access API require a secure context.
 
-On first launch, the demo copies its configured project into an origin-private browser workspace and opens it automatically. Each project content version receives a separate workspace, so rebuilding the demo does not overwrite edits made to an older version. Edge and Chrome users can also open a user-authorized local folder containing `project.yaml` and project assets; that directory handle is remembered in IndexedDB when permission persists. Play injects the project's text and binary files into an isolated iframe; Stop destroys that iframe. The demo build does not contain the Agent, model settings, Host APIs, or MCP command bridge.
+Build and serve the static demo locally with:
+
+```bash
+xmake run entisium-editor-demo
+```
+
+The preview server listens on `http://127.0.0.1:4173` by default; open
+`http://127.0.0.1:4173/editor-demo/index.html`. Pass Vite preview options after
+`--` when a different address is needed, for example
+`xmake run entisium-editor-demo -- --port 8000`.
+
+The demo keeps one origin-private browser workspace for its configured project and opens it automatically. Reloading the page preserves edits while the packaged project version is unchanged. When the packaged project content changes, the demo replaces that same workspace with a fresh copy instead of retaining a separate older workspace. Edge and Chrome users can also open a user-authorized local folder containing `project.yaml` and project assets; that directory handle is remembered in IndexedDB when permission persists and is independent of the bundled workspace. Play injects the project's text and binary files into an isolated iframe; Stop destroys that iframe. The demo build does not contain the Agent, model settings, Host APIs, or MCP command bridge.
 
 ## Deploy the demo to GitHub Pages
 

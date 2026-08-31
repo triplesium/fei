@@ -196,6 +196,30 @@ function run(target)
     })
 end
 
+function run_demo(target)
+    local option = import("core.base.option")
+    local runtime = assert(target:dep("entisium-editor-runtime"))
+    local runtime_directory = path.absolute(runtime:targetdir(), os.projectdir())
+    local demo = path.join(runtime_directory, "editor-demo", "index.html")
+    assert(os.isfile(demo), "Web Editor demo has not been built: " .. demo)
+
+    local arguments = {
+        "preview",
+        "--outDir",
+        runtime_directory,
+        "--host",
+        "127.0.0.1",
+    }
+    for _, argument in ipairs(table.wrap(option.get("arguments"))) do
+        if argument ~= "--" then
+            table.insert(arguments, argument)
+        end
+    end
+
+    print("Web Editor demo entry: /editor-demo/index.html")
+    os.execv(editor_program("vite"), arguments, {curdir = editor_root})
+end
+
 function dev(target, editor_options)
     local find_tool = import("lib.detect.find_tool")
     local npm_name = os.host() == "windows" and "npm.cmd" or "npm"
