@@ -129,11 +129,45 @@ std::optional<std::string> EntisiumPlatform::functionHoverSignature(
         position,
         inferred_return_type
     );
+    if (auto signature = source_function_hover_signature(
+            document,
+            source_module,
+            position,
+            return_type
+        )) {
+        return signature;
+    }
+
+    const auto configuration =
+        workspaceFolder->client->getConfiguration(workspaceFolder->rootUri);
+    const auto module_name = fileResolver->getModuleName(document.uri());
+    const auto module = workspaceFolder->getModule(
+        module_name,
+        configuration.hover.strictDatamodelTypes
+    );
+    if (module == nullptr) {
+        return std::nullopt;
+    }
+    const auto reference =
+        referenced_source_function(source_module, *module, position);
+    if (!reference) {
+        return std::nullopt;
+    }
+    const auto* declaration_module =
+        workspaceFolder->frontend.getSourceModule(reference->module_name);
+    auto declaration_document =
+        fileResolver->getOrCreateTextDocumentFromModuleName(
+            reference->module_name
+        );
+    if (declaration_module == nullptr || !declaration_document) {
+        return std::nullopt;
+    }
     return source_function_hover_signature(
-        document,
-        source_module,
-        position,
-        return_type
+        **declaration_document,
+        *declaration_module,
+        reference->declaration_position,
+        return_type,
+        reference->display_name
     );
 }
 
@@ -150,12 +184,47 @@ void EntisiumPlatform::transformFunctionSignature(
         position,
         inferred_return_type
     );
+    if (apply_source_function_signature(
+            document,
+            source_module,
+            position,
+            return_type,
+            information
+        )) {
+        return;
+    }
+
+    const auto configuration =
+        workspaceFolder->client->getConfiguration(workspaceFolder->rootUri);
+    const auto module_name = fileResolver->getModuleName(document.uri());
+    const auto module = workspaceFolder->getModule(
+        module_name,
+        configuration.hover.strictDatamodelTypes
+    );
+    if (module == nullptr) {
+        return;
+    }
+    const auto reference =
+        referenced_source_function(source_module, *module, position);
+    if (!reference) {
+        return;
+    }
+    const auto* declaration_module =
+        workspaceFolder->frontend.getSourceModule(reference->module_name);
+    auto declaration_document =
+        fileResolver->getOrCreateTextDocumentFromModuleName(
+            reference->module_name
+        );
+    if (declaration_module == nullptr || !declaration_document) {
+        return;
+    }
     apply_source_function_signature(
-        document,
-        source_module,
-        position,
+        **declaration_document,
+        *declaration_module,
+        reference->declaration_position,
         return_type,
-        information
+        information,
+        reference->display_name
     );
 }
 

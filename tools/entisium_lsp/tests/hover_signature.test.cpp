@@ -2,6 +2,11 @@
 
 #include "LSP/TextDocument.hpp"
 #include "LSP/Uri.hpp"
+#include "Luau/BuiltinDefinitions.h"
+#include "Luau/ConfigResolver.h"
+#include "Luau/Error.h"
+#include "Luau/FileResolver.h"
+#include "Luau/Frontend.h"
 #include "Luau/Module.h"
 #include "Luau/Parser.h"
 #include "Plugin/PluginTextDocument.hpp"
@@ -10,9 +15,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -22,6 +29,47 @@ namespace {
 using Luau::LanguageServer::Plugin::PluginTextDocument;
 using Luau::LanguageServer::Plugin::SourceMapping;
 using Luau::LanguageServer::Plugin::TextEdit;
+
+class MemoryFileResolver final : public Luau::FileResolver {
+  public:
+    std::unordered_map<Luau::ModuleName, std::string> sources;
+
+    std::optional<Luau::SourceCode>
+    readSource(const Luau::ModuleName& name) override {
+        const auto source = sources.find(name);
+        if (source == sources.end()) {
+            return std::nullopt;
+        }
+        return Luau::SourceCode {
+            .source = source->second,
+            .type = Luau::SourceCode::Type::Module,
+        };
+    }
+
+    std::optional<Luau::ModuleInfo> resolveModule(
+        const Luau::ModuleInfo* context,
+        Luau::AstExpr* expression,
+        const Luau::TypeCheckLimits&
+    ) override {
+        const auto* specifier =
+            expression->as<Luau::AstExprConstantString>();
+        if (specifier == nullptr) {
+            return std::nullopt;
+        }
+        std::filesystem::path path {
+            std::string {specifier->value.data, specifier->value.size}
+        };
+        if (context != nullptr && path.is_relative()) {
+            path =
+                std::filesystem::path {context->name}.parent_path() / path;
+        }
+        path = path.lexically_normal();
+        if (!path.has_extension()) {
+            path += ".luau";
+        }
+        return Luau::ModuleInfo {.name = path.generic_string()};
+    }
+};
 
 [[nodiscard]] Luau::SourceModule parse(std::string_view source) {
     Luau::SourceModule source_module;
@@ -415,4 +463,134 @@ TEST_CASE(
 
     REQUIRE(signature.has_value());
     CHECK(*signature == "local function update(state: ResRW<GameState>): ()");
+}
+
+TEST_CASE(
+    "function hover can label a declaration as an imported module member",
+    "[lsp][hover][module]"
+) {
+    const std::string source =
+        "export function move_player(\n"
+        "    time: ResRO<core.FixedTime>,\n"
+        "    players: Query<Write<core.Transform2d>, Write<Player>>\n"
+        ")\n"
+        "end\n";
+
+    auto source_module = parse(source);
+    TextDocument document {
+        Uri::parse("file:///player.luau"),
+        "luau",
+        1,
+        source,
+    };
+    const auto signature = ets::lsp::source_function_hover_signature(
+        document,
+        source_module,
+        document.convertPosition(
+            document.positionAt(source.find("move_player"))
+        ),
+        "()",
+        "Player.move_player"
+    );
+
+    REQUIRE(signature.has_value());
+    CHECK(
+        *signature ==
+        "function Player.move_player(\n"
+        "    time: ResRO<core.FixedTime>,\n"
+        "    players: Query<Write<core.Transform2d>, Write<Player>>\n"
+        "): ()"
+    );
+}
+
+TEST_CASE(
+    "function hover resolves an imported module member to its declaration",
+    "[lsp][hover][module]"
+) {
+    const std::string provider =
+        "local function move_player(\n"
+        "    time: number,\n"
+        "    state: string\n"
+        ")\n"
+        "end\n"
+        "return { move_player = move_player }\n";
+    const std::string importer =
+        "local Gameplay = require(\"./gameplay\")\n"
+        "Gameplay.move_player(1, \"ready\")\n";
+
+    MemoryFileResolver files;
+    files.sources.emplace("gameplay.luau", provider);
+    files.sources.emplace("game.luau", importer);
+    Luau::NullConfigResolver configs;
+    configs.defaultConfig.mode = Luau::Mode::Strict;
+    Luau::Frontend frontend {
+        &files,
+        &configs,
+        Luau::FrontendOptions {.retainFullTypeGraphs = true},
+    };
+    Luau::registerBuiltinGlobals(frontend, frontend.globals);
+    const auto result = frontend.check("game.luau");
+    for (const auto& error : result.errors) {
+        UNSCOPED_INFO(Luau::toString(error));
+    }
+    REQUIRE(result.errors.empty());
+
+    const auto* source_module = frontend.getSourceModule("game.luau");
+    const auto module = frontend.moduleResolver.getModule("game.luau");
+    REQUIRE(source_module != nullptr);
+    REQUIRE(module != nullptr);
+    TextDocument importer_document {
+        Uri::parse("file:///game.luau"),
+        "luau",
+        1,
+        importer,
+    };
+    const auto position = importer_document.convertPosition(
+        importer_document.positionAt(importer.find("move_player"))
+    );
+    const auto reference = ets::lsp::referenced_source_function(
+        *source_module,
+        *module,
+        position
+    );
+
+    REQUIRE(reference.has_value());
+    CHECK(reference->module_name == "gameplay.luau");
+    CHECK(reference->display_name == "Gameplay.move_player");
+
+    const auto call_start = ets::lsp::referenced_source_function(
+        *source_module,
+        *module,
+        importer_document.convertPosition(
+            importer_document.positionAt(
+                importer.find("Gameplay.move_player")
+            )
+        )
+    );
+    REQUIRE(call_start.has_value());
+    CHECK(call_start->display_name == "Gameplay.move_player");
+
+    const auto* declaration_module =
+        frontend.getSourceModule(reference->module_name);
+    REQUIRE(declaration_module != nullptr);
+    TextDocument provider_document {
+        Uri::parse("file:///gameplay.luau"),
+        "luau",
+        1,
+        provider,
+    };
+    const auto signature = ets::lsp::source_function_hover_signature(
+        provider_document,
+        *declaration_module,
+        reference->declaration_position,
+        "()",
+        reference->display_name
+    );
+    REQUIRE(signature.has_value());
+    CHECK(
+        *signature == "function Gameplay.move_player(\n"
+                      "    time: number,\n"
+                      "    state: string\n"
+                      "): ()"
+    );
 }
