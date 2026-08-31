@@ -25,6 +25,7 @@ export default defineConfig(({ mode }) => {
                     ws: true,
                 },
                 "/runtime": "http://127.0.0.1:3100",
+                "/profile-symbols": "http://127.0.0.1:3100",
             },
         },
         preview: {

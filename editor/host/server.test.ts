@@ -152,6 +152,18 @@ describe("Editor Host", () => {
             expect(runtime.headers.get("cross-origin-embedder-policy")).toBe("require-corp");
             expect(await runtime.text()).toContain("Entisium Runtime");
 
+            const staticSymbols = await fetch(
+                `${baseUrl}/profile-symbols/${digest}.json`,
+            );
+            expect(staticSymbols.status).toBe(200);
+            expect(await staticSymbols.json()).toMatchObject({
+                module_id: `wasm:${digest}`,
+                symbols: {
+                    "42": { function: "ets::update()" },
+                    "99": { function: "ets::render()" },
+                },
+            });
+
             const unknown = await fetch(`${baseUrl}/runtime/entisium-editor-runtime.map`);
             expect(unknown.status).toBe(404);
 

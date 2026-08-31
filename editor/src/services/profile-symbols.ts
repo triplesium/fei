@@ -3,7 +3,6 @@ import type {
     ProfileFrameDetails,
     ProfileSummary,
 } from "../runtime/profiling";
-import { editorHost } from "./editor-host-client";
 
 export interface ProfileSymbolManifestEntry {
     function: string;
@@ -19,14 +18,10 @@ export interface ProfileSymbolManifest {
 }
 
 interface ProfileSymbolCache {
-    manifest: ProfileSymbolManifest | null;
-    knownIds: Set<string>;
-    queue: Promise<void>;
-    unavailable: boolean;
+    manifest: Promise<ProfileSymbolManifest | null>;
 }
 
 const manifests = new Map<string, ProfileSymbolCache>();
-const maximumSymbolsPerRequest = 512;
 
 function isManifest(value: unknown, moduleId: string): value is ProfileSymbolManifest {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -41,45 +36,30 @@ function isManifest(value: unknown, moduleId: string): value is ProfileSymbolMan
     );
 }
 
-async function loadManifest(
-    moduleId: string,
-    symbolIds: readonly string[],
-): Promise<ProfileSymbolManifest | null> {
+async function loadManifest(moduleId: string): Promise<ProfileSymbolManifest | null> {
     let cache = manifests.get(moduleId);
     if (!cache) {
-        cache = {
-            manifest: null,
-            knownIds: new Set(),
-            queue: Promise.resolve(),
-            unavailable: false,
-        };
+        const match = /^wasm:([0-9a-f]{64})$/.exec(moduleId);
+        const manifest = match
+            ? fetch(new URL(`profile-symbols/${match[1]}.json`, document.baseURI), {
+                  cache: "no-store",
+              })
+                  .then(async (response) => {
+                      if (!response.ok) {
+                          throw new Error(`Profile symbols unavailable (${response.status}).`);
+                      }
+                      const value: unknown = await response.json();
+                      if (!isManifest(value, moduleId)) {
+                          throw new Error("Invalid profiling symbol manifest.");
+                      }
+                      return value;
+                  })
+                  .catch(() => null)
+            : Promise.resolve(null);
+        cache = { manifest };
         manifests.set(moduleId, cache);
     }
-
-    cache.queue = cache.queue
-        .then(async () => {
-            if (cache!.unavailable) return;
-            const missingIds = symbolIds.filter((id) => !cache!.knownIds.has(id));
-            for (let offset = 0; offset < missingIds.length; offset += maximumSymbolsPerRequest) {
-                const ids = missingIds.slice(offset, offset + maximumSymbolsPerRequest);
-                const value = await editorHost.json<unknown>(
-                    `/api/v1/profile-symbols?module=${encodeURIComponent(moduleId)}&ids=${ids.join(",")}`,
-                );
-                if (!isManifest(value, moduleId)) {
-                    throw new Error("Invalid profiling symbol manifest.");
-                }
-                if (!cache!.manifest) {
-                    cache!.manifest = { ...value, symbols: {} };
-                }
-                Object.assign(cache!.manifest.symbols, value.symbols);
-                ids.forEach((id) => cache!.knownIds.add(id));
-            }
-        })
-        .catch(() => {
-            cache!.unavailable = true;
-        });
-    await cache.queue;
-    return cache.unavailable ? null : cache.manifest;
+    return cache.manifest;
 }
 
 function leafFunctionName(functionName: string): string {
@@ -121,20 +101,14 @@ export function applyProfileSymbolManifest(
 }
 
 async function resolveEntries(entries: ProfileEntry[]): Promise<ProfileEntry[]> {
-    const symbolIdsByModule = new Map<string, Set<string>>();
+    const moduleIds = new Set<string>();
     for (const entry of entries) {
         if (entry.symbol?.kind !== "wasm-function-index") continue;
-        let ids = symbolIdsByModule.get(entry.symbol.moduleId);
-        if (!ids) {
-            ids = new Set();
-            symbolIdsByModule.set(entry.symbol.moduleId, ids);
-        }
-        ids.add(String(entry.symbol.id));
+        moduleIds.add(entry.symbol.moduleId);
     }
     const loaded = await Promise.all(
-        [...symbolIdsByModule].map(
-            async ([moduleId, ids]) =>
-                [moduleId, await loadManifest(moduleId, [...ids])] as const,
+        [...moduleIds].map(
+            async (moduleId) => [moduleId, await loadManifest(moduleId)] as const,
         ),
     );
     const byModule = new Map(loaded);

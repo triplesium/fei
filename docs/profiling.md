@@ -224,10 +224,11 @@ build/wasm/wasm32/release/profile-symbols/<wasm-sha256>.json
 ```
 
 Runtime records use `wasm:<sha256>` plus the final Wasm function index. The
-Editor requests only referenced function indices through the authenticated
-Editor Host API. The host caches the full manifest by build ID, while the
-browser incrementally caches returned subsets. Symbol manifests are
-deliberately not copied into the public `runtime/` asset directory.
+Editor and static Editor demo both resolve those indices from the same
+`profile-symbols/<wasm-sha256>.json` manifest URL relative to the Editor page.
+The Editor Host serves that route from its runtime output, while the demo build
+copies the matching manifest into its self-contained deployment directory.
+Symbol manifests remain separate from the public `runtime/` executable assets.
 
 Archive the manifest with profiling captures. A manifest from a different Wasm
 binary is rejected because its `module_id` does not match.

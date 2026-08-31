@@ -155,10 +155,30 @@ target("entisium-editor-demo")
             },
             {curdir = os.projectdir()}
         )
-        os.cp(
-            path.join(output_root, "runtime"),
-            path.join(editor_output, "runtime")
-        )
+        local runtime_output = path.join(editor_output, "runtime")
+        os.rm(runtime_output)
+        os.mkdir(runtime_output)
+        os.cp(path.join(output_root, "runtime", "*"), runtime_output)
+        local symbol_output = path.join(editor_output, "profile-symbols")
+        os.rm(symbol_output)
+        if has_config("profile_summary") then
+            local runtime_wasm = path.join(
+                output_root,
+                runtime:name() .. ".wasm"
+            )
+            local digest = hash.sha256(runtime_wasm)
+            local manifest = path.join(
+                output_root,
+                "profile-symbols",
+                digest .. ".json"
+            )
+            assert(
+                os.isfile(manifest),
+                "missing WebAssembly profile symbol manifest: " .. manifest
+            )
+            os.mkdir(symbol_output)
+            os.cp(manifest, symbol_output)
+        end
         local lsp = assert(target:dep("entisium-lsp-wasm"))
         local lsp_output = path.join(editor_output, "lsp")
         os.rm(lsp_output)

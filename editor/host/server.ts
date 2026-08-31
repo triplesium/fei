@@ -606,6 +606,26 @@ export function createEditorHost(options: HostOptions): {
                 await serveRuntimeAsset(options.runtimeDirectory, url.pathname, response);
                 return;
             }
+            const profileSymbolPath = /^\/profile-symbols\/([0-9a-f]{64})\.json$/.exec(
+                url.pathname,
+            );
+            if (request.method === "GET" && profileSymbolPath) {
+                try {
+                    json(response, 200, await loadProfileSymbolManifest(profileSymbolPath[1]));
+                } catch (error) {
+                    if (
+                        error &&
+                        typeof error === "object" &&
+                        "code" in error &&
+                        error.code === "ENOENT"
+                    ) {
+                        json(response, 404, { error: "Profiling symbols not found." });
+                    } else {
+                        throw error;
+                    }
+                }
+                return;
+            }
             await serveStatic(options.distDirectory, url.pathname, response);
         } catch (error) {
             if (response.headersSent) {
