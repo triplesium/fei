@@ -15,6 +15,7 @@ export interface EditorCommandRequest {
     provider?: string;
     schema?: string;
     payload?: unknown;
+    mode?: "interactive" | "playtest";
 }
 
 export interface EditorToolDefinition {
@@ -453,10 +454,27 @@ export const editorToolDefinitions: readonly EditorToolDefinition[] = Object.fre
         command: "runtime.play",
         name: "runtime_play",
         label: "Start Runtime",
-        description: "Start the current project in the Entisium WebAssembly runtime.",
-        inputSchema: emptyInput,
+        description:
+            "Start the current project in the Entisium WebAssembly runtime. Playtest mode enables deterministic structured steps and is the default for this agent tool.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                mode: {
+                    type: "string",
+                    enum: ["interactive", "playtest"],
+                    description:
+                        "Runtime control mode; defaults to playtest for this agent tool",
+                },
+            },
+            additionalProperties: false,
+        },
         executionMode: "sequential",
-        request: () => ({ type: "runtime.play" }),
+        request: (parameters) => {
+            const { mode } = parameters as {
+                mode?: "interactive" | "playtest";
+            };
+            return { type: "runtime.play", mode: mode ?? "playtest" };
+        },
     },
     {
         command: "runtime.stop",
@@ -471,9 +489,25 @@ export const editorToolDefinitions: readonly EditorToolDefinition[] = Object.fre
         command: "runtime.restart",
         name: "runtime_restart",
         label: "Restart Runtime",
-        description: "Restart the current project in the Entisium WebAssembly runtime.",
-        inputSchema: emptyInput,
+        description:
+            "Restart the current project, preserving its control mode unless an override is supplied.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                mode: {
+                    type: "string",
+                    enum: ["interactive", "playtest"],
+                    description: "Optional runtime control mode override",
+                },
+            },
+            additionalProperties: false,
+        },
         executionMode: "sequential",
-        request: () => ({ type: "runtime.restart" }),
+        request: (parameters) => {
+            const { mode } = parameters as {
+                mode?: "interactive" | "playtest";
+            };
+            return { type: "runtime.restart", mode };
+        },
     },
 ]);

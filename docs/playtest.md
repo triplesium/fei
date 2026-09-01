@@ -18,7 +18,7 @@ A playtest interface contains an action JSON Schema, an observation JSON Schema,
 4. `observe` returns the new structured state, which is validated against the observation schema.
 5. The playtest clock pauses again until another step is queued.
 
-When at least one interface is registered, `PlaytestPlugin` preserves the game's previous clock settings, selects the fixed timestep, and pauses the simulation after startup. `play_observe` and viewport capture do not advance the simulation. Only one step may be active at a time, and its completed result must be consumed before another step can be queued.
+Registering an interface does not affect an Editor runtime launched in `interactive` mode. In `playtest` mode, `PlaytestPlugin` preserves the game's previous clock settings, selects the fixed timestep, and pauses the simulation after startup when at least one interface is registered. `play_observe` and viewport capture do not advance the simulation. Only one step may be active at a time, and its completed result must be consumed before another step can be queued.
 
 Put gameplay that must advance during an agent step in `FixedPreUpdate`, `FixedUpdate`, or another fixed schedule. Ordinary `Update` systems do not represent deterministic game ticks and should normally be limited to presentation work while a structured playtest is active.
 
@@ -176,7 +176,7 @@ The Editor Host exposes a local Streamable HTTP MCP endpoint at `http://127.0.0.
 
 Keep the Editor page open because the host relays MCP calls to the currently connected page. A complete agent session follows this order:
 
-1. Call `runtime_play` and wait until the runtime is running.
+1. Call `runtime_play` with `mode: "playtest"` and wait until the runtime is running.
 2. Call `play_interfaces` before choosing an action.
 3. Select an interface and call `play_observe` for its initial state.
 4. Call `play_step` with an action matching `action_schema` and, when allowed, a tick override.
@@ -188,7 +188,7 @@ Keep the Editor page open because the host relays MCP calls to the currently con
 Conceptually, clients should use `try/finally` around the session:
 
 ```text
-runtime_play()
+runtime_play(mode="playtest")
 try
     discovered = play_interfaces()
     interface = discovered.interfaces[0]
@@ -261,6 +261,7 @@ Registration must finish before `PlaytestRegistry` is frozen. Prefer the Plugin 
 | --- | --- |
 | `play_interfaces` is unavailable | The runtime must be running, the Editor page must remain connected, and the project must install a playtest interface. |
 | An interface is missing | Ensure its Plugin is exported by the project and its `app:add_playtest` call runs during Plugin build. |
+| A step says the runtime is not deterministic | Restart the same project with `runtime_play({mode: "playtest"})`. |
 | Registration fails | Check for duplicate IDs, invalid tick bounds, malformed schemas, unsupported schema keywords, or missing callbacks. |
 | A step is rejected as busy | Poll and consume the previous request with `play_step_status` before queuing another. |
 | The game moves between steps | Put simulation state changes in fixed schedules and ensure the runtime includes `PlaytestPlugin`. |

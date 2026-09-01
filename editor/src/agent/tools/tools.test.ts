@@ -105,6 +105,31 @@ describe("Editor agent tools", () => {
         ]);
     });
 
+    it("starts agent runtimes in playtest mode by default", async () => {
+        const requests: unknown[] = [];
+        const editor = createEditor(async (request) => {
+            requests.push(request);
+            return {
+                requestId: "response",
+                ok: true,
+                value: { state: "starting", mode: request.mode },
+            };
+        });
+        const runtimePlay = createEditorTools(editor).find(
+            (candidate) => candidate.name === "runtime_play",
+        );
+
+        await runtimePlay?.execute("play-call", {});
+        await runtimePlay?.execute("interactive-call", {
+            mode: "interactive",
+        });
+
+        expect(requests).toEqual([
+            { type: "runtime.play", mode: "playtest" },
+            { type: "runtime.play", mode: "interactive" },
+        ]);
+    });
+
     it("routes structured play tools through one runtime inspection command", async () => {
         const requests: unknown[] = [];
         const editor = createEditor(async (request) => {

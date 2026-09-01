@@ -1,4 +1,5 @@
 export type RuntimeState = "stopped" | "starting" | "running" | "failed";
+export type RuntimeMode = "interactive" | "playtest";
 
 export interface RuntimeProjectFile {
     path: string;
@@ -9,6 +10,7 @@ export interface RuntimeSession {
     channelId: string;
     files: RuntimeProjectFile[];
     source: string;
+    mode: RuntimeMode;
 }
 
 export interface RuntimeSnapshot {

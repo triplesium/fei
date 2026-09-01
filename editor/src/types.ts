@@ -1,4 +1,5 @@
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
+import type { RuntimeMode } from "./runtime/types";
 
 export type ProjectFileKind = "text" | "binary" | "directory";
 
@@ -51,7 +52,7 @@ export interface RememberedProject {
     source?: "local" | "bundled";
 }
 
-export type { RuntimeSession, RuntimeState } from "./runtime/types";
+export type { RuntimeMode, RuntimeSession, RuntimeState } from "./runtime/types";
 
 export type ConsoleLevel = "info" | "error" | "command";
 
@@ -88,6 +89,7 @@ export interface AgentRequest {
     provider?: string;
     schema?: string;
     payload?: unknown;
+    mode?: RuntimeMode;
 }
 
 export interface AgentResponse {

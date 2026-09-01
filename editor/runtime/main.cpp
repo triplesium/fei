@@ -15,6 +15,7 @@
 #include "runtime_inspection/registry.hpp"
 #include "runtime_inspection_playtest/playtest.hpp"
 #include "runtime_inspection_profiling/profiling.hpp"
+#include "runtime_protocol/playtest_plugin.hpp"
 #include "sprite/plugin.hpp"
 #include "sprite/renderer.hpp"
 #include "ui_rendering/plugin.hpp"
@@ -28,6 +29,20 @@
 namespace {
 
 ets::World* g_runtime_world = nullptr;
+
+ets::runtime_protocol::PlaytestMode editor_playtest_mode() {
+    const auto deterministic = EM_ASM_INT(
+        {
+            const mode = new URLSearchParams(window.location.search).get(
+                "entisium-runtime-mode",
+            );
+            return mode === "playtest" ? 1 : 0;
+        }
+    );
+    return deterministic != 0 ?
+               ets::runtime_protocol::PlaytestMode::Deterministic :
+               ets::runtime_protocol::PlaytestMode::Interactive;
+}
 
 void publish_inspection(
     const char* request_id,
@@ -258,6 +273,9 @@ int main() {
     }
 
     App app;
+    app.add_resource(
+        runtime_protocol::PlaytestConfig {.mode = editor_playtest_mode()}
+    );
     runtime_inspection::InspectionRegistry inspections;
     auto registered =
         runtime_inspection::playtest::register_playtest_inspection_providers(

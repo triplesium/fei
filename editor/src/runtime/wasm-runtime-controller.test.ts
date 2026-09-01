@@ -3,6 +3,30 @@ import { WasmRuntimeController } from "./wasm-runtime-controller";
 import type { RuntimeSnapshot } from "./types";
 
 describe("WasmRuntimeController agent interaction", () => {
+    it("records the selected runtime mode in the isolated runtime URL", async () => {
+        vi.stubGlobal("window", {
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            setInterval: vi.fn(() => 1),
+            clearInterval: vi.fn(),
+            setTimeout: vi.fn(() => 2),
+            clearTimeout: vi.fn(),
+        });
+        const controller = new WasmRuntimeController();
+
+        await controller.start([], "playtest");
+
+        expect(controller.getSnapshot().session).toMatchObject({
+            files: [],
+            mode: "playtest",
+        });
+        expect(controller.getSnapshot().session?.source).toContain(
+            "entisium-runtime-mode=playtest",
+        );
+        controller.stop("test complete", false);
+        vi.unstubAllGlobals();
+    });
+
     it("captures the viewport and dispatches held keyboard and pointer input", async () => {
         vi.stubGlobal("location", { origin: "http://localhost" });
         const windowEvents: Array<{ type: string; init: Record<string, unknown> }> = [];
@@ -47,7 +71,12 @@ describe("WasmRuntimeController agent interaction", () => {
             detail: "running",
             script: "loaded",
             frame: "presented",
-            session: { channelId: "test", files: [], source: "test" },
+            session: {
+                channelId: "test",
+                files: [],
+                source: "test",
+                mode: "playtest",
+            },
         };
         controller.attachFrame({ contentWindow: view, contentDocument: document } as never);
 

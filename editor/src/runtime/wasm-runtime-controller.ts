@@ -1,6 +1,7 @@
 import type {
     RuntimeEvent,
     RuntimeEventListener,
+    RuntimeMode,
     RuntimeProjectFile,
     RuntimeSnapshot,
 } from "./types";
@@ -201,13 +202,22 @@ export class WasmRuntimeController {
         return { cleared: true };
     }
 
-    async start(files: RuntimeProjectFile[], force = false): Promise<void> {
+    async start(
+        files: RuntimeProjectFile[],
+        mode: RuntimeMode = "interactive",
+        force = false,
+    ): Promise<void> {
         if (!force && (this.snapshot.state === "starting" || this.snapshot.state === "running")) {
             return;
         }
 
         this.stopMonitoring();
         const channelId = runtimeRequestId();
+        const query = new URLSearchParams({
+            "entisium-editor-channel": channelId,
+            "entisium-runtime-mode": mode,
+            dev: Date.now().toString(),
+        });
         this.updateSnapshot({
             state: "starting",
             detail: "starting",
@@ -216,10 +226,11 @@ export class WasmRuntimeController {
             session: {
                 channelId,
                 files,
-                source: `${runtimeSource}?entisium-editor-channel=${encodeURIComponent(channelId)}&dev=${Date.now()}`,
+                source: `${runtimeSource}?${query}`,
+                mode,
             },
         });
-        this.emitLog("info", "runtime", "creating isolated runtime");
+        this.emitLog("info", "runtime", `creating isolated ${mode} runtime`);
         this.startMonitoring();
     }
 
@@ -239,9 +250,12 @@ export class WasmRuntimeController {
         if (log) this.emitLog("info", "runtime", reason);
     }
 
-    async restart(files: RuntimeProjectFile[]): Promise<void> {
+    async restart(
+        files: RuntimeProjectFile[],
+        mode: RuntimeMode = this.snapshot.session?.mode ?? "interactive",
+    ): Promise<void> {
         this.stop("restarting runtime");
-        await this.start(files, true);
+        await this.start(files, mode, true);
     }
 
     dispose(): void {
