@@ -92,6 +92,32 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Interactive mode registers playtests without taking over the clock",
+    "[runtime-protocol][playtest][clock]"
+) {
+    App app;
+    app.add_resource(PlaytestConfig {.mode = PlaytestMode::Interactive});
+    app.add_plugin<TestGamePlaytestPlugin>();
+    app.finish();
+
+    CHECK(playtest_registry(app).find("game.main") != nullptr);
+    CHECK(app.resource<Time>().time_scale == 1.0F);
+    CHECK_FALSE(app.resource<Time>().fixed_delta());
+    CHECK_FALSE(playtest_runner(app).enabled());
+
+    auto queued = playtest_runner(app).queue_step(
+        playtest_registry(static_cast<const App&>(app)),
+        PlaytestStepRequest {
+            .request_id = "interactive-step",
+            .interface_id = "game.main",
+            .action_json = "{}",
+        }
+    );
+    REQUIRE_FALSE(queued);
+    CHECK(queued.error().kind == PlaytestErrorKind::Unsupported);
+}
+
+TEST_CASE(
     "Playtest runner completes queued actions after deterministic fixed ticks",
     "[runtime-protocol][playtest][runner]"
 ) {
@@ -139,6 +165,7 @@ TEST_CASE(
 ) {
     App app;
     uint32 fixed_ticks = 0;
+    app.add_resource(PlaytestConfig {.mode = PlaytestMode::Deterministic});
     app.add_plugin<TestGamePlaytestPlugin>();
     app.add_systems(FixedUpdate, [&fixed_ticks]() {
         ++fixed_ticks;

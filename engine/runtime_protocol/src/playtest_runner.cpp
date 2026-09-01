@@ -40,6 +40,15 @@ Status<PlaytestError> PlaytestRunner::queue_step(
             }
         );
     }
+    if (!m_enabled) {
+        return failure(
+            PlaytestError {
+                .kind = PlaytestErrorKind::Unsupported,
+                .message =
+                    "Playtest steps require a deterministic runtime session",
+            }
+        );
+    }
     if (m_step || m_completion) {
         return failure(
             PlaytestError {

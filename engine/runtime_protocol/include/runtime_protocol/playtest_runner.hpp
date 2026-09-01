@@ -45,6 +45,9 @@ struct PlaytestStepProgress {
 
 class PlaytestRunner {
   public:
+    void set_enabled(bool enabled) { m_enabled = enabled; }
+    [[nodiscard]] bool enabled() const { return m_enabled; }
+
     // A completion must be consumed before another step can be queued.
     [[nodiscard]] Status<PlaytestError>
     queue_step(const PlaytestRegistry& registry, PlaytestStepRequest request);
@@ -74,6 +77,7 @@ class PlaytestRunner {
 
     Optional<Step> m_step;
     Optional<PlaytestStepCompletion> m_completion;
+    bool m_enabled {true};
 };
 
 } // namespace runtime_protocol
