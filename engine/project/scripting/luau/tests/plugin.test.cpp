@@ -547,6 +547,98 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Project Luau Plugin dependencies own playtest callbacks",
+    "[project-runtime][luau][playtest][plugin][dependency]"
+) {
+    TemporaryMixedScriptProject directory(
+        {},
+        {
+            ScriptFile {
+                .path = "scripts/playtest.luau",
+                .content = std::string_view {R"(
+                    export type Control = {
+                        value: i32,
+                    }
+
+                    local function begin_step(ctx, action)
+                        ctx:resource(Control).value = action.value
+                    end
+
+                    local function end_step(ctx)
+                        ctx:resource(Control).value = 0
+                    end
+
+                    local function observe(ctx)
+                        return { value = ctx:resource(Control).value }
+                    end
+
+                    export local PlaytestPlugin = Plugin.new {
+                        build = function(app: App)
+                            app:insert_resource(Control { value = 0 })
+                            app:add_playtest {
+                                id = "game.dependency",
+                                action = {
+                                    type = "object",
+                                    properties = {
+                                        value = {type = "integer"},
+                                    },
+                                    required = {"value"},
+                                },
+                                observation = {
+                                    type = "object",
+                                    properties = {
+                                        value = {type = "integer"},
+                                    },
+                                    required = {"value"},
+                                },
+                                begin_step = begin_step,
+                                end_step = end_step,
+                                observe = observe,
+                            }
+                        end,
+                    }
+                )"},
+            },
+            ScriptFile {
+                .path = "scripts/game.luau",
+                .content = std::string_view {R"(
+                    local Playtest = require("./playtest")
+
+                    export local GamePlugin = Plugin.new {
+                        dependencies = {
+                            Playtest.PlaytestPlugin,
+                        },
+                        build = function(_app: App)
+                        end,
+                    }
+                )"},
+            },
+        },
+        std::string_view {"project://scripts/game.luau#GamePlugin"}
+    );
+    auto project = Project::load(directory.project_file());
+    REQUIRE(project);
+
+    App app;
+    app.add_resource(runtime_protocol::PlaytestRegistry {});
+    configure_project_runtime(app, std::move(*project));
+    app.add_plugin(project_runtime::LuauPlaytestsPlugin {});
+    app.finish();
+
+    auto& registry = app.resource<runtime_protocol::PlaytestRegistry>();
+    const auto* interface = registry.find("game.dependency");
+    REQUIRE(interface != nullptr);
+    REQUIRE(interface->begin_step(app.world(), R"({"value":9})"));
+    auto observation = interface->observe(app.world());
+    REQUIRE(observation);
+    CHECK(nlohmann::json::parse(*observation).at("value") == 9);
+    REQUIRE(interface->end_step(app.world()));
+    observation = interface->observe(app.world());
+    REQUIRE(observation);
+    CHECK(nlohmann::json::parse(*observation).at("value") == 0);
+}
+
+TEST_CASE(
     "Project Luau scripts preserve module compilation failures",
     "[project-runtime][luau][script]"
 ) {

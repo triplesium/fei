@@ -6,6 +6,7 @@
 #include "compiler/module_ir.hpp"
 #include "compiler/pass.hpp"
 #include "ecs/dynamic/system_decl.hpp"
+#include "refl/annotations.hpp"
 #include "refl/cls.hpp"
 #include "refl/registry.hpp"
 #include "scripting/detail/plugin_install.hpp"
@@ -27,6 +28,10 @@ struct ChunkLoweringVector {
 struct ChunkLoweringComponent {
     ChunkLoweringVector position;
     float x {0.0F};
+};
+
+struct NativePlaytestComponent {
+    float value {0.0F};
 };
 
 Result<std::string, LuauScriptError> lower_chunk_query_source(
@@ -969,6 +974,63 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Luau compiler omits unused imported exported functions",
+    "[scripting_luau][compiler][system][import]"
+) {
+    const LuauScriptSource helpers {
+        .name = "project://scripts/helpers.luau",
+        .content = R"(
+            export function unused()
+            end
+        )",
+    };
+    const LuauScriptSource game {
+        .name = "project://scripts/game.luau",
+        .content = R"(
+            local Helpers = require("./helpers")
+
+            export type Counter = {
+                count: i32,
+            }
+
+            export local GamePlugin = Plugin.new {
+                build = function(app: App)
+                    app:insert_resource(Counter { count = 0 })
+                end,
+            }
+        )",
+    };
+    auto helpers_metadata = compile_luau_module_metadata(helpers);
+    REQUIRE(helpers_metadata);
+    auto shared_helpers_metadata = std::make_shared<const LuauModuleMetadata>(
+        std::move(*helpers_metadata)
+    );
+
+    auto artifact = compile_luau_script_module(
+        game,
+        LuauCompileOptions {
+            .module_metadata_resolver =
+                [shared_helpers_metadata](std::string_view specifier)
+                -> Result<
+                    std::shared_ptr<const LuauModuleMetadata>,
+                    LuauScriptError> {
+                if (specifier != "./helpers") {
+                    return failure(
+                        LuauScriptError {"unexpected module specifier"}
+                    );
+                }
+                return shared_helpers_metadata;
+            },
+        }
+    );
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    CHECK(artifact->functions.empty());
+    CHECK(artifact->plugins.front().functions.empty());
+}
+
+TEST_CASE(
     "Luau Plugin playtests use imported reflected types",
     "[scripting_luau][compiler][plugin][playtest][import]"
 ) {
@@ -998,6 +1060,63 @@ TEST_CASE(
         FAIL(artifact.error().message);
     }
     CHECK(artifact->plugins.front().name == "PlaytestPlugin");
+}
+
+TEST_CASE(
+    "Luau native playtest types do not require script module metadata",
+    "[scripting_luau][compiler][plugin][playtest][native]"
+) {
+    auto& registry = Registry::instance();
+    registry
+        .register_cls<NativePlaytestComponent>(
+            {"ets", "test"},
+            "NativePlaytestComponent"
+        )
+        .add_property("value", &NativePlaytestComponent::value);
+    registry.add_annotation<NativePlaytestComponent>(
+        annotations::ScriptModule {.name = "compiler-test"}
+    );
+
+    bool resolved_script_metadata = false;
+    auto artifact = compile_luau_script_module(
+        LuauScriptSource {
+            .name = "project://scripts/native_playtest.luau",
+            .content = R"(
+                local native = require("@entisium/compiler-test")
+
+                local function observe(ctx)
+                    local values = ctx:query {
+                        Read(native.NativePlaytestComponent),
+                    }
+                    return {count = values:size()}
+                end
+
+                export local PlaytestPlugin = Plugin.new {
+                    build = function(app: App)
+                        app:add_playtest {
+                            id = "game.main",
+                            action = {type = "object"},
+                            observe = observe,
+                        }
+                    end,
+                }
+            )",
+        },
+        LuauCompileOptions {
+            .module_metadata_resolver =
+                [&resolved_script_metadata](std::string_view)
+                -> Result<
+                    std::shared_ptr<const LuauModuleMetadata>,
+                    LuauScriptError> {
+                resolved_script_metadata = true;
+                return failure(LuauScriptError {"unexpected resolver call"});
+            },
+        }
+    );
+    if (!artifact) {
+        FAIL(artifact.error().message);
+    }
+    CHECK_FALSE(resolved_script_metadata);
 }
 
 TEST_CASE(

@@ -1624,6 +1624,9 @@ class ImportedRuntimeTypeUseValidator final : public Luau::AstVisitor {
         if (imported == m_module->imports().end()) {
             return true;
         }
+        if (is_native_luau_module(imported->second)) {
+            return true;
+        }
 
         const auto cached = m_metadata.find(imported->second);
         std::shared_ptr<const LuauModuleMetadata> metadata;
@@ -1873,20 +1876,20 @@ class ImportedFunctionCollector final : public Luau::AstVisitor {
   public:
     ImportedFunctionCollector(
         const LuauScriptSource& source,
-        const FunctionResolutionContext& context,
+        FunctionResolutionContext context,
         RuntimeFunctionCatalog& catalog
-    ) : m_source(&source), m_context(&context), m_catalog(&catalog) {}
+    ) : m_source(&source), m_context(context), m_catalog(&catalog) {}
 
     bool visit(AstExprIndexName* expression) override {
         const auto* module = expression->expr->as<AstExprLocal>();
         if (module == nullptr ||
-            !m_context->module.imports().contains(module->local) ||
-            !m_context->module_metadata_resolver) {
+            !m_context.module.imports().contains(module->local) ||
+            !m_context.module_metadata_resolver) {
             return true;
         }
         auto declaration = compile_function_ref(
             *expression,
-            *m_context,
+            m_context,
             "imported runtime function"
         );
         if (!declaration || m_names.contains(declaration->name)) {
@@ -1909,7 +1912,8 @@ class ImportedFunctionCollector final : public Luau::AstVisitor {
 
   private:
     const LuauScriptSource* m_source;
-    const FunctionResolutionContext* m_context;
+    // Callers construct this context inline, so the visitor must own it.
+    FunctionResolutionContext m_context;
     RuntimeFunctionCatalog* m_catalog;
     std::unordered_set<std::string> m_names;
 };
@@ -1950,36 +1954,6 @@ Result<RuntimeFunctionCatalog, LuauScriptError> compile_runtime_functions(
         collector.add_name(function.name);
     }
 
-#if defined(__EMSCRIPTEN__)
-    std::vector<std::pair<std::string, std::string>> imports;
-    imports.reserve(module.imports().size());
-    for (const auto& [local, specifier] : module.imports()) {
-        imports.emplace_back(std::string(name_view(local->name)), specifier);
-    }
-    std::ranges::sort(imports);
-    for (const auto& [local_name, specifier] : imports) {
-        if (!module_metadata_resolver) {
-            continue;
-        }
-        auto metadata = module_metadata_resolver(specifier);
-        if (!metadata) {
-            return failure(std::move(metadata.error()));
-        }
-        for (const auto& function : (*metadata)->functions) {
-            if (!function.is_system_compatible()) {
-                continue;
-            }
-            collector.add_name(function.qualified_name);
-            result.plugin.functions.push_back(
-                LuauFunctionDecl {
-                    .name = function.qualified_name,
-                    .params = clone_param_declarations(function.system_params),
-                }
-            );
-            result.expressions.push_back(local_name + "." + function.name);
-        }
-    }
-#endif
     plugin.build->body->visit(&collector);
     return result;
 }
