@@ -7,10 +7,10 @@ Play.
 Project scripts are kept directly under `assets/`, with images in
 `assets/images/`:
 
-- `game.luau` is the normal game entry.
+- `game.luau` is the single project entry and composes the game Plugins.
 - `gameplay.luau` contains game state and gameplay systems.
 - `hud.luau` contains presentation systems.
-- `playtest.luau` contains the agent-testing entry and interface.
+- `playtest.luau` contains the agent action and observation contract.
 - `images/` contains all runtime textures.
 
 Controls:
@@ -18,15 +18,16 @@ Controls:
 - Move with WASD or the arrow keys.
 - Fire with Space or Z.
 
-The default project entry runs continuously for normal play. For deterministic
-agent testing, open `playtest.project.yaml` instead. It uses:
+The project has one entry:
 
 ```yaml
-plugin: project://playtest.luau#SkylineStrikePlaytestPlugin
+plugin: project://game.luau#SkylineStrikePlugin
 ```
 
-That entry exposes the `skyline-strike.main` Playtest interface and pauses the
-fixed clock between agent-controlled steps by design.
+Normal Editor Play starts it in interactive mode. Agent testing starts the same
+entry with `runtime_play({mode: "playtest"})`, exposing the
+`skyline-strike.main` interface and pausing the fixed clock between
+agent-controlled steps.
 
 The first playable slice contains a scrolling star layer, deterministic enemy
 waves, player and enemy projectiles, circular hit detection, a dreadnought

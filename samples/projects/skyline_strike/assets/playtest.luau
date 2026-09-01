@@ -1,9 +1,9 @@
 local core = require("@entisium/core")
-local Game = require("./game")
 local Gameplay = require("./gameplay")
 
 local function begin_step(ctx, action)
     local control = ctx:resource(Gameplay.ControlState)
+    control.agent_active = 1
     control.agent_x = action.move_x
     control.agent_y = action.move_y
     control.agent_fire = if action.fire then 1 else 0
@@ -14,21 +14,28 @@ local function end_step(ctx)
     control.agent_x = 0.0
     control.agent_y = 0.0
     control.agent_fire = 0
+    control.agent_active = 0
 end
 
 local function observe(ctx)
     local state = ctx:resource(Gameplay.GameState)
     local players = ctx:query {
+        Read(Gameplay.Player),
         Read(core.Transform2d),
-        With(Gameplay.Player),
     }
-    local transform = players:first()
     local enemies = ctx:query {
         Read(Gameplay.Enemy),
     }
     local projectiles = ctx:query {
         Read(Gameplay.Projectile),
     }
+
+    local player_x = 0.0
+    local player_y = 0.0
+    for _, transform in players do
+        player_x = transform.position.x
+        player_y = transform.position.y
+    end
 
     return {
         phase = state.phase,
@@ -37,8 +44,8 @@ local function observe(ctx)
         kills = state.kills,
         player_health = state.player_health,
         player = {
-            x = transform.position.x,
-            y = transform.position.y,
+            x = player_x,
+            y = player_y,
         },
         boss_spawned = state.boss_spawned ~= 0,
         boss_health = state.boss_health,
@@ -50,7 +57,6 @@ local function observe(ctx)
 end
 
 export local SkylineStrikePlaytestPlugin = Plugin.new {
-    dependencies = {Game.SkylineStrikePlugin},
     build = function(app: App)
         app:add_playtest {
             id = "skyline-strike.main",
