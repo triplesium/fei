@@ -1,7 +1,11 @@
 local Gameplay = require("./gameplay")
 local Hud = require("./hud")
+local Playtest = require("./playtest")
 
 export local SkylineStrikePlugin = Plugin.new {
+    dependencies = {
+        Playtest.SkylineStrikePlaytestPlugin,
+    },
     build = function(app: App)
         app:add_resource(Gameplay.GameState {})
         app:add_resource(Gameplay.GameAssets {})

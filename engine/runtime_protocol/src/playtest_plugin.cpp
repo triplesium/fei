@@ -37,11 +37,17 @@ void PlaytestPlugin::dependencies(PluginDependencies& dependencies) const {
 }
 
 void PlaytestPlugin::setup(App& app) {
+    if (!app.has_resource<PlaytestConfig>()) {
+        app.add_resource(PlaytestConfig {});
+    }
     if (!app.has_resource<PlaytestRegistry>()) {
         app.add_resource(PlaytestRegistry {});
     }
     if (!app.has_resource<PlaytestRunner>()) {
         app.add_resource(PlaytestRunner {});
+    }
+    if (!app.has_resource<PlaytestSegmentCompiler>()) {
+        app.add_resource(PlaytestSegmentCompiler {});
     }
     auto& time = app.resource<Time>();
     app.add_resource(
@@ -62,7 +68,11 @@ void PlaytestPlugin::setup(App& app) {
 
 void PlaytestPlugin::finish(App& app) {
     playtest_registry(app).freeze();
-    if (playtest_registry(app).interfaces().empty()) {
+    const auto has_interfaces = !playtest_registry(app).interfaces().empty();
+    const auto mode = app.resource<PlaytestConfig>().mode;
+    const auto enabled = has_interfaces && mode != PlaytestMode::Interactive;
+    playtest_runner(app).set_enabled(enabled);
+    if (!enabled) {
         return;
     }
     app.resource<PlaytestClock>().enabled = true;

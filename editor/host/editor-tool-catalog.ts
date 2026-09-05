@@ -15,6 +15,7 @@ export interface EditorCommandRequest {
     provider?: string;
     schema?: string;
     payload?: unknown;
+    mode?: "interactive" | "playtest";
 }
 
 export interface EditorToolDefinition {
@@ -450,13 +451,135 @@ export const editorToolDefinitions: readonly EditorToolDefinition[] = Object.fre
         },
     },
     {
+        command: "runtime.inspect",
+        name: "play_segment",
+        label: "Queue Reactive Play Segment",
+        description:
+            "Run a bounded Luau controller once per fixed tick. Source must return function(ctx) and each call must return { action = {...} } or { stop = \"reason\" }. Poll with play_segment_status.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                interface: {
+                    type: "string",
+                    description: "Interface id returned by play_interfaces",
+                },
+                source: {
+                    type: "string",
+                    maxLength: 65536,
+                    description:
+                        "Isolated Luau source returning function(ctx); ctx has read-only tick and observation fields",
+                },
+                maxTicks: {
+                    type: "integer",
+                    minimum: 1,
+                    maximum: 3600,
+                    description: "Mandatory fixed-tick safety limit",
+                },
+            },
+            required: ["interface", "source", "maxTicks"],
+            additionalProperties: false,
+        },
+        executionMode: "sequential",
+        request: (parameters) => {
+            const { interface: interfaceId, source, maxTicks } = parameters as {
+                interface: string;
+                source: string;
+                maxTicks: number;
+            };
+            return {
+                type: "runtime.inspect",
+                provider: "play.segment",
+                schema: "play.segment.v1",
+                payload: {
+                    request_id: playStepRequestId(),
+                    interface: interfaceId,
+                    source,
+                    max_ticks: maxTicks,
+                },
+            };
+        },
+    },
+    {
+        command: "runtime.inspect",
+        name: "play_segment_status",
+        label: "Poll Reactive Play Segment",
+        description:
+            "Poll a reactive segment by request_id. Terminal results include the exact completed tick count, reason, and final observation and are consumed when returned.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                requestId: {
+                    type: "string",
+                    description: "request_id returned by play_segment",
+                },
+            },
+            required: ["requestId"],
+            additionalProperties: false,
+        },
+        executionMode: "sequential",
+        request: (parameters) => {
+            const { requestId } = parameters as { requestId: string };
+            return {
+                type: "runtime.inspect",
+                provider: "play.segment_status",
+                schema: "play.segment_status.v1",
+                payload: { request_id: requestId },
+            };
+        },
+    },
+    {
+        command: "runtime.inspect",
+        name: "play_segment_cancel",
+        label: "Cancel Reactive Play Segment",
+        description:
+            "Cancel an active reactive segment, release its current action, and pause the deterministic clock.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                requestId: {
+                    type: "string",
+                    description: "request_id returned by play_segment",
+                },
+            },
+            required: ["requestId"],
+            additionalProperties: false,
+        },
+        executionMode: "sequential",
+        request: (parameters) => {
+            const { requestId } = parameters as { requestId: string };
+            return {
+                type: "runtime.inspect",
+                provider: "play.segment_cancel",
+                schema: "play.segment_cancel.v1",
+                payload: { request_id: requestId },
+            };
+        },
+    },
+    {
         command: "runtime.play",
         name: "runtime_play",
         label: "Start Runtime",
-        description: "Start the current project in the Entisium WebAssembly runtime.",
-        inputSchema: emptyInput,
+        description:
+            "Start the current project in the Entisium WebAssembly runtime. Playtest mode enables deterministic structured steps and is the default for this agent tool.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                mode: {
+                    type: "string",
+                    enum: ["interactive", "playtest"],
+                    description:
+                        "Runtime control mode; defaults to playtest for this agent tool",
+                },
+            },
+            additionalProperties: false,
+        },
         executionMode: "sequential",
-        request: () => ({ type: "runtime.play" }),
+        request: (parameters) => {
+            const { mode } = parameters as {
+                mode?: "interactive" | "playtest";
+            };
+            return { type: "runtime.play", mode: mode ?? "playtest" };
+        },
     },
     {
         command: "runtime.stop",
@@ -471,9 +594,25 @@ export const editorToolDefinitions: readonly EditorToolDefinition[] = Object.fre
         command: "runtime.restart",
         name: "runtime_restart",
         label: "Restart Runtime",
-        description: "Restart the current project in the Entisium WebAssembly runtime.",
-        inputSchema: emptyInput,
+        description:
+            "Restart the current project, preserving its control mode unless an override is supplied.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                mode: {
+                    type: "string",
+                    enum: ["interactive", "playtest"],
+                    description: "Optional runtime control mode override",
+                },
+            },
+            additionalProperties: false,
+        },
         executionMode: "sequential",
-        request: () => ({ type: "runtime.restart" }),
+        request: (parameters) => {
+            const { mode } = parameters as {
+                mode?: "interactive" | "playtest";
+            };
+            return { type: "runtime.restart", mode };
+        },
     },
 ]);

@@ -87,6 +87,7 @@ import {
 } from "./components/project-operation-dialog";
 import { ProjectSettingsDialog } from "./components/project-settings-dialog";
 import { WasmRuntimeController } from "./runtime/wasm-runtime-controller";
+import type { RuntimeMode } from "./runtime/types";
 import {
     finalizeProfileCapture,
     type ProfileCaptureArchive,
@@ -933,19 +934,27 @@ export function App() {
         );
     };
 
-    const playRuntime = async (force = false): Promise<void> => {
-        if (!force && (runtimeState === "starting" || runtimeState === "running")) return;
+    const playRuntime = async (
+        mode: RuntimeMode = "interactive",
+        force = false,
+    ): Promise<void> => {
+        if (!force && (runtimeState === "starting" || runtimeState === "running")) {
+            if (runtimeSession?.mode === mode) return;
+            await stopRuntime(`switching runtime to ${mode} mode`);
+        }
         if (runtimeStopRef.current) await runtimeStopRef.current;
         const snapshot = await projectSnapshot();
         storeProfileArchive(null);
-        await runtimeController.start(snapshot, force);
+        await runtimeController.start(snapshot, mode, force);
     };
 
-    const restartRuntime = async (): Promise<void> => {
+    const restartRuntime = async (
+        mode: RuntimeMode = runtimeSession?.mode ?? "interactive",
+    ): Promise<void> => {
         if (runtimeStopRef.current) await runtimeStopRef.current;
         const snapshot = await projectSnapshot();
         storeProfileArchive(null);
-        await runtimeController.restart(snapshot);
+        await runtimeController.restart(snapshot, mode);
     };
 
     const showOperation = (
@@ -1174,22 +1183,25 @@ export function App() {
         "project.rename": async ({ path, destination }) =>
             renameProjectFile(path ?? "", destination ?? ""),
         "project.remove": async ({ path }) => removeProjectFile(path ?? ""),
-        "runtime.play": async () => {
-            await playRuntime();
-            return { state: "starting" };
+        "runtime.play": async ({ mode }) => {
+            const selectedMode = mode ?? "interactive";
+            await playRuntime(selectedMode);
+            return { state: "starting", mode: selectedMode };
         },
         "runtime.stop": async () => {
             await stopRuntime("stopped by command");
             return { state: "stopped" };
         },
-        "runtime.restart": async () => {
-            await restartRuntime();
-            return { state: "starting" };
+        "runtime.restart": async ({ mode }) => {
+            const selectedMode = mode ?? runtimeSession?.mode ?? "interactive";
+            await restartRuntime(selectedMode);
+            return { state: "starting", mode: selectedMode };
         },
         "runtime.status": async () => ({
             state: runtimeState,
             script: runtimeScript,
             frame: runtimeFrame,
+            mode: runtimeSession?.mode ?? null,
         }),
           "runtime.observe": async () => ({
               ...(await runtimeController.capture()),
@@ -1214,6 +1226,7 @@ export function App() {
                 state: snapshot.state,
                 script: snapshot.script,
                 frame: snapshot.frame,
+                mode: snapshot.session?.mode ?? null,
             };
         },
         "runtime.clear_input": async () => runtimeController.clearInput(),

@@ -369,7 +369,6 @@
                                     showError(message);
                                 });
                                 Module.preinitializedWebGPUDevice = device;
-                                removeRunDependency(dependency);
                             } catch (error) {
                                 document.documentElement.dataset.entisiumStatus =
                                     "webgpu initialization failed";
@@ -377,6 +376,20 @@
                                     error?.stack ?? error?.message ?? error;
                                 console.error(
                                     "[entisium] WebGPU initialization failed:",
+                                    message,
+                                );
+                                showError(message);
+                                return;
+                            }
+                            try {
+                                removeRunDependency(dependency);
+                            } catch (error) {
+                                document.documentElement.dataset.entisiumStatus =
+                                    "runtime initialization failed";
+                                const message =
+                                    error?.stack ?? error?.message ?? error;
+                                console.error(
+                                    "[entisium] Runtime initialization failed:",
                                     message,
                                 );
                                 showError(message);

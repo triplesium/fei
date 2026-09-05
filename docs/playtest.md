@@ -1,10 +1,28 @@
 # Playtest
 
+For native projects controlled without opening the Editor or a browser, see
+[Native Runtime MCP](runtime-mcp.md).
+
 This guide covers the current structured playtest contract for browser projects and native C++ registration. It assumes the Editor runtime described in [Browser and Web Editor](browser.md) is already available.
 
 Playtest exposes a game-specific, machine-readable control contract to agents. Instead of inferring every action from pixels and synthesizing keyboard input, an agent can discover structured actions, execute an exact number of fixed ticks, and read a structured observation of the resulting game state.
 
 The contract is available through the Web Editor command registry, used by the built-in Pi agent and the local `entisium-editor` MCP server. Both clients use the same runtime inspection providers and Playtest registry.
+
+The built-in Pi agent's `play_step` and `play_segment` tools wait internally for
+the final result. Intermediate tick progress appears in the chat tool card,
+without adding status polling calls to the model conversation. The two status
+tools are omitted from Pi's tool list. The external Editor MCP and command API
+retain the explicit submission/status workflow documented below.
+
+Pi polls every 250 ms with a 120-second overall wait limit and a 10-second
+limit on each command. It consumes terminal results exactly once. Cancelling
+a segment invokes its cancellation provider, which releases the current action
+and returns the terminal result. A single step has no cancellation provider,
+so cancelling it stops the runtime. If segment cancellation cannot be confirmed,
+Pi also attempts to stop the runtime. Timeout errors retain the request ID and
+report the cleanup outcome; never automatically retry the action, since it may
+already have advanced the simulation.
 
 Viewport capture and raw keyboard or pointer input remain available as a fallback for projects that do not declare a structured interface.
 
@@ -18,7 +36,7 @@ A playtest interface contains an action JSON Schema, an observation JSON Schema,
 4. `observe` returns the new structured state, which is validated against the observation schema.
 5. The playtest clock pauses again until another step is queued.
 
-When at least one interface is registered, `PlaytestPlugin` preserves the game's previous clock settings, selects the fixed timestep, and pauses the simulation after startup. `play_observe` and viewport capture do not advance the simulation. Only one step may be active at a time, and its completed result must be consumed before another step can be queued.
+Registering an interface does not affect an Editor runtime launched in `interactive` mode. In `playtest` mode, `PlaytestPlugin` preserves the game's previous clock settings, selects the fixed timestep, and pauses the simulation after startup when at least one interface is registered. `play_observe` and viewport capture do not advance the simulation. Only one step may be active at a time, and its completed result must be consumed before another step can be queued.
 
 Put gameplay that must advance during an agent step in `FixedPreUpdate`, `FixedUpdate`, or another fixed schedule. Ordinary `Update` systems do not represent deterministic game ticks and should normally be limited to presentation work while a structured playtest is active.
 
@@ -176,7 +194,7 @@ The Editor Host exposes a local Streamable HTTP MCP endpoint at `http://127.0.0.
 
 Keep the Editor page open because the host relays MCP calls to the currently connected page. A complete agent session follows this order:
 
-1. Call `runtime_play` and wait until the runtime is running.
+1. Call `runtime_play` with `mode: "playtest"` and wait until the runtime is running.
 2. Call `play_interfaces` before choosing an action.
 3. Select an interface and call `play_observe` for its initial state.
 4. Call `play_step` with an action matching `action_schema` and, when allowed, a tick override.
@@ -188,7 +206,7 @@ Keep the Editor page open because the host relays MCP calls to the currently con
 Conceptually, clients should use `try/finally` around the session:
 
 ```text
-runtime_play()
+runtime_play(mode="playtest")
 try
     discovered = play_interfaces()
     interface = discovered.interfaces[0]
@@ -202,6 +220,33 @@ finally
 ```
 
 `play_step` is asynchronous because execution happens on the runtime's game thread. Do not queue another step while the previous completion is unread. Prefer the structured observation over screenshots for decisions, and use screenshots to verify presentation or when no structured interface exists.
+
+### Reactive segments
+
+Use `play_segment` when an action must be reconsidered every fixed tick. Its `source` is isolated Luau code that returns one function. The runtime invokes that function with a read-only context containing `ctx.tick` (the number of already completed ticks) and `ctx.observation` (the current structured observation):
+
+```luau
+return function(ctx)
+    if ctx.observation.level_complete then
+        return { stop = "level complete" }
+    end
+
+    local player = ctx.observation.player
+    local goal = ctx.observation.goal
+    return {
+        action = {
+            horizontal = if player.x < goal.x then 1 else -1,
+            jump = player.grounded and goal.y > player.y,
+        },
+    }
+end
+```
+
+Every invocation must return exactly one of `{ action = {...} }` or `{ stop = "reason" }`. Actions pass through the selected interface's existing action schema and callbacks. After an action, the runtime advances exactly one fixed tick, calls `end_step`, observes again, and reinvokes the function. A stop decision made from the initial observation completes with zero ticks.
+
+`maxTicks` is mandatory and capped at 3,600. The segment VM is separate from project scripting, exposes no `World`, ECS, or `require`, makes observations read-only, limits source to 64 KiB, each observation to 1 MiB, and VM memory to 16 MiB, and interrupts runaway invocations. Poll `play_segment_status` until `stopped`, `max_ticks`, `cancelled`, or `failed`; terminal status includes `completed_ticks`, the final observation, and either a reason or an error phase/tick/message. Use `play_segment_cancel` to stop an active segment. Every terminal path releases the active action and pauses the playtest clock.
+
+Reactive segments intentionally have no checkpoint, trace, replay, or raw-input support in the first version. They are short, bounded controllers over an already declared structured interface, not scripts that play an entire game unattended.
 
 The structured controller and normal keyboard controller can both affect the same game state. Call `runtime_clear_input` before structured play if an agent may have left a key or pointer button held, and design gameplay so structured control does not accidentally combine with ordinary input. `end_step` should always return action-owned resources to a neutral state.
 
@@ -261,8 +306,12 @@ Registration must finish before `PlaytestRegistry` is frozen. Prefer the Plugin 
 | --- | --- |
 | `play_interfaces` is unavailable | The runtime must be running, the Editor page must remain connected, and the project must install a playtest interface. |
 | An interface is missing | Ensure its Plugin is exported by the project and its `app:add_playtest` call runs during Plugin build. |
+| A step says the runtime is not deterministic | Restart the same project with `runtime_play({mode: "playtest"})`. |
 | Registration fails | Check for duplicate IDs, invalid tick bounds, malformed schemas, unsupported schema keywords, or missing callbacks. |
 | A step is rejected as busy | Poll and consume the previous request with `play_step_status` before queuing another. |
+| A segment is rejected as busy | Poll and consume the previous step or segment completion before queuing it. |
+| A segment reaches `max_ticks` | Increase the bound only after checking its stop condition and observation fields; the cap is a safety boundary. |
+| A segment fails in `program` | Check that the source returns a function and every invocation returns exactly one valid decision. |
 | The game moves between steps | Put simulation state changes in fixed schedules and ensure the runtime includes `PlaytestPlugin`. |
 | Movement differs from the action | Release held input with `runtime_clear_input` and avoid combining the normal input controller with the playtest controller. |
 | A completed game keeps running | Treat `runtime_stop` as required session cleanup, not an optional action. |
@@ -273,3 +322,4 @@ Registration must finish before `PlaytestRegistry` is frozen. Prefer the Plugin 
 - [`samples/projects/scripting/README.md`](../samples/projects/scripting/README.md) lists platformer, pointer, card battle, and checkpoint examples.
 - [`runtime_protocol/playtest.hpp`](../engine/runtime_protocol/include/runtime_protocol/playtest.hpp) defines the native interface descriptor and registry.
 - [`runtime_protocol/playtest_runner.hpp`](../engine/runtime_protocol/include/runtime_protocol/playtest_runner.hpp) defines queued step execution and completion state.
+- [`scripting/playtest_segment.hpp`](../engine/scripting/include/scripting/playtest_segment.hpp) defines the isolated Luau segment VM.

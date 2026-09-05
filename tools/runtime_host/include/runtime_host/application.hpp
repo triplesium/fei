@@ -5,9 +5,16 @@
 
 namespace ets::runtime_host {
 
+struct RuntimeHostOptions {
+    bool hidden {false};
+};
+
 class RuntimeHostApplication {
   public:
-    explicit RuntimeHostApplication(Project project);
+    explicit RuntimeHostApplication(
+        Project project,
+        RuntimeHostOptions options = {}
+    );
     RuntimeHostApplication(const RuntimeHostApplication&) = delete;
     RuntimeHostApplication& operator=(const RuntimeHostApplication&) = delete;
     RuntimeHostApplication(RuntimeHostApplication&&) = delete;

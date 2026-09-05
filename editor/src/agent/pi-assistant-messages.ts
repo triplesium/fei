@@ -77,6 +77,7 @@ function projectAssistantMessage(
     index: number,
     streaming: boolean,
     toolResults: ReadonlyMap<string, ToolResultMessage>,
+    toolProgress?: ReadonlyMap<string, string>,
 ): ProjectedAssistantMessage {
     const content: ThreadAssistantMessagePart[] = [];
     for (const part of message.content) {
@@ -95,7 +96,8 @@ function projectAssistantMessage(
             toolName: part.name,
             args: part.arguments,
             argsText: JSON.stringify(part.arguments),
-            result: result ? toolResultValue(result) : undefined,
+            result: result ? toolResultValue(result) : toolProgress?.has(part.id)
+                ? { inProgress: true, message: toolProgress.get(part.id) } : undefined,
             isError: result?.isError,
         });
     }
@@ -111,9 +113,10 @@ function projectAssistantMessage(
 function projectAssistantTurn(
     messages: readonly { message: AssistantMessage; index: number; streaming: boolean }[],
     toolResults: ReadonlyMap<string, ToolResultMessage>,
+    toolProgress?: ReadonlyMap<string, string>,
 ): ProjectedAssistantMessage {
     const projected = messages.map(({ message, index, streaming }) =>
-        projectAssistantMessage(message, index, streaming, toolResults),
+        projectAssistantMessage(message, index, streaming, toolResults, toolProgress),
     );
     const first = projected[0]!;
     const last = projected.at(-1)!;
@@ -137,7 +140,7 @@ export function projectPiMessages(snapshot: EditorPiAgentSnapshot): ThreadMessag
     let assistantTurn: { message: AssistantMessage; index: number; streaming: boolean }[] = [];
     const flushAssistantTurn = (): void => {
         if (assistantTurn.length === 0) return;
-        projected.push(projectAssistantTurn(assistantTurn, toolResults));
+        projected.push(projectAssistantTurn(assistantTurn, toolResults, snapshot.toolProgress));
         assistantTurn = [];
     };
 

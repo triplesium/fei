@@ -10,7 +10,7 @@ import { createEditorTools } from "./tools";
 
 const systemPrompt = `You are the built-in agent for the Entisium Editor.
 Use the available tools to inspect and edit the current project and control its WebAssembly runtime.
-When playing a game, call play_interfaces first. Prefer structured play_observe and play_step calls, polling play_step_status until completed. Fall back to viewport capture and input tools when the game exposes no structured interface. Release held inputs when they are no longer needed.
+When playing a game, start it with runtime_play in playtest mode, then call play_interfaces. Prefer play_segment for short reactive behavior that must inspect the observation every fixed tick, and use play_step for a single fixed action. Both tools wait internally and return final results; do not poll status yourself. Never automatically retry a timed-out action, which may already have advanced the game. Cancelling a step stops the runtime; cancelling a segment ends its current action. Fall back to viewport capture and input tools when the game exposes no structured interface. Release held inputs when they are no longer needed.
 For performance investigations, call profiler_summary first, use profiler_frames to locate spikes, and inspect only relevant frames with profiler_frame. These tools can read the retained capture after the runtime stops.
 Do not claim an operation succeeded until its tool result confirms success.`;
 
@@ -28,6 +28,7 @@ export interface EditorPiAgentSnapshot {
     streamingMessage?: AgentMessage;
     streaming: boolean;
     pendingToolCalls: ReadonlySet<string>;
+    toolProgress?: ReadonlyMap<string, string>;
     error?: string;
     configured: boolean;
 }
@@ -37,6 +38,7 @@ export class EditorPiAgent implements EditorPiAgentApi {
     private configured = false;
     private readonly toolNames: readonly string[];
     private readonly stateListeners = new Set<() => void>();
+    private readonly toolProgress = new Map<string, string>();
     private readonly unsubscribeStateEvents: () => void;
 
     constructor(editor: EditorAgentApi) {
@@ -51,7 +53,19 @@ export class EditorPiAgent implements EditorPiAgentApi {
             streamFn: unconfiguredStream,
             toolExecution: "sequential",
         });
-        this.unsubscribeStateEvents = this.agent.subscribe(() => this.emitState());
+        this.unsubscribeStateEvents = this.agent.subscribe((event) => {
+            if (event.type === "tool_execution_update") {
+                const parts = event.partialResult?.content;
+                if (Array.isArray(parts)) {
+                    this.toolProgress.set(event.toolCallId, parts.filter((part) => part.type === "text").map((part) => part.text).join("\n"));
+                }
+            } else if (event.type === "tool_execution_end") {
+                this.toolProgress.delete(event.toolCallId);
+            } else if (event.type === "agent_end") {
+                this.toolProgress.clear();
+            }
+            this.emitState();
+        });
     }
 
     configure(configuration: EditorPiAgentConfiguration): void {
@@ -98,6 +112,7 @@ export class EditorPiAgent implements EditorPiAgentApi {
     }
 
     reset(): void {
+        this.toolProgress.clear();
         this.agent.reset();
         this.emitState();
     }
@@ -112,6 +127,7 @@ export class EditorPiAgent implements EditorPiAgentApi {
             streamingMessage: this.agent.state.streamingMessage,
             streaming: this.agent.state.isStreaming,
             pendingToolCalls: this.agent.state.pendingToolCalls,
+            toolProgress: new Map(this.toolProgress),
             error: this.agent.state.errorMessage,
             configured: this.configured,
         };

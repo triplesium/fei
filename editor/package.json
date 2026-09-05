@@ -10,6 +10,7 @@
         "dev:sandbox": "npm run sandbox:prepare && npm run dev -- --project ../.sandbox/editor-project",
         "sandbox:prepare": "node tools/sandbox-project.mjs --prepare-only",
         "start": "node host-dist/main.js",
+        "runtime:mcp": "tsx host/runtime-mcp-main.ts",
         "start:sandbox": "node tools/sandbox-project.mjs",
         "test": "vitest run",
         "typecheck": "tsc -b && tsc -p tsconfig.host.json --noEmit"

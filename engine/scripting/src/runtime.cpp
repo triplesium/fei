@@ -495,8 +495,9 @@ struct LuauRuntime::Impl {
     static int require_module(lua_State* thread) {
         auto* impl =
             static_cast<Impl*>(lua_touserdata(thread, lua_upvalueindex(1)));
-        auto* importer =
-            static_cast<Module*>(lua_touserdata(thread, lua_upvalueindex(2)));
+        const auto* importer_id = static_cast<const LuauScriptModuleId*>(
+            lua_touserdata(thread, lua_upvalueindex(2))
+        );
         std::size_t length = 0;
         const char* value = luaL_checklstring(thread, 1, &length);
         const std::string specifier {value, length};
@@ -509,12 +510,17 @@ struct LuauRuntime::Impl {
             lua_getref(thread, *native);
             return 1;
         }
-        if (importer == nullptr) {
+        if (importer_id == nullptr) {
             luaL_error(thread, "Luau importer module is not loaded");
             return 0;
         }
-        const auto binding = importer->imports.find(specifier);
-        if (binding == importer->imports.end()) {
+        const auto importer = impl->modules.find(*importer_id);
+        if (importer == impl->modules.end()) {
+            luaL_error(thread, "Luau importer module is not loaded");
+            return 0;
+        }
+        const auto binding = importer->second.imports.find(specifier);
+        if (binding == importer->second.imports.end()) {
             luaL_error(
                 thread,
                 "Luau module has no static import binding for '%s'",
@@ -537,6 +543,7 @@ struct LuauRuntime::Impl {
     }
 
     void install_imports(
+        LuauScriptModuleId id,
         Module& module,
         std::span<const LuauScriptImportBinding> imports
     ) {
@@ -544,7 +551,10 @@ struct LuauRuntime::Impl {
             module.imports.emplace(import.specifier, import.module);
         }
         lua_pushlightuserdata(module.thread, this);
-        lua_pushlightuserdata(module.thread, &module);
+        auto* importer_id = static_cast<LuauScriptModuleId*>(
+            lua_newuserdata(module.thread, sizeof(LuauScriptModuleId))
+        );
+        *importer_id = id;
         lua_pushcclosure(module.thread, require_module, "require", 2);
         lua_setglobal(module.thread, "require");
     }
@@ -1533,13 +1543,12 @@ Result<LuauScriptModuleId, LuauScriptError> LuauRuntime::load_module(
     install_module_helpers(thread);
 
     const auto id = static_cast<LuauScriptModuleId>(m_impl->next_module_id++);
-    auto [loaded_entry, inserted] = m_impl->modules.emplace(
-        id,
-        Impl::Module {.thread = thread, .thread_ref = thread_ref}
-    );
+    auto [loaded_entry, inserted] = m_impl->modules.try_emplace(id);
     (void)inserted;
     auto& loaded = loaded_entry->second;
-    m_impl->install_imports(loaded, imports);
+    loaded.thread = thread;
+    loaded.thread_ref = thread_ref;
+    m_impl->install_imports(id, loaded, imports);
     auto fail_loading = [&](
                             LuauScriptError error
                         ) -> Result<LuauScriptModuleId, LuauScriptError> {

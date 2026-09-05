@@ -11,6 +11,16 @@ class App;
 
 namespace runtime_protocol {
 
+enum class PlaytestMode : uint8 {
+    Automatic,
+    Interactive,
+    Deterministic,
+};
+
+struct PlaytestConfig {
+    PlaytestMode mode {PlaytestMode::Automatic};
+};
+
 struct PlaytestSystems {
     struct BeginStep : SystemSet<BeginStep> {};
     struct CompleteStep : SystemSet<CompleteStep> {};

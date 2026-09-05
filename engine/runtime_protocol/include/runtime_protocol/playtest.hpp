@@ -55,6 +55,31 @@ struct PlaytestInterfaceRegistration {
     PlaytestObserve observe;
 };
 
+enum class PlaytestSegmentDecisionKind : uint8 {
+    Action,
+    Stop,
+};
+
+struct PlaytestSegmentDecision {
+    PlaytestSegmentDecisionKind kind {PlaytestSegmentDecisionKind::Action};
+    // JSON for Action, a human-readable reason for Stop.
+    std::string value;
+};
+
+using PlaytestSegmentNext = std::function<
+    Result<PlaytestSegmentDecision, PlaytestError>(std::string_view, uint32)>;
+
+struct PlaytestSegmentProgram {
+    PlaytestSegmentNext next;
+};
+
+struct PlaytestSegmentCompiler {
+    using Compile = std::function<
+        Result<PlaytestSegmentProgram, PlaytestError>(std::string_view)>;
+
+    Compile compile;
+};
+
 class PlaytestRegistry {
   public:
     Status<PlaytestError> add(PlaytestInterfaceRegistration registration);

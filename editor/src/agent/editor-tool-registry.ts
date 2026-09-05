@@ -7,6 +7,7 @@ import type {
     EditorAgentApi,
 } from "../types";
 import { invokeEditorCommand } from "./tools/editor-command";
+import { invokePlaytestCommand } from "./tools/playtest-command";
 
 export type EditorCommandHandler = (request: AgentRequest) => Promise<unknown>;
 
@@ -52,6 +53,7 @@ export class EditorToolRegistry {
 
     createPiTools(editor: EditorAgentApi): AgentTool<any>[] {
         return editorToolDefinitions.flatMap((definition) => {
+            if (definition.name === "play_step_status" || definition.name === "play_segment_status") return [];
             if (
                 !definition.name ||
                 !definition.label ||
@@ -64,12 +66,18 @@ export class EditorToolRegistry {
             return [
                 {
                     name: definition.name,
-                    label: definition.label,
-                    description: definition.description,
+                    label: definition.name === "play_step" ? "Run Structured Play Step" : definition.name === "play_segment" ? "Run Reactive Play Segment" : definition.label,
+                    description: definition.name === "play_step"
+                        ? "Execute a schema-validated action and wait for its final observation. Progress is shown automatically; no polling is needed. Cancelling a step stops the runtime."
+                        : definition.name === "play_segment"
+                          ? "Run a bounded Luau controller once per fixed tick and wait for its final result. Source returns function(ctx), which returns {action={...}} or {stop='reason'}. Progress and cancellation are handled automatically; no polling is needed."
+                          : definition.description,
                     parameters: definition.inputSchema as TSchema,
                     executionMode: definition.executionMode,
-                    execute: async (_toolCallId, parameters, signal) =>
-                        invokeEditorCommand(editor, definition.request!(parameters), signal),
+                    execute: async (_toolCallId, parameters, signal, onUpdate) =>
+                        definition.name === "play_step" || definition.name === "play_segment"
+                            ? invokePlaytestCommand(editor, definition.request!(parameters), signal, onUpdate)
+                            : invokeEditorCommand(editor, definition.request!(parameters), signal),
                 },
             ];
         });

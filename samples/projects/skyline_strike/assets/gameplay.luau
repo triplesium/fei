@@ -148,6 +148,7 @@ export type ControlState = {
     agent_x: f32,
     agent_y: f32,
     agent_fire: i32,
+    agent_active: i32,
 }
 
 export type Player = {
@@ -163,6 +164,10 @@ export function read_keyboard(
     control.keyboard_x = 0.0
     control.keyboard_y = 0.0
     control.keyboard_fire = 0
+
+    if control.agent_active ~= 0 then
+        return
+    end
 
     if keys:pressed(KeyCode.Left) or keys:pressed(KeyCode.A) then
         control.keyboard_x -= 1.0
