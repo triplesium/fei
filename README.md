@@ -20,6 +20,12 @@
     - **Editor:** Web-based editing with a built-in agent and MCP support
     - **Playtesting:** An extensible framework for agent-driven playtesting
 
+## Editor
+
+Entisium includes an agent-assisted editor with structured playtesting, runtime inspection, and live profiling.
+
+![Entisium Editor running an agent-driven Skyline Strike playtest](docs/images/editor-agent-playtest.png)
+
 ## Requirements
 
 - A C++23-capable compiler
@@ -145,6 +151,7 @@ See [`samples/`](samples/) for more examples.
 - [Profiling](docs/profiling.md)
 
 ## Screenshots
+
 ![VXGI](docs/images/scene.jpg)
 
 ## Acknowledgements
