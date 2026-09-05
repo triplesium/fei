@@ -9,6 +9,21 @@ Playtest exposes a game-specific, machine-readable control contract to agents. I
 
 The contract is available through the Web Editor command registry, used by the built-in Pi agent and the local `entisium-editor` MCP server. Both clients use the same runtime inspection providers and Playtest registry.
 
+The built-in Pi agent's `play_step` and `play_segment` tools wait internally for
+the final result. Intermediate tick progress appears in the chat tool card,
+without adding status polling calls to the model conversation. The two status
+tools are omitted from Pi's tool list. The external Editor MCP and command API
+retain the explicit submission/status workflow documented below.
+
+Pi polls every 250 ms with a 120-second overall wait limit and a 10-second
+limit on each command. It consumes terminal results exactly once. Cancelling
+a segment invokes its cancellation provider, which releases the current action
+and returns the terminal result. A single step has no cancellation provider,
+so cancelling it stops the runtime. If segment cancellation cannot be confirmed,
+Pi also attempts to stop the runtime. Timeout errors retain the request ID and
+report the cleanup outcome; never automatically retry the action, since it may
+already have advanced the simulation.
+
 Viewport capture and raw keyboard or pointer input remain available as a fallback for projects that do not declare a structured interface.
 
 ## Runtime model

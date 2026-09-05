@@ -19,7 +19,8 @@ export function ToolFallback({
     result,
     isError,
 }: ToolCallMessagePartProps) {
-    const complete = result !== undefined;
+    const progress = result && typeof result === "object" && "inProgress" in result && result.inProgress === true;
+    const complete = result !== undefined && !progress;
     const failed = Boolean(isError);
     const [open, setOpen] = useState(!complete || failed);
     const previousCompleteRef = useRef(complete);
@@ -60,7 +61,7 @@ export function ToolFallback({
                     Used tool: <b className="font-mono font-medium text-foreground">{toolName}</b>
                 </span>
                 <span className="ml-auto text-xs">
-                    {!complete ? "Running" : isError ? "Failed" : "Completed"}
+                    {progress && "message" in result ? String(result.message) : !complete ? "Running" : isError ? "Failed" : "Completed"}
                 </span>
                 <ChevronDown className="size-3.5 shrink-0 transition-transform group-data-[state=closed]/tool-trigger:-rotate-90" />
             </CollapsibleTrigger>

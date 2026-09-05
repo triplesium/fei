@@ -9,6 +9,43 @@ import type { EditorAgentApi } from "../types";
 import { EditorPiAgent } from "./editor-pi-agent";
 
 describe("EditorPiAgent", () => {
+    it("keeps playtest progress in UI snapshots and sends the model one terminal result", async () => {
+        let requestId: unknown;
+        const editor: EditorAgentApi = {
+            capabilities: [],
+            invoke: async (request) => {
+                if (request.provider === "play.segment") requestId = (request.payload as { request_id: string }).request_id;
+                return { requestId: "reply", ok: true, value: {
+                    request_id: requestId,
+                    state: request.provider === "play.segment" ? "pending" : "stopped",
+                    completed_ticks: request.provider === "play.segment" ? 0 : 3,
+                    max_ticks: 10,
+                } };
+            },
+        };
+        const faux = fauxProvider();
+        faux.setResponses([
+            fauxAssistantMessage(fauxToolCall("play_segment", {
+                interface: "game.main", source: "return function() return {stop='done'} end", maxTicks: 10,
+            }), { stopReason: "toolUse" }),
+            fauxAssistantMessage("Done."),
+        ]);
+        const models = createModels();
+        models.setProvider(faux.provider);
+        const agent = new EditorPiAgent(editor);
+        agent.configure({ model: faux.getModel(), streamFn: models.streamSimple.bind(models) });
+        const progress: string[] = [];
+        agent.subscribeState(() => progress.push(...agent.snapshot().toolProgress!.values()));
+        try {
+            await agent.prompt("Run a short playtest.");
+            expect(progress.some((text) => text.includes("0 / 10 ticks"))).toBe(true);
+            const results = agent.snapshot().messages.filter((message) => message.role === "toolResult");
+            expect(results).toHaveLength(1);
+            expect(JSON.stringify(results[0])).toContain("stopped");
+            expect(JSON.stringify(results[0])).not.toContain("pending");
+            expect(agent.snapshot().toolProgress?.size).toBe(0);
+        } finally { agent.dispose(); }
+    });
     it("executes runtime_status through the Editor command bus", async () => {
         const commands: string[] = [];
         const editor: EditorAgentApi = {
@@ -76,9 +113,7 @@ describe("EditorPiAgent", () => {
                 "play_interfaces",
                 "play_observe",
                 "play_step",
-                "play_step_status",
                 "play_segment",
-                "play_segment_status",
                 "play_segment_cancel",
                 "runtime_play",
                 "runtime_stop",

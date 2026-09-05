@@ -132,12 +132,14 @@ describe("Editor agent tools", () => {
 
     it("routes structured play tools through one runtime inspection command", async () => {
         const requests: unknown[] = [];
+        let stepId: unknown;
         const editor = createEditor(async (request) => {
             requests.push(request);
+            if (request.provider === "play.step") stepId = (request.payload as { request_id: string }).request_id;
             return {
                 requestId: "response",
                 ok: true,
-                value: { request_id: "step-response", state: "pending" },
+                value: { request_id: stepId, state: request.provider === "play.step_status" ? "completed" : "pending" },
             };
         });
         const tools = createEditorTools(editor);
@@ -149,9 +151,7 @@ describe("Editor agent tools", () => {
             "step-call",
             { interface: "game.main", action: { move: "left" }, ticks: 3 },
         );
-        await tools
-            .find((candidate) => candidate.name === "play_step_status")
-            ?.execute("status-call", { requestId: "step-response" });
+        expect(tools.find((candidate) => candidate.name === "play_step_status")).toBeUndefined();
 
         expect(requests).toHaveLength(3);
         expect(requests[0]).toEqual({
@@ -177,15 +177,17 @@ describe("Editor agent tools", () => {
             type: "runtime.inspect",
             provider: "play.step_status",
             schema: "play.step_status.v1",
-            payload: { request_id: "step-response" },
+            payload: { request_id: stepId },
         });
     });
 
     it("routes reactive play segments and cancellation", async () => {
         const requests: unknown[] = [];
+        let segmentId: unknown;
         const editor = createEditor(async (request) => {
             requests.push(request);
-            return { requestId: "response", ok: true, value: {} };
+            if (request.provider === "play.segment") segmentId = (request.payload as { request_id: string }).request_id;
+            return { requestId: "response", ok: true, value: { request_id: segmentId, state: request.provider === "play.segment" ? "pending" : "stopped" } };
         });
         const tools = createEditorTools(editor);
 
@@ -197,9 +199,7 @@ describe("Editor agent tools", () => {
                 maxTicks: 30,
             },
         );
-        await tools
-            .find((candidate) => candidate.name === "play_segment_status")
-            ?.execute("segment-status", { requestId: "segment-1" });
+        expect(tools.find((candidate) => candidate.name === "play_segment_status")).toBeUndefined();
         await tools
             .find((candidate) => candidate.name === "play_segment_cancel")
             ?.execute("segment-cancel", { requestId: "segment-1" });
@@ -217,7 +217,7 @@ describe("Editor agent tools", () => {
             type: "runtime.inspect",
             provider: "play.segment_status",
             schema: "play.segment_status.v1",
-            payload: { request_id: "segment-1" },
+            payload: { request_id: segmentId },
         });
         expect(requests[2]).toEqual({
             type: "runtime.inspect",

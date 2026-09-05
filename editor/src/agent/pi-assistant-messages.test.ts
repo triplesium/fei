@@ -11,6 +11,19 @@ import type { EditorPiAgentSnapshot } from "./editor-pi-agent";
 import { projectPiMessages } from "./pi-assistant-messages";
 
 describe("projectPiMessages", () => {
+    it("projects transient progress without adding model messages", () => {
+        const assistant = fauxAssistantMessage(fauxToolCall("play_segment", {}, { id: "progress-tool" }), { stopReason: "toolUse" });
+        const snapshot: EditorPiAgentSnapshot = {
+            messages: [assistant], streaming: true, configured: true,
+            pendingToolCalls: new Set(["progress-tool"]),
+            toolProgress: new Map([["progress-tool", "Playtest running: 12 / 60 ticks"]]),
+        };
+        const projected = projectPiMessages(snapshot);
+        expect(projected[0]).toMatchObject({ content: [{
+            type: "tool-call", result: { inProgress: true, message: "Playtest running: 12 / 60 ticks" },
+        }] });
+        expect(snapshot.messages).toEqual([assistant]);
+    });
     it("embeds Pi reasoning and tool results in assistant-ui message parts", () => {
         const user: UserMessage = {
             role: "user",
