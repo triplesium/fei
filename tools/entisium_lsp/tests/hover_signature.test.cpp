@@ -470,7 +470,7 @@ TEST_CASE(
     "[lsp][hover][module]"
 ) {
     const std::string source =
-        "export function move_player(\n"
+        "local function move_player(\n"
         "    time: ResRO<core.FixedTime>,\n"
         "    players: Query<Write<core.Transform2d>, Write<Player>>\n"
         ")\n"
