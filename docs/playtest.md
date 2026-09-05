@@ -1,5 +1,8 @@
 # Playtest
 
+For native projects controlled without opening the Editor or a browser, see
+[Native Runtime MCP](runtime-mcp.md).
+
 This guide covers the current structured playtest contract for browser projects and native C++ registration. It assumes the Editor runtime described in [Browser and Web Editor](browser.md) is already available.
 
 Playtest exposes a game-specific, machine-readable control contract to agents. Instead of inferring every action from pixels and synthesizing keyboard input, an agent can discover structured actions, execute an exact number of fixed ticks, and read a structured observation of the resulting game state.

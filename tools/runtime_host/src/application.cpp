@@ -25,7 +25,9 @@
 #include "runtime_inspection_ecs/world_summary.hpp"
 #include "runtime_inspection_snapshot/checkpoint.hpp"
 #include "runtime_protocol/playtest.hpp"
+#include "runtime_protocol/playtest_plugin.hpp"
 #include "runtime_protocol/probe.hpp"
+#include "scripting/playtest_segment.hpp"
 #include "scripting/runtime.hpp"
 #include "snapshot_runtime/adapters.hpp"
 #include "snapshot_runtime_asset/adapters.hpp"
@@ -71,6 +73,8 @@ constexpr std::string_view c_playtest_observe_id {"play.observe"};
 constexpr std::string_view c_playtest_observe_schema {"play.observe.v1"};
 constexpr std::string_view c_playtest_step_id {"play.step"};
 constexpr std::string_view c_playtest_step_schema {"play.step.v1"};
+constexpr std::string_view c_playtest_segment_id {"play.segment"};
+constexpr std::string_view c_playtest_segment_schema {"play.segment.v1"};
 constexpr std::string_view c_checkpoint_restore_id {"play.checkpoint.restore"};
 constexpr std::string_view c_checkpoint_restore_schema {
     "play.checkpoint.restore.v1"
@@ -662,7 +666,7 @@ register_playtest_inspection_providers(
     if (!status) {
         return status;
     }
-    return registry.add(
+    status = registry.add(
         runtime_inspection::InspectionDescriptor {
             .id = std::string(c_playtest_step_id),
             .label = "Step Playtest",
@@ -687,11 +691,42 @@ register_playtest_inspection_providers(
             );
         }
     );
+    if (!status) {
+        return status;
+    }
+    return registry.add(
+        runtime_inspection::InspectionDescriptor {
+            .id = std::string(c_playtest_segment_id),
+            .label = "Run Playtest Segment",
+            .description = "Runs an isolated reactive Luau controller once per "
+                           "fixed tick and returns the final observation.",
+            .schema = std::string(c_playtest_segment_schema),
+            .read_only = false,
+            .cost = runtime_inspection::InspectionCost::High,
+            .request_schema_json =
+                R"({"type":"object","properties":{"interface":{"type":"string"},"source":{"type":"string","maxLength":65536},"max_ticks":{"type":"integer","minimum":1,"maximum":600}},"required":["interface","source","max_ticks"],"additionalProperties":false})",
+            .response_schema_json =
+                R"({"type":"object","properties":{"interface":{"type":"string"},"ticks":{"type":"integer"},"frame":{"type":"integer"},"reason":{"type":"string"},"observation":{}},"required":["interface","ticks","frame","reason","observation"],"additionalProperties":false})",
+        },
+        [](World&, std::string_view)
+            -> Result<std::string, runtime_inspection::InspectionError> {
+            return failure(
+                runtime_inspection::InspectionError {
+                    .kind = runtime_inspection::InspectionErrorKind::Internal,
+                    .message =
+                        "play.segment requires Runtime Host manual dispatch",
+                }
+            );
+        }
+    );
 }
 
 } // namespace
 
-RuntimeHostApplication::RuntimeHostApplication(Project project) {
+RuntimeHostApplication::RuntimeHostApplication(
+    Project project,
+    RuntimeHostOptions options
+) {
     auto engine_build = read_environment_variable("ETS_RUNTIME_BUILD_ID");
     if (!engine_build) {
         auto detected_build = current_runtime_build_id();
@@ -786,7 +821,15 @@ RuntimeHostApplication::RuntimeHostApplication(Project project) {
     runtime_protocol::PlaytestRegistry playtest_registry;
     register_builtin_playtest_interfaces(playtest_registry);
 
-    m_app.add_resource(std::move(inspection_registry))
+    m_app
+        .add_resource(std::move(inspection_registry))
+        // This host owns deterministic stepping in its manual inspection loop.
+        // The shared runner must not pause the clock underneath that loop.
+        .add_resource(
+            runtime_protocol::PlaytestConfig {
+                .mode = runtime_protocol::PlaytestMode::Interactive,
+            }
+        )
         .add_resource(std::move(playtest_registry))
         .add_resource(std::move(*archive_metadata))
         .add_resource(snapshot::CheckpointStore {})
@@ -797,6 +840,8 @@ RuntimeHostApplication::RuntimeHostApplication(Project project) {
                 .width = 1600,
                 .height = 900,
                 .title = "Entisium Runtime Host",
+                .hints =
+                    {{GLFW_VISIBLE, options.hidden ? GLFW_FALSE : GLFW_TRUE}},
             }
         )
         .add_systems(Last, request_quick_save_hotkeys);
@@ -1165,7 +1210,8 @@ void RuntimeHostApplication::run() {
 
         auto execute_playtest_step =
             [this, &frame_count](
-                const runtime_protocol::InspectionRequest& request
+                const runtime_protocol::InspectionRequest& request,
+                bool segment_tick = false
             ) -> Result<std::string, runtime_protocol::RuntimeInspectionError> {
             Json payload;
             try {
@@ -1226,7 +1272,7 @@ void RuntimeHostApplication::run() {
             auto ticks = descriptor.decision_ticks;
             try {
                 if (payload.contains("ticks")) {
-                    if (!descriptor.allow_tick_override) {
+                    if (!descriptor.allow_tick_override && !segment_tick) {
                         return failure(
                             runtime_protocol::RuntimeInspectionError {
                                 .kind = "invalid_request",
@@ -1247,8 +1293,8 @@ void RuntimeHostApplication::run() {
                     }
                 );
             }
-            if (ticks < descriptor.minimum_ticks ||
-                ticks > descriptor.maximum_ticks) {
+            if (!segment_tick && (ticks < descriptor.minimum_ticks ||
+                                  ticks > descriptor.maximum_ticks)) {
                 return failure(
                     runtime_protocol::RuntimeInspectionError {
                         .kind = "invalid_request",
@@ -1340,10 +1386,95 @@ void RuntimeHostApplication::run() {
             }
         };
 
+        auto execute_playtest_segment =
+            [&execute_playtest_observe, &execute_playtest_step](
+                const runtime_protocol::InspectionRequest& request
+            ) -> Result<std::string, runtime_protocol::RuntimeInspectionError> {
+            const auto invalid = [](std::string message) {
+                return failure(
+                    runtime_protocol::RuntimeInspectionError {
+                        .kind = "invalid_request",
+                        .message = std::move(message),
+                    }
+                );
+            };
+            const auto payload = Json::parse(request.payload_json);
+            if (!payload.is_object() || payload.size() != 3 ||
+                !payload.contains("interface") ||
+                !payload.at("interface").is_string() ||
+                !payload.contains("source") ||
+                !payload.at("source").is_string() ||
+                !payload.contains("max_ticks") ||
+                !payload.at("max_ticks").is_number_unsigned()) {
+                return invalid(
+                    "play.segment requires interface, source and max_ticks"
+                );
+            }
+            const auto maximum = payload.at("max_ticks").get<uint64>();
+            if (maximum < 1 || maximum > 600) {
+                return invalid(
+                    "play.segment max_ticks must be between 1 and 600"
+                );
+            }
+            auto program = LuauPlaytestSegment::compile(
+                payload.at("source").get<std::string>()
+            );
+            if (!program) {
+                return invalid(program.error().message);
+            }
+            auto internal_request = request;
+            internal_request.payload_json =
+                Json {{"interface", payload.at("interface")}}.dump();
+            auto observed = execute_playtest_observe(internal_request);
+            if (!observed) {
+                return failure(std::move(observed.error()));
+            }
+            auto state = Json::parse(*observed);
+            uint32 ticks = 0;
+            std::string reason = "max_ticks";
+            while (ticks < maximum) {
+                auto decision =
+                    (*program)->next(state.at("observation").dump(), ticks);
+                if (!decision) {
+                    return invalid(decision.error().message);
+                }
+                if (decision->kind == LuauPlaytestSegmentDecisionKind::Stop) {
+                    reason = decision->value;
+                    break;
+                }
+                internal_request.payload_json =
+                    Json {
+                        {"interface", payload.at("interface")},
+                        {"action", Json::parse(decision->value)},
+                        {"ticks", 1},
+                    }
+                        .dump();
+                auto step = execute_playtest_step(internal_request, true);
+                if (!step) {
+                    return failure(std::move(step.error()));
+                }
+                state = Json::parse(*step);
+                ++ticks;
+                if (state.value("stopped", false)) {
+                    reason = "runtime_stopped";
+                    break;
+                }
+            }
+            return Json {
+                {"interface", payload.at("interface")},
+                {"ticks", ticks},
+                {"frame", state.at("frame")},
+                {"reason", reason},
+                {"observation", state.at("observation")},
+            }
+                .dump();
+        };
+
         auto dispatch_manual_inspection = [this,
                                            &execute_playtest_capture,
                                            &execute_playtest_observe,
-                                           &execute_playtest_step](
+                                           &execute_playtest_step,
+                                           &execute_playtest_segment](
                                               const runtime_protocol::
                                                   InspectionRequest& request
                                           ) {
@@ -1378,6 +1509,11 @@ void RuntimeHostApplication::run() {
                     request.schema == c_playtest_step_schema
                 ) {
                     result = execute_playtest_step(request);
+                } else if (
+                    request.provider == c_playtest_segment_id &&
+                    request.schema == c_playtest_segment_schema
+                ) {
+                    result = execute_playtest_segment(request);
                 } else {
                     result = inspect_runtime(m_app.world(), request);
                 }

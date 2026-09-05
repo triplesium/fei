@@ -46,3 +46,14 @@ xmake run entisium-runtime-host `
 The playtest programs are intentionally not stored as fixed command sequences.
 Agents are expected to inspect each interface and choose actions from the live
 observation.
+
+For automated runs, add `--hidden` to create the native window hidden from the
+start, while retaining rendering and runtime inspection:
+
+```powershell
+xmake run -y entisium-runtime-host --hidden samples/projects/skyline_strike/project.yaml
+```
+
+This mode still requires a desktop graphics environment. It does not receive
+normal keyboard or mouse interaction; use runtime control interfaces instead.
+The default launch continues to show the game window.
