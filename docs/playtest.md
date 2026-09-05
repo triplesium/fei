@@ -203,6 +203,33 @@ finally
 
 `play_step` is asynchronous because execution happens on the runtime's game thread. Do not queue another step while the previous completion is unread. Prefer the structured observation over screenshots for decisions, and use screenshots to verify presentation or when no structured interface exists.
 
+### Reactive segments
+
+Use `play_segment` when an action must be reconsidered every fixed tick. Its `source` is isolated Luau code that returns one function. The runtime invokes that function with a read-only context containing `ctx.tick` (the number of already completed ticks) and `ctx.observation` (the current structured observation):
+
+```luau
+return function(ctx)
+    if ctx.observation.level_complete then
+        return { stop = "level complete" }
+    end
+
+    local player = ctx.observation.player
+    local goal = ctx.observation.goal
+    return {
+        action = {
+            horizontal = if player.x < goal.x then 1 else -1,
+            jump = player.grounded and goal.y > player.y,
+        },
+    }
+end
+```
+
+Every invocation must return exactly one of `{ action = {...} }` or `{ stop = "reason" }`. Actions pass through the selected interface's existing action schema and callbacks. After an action, the runtime advances exactly one fixed tick, calls `end_step`, observes again, and reinvokes the function. A stop decision made from the initial observation completes with zero ticks.
+
+`maxTicks` is mandatory and capped at 3,600. The segment VM is separate from project scripting, exposes no `World`, ECS, or `require`, makes observations read-only, limits source to 64 KiB, each observation to 1 MiB, and VM memory to 16 MiB, and interrupts runaway invocations. Poll `play_segment_status` until `stopped`, `max_ticks`, `cancelled`, or `failed`; terminal status includes `completed_ticks`, the final observation, and either a reason or an error phase/tick/message. Use `play_segment_cancel` to stop an active segment. Every terminal path releases the active action and pauses the playtest clock.
+
+Reactive segments intentionally have no checkpoint, trace, replay, or raw-input support in the first version. They are short, bounded controllers over an already declared structured interface, not scripts that play an entire game unattended.
+
 The structured controller and normal keyboard controller can both affect the same game state. Call `runtime_clear_input` before structured play if an agent may have left a key or pointer button held, and design gameplay so structured control does not accidentally combine with ordinary input. `end_step` should always return action-owned resources to a neutral state.
 
 ## Native C++ registration
@@ -264,6 +291,9 @@ Registration must finish before `PlaytestRegistry` is frozen. Prefer the Plugin 
 | A step says the runtime is not deterministic | Restart the same project with `runtime_play({mode: "playtest"})`. |
 | Registration fails | Check for duplicate IDs, invalid tick bounds, malformed schemas, unsupported schema keywords, or missing callbacks. |
 | A step is rejected as busy | Poll and consume the previous request with `play_step_status` before queuing another. |
+| A segment is rejected as busy | Poll and consume the previous step or segment completion before queuing it. |
+| A segment reaches `max_ticks` | Increase the bound only after checking its stop condition and observation fields; the cap is a safety boundary. |
+| A segment fails in `program` | Check that the source returns a function and every invocation returns exactly one valid decision. |
 | The game moves between steps | Put simulation state changes in fixed schedules and ensure the runtime includes `PlaytestPlugin`. |
 | Movement differs from the action | Release held input with `runtime_clear_input` and avoid combining the normal input controller with the playtest controller. |
 | A completed game keeps running | Treat `runtime_stop` as required session cleanup, not an optional action. |
@@ -274,3 +304,4 @@ Registration must finish before `PlaytestRegistry` is frozen. Prefer the Plugin 
 - [`samples/projects/scripting/README.md`](../samples/projects/scripting/README.md) lists platformer, pointer, card battle, and checkpoint examples.
 - [`runtime_protocol/playtest.hpp`](../engine/runtime_protocol/include/runtime_protocol/playtest.hpp) defines the native interface descriptor and registry.
 - [`runtime_protocol/playtest_runner.hpp`](../engine/runtime_protocol/include/runtime_protocol/playtest_runner.hpp) defines queued step execution and completion state.
+- [`scripting/playtest_segment.hpp`](../engine/scripting/include/scripting/playtest_segment.hpp) defines the isolated Luau segment VM.
