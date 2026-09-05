@@ -181,6 +181,52 @@ describe("Editor agent tools", () => {
         });
     });
 
+    it("routes reactive play segments and cancellation", async () => {
+        const requests: unknown[] = [];
+        const editor = createEditor(async (request) => {
+            requests.push(request);
+            return { requestId: "response", ok: true, value: {} };
+        });
+        const tools = createEditorTools(editor);
+
+        await tools.find((candidate) => candidate.name === "play_segment")?.execute(
+            "segment-call",
+            {
+                interface: "game.main",
+                source: "return function(ctx) return { stop = 'done' } end",
+                maxTicks: 30,
+            },
+        );
+        await tools
+            .find((candidate) => candidate.name === "play_segment_status")
+            ?.execute("segment-status", { requestId: "segment-1" });
+        await tools
+            .find((candidate) => candidate.name === "play_segment_cancel")
+            ?.execute("segment-cancel", { requestId: "segment-1" });
+
+        expect(requests[0]).toMatchObject({
+            type: "runtime.inspect",
+            provider: "play.segment",
+            schema: "play.segment.v1",
+            payload: {
+                interface: "game.main",
+                max_ticks: 30,
+            },
+        });
+        expect(requests[1]).toEqual({
+            type: "runtime.inspect",
+            provider: "play.segment_status",
+            schema: "play.segment_status.v1",
+            payload: { request_id: "segment-1" },
+        });
+        expect(requests[2]).toEqual({
+            type: "runtime.inspect",
+            provider: "play.segment_cancel",
+            schema: "play.segment_cancel.v1",
+            payload: { request_id: "segment-1" },
+        });
+    });
+
     it("exposes profiler overview, frame history, and frame detail tools", async () => {
         const requests: unknown[] = [];
         const editor = createEditor(async (request) => {

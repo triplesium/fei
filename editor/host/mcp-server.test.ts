@@ -93,6 +93,9 @@ describe("Editor MCP server", () => {
                     "play_observe",
                     "play_step",
                     "play_step_status",
+                    "play_segment",
+                    "play_segment_status",
+                    "play_segment_cancel",
                 ]),
             );
 

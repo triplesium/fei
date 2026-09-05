@@ -135,6 +135,21 @@ runner_resource(World& world) {
     return world.resource<runtime_protocol::PlaytestRunner>();
 }
 
+Result<runtime_protocol::PlaytestSegmentCompiler&, InspectionError>
+segment_compiler_resource(World& world) {
+    if (!world.has_resource<runtime_protocol::PlaytestSegmentCompiler>() ||
+        !world.resource<runtime_protocol::PlaytestSegmentCompiler>().compile) {
+        return failure(
+            InspectionError {
+                .kind = InspectionErrorKind::Unsupported,
+                .message =
+                    "This runtime does not install a playtest segment compiler",
+            }
+        );
+    }
+    return world.resource<runtime_protocol::PlaytestSegmentCompiler>();
+}
+
 Json parse_embedded_json(std::string_view text) {
     return Json::parse(text);
 }
@@ -168,6 +183,52 @@ Json encode_status(const StepStatusResponse& response) {
         value["error"] = Json {
             {"kind",
              runtime_protocol::playtest_error_kind_name(response.error->kind)},
+            {"message", response.error->message},
+        };
+    }
+    return value;
+}
+
+std::string_view
+segment_state_name(runtime_protocol::PlaytestSegmentState state) {
+    using State = runtime_protocol::PlaytestSegmentState;
+    switch (state) {
+        case State::Pending:
+            return "pending";
+        case State::Running:
+            return "running";
+        case State::Stopped:
+            return "stopped";
+        case State::MaxTicks:
+            return "max_ticks";
+        case State::Cancelled:
+            return "cancelled";
+        case State::Failed:
+            return "failed";
+    }
+    return "failed";
+}
+
+Json encode_segment_status(const SegmentStatusResponse& response) {
+    Json value {
+        {"request_id", response.request_id},
+        {"interface", response.interface_id},
+        {"state", segment_state_name(response.state)},
+        {"completed_ticks", response.completed_ticks},
+        {"max_ticks", response.max_ticks},
+    };
+    if (!response.reason.empty()) {
+        value["reason"] = response.reason;
+    }
+    if (!response.observation_json.empty()) {
+        value["observation"] = parse_embedded_json(response.observation_json);
+    }
+    if (response.error) {
+        value["error"] = Json {
+            {"kind",
+             runtime_protocol::playtest_error_kind_name(response.error->kind)},
+            {"phase", response.error_phase},
+            {"tick", response.completed_ticks},
             {"message", response.error->message},
         };
     }
@@ -300,6 +361,108 @@ Result<StepStatusResponse, InspectionError> StepStatusProvider::inspect(
         response.error = std::move(completion->result.error());
     }
     return response;
+}
+
+Result<SegmentResponse, InspectionError>
+SegmentProvider::inspect(World& world, const SegmentRequest& request) const {
+    auto registry = registry_resource(world);
+    if (!registry) {
+        return failure(std::move(registry.error()));
+    }
+    auto runner = runner_resource(world);
+    if (!runner) {
+        return failure(std::move(runner.error()));
+    }
+    auto compiler = segment_compiler_resource(world);
+    if (!compiler) {
+        return failure(std::move(compiler.error()));
+    }
+    auto program = compiler->compile(request.source);
+    if (!program) {
+        return failure(map_error(std::move(program.error())));
+    }
+    auto queued = runner->queue_segment(
+        *registry,
+        runtime_protocol::PlaytestSegmentRequest {
+            .request_id = request.request_id,
+            .interface_id = request.interface_id,
+            .max_ticks = request.max_ticks,
+        },
+        std::move(*program)
+    );
+    if (!queued) {
+        return failure(map_error(std::move(queued.error())));
+    }
+    return SegmentResponse {
+        .request_id = request.request_id,
+        .interface_id = request.interface_id,
+        .max_ticks = request.max_ticks,
+    };
+}
+
+Result<SegmentStatusResponse, InspectionError> SegmentStatusProvider::inspect(
+    World& world,
+    const SegmentStatusRequest& request
+) const {
+    auto runner = runner_resource(world);
+    if (!runner) {
+        return failure(std::move(runner.error()));
+    }
+    if (const auto progress = runner->segment_progress()) {
+        if (progress->request_id != request.request_id) {
+            return failure(not_found(
+                "Unknown playtest segment '" + request.request_id + "'"
+            ));
+        }
+        return SegmentStatusResponse {
+            .request_id = progress->request_id,
+            .interface_id = progress->interface_id,
+            .state = progress->state,
+            .completed_ticks = progress->completed_ticks,
+            .max_ticks = progress->max_ticks,
+        };
+    }
+    const auto* pending = runner->segment_completion();
+    if (pending == nullptr || pending->request_id != request.request_id) {
+        return failure(
+            not_found("Unknown playtest segment '" + request.request_id + "'")
+        );
+    }
+    auto completion = runner->take_segment_completion();
+    return SegmentStatusResponse {
+        .request_id = completion->request_id,
+        .interface_id = completion->interface_id,
+        .state = completion->state,
+        .completed_ticks = completion->completed_ticks,
+        .max_ticks = completion->max_ticks,
+        .reason = std::move(completion->reason),
+        .observation_json = std::move(completion->observation_json),
+        .error_phase = std::move(completion->error_phase),
+        .error = std::move(completion->error),
+    };
+}
+
+Result<SegmentStatusResponse, InspectionError> SegmentCancelProvider::inspect(
+    World& world,
+    const SegmentCancelRequest& request
+) const {
+    auto registry = registry_resource(world);
+    if (!registry) {
+        return failure(std::move(registry.error()));
+    }
+    auto runner = runner_resource(world);
+    if (!runner) {
+        return failure(std::move(runner.error()));
+    }
+    auto cancelled =
+        runner->cancel_segment(world, *registry, request.request_id);
+    if (!cancelled) {
+        return failure(map_error(std::move(cancelled.error())));
+    }
+    return SegmentStatusProvider {}.inspect(
+        world,
+        SegmentStatusRequest {.request_id = request.request_id}
+    );
 }
 
 Result<std::string, InspectionError>
@@ -443,6 +606,110 @@ step_status_json(World& world, std::string_view request_json) {
     return encode_status(*response).dump();
 }
 
+Result<std::string, InspectionError>
+queue_segment_json(World& world, std::string_view request_json) {
+    auto request = parse_object(request_json);
+    if (!request) {
+        return failure(std::move(request.error()));
+    }
+    if (auto fields = require_fields(
+            *request,
+            {"request_id", "interface", "source", "max_ticks"},
+            {"request_id", "interface", "source", "max_ticks"}
+        );
+        !fields) {
+        return failure(std::move(fields.error()));
+    }
+    auto request_id = read_string(*request, "request_id");
+    if (!request_id) {
+        return failure(std::move(request_id.error()));
+    }
+    auto interface_id = read_string(*request, "interface");
+    if (!interface_id) {
+        return failure(std::move(interface_id.error()));
+    }
+    auto source = read_string(*request, "source");
+    if (!source) {
+        return failure(std::move(source.error()));
+    }
+    const auto& max_ticks_value = request->at("max_ticks");
+    if (!max_ticks_value.is_number_unsigned() ||
+        max_ticks_value.get<uint64>() == 0 ||
+        max_ticks_value.get<uint64>() >
+            runtime_protocol::PlaytestRunner::maximum_segment_ticks) {
+        return failure(invalid_request(
+            "Play request field 'max_ticks' must be between 1 and 3600"
+        ));
+    }
+    auto response = SegmentProvider {}.inspect(
+        world,
+        SegmentRequest {
+            .request_id = std::move(*request_id),
+            .interface_id = std::move(*interface_id),
+            .source = std::move(*source),
+            .max_ticks = static_cast<uint32>(max_ticks_value.get<uint64>()),
+        }
+    );
+    if (!response) {
+        return failure(std::move(response.error()));
+    }
+    return Json({
+                    {"request_id", response->request_id},
+                    {"interface", response->interface_id},
+                    {"state", "pending"},
+                    {"max_ticks", response->max_ticks},
+                })
+        .dump();
+}
+
+Result<std::string, InspectionError>
+segment_status_json(World& world, std::string_view request_json) {
+    auto request = parse_object(request_json);
+    if (!request) {
+        return failure(std::move(request.error()));
+    }
+    if (auto fields = require_fields(*request, {"request_id"}, {"request_id"});
+        !fields) {
+        return failure(std::move(fields.error()));
+    }
+    auto request_id = read_string(*request, "request_id");
+    if (!request_id) {
+        return failure(std::move(request_id.error()));
+    }
+    auto response = SegmentStatusProvider {}.inspect(
+        world,
+        SegmentStatusRequest {.request_id = std::move(*request_id)}
+    );
+    if (!response) {
+        return failure(std::move(response.error()));
+    }
+    return encode_segment_status(*response).dump();
+}
+
+Result<std::string, InspectionError>
+cancel_segment_json(World& world, std::string_view request_json) {
+    auto request = parse_object(request_json);
+    if (!request) {
+        return failure(std::move(request.error()));
+    }
+    if (auto fields = require_fields(*request, {"request_id"}, {"request_id"});
+        !fields) {
+        return failure(std::move(fields.error()));
+    }
+    auto request_id = read_string(*request, "request_id");
+    if (!request_id) {
+        return failure(std::move(request_id.error()));
+    }
+    auto response = SegmentCancelProvider {}.inspect(
+        world,
+        SegmentCancelRequest {.request_id = std::move(*request_id)}
+    );
+    if (!response) {
+        return failure(std::move(response.error()));
+    }
+    return encode_segment_status(*response).dump();
+}
+
 Status<InspectionError>
 register_playtest_inspection_providers(InspectionRegistry& registry) {
     auto status =
@@ -467,9 +734,30 @@ register_playtest_inspection_providers(InspectionRegistry& registry) {
     if (!status) {
         return status;
     }
-    return registry.add<StepStatusProvider>([](World& world,
-                                               std::string_view payload) {
+    status = registry.add<StepStatusProvider>([](World& world,
+                                                 std::string_view payload) {
         return step_status_json(world, payload);
+    });
+    if (!status) {
+        return status;
+    }
+    status = registry.add<SegmentProvider>([](World& world,
+                                              std::string_view payload) {
+        return queue_segment_json(world, payload);
+    });
+    if (!status) {
+        return status;
+    }
+    status = registry.add<SegmentStatusProvider>([](World& world,
+                                                    std::string_view payload) {
+        return segment_status_json(world, payload);
+    });
+    if (!status) {
+        return status;
+    }
+    return registry.add<SegmentCancelProvider>([](World& world,
+                                                  std::string_view payload) {
+        return cancel_segment_json(world, payload);
     });
 }
 

@@ -76,6 +76,38 @@ World test_world() {
     playtests.freeze();
     world.add_resource(std::move(playtests));
     world.add_resource(PlaytestRunner {});
+    world.add_resource(
+        PlaytestSegmentCompiler {
+            .compile = [](std::string_view source)
+                -> Result<PlaytestSegmentProgram, PlaytestError> {
+                if (source != "increment-until-five") {
+                    return failure(
+                        PlaytestError {
+                            .kind = PlaytestErrorKind::InvalidAction,
+                            .message = "unknown test program",
+                        }
+                    );
+                }
+                return PlaytestSegmentProgram {
+                    .next = [](std::string_view observation, uint32)
+                        -> Result<PlaytestSegmentDecision, PlaytestError> {
+                        const auto value =
+                            Json::parse(observation).at("value").get<int>();
+                        if (value >= 5) {
+                            return PlaytestSegmentDecision {
+                                .kind = PlaytestSegmentDecisionKind::Stop,
+                                .value = "target reached",
+                            };
+                        }
+                        return PlaytestSegmentDecision {
+                            .kind = PlaytestSegmentDecisionKind::Action,
+                            .value = Json({{"value", value + 1}}).dump(),
+                        };
+                    },
+                };
+            },
+        }
+    );
     return world;
 }
 
@@ -112,11 +144,14 @@ TEST_CASE(
     auto world = test_world();
     auto registry = test_registry();
 
-    REQUIRE(registry.descriptors().size() == 4);
+    REQUIRE(registry.descriptors().size() == 7);
     CHECK(registry.contains("play.interfaces"));
     CHECK(registry.contains("play.observe"));
     CHECK(registry.contains("play.step"));
     CHECK(registry.contains("play.step_status"));
+    CHECK(registry.contains("play.segment"));
+    CHECK(registry.contains("play.segment_status"));
+    CHECK(registry.contains("play.segment_cancel"));
 
     auto listed = dispatch(
         registry,
@@ -263,4 +298,55 @@ TEST_CASE(
     CHECK(result.at("error").at("kind") == "invalid_action");
     CHECK(result.at("completed_ticks") == 0);
     CHECK(result.at("target_ticks") == 2);
+}
+
+TEST_CASE(
+    "Playtest inspection queues and polls reactive segments",
+    "[runtime-inspection][playtest][segment]"
+) {
+    auto world = test_world();
+    auto registry = test_registry();
+
+    auto queued = dispatch(
+        registry,
+        world,
+        "play.segment",
+        "play.segment.v1",
+        R"({"request_id":"segment-1","interface":"game.main","source":"increment-until-five","max_ticks":10})"
+    );
+    REQUIRE(queued);
+    CHECK(Json::parse(*queued).at("state") == "pending");
+
+    auto& runner = world.resource<PlaytestRunner>();
+    const auto& playtests =
+        static_cast<const World&>(world).resource<PlaytestRegistry>();
+    runner.begin_queued_step(world, playtests);
+    runner.advance_fixed_tick(world, playtests);
+
+    auto running = dispatch(
+        registry,
+        world,
+        "play.segment_status",
+        "play.segment_status.v1",
+        R"({"request_id":"segment-1"})"
+    );
+    REQUIRE(running);
+    CHECK(Json::parse(*running).at("state") == "running");
+    CHECK(Json::parse(*running).at("completed_ticks") == 1);
+
+    runner.advance_fixed_tick(world, playtests);
+    auto stopped = dispatch(
+        registry,
+        world,
+        "play.segment_status",
+        "play.segment_status.v1",
+        R"({"request_id":"segment-1"})"
+    );
+    REQUIRE(stopped);
+    const auto result = Json::parse(*stopped);
+    CHECK(result.at("state") == "stopped");
+    CHECK(result.at("completed_ticks") == 2);
+    CHECK(result.at("reason") == "target reached");
+    CHECK(result.at("observation").at("value") == 5);
+    CHECK_FALSE(runner.busy());
 }
