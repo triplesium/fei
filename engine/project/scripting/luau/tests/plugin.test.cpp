@@ -530,6 +530,23 @@ TEST_CASE(
     app.add_plugin(project_runtime::LuauPlaytestsPlugin {});
     app.finish();
 
+    auto& segment_compiler =
+        app.resource<runtime_protocol::PlaytestSegmentCompiler>();
+    REQUIRE(segment_compiler.compile);
+    auto segment = segment_compiler.compile(R"(
+        return function(ctx)
+            return { action = { value = ctx.tick + 2 } }
+        end
+    )");
+    REQUIRE(segment);
+    auto segment_decision = segment->next(R"({"value":0})", 1);
+    REQUIRE(segment_decision);
+    CHECK(
+        segment_decision->kind ==
+        runtime_protocol::PlaytestSegmentDecisionKind::Action
+    );
+    CHECK(nlohmann::json::parse(segment_decision->value).at("value") == 3);
+
     auto& registry = app.resource<runtime_protocol::PlaytestRegistry>();
     const auto* interface = registry.find("game.main");
     REQUIRE(interface != nullptr);

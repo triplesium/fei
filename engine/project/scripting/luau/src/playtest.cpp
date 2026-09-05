@@ -2,6 +2,7 @@
 
 #include "app/app.hpp"
 #include "runtime_protocol/playtest.hpp"
+#include "scripting/playtest_segment.hpp"
 #include "scripting/runtime.hpp"
 #include "scripting/script_system_registry.hpp"
 
@@ -33,6 +34,43 @@ void LuauPlaytestsPlugin::setup(App& app) {
     }
 
     auto& registry = app.resource<runtime_protocol::PlaytestRegistry>();
+    auto& segment_compiler =
+        app.resource<runtime_protocol::PlaytestSegmentCompiler>();
+    segment_compiler.compile = [](std::string_view source)
+        -> Result<runtime_protocol::PlaytestSegmentProgram, PlaytestError> {
+        auto program = LuauPlaytestSegment::compile(source);
+        if (!program) {
+            return failure(playtest_error(
+                std::move(program.error()),
+                PlaytestErrorKind::InvalidAction
+            ));
+        }
+        return runtime_protocol::PlaytestSegmentProgram {
+            .next = [program = std::move(
+                         *program
+                     )](std::string_view observation_json, uint32 tick)
+                -> Result<
+                    runtime_protocol::PlaytestSegmentDecision,
+                    PlaytestError> {
+                auto decision = program->next(observation_json, tick);
+                if (!decision) {
+                    return failure(playtest_error(
+                        std::move(decision.error()),
+                        PlaytestErrorKind::InvalidAction
+                    ));
+                }
+                return runtime_protocol::PlaytestSegmentDecision {
+                    .kind =
+                        decision->kind ==
+                                LuauPlaytestSegmentDecisionKind::Action ?
+                            runtime_protocol::PlaytestSegmentDecisionKind::
+                                Action :
+                            runtime_protocol::PlaytestSegmentDecisionKind::Stop,
+                    .value = std::move(decision->value),
+                };
+            },
+        };
+    };
     auto& runtime = app.resource<LuauRuntime>();
     for (const auto& script_module :
          app.resource<LuauScriptSystemRegistry>().modules()) {

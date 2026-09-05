@@ -15,6 +15,11 @@ using namespace ets::runtime_protocol;
 
 namespace {
 
+uint32 json_value(std::string_view json) {
+    const auto colon = json.find(':');
+    return static_cast<uint32>(std::stoul(std::string(json.substr(colon + 1))));
+}
+
 PlaytestInterfaceRegistration test_interface(std::string id = "game.main") {
     return PlaytestInterfaceRegistration {
         .descriptor =
@@ -157,6 +162,229 @@ TEST_CASE(
     CHECK(completion->result->ticks == 4);
     CHECK(completion->result->observation_json == "{}");
     CHECK_FALSE(runner.busy());
+}
+
+TEST_CASE(
+    "Playtest runner executes reactive segments until their exact stop tick",
+    "[runtime-protocol][playtest][segment]"
+) {
+    struct SegmentState {
+        uint32 value {0};
+        uint32 ended_actions {0};
+    };
+    World world;
+    world.add_resource(SegmentState {});
+    PlaytestRegistry registry;
+    REQUIRE(registry.add(
+        PlaytestInterfaceRegistration {
+            .descriptor =
+                PlaytestInterfaceDescriptor {
+                    .id = "game.segment",
+                    .label = "Segment",
+                    .description = "Segment test interface.",
+                    .action_schema_json =
+                        R"({"type":"object","required":["value"],"properties":{"value":{"type":"integer"}},"additionalProperties":false})",
+                    .observation_schema_json =
+                        R"({"type":"object","required":["value"],"properties":{"value":{"type":"integer"}},"additionalProperties":false})",
+                },
+            .begin_step = [](World& target,
+                             std::string_view action) -> Status<PlaytestError> {
+                target.resource<SegmentState>().value = json_value(action);
+                return {};
+            },
+            .end_step = [](World& target) -> Status<PlaytestError> {
+                ++target.resource<SegmentState>().ended_actions;
+                return {};
+            },
+            .observe = [](World& target) -> Result<std::string, PlaytestError> {
+                return "{\"value\":" +
+                       std::to_string(target.resource<SegmentState>().value) +
+                       "}";
+            },
+        }
+    ));
+    registry.freeze();
+
+    PlaytestRunner runner;
+    REQUIRE(runner.queue_segment(
+        registry,
+        PlaytestSegmentRequest {
+            .request_id = "segment-1",
+            .interface_id = "game.segment",
+            .max_ticks = 10,
+        },
+        PlaytestSegmentProgram {
+            .next = [](std::string_view observation, uint32 tick)
+                -> Result<PlaytestSegmentDecision, PlaytestError> {
+                const auto value = json_value(observation);
+                CHECK(value == tick);
+                if (value == 3) {
+                    return PlaytestSegmentDecision {
+                        .kind = PlaytestSegmentDecisionKind::Stop,
+                        .value = "target reached",
+                    };
+                }
+                return PlaytestSegmentDecision {
+                    .kind = PlaytestSegmentDecisionKind::Action,
+                    .value = "{\"value\":" + std::to_string(value + 1) + "}",
+                };
+            },
+        }
+    ));
+
+    runner.begin_queued_step(world, registry);
+    REQUIRE(runner.segment_progress());
+    for (uint32 tick = 0; tick < 3; ++tick) {
+        runner.advance_fixed_tick(world, registry);
+    }
+
+    auto completion = runner.take_segment_completion();
+    REQUIRE(completion);
+    CHECK(completion->state == PlaytestSegmentState::Stopped);
+    CHECK(completion->completed_ticks == 3);
+    CHECK(completion->reason == "target reached");
+    CHECK(json_value(completion->observation_json) == 3);
+    CHECK(world.resource<SegmentState>().ended_actions == 3);
+    CHECK_FALSE(runner.busy());
+
+    REQUIRE(runner.queue_segment(
+        registry,
+        PlaytestSegmentRequest {
+            .request_id = "segment-immediate-stop",
+            .interface_id = "game.segment",
+            .max_ticks = 1,
+        },
+        PlaytestSegmentProgram {
+            .next = [](std::string_view, uint32)
+                -> Result<PlaytestSegmentDecision, PlaytestError> {
+                return PlaytestSegmentDecision {
+                    .kind = PlaytestSegmentDecisionKind::Stop,
+                    .value = "already complete",
+                };
+            },
+        }
+    ));
+    runner.begin_queued_step(world, registry);
+    auto immediate = runner.take_segment_completion();
+    REQUIRE(immediate);
+    CHECK(immediate->state == PlaytestSegmentState::Stopped);
+    CHECK(immediate->completed_ticks == 0);
+    CHECK(immediate->reason == "already complete");
+}
+
+TEST_CASE(
+    "Playtest runner bounds and cancels reactive segments with cleanup",
+    "[runtime-protocol][playtest][segment][safety]"
+) {
+    struct SegmentState {
+        uint32 began {0};
+        uint32 ended {0};
+    };
+    World world;
+    world.add_resource(SegmentState {});
+    PlaytestRegistry registry;
+    REQUIRE(registry.add(
+        PlaytestInterfaceRegistration {
+            .descriptor =
+                PlaytestInterfaceDescriptor {
+                    .id = "game.segment",
+                    .label = "Segment",
+                    .description = "Segment test interface.",
+                    .action_schema_json = R"({"type":"object"})",
+                    .observation_schema_json = R"({"type":"object"})",
+                },
+            .begin_step = [](World& target,
+                             std::string_view) -> Status<PlaytestError> {
+                ++target.resource<SegmentState>().began;
+                return {};
+            },
+            .end_step = [](World& target) -> Status<PlaytestError> {
+                ++target.resource<SegmentState>().ended;
+                return {};
+            },
+            .observe = [](World&) -> Result<std::string, PlaytestError> {
+                return std::string {"{}"};
+            },
+        }
+    ));
+    registry.freeze();
+    const auto always_act = [] {
+        return PlaytestSegmentProgram {
+            .next = [](std::string_view, uint32)
+                -> Result<PlaytestSegmentDecision, PlaytestError> {
+                return PlaytestSegmentDecision {
+                    .kind = PlaytestSegmentDecisionKind::Action,
+                    .value = "{}",
+                };
+            },
+        };
+    };
+
+    PlaytestRunner runner;
+    REQUIRE(runner.queue_segment(
+        registry,
+        PlaytestSegmentRequest {
+            .request_id = "bounded",
+            .interface_id = "game.segment",
+            .max_ticks = 2,
+        },
+        always_act()
+    ));
+    runner.begin_queued_step(world, registry);
+    runner.advance_fixed_tick(world, registry);
+    runner.advance_fixed_tick(world, registry);
+    auto bounded = runner.take_segment_completion();
+    REQUIRE(bounded);
+    CHECK(bounded->state == PlaytestSegmentState::MaxTicks);
+    CHECK(bounded->completed_ticks == 2);
+    CHECK(world.resource<SegmentState>().began == 2);
+    CHECK(world.resource<SegmentState>().ended == 2);
+
+    REQUIRE(runner.queue_segment(
+        registry,
+        PlaytestSegmentRequest {
+            .request_id = "cancelled",
+            .interface_id = "game.segment",
+            .max_ticks = 10,
+        },
+        always_act()
+    ));
+    runner.begin_queued_step(world, registry);
+    REQUIRE(runner.cancel_segment(world, registry, "cancelled"));
+    auto cancelled = runner.take_segment_completion();
+    REQUIRE(cancelled);
+    CHECK(cancelled->state == PlaytestSegmentState::Cancelled);
+    CHECK(cancelled->completed_ticks == 0);
+    CHECK(world.resource<SegmentState>().began == 3);
+    CHECK(world.resource<SegmentState>().ended == 3);
+
+    REQUIRE(runner.queue_segment(
+        registry,
+        PlaytestSegmentRequest {
+            .request_id = "invalid-action",
+            .interface_id = "game.segment",
+            .max_ticks = 1,
+        },
+        PlaytestSegmentProgram {
+            .next = [](std::string_view, uint32)
+                -> Result<PlaytestSegmentDecision, PlaytestError> {
+                return PlaytestSegmentDecision {
+                    .kind = PlaytestSegmentDecisionKind::Action,
+                    .value = "[]",
+                };
+            },
+        }
+    ));
+    runner.begin_queued_step(world, registry);
+    auto failed = runner.take_segment_completion();
+    REQUIRE(failed);
+    CHECK(failed->state == PlaytestSegmentState::Failed);
+    CHECK(failed->completed_ticks == 0);
+    CHECK(failed->error_phase == "begin_step");
+    REQUIRE(failed->error);
+    CHECK(failed->error->kind == PlaytestErrorKind::InvalidAction);
+    CHECK(world.resource<SegmentState>().began == 3);
+    CHECK(world.resource<SegmentState>().ended == 4);
 }
 
 TEST_CASE(

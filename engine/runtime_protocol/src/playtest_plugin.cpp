@@ -46,6 +46,9 @@ void PlaytestPlugin::setup(App& app) {
     if (!app.has_resource<PlaytestRunner>()) {
         app.add_resource(PlaytestRunner {});
     }
+    if (!app.has_resource<PlaytestSegmentCompiler>()) {
+        app.add_resource(PlaytestSegmentCompiler {});
+    }
     auto& time = app.resource<Time>();
     app.add_resource(
         PlaytestClock {
