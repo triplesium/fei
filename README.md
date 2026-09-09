@@ -143,6 +143,10 @@ See [`samples/`](samples/) for more examples.
 
 ## Documentation
 
+See [repository structure](docs/repository-structure.md) for the `agent/`, `devkit/`, and `editor/` workspace boundaries. The `packages/` directory retains its xmake role.
+
+The [Entisium Agent](docs/agent.md) runs inside the Editor or as a standalone CLI and can control native games without a browser.
+
 - [Deterministic agent playtests](docs/playtest.md)
 - [ECS](docs/ecs.md)
 - [2D physics](docs/physics2d.md)

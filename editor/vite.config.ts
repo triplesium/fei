@@ -2,6 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
+import { createRequire } from "node:module";
+
+const materialIconRoot = path.dirname(createRequire(import.meta.url).resolve("material-icon-theme/package.json"));
 
 export default defineConfig(({ mode }) => {
     const platform = mode === "demo" ? "demo" : "host";
@@ -10,8 +13,9 @@ export default defineConfig(({ mode }) => {
         plugins: [react(), tailwindcss()],
         resolve: {
             alias: {
-                "@editor-platform": path.resolve(import.meta.dirname, "src", "platform", platform),
-                "@": path.resolve(import.meta.dirname, "src"),
+                "@material-icon-theme": materialIconRoot,
+                "@editor-platform": path.resolve(import.meta.dirname, "src", "browser", "platform", platform),
+                "@": path.resolve(import.meta.dirname, "src", "browser"),
             },
         },
         server: {
@@ -35,7 +39,7 @@ export default defineConfig(({ mode }) => {
             },
         },
         build: {
-            outDir: path.resolve(import.meta.dirname, "dist", platform),
+            outDir: path.resolve(import.meta.dirname, "dist", platform === "demo" ? "demo" : "browser"),
             emptyOutDir: true,
         },
     };

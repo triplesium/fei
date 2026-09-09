@@ -9,6 +9,11 @@
 |   |-- <module>/src/               # module implementation
 |   |-- <module>/tests/             # module-local Catch2 tests
 |   `-- graphics/                   # graphics core/backends/platform groups
+|-- runtime/            # native and browser engine execution entrypoints
+|-- agent/               # Agent core, model settings, tools, and CLI
+|-- devkit/              # reusable project/runtime services and MCP
+|-- editor/              # src/browser, src/server, and shared Editor contracts
+|-- packages/            # xmake dependency declarations (not npm workspaces)
 |-- tests/               # top-level integration tests and support/
 |-- samples/             # runnable sample-* targets
 |-- assets/              # runtime assets via ETS_ASSETS_PATH
@@ -55,6 +60,16 @@
   jobs.
 - `xmake tidy --fix entisium-math`: apply clang-tidy fix-its in place for one
   target.
+
+The root npm workspace contains `agent`, `devkit`, and `editor`. Run `npm ci`
+from the repository root. `npm run typecheck` checks the shared packages and
+Editor; `npm test` runs all three workspace test suites. `npm run build:server` (also available as `build:host`),
+`npm run build:editor`, and `npm run build:demo` build the TypeScript host or UI.
+Use package exports (`@entisium/agent/...`, `@entisium/devkit/...`) across workspace
+boundaries. DevKit must not import Agent or Editor code; Agent core must not
+import Editor code or Node-only application services. Editor browser code lives
+in `editor/src/browser`, server code in `editor/src/server`, and browser-safe
+Editor contracts in `editor/src/shared`; browser code must not import server modules.
 
 ## Coding Style & Naming Conventions
 

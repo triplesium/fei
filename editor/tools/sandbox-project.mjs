@@ -38,5 +38,5 @@ await prepareSandboxProject();
 
 if (!process.argv.includes("--prepare-only")) {
     process.env.ETS_EDITOR_PROJECT_DIR = sandboxDirectory;
-    await import("../host-dist/main.js");
+    await import("../dist/server/main.js");
 }

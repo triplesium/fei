@@ -32,8 +32,12 @@ if (projectDirectory) {
 const { result } = concurrently(
     [
         {
-            command: "npm run dev:host",
-            name: "host",
+            command: "tsc -b ../devkit ../agent --watch --preserveWatchOutput",
+            name: "shared",
+        },
+        {
+            command: "npm run dev:server",
+            name: "server",
             env: projectDirectory ? { ETS_EDITOR_PROJECT_DIR: projectDirectory } : undefined,
         },
         {

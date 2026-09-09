@@ -1,5 +1,4 @@
 includes("reflgen")
 includes("luau_defgen")
 includes("tasks")
-includes("runtime_host")
 includes("entisium_lsp")

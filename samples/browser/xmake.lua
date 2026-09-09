@@ -18,4 +18,4 @@ target("sample-browser")
         "entisium-window-browser",
         "entisium-graphics-webgpu-browser"
     )
-    add_browser_shell(path.join(os.projectdir(), "editor/runtime/shell.html"))
+    add_browser_shell(path.join(os.projectdir(), "runtime/browser/shell.html"))

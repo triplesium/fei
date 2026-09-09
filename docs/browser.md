@@ -89,7 +89,7 @@ Compiled shader variants are cached at `/entisium/cache/shaders`. The current ca
 
 ## Run the local Editor
 
-The Editor is a Vite, React, and TypeScript application under `editor/`. Xmake owns dependency installation, TypeScript compilation, Vite bundling, Host compilation, and output staging. The `entisium-editor` and `entisium-editor-demo` targets compile the same application against Host and browser platform implementations respectively, then stage their output beside the shared WASM runtime. Runtime artifacts use the stable `runtime/` path rather than exposing target output names to the Editor. Editor inputs are tracked incrementally, and `npm ci` runs when `node_modules` is missing or `package-lock.json` changes.
+The Editor is a Vite, React, and TypeScript application under `editor/src/browser/`, with its Node service in `editor/src/server/` and browser-safe command contracts in `editor/src/shared/`, sharing the root npm workspace with `agent/` and `devkit/`. Run `npm ci` from the repository root; `packages/` continues to contain xmake dependency declarations. Xmake owns dependency installation, TypeScript compilation, Vite bundling, server compilation, and output staging. The `entisium-editor` and `entisium-editor-demo` targets compile the same application against Host and browser platform implementations respectively, then stage their output beside the shared WASM runtime. Runtime artifacts use the stable `runtime/` path rather than exposing target output names to the Editor. Editor and shared workspace inputs are tracked incrementally. Xmake installs dependencies in the root `node_modules` and builds shared packages before the Editor; the root `package-lock.json` controls installation.
 
 For local development, build and start `entisium-editor` from the repository root:
 
@@ -109,7 +109,7 @@ xmake run entisium-editor-dev -- --project=samples/browser_project/project
 This builds the npm dependencies and the matching `entisium-editor-runtime`
 output before starting the existing npm development servers. C++ and other
 WebAssembly runtime changes still require rebuilding `entisium-editor-runtime`
-and restarting the runtime from the Editor; frontend and Host changes are
+and restarting the runtime from the Editor; browser, server and shared workspace changes are
 watched automatically.
 
 The host serves the Editor and runtime from `http://127.0.0.1:3100` by default. Use `ETS_EDITOR_HOST_PORT` to select another port. When launching the Host directly rather than through xmake, use `ETS_EDITOR_RUNTIME_DIR` to point at a staged WASM directory. Use `npm run dev -- --project <directory>` when working on the Editor frontend.
@@ -141,6 +141,13 @@ Host. GitHub Pages does not provide the cross-origin isolation headers used by
 the local preview, so CPU timings use the browser's coarser non-isolated clock.
 
 In the full Editor, the supported browser command registry is `window.entisiumEditor.commands`. `window.entisiumEditorAgent` remains a deprecated compatibility alias.
+
+## Native Agent tools
+
+The built-in Agent can also control a hidden native runtime directly through the
+Host, without the WASM iframe. Native tools use the `native_` prefix and operate on
+the current saved project. See [Entisium Agent](agent.md) for the standalone CLI,
+capture display and lifecycle boundaries.
 
 ## Connect through MCP
 

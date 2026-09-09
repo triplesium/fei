@@ -30,3 +30,9 @@ imgui.ini
 engine/generated/reflgen.cpp
 
 .codex/
+
+# TypeScript workspace outputs
+agent/dist/
+devkit/dist/
+agent/*.tsbuildinfo
+devkit/*.tsbuildinfo

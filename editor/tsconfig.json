@@ -2,7 +2,11 @@
     "compilerOptions": {
         "target": "ES2022",
         "useDefineForClassFields": true,
-        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "lib": [
+            "ES2022",
+            "DOM",
+            "DOM.Iterable"
+        ],
         "allowJs": false,
         "skipLibCheck": true,
         "esModuleInterop": true,
@@ -12,14 +16,25 @@
         "module": "ESNext",
         "moduleResolution": "Bundler",
         "paths": {
-            "@/*": ["./src/*"],
-            "@editor-platform/*": ["./src/platform/host/*"]
+            "@/*": [
+                "./src/browser/*"
+            ],
+            "@editor-platform/*": [
+                "./src/browser/platform/host/*"
+            ]
         },
-        "types": ["vite/client", "wicg-file-system-access"],
+        "types": [
+            "vite/client",
+            "wicg-file-system-access"
+        ],
         "resolveJsonModule": true,
         "isolatedModules": true,
         "noEmit": true,
         "jsx": "react-jsx"
     },
-    "include": ["src", "vite.config.ts"]
+    "include": [
+        "src/browser",
+        "src/shared",
+        "vite.config.ts"
+    ]
 }

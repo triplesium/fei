@@ -7,6 +7,8 @@ This directory contains both usage guides and implementation notes. Start with t
 | Topic | Use it when |
 | --- | --- |
 | [Browser and Web Editor](browser.md) | Building the WebAssembly targets, running browser smoke tests, editing local projects, or connecting to the Editor MCP endpoint |
+| [Repository structure](repository-structure.md) | Understanding the Agent, DevKit, Editor and build boundaries |
+| [Entisium Agent](agent.md) | Running the shared Agent in the Editor or CLI and controlling native runtimes |
 | [Playtest](playtest.md) | Declaring a deterministic game-control contract or driving a project through Editor MCP |
 | [2D physics](physics2d.md) | Adding Box2D bodies, collision layers, sensors, interpolation, or teleports |
 | [Profiling](profiling.md) | Capturing bounded CPU summaries or inspecting Tracy zones |

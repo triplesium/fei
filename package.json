@@ -1,0 +1,30 @@
+{
+    "name": "entisium",
+    "private": true,
+    "version": "0.1.0",
+    "workspaces": [
+        "devkit",
+        "agent",
+        "editor"
+    ],
+    "scripts": {
+        "build:shared": "tsc -b devkit agent",
+        "build:host": "npm run build:server",
+        "build:editor": "npm run build:shared && npm exec --workspace @entisium/editor -- vite build",
+        "build:demo": "npm run build:shared && npm exec --workspace @entisium/editor -- vite build --mode demo",
+        "agent": "node --conditions=development --import tsx agent/src/cli/main.ts",
+        "runtime:mcp": "node --conditions=development --import tsx devkit/src/mcp/main.ts",
+        "typecheck": "npm run build:shared && npm run typecheck --workspace @entisium/editor",
+        "test": "npm run build:shared && npm run test --workspaces --if-present",
+        "build:server": "npm run build:shared && tsc -p editor/tsconfig.server.json"
+    },
+    "devDependencies": {
+        "@types/node": "^24.13.3",
+        "tsx": "^4.23.12",
+        "typescript": "^7.0.2",
+        "vitest": "^4.1.11"
+    },
+    "overrides": {
+        "dompurify": "^3.4.14"
+    }
+}

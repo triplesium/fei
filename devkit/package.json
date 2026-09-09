@@ -1,0 +1,29 @@
+{
+    "name": "@entisium/devkit",
+    "private": true,
+    "version": "0.1.0",
+    "type": "module",
+    "exports": {
+        "./*": {
+            "types": "./dist/*.d.ts",
+            "development": "./src/*.ts",
+            "default": "./dist/*.js"
+        }
+    },
+    "scripts": {
+        "build": "tsc -b",
+        "typecheck": "tsc -b",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.30.0",
+        "yaml": "^2.9.0",
+        "zod": "^4.4.3"
+    },
+    "devDependencies": {
+        "@types/node": "^24.13.3",
+        "tsx": "^4.23.12",
+        "typescript": "^7.0.2",
+        "vitest": "^4.1.11"
+    }
+}

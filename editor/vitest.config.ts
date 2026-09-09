@@ -3,11 +3,12 @@ import path from "node:path";
 
 export default defineConfig({
     resolve: {
+        conditions: ["development"],
         alias: {
-            "@editor-platform": path.resolve(import.meta.dirname, "src", "platform", "host"),
+            "@editor-platform": path.resolve(import.meta.dirname, "src", "browser", "platform", "host"),
         },
     },
     test: {
-        include: ["src/**/*.test.ts", "host/**/*.test.ts"],
+        include: ["src/**/*.test.ts"],
     },
 });

@@ -1,0 +1,31 @@
+{
+    "name": "@entisium/agent",
+    "private": true,
+    "version": "0.1.0",
+    "type": "module",
+    "exports": {
+        "./*": {
+            "types": "./dist/*.d.ts",
+            "development": "./src/*.ts",
+            "default": "./dist/*.js"
+        }
+    },
+    "scripts": {
+        "build": "tsc -b",
+        "typecheck": "tsc -b",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "@earendil-works/pi-agent-core": "^0.84.2",
+        "@earendil-works/pi-ai": "^0.84.2",
+        "typebox": "^1.3.16",
+        "zod": "^4.4.3",
+        "@entisium/devkit": "0.1.0"
+    },
+    "devDependencies": {
+        "@types/node": "^24.13.3",
+        "tsx": "^4.23.12",
+        "typescript": "^7.0.2",
+        "vitest": "^4.1.11"
+    }
+}

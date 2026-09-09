@@ -37,7 +37,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: editor/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Set up xmake
         uses: xmake-io/github-action-setup-xmake@3a1a5dddfc7fa625d9a698738334bf55655a861a # v1

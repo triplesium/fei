@@ -5,15 +5,18 @@
     "type": "module",
     "scripts": {
         "dev": "node tools/dev.mjs",
-        "dev:host": "tsx watch host/main.ts",
+        "dev:host": "npm run dev:server",
         "dev:renderer": "vite",
         "dev:sandbox": "npm run sandbox:prepare && npm run dev -- --project ../.sandbox/editor-project",
         "sandbox:prepare": "node tools/sandbox-project.mjs --prepare-only",
-        "start": "node host-dist/main.js",
-        "runtime:mcp": "tsx host/runtime-mcp-main.ts",
+        "start": "node dist/server/main.js",
+        "agent": "node --conditions=development --import tsx ../agent/src/cli/main.ts",
+        "runtime:mcp": "node --conditions=development --import tsx ../devkit/src/mcp/main.ts",
         "start:sandbox": "node tools/sandbox-project.mjs",
         "test": "vitest run",
-        "typecheck": "tsc -b && tsc -p tsconfig.host.json --noEmit"
+        "typecheck": "tsc -b ../devkit ../agent && tsc -b && tsc -p tsconfig.server.json --noEmit",
+        "predev": "npm run build:shared --prefix ..",
+        "dev:server": "tsx watch --conditions=development src/server/main.ts"
     },
     "dependencies": {
         "@assistant-ui/react": "^0.15.16",
@@ -28,7 +31,6 @@
         "@earendil-works/pi-ai": "^0.84.2",
         "@headless-tree/core": "^1.7.0",
         "@headless-tree/react": "^1.7.0",
-        "@modelcontextprotocol/sdk": "^1.30.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "cmdk": "^1.1.1",
@@ -46,12 +48,14 @@
         "typebox": "^1.3.16",
         "vscode": "npm:@codingame/monaco-vscode-extension-api@25.1.2",
         "ws": "^8.21.3",
+        "@modelcontextprotocol/sdk": "^1.30.0",
+        "@entisium/agent": "0.1.0",
+        "@entisium/devkit": "0.1.0",
         "yaml": "^2.9.0",
         "zod": "^4.4.3"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.3.3",
-        "@types/node": "^24.13.3",
         "@types/react": "^19.2.18",
         "@types/react-dom": "^19.2.4",
         "@types/wicg-file-system-access": "^2023.10.7",
@@ -59,12 +63,6 @@
         "@vitejs/plugin-react": "^6.1.0",
         "concurrently": "^10.0.5",
         "tailwindcss": "^4.3.3",
-        "tsx": "^4.23.12",
-        "typescript": "^7.0.2",
-        "vite": "^8.2.2",
-        "vitest": "^4.1.11"
-    },
-    "overrides": {
-        "dompurify": "^3.4.14"
+        "vite": "^8.2.2"
     }
 }

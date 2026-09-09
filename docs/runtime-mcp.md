@@ -1,9 +1,12 @@
 # Native Runtime MCP
 
+For the shared Agent and standalone task CLI, see [Entisium Agent](agent.md).
+
 The standalone `entisium-runtime` stdio server starts a native project with a
-hidden window. It does not start the Web Editor, Vite, or a browser. The source
-entry point lives in `editor/host` to reuse the existing Node dependencies and
-host TypeScript build; it has no dependency on the Editor command relay.
+hidden window. It does not start the Web Editor, Vite, or a browser. The entry
+point is `devkit/src/mcp/main.ts`; the DevKit package has no dependency
+on the Agent or Editor. Its tool contracts and runtime session service are also
+used by the Agent and Editor adapters.
 
 ## Setup
 
@@ -11,7 +14,7 @@ From the repository root, install dependencies if necessary and build the game
 host:
 
 ```powershell
-npm ci --prefix editor
+npm ci
 xmake build -y entisium-runtime-host
 ```
 
@@ -21,8 +24,8 @@ paths for the checkout and build mode:
 ```toml
 [mcp_servers.entisium-runtime]
 command = "node"
-args = ["--import", "tsx", "host/runtime-mcp-main.ts"]
-cwd = "D:/Projects/entisium/editor"
+args = ["--conditions=development", "--import", "tsx", "devkit/src/mcp/main.ts"]
+cwd = "D:/Projects/entisium"
 startup_timeout_sec = 15
 tool_timeout_sec = 60
 
@@ -31,9 +34,14 @@ ETS_RUNTIME_HOST_PATH = "D:/Projects/entisium/build/windows/x64/debug/entisium-r
 ```
 
 For Codex, put this in the trusted project's `.codex/config.toml` or the local
-user configuration, then reload the MCP server. `node --import tsx` starts the
-server directly without npm lifecycle output on stdout. After compiling the
-host TypeScript, `node host-dist/runtime-mcp-main.js` is also supported.
+user configuration, then reload the MCP server.
+`node --conditions=development --import tsx` starts the server from source without
+npm lifecycle output on stdout. For compiled execution, run
+`npm run build:shared`, then `node devkit/dist/mcp/main.js`.
+
+The old `editor/host/runtime-mcp-main.ts` entry remains a compatibility shim and
+requires built shared packages. Existing model settings and credential environment
+variables retain their names and storage locations.
 
 The executable defaults to the checkout's native debug output; set
 `ETS_RUNTIME_HOST_PATH` explicitly for other platforms, architectures or modes.
@@ -83,17 +91,17 @@ replace WebGPU/browser compatibility testing.
 
 ## Verification
 
-From `editor`, run the protocol/lifecycle tests:
+From the repository root, run the protocol/lifecycle tests:
 
 ```powershell
-node node_modules/vitest/vitest.mjs run host/native-runtime.test.ts
+npm exec --workspace @entisium/devkit -- vitest run tests/native-runtime.test.ts
 ```
 
 The real game test is opt-in and launches hidden windows only:
 
 ```powershell
 $env:ETS_RUNTIME_MCP_TEST_EXE = "D:/Projects/entisium/build/windows/x64/debug/entisium-runtime-host.exe"
-node node_modules/vitest/vitest.mjs run host/runtime-mcp.test.ts
+npm exec --workspace @entisium/devkit -- vitest run tests/runtime-mcp.test.ts
 ```
 
 It covers stdio tool discovery, startup, actual player movement, reactive

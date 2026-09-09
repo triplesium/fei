@@ -543,7 +543,8 @@ else
     includes("tests")
 end
 
-includes("editor/runtime")
+includes("runtime")
+includes("editor")
 
 if is_plat("wasm") then
     includes("tools/entisium_lsp")
