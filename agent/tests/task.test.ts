@@ -11,6 +11,23 @@ function configuration(responses: ReturnType<typeof fauxAssistantMessage>[]) {
 }
 
 describe("headless agent task", () => {
+    it("retains conversation history and awaits snapshots across follow-up turns", async () => {
+        const base = configuration([fauxAssistantMessage("Speed is now 8."), fauxAssistantMessage("Jump is now 6; speed remains 8.")]);
+        const contexts: string[] = [];
+        const turns: number[] = [];
+        const cleanup = vi.fn(async () => {});
+        await runAgentTask({ prompt: "Set speed to 8.", followUps: ["Now set jump to 6."], tools: [], cleanup,
+            configuration: { ...base, streamFn: (...args) => {
+                contexts.push(JSON.stringify(args[1])); return base.streamFn(...args);
+            } },
+            onTurnEnd: async turn => { await Promise.resolve(); turns.push(turn); },
+        });
+        expect(contexts[1]).toContain("Set speed to 8.");
+        expect(contexts[1]).toContain("Speed is now 8.");
+        expect(contexts[1]).toContain("Now set jump to 6.");
+        expect(turns).toEqual([0, 1]);
+        expect(cleanup).toHaveBeenCalledOnce();
+    });
     it("executes injected tools and emits the final answer without browser globals", async () => {
         const invoke = vi.fn(async () => ({ value: { state: "stopped" } }));
         const cleanup = vi.fn(async () => {});

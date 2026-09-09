@@ -4,6 +4,8 @@ import { EntisiumAgent, type AgentConfiguration } from "./agent.js";
 /** One task, with injected model/tools and an awaited ownership cleanup boundary. */
 export async function runAgentTask(options: {
     prompt: string;
+    followUps?: string[];
+    onTurnEnd?: (turn: number) => Promise<void>;
     configuration: AgentConfiguration;
     tools: AgentTool<any>[];
     signal?: AbortSignal;
@@ -17,10 +19,15 @@ export async function runAgentTask(options: {
         options.signal?.throwIfAborted();
         agent.configure(options.configuration);
         options.signal?.addEventListener("abort", cancel, { once: true });
-        await agent.prompt(options.prompt);
-        options.signal?.throwIfAborted();
-        const error = agent.snapshot().error;
-        if (error) throw new Error(error);
+        const prompts = [options.prompt, ...(options.followUps ?? [])];
+        for (let turn = 0; turn < prompts.length; turn++) {
+            options.signal?.throwIfAborted();
+            await agent.prompt(prompts[turn]);
+            options.signal?.throwIfAborted();
+            const error = agent.snapshot().error;
+            if (error) throw new Error(error);
+            await options.onTurnEnd?.(turn);
+        }
     } finally {
         options.signal?.removeEventListener("abort", cancel);
         unsubscribe();
