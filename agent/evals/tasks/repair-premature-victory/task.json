@@ -1,0 +1,20 @@
+{
+  "id": "repair-premature-victory",
+  "version": 1,
+  "tags": [
+    "scripting",
+    "debugging"
+  ],
+  "environment": {
+    "runtime": "native",
+    "fixture": "project",
+    "writable": true,
+    "interface": "capability.main"
+  },
+  "steps": [
+    {
+      "id": "repair",
+      "instruction": "01-repair.md"
+    }
+  ]
+}

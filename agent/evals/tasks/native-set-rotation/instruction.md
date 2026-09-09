@@ -1,0 +1,1 @@
+Start the current native project, discover its play interface, and use a structured action to set the sprite rotation to 90 degrees for one tick. Verify the resulting rotation is between 89 and 92 degrees, then stop the runtime. Do not change project files.

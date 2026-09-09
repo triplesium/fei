@@ -1,0 +1,1 @@
+Play the native microgame to victory within 180 gameplay ticks with zero collisions. The gate changes each tick; use the observed gate_open state to decide whether to move or wait. Do not modify files, restart after beginning gameplay, or mutate state through inspection. Stop the runtime after victory.

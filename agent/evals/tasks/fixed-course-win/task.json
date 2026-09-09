@@ -1,0 +1,19 @@
+{
+  "id": "fixed-course-win",
+  "version": 1,
+  "tags": [
+    "playtesting"
+  ],
+  "environment": {
+    "runtime": "native",
+    "fixture": "project",
+    "writable": false,
+    "interface": "capability.main"
+  },
+  "steps": [
+    {
+      "id": "play",
+      "instruction": "01-play.md"
+    }
+  ]
+}

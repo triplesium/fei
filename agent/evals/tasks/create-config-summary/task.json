@@ -1,0 +1,18 @@
+{
+  "id": "create-config-summary",
+  "version": 1,
+  "tags": [
+    "project"
+  ],
+  "environment": {
+    "runtime": "simulated",
+    "fixture": "project",
+    "writable": true
+  },
+  "steps": [
+    {
+      "id": "run",
+      "instruction": "instruction.md"
+    }
+  ]
+}

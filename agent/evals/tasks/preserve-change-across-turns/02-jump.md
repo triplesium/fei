@@ -1,0 +1,1 @@
+Now increase jump launch speed from 5 to 6 units/s. Preserve the 8 units/s horizontal movement from the previous turn and all other mechanics. Verify the new saved behavior with the runtime. Edit only assets/gameplay.luau and stop the runtime afterward.

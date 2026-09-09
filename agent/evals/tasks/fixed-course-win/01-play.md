@@ -1,0 +1,1 @@
+Play the native microgame to victory within 120 gameplay ticks with zero collisions. Jump over the wall at x in [1.2,1.8], requiring y >= 0.8 to cross. Do not modify files, restart after beginning gameplay, or mutate state through inspection. Stop the runtime after victory.

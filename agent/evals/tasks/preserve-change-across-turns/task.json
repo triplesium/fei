@@ -1,0 +1,24 @@
+{
+  "id": "preserve-change-across-turns",
+  "version": 2,
+  "tags": [
+    "scripting",
+    "multi-turn"
+  ],
+  "environment": {
+    "runtime": "native",
+    "fixture": "project",
+    "writable": true,
+    "interface": "capability.main"
+  },
+  "steps": [
+    {
+      "id": "movement",
+      "instruction": "01-movement.md"
+    },
+    {
+      "id": "jump",
+      "instruction": "02-jump.md"
+    }
+  ]
+}

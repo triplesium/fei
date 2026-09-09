@@ -1,0 +1,19 @@
+{
+  "id": "uncertain-action",
+  "version": 1,
+  "tags": [
+    "recovery"
+  ],
+  "environment": {
+    "runtime": "simulated",
+    "fixture": "project",
+    "writable": false,
+    "fault": "timeout"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "instruction": "instruction.md"
+    }
+  ]
+}

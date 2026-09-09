@@ -1,0 +1,19 @@
+{
+  "id": "write-failure",
+  "version": 1,
+  "tags": [
+    "recovery"
+  ],
+  "environment": {
+    "runtime": "simulated",
+    "fixture": "project",
+    "writable": true,
+    "fault": "write"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "instruction": "instruction.md"
+    }
+  ]
+}

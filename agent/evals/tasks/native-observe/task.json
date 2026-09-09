@@ -1,0 +1,19 @@
+{
+  "id": "native-observe",
+  "version": 1,
+  "tags": [
+    "runtime"
+  ],
+  "environment": {
+    "runtime": "native",
+    "fixture": "project",
+    "writable": false,
+    "interface": "browser-demo.main"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "instruction": "instruction.md"
+    }
+  ]
+}

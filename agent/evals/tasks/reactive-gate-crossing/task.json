@@ -1,0 +1,20 @@
+{
+  "id": "reactive-gate-crossing",
+  "version": 1,
+  "tags": [
+    "playtesting",
+    "reactive"
+  ],
+  "environment": {
+    "runtime": "native",
+    "fixture": "project",
+    "writable": false,
+    "interface": "capability.main"
+  },
+  "steps": [
+    {
+      "id": "play",
+      "instruction": "01-play.md"
+    }
+  ]
+}

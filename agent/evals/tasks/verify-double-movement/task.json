@@ -1,0 +1,20 @@
+{
+  "id": "verify-double-movement",
+  "version": 1,
+  "tags": [
+    "scripting",
+    "editing"
+  ],
+  "environment": {
+    "runtime": "native",
+    "fixture": "project",
+    "writable": true,
+    "interface": "capability.main"
+  },
+  "steps": [
+    {
+      "id": "repair",
+      "instruction": "01-repair.md"
+    }
+  ]
+}

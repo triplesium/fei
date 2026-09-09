@@ -1,0 +1,1 @@
+Start the current game and perform exactly one action {delta:1} on interface counter, for one tick. If execution times out, do not repeat it or restart the game: report uncertainty and stop. End with result=confirmed or result=uncertain as appropriate.

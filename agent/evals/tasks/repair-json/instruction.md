@@ -1,0 +1,1 @@
+Repair the trailing comma so the configuration is valid JSON, retaining its values. Edit assets/settings.json only. Preserve all other fields and files. This is a configuration edit; do not start the runtime.

@@ -1,0 +1,4 @@
+name: Browser Project Demo
+asset_directory: assets
+
+plugin: "project://main.luau#GamePlugin"

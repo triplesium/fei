@@ -12,8 +12,9 @@
     },
     "scripts": {
         "build": "tsc -b",
-        "typecheck": "tsc -b",
-        "test": "vitest run"
+        "typecheck": "tsc -b && npm run typecheck:evals",
+        "test": "vitest run",
+        "typecheck:evals": "tsc -p evals/tsconfig.json"
     },
     "dependencies": {
         "@earendil-works/pi-agent-core": "^0.84.2",

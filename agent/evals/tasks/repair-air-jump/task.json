@@ -1,0 +1,20 @@
+{
+  "id": "repair-air-jump",
+  "version": 2,
+  "tags": [
+    "scripting",
+    "debugging"
+  ],
+  "environment": {
+    "runtime": "native",
+    "fixture": "project",
+    "writable": true,
+    "interface": "capability.main"
+  },
+  "steps": [
+    {
+      "id": "repair",
+      "instruction": "01-repair.md"
+    }
+  ]
+}
