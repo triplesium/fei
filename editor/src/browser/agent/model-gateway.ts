@@ -132,6 +132,7 @@ export class EditorModelGateway {
         const authToken = bootstrap.token;
         agent.configure({
             model: bootstrap.provider.model,
+            reasoning: bootstrap.reasoning,
             streamFn: (model, context, options) =>
                 streamProxy(model, context, {
                     ...options,

@@ -17,6 +17,7 @@ const unconfiguredStream: StreamFn = () => {
 export interface AgentConfiguration {
     model: Model<Api>;
     streamFn: StreamFn;
+    reasoning?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 }
 
 export interface AgentSnapshot {
@@ -68,7 +69,7 @@ export class EntisiumAgent {
             throw new Error("Cannot change the model while the agent is running.");
         }
         this.agent.state.model = configuration.model;
-        this.agent.state.thinkingLevel = configuration.model.reasoning ? "low" : "off";
+        this.agent.state.thinkingLevel = configuration.model.reasoning ? configuration.reasoning ?? "low" : "off";
         this.agent.streamFunction = configuration.streamFn;
         this.configured = true;
         this.emitState();

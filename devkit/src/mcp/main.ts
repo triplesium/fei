@@ -1,9 +1,11 @@
-import { defaultRuntimeExecutable } from "../runtime/session.js";
+import { runtimeExecutableFromConfig } from "../settings/runtime.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { NativeRuntime } from "../runtime/native-runtime.js";
 import { createRuntimeMcp } from "./runtime.js";
+import { loadConfig } from "../settings/yaml-store.js";
 
-const runtime = new NativeRuntime(defaultRuntimeExecutable());
+const { store: settings, config } = await loadConfig();
+const runtime = new NativeRuntime(runtimeExecutableFromConfig(config, settings));
 const server = createRuntimeMcp(runtime);
 let shuttingDown = false;
 async function shutdown() {

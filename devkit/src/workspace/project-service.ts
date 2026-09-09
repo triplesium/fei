@@ -363,6 +363,12 @@ export class HostProjectService {
         }
     }
 
+    /** Create a new asset without replacing existing files. */
+    async writeNew(path: string, content: Buffer): Promise<void> {
+        const file = await this.writableFile(path);
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(file, content, { flag: "wx" });
+    }
     async createDirectory(path: string): Promise<void> {
         if (!path.startsWith("assets/")) {
             throw new Error("Project directories must be inside assets/.");

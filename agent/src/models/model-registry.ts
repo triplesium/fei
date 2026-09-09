@@ -330,7 +330,7 @@ export class HostModelRegistry {
         this.models.setProvider(runtimeProvider(provider));
 
         if (nextSettings.active?.providerId === providerId && nextSettings.active.modelId === modelId) {
-            const fallbackProvider = nextSettings.providers[0];
+            const fallbackProvider = nextSettings.providers.find((candidate) => candidate.models.length > 0)!;
             nextSettings.active = {
                 providerId: fallbackProvider.id,
                 modelId: fallbackProvider.models[0].id,

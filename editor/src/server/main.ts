@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
-import { EncryptedCredentialStore } from "@entisium/agent/models/credential-store";
+import { loadHostConfiguration } from "@entisium/agent/host/configuration";
+import { runtimeExecutableFromConfig } from "@entisium/devkit/settings/runtime";
 import { FileEditorSettingsStore } from "./editor-settings-store.js";
-import { FileEditorModelSettingsStore } from "@entisium/agent/models/model-settings-store";
 import {
     chooseProjectDirectory,
     projectDirectoryFromArguments,
@@ -20,15 +20,19 @@ const runtimeDirectory = resolve(
     process.env.ETS_EDITOR_RUNTIME_DIR ??
         resolve(process.cwd(), "..", "build", "wasm", "wasm32", "debug"),
 );
+const projectDirectory = projectDirectoryFromArguments(process.argv.slice(2));
+const configuration = await loadHostConfiguration(undefined, projectDirectory);
 const host = createEditorHost({
-    credentials: new EncryptedCredentialStore(),
+    credentials: configuration.credentials,
     editorSettingsStore: new FileEditorSettingsStore(),
-    modelSettingsStore: new FileEditorModelSettingsStore(),
+    modelSettingsStore: configuration.modelSettingsStore,
+    config: configuration.config,
+    runtimeExecutable: runtimeExecutableFromConfig(configuration.config, configuration.store),
     distDirectory: resolve(process.cwd(), "dist", "browser"),
     runtimeDirectory,
     host: "127.0.0.1",
     port: portFromEnvironment(),
-    projectDirectory: projectDirectoryFromArguments(process.argv.slice(2)),
+    projectDirectory,
     pickProjectDirectory: chooseProjectDirectory,
     luauLspExecutable: process.env.ETS_ENTISIUM_LSP_PATH?.trim() || undefined,
     luauDefinitionsIndex:

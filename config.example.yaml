@@ -1,0 +1,36 @@
+# Copy to <project>/.entisium/config.yaml for automatic project configuration.
+# Alternatively use %APPDATA%/Entisium/config.yaml or Agent --config <path>.
+version: 1
+
+providers:
+  deepseek:
+    baseUrl: https://api.deepseek.com
+    api: responses
+    apiKey: replace-with-your-deepseek-key
+    models:
+      - id: deepseek-v4-flash
+        reasoning: true
+        contextWindow: 1000000
+        maxTokens: 384000
+  openai:
+    baseUrl: https://api.openai.com/v1
+    apiKey: replace-with-your-openai-key
+
+agent:
+  model:
+    provider: deepseek
+    id: deepseek-v4-flash
+  reasoning: high
+
+imageGeneration:
+  api: openai-images # Use openrouter-images for the OpenRouter Image API.
+  provider: openai
+  model: gpt-image-2
+  timeoutMs: 600000
+  defaults:
+    resolution: 1K
+    aspect_ratio: "1:1"
+    quality: auto
+
+runtime:
+  executable: auto

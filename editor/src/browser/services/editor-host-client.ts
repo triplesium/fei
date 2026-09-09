@@ -76,6 +76,7 @@ function asEditorSettings(value: unknown): EditorSettings {
 }
 
 export interface EditorHostBootstrap {
+    reasoning?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
     version: 1;
     token: string;
     project: {

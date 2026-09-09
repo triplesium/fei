@@ -1,4 +1,9 @@
 import { RuntimeSession } from "@entisium/devkit/runtime/session";
+import { createHostImageGeneration } from "@entisium/agent/host/image-generation";
+import type { EntisiumConfig } from "@entisium/devkit/settings/config";
+import { NativeRuntime } from "@entisium/devkit/runtime/native-runtime";
+import { parseAgentSettings } from "@entisium/agent/settings/config";
+import { imageGenerationSchema, type ImageGenerationInvoker } from "@entisium/devkit/contracts/image-generation";
 import { randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { access, readFile, stat } from "node:fs/promises";
@@ -55,6 +60,9 @@ interface HostOptions {
     projectService?: HostProjectService;
     commandRelay?: EditorCommandRelay;
     nativeSession?: RuntimeSession;
+    generateImage?: ImageGenerationInvoker;
+    config?: EntisiumConfig;
+    runtimeExecutable?: string;
     luauLspExecutable?: string;
     luauLspArguments?: readonly string[];
     luauDefinitionsIndex?: string;
@@ -234,8 +242,9 @@ export function createEditorHost(options: HostOptions): {
     const projects =
         options.projectService ??
         new HostProjectService(options.projectDirectory, options.pickProjectDirectory);
-    const nativeSession = options.nativeSession ?? new RuntimeSession(undefined, async () => resolve(await projects.workspaceRoot(), "project.yaml"));
+    const nativeSession = options.nativeSession ?? new RuntimeSession(options.runtimeExecutable ? new NativeRuntime(options.runtimeExecutable) : undefined, async () => resolve(await projects.workspaceRoot(), "project.yaml"));
     const commands = options.commandRelay ?? new EditorCommandRelay();
+    const images = createHostImageGeneration(projects, options.credentials, options.config);
     const luauLspArguments = [...(options.luauLspArguments ?? ["--stdio"])];
     if (options.luauDefinitionsIndex) {
         luauLspArguments.push("--definitions-index", options.luauDefinitionsIndex);
@@ -307,12 +316,27 @@ export function createEditorHost(options: HostOptions): {
                         model: modelForClient(active.model),
                     },
                     modelSettings,
+                    reasoning: parseAgentSettings(options.config?.agent).reasoning,
                 });
                 return;
             }
 
             if (bearerToken(request) !== token && url.pathname.startsWith("/api/")) {
                 json(response, 401, { error: "Invalid Editor Host token." });
+                return;
+            }
+
+            if (request.method === "POST" && url.pathname === "/api/v1/image-generation") {
+                const controller = new AbortController();
+                const disconnected = () => { if (!response.writableEnded) controller.abort(); };
+                response.once("close", disconnected);
+                try {
+                    const input = imageGenerationSchema.parse(await readJson(request, 128 * 1024));
+                    if (response.destroyed) controller.abort();
+                    controller.signal.throwIfAborted();
+                    const result = await (options.generateImage ?? images.generate.bind(images))(input, controller.signal);
+                    if (!response.destroyed) json(response, 200, result);
+                } finally { response.removeListener("close", disconnected); }
                 return;
             }
 

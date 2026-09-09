@@ -3,29 +3,33 @@ import { dirname, resolve } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { HostModelRegistry } from "../models/model-registry.js";
-import { FileEditorModelSettingsStore } from "../models/model-settings-store.js";
-import { EncryptedCredentialStore } from "../models/credential-store.js";
+import { loadHostConfiguration } from "../host/configuration.js";
+import { NativeRuntime } from "@entisium/devkit/runtime/native-runtime";
+import { runtimeExecutableFromConfig } from "@entisium/devkit/settings/runtime";
 import { HostProjectService } from "@entisium/devkit/workspace/project-service";
 import { RuntimeSession } from "@entisium/devkit/runtime/session";
 import { createNativeAgentTools } from "../tools/runtime.js";
 import { createProjectTools } from "../tools/project.js";
 import { runAgentTask } from "../core/task.js";
+import { createImageGenerationTools } from "../tools/image-generation.js";
+import { createHostImageGeneration } from "../host/image-generation.js";
 
 async function main() {
     const { values } = parseArgs({ options: {
         project: { type: "string" }, prompt: { type: "string" },
         provider: { type: "string" }, model: { type: "string" },
-        output: { type: "string" }, help: { type: "boolean" },
+        output: { type: "string" }, config: { type: "string" }, help: { type: "boolean" },
     } });
     if (values.help) {
-        console.log("Usage: npm run agent -- --project <project.yaml> --prompt <task> [--provider <id> --model <id>] [--output <directory>]\nUses the saved Editor model configuration; no Editor, browser or MCP server is required. Build entisium-runtime-host first.");
+        console.log("Usage: npm run agent -- --project <project.yaml> --prompt <task> [--provider <id> --model <id>] [--output <directory>] [--config <config.yaml>]\nUses config.yaml (or legacy model settings when absent); no Editor, browser or MCP server is required. Build entisium-runtime-host first.");
         return;
     }
     if (!values.project || !values.prompt?.trim()) throw new Error("--project and --prompt are required. Use --help.");
     if (Boolean(values.provider) !== Boolean(values.model)) throw new Error("Supply both --provider and --model.");
     const projectFile = resolve(values.project);
     const project = new HostProjectService(dirname(projectFile));
-    const session = new RuntimeSession(undefined, async () => projectFile);
+    const hostConfig = await loadHostConfiguration(values.config, dirname(projectFile));
+    const session = new RuntimeSession(new NativeRuntime(runtimeExecutableFromConfig(hostConfig.config, hostConfig.store)), async () => projectFile);
     const abort = new AbortController();
     const interrupt = () => abort.abort(new Error("Agent task interrupted."));
     process.once("SIGINT", interrupt);
@@ -33,7 +37,9 @@ async function main() {
     try {
         // Validate workspace before contacting a model.
         if (projectFile !== resolve(await project.workspaceRoot(), "project.yaml")) throw new Error("--project must name project.yaml.");
-        const registry = new HostModelRegistry(new EncryptedCredentialStore(), new FileEditorModelSettingsStore());
+        const credentials = hostConfig.credentials;
+        const registry = new HostModelRegistry(credentials, hostConfig.modelSettingsStore);
+        const images = createHostImageGeneration(project, credentials, hostConfig.config);
         const active = await registry.activeModel();
         const model = values.provider && values.model
             ? await registry.getModel(values.provider, values.model) : active.model;
@@ -43,9 +49,14 @@ async function main() {
         let capture = 0;
         await runAgentTask({
             prompt: values.prompt,
-            configuration: { model, streamFn: registry.streamSimple.bind(registry) },
+            configuration: { model, streamFn: registry.streamSimple.bind(registry), reasoning: hostConfig.agent.reasoning },
             tools: [
                 ...createProjectTools(project),
+                ...createImageGenerationTools(async (input, signal) => {
+                    const result = await images.generate(input, signal);
+                    console.log(JSON.stringify({ type: "artifact", ...result, path: resolve(dirname(projectFile), result.path) }));
+                    return result;
+                }),
                 ...createNativeAgentTools(async (name, parameters, signal) => {
                     const result = await session.invoke(name, parameters, signal);
                     if (result.image) {
