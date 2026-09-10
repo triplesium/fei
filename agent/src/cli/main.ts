@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { HostModelRegistry } from "../models/model-registry.js";
+import { ModelMetadataService } from "@entisium/devkit/models/service";
 import { loadHostConfiguration } from "../host/configuration.js";
 import { NativeRuntime } from "@entisium/devkit/runtime/native-runtime";
 import { runtimeExecutableFromConfig } from "@entisium/devkit/settings/runtime";
@@ -38,12 +39,12 @@ async function main() {
         // Validate workspace before contacting a model.
         if (projectFile !== resolve(await project.workspaceRoot(), "project.yaml")) throw new Error("--project must name project.yaml.");
         const credentials = hostConfig.credentials;
-        const registry = new HostModelRegistry(credentials, hostConfig.modelSettingsStore);
-        const images = createHostImageGeneration(project, credentials, hostConfig.config);
-        const active = await registry.activeModel();
+        const metadata = new ModelMetadataService();
+        const registry = new HostModelRegistry(credentials, hostConfig.modelSettingsStore, metadata);
+        const images = createHostImageGeneration(project, credentials, hostConfig.config, metadata);
         const model = values.provider && values.model
-            ? await registry.getModel(values.provider, values.model) : active.model;
-        if (!model) throw new Error("The requested model is not registered.");
+            ? await registry.getModel(values.provider, values.model, abort.signal) : (await registry.activeModel(abort.signal)).model;
+        if (!model) throw new Error("The requested provider has no supported chat connection.");
         const output = resolve(values.output ?? resolve(dirname(projectFile), ".entisium", "agent-runs", randomUUID()));
         await mkdir(output, { recursive: true });
         let capture = 0;

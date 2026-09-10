@@ -25,7 +25,7 @@ assets/generated/potion.png.” The tool accepts:
 - `resolution`: `512`, `1K`, `2K`, or `4K`.
 - `aspect_ratio`: `auto` or a supported ratio such as `1:1`, `16:9`, `9:16`, `3:2`.
 - `size`: optional tier (`2K`) or explicit pixels (`2048x2048`); prefer resolution and aspect_ratio.
-- `quality`: `auto`, `low`, `medium`, or `high`.
+- `quality`: `auto`, `low`, `medium`, `high`, `xhigh`, or `max`; model support varies.
 - `background`: `auto`, `transparent`, or `opaque`.
 - `seed`: optional integer from 0 through 2147483647 (OpenRouter only).
 
@@ -34,7 +34,7 @@ saved asset in the Editor asset browser to preview it. CLI also emits an `artifa
 JSON event with the absolute file path. Image bytes are not stored in conversation history.
 
 Generation is pinned to the project open at request start and never overwrites an
-existing asset. Requests time out after `imageGeneration.timeoutMs` (ten minutes by default) and are not automatically retried.
+existing asset. Requests time out after `imageGeneration.timeoutMs` (ten minutes by default). OpenAI and OpenRouter requests are not automatically retried; fal queue requests disable automatic retries as well.
 Cancelling aborts the HTTP request and prevents saving if observed before writing;
 it cannot guarantee cancellation or refund of work already accepted by OpenAI.
 Reference-image editing and the browser demo are not supported in this first version.
@@ -44,19 +44,17 @@ API contract: [OpenAI image generation documentation](https://developers.openai.
 ## OpenRouter
 
 OpenRouter uses its dedicated Image API rather than the OpenAI Images endpoint.
-Select the protocol explicitly; it is independent of `providers.<id>.api`, which
-controls conversation models. Existing configurations default to `openai-images`.
+Set the provider type to `openrouter`; it resolves both chat and image defaults.
+The image selection does not need a separate protocol or model catalogue.
 
 ```yaml
 providers:
   openrouter:
-    baseUrl: https://openrouter.ai/api/v1
+    type: openrouter
     apiKey: your-openrouter-api-key
 
 imageGeneration:
-  api: openrouter-images
-  provider: openrouter
-  model: openai/gpt-image-2
+  model: { provider: openrouter, id: openai/gpt-image-2 }
   defaults:
     resolution: 1K
     aspect_ratio: "1:1"
@@ -70,6 +68,39 @@ Reference images, streaming, multiple images, other file formats and provider ro
 No automatic fallback to a different protocol or retry is performed.
 
 See the [OpenRouter image generation documentation](https://openrouter.ai/docs/guides/overview/multimodal/image-generation).
+
+## fal.ai GPT Image 2.5
+
+Use the dedicated fal.ai queue protocol for GPT Image 2.5 Sunburst:
+
+```yaml
+providers:
+  fal:
+    type: fal
+    apiKey: your-fal-key
+
+imageGeneration:
+  model: { provider: fal, id: openai/gpt-image-2.5/sunburst/text-to-image }
+  defaults:
+    resolution: 1K
+    aspect_ratio: "1:1"
+    quality: high
+```
+
+`FAL_KEY` takes precedence over the configured key. The host submits through the
+official fal.ai queue, requests a single synchronous PNG data URI, validates the
+returned bytes and saves them through the same protected project-asset path. It
+does not expose the key or generated image URL to the browser. A custom `providers.<id>.images.baseUrl`
+is rejected for this protocol.
+
+The GPT Image 2.5 model adapter maps common 1K ratios to fal.ai presets and maps 2K, 4K or explicit
+pixel sizes to `image_size`. Explicit sizes follow GPT Image 2.5's documented
+multiples-of-16, pixel-count, edge and 3:1 ratio limits. `quality`, including
+`xhigh` and `max`, and `background` pass through. This text-to-image endpoint does
+not accept `seed`, so the tool rejects it before submitting billable work. Other fal
+model IDs require their own adapters; these constraints are not platform-wide.
+
+See the [fal.ai GPT Image 2.5 Sunburst API documentation](https://fal.ai/models/openai/gpt-image-2.5/sunburst/text-to-image/api).
 
 ## Unified options and backend conversion
 

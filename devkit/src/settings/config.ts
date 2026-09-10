@@ -2,28 +2,32 @@ import { imageOptionsSchema } from "../contracts/image-generation.js";
 import { z } from "zod/v4";
 
 const text = z.string().trim().min(1);
+const baseUrl = z.string().url().refine((value) => {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash;
+});
+export const modelSelectionSchema = z.object({ provider: text, id: text }).strict();
 const providerSchema = z.object({
+    type: z.enum(["openai", "openrouter", "fal", "openai-compatible"]).optional(),
     name: text.optional(),
-    baseUrl: z.string().url().refine((value) => {
-        const url = new URL(value);
-        return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash;
-    }).optional(),
     apiKey: z.string().trim().min(8).max(4096).regex(/^[\x21-\x7e]+$/).optional(),
-    api: z.enum(["responses", "chat-completions"]).default("responses"),
-    // Model catalogue details belong to the consuming Agent package.
-    models: z.array(z.unknown()).default([]),
+    chat: z.object({ api: z.enum(["responses", "chat-completions"]).optional(), baseUrl: baseUrl.optional() }).strict().optional(),
+    images: z.object({
+        api: z.enum(["openai-images", "openrouter-images", "fal-images"]).optional(),
+        baseUrl: baseUrl.optional(),
+    }).strict().optional(),
+    // Optional chat catalogue/metadata overrides, interpreted by Agent.
+    models: z.array(z.unknown()).optional(),
 }).strict();
 
 export const configSchema = z.object({
     version: z.literal(1),
     providers: z.record(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/), providerSchema).default({}),
     imageGeneration: z.object({
-        api: z.enum(["openai-images", "openrouter-images"]).default("openai-images"),
-        provider: text.default("openai"),
-        model: text.default("gpt-image-2"),
+        model: modelSelectionSchema.default({ provider: "openai", id: "gpt-image-2" }),
         timeoutMs: z.number().int().min(1000).max(30 * 60_000).default(10 * 60_000),
         defaults: imageOptionsSchema.prefault({}),
-    }).prefault({}),
+    }).strict().prefault({}),
     runtime: z.object({ executable: text.default("auto") }).prefault({}),
     agent: z.unknown().optional(),
     editor: z.unknown().optional(),

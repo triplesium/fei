@@ -9,6 +9,10 @@ import {
 } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
+import { catalogChatMetadata, chatRuntimeSettings, fallbackChatMetadata, metadataTarget, resolveChatMetadata } from "./model-metadata.js";
+import { ModelMetadataService } from "@entisium/devkit/models/service";
+import type { ResolvedModelMetadata } from "@entisium/devkit/models/metadata";
+import { createHash } from "node:crypto";
 import {
     type EditorModelSettings,
     type EditorModelSettingsStore,
@@ -23,6 +27,7 @@ export interface ModelProviderSummary {
     api: OpenAICompatibleProviderSettings["api"];
     configured: boolean;
     models: Model<Api>[];
+    metadata?: Record<string, ResolvedModelMetadata>;
 }
 
 export interface ModelRegistrySnapshot {
@@ -94,13 +99,13 @@ function integer(value: number, label: string, minimum: number, maximum: number)
 }
 
 function normalizeModel(input: OpenAICompatibleModelSettings): OpenAICompatibleModelSettings {
-    const contextWindow = integer(input.contextWindow, "Context window", 1_024, 10_000_000);
+    const contextWindow = input.contextWindow === undefined ? undefined : integer(input.contextWindow, "Context window", 1_024, 10_000_000);
     return {
         id: identifier(input.id, "Model ID"),
-        name: nonEmpty(input.name, "Model name"),
-        reasoning: Boolean(input.reasoning),
-        contextWindow,
-        maxTokens: integer(input.maxTokens, "Maximum output tokens", 256, contextWindow),
+        ...(input.name === undefined ? {} : { name: nonEmpty(input.name, "Model name") }),
+        ...(input.reasoning === undefined ? {} : { reasoning: Boolean(input.reasoning) }),
+        ...(contextWindow === undefined ? {} : { contextWindow }),
+        ...(input.maxTokens === undefined ? {} : { maxTokens: integer(input.maxTokens, "Maximum output tokens", 256, contextWindow ?? 10_000_000) }),
     };
 }
 
@@ -117,13 +122,14 @@ function normalizeProvider(
         name: nonEmpty(input.name, "Provider name"),
         baseUrl: normalizedUrl(input.baseUrl),
         api: input.api === "chat-completions" ? "chat-completions" : "responses",
+        ...(input.type ? { type: input.type } : {}),
         models,
     };
 }
 
-function runtimeProvider(settings: OpenAICompatibleProviderSettings) {
+function runtimeModel(settings: OpenAICompatibleProviderSettings, model: Required<OpenAICompatibleModelSettings>): Model<Api> {
     const api = settings.api === "responses" ? "openai-responses" : "openai-completions";
-    const models: Model<Api>[] = settings.models.map((model) => ({
+    return {
         id: model.id,
         name: model.name,
         api,
@@ -151,7 +157,11 @@ function runtimeProvider(settings: OpenAICompatibleProviderSettings) {
                   },
               }
             : {}),
-    }));
+    };
+}
+
+function runtimeProvider(settings: OpenAICompatibleProviderSettings, resolvedModels?: readonly Model<Api>[]) {
+    const models = resolvedModels ?? settings.models.map((model) => runtimeModel(settings, chatRuntimeSettings(fallbackChatMetadata(settings, model.id))));
     return createProvider({
         id: settings.id,
         name: settings.name,
@@ -177,10 +187,13 @@ export class HostModelRegistry {
     private readonly readyPromise: Promise<void>;
     private readonly warnedCredentialProviders = new Set<string>();
     private settings!: EditorModelSettings;
+    private readonly metadata = new Map<string, ResolvedModelMetadata>();
+    private readonly credentialScopes = new Map<string, string>();
 
     constructor(
         private readonly credentials: CredentialStore,
         private readonly settingsStore: EditorModelSettingsStore,
+        private readonly metadataService = new ModelMetadataService(),
     ) {
         this.models = createModels({ credentials });
         this.readyPromise = this.initialize();
@@ -200,6 +213,10 @@ export class HostModelRegistry {
                     api: settings.api,
                     configured: await this.isConfigured(settings.id),
                     models: provider.getModels().map((model) => structuredClone(model)),
+                    metadata: Object.fromEntries(provider.getModels().flatMap((model) => {
+                        const metadata = this.metadata.get(JSON.stringify([settings.id, model.id]));
+                        return metadata ? [[model.id, structuredClone(metadata)]] : [];
+                    })),
                 };
             }),
         );
@@ -220,12 +237,9 @@ export class HostModelRegistry {
             const existingIndex = nextSettings.providers.findIndex((candidate) => candidate.id === provider.id);
             if (existingIndex >= 0) nextSettings.providers[existingIndex] = provider;
             else nextSettings.providers.push(provider);
-            this.models.setProvider(runtimeProvider(provider));
         }
 
-        if (!this.models.getModel(providerId, modelId)) {
-            throw new Error("The selected model is unavailable.");
-        }
+        if (!nextSettings.providers.some((provider) => provider.id === providerId)) throw new Error("Unknown model provider.");
         if (input.apiKey !== undefined) {
             const apiKey = input.apiKey.trim();
             if (!validApiKey(apiKey)) {
@@ -238,6 +252,8 @@ export class HostModelRegistry {
         nextSettings.active = { providerId, modelId };
         await this.settingsStore.write(nextSettings);
         this.settings = nextSettings;
+        if (input.provider || input.apiKey !== undefined) this.replaceProvider(nextSettings.providers.find((provider) => provider.id === providerId)!);
+        await this.getModel(providerId, modelId);
         return this.snapshot();
     }
 
@@ -247,6 +263,7 @@ export class HostModelRegistry {
         const existing = this.settings.providers.find((provider) => provider.id === providerInput.id);
         const provider = normalizeProvider({
             ...providerInput,
+            type: providerInput.type ?? existing?.type,
             models: existing?.models ?? [],
         });
         const nextSettings = structuredClone(this.settings);
@@ -265,7 +282,8 @@ export class HostModelRegistry {
         }
         await this.settingsStore.write(nextSettings);
         this.settings = nextSettings;
-        this.models.setProvider(runtimeProvider(provider));
+        this.replaceProvider(provider);
+        if (this.settings.active?.providerId === provider.id) this.registerSelectedModel(provider.id, this.settings.active.modelId);
         return this.snapshot();
     }
 
@@ -283,7 +301,7 @@ export class HostModelRegistry {
         const existingIndex = previousModelId
             ? provider.models.findIndex((candidate) => candidate.id === previousModelId)
             : -1;
-        if (previousModelId && existingIndex < 0) throw new Error("The model to edit is unavailable.");
+        if (previousModelId && existingIndex < 0 && !this.models.getModel(providerId, previousModelId)) throw new Error("The model to edit is unavailable.");
         if (
             provider.models.some(
                 (candidate, index) => candidate.id === model.id && index !== existingIndex,
@@ -304,7 +322,7 @@ export class HostModelRegistry {
         nextSettings.active ??= { providerId, modelId: model.id };
         await this.settingsStore.write(nextSettings);
         this.settings = nextSettings;
-        this.models.setProvider(runtimeProvider(provider));
+        this.replaceProvider(provider);
         return this.snapshot();
     }
 
@@ -315,29 +333,29 @@ export class HostModelRegistry {
         const nextSettings = structuredClone(this.settings);
         const providerIndex = nextSettings.providers.findIndex((provider) => provider.id === providerId);
         const provider = nextSettings.providers[providerIndex];
-        if (!provider || !provider.models.some((model) => model.id === modelId)) {
+        if (!provider || !this.models.getModel(providerId, modelId)) {
             throw new Error("The model to delete is unavailable.");
         }
 
         const modelCount = nextSettings.providers.reduce(
-            (total, candidate) => total + candidate.models.length,
+            (total, candidate) => total + (this.models.getProvider(candidate.id)?.getModels().length ?? 0),
             0,
         );
         if (modelCount === 1) {
             throw new Error("At least one model must remain configured.");
         }
         provider.models = provider.models.filter((model) => model.id !== modelId);
-        this.models.setProvider(runtimeProvider(provider));
-
+        const remaining = this.settings.providers.flatMap((candidate) =>
+            (this.models.getProvider(candidate.id)?.getModels() ?? []).filter((model) => candidate.id !== providerId || model.id !== modelId));
         if (nextSettings.active?.providerId === providerId && nextSettings.active.modelId === modelId) {
-            const fallbackProvider = nextSettings.providers.find((candidate) => candidate.models.length > 0)!;
             nextSettings.active = {
-                providerId: fallbackProvider.id,
-                modelId: fallbackProvider.models[0].id,
+                providerId: remaining[0].provider,
+                modelId: remaining[0].id,
             };
         }
         await this.settingsStore.write(nextSettings);
         this.settings = nextSettings;
+        this.models.setProvider(runtimeProvider({ ...provider, models: remaining.filter((model) => model.provider === providerId) }));
         return this.snapshot();
     }
 
@@ -348,23 +366,25 @@ export class HostModelRegistry {
         const provider = nextSettings.providers.find((candidate) => candidate.id === providerId);
         if (!provider) throw new Error("Unknown model provider.");
         const remainingModelCount = nextSettings.providers.reduce(
-            (total, candidate) => total + (candidate.id === providerId ? 0 : candidate.models.length),
+            (total, candidate) => total + (candidate.id === providerId ? 0 : this.models.getProvider(candidate.id)?.getModels().length ?? 0),
             0,
         );
         if (remainingModelCount === 0) throw new Error("At least one model must remain configured.");
 
         nextSettings.providers = nextSettings.providers.filter((candidate) => candidate.id !== providerId);
         if (nextSettings.active?.providerId === providerId) {
-            const fallbackProvider = nextSettings.providers.find((candidate) => candidate.models.length > 0)!;
+            const fallbackModel = nextSettings.providers.flatMap((candidate) => this.models.getProvider(candidate.id)?.getModels() ?? [])[0];
             nextSettings.active = {
-                providerId: fallbackProvider.id,
-                modelId: fallbackProvider.models[0].id,
+                providerId: fallbackModel.provider,
+                modelId: fallbackModel.id,
             };
         }
         await this.settingsStore.write(nextSettings);
         this.settings = nextSettings;
+        for (const model of this.models.getProvider(providerId)?.getModels() ?? []) this.metadata.delete(JSON.stringify([providerId, model.id]));
         this.models.deleteProvider(providerId);
         await this.credentials.delete(providerId);
+        this.credentialScopes.delete(providerId);
         return this.snapshot();
     }
 
@@ -372,10 +392,15 @@ export class HostModelRegistry {
         await this.readyPromise;
         if (!this.models.getProvider(providerId)) throw new Error("Unknown model provider.");
         await this.credentials.delete(providerId);
+        const provider = this.settings.providers.find((candidate) => candidate.id === providerId);
+        if (provider) this.replaceProvider(provider);
         return this.snapshot();
     }
 
-    async activeModel(): Promise<{ provider: ModelProviderSummary; model: Model<Api> }> {
+    async activeModel(signal?: AbortSignal): Promise<{ provider: ModelProviderSummary; model: Model<Api> }> {
+        await this.readyPromise;
+        const selected = this.resolveActive();
+        await this.getModel(selected.providerId, selected.modelId, signal);
         const snapshot = await this.snapshot();
         const provider = snapshot.providers.find((candidate) => candidate.id === snapshot.active.providerId);
         const model = provider?.models.find((candidate) => candidate.id === snapshot.active.modelId);
@@ -383,9 +408,39 @@ export class HostModelRegistry {
         return { provider, model };
     }
 
-    async getModel(providerId: string, modelId: string): Promise<Model<Api> | undefined> {
+    async getModel(providerId: string, modelId: string, signal?: AbortSignal): Promise<Model<Api> | undefined> {
         await this.readyPromise;
-        return this.models.getModel(providerId, modelId);
+        providerId = identifier(providerId, "Provider ID");
+        modelId = identifier(modelId, "Model ID");
+        const provider = this.settings.providers.find((candidate) => candidate.id === providerId);
+        if (!provider) return undefined;
+        const credential = await this.credentials.read(providerId, { signal }).catch(() => undefined);
+        signal?.throwIfAborted();
+        const key = credential?.type === "api_key" ? credential.key : undefined;
+        const scope = this.metadataScope(provider, key);
+        const metadata = await resolveChatMetadata(this.metadataService, provider, modelId, key, signal);
+        return structuredClone(this.publishModel(this.credentialScopes.get(providerId) === scope ? provider : { ...provider }, modelId, metadata));
+    }
+
+    async refreshModels(providerId: string, force = false): Promise<ModelRegistrySnapshot> {
+        await this.readyPromise;
+        const provider = this.settings.providers.find((candidate) => candidate.id === providerId);
+        if (!provider) throw new Error("Unknown model provider.");
+        const credential = await this.credentials.read(providerId).catch(() => undefined);
+        const target = metadataTarget(provider, credential?.type === "api_key" ? credential.key : undefined);
+        const scope = this.metadataScope(provider, target.apiKey);
+        const catalog = await this.metadataService.listModels(target, { force });
+        if (this.settings.providers.find((candidate) => candidate.id === providerId) !== provider || this.credentialScopes.get(providerId) !== scope) return this.snapshot();
+        // Only chat-capable catalog entries appear in the Agent selector. Direct IDs remain allowed.
+        const models = new Map((this.models.getProvider(providerId)?.getModels() ?? []).map((model) => [model.id, model]));
+        for (const model of catalog.models) {
+            if (model.outputModalities && !model.outputModalities.includes("text")) continue;
+            if (model.id.length > 120 || !/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(model.id)) continue;
+            const metadata = { ...catalogChatMetadata(provider, model, catalog.fetchedAt), stale: catalog.stale, status: catalog.status };
+            models.set(model.id, this.publishModel(provider, model.id, metadata, false));
+        }
+        this.models.setProvider(runtimeProvider(provider, [...models.values()]));
+        return this.snapshot();
     }
 
     streamSimple(model: Model<Api>, context: Context, options?: SimpleStreamOptions) {
@@ -400,6 +455,43 @@ export class HostModelRegistry {
         }
         this.settings = settings;
         for (const provider of settings.providers) this.models.setProvider(runtimeProvider(provider));
+        if (settings.active) this.registerSelectedModel(settings.active.providerId, settings.active.modelId);
+    }
+
+    private registerSelectedModel(providerId: string, modelId: string): void {
+        if (this.models.getModel(providerId, modelId)) return;
+        const provider = this.settings.providers.find((candidate) => candidate.id === providerId);
+        if (!provider) return;
+        this.publishModel(provider, modelId, fallbackChatMetadata(provider, modelId));
+    }
+
+    private replaceProvider(provider: OpenAICompatibleProviderSettings): void {
+        for (const model of this.models.getProvider(provider.id)?.getModels() ?? []) this.metadata.delete(JSON.stringify([provider.id, model.id]));
+        this.models.setProvider(runtimeProvider(provider));
+    }
+
+    private metadataScope(provider: OpenAICompatibleProviderSettings, apiKey?: string): string {
+        const scope = createHash("sha256").update(JSON.stringify(metadataTarget(provider, apiKey))).digest("hex");
+        if (this.settings.providers.find((candidate) => candidate.id === provider.id) !== provider) return scope;
+        const previous = this.credentialScopes.get(provider.id);
+        if (previous && previous !== scope) this.replaceProvider(provider);
+        this.credentialScopes.set(provider.id, scope);
+        return scope;
+    }
+
+    private publishModel(provider: OpenAICompatibleProviderSettings, id: string, metadata: ResolvedModelMetadata, publish = true): Model<Api> {
+        const operating = chatRuntimeSettings(metadata);
+        const model = runtimeModel(provider, operating);
+        const input = metadata.model.inputModalities?.filter((modality): modality is "text" | "image" => modality === "text" || modality === "image");
+        if (input?.length) model.input = input;
+        if (this.settings.providers.find((candidate) => candidate.id === provider.id) === provider) {
+            this.metadata.set(JSON.stringify([provider.id, id]), structuredClone(metadata));
+            if (publish) {
+                const others = (this.models.getProvider(provider.id)?.getModels() ?? []).filter((candidate) => candidate.id !== id);
+                this.models.setProvider(runtimeProvider(provider, [...others, model]));
+            }
+        }
+        return model;
     }
 
     private async isConfigured(providerId: string): Promise<boolean> {
@@ -426,13 +518,14 @@ export class HostModelRegistry {
     private resolveActive(): { providerId: string; modelId: string } {
         const configuredModel = process.env.ETS_EDITOR_MODEL?.trim();
         if (configuredModel) {
-            for (const provider of this.settings.providers) {
-                if (this.models.getModel(provider.id, configuredModel)) {
-                    return { providerId: provider.id, modelId: configuredModel };
-                }
+            const providerId = this.settings.active?.providerId ?? this.settings.providers[0]?.id;
+            if (providerId) {
+                this.registerSelectedModel(providerId, identifier(configuredModel, "Model ID"));
+                return { providerId, modelId: configuredModel };
             }
         }
         const active = this.settings.active;
+        if (active) this.registerSelectedModel(active.providerId, active.modelId);
         if (active && this.models.getModel(active.providerId, active.modelId)) return { ...active };
         const provider = this.settings.providers.find((candidate) => candidate.models.length > 0);
         const model = provider?.models[0];

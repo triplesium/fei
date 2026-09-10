@@ -4,33 +4,35 @@ version: 1
 
 providers:
   deepseek:
-    baseUrl: https://api.deepseek.com
-    api: responses
+    type: openai-compatible
+    chat:
+      baseUrl: https://api.deepseek.com
+      api: responses
     apiKey: replace-with-your-deepseek-key
-    models:
-      - id: deepseek-v4-flash
-        reasoning: true
-        contextWindow: 1000000
-        maxTokens: 384000
-  openai:
-    baseUrl: https://api.openai.com/v1
-    apiKey: replace-with-your-openai-key
+  router:
+    type: openrouter
+    apiKey: replace-with-your-openrouter-key
+  fal:
+    type: fal
+    apiKey: replace-with-your-fal-key
 
 agent:
-  model:
-    provider: deepseek
-    id: deepseek-v4-flash
+  model: { provider: deepseek, id: deepseek-v4-flash }
   reasoning: high
 
 imageGeneration:
-  api: openai-images # Use openrouter-images for the OpenRouter Image API.
-  provider: openai
-  model: gpt-image-2
+  model: { provider: router, id: openai/gpt-image-2 }
   timeoutMs: 600000
   defaults:
     resolution: 1K
     aspect_ratio: "1:1"
     quality: auto
+
+# To use fal.ai GPT Image 2.5 instead:
+# imageGeneration:
+#   model: { provider: fal, id: openai/gpt-image-2.5/sunburst/text-to-image }
+#   defaults: { resolution: 1K, aspect_ratio: "1:1", quality: high }
+# No providers.<id>.models catalogue is required for either capability.
 
 runtime:
   executable: auto

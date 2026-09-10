@@ -1,15 +1,20 @@
-import { imageRequestOptions } from "./request-options.js";
+import type { FalQueueOptions } from "../providers/fal/queue.js";
+import { generateFalImage } from "../providers/fal/images.js";
+import { imageRequestOptions, type ImageGenerationApi } from "./request-options.js";
 import { imageGenerationSchema, type ImageGenerationResult, type ImageOptions } from "../contracts/image-generation.js";
 import { HostProjectService } from "../workspace/project-service.js";
+import type { ResolvedModelMetadata } from "../models/metadata.js";
 
 export interface ImageGenerationOptions {
     model: string;
     baseUrl?: string;
-    api?: "openai-images" | "openrouter-images";
+    api?: ImageGenerationApi;
     timeoutMs?: number;
     defaults?: ImageOptions;
     resolveApiKey: (signal?: AbortSignal) => Promise<string | undefined>;
+    resolveMetadata?: (model: string, apiKey: string, signal?: AbortSignal) => Promise<ResolvedModelMetadata>;
     fetch?: typeof fetch;
+    createFalClient?: FalQueueOptions["createFalClient"];
 }
 
 /** Host-only service. Credentials and provider configuration never enter tool arguments. */
@@ -19,15 +24,9 @@ export class ImageGenerationService {
     async generate(parameters: unknown, signal?: AbortSignal): Promise<ImageGenerationResult> {
         const input = imageGenerationSchema.parse(parameters);
         const { prompt, path: _path, ...options } = input;
-        const requestOptions = imageRequestOptions(this.options.defaults, options, this.options.api ?? "openai-images");
-        let baseUrl: URL;
-        try { baseUrl = new URL(this.options.baseUrl ?? (this.options.api === "openrouter-images" ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1")); }
-        catch { throw new Error("Image generation baseUrl must be a valid HTTP or HTTPS URL."); }
-        if (!["https:", "http:"].includes(baseUrl.protocol) || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash) {
-            throw new Error("Image generation baseUrl must use HTTP or HTTPS without credentials, query or fragment.");
-        }
-        const route = this.options.api === "openrouter-images" ? "/images" : "/images/generations";
-        const endpoint = `${baseUrl.href.replace(/\/+$/, "")}${route}`;
+        const requestOptions = imageRequestOptions(this.options.defaults, options, this.options.api ?? "openai-images", this.options.model);
+        const api = this.options.api ?? "openai-images";
+        const endpoint = api === "fal-images" ? undefined : imageEndpoint(this.options.baseUrl, api);
         const requestSignal = signal
             ? AbortSignal.any([signal, AbortSignal.timeout(this.options.timeoutMs ?? 10 * 60_000)])
             : AbortSignal.timeout(this.options.timeoutMs ?? 10 * 60_000);
@@ -39,17 +38,20 @@ export class ImageGenerationService {
             const apiKey = await this.options.resolveApiKey(requestSignal);
             requestSignal.throwIfAborted();
             if (!apiKey?.trim()) throw new Error("Image generation requires an API key for the selected provider. Configure providers.<provider>.apiKey in config.yaml or model settings.");
-            const response = await (this.options.fetch ?? fetch)(endpoint, {
-                method: "POST", signal: requestSignal,
-                headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ model: this.options.model, prompt, ...requestOptions, n: 1, output_format: "png" }),
-            });
-            // Do not echo upstream bodies: they may contain credentials or huge payloads.
-            if (!response.ok) throw new Error(`Image generation failed (HTTP ${response.status}). Check API access, quota and image model configuration. The request was not retried.`);
-            const body = await response.json() as { data?: { b64_json?: unknown; media_type?: unknown }[] };
-            const mediaType = body?.data?.[0]?.media_type;
+            const metadata = await this.options.resolveMetadata?.(this.options.model, apiKey, requestSignal);
+            requestSignal.throwIfAborted();
+            if (metadata?.model.outputModalities?.length && !metadata.model.outputModalities.includes("image")) {
+                throw new Error("The selected model reports no image output capability.");
+            }
+            const output = api === "fal-images"
+                ? await generateFalImage({
+                    model: this.options.model, prompt, requestOptions, apiKey, signal: requestSignal,
+                    fetch: this.options.fetch, createFalClient: this.options.createFalClient,
+                })
+                : await this.generateWithOpenAi(endpoint!, prompt, requestOptions, apiKey, requestSignal);
+            const mediaType = output.mediaType;
             if (mediaType !== undefined && mediaType !== "image/png") throw new Error("Image provider did not return a PNG image.");
-            const encoded = body?.data?.[0]?.b64_json;
+            const encoded = output.encoded;
             if (typeof encoded !== "string" || encoded.length > 48 * 1024 * 1024 ||
                 encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) {
                 throw new Error("Image provider returned an invalid or oversized image.");
@@ -65,4 +67,27 @@ export class ImageGenerationService {
             return { path: input.path, mimeType: "image/png", width, height, bytes: image.length, model: this.options.model };
         } finally { project.dispose(); }
     }
+
+    private async generateWithOpenAi(endpoint: string, prompt: string, requestOptions: object, apiKey: string, signal: AbortSignal) {
+        const response = await (this.options.fetch ?? fetch)(endpoint, {
+            method: "POST", signal,
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ model: this.options.model, prompt, ...requestOptions, n: 1, output_format: "png" }),
+        });
+        // Do not echo upstream bodies: they may contain credentials or huge payloads.
+        if (!response.ok) throw new Error(`Image generation failed (HTTP ${response.status}). Check API access, quota and image model configuration. The request was not retried.`);
+        const body = await response.json() as { data?: { b64_json?: unknown; media_type?: unknown }[] };
+        return { encoded: body?.data?.[0]?.b64_json, mediaType: body?.data?.[0]?.media_type };
+    }
+}
+
+function imageEndpoint(configured: string | undefined, api: Exclude<ImageGenerationApi, "fal-images">) {
+    let baseUrl: URL;
+    try { baseUrl = new URL(configured ?? (api === "openrouter-images" ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1")); }
+    catch { throw new Error("Image generation baseUrl must be a valid HTTP or HTTPS URL."); }
+    if (!["https:", "http:"].includes(baseUrl.protocol) || baseUrl.username || baseUrl.password || baseUrl.search || baseUrl.hash) {
+        throw new Error("Image generation baseUrl must use HTTP or HTTPS without credentials, query or fragment.");
+    }
+    const route = api === "openrouter-images" ? "/images" : "/images/generations";
+    return `${baseUrl.href.replace(/\/+$/, "")}${route}`;
 }

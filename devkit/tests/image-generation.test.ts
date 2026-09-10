@@ -20,6 +20,19 @@ async function fixture() {
 }
 const input = { prompt: "A game icon", path: "assets/generated/icon.png" };
 
+it("checks known image capabilities and still generates when discovery is unavailable", async () => {
+    const { project, request } = await fixture();
+    const metadata = vi.fn(async () => ({ model: { id: "test", outputModalities: ["text"] }, sources: {}, status: "found" as const, stale: false }));
+    const unsupported = new ImageGenerationService(project, { model: "test", fetch: request, resolveApiKey: async () => "test-key", resolveMetadata: metadata });
+    await expect(unsupported.generate(input)).rejects.toThrow("no image output");
+    expect(request).not.toHaveBeenCalled();
+    expect(metadata).toHaveBeenCalledWith("test", "test-key", expect.any(AbortSignal));
+    const unknown = new ImageGenerationService(project, { model: "test", fetch: request, resolveApiKey: async () => "test-key",
+        resolveMetadata: async () => ({ model: { id: "test" }, sources: {}, status: "unavailable", stale: false }) });
+    expect(await unknown.generate(input)).toMatchObject({ path: input.path });
+    expect(request).toHaveBeenCalledTimes(1);
+});
+
 it("calls the configured model and saves a PNG with metadata, without base64 in the result", async () => {
     const { root, service, request } = await fixture();
     expect(await service.generate(input)).toEqual({ path: input.path, mimeType: "image/png", width: 1, height: 1, bytes: png.length, model: "test-image-model" });
@@ -154,4 +167,49 @@ it("sends unified OpenRouter options and rejects incompatible OpenAI options bef
     await router.generate({ ...input, resolution: "2K", aspect_ratio: "16:9", background: "transparent", seed: 123 });
     expect(JSON.parse(request.mock.calls[0][1]!.body as string)).toMatchObject({ resolution: "2K", aspect_ratio: "16:9", background: "transparent", seed: 123 });
     expect(JSON.parse(request.mock.calls[0][1]!.body as string)).not.toHaveProperty("size");
+});
+
+it("uses the fal.ai queue and saves its synchronous PNG data URI", async () => {
+    const { project, root, request } = await fixture();
+    const submit = vi.fn(async () => ({ request_id: "request-1" }));
+    const subscribeToStatus = vi.fn(async () => ({ status: "COMPLETED" }));
+    const result = vi.fn(async () => ({ data: { images: [{
+        url: `data:image/png;base64,${png.toString("base64")}`, content_type: "image/png",
+    }] } }));
+    const cancel = vi.fn(async () => undefined);
+    const service = new ImageGenerationService(project, {
+        api: "fal-images", model: "openai/gpt-image-2.5/sunburst/text-to-image", fetch: request,
+        resolveApiKey: async () => "fal-test-key",
+        createFalClient: () => ({ queue: { submit, subscribeToStatus, result, cancel } } as never),
+    });
+    expect(await service.generate({ ...input, resolution: "4K", aspect_ratio: "16:9", quality: "max" }))
+        .toMatchObject({ path: input.path, width: 1, height: 1, model: "openai/gpt-image-2.5/sunburst/text-to-image" });
+    expect(submit).toHaveBeenCalledWith("openai/gpt-image-2.5/sunburst/text-to-image", expect.objectContaining({ input: {
+        prompt: input.prompt, image_size: { width: 3840, height: 2160 }, quality: "max",
+        num_images: 1, output_format: "png", sync_mode: true,
+    } }));
+    expect(subscribeToStatus).toHaveBeenCalledWith("openai/gpt-image-2.5/sunburst/text-to-image", expect.objectContaining({ requestId: "request-1" }));
+    expect(result).toHaveBeenCalledWith("openai/gpt-image-2.5/sunburst/text-to-image", expect.objectContaining({ requestId: "request-1" }));
+    expect(cancel).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+    expect(await readFile(join(root, input.path))).toEqual(png);
+});
+
+it("cancels an enqueued fal.ai request and hides invalid upstream responses", async () => {
+    const { project } = await fixture();
+    const cancel = vi.fn(async () => undefined);
+    const service = new ImageGenerationService(project, {
+        api: "fal-images", model: "openai/gpt-image-2.5/sunburst/text-to-image",
+        resolveApiKey: async () => "fal-test-key",
+        createFalClient: () => ({ queue: {
+            submit: vi.fn(async () => ({ request_id: "request-2" })),
+            subscribeToStatus: vi.fn(async () => ({ status: "COMPLETED" })),
+            result: vi.fn(async () => ({ data: { private: "upstream-secret" } })), cancel,
+        } } as never),
+    });
+    const error = await service.generate(input).catch((reason: Error) => reason);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain("fal.ai failed");
+    expect(error.message).not.toContain("upstream-secret");
+    expect(cancel).toHaveBeenCalledWith("openai/gpt-image-2.5/sunburst/text-to-image", { requestId: "request-2" });
 });

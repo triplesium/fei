@@ -26,25 +26,76 @@ settings file; `editor` in YAML is reserved and preserved but not applied yet.
 
 ## Sections
 
-`providers` maps provider IDs to `name` (optional), `baseUrl`, `api`
-(`responses` or `chat-completions`), `apiKey`, and `models`. OpenAI defaults to
-`https://api.openai.com/v1`; other conversation providers require `baseUrl`.
-An image-only OpenAI provider can omit `models`.
+`providers` maps connection IDs to optional `name`, `type`, `apiKey`,
+`chat` and `images` settings. A connection can serve multiple capabilities
+with one saved credential. `type` is `openai`, `openrouter`, `fal` or
+`openai-compatible`. IDs matching the first three infer that type; other IDs
+require an explicit type for platform defaults, or explicit capability connections.
 
-Conversation models require `id`, `contextWindow` and `maxTokens`. Optional `name`
-defaults to the ID and `reasoning` defaults to false. `agent.model` selects a
-provider and an ID from that catalogue. `agent.reasoning` accepts `off`, `minimal`,
-`low`, `medium`, `high`, `xhigh`, or `max` (default `low`), and is disabled for
-models that do not support reasoning. CLI `--provider` and `--model` override the
-saved selection. The legacy `ETS_EDITOR_MODEL` override remains supported.
+- OpenAI defaults to Responses for chat and OpenAI Images for images, with
+  `https://api.openai.com/v1` as each capability's base URL.
+- OpenRouter defaults to Chat Completions and its dedicated Images API, with
+  `https://openrouter.ai/api/v1` as each capability's base URL.
+- fal defaults to its official image queue adapter. It does not create a chat
+  connection; native fal LLM and video adapters are not implemented yet.
+- Custom connections specify `chat: { api, baseUrl }` and/or
+  `images: { api, baseUrl }`. Each capability has its own URL; overriding a chat
+  URL never redirects images. Chat API formats are `responses` (default) and
+  `chat-completions`; image adapters are `openai-images` (default),
+  `openrouter-images` and `fal-images`. The fal image adapter rejects a custom
+  image URL. Include the version path in URLs where needed.
 
-`imageGeneration` selects a credential provider and an image model independently
-of the conversation model. Requests use the selected provider baseUrl and apiKey, appending `/images/generations` for `imageGeneration.api: openai-images` (default), or `/images` for `openrouter-images`. Include `/v1` in the base URL when required by your provider. Custom providers must support the OpenAI Images request schema and return PNG data in `data[0].b64_json`.
-`defaults` uses the unified OpenRouter-style options: `resolution`, `aspect_ratio`, optional `size`, `quality`, `background`, and `seed`. See [image-generation.md](image-generation.md) for merging and OpenAI conversion rules.
+Both `agent.model` and `imageGeneration.model` use `{ provider, id }`.
+Model IDs are used directly, without prior registration. `providers.<id>.models`
+is an optional chat catalogue and metadata override, not a whitelist. Each entry
+requires only `id`; `contextWindow`, `maxTokens`, `name` and `reasoning` are optional
+field overrides. Metadata merges each field from explicit overrides, platform
+responses/cache, then bundled OpenAI/OpenRouter data or DeepSeek presets. Missing
+fields remain unknown in metadata; an explicit `reasoning: false` overrides true.
+Unknown models use operating defaults of 32,768 context tokens, 4,096 output
+tokens, and reasoning disabled; these are not claims about upstream limits.
+Add an override when a model needs different limits or reasoning support.
+Merely selecting a model never writes a catalogue entry. Platform metadata is
+cached separately from YAML. See [model-metadata.md](model-metadata.md) for
+platform differences, refresh behavior, provenance and cache locations.
+
+`agent.reasoning` accepts `off`, `minimal`, `low`, `medium`, `high`,
+`xhigh`, or `max` (default `low`), and is disabled for models without
+reasoning support. CLI `--provider` and `--model` override the saved selection,
+including IDs absent from the catalogue. The Editor model selector accepts a
+model ID in its search field and offers it under each chat provider. Existing
+model-management forms edit optional metadata. Opening the selector loads the
+platform catalogue asynchronously; **Refresh models** forces a refresh. `ETS_EDITOR_MODEL` also accepts
+unlisted IDs on the active provider (or the first chat provider when none is active).
+
+`imageGeneration` selects its model independently of the conversation model.
+The chosen provider resolves the image adapter. OpenAI Images appends
+`/images/generations`; OpenRouter appends `/images`; both require PNG data in
+`data[0].b64_json`. fal uses its official queue. Its current model adapter is
+specific to `openai/gpt-image-2.5/sunburst/text-to-image`; unsupported fal image
+models are rejected before submission instead of receiving that model's schema.
+`defaults` uses `resolution`, `aspect_ratio`, optional `size`, `quality`,
+`background`, and `seed`; see [image-generation.md](image-generation.md).
 `timeoutMs` defaults to 600000 and accepts 1000–1800000.
-`ETS_IMAGE_MODEL` overrides the YAML model; `ENTISIUM_IMAGE_MODEL` remains a
-lower-priority compatibility alias. `OPENAI_API_KEY` overrides the YAML key for
-image generation when the selected provider is `openai`.
+`ETS_IMAGE_MODEL` overrides the selected image ID; `ENTISIUM_IMAGE_MODEL`
+remains a lower-priority alias. Image credentials prefer `OPENAI_API_KEY`,
+`OPENROUTER_API_KEY`, or `FAL_KEY` according to platform type, then the selected
+connection's stored key. Custom compatible connections use their own stored key.
+
+Chat settings updates preserve image-only providers and other capability settings.
+Deleting a chat provider still used by image generation, or with an explicit image
+connection, is rejected; first reassign the image selection and remove that connection.
+
+### Updating the previous configuration shape
+
+Move `providers.<id>.api` and `baseUrl` into `providers.<id>.chat` for chat,
+and put any custom image URL under `providers.<id>.images.baseUrl`. For built-in
+platforms, set `type` and omit default connection settings. Replace the old
+`imageGeneration.provider` and string `model` with
+`imageGeneration.model: { provider, id }`; move any custom image API override to
+`providers.<id>.images.api`. The old fields are rejected, not silently ignored.
+Existing model catalogues can be retained as optional metadata or removed.
+See [config.example.yaml](../config.example.yaml) for the new shape.
 
 `runtime.executable` is `auto` by default, or an executable path. YAML relative
 paths resolve against the configuration file directory. `ETS_RUNTIME_HOST_PATH`

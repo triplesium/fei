@@ -22,7 +22,7 @@ it("reads YAML providers with inline keys and applies DevKit defaults", async ()
     const store = await fixture("version: 1\nproviders:\n  openai:\n    apiKey: test-api-key\n");
     const config = await store.read();
     expect(config.providers.openai.apiKey).toBe("test-api-key");
-    expect(config.imageGeneration).toMatchObject({ provider: "openai", model: "gpt-image-2", defaults: {} });
+    expect(config.imageGeneration).toMatchObject({ model: { provider: "openai", id: "gpt-image-2" }, defaults: {} });
     expect(store.resolvePath("bin/runtime.exe")).toBe(resolve(store.path, "..", "bin/runtime.exe"));
     vi.stubEnv("ETS_RUNTIME_HOST_PATH", "");
     config.runtime.executable = "bin/runtime.exe";
@@ -34,7 +34,7 @@ it("reads YAML providers with inline keys and applies DevKit defaults", async ()
 it("serializes updates without losing unrelated sections or their comments", async () => {
     const store = await fixture("# user settings\nversion: 1\nproviders: {}\n# keep runtime\nruntime:\n  executable: ./runtime.exe\neditor:\n  custom: keep\n");
     await Promise.all([
-        store.update((config) => { config.providers.openai = { api: "responses", models: [], apiKey: "test-api-key" }; }),
+        store.update((config) => { config.providers.openai = { type: "openai", apiKey: "test-api-key" }; }),
         store.update((config) => { config.agent = { reasoning: "high" }; }),
     ]);
     const result = await store.read();
@@ -69,26 +69,26 @@ it("rejects invalid updates without changing the file and distinguishes missing 
 });
 
 it("selects explicit, environment, project and user files in order without merging", async () => {
-    const explicit = await fixture("version: 1\nimageGeneration: { model: explicit }\n");
-    const environment = await fixture("version: 1\nimageGeneration: { model: environment }\n");
+    const explicit = await fixture("version: 1\nimageGeneration: { model: { provider: openai, id: explicit } }\n");
+    const environment = await fixture("version: 1\nimageGeneration: { model: { provider: openai, id: environment } }\n");
     const root = dirname(explicit.path);
     const project = join(root, "project");
     const local = join(project, ".entisium", "config.yaml");
     await mkdir(dirname(local), { recursive: true });
-    await writeFile(local, "version: 1\nimageGeneration: { model: local }\n");
+    await writeFile(local, "version: 1\nimageGeneration: { model: { provider: openai, id: local } }\n");
     vi.stubEnv("ETS_CONFIG_PATH", "");
     vi.stubEnv("APPDATA", join(root, "user"));
     vi.stubEnv("XDG_CONFIG_HOME", join(root, "user"));
     const userPath = defaultConfigPath();
     await mkdir(dirname(userPath), { recursive: true });
-    await writeFile(userPath, "version: 1\nimageGeneration: { model: user, defaults: { quality: high } }\n");
+    await writeFile(userPath, "version: 1\nimageGeneration: { model: { provider: openai, id: user }, defaults: { quality: high } }\n");
     vi.stubEnv("ETS_CONFIG_PATH", environment.path);
-    expect((await loadConfig(explicit.path, project)).config?.imageGeneration.model).toBe("explicit");
-    expect((await loadConfig(undefined, project)).config?.imageGeneration.model).toBe("environment");
+    expect((await loadConfig(explicit.path, project)).config?.imageGeneration.model.id).toBe("explicit");
+    expect((await loadConfig(undefined, project)).config?.imageGeneration.model.id).toBe("environment");
     vi.stubEnv("ETS_CONFIG_PATH", "");
     const selected = await loadConfig(undefined, project);
     expect(selected.store.path).toBe(local);
-    expect(selected.config?.imageGeneration).toMatchObject({ model: "local", defaults: {} });
+    expect(selected.config?.imageGeneration).toMatchObject({ model: { provider: "openai", id: "local" }, defaults: {} });
     await rm(local);
     expect((await loadConfig(undefined, project)).store.path).toBe(userPath);
     await rm(userPath);
@@ -106,7 +106,14 @@ it("does not fall back when a selected project file is invalid or an explicit fi
 
 it("defaults to OpenAI Images and rejects unknown image protocols", async () => {
     const store = await fixture("version: 1\n");
-    expect((await store.read()).imageGeneration.api).toBe("openai-images");
+    expect((await store.read()).imageGeneration.model.provider).toBe("openai");
     await writeFile(store.path, "version: 1\nimageGeneration:\n  api: unsupported\n");
-    await expect(store.read()).rejects.toThrow("imageGeneration.api");
+    await expect(store.read()).rejects.toThrow("imageGeneration");
+});
+
+it("accepts the fal.ai image protocol and GPT Image 2.5 quality levels", async () => {
+    const store = await fixture("version: 1\nproviders:\n  fal: { type: fal }\nimageGeneration:\n  model: { provider: fal, id: openai/gpt-image-2.5/sunburst/text-to-image }\n  defaults: { quality: max }\n");
+    expect((await store.read()).imageGeneration).toMatchObject({
+        model: { provider: "fal", id: "openai/gpt-image-2.5/sunburst/text-to-image" }, defaults: { quality: "max" },
+    });
 });

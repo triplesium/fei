@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import type { ProviderType } from "@entisium/devkit/settings/providers";
 
 export type OpenAICompatibleApi = "responses" | "chat-completions";
 
@@ -13,13 +14,14 @@ export interface ActiveModelSelection {
 
 export interface OpenAICompatibleModelSettings {
     id: string;
-    name: string;
-    reasoning: boolean;
-    contextWindow: number;
-    maxTokens: number;
+    name?: string;
+    reasoning?: boolean;
+    contextWindow?: number;
+    maxTokens?: number;
 }
 
 export interface OpenAICompatibleProviderSettings {
+    type?: ProviderType;
     id: string;
     name: string;
     baseUrl: string;
@@ -97,10 +99,10 @@ function validModel(value: unknown): value is OpenAICompatibleModelSettings {
     const model = value as Partial<OpenAICompatibleModelSettings>;
     return (
         typeof model.id === "string" &&
-        typeof model.name === "string" &&
-        typeof model.reasoning === "boolean" &&
-        typeof model.contextWindow === "number" &&
-        typeof model.maxTokens === "number"
+        (model.name === undefined || typeof model.name === "string") &&
+        (model.reasoning === undefined || typeof model.reasoning === "boolean") &&
+        (model.contextWindow === undefined || typeof model.contextWindow === "number") &&
+        (model.maxTokens === undefined || typeof model.maxTokens === "number")
     );
 }
 

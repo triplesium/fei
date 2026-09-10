@@ -1,9 +1,10 @@
 import { z } from "zod/v4";
-import type { EntisiumConfig } from "@entisium/devkit/settings/config";
+import { modelSelectionSchema, type EntisiumConfig } from "@entisium/devkit/settings/config";
+import { chatConnection, providerType, selectedProvider } from "@entisium/devkit/settings/providers";
 import type { EditorModelSettings } from "../models/model-settings-store.js";
 
 export const agentSettingsSchema = z.object({
-    model: z.object({ provider: z.string().min(1), id: z.string().min(1) }).strict().optional(),
+    model: modelSelectionSchema.optional(),
     reasoning: z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]).default("low"),
 }).strict();
 export type AgentSettings = z.infer<typeof agentSettingsSchema>;
@@ -14,25 +15,30 @@ export function parseAgentSettings(value: unknown): AgentSettings {
 }
 
 const modelSchema = z.object({
-    id: z.string().min(1), name: z.string().min(1).optional(), reasoning: z.boolean().default(false),
-    contextWindow: z.number().int().min(1024).max(10_000_000),
-    maxTokens: z.number().int().min(256),
-}).strict().refine((model) => model.maxTokens <= model.contextWindow);
+    id: z.string().min(1), name: z.string().min(1).optional(), reasoning: z.boolean().optional(),
+    contextWindow: z.number().int().min(1024).max(10_000_000).optional(),
+    maxTokens: z.number().int().min(256).max(10_000_000).optional(),
+}).strict().refine((model) => model.maxTokens === undefined || model.contextWindow === undefined || model.maxTokens <= model.contextWindow);
 
 /** Explicit projection: apiKey is never copied into the registry's browser-visible settings. */
 export function modelSettingsFromConfig(config: EntisiumConfig): EditorModelSettings {
     const agent = parseAgentSettings(config.agent);
-    const providers = Object.entries(config.providers).map(([id, provider]) => {
-        const parsed = z.array(modelSchema).safeParse(provider.models);
+    const connections = { ...config.providers };
+    if (agent.model && !Object.hasOwn(connections, agent.model.provider)) {
+        Object.defineProperty(connections, agent.model.provider, { value: selectedProvider(config, agent.model.provider), enumerable: true });
+    }
+    const providers = Object.entries(connections).flatMap(([id, provider]) => {
+        const connection = chatConnection(id, provider);
+        if (!connection) return [];
+        const parsed = z.array(modelSchema).safeParse(provider.models ?? []);
         if (!parsed.success) throw new Error("Invalid config.yaml provider model catalogue.");
-        if (!provider.baseUrl && id !== "openai") throw new Error("Non-OpenAI providers require baseUrl in config.yaml.");
-        return {
-            id, name: provider.name ?? id, baseUrl: provider.baseUrl ?? "https://api.openai.com/v1", api: provider.api,
-            models: parsed.data.map((model) => ({ ...model, name: model.name ?? model.id })),
-        };
+        return [{
+            id, name: provider.name ?? id, ...connection, type: providerType(id, provider),
+            models: parsed.data,
+        }];
     });
-    if (agent.model && !providers.some((provider) => provider.id === agent.model!.provider && provider.models.some((model) => model.id === agent.model!.id))) {
-        throw new Error("config.yaml agent.model must reference a model in providers.<provider>.models.");
+    if (agent.model && !providers.some((provider) => provider.id === agent.model!.provider)) {
+        throw new Error("config.yaml agent.model requires a provider with a supported chat connection.");
     }
     return { version: 2, providers, ...(agent.model ? { active: { providerId: agent.model.provider, modelId: agent.model.id } } : {}) };
 }

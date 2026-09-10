@@ -5,7 +5,7 @@ export const imageOptionsSchema = z.object({
     aspect_ratio: z.enum(["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "4:5", "5:4", "1:2", "2:1", "1:4", "4:1", "1:8", "8:1", "9:21", "21:9"]).optional(),
     size: z.string().regex(/^(?:512|1K|2K|4K|[1-9][0-9]{0,4}x[1-9][0-9]{0,4})$/).optional()
         .describe("Optional resolution tier or explicit WIDTHxHEIGHT. Prefer resolution and aspect_ratio."),
-    quality: z.enum(["auto", "low", "medium", "high"]).optional(),
+    quality: z.enum(["auto", "low", "medium", "high", "xhigh", "max"]).optional(),
     background: z.enum(["auto", "transparent", "opaque"]).optional(),
     seed: z.number().int().min(0).max(2147483647).optional(),
 }).strict();

@@ -1,7 +1,11 @@
 import { imageOptionsSchema, type ImageOptions } from "../contracts/image-generation.js";
 
+import { falGptImageModel, falImageOptions } from "../providers/fal/gpt-image.js";
+
+export type ImageGenerationApi = "openai-images" | "openrouter-images" | "fal-images";
+
 /** Dimension arguments form one group: a tool-level group replaces YAML dimensions. */
-export function imageRequestOptions(defaults: ImageOptions | undefined, input: ImageOptions, api: "openai-images" | "openrouter-images") {
+export function imageRequestOptions(defaults: ImageOptions | undefined, input: ImageOptions, api: ImageGenerationApi, model = falGptImageModel) {
     const options = { ...imageOptionsSchema.parse(defaults ?? {}) };
     if (input.size !== undefined || input.resolution !== undefined || input.aspect_ratio !== undefined) {
         delete options.size; delete options.resolution; delete options.aspect_ratio;
@@ -28,6 +32,7 @@ export function imageRequestOptions(defaults: ImageOptions | undefined, input: I
         result.aspect_ratio ??= "1:1";
     }
     if (api === "openrouter-images") return result;
+    if (api === "fal-images") return falImageOptions(result, model);
     if (result.seed !== undefined) throw new Error("seed requires openrouter-images; OpenAI Images does not support it.");
     if (!result.size) {
         const sizes: Record<string, string> = { "1:1": "1024x1024", "3:2": "1536x1024", "2:3": "1024x1536", auto: "auto" };

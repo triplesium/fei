@@ -1,5 +1,6 @@
 import type { AuthOperationOptions, Credential, CredentialStore } from "@earendil-works/pi-ai";
 import { YamlConfigStore, loadConfig } from "@entisium/devkit/settings/yaml-store";
+import { chatConnection, type ProviderSettings } from "@entisium/devkit/settings/providers";
 import { EncryptedCredentialStore } from "../models/credential-store.js";
 import { FileEditorModelSettingsStore, type EditorModelSettings, type EditorModelSettingsStore } from "../models/model-settings-store.js";
 import { modelSettingsFromConfig, parseAgentSettings } from "../settings/config.js";
@@ -22,7 +23,7 @@ export class YamlCredentialStore implements CredentialStore {
         let result: Credential | undefined;
         await this.config.update(async (config) => {
             options?.signal?.throwIfAborted();
-            const provider = Object.hasOwn(config.providers, providerId) ? config.providers[providerId] : { api: "responses" as const, models: [] };
+            const provider: ProviderSettings = Object.hasOwn(config.providers, providerId) ? config.providers[providerId] : {};
 
             result = await edit(provider.apiKey ? { type: "api_key", key: provider.apiKey } : undefined);
             options?.signal?.throwIfAborted();
@@ -47,11 +48,22 @@ export class YamlModelSettingsStore implements EditorModelSettingsStore {
     async read(): Promise<EditorModelSettings> { return modelSettingsFromConfig(await this.config.read()); }
     async write(settings: EditorModelSettings): Promise<void> {
         await this.config.update((config) => {
-            const providers = Object.fromEntries(settings.providers.map(({ id, ...provider }) => [id, {
-                ...provider,
-                ...(Object.hasOwn(config.providers, id) && config.providers[id].apiKey ? { apiKey: config.providers[id].apiKey } : {}),
-            }]));
-            config.providers = providers;
+            const retained = new Set(settings.providers.map((provider) => provider.id));
+            for (const [id, provider] of Object.entries(config.providers)) {
+                if (retained.has(id) || !chatConnection(id, provider)) continue;
+                if (config.imageGeneration.model.provider === id || provider.images) {
+                    throw new Error("This provider is shared with image generation; remove or reassign its image connection before deleting it.");
+                }
+                delete config.providers[id];
+            }
+            for (const { id, name, baseUrl, api, models, type } of settings.providers) {
+                const previous = Object.hasOwn(config.providers, id) ? config.providers[id] : undefined;
+                const provider: ProviderSettings = { ...previous, name,
+                    type: previous?.type ?? type ?? "openai-compatible", chat: { api, baseUrl } };
+                if (models.length) provider.models = models;
+                else delete provider.models;
+                Object.defineProperty(config.providers, id, { value: provider, enumerable: true, writable: true, configurable: true });
+            }
             config.agent = { ...parseAgentSettings(config.agent),
                 model: settings.active ? { provider: settings.active.providerId, id: settings.active.modelId } : undefined };
             modelSettingsFromConfig(config);
