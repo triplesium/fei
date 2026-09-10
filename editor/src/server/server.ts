@@ -1,4 +1,5 @@
 import { RuntimeSession } from "@entisium/devkit/runtime/session";
+import { ModelMetadataService } from "@entisium/devkit/models/service";
 import { createHostImageGeneration } from "@entisium/agent/host/image-generation";
 import type { EntisiumConfig } from "@entisium/devkit/settings/config";
 import { NativeRuntime } from "@entisium/devkit/runtime/native-runtime";
@@ -50,6 +51,7 @@ interface HostOptions {
     credentials: CredentialStore;
     editorSettingsStore?: EditorSettingsStore;
     modelSettingsStore?: EditorModelSettingsStore;
+    modelMetadataService?: ModelMetadataService;
     distDirectory: string;
     runtimeDirectory: string;
     host?: string;
@@ -234,9 +236,11 @@ export function createEditorHost(options: HostOptions): {
             throw error;
         }
     };
+    const metadata = options.modelMetadataService ?? new ModelMetadataService();
     const modelRegistry = new HostModelRegistry(
         options.credentials,
         options.modelSettingsStore ?? new MemoryEditorModelSettingsStore(),
+        metadata,
     );
     const editorSettings = options.editorSettingsStore ?? new MemoryEditorSettingsStore();
     const projects =
@@ -244,7 +248,7 @@ export function createEditorHost(options: HostOptions): {
         new HostProjectService(options.projectDirectory, options.pickProjectDirectory);
     const nativeSession = options.nativeSession ?? new RuntimeSession(options.runtimeExecutable ? new NativeRuntime(options.runtimeExecutable) : undefined, async () => resolve(await projects.workspaceRoot(), "project.yaml"));
     const commands = options.commandRelay ?? new EditorCommandRelay();
-    const images = createHostImageGeneration(projects, options.credentials, options.config);
+    const images = createHostImageGeneration(projects, options.credentials, options.config, metadata);
     const luauLspArguments = [...(options.luauLspArguments ?? ["--stdio"])];
     if (options.luauDefinitionsIndex) {
         luauLspArguments.push("--definitions-index", options.luauDefinitionsIndex);
@@ -303,8 +307,8 @@ export function createEditorHost(options: HostOptions): {
             }
 
             if (request.method === "GET" && url.pathname === "/api/v1/bootstrap") {
-                const modelSettings = await modelRegistry.snapshot();
                 const active = await modelRegistry.activeModel();
+                const modelSettings = await modelRegistry.snapshot();
                 json(response, 200, {
                     version: 1,
                     token,
@@ -404,6 +408,11 @@ export function createEditorHost(options: HostOptions): {
 
             if (request.method === "GET" && url.pathname === "/api/v1/model-settings") {
                 json(response, 200, await modelRegistry.snapshot());
+                return;
+            }
+
+            if (request.method === "POST" && url.pathname === "/api/v1/model-settings/refresh") {
+                json(response, 200, await modelRegistry.refreshModels(url.searchParams.get("provider") ?? "", url.searchParams.get("force") === "true"));
                 return;
             }
 
@@ -619,16 +628,16 @@ export function createEditorHost(options: HostOptions): {
                     json(response, 400, { error: "A registered model is required." });
                     return;
                 }
-                const model = await modelRegistry.getModel(body.model.provider, body.model.id);
+                const abortController = new AbortController();
+                response.on("close", () => {
+                    if (!response.writableEnded) abortController.abort();
+                });
+                const model = await modelRegistry.getModel(body.model.provider, body.model.id, abortController.signal);
                 if (!model) {
                     json(response, 400, { error: "Requested model is unavailable." });
                     return;
                 }
                 const context = sanitizeContext(body.context);
-                const abortController = new AbortController();
-                response.on("close", () => {
-                    if (!response.writableEnded) abortController.abort();
-                });
                 response.writeHead(200, {
                     "Content-Type": "text/event-stream; charset=utf-8",
                     "Cache-Control": "no-cache, no-transform",

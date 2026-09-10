@@ -84,6 +84,18 @@ export class EditorModelGateway {
         return this.connect(agent);
     }
 
+    async refreshModels(providerId: string, force = false): Promise<EditorModelSettingsSnapshot> {
+        const response = await editorHost.request(
+            `/api/v1/model-settings/refresh?provider=${encodeURIComponent(providerId)}&force=${force}`,
+            { method: "POST" },
+        );
+        return response.json() as Promise<EditorModelSettingsSnapshot>;
+    }
+
+    async modelSettings(): Promise<EditorModelSettingsSnapshot> {
+        return (await editorHost.request("/api/v1/model-settings")).json() as Promise<EditorModelSettingsSnapshot>;
+    }
+
     async deleteModel(
         providerId: string,
         modelId: string,

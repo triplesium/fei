@@ -1573,7 +1573,7 @@ export function App() {
         if (agentStreaming || agentSettingsSaving) return;
         const provider = agentModelSettings?.providers.find((candidate) => candidate.id === providerId);
         const model = provider?.models.find((candidate) => candidate.id === modelId);
-        if (!provider || !model) return;
+        if (!provider) return;
         if (!provider.configured) {
             openAgentSettings();
             editAgentProvider(providerId);
@@ -1593,7 +1593,7 @@ export function App() {
         try {
             const state = await modelGateway.configure(update, piAgent);
             setAgentGatewayState(state);
-            appendConsole("info", "agent", `using ${provider.name} · ${model.name}`);
+            appendConsole("info", "agent", `using ${provider.name} · ${model?.name ?? modelId}`);
         } catch (error) {
             appendConsole("error", "agent", errorMessage(error));
             openAgentSettings();
@@ -1621,6 +1621,18 @@ export function App() {
             ready={agentGatewayState.state === "ready"}
             disabled={agentStreaming || agentSettingsSaving}
             onSelectModel={selectAgentModel}
+            onRefreshModels={async (force) => {
+                if (agentStreaming || agentSettingsSaving) return;
+                await Promise.all((agentModelSettings?.providers ?? []).map(async (provider) => {
+                    try {
+                        await modelGateway.refreshModels(provider.id, force);
+                    } catch (error) { appendConsole("error", "models", errorMessage(error)); }
+                }));
+                try {
+                    const settings = await modelGateway.modelSettings();
+                    setAgentGatewayState((current) => "settings" in current ? { ...current, settings } : current);
+                } catch (error) { appendConsole("error", "models", errorMessage(error)); }
+            }}
             onManageModels={openAgentSettings}
         />
     );

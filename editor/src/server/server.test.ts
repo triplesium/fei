@@ -9,6 +9,7 @@ import {
 } from "@entisium/agent/models/credential-store";
 import { FileEditorModelSettingsStore } from "@entisium/agent/models/model-settings-store";
 import { createEditorHost } from "./server.js";
+import { ModelMetadataService } from "@entisium/devkit/models/service";
 
 const temporaryDirectories: string[] = [];
 
@@ -31,6 +32,36 @@ afterEach(async () => {
 });
 
 describe("Editor Host", () => {
+    it("refreshes a remote catalogue through authenticated HTTP without persisting discovered models", async () => {
+        const directory = await mkdtemp(join(tmpdir(), "entisium-editor-metadata-"));
+        temporaryDirectories.push(directory);
+        const settings = new FileEditorModelSettingsStore(join(directory, "models.json"));
+        await settings.write({ version: 2, active: { providerId: "router", modelId: "vendor/chat" }, providers: [{
+            id: "router", name: "Router", type: "openrouter", baseUrl: "https://openrouter.ai/api/v1", api: "chat-completions", models: [],
+        }] });
+        let requests = 0;
+        const metadata = new ModelMetadataService({ cacheDirectory: null, fetch: async () => {
+            requests++;
+            return new Response(JSON.stringify({ data: [{ id: "vendor/chat", context_length: 64000, architecture: { output_modalities: ["text"] } },
+                { id: "vendor/other", architecture: { output_modalities: ["text"] } }] }));
+        } });
+        const host = createEditorHost({ credentials: new EncryptedCredentialStore(join(directory, "credentials.json"), testProtector),
+            modelSettingsStore: settings, modelMetadataService: metadata, distDirectory: directory, runtimeDirectory: directory, port: 0 });
+        const address = await host.listen();
+        const url = `http://${address.host}:${address.port}`;
+        try {
+            const bootstrap = await fetch(`${url}/api/v1/bootstrap`).then((response) => response.json());
+            expect(bootstrap.provider.model.contextWindow).toBe(64000);
+            const route = `${url}/api/v1/model-settings/refresh?provider=router&force=true`;
+            expect((await fetch(route, { method: "POST" })).status).toBe(401);
+            expect(requests).toBe(1);
+            const refreshed = await fetch(route, { method: "POST", headers: { Authorization: `Bearer ${host.token}` } }).then((response) => response.json());
+            expect(refreshed.providers[0].models.map((model: { id: string }) => model.id)).toEqual(["vendor/chat", "vendor/other"]);
+            expect(requests).toBe(2);
+            expect((await settings.read()).providers[0].models).toEqual([]);
+        } finally { await new Promise<void>((done) => host.server.close(() => done())); }
+    });
+
     it("bootstraps a session and stores credentials without returning the key", async () => {
         const directory = await mkdtemp(join(tmpdir(), "entisium-editor-host-"));
         temporaryDirectories.push(directory);
@@ -94,6 +125,16 @@ describe("Editor Host", () => {
             const configured = await fetch(`${baseUrl}/api/v1/bootstrap`).then((response) => response.json());
             expect(configured.provider.configured).toBe(true);
             expect(JSON.stringify(configured)).not.toContain("test-deepseek-secret");
+
+            const selected = await fetch(`${baseUrl}/api/v1/model-settings`, {
+                method: "PUT",
+                headers: { Authorization: `Bearer ${initial.token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ providerId: initial.provider.id, modelId: "unlisted-chat-model" }),
+            });
+            expect(selected.status).toBe(200);
+            const direct = await fetch(`${baseUrl}/api/v1/bootstrap`).then((response) => response.json());
+            expect(direct.provider.model).toMatchObject({ id: "unlisted-chat-model", contextWindow: 32768, maxTokens: 4096 });
+            expect(direct.modelSettings.active).toEqual({ providerId: initial.provider.id, modelId: "unlisted-chat-model" });
         } finally {
             await new Promise<void>((resolveClose) => host.server.close(() => resolveClose()));
         }

@@ -1,4 +1,4 @@
-import { Settings2 } from "lucide-react";
+import { RefreshCw, Settings2 } from "lucide-react";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import type { EditorModelProviderSummary } from "@/services/editor-host-client";
 import { CommandItem } from "@/components/ui/command";
@@ -25,6 +25,7 @@ interface AgentModelSelectorProps {
     disabled?: boolean;
     onSelectModel: (providerId: string, modelId: string) => void | Promise<void>;
     onManageModels: () => void;
+    onRefreshModels?: (force: boolean) => Promise<void>;
 }
 
 function modelKey(providerId: string, modelId: string): string {
@@ -51,8 +52,14 @@ export function AgentModelSelector({
     disabled = false,
     onSelectModel,
     onManageModels,
+    onRefreshModels,
 }: AgentModelSelectorProps) {
     const [open, setOpen] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const refreshInFlight = useRef(false);
+    const [search, setSearch] = useState("");
+    const requestedId = search.trim();
+    const canSelectId = requestedId.length <= 120 && /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(requestedId);
     const triggerRef = useRef<HTMLButtonElement>(null);
     const openedWithPointerRef = useRef(false);
     const models = useMemo<ModelOption[]>(
@@ -88,8 +95,18 @@ export function AgentModelSelector({
         onManageModels();
     };
 
+    const refreshModels = async (force: boolean): Promise<void> => {
+        if (!onRefreshModels || refreshInFlight.current) return;
+        refreshInFlight.current = true;
+        setRefreshing(true);
+        try { await onRefreshModels(force); }
+        finally { refreshInFlight.current = false; setRefreshing(false); }
+    };
+
     const setSelectorOpen = (nextOpen: boolean): void => {
         setOpen(nextOpen);
+        if (nextOpen) void refreshModels(false);
+        if (!nextOpen) setSearch("");
         if (!nextOpen && openedWithPointerRef.current) {
             window.requestAnimationFrame(() => triggerRef.current?.blur());
         }
@@ -120,7 +137,7 @@ export function AgentModelSelector({
                 <ModelSelectorValue placeholder={label} />
             </ModelSelectorTrigger>
             <ModelSelectorContent className="w-[280px] [&_[cmdk-input-wrapper]]:h-8">
-                <ModelSelectorSearch placeholder="Search models…" />
+                <ModelSelectorSearch placeholder="Search or enter a model ID…" value={search} onValueChange={setSearch} />
                 <ModelSelectorList className="p-0.5">
                     <ModelSelectorEmpty />
                     {providers?.map((provider) => (
@@ -145,10 +162,26 @@ export function AgentModelSelector({
                                     className="min-h-8 py-1"
                                 />
                             ))}
+                            {canSelectId && !provider.models.some((model) => model.id === requestedId) && (
+                                <CommandItem
+                                    value={`use ${requestedId} ${provider.id}`}
+                                    onSelect={() => {
+                                        void onSelectModel(provider.id, requestedId);
+                                        setSelectorOpen(false);
+                                    }}
+                                    className="min-h-8 py-1"
+                                >
+                                    <span className="break-all">Use {requestedId}</span>
+                                </CommandItem>
+                            )}
                         </ModelSelectorGroup>
                     ))}
                     <ModelSelectorSeparator className="my-0.5" />
                     <ModelSelectorGroup className="p-0.5">
+                        {onRefreshModels && <CommandItem className="min-h-8 py-1" value="refresh models" disabled={refreshing} onSelect={() => void refreshModels(true)}>
+                            <RefreshCw className={refreshing ? "size-3.5 animate-spin" : "size-3.5"} />
+                            <span>{refreshing ? "Refreshing models…" : "Refresh models"}</span>
+                        </CommandItem>}
                         <CommandItem className="min-h-8 py-1" value="manage configure models settings" onSelect={manageModels}>
                             <Settings2 className="size-3.5 text-muted-foreground" />
                             <span className="font-medium">Manage models…</span>
