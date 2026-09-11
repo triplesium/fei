@@ -14,6 +14,8 @@ import { createProjectTools } from "../tools/project.js";
 import { runAgentTask } from "../core/task.js";
 import { createImageGenerationTools } from "../tools/image-generation.js";
 import { createHostImageGeneration } from "../host/image-generation.js";
+import { SpriteAnimationService } from "@entisium/devkit/sprite-animation/service";
+import { createSpriteAnimationTools } from "../tools/sprite-animation.js";
 
 async function main() {
     const { values } = parseArgs({ options: {
@@ -42,6 +44,10 @@ async function main() {
         const metadata = new ModelMetadataService();
         const registry = new HostModelRegistry(credentials, hostConfig.modelSettingsStore, metadata);
         const images = createHostImageGeneration(project, credentials, hostConfig.config, metadata);
+        const sprites = new SpriteAnimationService(project, pinned => {
+            const service = createHostImageGeneration(pinned, credentials, hostConfig.config, metadata);
+            return service.generate.bind(service);
+        });
         const model = values.provider && values.model
             ? await registry.getModel(values.provider, values.model, abort.signal) : (await registry.activeModel(abort.signal)).model;
         if (!model) throw new Error("The requested provider has no supported chat connection.");
@@ -53,6 +59,7 @@ async function main() {
             configuration: { model, streamFn: registry.streamSimple.bind(registry), reasoning: hostConfig.agent.reasoning },
             tools: [
                 ...createProjectTools(project),
+                ...createSpriteAnimationTools(sprites.invoke.bind(sprites)),
                 ...createImageGenerationTools(async (input, signal) => {
                     const result = await images.generate(input, signal);
                     console.log(JSON.stringify({ type: "artifact", ...result, path: resolve(dirname(projectFile), result.path) }));

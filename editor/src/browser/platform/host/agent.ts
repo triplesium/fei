@@ -2,11 +2,15 @@ import { EditorPiAgent as BaseEditorPiAgent } from "@/agent/editor-pi-agent";
 import { createEditorNativeTools } from "@/agent/native-tools";
 import type { EditorAgentApi } from "@/types";
 import { createImageGenerationTools } from "@entisium/agent/tools/image-generation";
+import { createSpriteAnimationTools } from "@entisium/agent/tools/sprite-animation";
 import { editorHost } from "@/services/editor-host-client";
 export class EditorPiAgent extends BaseEditorPiAgent {
     constructor(editor: EditorAgentApi) {
         super(editor, [...createEditorNativeTools(), ...createImageGenerationTools((input, signal) =>
             editorHost.json("/api/v1/image-generation", {
+                method: "POST", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+            })), ...createSpriteAnimationTools((input, signal) =>
+            editorHost.json("/api/v1/sprite-animation", {
                 method: "POST", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
             }))]);
     }

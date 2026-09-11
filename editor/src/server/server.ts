@@ -5,6 +5,8 @@ import type { EntisiumConfig } from "@entisium/devkit/settings/config";
 import { NativeRuntime } from "@entisium/devkit/runtime/native-runtime";
 import { parseAgentSettings } from "@entisium/agent/settings/config";
 import { imageGenerationSchema, type ImageGenerationInvoker } from "@entisium/devkit/contracts/image-generation";
+import { SpriteAnimationService } from "@entisium/devkit/sprite-animation/service";
+import { spriteAnimationSchema } from "@entisium/devkit/contracts/sprite-animation";
 import { randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { access, readFile, stat } from "node:fs/promises";
@@ -327,6 +329,23 @@ export function createEditorHost(options: HostOptions): {
 
             if (bearerToken(request) !== token && url.pathname.startsWith("/api/")) {
                 json(response, 401, { error: "Invalid Editor Host token." });
+                return;
+            }
+
+            if (request.method === "POST" && url.pathname === "/api/v1/sprite-animation") {
+                const controller = new AbortController();
+                const disconnected = () => { if (!response.writableEnded) controller.abort(); };
+                response.once("close", disconnected);
+                try {
+                    const input = spriteAnimationSchema.parse(await readJson(request, 256 * 1024));
+                    if (response.destroyed) controller.abort();
+                    const service = new SpriteAnimationService(projects, pinned => {
+                        const generator = createHostImageGeneration(pinned, options.credentials, options.config);
+                        return options.generateImage ?? generator.generate.bind(generator);
+                    });
+                    const result = await service.invoke(input, controller.signal);
+                    if (!response.destroyed) json(response, 200, result);
+                } finally { response.removeListener("close", disconnected); }
                 return;
             }
 
