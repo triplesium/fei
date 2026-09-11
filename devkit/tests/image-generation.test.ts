@@ -20,6 +20,52 @@ async function fixture() {
 }
 const input = { prompt: "A game icon", path: "assets/generated/icon.png" };
 
+it("uploads project PNG references through OpenAI edits and OpenRouter input_references", async () => {
+    const { project, service, request } = await fixture();
+    request.mockImplementation(async () => Response.json({ data: [{ b64_json: png.toString("base64") }] }));
+    await project.writeNew("assets/ref.png", png);
+    await service.generate({ ...input, references: ["assets/ref.png"] });
+    const [url, options] = request.mock.calls[0];
+    expect(url).toBe("https://api.openai.com/v1/images/edits");
+    const form = options!.body as FormData;
+    expect(form.get("prompt")).toBe(input.prompt);
+    const references = form.getAll("image[]") as File[];
+    expect(references).toHaveLength(1);
+    expect(Buffer.from(await references[0].arrayBuffer())).toEqual(png);
+    expect(options!.headers).not.toHaveProperty("Content-Type");
+    const router = new ImageGenerationService(project, { model: "test", api: "openrouter-images", fetch: request, resolveApiKey: async () => "test" });
+    await router.generate({ ...input, path: "assets/router.png", references: ["assets/ref.png"] });
+    expect(JSON.parse(request.mock.calls[1][1]!.body as string)).toMatchObject({
+        input_references: [{ type: "image_url", image_url: { url: `data:image/png;base64,${png.toString("base64")}` } }],
+    });
+});
+
+it("rejects missing, invalid or unsupported references before submitting generation", async () => {
+    const { project, service, request } = await fixture();
+    await expect(service.generate({ ...input, references: ["assets/missing.png"] })).rejects.toThrow("Reference");
+    await project.writeNew("assets/bad.png", Buffer.from("not PNG"));
+    await expect(service.generate({ ...input, references: ["assets/bad.png"] })).rejects.toThrow("Reference");
+    await project.writeNew("assets/ref.png", png);
+    const unsupported = new ImageGenerationService(project, { model: "test", fetch: request, resolveApiKey: async () => "test",
+        resolveMetadata: async () => ({ model: { id: "test", inputModalities: ["text"], outputModalities: ["image"] }, sources: {}, status: "found", stale: false }) });
+    await expect(unsupported.generate({ ...input, references: ["assets/ref.png"] })).rejects.toThrow("reference image input");
+    expect(request).not.toHaveBeenCalled();
+});
+
+it("routes fal reference requests to the matching edit endpoint", async () => {
+    const { project } = await fixture();
+    await project.writeNew("assets/ref.png", png);
+    const submit = vi.fn(async () => ({ request_id: "edit-1" }));
+    const result = vi.fn(async () => ({ data: { images: [{ url: `data:image/png;base64,${png.toString("base64")}`, content_type: "image/png" }] } }));
+    const resolveMetadata = vi.fn(async (model: string) => ({ model: { id: model, inputModalities: model.endsWith("/edit") ? ["image", "text"] : ["text"], outputModalities: ["image"] }, sources: {}, status: "found" as const, stale: false }));
+    const service = new ImageGenerationService(project, { api: "fal-images", model: "openai/gpt-image-2.5/sunburst/text-to-image", resolveApiKey: async () => "test", resolveMetadata,
+        createFalClient: () => ({ queue: { submit, result, subscribeToStatus: vi.fn(async () => ({ status: "COMPLETED" })), cancel: vi.fn() } } as never) });
+    expect(await service.generate({ ...input, references: ["assets/ref.png"] })).toMatchObject({ model: "openai/gpt-image-2.5/sunburst/edit" });
+    expect(resolveMetadata).toHaveBeenCalledWith("openai/gpt-image-2.5/sunburst/edit", "test", expect.any(AbortSignal));
+    expect(submit).toHaveBeenCalledWith("openai/gpt-image-2.5/sunburst/edit", expect.objectContaining({ input: expect.objectContaining({ image_urls: [`data:image/png;base64,${png.toString("base64")}`] }) }));
+    expect(result).toHaveBeenCalledWith("openai/gpt-image-2.5/sunburst/edit", expect.anything());
+});
+
 it("checks known image capabilities and still generates when discovery is unavailable", async () => {
     const { project, request } = await fixture();
     const metadata = vi.fn(async () => ({ model: { id: "test", outputModalities: ["text"] }, sources: {}, status: "found" as const, stale: false }));

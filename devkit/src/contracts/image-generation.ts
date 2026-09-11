@@ -12,6 +12,8 @@ export const imageOptionsSchema = z.object({
 export type ImageOptions = z.infer<typeof imageOptionsSchema>;
 
 export const imageGenerationSchema = imageOptionsSchema.extend({
+    references: z.array(z.string().regex(/^assets\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.png$/)).min(1).max(4).optional()
+        .describe("Existing project PNG assets used as visual references, in order."),
     prompt: z.string().trim().min(1).max(32000),
     path: z.string().regex(/^assets\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.png$/,
         "Use a PNG path inside assets/ with letters, numbers, underscores or hyphens."),

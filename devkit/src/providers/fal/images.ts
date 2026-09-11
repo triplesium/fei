@@ -1,9 +1,13 @@
 import { runFalQueue, type FalQueueOptions } from "./queue.js";
+import { falGptImageModel } from "./gpt-image.js";
 
-export async function generateFalImage(options: FalQueueOptions & { prompt: string; requestOptions: object }) {
+export async function generateFalImage(options: FalQueueOptions & { prompt: string; requestOptions: object; references?: string[] }) {
+    const editing = Boolean(options.references?.length);
+    if (editing && options.model !== falGptImageModel) throw new Error("No reference image adapter is available for this fal model.");
     try {
-        return await runFalQueue(options, {
+        return await runFalQueue({ ...options, model: editing ? options.model.replace(/\/text-to-image$/, "/edit") : options.model }, {
             prompt: options.prompt, ...options.requestOptions, num_images: 1, output_format: "png", sync_mode: true,
+            ...(editing ? { image_urls: options.references } : {}),
         }, (data) => {
             const body = data as { images?: { url?: unknown; content_type?: unknown }[] };
             const file = body?.images?.[0];
